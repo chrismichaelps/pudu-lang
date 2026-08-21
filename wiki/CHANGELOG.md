@@ -12,6 +12,7 @@ tags: [changelog]
 - 2026-08-21 · [[architecture/SEMANTICS]] · define replacement/reinitialization and normalized sync/async failure signatures before implementation · risk HIGH · depth reviewed→grilled · [[ADR-0003-ownership-and-resource-safety]]
 - 2026-08-21 · [[Source]] · establish opaque snapshot identity, cached Unicode-scalar bounds, overflow-safe offsets, and allocation-conscious positions · risk MED · depth n/a→MEDIUM · issue #2
 - 2026-08-21 · [[Diagnostic Model]] · establish deterministic structured diagnostics, ordered causality, and severity-only error gating · risk MED · depth n/a→MEDIUM · issue #9
+- 2026-08-21 · [[architecture/SEMANTICS]] · fix diagnostic-code shape and severity-family compatibility before phase publication · risk MED · depth grilled→clarified · issue #9
 
 ## Referenced by
 

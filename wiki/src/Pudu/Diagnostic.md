@@ -26,8 +26,7 @@ Represent phase-independent structured [[Diagnostic]] values with stable codes, 
 ### Signatures
 
 ```haskell
-newtype DiagnosticCode = DiagnosticCode { unDiagnosticCode :: Text }
-  deriving stock (Eq, Ord, Show)
+data DiagnosticCode -- constructor hidden; Eq, Ord, and Show
 
 data Severity = Error | Warning | Note
   deriving stock (Eq, Ord, Show, Enum, Bounded)
@@ -40,7 +39,9 @@ data Related = Related
 
 data Diagnostic -- constructor hidden; Eq and Show
 
-diagnostic :: DiagnosticCode -> Severity -> Span -> Text -> Diagnostic
+mkDiagnosticCode :: Text -> Maybe DiagnosticCode
+diagnosticCodeText :: DiagnosticCode -> Text
+diagnostic :: DiagnosticCode -> Severity -> Span -> Text -> Maybe Diagnostic
 diagnosticCode :: Diagnostic -> DiagnosticCode
 diagnosticSeverity :: Diagnostic -> Severity
 diagnosticSpan :: Diagnostic -> Span
@@ -55,9 +56,10 @@ hasErrors :: [Diagnostic] -> Bool
 
 ### Governance
 
-- Codes use the groups in [[architecture/SEMANTICS#Diagnostic Contract]].
+- Codes are opaque and validate the exact five-character `E/W`, phase `0..7`, three-ASCII-digit groups in [[architecture/SEMANTICS#Diagnostic Contract]]. Error/code-family mismatch is rejected; `Note` may retain either family.
 - `withRelated` preserves insertion order for explanatory causality.
-- Deterministic ordering is source name, start, end, severity rank (`Error`, `Warning`, `Note`), then code. Message, help, and ordered related-location data are total tie-breakers.
+- Deterministic ordering is source display name, start, end, severity rank (`Error`, `Warning`, `Note`), code, message, help, then ordered related display locations/messages.
+- The ordering canonically orders render-distinct diagnostics. Structurally unequal diagnostics from separate opaque snapshots with identical render keys may retain producer order because no deterministic snapshot key exists and their rendered output is identical.
 - Messages are non-empty developer-facing text. An empty internal message is replaced deterministically with the diagnostic code so renderers never receive an empty primary message.
 - The `Diagnostic` constructor and writable record fields are hidden so callers cannot bypass message normalization; explicit accessors are read-only.
 
@@ -68,15 +70,16 @@ hasErrors :: [Diagnostic] -> Bool
 
 ## Algorithm
 
-1. Construct a base diagnostic with no help/related items, normalizing an empty message to a stable code-based fallback.
+1. Validate a code's exact ASCII family/group shape, then construct a base diagnostic only when severity and code family agree, normalizing an empty message to a stable code-based fallback.
 2. Decorators add help or append related locations without changing code/severity/span.
-3. Sort by the primary location/severity/code key, then all remaining observable fields, so parallel or recovery paths cannot reorder distinct output nondeterministically.
+3. Sort by the complete render key so parallel or recovery paths cannot reorder distinct output nondeterministically; never order by ephemeral snapshot allocation identity.
 4. Detect blocking errors by severity only, never code prefixes or rendered text.
 
 ## Negative Logic (Prohibited Paths)
 
 - No raw host exceptions or process stderr as messages without translation.
 - No severity inferred from a code string.
+- No empty, malformed, unknown-group, or severity-incompatible diagnostic code.
 - No deduplication by message text.
 - No public construction or record update that bypasses primary-message normalization.
 - No rendering/color/terminal width in the model.
@@ -87,6 +90,8 @@ hasErrors :: [Diagnostic] -> Bool
 - Related locations may be in other sources.
 - Empty related list and absent help are ordinary.
 - Empty input message becomes `compiler diagnostic <code>`; this is an internal-defect fallback, not a user-facing phase template.
+- Invalid code shape or error/warning family mismatch prevents diagnostic construction.
+- Same-name/same-offset diagnostics from separate snapshots compare unequal but have the same render key; their relative structural order is intentionally unspecified and output-equivalent.
 
 ## Depth
 
@@ -98,8 +103,9 @@ DEPTH 0.57 (MEDIUM). The interface centralizes a durable cross-phase product con
 - **Q:** Deduplicate diagnostics centrally? **A:** No. _Rationale:_ only the emitting phase knows causal equivalence. _Rejected:_ span/message set deduplication that hides legitimate findings.
 - **Q:** Is warning an error under warnings-as-errors? **A:** That is CLI policy, not model severity mutation. _Rationale:_ preserve semantic classification. _Rejected:_ rewriting warning values.
 - **Q:** May callers construct or update diagnostic records directly? **A:** No; the type is opaque and exposes read-only accessors plus invariant-preserving decorators. _Rationale:_ otherwise an empty primary message could bypass normalization. _Rejected:_ exporting `Diagnostic(..)` or writable record labels.
-- **Q:** Is a stable partial key deterministic enough? **A:** No; after location, severity, and code, compare every remaining observable field. _Rationale:_ stable sort alone preserves nondeterministic producer order for equal primary keys. _Rejected:_ relying on input order for distinct diagnostics.
-- **Q:** Replace the short related-location list with a sequence now? **A:** No; causality lists are expected to remain small and no profile identifies decoration as a bottleneck. _Rationale:_ preserve a minimal public model until allocation evidence justifies a representation change. _Rejected:_ speculative container dependency.
+- **Q:** Is a stable partial render key deterministic enough? **A:** No; after location, severity, and code, compare every remaining rendered field. _Rationale:_ stable sort alone preserves nondeterministic producer order for render-distinct diagnostics. _Rejected:_ relying on input order when output differs.
+- **Q:** Can opaque snapshot identity complete the key? **A:** No; process-local allocation order is not reproducible. _Rationale:_ snapshot-distinct values with the same complete render key produce identical output, so only their unobservable relative identity order remains unspecified. _Rejected:_ sorting by `Unique`; source-content traversal or collision-prone hashes.
+- **Q:** Keep repeated list append for related locations? **A:** No; use an internal sequence for amortized O(1) decoration and expose an ordered list view. _Rationale:_ callers should not become quadratic when causal context grows. _Rejected:_ repeated `list <> [item]`; exposing the internal container.
 
 ## Variants
 
