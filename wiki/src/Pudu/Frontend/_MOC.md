@@ -10,7 +10,7 @@ tags: [moc, module, frontend]
 - [[src/Pudu/Frontend/Lexer/_MOC|Lexer modules]] — strict traversal plus modular trivia, identifier, number, symbol, and quoted scanners.
 - [[Syntax]] — untyped recovery-capable surface API.
 - [[src/Pudu/Frontend/Syntax/_MOC|Syntax modules]] — located values, segmented names, and the recursive data-only tree.
-- [[src/Pudu/Frontend/Parser/_MOC|Parser modules]] — strict bounded state plus segmented-name, unresolved-type, and precedence expression grammar.
+- [[src/Pudu/Frontend/Parser/_MOC|Parser modules]] — strict bounded state plus segmented-name, unresolved-type, precedence-expression, and modular import grammar.
 
 ## Referenced by
 

@@ -36,8 +36,10 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 program          = module_decl, import_decl*, top_declaration*, EOF ;
 module_decl      = "module", module_path ;
 module_path      = upper_ident, (".", upper_ident)* ;
-import_decl      = "import", module_path,
-                   (("as", upper_ident) | ("{", import_item, (",", import_item)*, "}"))? ;
+import_decl      = "import", module_path, import_suffix? ;
+import_suffix    = "as", upper_ident
+                 | "{", import_item, (",", import_item)*, ","?, "}" ;
+import_item      = ident ;
 top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
 const_decl       = "const", constant_ident, (":", type_ref)?, "=", expression ;
 local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expression

@@ -99,7 +99,7 @@ symbolText :: SymbolKind -> Text
 ### Linkage
 
 - **Requires:** [[Source]], [[Source Text]], [[Frontend]], [[grammar/pudu]], [[grammar/haskell]].
-- **Consumed by:** the dependency-ordered lexer modules, [[Parser State]], [[Parser Expression]], and later parser/tooling work inside [[Frontend]].
+- **Consumed by:** the dependency-ordered lexer modules, [[Parser State]], [[Parser Expression]], [[Parser Import]], and later parser/tooling work inside [[Frontend]].
 
 ## Algorithm
 
@@ -143,4 +143,4 @@ DEPTH 0.58 (MEDIUM). A compact closed interface centralizes the language's lexic
 
 ## Referenced by
 
-[[src/Pudu/Frontend/_MOC]] · [[Source]] · [[Parser State]] · [[Parser Expression]] · [[Frontend]]
+[[src/Pudu/Frontend/_MOC]] · [[Source]] · [[Parser State]] · [[Parser Expression]] · [[Parser Import]] · [[Frontend]]
