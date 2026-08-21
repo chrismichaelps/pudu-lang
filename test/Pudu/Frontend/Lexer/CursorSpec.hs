@@ -1,5 +1,6 @@
 module Pudu.Frontend.Lexer.CursorSpec (cursorProperties) where
 
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic
@@ -104,7 +105,7 @@ testEmissionGuards = do
             Nothing -> counterexample "valid trivia emission failed" False
         , rejects (emitToken invalidMark EndOfFile invalidEnd)
         , rejects (emitToken invalidMark (Invalid "!") invalidEnd)
-        , property (accepts (emitToken invalidMark (Invalid "@") invalidEnd))
+        , property (isJust (emitToken invalidMark (Invalid "@") invalidEnd))
         ]
     )
 
@@ -126,17 +127,20 @@ testCompletionBoundaries :: IO Property
 testCompletionBoundaries = do
   empty <- newSource (SourceName "empty.pudu") Text.empty
   source <- newSource (SourceName "incomplete.pudu") "x"
+  trailingSource <- newSource (SourceName "trailing.pudu") " "
   let emptyCursor = newCursor empty
       incomplete = newCursor source
       consumed = consumeScalars 1 incomplete
-  pure $ case completeCursor emptyCursor of
-    Just output ->
+      trailingOutput = takeTrivia 1 Whitespace (newCursor trailingSource) >>= completeCursor
+  pure $ case (completeCursor emptyCursor, trailingOutput) of
+    (Just output, Just trailing) ->
       conjoin
         [ map tokenKind (outputTokens output) === [EndOfFile]
+        , map triviaText (concatMap tokenLeadingTrivia (outputTokens trailing)) === [" "]
         , rejects (completeCursor incomplete)
         , rejects (completeCursor consumed)
         ]
-    Nothing -> counterexample "empty cursor did not complete" False
+    _ -> counterexample "empty or trailing-trivia cursor did not complete" False
 
 testDiagnostics :: IO Property
 testDiagnostics = do
@@ -197,9 +201,7 @@ takeTrivia amount kind cursor = emitTrivia (markCursor cursor) kind (consumeScal
 takeToken :: Int -> TokenKind -> LexerCursor -> Maybe LexerCursor
 takeToken amount kind cursor = emitToken (markCursor cursor) kind (consumeScalars amount cursor)
 makeDiagnostic :: Text -> Span -> Maybe Diagnostic
-makeDiagnostic code spanValue = do
-  validCode <- mkDiagnosticCode code
-  diagnostic validCode Error spanValue "lexical failure"
+makeDiagnostic code spanValue = mkDiagnosticCode code >>= \valid -> diagnostic valid Error spanValue "lexical failure"
 spanAt :: Source -> Int -> Int -> Maybe Span
 spanAt source start end = do
   startOffset <- offsetFromInt start
@@ -209,9 +211,4 @@ reconstruct :: Token -> Text
 reconstruct token = Text.concat (map triviaText (tokenLeadingTrivia token)) <> tokenLexeme token
 
 rejects :: Maybe value -> Property
-rejects result = property (not (accepts result))
-
-accepts :: Maybe value -> Bool
-accepts result = case result of
-  Just _ -> True
-  Nothing -> False
+rejects = property . not . isJust
