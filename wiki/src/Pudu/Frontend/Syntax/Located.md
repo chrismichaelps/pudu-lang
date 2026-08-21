@@ -38,7 +38,7 @@ mergeLocatedSpan :: Located a -> Located b -> Maybe Span
 ### Linkage
 
 - **Requires:** [[Source]].
-- **Consumed by:** [[Syntax Name]], [[Syntax Tree]], all parsers.
+- **Consumed by:** [[Syntax Name]], [[Syntax Tree]], and future parser modules.
 
 ## Algorithm
 

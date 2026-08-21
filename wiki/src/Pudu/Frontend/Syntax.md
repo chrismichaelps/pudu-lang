@@ -15,7 +15,7 @@ aliases: [Syntax]
 
 # Syntax
 
-> `{-| @Program.Syntax.Module — preserves recoverable surface structure -}`
+> `{-| @Program.Syntax.Module — exposes recoverable surface structure -}`
 
 ## Purpose
 
@@ -43,7 +43,7 @@ module Pudu.Frontend.Syntax
 ### Linkage
 
 - **Requires:** [[Syntax Located]], [[Syntax Name]], [[Syntax Tree]], [[Source]], [[Pudu Program]], [[Pudu Type]], [[grammar/pudu]], [[grammar/haskell]].
-- **Consumed by:** [[Parser]], [[Compiler Pipeline]], later [[Name Resolution]], formatter tooling.
+- **Consumed by:** later parser, compiler-pipeline, name-resolution, and formatter modules through [[Frontend]].
 
 ## Algorithm
 
@@ -79,4 +79,4 @@ DEPTH 0.53 (MEDIUM). The API is necessarily broad because it models syntax, but 
 
 ## Referenced by
 
-[[src/Pudu/Frontend/_MOC]] · [[src/Pudu/Frontend/Syntax/_MOC]] · [[Parser]] · [[Compiler Pipeline]] · [[Pudu Program]]
+[[src/Pudu/Frontend/_MOC]] · [[src/Pudu/Frontend/Syntax/_MOC]] · [[Frontend]] · [[Pudu Program]]

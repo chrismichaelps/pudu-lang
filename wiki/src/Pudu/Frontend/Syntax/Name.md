@@ -37,7 +37,7 @@ moduleNameText :: ModuleName -> Text
 ### Linkage
 
 - **Requires:** [[Pudu Module]].
-- **Consumed by:** [[Syntax Tree]], [[Parser Name]].
+- **Consumed by:** [[Syntax Tree]] and the future parser-name module.
 
 ## Algorithm
 
@@ -65,4 +65,4 @@ DEPTH 0.48 (MEDIUM). A narrow nominal contract prevents stringly module paths.
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Syntax Tree]] · [[Parser Name]]
+[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Syntax Tree]]
