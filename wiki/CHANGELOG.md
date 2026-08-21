@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Quoted Scanner]] · establish bounded string/character decoding and E0002/E0005–E0008 recovery · risk MED · depth n/a→MEDIUM · issue #8
 - 2026-08-21 · [[Number Scanner]] and [[Symbol Scanner]] · establish textual numeric validation, E0004 recovery, and longest-match symbols · risk MED · depth n/a→MEDIUM · issue #7
 - 2026-08-21 · [[Trivia Scanner]] and [[Identifier Scanner]] · establish modular Unicode trivia/name scanning and E0003 recovery · risk MED · depth n/a→MEDIUM · issue #6
 - 2026-08-21 · [[Lexer Cursor]] · establish strict snapshot-safe traversal, committed segments, and deterministic completion · risk MED · depth n/a→DEEP · issue #12

@@ -39,6 +39,8 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved issue #7 numeric ownership, range ambiguity, E0004 recovery, and closed longest-match symbols.
 - [Role: DNA Engineer → Shadow] Committed complete [[Number Scanner]] and [[Symbol Scanner]] mirrors before implementation.
 - [Role: Shadow → Forensic Guardian] Implemented textual number validation, exact E0004 recovery, longest-match symbols, ambiguity/stress properties, and optimized gates.
+- [Role: Forensic Guardian → Architect] Merged issue #7 through PR #16 after exact-head semantic, forensic, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Split issue #8 into bounded quoted-scanner and facade integrations; resolved [[Quoted Scanner]] delimiter ownership, scalar-safe escape decoding, and E0002/E0005–E0008 recovery.
 
 ## Decided (do not re-litigate)
 
@@ -50,17 +52,17 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #7 requires final integration; issue #8 then completes the lexer and unblocks parser integration.
+- Issue #8 requires the quoted-scanner implementation followed by the public lexer facade; completion unblocks parser integration.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: audit issue #7 numeric ownership, E0004 exactness, longest-match exhaustiveness, text-only magnitude handling, scope, and validation.
+Shadow: implement [[Quoted Scanner]] and its focused success, failure, recovery, losslessness, and long-literal properties from the resolved mirror.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Quoted Scanner]] · [[Engineering Delivery]]
 
 ## Referenced by
 

@@ -16,7 +16,7 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Active Modules
 
-[[Token]] defines the closed lossless vocabulary. [[Lexer Cursor]] owns strict traversal; [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], and [[Symbol Scanner]] provide modular categories beneath the final quoted scanner and facade.
+[[Token]] defines the closed lossless vocabulary. [[Lexer Cursor]] owns strict traversal; [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], [[Symbol Scanner]], and [[Quoted Scanner]] provide modular categories beneath the final facade.
 
 ## Boundaries
 

@@ -10,7 +10,8 @@ tags: [moc, module, frontend, lexer]
 - [[Identifier Scanner]] — Unicode name boundaries and closed keyword classification.
 - [[Number Scanner]] — textual bases, fractions, exponents, range boundaries, and E0004 recovery.
 - [[Symbol Scanner]] — bounded longest-match punctuation and operators.
-- Quoted scanners and the public facade enter through the final lexer issue.
+- [[Quoted Scanner]] — decoded strings/chars, scalar-safe Unicode escapes, and E0002/E0005–E0008 recovery.
+- The public facade enters through the final lexer integration slice.
 
 ## Referenced by
 
