@@ -1,11 +1,13 @@
-# Files
+# Private project inputs
 fmcf.md
-
-# Proposal
+fmfc.md
 lang_proposal.md
-
-# goal
+proposal.md
 goal.md
+
+# Haskell build artifacts
+dist-newstyle/
+cabal.project.local
 
 # Claude Code
 .claude/
