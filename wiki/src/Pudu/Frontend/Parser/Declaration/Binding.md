@@ -39,6 +39,7 @@ parseLocalBinding :: BlockParser -> Parser (Located Declaration)
 - A `:` introduces [[Parser Type]] syntax and `=` is mandatory through the state-owned `E1001` expectation.
 - Initializers use [[Parser Expression]] with an injected block capability, preventing a Haskell module cycle.
 - Missing initializers retain `InvalidExpression` with `E1040`; an existing expression-budget `E1099` is not followed by a binding-specific cascade.
+- A non-`const` module keyword and a non-binding local keyword are each rejected once with `E1001` and recovered as `InvalidDeclaration`; the offending token is consumed so declaration and block parsing keep making progress without a name/type/initializer cascade.
 
 ### Linkage
 
@@ -47,7 +48,7 @@ parseLocalBinding :: BlockParser -> Parser (Located Declaration)
 
 ## Algorithm
 
-Choose a closed binding kind from the admitted keyword, validate its identifier class, parse an optional type after `:`, require `=`, delegate initializer parsing through the supplied block capability, and merge the keyword-to-initializer span.
+Inspect the leading keyword without consuming it, reject an unadmitted keyword once, otherwise choose a closed binding kind from the admitted keyword, validate its identifier class, parse an optional type after `:`, require `=`, delegate initializer parsing through the supplied block capability, and merge the keyword-to-initializer span.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -56,6 +57,7 @@ Choose a closed binding kind from the admitted keyword, validate its identifier 
 ## Edge Cases
 
 - Missing `=` diagnoses without consuming the following expression; missing initializer yields an invalid recovery node; multiline boundaries remain trivia-insignificant and are determined by the closed expression grammar.
+- `let`/`var` at module scope produce exactly one `E1001` and no fabricated constant name; an exhausted expression budget leaves the surrounding binding node intact with only the owning `E1099`.
 
 ## Depth
 
@@ -65,6 +67,7 @@ DEPTH 0.66 (MEDIUM). It centralizes scope-sensitive binding grammar, name-class 
 
 - **Q:** One context flag or two entry points? **A:** Expose separate top-constant and local-binding operations. _Rationale:_ the API makes illegal module `let`/`var` unrepresentable to orchestration. _Rejected:_ Boolean scope flags; one permissive parser plus later rejection.
 - **Q:** Should the module import the future block parser? **A:** No; accept a block capability passed to expression parsing. _Rationale:_ declaration/block/expression recursion stays explicit without `hs-boot`. _Rejected:_ monolithic declaration module; cyclic imports.
+- **Q:** How does an unadmitted keyword recover? **A:** Emit one `E1001`, consume the token, and return `InvalidDeclaration`. _Rationale:_ callers keep progress while diagnostics stay cascade-free. _Rejected:_ parsing the wrong keyword as a `let` binding, which fabricated a name and emitted three stacked `E1001` diagnostics at one offset; non-consuming rejection, which lets an orchestrator loop.
 - **Q:** Does parsing enforce constant evaluation or binding inference? **A:** No; it preserves syntax and diagnostics only. _Rationale:_ [[architecture/SEMANTICS]] assigns those rules to later semantic phases. _Rejected:_ parser-time evaluation or typing.
 
 ## Variants

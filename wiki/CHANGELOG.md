@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Parser Binding]] · implement module constants and local `let`/`var`/`const` bindings with `E1012`/`E1013` name classes, single-`E1001` unadmitted-keyword recovery, and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Binding]] · specify scope-safe module constants and local bindings with value/constant name classes and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Import]] · implement modular bounded absolute imports, exclusive alias/selection suffixes, trailing commas, and E1030/E1031 recovery · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Expression]] · specify closed-vocabulary bounded precedence, postfix, conditional, E1040/E1042/E1043 recovery · risk HIGH · depth n/a→DEEP · issue #3

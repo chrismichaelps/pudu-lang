@@ -70,6 +70,7 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented modular import parsing, reusable uppercase aliases, cascade-free shared budgets, and focused success, failure, regression, diagnostic, and hostile-input properties.
 - [Role: Forensic Guardian → Architect] Validated the modular import partition through PR #22 with exact-head Language Architect, forensic, development, optimized, package, size, private-boundary, and locked-CI gates passing.
 - [Role: Architect → DNA Engineer] Resolved [[Parser Binding]] as separate top-constant/local-binding entry points with explicit name classes, injected block capability, recovery boundaries, and no module `let`/`var` admission.
+- [Role: Shadow → Forensic Guardian] Implemented [[Parser Binding]] with `E1012`/`E1013` name-class validation, optional type annotations, mandatory initializers, single-`E1001` unadmitted-keyword recovery, and focused success, failure, regression, diagnostic, and hostile-budget properties; development and `-O2` suites pass 83x200.
 
 ## Decided (do not re-litigate)
 
@@ -81,12 +82,12 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: commit and implement the modular binding declaration partition before function/block/orchestration behavior.
+- Issue #3: resolve and implement the modular function, block, and declaration-orchestration partitions; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-DNA Engineer: commit [[Parser Binding]], name-class governance, maps, changelog, and backlinks before staging source.
+Architect: resolve the [[Parser Block]] and function-declaration mirrors — statement/result ownership, `;` ownership, and block-capability wiring — before any function/block source is staged.
 
 ## Links
 
