@@ -41,6 +41,10 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented textual number validation, exact E0004 recovery, longest-match symbols, ambiguity/stress properties, and optimized gates.
 - [Role: Forensic Guardian → Architect] Merged issue #7 through PR #16 after exact-head semantic, forensic, optimized, and locked-CI gates passed.
 - [Role: Architect → DNA Engineer] Split issue #8 into bounded quoted-scanner and facade integrations; resolved [[Quoted Scanner]] delimiter ownership, scalar-safe escape decoding, and E0002/E0005–E0008 recovery.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Quoted Scanner]] mirror and Grill Log before implementation.
+- [Role: Shadow → Forensic Guardian] Implemented quoted decoding and focused success, failure, recovery, losslessness, and long-literal properties; PR #17 review required completing the same issue with its bounded facade.
+- [Role: Forensic Guardian → Architect] Kept issue #8 atomic, resolved [[Lexer Facade]], and constrained the combined PR below 600 additions rather than closing a partial issue.
+- [Role: Architect → DNA Engineer] Committed the complete facade mirror and Grill Log before its implementation.
 
 ## Decided (do not re-litigate)
 
@@ -52,17 +56,17 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #8 requires the quoted-scanner implementation followed by the public lexer facade; completion unblocks parser integration.
+- Issue #8 requires facade implementation and exact-head gates in PR #17; completion unblocks parser integration.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Shadow: implement [[Quoted Scanner]] and its focused success, failure, recovery, losslessness, and long-literal properties from the resolved mirror.
+Shadow: implement [[Lexer Facade]], integrate all scanners, and keep PR #17 below 600 additions before repeated exact-head review.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Quoted Scanner]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Quoted Scanner]] · [[Engineering Delivery]]
 
 ## Referenced by
 

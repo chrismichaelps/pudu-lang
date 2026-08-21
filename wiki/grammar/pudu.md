@@ -22,6 +22,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 - Strings are UTF-8 text with `\n`, `\r`, `\t`, `\\`, `\"`, `\0`, and `\u{HEX}` escapes. String interpolation is reserved but not admitted in the 0.1 core; an unescaped `{` or `}` produces E0008 rather than silently becoming text. A later semantic slice will admit `{expression}` segments and `{{`/`}}` brace escapes together. Raw CR/LF is not admitted.
 - Character literals contain exactly one Unicode scalar value after escapes and additionally admit `\'`. Raw CR/LF is not admitted.
 - Quoted input that reaches EOF or raw CR/LF before its closing delimiter produces E0002 without consuming the line break. Unknown escapes produce E0005. `\u{HEX}` requires one through six ASCII hexadecimal digits and rejects surrogates and values above U+10FFFF with E0006. Closed characters whose decoded payload is not exactly one scalar produce E0007.
+- A decoded scalar not owned by trivia, quoted, number, identifier, or symbol scanning is retained as a one-scalar `Invalid` token with E0099; lexing then continues.
 
 ## Reserved Keywords
 

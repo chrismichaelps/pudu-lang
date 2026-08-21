@@ -11,7 +11,7 @@ tags: [moc, module, frontend, lexer]
 - [[Number Scanner]] — textual bases, fractions, exponents, range boundaries, and E0004 recovery.
 - [[Symbol Scanner]] — bounded longest-match punctuation and operators.
 - [[Quoted Scanner]] — decoded strings/chars, scalar-safe Unicode escapes, and E0002/E0005–E0008 recovery.
-- The public facade enters through the final lexer integration slice.
+- [[Lexer Facade]] — fixed scanner precedence, total progress, E0099 recovery, and one lossless result boundary.
 
 ## Referenced by
 
