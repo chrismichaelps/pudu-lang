@@ -56,6 +56,10 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved parser state/name source ownership, source-end EOF normalization, opaque diagnostic construction, closed symbol mapping, declaration boundaries, and segmented-name casing before implementation admission.
 - [Role: DNA Engineer → Shadow] Committed [[Parser State]], [[Parser Name]], and their active parser map before staging source.
 - [Role: Shadow → Forensic Guardian] Repaired the preserved state/name implementations against opaque diagnostics and closed symbols; added EOF, progress, budget, casing, and trailing-dot properties.
+- [Role: Forensic Guardian → Architect] Merged the state/name partition through PR #19 after canonical EOF, linear cursor, bounded path, semantic, forensic, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Resolved [[Parser Type]] ownership, closed punctuation, E1020 recovery, delimiter behavior, and shared recursion budgeting before implementation admission.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Parser Type]] mirror and maps before staging source.
+- [Role: Shadow → Forensic Guardian] Implemented bounded reference, tuple/unit, named, and generic parsing with focused success, recovery, and hostile-nesting properties.
 
 ## Decided (do not re-litigate)
 
@@ -67,16 +71,16 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: validate and merge parser state/name before type/expression behavior.
+- Issue #3: implement and validate type syntax before expression behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: audit parser state/name totality, EOF identity, closed symbols, diagnostic opacity/order, budgets, path recovery, size, and validation.
+Forensic Guardian: audit type parser grammar fidelity, progress, recovery diagnostics, recursion budgets, source/wiki parity, size, and validation.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Parser Type]] · [[Engineering Delivery]]
 
 ## Referenced by
 
