@@ -10,6 +10,7 @@ tags: [changelog]
 - 2026-08-21 · [[Performance Constitution]] · lock compiler-throughput and low-level generated-code optimization laws · risk HIGH · depth n/a→specified · [[ADR-0005-performance-and-low-level-optimization]]
 - 2026-08-21 · [[architecture/SEMANTICS]] · clarify default evaluation, module constants, and structural `Copy` before implementation · risk HIGH · depth specified→reviewed · [[ADR-0003-ownership-and-resource-safety]]
 - 2026-08-21 · [[architecture/SEMANTICS]] · define replacement/reinitialization and normalized sync/async failure signatures before implementation · risk HIGH · depth reviewed→grilled · [[ADR-0003-ownership-and-resource-safety]]
+- 2026-08-21 · [[Source]] · establish opaque snapshot identity, cached Unicode-scalar bounds, overflow-safe offsets, and allocation-conscious positions · risk MED · depth n/a→MEDIUM · issue #2
 
 ## Referenced by
 

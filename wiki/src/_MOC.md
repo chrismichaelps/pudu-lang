@@ -5,13 +5,13 @@ tags: [moc, module]
 
 # Module Map
 
-- Compiler module pages are introduced by issue-linked vertical slices after their contracts are grilled.
+- [[src/Pudu/_MOC|Pudu modules]] — validated source-location foundation.
 
 ## Depth Baseline
 
 | Status | Count | Modules |
 | --- | ---: | --- |
-| Planned | 0 | No implementation modules are versioned in the governance foundation. |
+| MEDIUM | 1 | [[Source]] |
 
 ## Referenced by
 

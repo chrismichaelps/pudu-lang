@@ -6,6 +6,13 @@ The repository is governed wiki-first. Start at [`wiki/00-INDEX.md`](wiki/00-IND
 
 The compiler is pre-release. Syntax or semantics not represented in the versioned vault are not implementation promises.
 
-The release toolchain is locked in [`wiki/grammar/haskell.md`](wiki/grammar/haskell.md). Build and test commands will be published with the compiler scaffold so every documented command works on the revision that introduces it.
+The release toolchain is locked in [`wiki/grammar/haskell.md`](wiki/grammar/haskell.md). The current source-location foundation builds and tests with:
+
+```sh
+cabal build all
+cabal test all --test-show-details=direct
+```
+
+Release validation uses `--enable-optimization=2`; normal local work uses the unoptimized project profile for fast feedback.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing language or compiler changes.
