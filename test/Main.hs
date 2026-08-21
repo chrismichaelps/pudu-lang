@@ -3,6 +3,7 @@ module Main (main) where
 import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
@@ -11,7 +12,7 @@ import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, forAl
   property, quickCheckResult, withMaxSuccess, (===))
 main :: IO ()
 main = do
-  outcomes <-
+  sourceOutcomes <-
     sequence
       [ check "empty source position" testEmptySourcePosition
       , check "CRLF position" testCrLfPosition
@@ -25,7 +26,8 @@ main = do
       , check "cached source length matches text" propertySourceLength
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       ]
-  unless (and outcomes) exitFailure
+  diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
+  unless (and (sourceOutcomes <> diagnosticOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

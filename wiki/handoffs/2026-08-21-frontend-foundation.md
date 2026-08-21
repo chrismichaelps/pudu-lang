@@ -1,7 +1,7 @@
 ---
 date: 2026-08-21
 topic: frontend-foundation
-from_role: Shadow
+from_role: Tooling Engineer
 to_role: Forensic Guardian
 status: REVIEW
 maturity: EXPLORING
@@ -18,6 +18,10 @@ tags: [handoff]
 - Established [[Engineering Delivery]] and private-input boundary.
 - Established [[Performance Constitution]] for strict phase data, measured low-level representations, and proof-preserving optimization.
 - Authored issue #2 module page and implementation for [[Source]], including development/optimized property tests and GHC 9.14.1 CI.
+- Merged issue #2 through PR #10 after independent Forensic Guardian review; source identity and span operations are now the validated dependency for diagnostics.
+- Resolved the complete mirrored contract and Grill Log for issue #9's [[Diagnostic Model]].
+- Implemented issue #9's opaque diagnostic model with normalized primary messages, ordered causality, complete render-key ordering, and severity-only error gating.
+- Added a separate diagnostic test module with construction, decorator, permutation, and error-gate properties; development and optimized suites pass.
 
 ## Decided (do not re-litigate)
 
@@ -29,14 +33,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #2: independent review, CI, and merge remain.
-- The diagnostic-model issue begins after issue #2 merges; issue #5 follows it.
+- Issue #9: independent review, locked CI, and PR merge remain; issue #5 follows it.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: review issue #2's module-page-first history and source diff for totality, overflow safety, cached-length complexity, allocation-conscious position lookup, test depth, MOC/backlink parity, and strict exclusion of diagnostics/lexer/parser implementation.
+Forensic Guardian: review issue #9 for invariant-safe construction, complete render-key ordering, snapshot-equivalent output, causality preservation, severity-only gating, modular tests, performance proportionality, and exact wiki parity.
 
 ## Links
 

@@ -28,9 +28,11 @@ library
   import:           warnings
   hs-source-dirs:   src
   exposed-modules:
+    Pudu.Diagnostic
     Pudu.Source
   build-depends:
     base >=4.20 && <4.23,
+    containers >=0.6 && <0.9,
     text >=2.1 && <2.2
 
 test-suite pudu-test
@@ -38,6 +40,8 @@ test-suite pudu-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Main.hs
+  other-modules:
+    Pudu.DiagnosticSpec
   build-depends:
     base >=4.20 && <4.23,
     pudu,

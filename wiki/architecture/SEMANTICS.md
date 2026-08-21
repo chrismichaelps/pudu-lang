@@ -226,7 +226,7 @@ These obligations require executable property/conformance tests now and mechaniz
 - Static rejection selects the earliest phase capable of explaining the defect accurately.
 - Later phases do not duplicate diagnostics caused solely by an earlier error node.
 - Recovery nodes preserve spans and suppress cascades through explicit poison types/symbols.
-- Diagnostic codes are grouped: `E0xxx` source/lexing, `E1xxx` parsing, `E2xxx` names, `E3xxx` types, `E4xxx` ownership, `E5xxx` exhaustiveness/effects, `E6xxx` lowering/backend, `E7xxx` runtime/toolchain; warnings use matching `W` groups.
+- Diagnostic codes are exactly five ASCII characters: `E0xxx` source/lexing, `E1xxx` parsing, `E2xxx` names, `E3xxx` types, `E4xxx` ownership, `E5xxx` exhaustiveness/effects, `E6xxx` lowering/backend, `E7xxx` runtime/toolchain, with each `x` an ASCII digit; warnings use matching `W` groups. `Error` requires an `E` code, `Warning` requires `W`, and explanatory `Note` diagnostics may retain either family without changing error gating.
 
 ## Semantic Compatibility and History
 
@@ -241,6 +241,7 @@ These obligations require executable property/conformance tests now and mechaniz
 - **0.1.0-draft · 2026-08-21:** Established evaluation order, local inference boundary, `Result` propagation, ownership transitions, deterministic cleanup, structured concurrency/cancellation, compile-time capability restrictions, unsafe containment, and conformance obligations. See [[ADR-0001-language-purpose-and-v1-scope]], [[ADR-0002-compiler-pipeline]], and [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification · 2026-08-21:** Closed pre-implementation ambiguities in default-argument evaluation, module-scope initialization, and compiler-controlled structural `Copy`. No implementation compatibility exists yet; these rules are part of the initial draft review. See [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification 2 · 2026-08-21:** Defined move reinitialization, replacement drop timing, constant naming, and normalized synchronous/asynchronous failure signatures before implementation. See [[ADR-0003-ownership-and-resource-safety]].
+- **0.1.0-draft clarification 3 · 2026-08-21:** Fixed the diagnostic-code lexical shape and error/warning family compatibility before phase diagnostics were published. Notes retain their parent `E/W` family and error gating remains severity-only.
 
 ## Grill Log
 
