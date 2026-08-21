@@ -20,7 +20,7 @@ tags: [handoff]
 - Authored issue #2 module page and implementation for [[Source]], including development/optimized property tests and GHC 9.14.1 CI.
 - Merged issue #2 through PR #10 after independent Forensic Guardian review; source identity and span operations are now the validated dependency for diagnostics.
 - Resolved the complete mirrored contract and Grill Log for issue #9's [[Diagnostic Model]].
-- Implemented issue #9's opaque diagnostic model with normalized primary messages, ordered causality, total deterministic sorting, and severity-only error gating.
+- Implemented issue #9's opaque diagnostic model with normalized primary messages, ordered causality, complete render-key ordering, and severity-only error gating.
 - Added a separate diagnostic test module with construction, decorator, permutation, and error-gate properties; development and optimized suites pass.
 
 ## Decided (do not re-litigate)
@@ -39,7 +39,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Forensic Guardian: review issue #9 for invariant-safe construction, deterministic total ordering, causality preservation, severity-only gating, modular tests, performance proportionality, and exact wiki parity.
+Forensic Guardian: review issue #9 for invariant-safe construction, complete render-key ordering, snapshot-equivalent output, causality preservation, severity-only gating, modular tests, performance proportionality, and exact wiki parity.
 
 ## Links
 

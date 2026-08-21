@@ -80,18 +80,19 @@ testOrderingKey = do
   sourceA <- newSource (SourceName "a.pudu") "abc"
   sourceB <- newSource (SourceName "b.pudu") "abc"
   let spans = (spanAt sourceA 0 1, spanAt sourceA 0 2, spanAt sourceA 1 2, spanAt sourceB 0 1)
-  pure $ case (spans, mkDiagnosticCode "E0001", mkDiagnosticCode "E0002") of
-    ((Just short, Just long, Just later, Just other), Just firstCode, Just secondCode) ->
+  pure $ case (spans, mkDiagnosticCode "E0001", mkDiagnosticCode "E0002", mkDiagnosticCode "W0001") of
+    ((Just short, Just long, Just later, Just other), Just firstCode, Just secondCode, Just warningCode) ->
       case
           ( diagnostic firstCode Error short "alpha"
           , diagnostic secondCode Error short "alpha"
+          , diagnostic warningCode Warning short "alpha"
           , diagnostic firstCode Note short "alpha"
           , diagnostic firstCode Error other "alpha"
           , diagnostic firstCode Error later "alpha"
           , diagnostic firstCode Error long "alpha"
           , diagnostic firstCode Error short "omega"
           ) of
-        (Just base, Just laterCode, Just laterSeverity, Just otherSource, Just laterStart, Just laterEnd, Just laterMessage) ->
+        (Just base, Just laterCode, Just warningSeverity, Just laterSeverity, Just otherSource, Just laterStart, Just laterEnd, Just laterMessage) ->
           let
               laterHelp = withHelp "help" base
               relatedShort = withRelated (Related short "a") base
@@ -107,6 +108,8 @@ testOrderingKey = do
                 , (base, laterStart)
                 , (base, laterEnd)
                 , (base, laterSeverity)
+                , (base, warningSeverity)
+                , (warningSeverity, laterSeverity)
                 , (base, laterCode)
                 , (base, laterMessage)
                 , (base, laterHelp)
