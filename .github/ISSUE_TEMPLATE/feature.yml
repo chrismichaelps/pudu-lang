@@ -1,0 +1,49 @@
+name: Compiler or language feature
+description: Define one FMCF-governed, independently testable vertical slice.
+title: "[FMCF] "
+labels: [feature]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the user-visible language or compiler outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: governance
+    attributes:
+      label: Governing wiki pages and ADRs
+      description: Link the complete module, semantic, seam, and decision pages.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and boundaries
+      description: List in-scope files/subsystems and explicit non-goals.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include success, failure, regression, diagnostic/output, full-suite, and wiki-parity criteria.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Senior grill and risk
+      description: Record resolved design risks, semantic compatibility, performance/safety concerns, and dependencies.
+    validations:
+      required: true
+  - type: dropdown
+    id: execution
+    attributes:
+      label: Execution class
+      options:
+        - AFK — deterministic implementation and acceptance criteria
+        - HITL — human product or architecture judgment required
+    validations:
+      required: true
