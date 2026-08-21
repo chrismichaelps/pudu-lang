@@ -42,7 +42,7 @@ data SymbolKind
   | SymLeftBracket | SymRightBracket
   | SymLeftBrace | SymRightBrace
   | SymComma | SymDot | SymColon | SymPipe
-  | SymAssign | SymThinArrow | SymFatArrow | SymQuestion
+  | SymAssign | SymThinArrow | SymQuestion
   | SymBang | SymMinus | SymAmpersand | SymStar | SymSlash | SymPercent | SymPlus
   | SymWrapMultiply | SymSaturatingMultiply
   | SymWrapAdd | SymWrapSubtract | SymSaturatingAdd | SymSaturatingSubtract
@@ -120,7 +120,7 @@ symbolText :: SymbolKind -> Text
 
 - `with` and `scope` are reserved for structured concurrency and round-trip like every other keyword.
 - `Module`, `WITH`, empty text, prefixes, and whitespace-padded text are not keywords.
-- Ambiguous symbol prefixes remain distinct exact values: `.`, `..`, `..=`, `-`, `->`, `=`, `==`, and `=>`.
+- Ambiguous symbol prefixes remain distinct exact values: `.`, `..`, `..=`, `-`, `->`, `=`, and `==`.
 - `_` is not punctuation; the identifier scanner owns wildcard/underscore classification.
 - Semicolon is not canonical Pudu syntax and is not admitted as a symbol.
 - `Invalid` retains rejected text so later recovery can always advance without losing source fidelity.
@@ -143,4 +143,4 @@ DEPTH 0.58 (MEDIUM). A compact closed interface centralizes the language's lexic
 
 ## Referenced by
 
-[[src/Pudu/Frontend/_MOC]] · [[src/Pudu/_MOC]] · [[Source]] · [[Frontend]]
+[[src/Pudu/Frontend/_MOC]] · [[Source]] · [[Frontend]]
