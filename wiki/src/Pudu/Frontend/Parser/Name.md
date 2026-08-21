@@ -36,7 +36,7 @@ parseNamePath :: Parser (Located (NonEmpty Text))
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Syntax Name]], [[Syntax Located]].
-- **Consumed by:** current [[Parser Type]] and future expression/declaration modules.
+- **Consumed by:** current [[Parser Type]] and [[Parser Expression]], plus the future declaration module.
 
 ## Algorithm
 
@@ -64,4 +64,4 @@ DEPTH 0.57 (MEDIUM). Centralizes repeated dotted-path and casing behavior.
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Parser Expression]] · [[Frontend]]

@@ -107,6 +107,7 @@ type Result[T, E] =
 
 From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; range `.. ..=`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||`; assignment; control expressions.
 
+- Assignment is right-associative. Every other admitted binary band is left-associative; semantic typing rejects operator chains whose intermediate result cannot serve as the next operand.
 - Assignment is a statement-like expression of type `()` and requires a mutable place.
 - Function calls evaluate callee then arguments left-to-right.
 - Blocks evaluate statements left-to-right and yield the final unterminated expression or `()`.
