@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Parser State]] and [[Parser Name]] · establish source-bound EOF normalization, bounded indexed traversal, opaque diagnostics, and segmented paths · risk MED · depth n/a→DEEP/MEDIUM · issue #3
 - 2026-08-21 · [[Syntax]] · establish located segmented recovery-capable untyped surface data · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Quoted Scanner]] and [[Lexer Facade]] · establish bounded quoted decoding, total lossless tokenization, E0002/E0005–E0008, and E0099 recovery · risk MED · depth n/a→MEDIUM · issue #8
 - 2026-08-21 · [[Number Scanner]] and [[Symbol Scanner]] · establish textual numeric validation, E0004 recovery, and longest-match symbols · risk MED · depth n/a→MEDIUM · issue #7

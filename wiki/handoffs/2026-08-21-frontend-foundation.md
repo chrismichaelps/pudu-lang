@@ -52,6 +52,8 @@ tags: [handoff]
 - [Role: DNA Engineer → Shadow] Committed the four syntax mirrors and maps before staging their implementation files.
 - [Role: Shadow → Forensic Guardian] Admitted the modular syntax data and direct provenance/name/recovery invariants with package exposure.
 - [Role: Forensic Guardian → Architect] Clarified delivery so issue #3 can use honest sub-600 intermediate `Refs` partitions without opening artificial issues; only its final partition closes the issue.
+- [Role: Forensic Guardian → Architect] Merged issue #3 syntax partition through PR #18 after exact-head semantic, forensic, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Resolved parser state/name source ownership, source-end EOF normalization, opaque diagnostic construction, closed symbol mapping, declaration boundaries, and segmented-name casing before implementation admission.
 
 ## Decided (do not re-litigate)
 
@@ -63,12 +65,12 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: validate and merge the syntax dependency before parser state/name/type behavior.
+- Issue #3: commit parser state/name mirrors first, then repair and validate their preserved implementations before type/expression behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: audit syntax mirror parity, recovery poison, non-empty segmented names, provenance invariants, size, and validation.
+DNA Engineer: commit complete [[Parser State]]/[[Parser Name]] mirrors and parser map before the Shadow stages their source files.
 
 ## Links
 
