@@ -37,7 +37,7 @@ Compiler changes also cover the affected lexer/parser/AST/type/ownership/exhaust
 
 ## Review
 
-Open a PR to `dev` with `Closes #<issue>`. Explain the behavior, why the diff is reviewable, what was run, and any intentionally deferred boundary in concise prose.
+Open a PR to `dev` with `Closes #<issue>`; mandatory intermediate size partitions use `Refs #<issue>`, keep it open, and name the exact remaining action. Explain behavior, reviewability, validation, and deferred boundaries concisely.
 
 The author performs a self-audit, then an independent reviewer checks correctness, semantic conformance, diagnostics, performance risks, and test strength. Semantic, ABI, or public API changes require Language Architect approval. A Forensic Guardian confirms wiki/source parity and history updates.
 

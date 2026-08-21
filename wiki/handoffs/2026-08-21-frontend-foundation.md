@@ -47,6 +47,11 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Committed the complete facade mirror and Grill Log before its implementation.
 - [Role: DNA Engineer → Shadow] Re-anchored implementation to the facade mirror and assigned only facade, focused integration tests, and package exposure.
 - [Role: Shadow → Forensic Guardian] Implemented the total facade, fixed scanner precedence, exact E0099 recovery, conservative lossless invariant fallback, generated losslessness properties, and development/optimized gates.
+- [Role: Forensic Guardian → Architect] Merged issue #8 through PR #17 after exact-head semantic, forensic, size, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Selected issue #3's dependency-first syntax slice and resolved the complete [[Syntax]], [[Syntax Located]], [[Syntax Name]], and [[Syntax Tree]] mirrors before history admission.
+- [Role: DNA Engineer → Shadow] Committed the four syntax mirrors and maps before staging their implementation files.
+- [Role: Shadow → Forensic Guardian] Admitted the modular syntax data and direct provenance/name/recovery invariants with package exposure.
+- [Role: Forensic Guardian → Architect] Clarified delivery so issue #3 can use honest sub-600 intermediate `Refs` partitions without opening artificial issues; only its final partition closes the issue.
 
 ## Decided (do not re-litigate)
 
@@ -58,17 +63,16 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #8 requires exact-head semantic, forensic, and locked-CI gates in PR #17; completion unblocks parser integration.
-- Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
+- Issue #3: validate and merge the syntax dependency before parser state/name/type behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: repeat exact-head issue #8 parity, totality, diagnostic, size, private-boundary, and validation review for PR #17.
+Forensic Guardian: audit syntax mirror parity, recovery poison, non-empty segmented names, provenance invariants, size, and validation.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Quoted Scanner]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Engineering Delivery]]
 
 ## Referenced by
 

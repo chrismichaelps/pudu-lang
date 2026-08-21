@@ -69,7 +69,7 @@ Agents working concurrently must own non-overlapping files or subsystems. Shared
 
 Every PR must satisfy:
 
-1. Linked issue; PR targets `dev` and uses `Closes #N`.
+1. Linked issue and `dev` target. The final PR uses `Closes #N`; intermediate partitions required by the 600-line split gate use `Refs #N`, keep the issue open, and name the exact remaining action.
 2. Review size target below 400 changed lines; split before 600 except isolated generated/snapshot data. Governance bootstrap issue #1 is the sole pre-code exception because the cross-linked constitution must become atomic source of truth before vertical slices begin.
 3. Semantic commits: `type(scope): imperative summary refs #N`.
 4. FMCF: complete module pages existed first; wiki/code match; backlinks/MOCs/changelog updated.
@@ -97,7 +97,7 @@ Review findings use:
 
 - Use merge commits for feature PRs so the PR boundary and reviewed commit series remain visible.
 - Delete merged remote feature branches.
-- The linked issue receives the merged PR number and closes after merge.
+- The linked issue receives every merged partition PR number and closes only after the final `Closes #N` merge.
 - `dev` is always buildable. Failed integrations are fixed forward or reverted through a PR.
 - Releases use `release/X.Y.Z`, a release PR to `main`, an annotated `vX.Y.Z` tag, and a back-merge to `dev` when release metadata differs.
 - Semantic releases also update [[architecture/SEMANTICS#Revision Ledger]] and cite their ADRs.
