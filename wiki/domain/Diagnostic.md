@@ -14,4 +14,4 @@ aliases: [Compiler Diagnostic]
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Source Text]] · [[Compiler Pipeline]] · [[Frontend]] · [[Semantics]] · [[Tooling]]
+[[architecture/OVERVIEW]] · [[Source Text]] · [[Frontend]] · [[Semantics]] · [[Tooling]]

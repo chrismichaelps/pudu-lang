@@ -88,4 +88,4 @@ The target-neutral [[Core IR]] lowers into control-flow IR suitable for these pr
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[architecture/SEMANTICS]] · [[ADR-0005-performance-and-low-level-optimization]] · [[Lexer]] · [[Semantics]] · [[Backend]]
+[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[architecture/SEMANTICS]] · [[ADR-0005-performance-and-low-level-optimization]] · [[Frontend]] · [[Semantics]] · [[Backend]]

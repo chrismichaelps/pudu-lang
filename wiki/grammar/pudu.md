@@ -23,20 +23,21 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 
 ## Reserved Keywords
 
-`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe scope`
+`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe with scope`
 
 `enum`, `struct`, `task`, and `spawn` are reserved for compatibility even where v1 canonical syntax uses `type` and structured `scope` forms.
 
 ## Module and Declaration Grammar
 
 ```ebnf
-program          = module_decl, import_decl*, declaration*, EOF ;
+program          = module_decl, import_decl*, top_declaration*, EOF ;
 module_decl      = "module", module_path ;
 module_path      = upper_ident, (".", upper_ident)* ;
 import_decl      = "import", module_path,
                    (("as", upper_ident) | ("{", import_item, (",", import_item)*, "}"))? ;
-declaration      = "export"?, (binding_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
-binding_decl     = ("let" | "var" | "const"), lower_ident, (":", type_ref)?, "=", expression ;
+top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
+const_decl       = "const", lower_ident, (":", type_ref)?, "=", expression ;
+local_binding    = ("let" | "var" | "const"), lower_ident, (":", type_ref)?, "=", expression ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 type_decl        = "type", upper_ident, type_params?, "=", (record_type | sum_type | type_ref) ;
@@ -50,9 +51,10 @@ Rules:
 - Module names match the manifest-relative file path.
 - Imports are absolute. Wildcard imports are prohibited.
 - Declarations are private unless `export`.
-- `let` is immutable, `var` is mutable, and `const` must be evaluated and stored at compile time.
+- Module-scope values are `const` only. Runtime `let` and `var` bindings are admitted inside blocks, preventing module-load execution and global mutable state.
+- `let` is immutable, `var` is mutable, and `const` is evaluated and stored at compile time.
 - Exported functions require explicit parameter and return types; private functions may infer omitted types when inference is unambiguous.
-- Default arguments must be compile-time evaluable and may reference only earlier parameters.
+- Default arguments are type-checked in the function declaration's lexical environment. They may reference module constants and earlier parameters, but not caller locals, later parameters, mutable global state, async operations, or unsafe operations. At a call, supplied arguments evaluate first from left to right; omitted defaults then evaluate in parameter order using already bound earlier parameter values. Any declared recoverable failure is part of the call expression's ordinary failure behavior.
 
 ## Type Grammar
 
@@ -92,7 +94,7 @@ type Result[T, E] =
 
 ## Expression Grammar and Precedence
 
-From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut`; multiplicative `* / %`; additive `+ - &+ &- +| -|`; range `.. ..=`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||`; assignment; control expressions.
+From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; range `.. ..=`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||`; assignment; control expressions.
 
 - Assignment is a statement-like expression of type `()` and requires a mutable place.
 - Function calls evaluate callee then arguments left-to-right.
@@ -165,6 +167,13 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - `unsafe { ... }` is the only construct enabling raw pointers, foreign calls marked unsafe, unchecked indexing, or `null`.
 - Unsafe does not disable type checking, ownership of safe values, or lexical initialization checks.
 - Public safe APIs wrapping unsafe code must state and enforce their invariants; unsafe requirements cannot be hidden in ordinary parameters.
+
+## Copy Eligibility
+
+- `Copy` is a compiler-controlled marker used by ownership checking, not an ordinary trait that user code may implement manually.
+- Integer, floating, boolean, character, unit, and shared-reference values are `Copy`. Mutable references, owning pointers/handles, and values with `Drop` are not.
+- Tuples, fixed arrays, and declared aggregates are `Copy` exactly when every stored component is `Copy` and the aggregate has no `Drop` implementation or resource identity.
+- Generic aggregate copying requires a `Copy` obligation for each type parameter reachable through a copied field. Failure to prove eligibility keeps the value move-only.
 
 ## Formatting Constitution
 

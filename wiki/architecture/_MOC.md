@@ -31,4 +31,4 @@ Pudu is a statically typed native systems language for developers who need predi
 
 ## Referenced by
 
-[[00-INDEX]] · [[Compiler Pipeline]]
+[[00-INDEX]] · [[architecture/OVERVIEW]] · [[Tooling]]

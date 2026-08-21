@@ -12,4 +12,4 @@ aliases: [Core Intermediate Representation]
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Interpreter]] · [[Native Backend]] · [[Ownership]]
+[[architecture/OVERVIEW]] · [[Runtime]] · [[Backend]] · [[Ownership]]

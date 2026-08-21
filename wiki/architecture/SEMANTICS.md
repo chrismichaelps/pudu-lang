@@ -71,7 +71,7 @@ Supporting judgements:
 - Imports never re-export implicitly.
 - Ambiguous unqualified references are errors with related spans for every candidate.
 - Trait method lookup considers inherent methods first, then in-scope traits; multiple applicable trait methods require qualification.
-- Cyclic module imports are allowed only for declaration signatures; initialization cycles do not exist because modules have no load-time execution.
+- Cyclic module imports are allowed only for declaration signatures. Module-scope values are compile-time constants, so initialization cycles and module-load execution do not exist.
 
 ## Type Formation and Equality
 
@@ -115,7 +115,7 @@ Supporting judgements:
 
 - Arguments bind by value unless their parameter type is a reference.
 - By-value non-`Copy` arguments move; `Copy` arguments duplicate their value.
-- Default arguments elaborate at the call site in parameter order after supplied arguments are evaluated.
+- Default expressions are type-checked at the declaration in its lexical environment and may reference only module constants plus earlier parameters. A call evaluates the callee and supplied arguments left-to-right, binds those parameter values, then evaluates omitted defaults in parameter order. Defaults cannot observe caller locals or ambient mutable state; their declared recoverable failures propagate as failures of the call expression.
 - Recursion is permitted. Tail calls are not guaranteed to be optimized in v1.
 - Trait-bounded generic calls use static monomorphization for native compilation; the interpreter may use equivalent dictionaries internally without observable difference.
 - Exported functions form compatibility boundaries: changing parameter order/type, return type, failure type, async status, or generic constraints is breaking.
@@ -149,6 +149,7 @@ drop p:                     Available → Moved
 - Borrow regions run from creation through last possible use, constrained by control flow. They do not extend merely to the lexical block end.
 - References cannot be stored in a value that outlives the referent; return references must derive from explicitly borrowed parameters, never locals.
 - Drop order is reverse declaration order within a scope; aggregate fields drop in declaration order after user `Drop` code completes.
+- `Copy` is compiler-controlled: user-written implementations are rejected. A value is copyable only when its representation contains exclusively `Copy` components and has neither resource identity nor `Drop`; mutable references are never `Copy`. Generic copying generates structural `Copy` obligations for all reachable type parameters.
 
 ## Resource Safety
 
@@ -235,6 +236,7 @@ These obligations require executable property/conformance tests now and mechaniz
 ## Revision Ledger
 
 - **0.1.0-draft · 2026-08-21:** Established evaluation order, local inference boundary, `Result` propagation, ownership transitions, deterministic cleanup, structured concurrency/cancellation, compile-time capability restrictions, unsafe containment, and conformance obligations. See [[ADR-0001-language-purpose-and-v1-scope]], [[ADR-0002-compiler-pipeline]], and [[ADR-0003-ownership-and-resource-safety]].
+- **0.1.0-draft clarification · 2026-08-21:** Closed pre-implementation ambiguities in default-argument evaluation, module-scope initialization, and compiler-controlled structural `Copy`. No implementation compatibility exists yet; these rules are part of the initial draft review. See [[ADR-0003-ownership-and-resource-safety]].
 
 ## Grill Log
 

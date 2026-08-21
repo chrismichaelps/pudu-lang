@@ -12,4 +12,4 @@ aliases: [Evaluation Result]
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Interpreter]] · [[Runtime]]
+[[architecture/OVERVIEW]] · [[Runtime]]

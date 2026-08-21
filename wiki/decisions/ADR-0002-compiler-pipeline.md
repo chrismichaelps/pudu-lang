@@ -20,7 +20,7 @@ Direct native emission from syntax would couple semantics to a backend, duplicat
 
 ## Decision
 
-Use the explicit phases in [[architecture/OVERVIEW]], implemented in Haskell locked by [[grammar/haskell]]. Both [[Interpreter]] and [[Native Backend]] consume checked [[Core IR]]. Native v1 emission targets portable C11 and crosses [[Native Toolchain]] for executable production.
+Use the explicit phases in [[architecture/OVERVIEW]], implemented in Haskell locked by [[grammar/haskell]]. The interpreter owned by [[Runtime]] and native emitter owned by [[Backend]] both consume checked [[Core IR]]. Native v1 emission targets portable C11 and crosses [[Native Toolchain]] for executable production.
 
 ## Rationale
 

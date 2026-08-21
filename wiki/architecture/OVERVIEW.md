@@ -13,14 +13,14 @@ Implement the [[Pudu Language]] as explicit, independently testable phases while
 ## Pipeline
 
 1. [[Source Text]] enters [[Frontend]].
-2. [[Lexer]] produces tokens and lexical [[Diagnostic]] values.
-3. [[Parser]] produces a recovery-capable untyped syntax tree.
-4. [[Name Resolution]] assigns declarations and lexical scopes.
-5. [[Type Checking]] produces typed syntax, verifies generics, effects, and exhaustive matching.
-6. [[Ownership Checking]] verifies moves, shared borrows, exclusive borrows, and region lifetimes.
+2. The lexer in [[Frontend]] produces tokens and lexical [[Diagnostic]] values.
+3. The parser in [[Frontend]] produces a recovery-capable untyped syntax tree.
+4. Name resolution in [[Semantics]] assigns declarations and lexical scopes.
+5. Type checking in [[Semantics]] produces typed syntax, verifies generics, effects, and exhaustive matching.
+6. Ownership checking in [[Semantics]] verifies moves, shared borrows, exclusive borrows, and region lifetimes.
 7. Lowering produces [[Core IR]] with explicit control flow and ownership operations.
-8. [[Interpreter]] evaluates typed/core programs for REPL and conformance.
-9. [[Native Backend]] emits portable C11, then crosses the [[Native Toolchain]] seam to produce a native [[Compilation Artifact]].
+8. The interpreter in [[Runtime]] evaluates typed/core programs for REPL and conformance.
+9. The native backend in [[Backend]] emits portable C11, then crosses the [[Native Toolchain]] seam to produce a native [[Compilation Artifact]].
 10. [[Tooling]] reuses the same source, syntax, semantic, and diagnostic models.
 
 ## Dependency Direction

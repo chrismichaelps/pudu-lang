@@ -48,4 +48,4 @@ DRIFT 0 (HEALTHY by specification). No callers exist; no bypass exists.
 
 ## Referenced by
 
-[[seams/_MOC]] · [[architecture/OVERVIEW]] · [[Backend]] · [[Native Backend]] · [[Compilation Artifact]] · [[ADR-0002-compiler-pipeline]]
+[[seams/_MOC]] · [[architecture/OVERVIEW]] · [[Backend]] · [[Compilation Artifact]] · [[ADR-0002-compiler-pipeline]]

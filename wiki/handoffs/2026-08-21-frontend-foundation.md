@@ -13,8 +13,8 @@ tags: [handoff]
 ## Done
 
 - Established [[grammar/haskell]], [[grammar/pudu]], and normative [[architecture/SEMANTICS]].
-- Specified [[Source]], [[Diagnostic Model]], [[Token]], [[Lexer]], [[Syntax]], [[Parser]], and [[Compiler Pipeline]].
-- Resolved frontend representation, lossless trivia, recovery, precedence, and public validity decisions in module Grill Logs.
+- Established the architectural contracts that issue #2 and issue #3 must refine into mirrored module pages before their implementation files enter history.
+- Resolved source offset units, frontend phase boundaries, recovery direction, precedence, and public validity constraints at architecture level.
 - Established [[Engineering Delivery]] and private-input boundary.
 - Established [[Performance Constitution]] for strict phase data, measured low-level representations, and proof-preserving optimization.
 
@@ -28,13 +28,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #2: author and implement the modular source/diagnostic/token/lexer slice.
-- Issue #3: author and implement the modular syntax/parser/compiler slice.
+- Issue #2: commit complete mirrored module pages with resolved Grill Logs, then implement the modular source/diagnostic/token/lexer slice.
+- Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-DNA Engineer: execute issue #2 from its governing module pages, keeping the lexer façade thin and its scanner internals separately owned. The issue #1 governance PR must merge before implementation begins on `dev`.
+DNA Engineer: on issue #2, reconcile and commit the Source/Diagnostic/Token/Lexer module pages before staging any Haskell, then implement from those versioned contracts with a thin lexer façade and separately owned scanner internals. The issue #1 governance PR must merge first.
 
 ## Links
 

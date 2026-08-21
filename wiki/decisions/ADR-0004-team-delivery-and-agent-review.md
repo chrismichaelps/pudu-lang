@@ -20,7 +20,7 @@ Ad hoc commits to `main`, large horizontal PRs, self-reviewing agents, and conve
 
 ## Decision
 
-Adopt [[Engineering Delivery]]: protected `main`/`dev`, issue-linked vertical feature branches, semantic commits, small PRs to `dev`, independent implementation review, architecture approval for semantic/public changes, FMCF Guardian parity review, and explicit release branches/tags.
+Adopt [[Engineering Delivery]]: target protected `main`/`dev`, issue-linked vertical feature branches, semantic commits, small PRs to `dev`, independent implementation review, architecture approval for semantic/public changes, FMCF Guardian parity review, and explicit release branches/tags.
 
 ## Rationale
 
@@ -30,7 +30,7 @@ The flow makes the issue, vault, branch, commits, PR, reviews, tests, and releas
 
 - Initial repository bootstrap must establish `dev` before normal feature work.
 - GitHub issue/branch automation should enforce naming and references without hiding dirty worktrees.
-- CI and branch protection become required before production claims.
+- CI arrives with the issue #2 executable scaffold; branch protection is enabled when repository ownership can satisfy the review rules without bypassing them. Both are required before production claims.
 - Agent roles are responsibilities, not fake identities or approval substitutes.
 
 ## Alternatives
@@ -43,7 +43,7 @@ The flow makes the issue, vault, branch, commits, PR, reviews, tests, and releas
 ## Validation
 
 - First three features must each trace issue → wiki → branch → commits → PR → independent review → merged `dev`.
-- PRs target under 400 changed lines and carry explicit focused/full validation evidence.
+- PRs target under 400 changed lines and carry explicit focused/full validation evidence. Issue #1 is the single governance-bootstrap exception: its cross-linked vault, workflow, and semantic constitution land atomically before implementation, and its independent review must explicitly accept that exception.
 - Review 2026-10-01 for wait time, PR size, escaped defects, and handoff quality.
 
 ## Referenced by

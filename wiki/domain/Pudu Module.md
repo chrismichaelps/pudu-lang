@@ -11,8 +11,8 @@ aliases: [Source Module]
 - **Not:** An FMCF implementation module.
 - **Invariant:** A module name is PascalCase segments and must match its manifest-relative path.
 - **Visibility:** Declarations are private unless explicitly `export`.
-- **Side effects:** Module loading never runs user code.
+- **Side effects:** Module loading never runs user code. Module-scope values are compile-time `const` declarations only; runtime `let` and `var` bindings are block-local.
 
 ## Referenced by
 
-[[Pudu Program]] · [[grammar/pudu]] · [[Name Resolution]]
+[[Pudu Program]] · [[grammar/pudu]] · [[Semantics]]

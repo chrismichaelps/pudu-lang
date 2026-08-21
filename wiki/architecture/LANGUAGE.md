@@ -11,7 +11,7 @@ aliases: [Architecture Language]
 - **Definition:** A unit with an interface and a hidden implementation.
 - **Canonical name:** Module.
 - **Not:** An arbitrary helper split with no behavior-hiding value.
-- **Example:** [[Lexer]] hides Unicode traversal, trivia, numeric validation, and token span construction behind one scan operation.
+- **Example:** The lexer façade in [[Frontend]] hides Unicode traversal, trivia, numeric validation, and token span construction behind one scan operation.
 
 ## Interface
 

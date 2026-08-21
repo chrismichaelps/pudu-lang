@@ -12,7 +12,7 @@ Lower checked [[Core IR]] into portable C11 and coordinate the [[Native Toolchai
 
 ## Owns
 
-[[Native Backend]] · C names/layout · runtime ABI references · target model · toolchain process translation.
+Native backend · C names/layout · runtime ABI references · target model · toolchain process translation.
 
 ## Boundaries
 

@@ -9,8 +9,8 @@ aliases: [Engineering Delivery, Team Workflow]
 ## Branch Topology
 
 ```text
-main                    production releases only; protected
-  └─ dev                integrated next release; protected
+main                    production releases only; protection target
+  └─ dev                integrated next release; protection target
       ├─ feature/<issue>-<slug>
       ├─ fix/<issue>-<slug>
       ├─ perf/<issue>-<slug>
@@ -31,7 +31,7 @@ dev ──> release/<version> ──PR──> main ──annotated tag v<version
 An issue is executable only when it contains:
 
 - objective and user/language behavior;
-- governing `[[wiki pages]]` and ADRs;
+- linked governing vault pages and ADRs;
 - in-scope and out-of-scope boundaries;
 - acceptance criteria covering success, failure, regression, diagnostics, wiki parity, and full suite;
 - risk/semantic compatibility classification;
@@ -70,13 +70,13 @@ Agents working concurrently must own non-overlapping files or subsystems. Shared
 Every PR must satisfy:
 
 1. Linked issue; PR targets `dev` and uses `Closes #N`.
-2. Review size target below 400 changed lines; split before 600 except isolated generated/snapshot data.
+2. Review size target below 400 changed lines; split before 600 except isolated generated/snapshot data. Governance bootstrap issue #1 is the sole pre-code exception because the cross-linked constitution must become atomic source of truth before vertical slices begin.
 3. Semantic commits: `type(scope): imperative summary refs #N`.
 4. FMCF: complete module pages existed first; wiki/code match; backlinks/MOCs/changelog updated.
 5. Regression gate: success, failure, regression, and diagnostic/output checks; formatter/linter; full suite when practical.
 6. Independent implementation review with no unresolved P0/P1 defects.
 7. Language Architect approval when accepted syntax, meaning, diagnostic compatibility, Core IR contract, ABI, or public standard library API changes.
-8. CI green on the supported GHC/toolchain matrix.
+8. CI green on the supported GHC/toolchain matrix once the issue #2 compiler scaffold introduces executable CI. Before then, governance PRs require whitespace, link/backlink, tracked-private-boundary, and issue/branch/commit validation evidence.
 
 Review findings use:
 
@@ -112,7 +112,7 @@ Review findings use:
 
 ## Current Repository Constraint
 
-As of 2026-08-21 the GitHub repository has one administrator identity. CODEOWNERS records stewardship, but GitHub-native independent approval cannot be enforced until another maintainer identity exists. Until then, independent agent review is mandatory and preserved as a PR comment or check artifact; it supplements rather than impersonates human approval.
+As of 2026-08-21 the GitHub repository has one administrator identity and branch protection/required CI are rollout targets, not current enforcement. CODEOWNERS records stewardship, but GitHub-native independent approval cannot be enforced until another maintainer identity exists. Until then, independent agent review is mandatory and preserved as a PR comment or check artifact; it supplements rather than impersonates human approval.
 
 The local proposal, goal, and FMCF instruction files are a private input boundary. They remain gitignored and must never appear in issues, branches, commits, PRs, review comments, CI artifacts, or releases. Reviewers use the distilled vault specifications and ADRs.
 

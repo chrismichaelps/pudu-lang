@@ -12,7 +12,7 @@ Enforce [[architecture/SEMANTICS]] by resolving names, inferring/checking [[Pudu
 
 ## Owns
 
-[[Name Resolution]] · [[Type Checking]] · [[Ownership Checking]] · exhaustiveness · trait coherence · typed syntax · lowering.
+Name resolution · type checking · ownership checking · exhaustiveness · trait coherence · typed syntax · lowering.
 
 ## Boundaries
 

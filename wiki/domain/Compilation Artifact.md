@@ -12,4 +12,4 @@ aliases: [Native Artifact]
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Native Backend]] · [[Native Toolchain]] · [[Backend]]
+[[architecture/OVERVIEW]] · [[Native Toolchain]] · [[Backend]]

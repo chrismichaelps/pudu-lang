@@ -14,4 +14,4 @@ aliases: [Type]
 
 ## Referenced by
 
-[[Type Checking]] · [[Ownership]] · [[Core IR]] · [[grammar/pudu]]
+[[Semantics]] · [[Ownership]] · [[Core IR]] · [[grammar/pudu]]

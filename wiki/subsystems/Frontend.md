@@ -12,7 +12,7 @@ Transform [[Source Text]] into a faithful recovery-capable syntax representation
 
 ## Owns
 
-[[Lexer]] · [[Parser]] · tokens · trivia · source spans · untyped syntax · recovery nodes.
+Lexer · parser · tokens · trivia · source spans · untyped syntax · recovery nodes.
 
 ## Boundaries
 

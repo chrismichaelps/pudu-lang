@@ -12,7 +12,7 @@ Provide deterministic [[Execution Result]] behavior for checked [[Core IR]] and 
 
 ## Owns
 
-[[Interpreter]] · runtime values · panic/cancellation model · deterministic destruction support · standard-library runtime primitives.
+Interpreter · runtime values · panic/cancellation model · deterministic destruction support · standard-library runtime primitives.
 
 ## Boundaries
 

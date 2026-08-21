@@ -8,7 +8,7 @@ aliases: [Tooling]
 
 ## Purpose
 
-Expose one consistent [[Compiler Pipeline]] through CLI, REPL, formatter, linter, project/package workflows, documentation generation, tests, and eventually LSP.
+Expose one consistent compiler pipeline through CLI, REPL, formatter, linter, project/package workflows, documentation generation, tests, and eventually LSP.
 
 ## Owns
 

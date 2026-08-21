@@ -23,6 +23,7 @@ An unspecified ownership model can compile use-after-free, reject ordinary safe 
 Adopt the state transitions and obligations in [[Ownership]] and [[architecture/SEMANTICS]]:
 
 - owning values move unless proven `Copy`;
+- `Copy` is compiler-controlled and structural: user implementations are rejected, every stored component must be `Copy`, and resource/`Drop` types plus mutable references are ineligible;
 - shared and exclusive borrows are statically exclusive as appropriate;
 - intra-function regions end at last use using control-flow analysis;
 - partial moves and definite initialization are tracked by place;
@@ -58,4 +59,4 @@ These rules provide a coherent safe native model with familiar expressiveness an
 
 ## Referenced by
 
-[[decisions/_MOC]] · [[Ownership]] · [[Ownership Checking]] · [[architecture/SEMANTICS]] · [[CHANGELOG]]
+[[decisions/_MOC]] · [[Ownership]] · [[Semantics]] · [[architecture/SEMANTICS]] · [[CHANGELOG]]
