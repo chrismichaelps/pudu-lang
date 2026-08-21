@@ -23,10 +23,8 @@ module Pudu.Frontend.Parser.State
   , withRecursionBudget
   ) where
 
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import Data.Text (Text)
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -48,8 +46,7 @@ import Pudu.Source (Source, Span, emptySpan, sourceLength, zeroWidthSpan)
 
 {-| @Program.Parser.State — isolates cursor and diagnostic invariants -}
 data ParserState = ParserState
-  { parserTokens :: !(Seq Token)
-  , parserIndex :: !Int
+  { parserRemaining :: ![Token]
   , parserDiagnosticsRev :: ![Diagnostic]
   , parserRecursionBudget :: !Int
   , parserFallbackEof :: !Token
@@ -83,8 +80,7 @@ initialParserState :: Source -> [Token] -> ParserState
 initialParserState source tokens =
   let fallback = sourceEof source
    in ParserState
-        { parserTokens = normalizeTokens fallback tokens
-        , parserIndex = 0
+        { parserRemaining = normalizeTokens fallback tokens
         , parserDiagnosticsRev = []
         , parserRecursionBudget = 512
         , parserFallbackEof = fallback
@@ -110,11 +106,10 @@ isAtEnd = (== EndOfFile) <$> peekKind
 advanceToken :: Parser Token
 advanceToken = Parser $ \state ->
   let token = tokenAt 0 state
-      nextIndex =
-        if tokenKind token == EndOfFile
-          then parserIndex state
-          else min (parserIndex state + 1) (Seq.length (parserTokens state) - 1)
-   in (token, state{parserIndex = nextIndex})
+      remaining = case parserRemaining state of
+        current : rest | tokenKind current /= EndOfFile -> rest
+        _ -> parserRemaining state
+   in (token, state{parserRemaining = remaining})
 
 matchKind :: (TokenKind -> Bool) -> Parser (Maybe Token)
 matchKind predicate = do
@@ -222,18 +217,19 @@ expectedToken expected display context = do
 
 tokenAt :: Int -> ParserState -> Token
 tokenAt distance state =
-  let finalIndex = Seq.length (parserTokens state) - 1
-      requested = min finalIndex (max 0 (parserIndex state + max 0 distance))
-   in case Seq.lookup requested (parserTokens state) of
-        Just token -> token
-        Nothing -> parserFallbackEof state
+  seek (max 0 distance) (parserRemaining state)
+  where
+    seek remaining tokens = case tokens of
+      token : rest
+        | remaining > 0 && tokenKind token /= EndOfFile -> seek (remaining - 1) rest
+        | otherwise -> token
+      [] -> parserFallbackEof state
 
-normalizeTokens :: Token -> [Token] -> Seq Token
+normalizeTokens :: Token -> [Token] -> [Token]
 normalizeTokens fallback tokens =
-  Seq.fromList $
-    case break ((== EndOfFile) . tokenKind) tokens of
-      (before, eof : _) -> before <> [eof]
-      (before, []) -> before <> [fallback]
+  case break ((== EndOfFile) . tokenKind) tokens of
+    (before, eof : _) -> before <> [fallback{tokenLeadingTrivia = tokenLeadingTrivia eof}]
+    (before, []) -> before <> [fallback]
 
 sourceEof :: Source -> Token
 sourceEof source =

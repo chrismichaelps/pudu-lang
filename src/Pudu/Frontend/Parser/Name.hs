@@ -13,6 +13,7 @@ import Pudu.Frontend.Parser.State
   , emitParseError
   , expectIdentifier
   , matchSymbol
+  , withRecursionBudget
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (ModuleName))
@@ -22,16 +23,12 @@ parseModuleName :: Parser (Located ModuleName)
 parseModuleName = do
   segments@(first :| rest) <- parseSegments
   mapM_ validateUpper (first : rest)
-  pure
-    Located
-      { locatedSpan = segmentsSpan segments
-      , locatedValue = ModuleName (fmap locatedValue segments)
-      }
+  pure (Located (segmentsSpan segments) (ModuleName (fmap locatedValue segments)))
 
 parseNamePath :: Parser (Located (NonEmpty Text))
 parseNamePath = do
   segments <- parseSegments
-  pure Located{locatedSpan = segmentsSpan segments, locatedValue = fmap locatedValue segments}
+  pure (Located (segmentsSpan segments) (fmap locatedValue segments))
 
 parseSegments :: Parser (NonEmpty (Located Text))
 parseSegments = do
@@ -40,16 +37,16 @@ parseSegments = do
   pure (first :| rest)
  where
   parseRemaining = do
-    dot <- matchSymbol "."
-    case dot of
-      Nothing -> pure []
-      Just _ -> do
-        segment <- expectIdentifier "after ."
-        if Text.null (locatedValue segment)
-          then pure []
-          else do
-            remaining <- parseRemaining
-            pure (segment : remaining)
+    bounded <- withRecursionBudget $ do
+      dot <- matchSymbol "."
+      case dot of
+        Nothing -> pure []
+        Just _ -> do
+          segment <- expectIdentifier "after ."
+          if Text.null (locatedValue segment)
+            then pure []
+            else (segment :) <$> parseRemaining
+    pure (maybe [] id bounded)
 
 validateUpper :: Located Text -> Parser ()
 validateUpper Located{locatedSpan, locatedValue} =

@@ -17,7 +17,7 @@ aliases: [Parser State]
 
 ## Purpose
 
-Own an opaque indexed token cursor, bounded recursion/recovery budget, diagnostic accumulation, expectations, safe advancement, and `Located` construction so grammar modules contain grammar rather than state mechanics.
+Own an opaque strict remaining-token cursor, bounded recursion/recovery budget, diagnostic accumulation, expectations, safe advancement, and `Located` construction so grammar modules contain grammar rather than state mechanics.
 
 ## Interface
 
@@ -55,8 +55,8 @@ synchronizeDeclaration :: Parser ()
 
 ### Governance
 
-- Constructor/state fields are internal; tokens are stored in an indexed immutable sequence for O(1) cursor access.
-- Input is normalized to exactly one final EOF at the supplied source end; empty and missing-EOF lists never fabricate source identity.
+- Constructor/state fields are internal; current peek/advance are O(1) over a strict remaining-token list and lookahead is O(k), with grammar callers restricted to bounded `k`.
+- Input is normalized to exactly one canonical final EOF at the supplied source end; a supplied EOF contributes only its trailing trivia, never foreign span/kind/lexeme data.
 - Expectations diagnose without host failure; synthetic tokens are never returned as ordinary input.
 - Textual symbol requests resolve through the closed `SymbolKind` vocabulary; parser modules cannot construct symbol kinds from raw text.
 - Parser-owned error construction validates opaque diagnostic codes once in this module.
@@ -69,7 +69,7 @@ synchronizeDeclaration :: Parser ()
 
 ## Algorithm
 
-Index tokens, append/truncate to one source-end EOF, clamp cursor, thread strict state, resolve textual expectations, and synchronize by advancing to declaration start/`}`/EOF with guaranteed progress.
+Normalize tokens to one source-end EOF, retain the unconsumed suffix, thread strict state, resolve textual expectations, and synchronize by advancing to declaration start/`}`/EOF with guaranteed progress.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -85,12 +85,12 @@ DEPTH 0.77 (DEEP). It hides every dangerous parser invariant behind a compact gr
 
 ## Grill Log
 
-- **Q:** List cursor or indexed sequence? **A:** Store a compact array/vector-like sequence; initial implementation may use `Seq` from `containers` for indexed access. _Rationale:_ avoids repeated list traversal while staying dependency-light. _Rejected:_ repeated `drop`; unsafe mutable cursor.
+- **Q:** Indexed sequence or remaining-token cursor? **A:** Keep the strict remaining suffix. _Rationale:_ peek/advance are O(1), bounded lookahead is O(k), and a full parse remains linear without partial array indexing. _Rejected:_ `Seq.lookup` O(log n); repeated `drop` from the original list; unsafe mutable cursor.
 - **Q:** Custom parser monad acceptable? **A:** Internal only and small. _Rationale:_ state/error recovery is domain-specific and explicit. _Rejected:_ public framework abstraction.
 
 ## Variants
 
-- Replace `Seq` with `Vector` after admitting/pinning the dependency and benchmarking.
+- Replace the suffix with `Vector` only if profiling proves bounded lookahead dominates.
 
 ## Referenced by
 
