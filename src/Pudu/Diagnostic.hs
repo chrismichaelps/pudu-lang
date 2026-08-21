@@ -1,23 +1,28 @@
 {-| @Diagnostic.Compiler.Module — stabilizes actionable compiler failures -}
 module Pudu.Diagnostic
   ( Diagnostic
-  , DiagnosticCode (..)
+  , DiagnosticCode
   , Related (..)
   , Severity (..)
   , diagnostic
   , diagnosticCode
+  , diagnosticCodeText
   , diagnosticHelp
   , diagnosticMessage
   , diagnosticRelated
   , diagnosticSeverity
   , diagnosticSpan
   , hasErrors
+  , mkDiagnosticCode
   , sortDiagnostics
   , withHelp
   , withRelated
   ) where
 
+import Data.Foldable (toList)
 import Data.List (sortOn)
+import Data.Sequence (Seq, (|>))
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Source (Offset, SourceName, Span, spanEnd, spanSource, spanStart)
@@ -44,20 +49,37 @@ data Diagnostic = Diagnostic
   , spanValue :: !Span
   , messageValue :: !Text
   , helpValue :: !(Maybe Text)
-  , relatedValues :: ![Related]
+  , relatedValues :: !(Seq Related)
   }
   deriving stock (Eq, Show)
 
-diagnostic :: DiagnosticCode -> Severity -> Span -> Text -> Diagnostic
+mkDiagnosticCode :: Text -> Maybe DiagnosticCode
+mkDiagnosticCode code =
+  case Text.unpack code of
+    [family, group, first, second, third]
+      | family `elem` ['E', 'W']
+      , group >= '0'
+      , group <= '7'
+      , all isAsciiDigit [first, second, third] -> Just (DiagnosticCode code)
+    _ -> Nothing
+
+diagnosticCodeText :: DiagnosticCode -> Text
+diagnosticCodeText = unDiagnosticCode
+
+diagnostic :: DiagnosticCode -> Severity -> Span -> Text -> Maybe Diagnostic
 diagnostic code severity spanValue message =
-  Diagnostic
-    { codeValue = code
-    , severityValue = severity
-    , spanValue
-    , messageValue = nonEmptyMessage code message
-    , helpValue = Nothing
-    , relatedValues = []
-    }
+  if supportsSeverity code severity
+    then
+      Just
+        Diagnostic
+          { codeValue = code
+          , severityValue = severity
+          , spanValue
+          , messageValue = nonEmptyMessage code message
+          , helpValue = Nothing
+          , relatedValues = Seq.empty
+          }
+    else Nothing
 
 diagnosticCode :: Diagnostic -> DiagnosticCode
 diagnosticCode = codeValue
@@ -75,14 +97,14 @@ diagnosticHelp :: Diagnostic -> Maybe Text
 diagnosticHelp = helpValue
 
 diagnosticRelated :: Diagnostic -> [Related]
-diagnosticRelated = relatedValues
+diagnosticRelated = toList . relatedValues
 
 withHelp :: Text -> Diagnostic -> Diagnostic
 withHelp helpText value = value{helpValue = Just helpText}
 
 withRelated :: Related -> Diagnostic -> Diagnostic
 withRelated related value =
-  value{relatedValues = relatedValues value <> [related]}
+  value{relatedValues = relatedValues value |> related}
 
 sortDiagnostics :: [Diagnostic] -> [Diagnostic]
 sortDiagnostics =
@@ -106,6 +128,17 @@ nonEmptyMessage :: DiagnosticCode -> Text -> Text
 nonEmptyMessage (DiagnosticCode code) message
   | Text.null message = "compiler diagnostic " <> code
   | otherwise = message
+
+supportsSeverity :: DiagnosticCode -> Severity -> Bool
+supportsSeverity (DiagnosticCode code) severity =
+  case (Text.uncons code, severity) of
+    (Just ('E', _), Error) -> True
+    (Just ('W', _), Warning) -> True
+    (Just (family, _), Note) -> family == 'E' || family == 'W'
+    _ -> False
+
+isAsciiDigit :: Char -> Bool
+isAsciiDigit value = value >= '0' && value <= '9'
 
 relatedKeys :: [Related] -> [(SourceName, Offset, Offset, Text)]
 relatedKeys = map relatedKey
