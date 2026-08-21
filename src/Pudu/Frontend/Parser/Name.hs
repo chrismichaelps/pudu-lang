@@ -1,6 +1,7 @@
 {-| @Module.Parser.Name — parses segmented source paths -}
 module Pudu.Frontend.Parser.Name
-  ( parseModuleName
+  ( expectUpperIdentifier
+  , parseModuleName
   , parseNamePath
   ) where
 
@@ -30,6 +31,14 @@ parseNamePath = do
   segments <- parseSegments
   pure (Located (segmentsSpan segments) (fmap locatedValue segments))
 
+expectUpperIdentifier :: Text -> Parser (Located Text)
+expectUpperIdentifier context = do
+  identifier <- expectIdentifier context
+  if Text.null (locatedValue identifier)
+    then pure ()
+    else validateUpper identifier
+  pure identifier
+
 parseSegments :: Parser (NonEmpty (Located Text))
 parseSegments = do
   first <- expectIdentifier "for this name"
@@ -37,16 +46,16 @@ parseSegments = do
   pure (first :| rest)
  where
   parseRemaining = do
-    bounded <- withRecursionBudget $ do
-      dot <- matchSymbol "."
-      case dot of
-        Nothing -> pure []
-        Just _ -> do
+    dot <- matchSymbol "."
+    case dot of
+      Nothing -> pure []
+      Just _ -> do
+        bounded <- withRecursionBudget $ do
           segment <- expectIdentifier "after ."
           if Text.null (locatedValue segment)
             then pure []
             else (segment :) <$> parseRemaining
-    pure (maybe [] id bounded)
+        pure (maybe [] id bounded)
 
 validateUpper :: Located Text -> Parser ()
 validateUpper Located{locatedSpan, locatedValue} =

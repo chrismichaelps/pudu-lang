@@ -66,6 +66,8 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented closed-vocabulary precedence climbing, unary/postfix/conditional parsing, explicit reserved-postfix recovery, and hostile-chain properties.
 - [Role: Forensic Guardian → Architect] Merged the expression partition through PR #21 after cascade-free budget recovery, exact hostile spans, semantic, forensic, optimized, and locked-CI gates passed.
 - [Role: Architect → DNA Engineer] Split declaration grammar into modular import/binding/function/block/orchestration files and resolved [[Parser Import]] alias/selection exclusivity, trailing commas, diagnostics, progress, and budgets first.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Parser Import]] mirror, declaration map, grammar clarification, and backlinks before staging source.
+- [Role: Shadow → Forensic Guardian] Implemented modular import parsing, reusable uppercase aliases, cascade-free shared budgets, and focused success, failure, regression, diagnostic, and hostile-input properties.
 
 ## Decided (do not re-litigate)
 
@@ -77,12 +79,12 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: implement and validate modular import syntax before remaining declaration behavior.
+- Issue #3: validate and merge modular import syntax before remaining declaration behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-DNA Engineer: commit [[Parser Import]], its declaration map, grammar clarification, and backlinks before staging source.
+Forensic Guardian: verify exact-head wiki parity, bounded hostile-input behavior, and validation evidence for the modular import partition.
 
 ## Links
 
