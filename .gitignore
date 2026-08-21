@@ -1,0 +1,14 @@
+# Files
+fmcf.md
+
+# Proposal
+lang_proposal.md
+
+# Claude Code
+.claude/
+claude/
+.claude.json
+
+# Codex
+.codex/
+codex/
