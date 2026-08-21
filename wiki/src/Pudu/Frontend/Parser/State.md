@@ -65,7 +65,7 @@ synchronizeDeclaration :: Parser ()
 ### Linkage
 
 - **Requires:** [[Token]], [[Diagnostic Model]], [[Syntax Located]], [[grammar/haskell]].
-- **Consumed by:** current [[Parser Name]] and future parser grammar modules.
+- **Consumed by:** current [[Parser Name]] and [[Parser Type]], plus future parser grammar modules.
 
 ## Algorithm
 
@@ -94,4 +94,4 @@ DEPTH 0.77 (DEEP). It hides every dangerous parser invariant behind a compact gr
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Name]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Name]] · [[Parser Type]] · [[Frontend]]
