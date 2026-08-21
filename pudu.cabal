@@ -30,6 +30,8 @@ library
   exposed-modules:
     Pudu.Diagnostic
     Pudu.Frontend.Lexer.Cursor
+    Pudu.Frontend.Lexer.Identifier
+    Pudu.Frontend.Lexer.Trivia
     Pudu.Frontend.Token
     Pudu.Source
   build-depends:
@@ -45,6 +47,7 @@ test-suite pudu-test
   other-modules:
     Pudu.DiagnosticSpec
     Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.Lexer.ScannerSpec
     Pudu.Frontend.TokenSpec
   build-depends:
     base >=4.20 && <4.23,

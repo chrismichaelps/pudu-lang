@@ -36,6 +36,7 @@ cursorAtEnd :: LexerCursor -> Bool
 peekScalar :: LexerCursor -> Maybe Char
 cursorStartsWith :: Text -> LexerCursor -> Bool
 consumeScalars :: Int -> LexerCursor -> LexerCursor
+consumeWhile :: (Char -> Bool) -> LexerCursor -> LexerCursor
 markCursor :: LexerCursor -> CursorMark
 captureSince :: CursorMark -> LexerCursor -> Maybe (Text, Span)
 emitTrivia :: CursorMark -> TriviaKind -> LexerCursor -> Maybe LexerCursor
@@ -65,7 +66,7 @@ outputDiagnostics :: LexerOutput -> [Diagnostic]
 ## Algorithm
 
 1. Initialize current and committed points with `emptySpan`, retain the original source and full text suffix, and initialize strict empty accumulators.
-2. Peek without consuming, or consume at most the requested positive scalar count by tail-recursive `Text.uncons`; zero and negative requests are unchanged, and oversized requests stop exactly at EOF.
+2. Peek without consuming, consume at most a requested positive scalar count, or consume the maximal prefix accepted by a predicate. Both consumption paths traverse with strict `Text.uncons` and allocate one new cursor point after the traversal.
 3. Mark by copying the current point and suffix. Capture only when the mark is from the same snapshot and not later than the cursor, returning the mark suffix prefix whose scalar length equals the offset delta.
 4. Emit only when the mark equals the committed point and capture width is positive. Cons trivia onto the pending accumulator; cons tokens with reversed pending trivia restored and then clear the pending state.
 5. Cons validated diagnostics without sorting. At EOF, create one EOF token from the current point, attach remaining trivia, reverse tokens, and sort diagnostics.
@@ -73,7 +74,7 @@ outputDiagnostics :: LexerOutput -> [Diagnostic]
 ## Complexity
 
 - Construction, offset/end queries, scalar peek, mark, pending count, and accumulator insertion are O(1).
-- Consuming `n` scalars is O(min(n, remaining scalars)) with no accepted-token backtracking.
+- Consuming `n` scalars or a predicate-matching prefix is O(consumed scalars) with no accepted-token backtracking.
 - Prefix testing is O(prefix scalars); capture is O(captured scalars) and never drops from the full source prefix.
 - Completion is O(tokens + trivia + diagnostics log diagnostics), paid once.
 
@@ -90,6 +91,7 @@ outputDiagnostics :: LexerOutput -> [Diagnostic]
 
 - Empty input completes immediately as one zero-width EOF token with no trivia.
 - Non-positive consumption is unchanged; oversized consumption reaches EOF without offset overflow.
+- Predicate consumption is unchanged when the first scalar fails and reaches EOF when every remaining scalar matches.
 - Unicode supplementary scalars and combining marks each advance one scalar offset.
 - Equal-name/equal-content source snapshots cannot share marks, captures, emissions, or primary diagnostics.
 - A later-state mark is rejected against an earlier cursor even when both belong to one source.

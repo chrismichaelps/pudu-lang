@@ -14,7 +14,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 
 - Source is UTF-8 [[Source Text]]. Invalid UTF-8 is diagnostic `E0001` before lexing.
 - Whitespace separates tokens but is otherwise insignificant outside strings.
-- `//` starts a line comment. `/* ... */` block comments nest and must terminate.
+- `//` starts a line comment. `/* ... */` block comments nest; an unterminated block comment is retained as trivia and produces `E0003` over the complete consumed comment.
 - Identifiers start with a Unicode letter or `_` and continue with Unicode letters, decimal digits, or `_`; keywords are ASCII lowercase and reserved. Full Unicode XID conformance is deferred until a pinned Unicode-table dependency is admitted.
 - Value identifiers may use `snake_case` or `camelCase`; public API formatter preference is `snake_case`. Types, traits, modules, and variants use `PascalCase`. Constant declarations use `UPPER_SNAKE_CASE`.
 - Decimal digits may contain `_` only between digits. Integer bases use `0b`, `0o`, or `0x`.
