@@ -38,17 +38,15 @@ data Related = Related
   }
   deriving stock (Eq, Show)
 
-data Diagnostic = Diagnostic
-  { diagnosticCode :: !DiagnosticCode
-  , diagnosticSeverity :: !Severity
-  , diagnosticSpan :: !Span
-  , diagnosticMessage :: !Text
-  , diagnosticHelp :: !(Maybe Text)
-  , diagnosticRelated :: ![Related]
-  }
-  deriving stock (Eq, Show)
+data Diagnostic -- constructor hidden; Eq and Show
 
 diagnostic :: DiagnosticCode -> Severity -> Span -> Text -> Diagnostic
+diagnosticCode :: Diagnostic -> DiagnosticCode
+diagnosticSeverity :: Diagnostic -> Severity
+diagnosticSpan :: Diagnostic -> Span
+diagnosticMessage :: Diagnostic -> Text
+diagnosticHelp :: Diagnostic -> Maybe Text
+diagnosticRelated :: Diagnostic -> [Related]
 withHelp :: Text -> Diagnostic -> Diagnostic
 withRelated :: Related -> Diagnostic -> Diagnostic
 sortDiagnostics :: [Diagnostic] -> [Diagnostic]
@@ -59,8 +57,9 @@ hasErrors :: [Diagnostic] -> Bool
 
 - Codes use the groups in [[architecture/SEMANTICS#Diagnostic Contract]].
 - `withRelated` preserves insertion order for explanatory causality.
-- Deterministic ordering is source name, start, end, severity rank (`Error`, `Warning`, `Note`), then code.
+- Deterministic ordering is source name, start, end, severity rank (`Error`, `Warning`, `Note`), then code. Message, help, and ordered related-location data are total tie-breakers.
 - Messages are non-empty developer-facing text. An empty internal message is replaced deterministically with the diagnostic code so renderers never receive an empty primary message.
+- The `Diagnostic` constructor and writable record fields are hidden so callers cannot bypass message normalization; explicit accessors are read-only.
 
 ### Linkage
 
@@ -71,7 +70,7 @@ hasErrors :: [Diagnostic] -> Bool
 
 1. Construct a base diagnostic with no help/related items, normalizing an empty message to a stable code-based fallback.
 2. Decorators add help or append related locations without changing code/severity/span.
-3. Sort through a stable comparison key so parallel or recovery paths cannot reorder output nondeterministically.
+3. Sort by the primary location/severity/code key, then all remaining observable fields, so parallel or recovery paths cannot reorder distinct output nondeterministically.
 4. Detect blocking errors by severity only, never code prefixes or rendered text.
 
 ## Negative Logic (Prohibited Paths)
@@ -79,6 +78,7 @@ hasErrors :: [Diagnostic] -> Bool
 - No raw host exceptions or process stderr as messages without translation.
 - No severity inferred from a code string.
 - No deduplication by message text.
+- No public construction or record update that bypasses primary-message normalization.
 - No rendering/color/terminal width in the model.
 
 ## Edge Cases
@@ -97,6 +97,8 @@ DEPTH 0.57 (MEDIUM). The interface centralizes a durable cross-phase product con
 - **Q:** Store diagnostic messages as variants or text? **A:** Store stable code plus rendered-neutral text initially; later registries can centralize templates. _Rationale:_ exact phase contexts vary while codes carry compatibility. _Rejected:_ untyped text only; enormous closed diagnostic sum before feature set exists.
 - **Q:** Deduplicate diagnostics centrally? **A:** No. _Rationale:_ only the emitting phase knows causal equivalence. _Rejected:_ span/message set deduplication that hides legitimate findings.
 - **Q:** Is warning an error under warnings-as-errors? **A:** That is CLI policy, not model severity mutation. _Rationale:_ preserve semantic classification. _Rejected:_ rewriting warning values.
+- **Q:** May callers construct or update diagnostic records directly? **A:** No; the type is opaque and exposes read-only accessors plus invariant-preserving decorators. _Rationale:_ otherwise an empty primary message could bypass normalization. _Rejected:_ exporting `Diagnostic(..)` or writable record labels.
+- **Q:** Is a stable partial key deterministic enough? **A:** No; after location, severity, and code, compare every remaining observable field. _Rationale:_ stable sort alone preserves nondeterministic producer order for equal primary keys. _Rejected:_ relying on input order for distinct diagnostics.
 
 ## Variants
 
