@@ -40,6 +40,7 @@ isAtEnd :: Parser Bool
 advanceToken :: Parser Token
 matchKind :: (TokenKind -> Bool) -> Parser (Maybe Token)
 matchKeyword :: Keyword -> Parser (Maybe Token)
+isSymbol :: Text -> TokenKind -> Bool
 matchSymbol :: Text -> Parser (Maybe Token)
 expectKeyword :: Keyword -> Text -> Parser Token
 expectSymbol :: Text -> Text -> Parser Token
