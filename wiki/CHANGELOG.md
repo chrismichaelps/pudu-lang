@@ -5,7 +5,7 @@ tags: [changelog]
 
 # Changelog
 
-- 2026-08-21 · [[Parser Type]] · specify bounded reference, tuple/unit, named, generic, and E1020 recovery syntax · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Type]] · specify bounded reference, tuple/unit/grouped, named, generic, trailing-comma, and E1020 recovery syntax · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser State]] and [[Parser Name]] · establish source-bound EOF normalization, bounded suffix traversal, opaque diagnostics, and segmented paths · risk MED · depth n/a→DEEP/MEDIUM · issue #3
 - 2026-08-21 · [[Syntax]] · establish located segmented recovery-capable untyped surface data · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Quoted Scanner]] and [[Lexer Facade]] · establish bounded quoted decoding, total lossless tokenization, E0002/E0005–E0008, and E0099 recovery · risk MED · depth n/a→MEDIUM · issue #8

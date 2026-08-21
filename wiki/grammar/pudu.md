@@ -64,11 +64,14 @@ Rules:
 ## Type Grammar
 
 ```ebnf
-type_ref         = reference_type | function_type | tuple_type | named_type ;
+type_ref         = reference_type | function_type | parenthesized_type | named_type ;
 reference_type   = "&", "mut"?, type_ref ;
 function_type    = "async"?, "fn", "(", type_list?, ")", "->", type_ref ;
-tuple_type       = "(", type_ref, ",", type_list?, ")" ;
+parenthesized_type = "(", ")"
+                   | "(", type_ref, ")"
+                   | "(", type_ref, ",", type_list?, ")" ;
 named_type       = module_path_or_type, ("[", type_list, "]")? ;
+type_list        = type_ref, (",", type_ref)*, ","? ;
 type_params      = "[", type_param, (",", type_param)*, "]" ;
 where_clause     = "where", constraint, (",", constraint)* ;
 constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
@@ -79,6 +82,7 @@ constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
 - `Option[T]` represents absence. Ordinary types exclude `null`.
 - `Array[T, N]` requires non-negative compile-time `N`.
 - Generic type arguments use square brackets consistently.
+- `()` is unit, `(T)` groups one type without adding structure, and a comma forms a tuple; type lists admit one trailing comma.
 - Generic constraints are nominal trait bounds; v1 has no higher-kinded types, specialization, implicit arguments, or default generic type parameters on functions.
 - A synchronous function type `fn(A) -> T` has no recoverable failure unless `T` is explicitly `Result[S, E]`; its normalized semantic signature is success `S`, failure `E`, capability `Sync`. `fn(A) -> T` otherwise normalizes to failure `Never`.
 - An asynchronous function type is written `async fn(A) -> T`. Calling it produces `Task[T, Never]`; when its declared return is `Result[S, E]`, calling it produces `Task[S, E]`. This spelling preserves async capability and recoverable failure in first-class function types.
