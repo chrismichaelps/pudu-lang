@@ -99,6 +99,7 @@ DEPTH 0.57 (MEDIUM). The interface centralizes a durable cross-phase product con
 - **Q:** Is warning an error under warnings-as-errors? **A:** That is CLI policy, not model severity mutation. _Rationale:_ preserve semantic classification. _Rejected:_ rewriting warning values.
 - **Q:** May callers construct or update diagnostic records directly? **A:** No; the type is opaque and exposes read-only accessors plus invariant-preserving decorators. _Rationale:_ otherwise an empty primary message could bypass normalization. _Rejected:_ exporting `Diagnostic(..)` or writable record labels.
 - **Q:** Is a stable partial key deterministic enough? **A:** No; after location, severity, and code, compare every remaining observable field. _Rationale:_ stable sort alone preserves nondeterministic producer order for equal primary keys. _Rejected:_ relying on input order for distinct diagnostics.
+- **Q:** Replace the short related-location list with a sequence now? **A:** No; causality lists are expected to remain small and no profile identifies decoration as a bottleneck. _Rationale:_ preserve a minimal public model until allocation evidence justifies a representation change. _Rejected:_ speculative container dependency.
 
 ## Variants
 
