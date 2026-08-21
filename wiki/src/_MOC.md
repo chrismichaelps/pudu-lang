@@ -11,7 +11,7 @@ tags: [moc, module]
 
 | Status | Count | Modules |
 | --- | ---: | --- |
-No implementation modules are versioned in the governance foundation.
+| Planned | 0 | No implementation modules are versioned in the governance foundation. |
 
 ## Referenced by
 

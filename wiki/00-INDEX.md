@@ -23,6 +23,10 @@ The vault is the source of truth for the [[Pudu Language]]. Implementation is a 
 
 The original proposal, goal, and FMCF instruction files are local-only inputs and are intentionally ignored. This vault contains their distilled engineering decisions and is the shareable source of truth. Do not copy or quote private input text into repository history.
 
+## Link Policy
+
+Every wiki link must resolve to a versioned page or declared alias. Maps of Content own exhaustive structural membership; each page's `Referenced by` section is a curated set of high-value inbound navigation, not a generated or exhaustive backlink index. Module dependency and consumer links remain explicit in mirrored module pages.
+
 ## Referenced by
 
 [[architecture/_MOC]] · [[FMCF Workflow]]

@@ -78,7 +78,7 @@ Supporting judgements:
 - Nominal types are equal only by declaration identity and equal type arguments.
 - Structural equality applies to tuples, functions, and internal anonymous record patterns, not named record declarations.
 - Type aliases expand transparently and cannot be recursive without passing through a nominal data constructor.
-- Function types include parameter types, return type, recoverable error type, and async capability.
+- Function types normalize to parameter types, success type, recoverable error type, and async capability. Surface `Result[T, E]` supplies success `T` and failure `E`; absent `Result`, failure is `Never`. Surface `async fn` supplies `Async`, while ordinary `fn` supplies `Sync`.
 - `Never` is a subtype of every type solely for unreachable control-flow joins.
 - `&mut T` may reborrow temporarily as `&T`; general subtyping and implicit variance are not in v1.
 - Generic instantiation substitutes monotypes satisfying every declared trait constraint.
@@ -115,6 +115,7 @@ Supporting judgements:
 
 - Arguments bind by value unless their parameter type is a reference.
 - By-value non-`Copy` arguments move; `Copy` arguments duplicate their value.
+- Calling a synchronous failing function produces `Result[T, E]`. Calling an `async fn` produces a cold `Task[T, E]`; its surface `Result[T, E]` return is normalized into the task's success/failure channels rather than nested as `Task[Result[T, E], Never]`.
 - Default expressions are type-checked at the declaration in its lexical environment and may reference only module constants plus earlier parameters. A call evaluates the callee and supplied arguments left-to-right, binds those parameter values, then evaluates omitted defaults in parameter order. Defaults cannot observe caller locals or ambient mutable state; their declared recoverable failures propagate as failures of the call expression.
 - Recursion is permitted. Tail calls are not guaranteed to be optimized in v1.
 - Trait-bounded generic calls use static monomorphization for native compilation; the interpreter may use equivalent dictionaries internally without observable difference.
@@ -139,13 +140,15 @@ shared borrow p:            Available/Shared(n) → Shared(n+1)
 end shared borrow p:        Shared(n) → Shared(n-1)/Available
 exclusive borrow p:         Available → Exclusive
 end exclusive borrow p:     Exclusive → Available
-assign p:                   Available(writable) → Available
+replace p:                  Available(writable, unborrowed) → Available
+reinitialize p:             Moved(writable, unborrowed) → Available
 drop p:                     Available → Moved
 ```
 
-- Reading, moving, borrowing, assigning, or dropping from `Moved` is rejected.
+- Reading, moving, borrowing, or dropping from `Moved` is rejected. Storing a new value into a writable, unborrowed moved place is reinitialization and is permitted.
 - Moving or mutating from `Shared(n)` and every access except the active exclusive reference from `Exclusive` is rejected.
-- Partial moves are tracked by place projection. A partially moved aggregate may use untouched fields but cannot be read or dropped as a whole until reinitialized.
+- Assignment resolves the destination place once, then evaluates the right side. At the store point, an initialized destination's old value is dropped immediately before replacement; an uninitialized destination is stored without a drop. If right-side evaluation fails, replacement has not occurred and any old destination value not consumed by that evaluation remains in its resulting ownership state.
+- Partial moves are tracked by place projection. A partially moved aggregate may use untouched fields but cannot be read or dropped as a whole until every moved field is reinitialized. Partial moves from a type with user `Drop` are rejected because its destructor requires the whole value.
 - Borrow regions run from creation through last possible use, constrained by control flow. They do not extend merely to the lexical block end.
 - References cannot be stored in a value that outlives the referent; return references must derive from explicitly borrowed parameters, never locals.
 - Drop order is reverse declaration order within a scope; aggregate fields drop in declaration order after user `Drop` code completes.
@@ -237,6 +240,7 @@ These obligations require executable property/conformance tests now and mechaniz
 
 - **0.1.0-draft · 2026-08-21:** Established evaluation order, local inference boundary, `Result` propagation, ownership transitions, deterministic cleanup, structured concurrency/cancellation, compile-time capability restrictions, unsafe containment, and conformance obligations. See [[ADR-0001-language-purpose-and-v1-scope]], [[ADR-0002-compiler-pipeline]], and [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification · 2026-08-21:** Closed pre-implementation ambiguities in default-argument evaluation, module-scope initialization, and compiler-controlled structural `Copy`. No implementation compatibility exists yet; these rules are part of the initial draft review. See [[ADR-0003-ownership-and-resource-safety]].
+- **0.1.0-draft clarification 2 · 2026-08-21:** Defined move reinitialization, replacement drop timing, constant naming, and normalized synchronous/asynchronous failure signatures before implementation. See [[ADR-0003-ownership-and-resource-safety]].
 
 ## Grill Log
 
@@ -255,4 +259,4 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Referenced by
 
-[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]]
+[[architecture/_MOC]] · [[architecture/OVERVIEW]] · [[Engineering Delivery]] · [[Performance Constitution]] · [[grammar/pudu]] · [[Pudu Type]] · [[Ownership]] · [[Core IR]] · [[Semantics]] · [[ADR-0001-language-purpose-and-v1-scope]] · [[ADR-0002-compiler-pipeline]] · [[ADR-0003-ownership-and-resource-safety]] · [[ADR-0005-performance-and-low-level-optimization]] · [[CHANGELOG]] · [[2026-08-21-frontend-foundation]]

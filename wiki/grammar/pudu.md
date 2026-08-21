@@ -16,7 +16,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 - Whitespace separates tokens but is otherwise insignificant outside strings.
 - `//` starts a line comment. `/* ... */` block comments nest and must terminate.
 - Identifiers start with a Unicode letter or `_` and continue with Unicode letters, decimal digits, or `_`; keywords are ASCII lowercase and reserved. Full Unicode XID conformance is deferred until a pinned Unicode-table dependency is admitted.
-- Value identifiers may use `snake_case` or `camelCase`; public API formatter preference is `snake_case`. Types, traits, modules, and variants use `PascalCase`. Constants use `UPPER_SNAKE_CASE` by convention.
+- Value identifiers may use `snake_case` or `camelCase`; public API formatter preference is `snake_case`. Types, traits, modules, and variants use `PascalCase`. Constant declarations use `UPPER_SNAKE_CASE`.
 - Decimal digits may contain `_` only between digits. Integer bases use `0b`, `0o`, or `0x`.
 - Strings are UTF-8 text with `\n`, `\r`, `\t`, `\\`, `\"`, `\0`, and `\u{HEX}` escapes. String interpolation is reserved but not admitted in the 0.1 core; an unescaped `{` or `}` produces E0008 rather than silently becoming text. A later semantic slice will admit `{expression}` segments and `{{`/`}}` brace escapes together.
 - Character literals contain exactly one Unicode scalar value after escapes.
@@ -36,8 +36,9 @@ module_path      = upper_ident, (".", upper_ident)* ;
 import_decl      = "import", module_path,
                    (("as", upper_ident) | ("{", import_item, (",", import_item)*, "}"))? ;
 top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
-const_decl       = "const", lower_ident, (":", type_ref)?, "=", expression ;
-local_binding    = ("let" | "var" | "const"), lower_ident, (":", type_ref)?, "=", expression ;
+const_decl       = "const", constant_ident, (":", type_ref)?, "=", expression ;
+local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expression
+                 | "const", constant_ident, (":", type_ref)?, "=", expression ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 type_decl        = "type", upper_ident, type_params?, "=", (record_type | sum_type | type_ref) ;
@@ -51,6 +52,7 @@ Rules:
 - Module names match the manifest-relative file path.
 - Imports are absolute. Wildcard imports are prohibited.
 - Declarations are private unless `export`.
+- `constant_ident` is an identifier composed of uppercase Unicode letters, decimal digits, and `_`, beginning with an uppercase letter or `_`; at least one uppercase letter is required.
 - Module-scope values are `const` only. Runtime `let` and `var` bindings are admitted inside blocks, preventing module-load execution and global mutable state.
 - `let` is immutable, `var` is mutable, and `const` is evaluated and stored at compile time.
 - Exported functions require explicit parameter and return types; private functions may infer omitted types when inference is unambiguous.
@@ -61,7 +63,7 @@ Rules:
 ```ebnf
 type_ref         = reference_type | function_type | tuple_type | named_type ;
 reference_type   = "&", "mut"?, type_ref ;
-function_type    = "fn", "(", type_list?, ")", "->", type_ref ;
+function_type    = "async"?, "fn", "(", type_list?, ")", "->", type_ref ;
 tuple_type       = "(", type_ref, ",", type_list?, ")" ;
 named_type       = module_path_or_type, ("[", type_list, "]")? ;
 type_params      = "[", type_param, (",", type_param)*, "]" ;
@@ -75,6 +77,8 @@ constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
 - `Array[T, N]` requires non-negative compile-time `N`.
 - Generic type arguments use square brackets consistently.
 - Generic constraints are nominal trait bounds; v1 has no higher-kinded types, specialization, implicit arguments, or default generic type parameters on functions.
+- A synchronous function type `fn(A) -> T` has no recoverable failure unless `T` is explicitly `Result[S, E]`; its normalized semantic signature is success `S`, failure `E`, capability `Sync`. `fn(A) -> T` otherwise normalizes to failure `Never`.
+- An asynchronous function type is written `async fn(A) -> T`. Calling it produces `Task[T, Never]`; when its declared return is `Result[S, E]`, calling it produces `Task[S, E]`. This spelling preserves async capability and recoverable failure in first-class function types.
 
 ## Data Types and Patterns
 
@@ -139,7 +143,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 ## Async and Structured Concurrency
 
-- `async fn` returns a lazy `Task[T, E]`; calling it does not execute until awaited or spawned in a scope.
+- `async fn` returns a lazy `Task[T, E]`; calling it does not execute until awaited or spawned in a scope. A declared `Result[T, E]` return supplies those task channels and is not nested inside the task.
 - `.await` is legal only inside `async fn` or an async block and is a cancellation point.
 - `async with scope { ... }` creates a structured task scope. Spawned tasks cannot outlive it.
 - Leaving a scope normally awaits children; leaving by failure or cancellation cancels children, runs cleanup, then waits for termination.
@@ -196,4 +200,4 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 ## Referenced by
 
-[[grammar/_MOC]] · [[Pudu Module]] · [[Pudu Type]] · [[Ownership]] · [[architecture/SEMANTICS]] · [[Standard Library]] · [[FMCF Workflow]]
+[[grammar/_MOC]] · [[Pudu Module]] · [[Pudu Type]] · [[Ownership]] · [[architecture/SEMANTICS]] · [[Standard Library]] · [[FMCF Workflow]] · [[2026-08-21-frontend-foundation]]

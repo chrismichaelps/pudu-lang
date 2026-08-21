@@ -27,6 +27,7 @@ Adopt the state transitions and obligations in [[Ownership]] and [[architecture/
 - shared and exclusive borrows are statically exclusive as appropriate;
 - intra-function regions end at last use using control-flow analysis;
 - partial moves and definite initialization are tracked by place;
+- writable moved places and fields may be reinitialized when no borrow overlaps; replacing an initialized value drops the old value immediately before the store;
 - destruction is deterministic with specified order;
 - resource close failures use explicit `close` when recoverable;
 - unsafe is lexical and cannot disable safe-value ownership;

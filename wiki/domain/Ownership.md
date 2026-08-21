@@ -16,4 +16,4 @@ aliases: [Ownership Model, Borrowing]
 
 ## Referenced by
 
-[[Pudu Type]] · [[Semantics]] · [[Core IR]] · [[ADR-0003-ownership-and-resource-safety]]
+[[domain/_MOC]] · [[Pudu Type]] · [[Semantics]] · [[Core IR]] · [[grammar/pudu]] · [[ADR-0003-ownership-and-resource-safety]]
