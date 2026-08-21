@@ -9,16 +9,21 @@ import Pudu.Source
   , SourceName (SourceName)
   , Span
   , advanceOffset
+  , emptySpan
   , mergeSpans
   , mkSource
   , mkSpan
   , offsetFromInt
   , offsetPosition
   , sourceLength
+  , sourceName
+  , sourceText
   , spanEnd
+  , spanSource
   , spanStart
   , unOffset
   , zeroOffset
+  , zeroWidthSpan
   )
 import System.Exit (exitFailure)
 import Test.QuickCheck
@@ -43,9 +48,12 @@ main = do
       [ check "empty source position" testEmptySourcePosition
       , check "CRLF position" testCrLfPosition
       , check "mixed newline positions" testMixedNewlinePosition
+      , check "Unicode scalars define offsets and columns" testUnicodeScalarPosition
       , check "offset arithmetic rejects invalid advances" testOffsetArithmetic
       , check "span construction validates bounds" testSpanBounds
-      , check "span merging respects source identity" testSpanMerging
+      , check "zero-width spans retain snapshot identity" testZeroWidthSpans
+      , check "span merging respects snapshot identity" testSpanMerging
+      , check "source accessors preserve input" testSourceAccessors
       , check "cached source length matches text" propertySourceLength
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       ]
@@ -64,13 +72,30 @@ testEmptySourcePosition =
 
 testCrLfPosition :: Property
 testCrLfPosition =
-  positionAt (mkSource (SourceName "crlf") "a\r\nb") 3
-    === Just (Position 2 1)
+  let source = mkSource (SourceName "crlf") "a\r\nb"
+   in conjoin
+        [ positionAt source 2 === Just (Position 2 1)
+        , positionAt source 3 === Just (Position 2 1)
+        , positionAt source 4 === Just (Position 2 2)
+        ]
 
 testMixedNewlinePosition :: Property
 testMixedNewlinePosition =
-  positionAt (mkSource (SourceName "mixed") "a\rb\nc") 4
-    === Just (Position 3 1)
+  let source = mkSource (SourceName "mixed") "a\rb\nc\r"
+   in conjoin
+        [ positionAt source 2 === Just (Position 2 1)
+        , positionAt source 4 === Just (Position 3 1)
+        , positionAt source 6 === Just (Position 4 1)
+        ]
+
+testUnicodeScalarPosition :: Property
+testUnicodeScalarPosition =
+  let source = mkSource (SourceName "unicode") "💡e\x0301"
+   in conjoin
+        [ unOffset (sourceLength source) === 3
+        , positionAt source 1 === Just (Position 1 2)
+        , positionAt source 3 === Just (Position 1 4)
+        ]
 
 testOffsetArithmetic :: Property
 testOffsetArithmetic =
@@ -99,8 +124,9 @@ testSpanMerging :: Property
 testSpanMerging =
   let source = mkSource (SourceName "source") "abcd"
       otherSource = mkSource (SourceName "other") "abcd"
-   in case (spanAt source 0 2, spanAt source 1 4, spanAt otherSource 0 1) of
-        (Just left, Just right, Just other) ->
+      revisedSource = mkSource (SourceName "source") "abcdefgh"
+   in case (spanAt source 0 2, spanAt source 1 4, spanAt otherSource 0 1, spanAt revisedSource 4 8) of
+        (Just left, Just right, Just other, Just revised) ->
           conjoin
             [ case mergeSpans left right of
                 Just merged ->
@@ -110,8 +136,32 @@ testSpanMerging =
                     ]
                 Nothing -> counterexample "same-source spans did not merge" False
             , mergeSpans left other === Nothing
+            , mergeSpans left revised === Nothing
             ]
         _ -> counterexample "test span construction failed" False
+
+testZeroWidthSpans :: Property
+testZeroWidthSpans =
+  let source = mkSource (SourceName "zero") "abc"
+   in case (offsetFromInt 3, zeroWidthSpan source =<< offsetFromInt 3) of
+        (Just endOffset, Just atEnd) ->
+          let atStart = emptySpan source
+           in conjoin
+                [ spanSource atStart === SourceName "zero"
+                , spanStart atStart === zeroOffset
+                , spanEnd atStart === zeroOffset
+                , spanStart atEnd === endOffset
+                , spanEnd atEnd === endOffset
+                ]
+        _ -> counterexample "zero-width span construction failed" False
+
+testSourceAccessors :: Property
+testSourceAccessors =
+  let source = mkSource (SourceName "accessor") "💡"
+   in conjoin
+        [ sourceName source === SourceName "accessor"
+        , sourceText source === "💡"
+        ]
 
 propertySourceLength :: Property
 propertySourceLength =

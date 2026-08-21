@@ -34,17 +34,23 @@ newtype SourceName = SourceName {unSourceName :: Text}
 newtype Offset = Offset {unOffset :: Int}
   deriving stock (Eq, Ord, Show)
 
-{-| @Source.Text.Value — pairs identity with decoded text -}
+{-| @Source.Text.Snapshot — distinguishes same-name content revisions -}
+data SourceSnapshot = SourceSnapshot
+  { snapshotName :: !SourceName
+  , snapshotText :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+{-| @Source.Text.Value — pairs an immutable snapshot with cached bounds -}
 data Source = Source
-  { sourceName :: !SourceName
-  , sourceText :: !Text
+  { sourceSnapshot :: !SourceSnapshot
   , sourceScalarLength :: !Int
   }
   deriving stock (Eq, Show)
 
-{-| @Source.Text.Span — identifies a half-open range -}
+{-| @Source.Text.Span — identifies a half-open range in one snapshot -}
 data Span = Span
-  { spanSource :: !SourceName
+  { spanSnapshot :: !SourceSnapshot
   , spanStart :: !Offset
   , spanEnd :: !Offset
   }
@@ -60,13 +66,19 @@ data Position = Position
 mkSource :: SourceName -> Text -> Source
 mkSource name textValue =
   Source
-    { sourceName = name
-    , sourceText = textValue
+    { sourceSnapshot = SourceSnapshot{snapshotName = name, snapshotText = textValue}
     , sourceScalarLength = Text.length textValue
     }
 
-emptySpan :: SourceName -> Span
-emptySpan name = Span{spanSource = name, spanStart = zeroOffset, spanEnd = zeroOffset}
+sourceName :: Source -> SourceName
+sourceName = snapshotName . sourceSnapshot
+
+sourceText :: Source -> Text
+sourceText = snapshotText . sourceSnapshot
+
+emptySpan :: Source -> Span
+emptySpan Source{sourceSnapshot} =
+  Span{spanSnapshot = sourceSnapshot, spanStart = zeroOffset, spanEnd = zeroOffset}
 
 zeroOffset :: Offset
 zeroOffset = Offset 0
@@ -83,31 +95,38 @@ advanceOffset amount (Offset value)
   | otherwise = Just (Offset (value + amount))
 
 mkSpan :: Source -> Offset -> Offset -> Maybe Span
-mkSpan Source{sourceName, sourceScalarLength} start@(Offset startValue) end@(Offset endValue)
+mkSpan Source{sourceSnapshot, sourceScalarLength} start@(Offset startValue) end@(Offset endValue)
   | startValue < 0 = Nothing
   | endValue < startValue = Nothing
   | endValue > sourceScalarLength = Nothing
-  | otherwise = Just Span{spanSource = sourceName, spanStart = start, spanEnd = end}
+  | otherwise = Just Span{spanSnapshot = sourceSnapshot, spanStart = start, spanEnd = end}
 
 zeroWidthSpan :: Source -> Offset -> Maybe Span
 zeroWidthSpan source offset = mkSpan source offset offset
 
 mergeSpans :: Span -> Span -> Maybe Span
 mergeSpans left right
-  | spanSource left /= spanSource right = Nothing
+  | spanSnapshot left /= spanSnapshot right = Nothing
   | otherwise =
       Just
         Span
-          { spanSource = spanSource left
+          { spanSnapshot = spanSnapshot left
           , spanStart = min (spanStart left) (spanStart right)
           , spanEnd = max (spanEnd left) (spanEnd right)
           }
 
 offsetPosition :: Source -> Offset -> Maybe Position
-offsetPosition Source{sourceText, sourceScalarLength} (Offset requested)
+spanSource :: Span -> SourceName
+spanSource = snapshotName . spanSnapshot
+
+offsetPosition Source{sourceSnapshot, sourceScalarLength} (Offset requested)
   | requested < 0 = Nothing
   | requested > sourceScalarLength = Nothing
-  | otherwise = Just (positionValue (Text.foldl' advancePosition initialPositionFold (Text.take requested sourceText)))
+  | otherwise =
+      Just
+        ( positionValue
+            (Text.foldl' advancePosition initialPositionFold (Text.take requested (snapshotText sourceSnapshot)))
+        )
 
 sourceLength :: Source -> Offset
 sourceLength = Offset . sourceScalarLength

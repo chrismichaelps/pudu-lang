@@ -15,8 +15,6 @@ source-repository head
 common warnings
   default-language: GHC2024
   default-extensions:
-    DeriveFunctor
-    LambdaCase
     NamedFieldPuns
     OverloadedStrings
     StrictData
