@@ -5,20 +5,16 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticSpan)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Token
-  ( Token, TokenKind (EndOfFile, Identifier, Invalid, Symbol)
-  , SymbolKind (SymPlus), tokenKind, tokenLeadingTrivia, tokenLexeme
-  , triviaText
-  )
+  ( Token, TokenKind (EndOfFile, Identifier, Invalid, Symbol), SymbolKind (SymPlus)
+  , tokenKind, tokenLeadingTrivia, tokenLexeme, triviaText )
 import Pudu.Source (SourceName (SourceName), newSource, spanEnd, spanStart, unOffset)
 import Test.QuickCheck
-  ( Gen, Property, conjoin, counterexample, elements, forAll, ioProperty
-  , listOf, property, (===)
-  )
+  ( Property, conjoin, counterexample, elements, forAll, ioProperty, listOf
+  , property, (===) )
 
 lexerProperties :: [(String, IO Property)]
 lexerProperties =
-  [ ("facade integrates scanners losslessly", testIntegration)
-  , ("unknown scalars recover one at a time with E0099", testUnknown)
+  [ ("facade integrates scanners losslessly", testIntegration), ("unknown scalars recover one at a time with E0099", testUnknown)
   , ("arbitrary scanner boundaries always complete losslessly", testTotalLosslessness)
   ]
 
@@ -39,22 +35,17 @@ testUnknown = do
       ([Invalid ";", Identifier "name", Invalid "٣", Symbol SymPlus, EndOfFile], [first, second]) ->
         conjoin
           [ map (diagnosticCodeText . diagnosticCode) [first, second] === ["E0099", "E0099"]
-          , map (\finding -> (unOffset (spanStart (diagnosticSpan finding)), unOffset (spanEnd (diagnosticSpan finding)))) [first, second]
-              === [(0, 1), (7, 8)]
+          , map (\finding -> (unOffset (spanStart (diagnosticSpan finding)), unOffset (spanEnd (diagnosticSpan finding)))) [first, second] === [(0, 1), (7, 8)]
           , reconstruct lexTokens === "; name ٣ +"
           ]
       _ -> counterexample "unknown-scalar recovery returned unexpected output" False
 
 testTotalLosslessness :: IO Property
-testTotalLosslessness = pure $ forAll sourceTextGenerator $ \input -> ioProperty $ do
+testTotalLosslessness = pure $ forAll (Text.pack <$> listOf (elements "abcXYZ_019٣ +-*/.;'\"\\{}\n\r\t💡")) $ \input -> ioProperty $ do
   source <- newSource (SourceName "generated-lexer.pudu") input
   let LexResult{lexTokens} = lexSource source
   pure $ conjoin [reconstruct lexTokens === input, property (countEof lexTokens == 1),
     property (endsWithEof lexTokens)]
-
-sourceTextGenerator :: Gen Text
-sourceTextGenerator =
-  Text.pack <$> listOf (elements "abcXYZ_019٣ +-*/.;'\"\\{}\n\r\t💡")
 
 countEof :: [Token] -> Int
 countEof = length . filter ((== EndOfFile) . tokenKind)
