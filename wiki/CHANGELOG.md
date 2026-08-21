@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Parser Expression]] · specify closed-vocabulary bounded precedence, postfix, conditional, E1040/E1042/E1043 recovery · risk HIGH · depth n/a→DEEP · issue #3
 - 2026-08-21 · [[Parser Type]] · specify bounded reference, tuple/unit/grouped, named, generic, trailing-comma, and E1020 recovery syntax · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser State]] and [[Parser Name]] · establish source-bound EOF normalization, bounded suffix traversal, opaque diagnostics, and segmented paths · risk MED · depth n/a→DEEP/MEDIUM · issue #3
 - 2026-08-21 · [[Syntax]] · establish located segmented recovery-capable untyped surface data · risk MED · depth n/a→MEDIUM · issue #3

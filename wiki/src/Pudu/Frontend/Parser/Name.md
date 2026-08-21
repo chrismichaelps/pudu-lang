@@ -36,7 +36,7 @@ parseNamePath :: Parser (Located (NonEmpty Text))
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Syntax Name]], [[Syntax Located]].
-- **Consumed by:** current [[Parser Type]] and future expression/declaration modules.
+- **Consumed by:** current [[Parser Type]] plus the future declaration module.
 
 ## Algorithm
 
