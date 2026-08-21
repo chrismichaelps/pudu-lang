@@ -4,42 +4,8 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Source
-  ( Position (Position)
-  , Source
-  , SourceName (SourceName)
-  , Span
-  , advanceOffset
-  , emptySpan
-  , mergeSpans
-  , mkSource
-  , mkSpan
-  , offsetFromInt
-  , offsetPosition
-  , sourceLength
-  , sourceName
-  , sourceText
-  , spanEnd
-  , spanSource
-  , spanStart
-  , unOffset
-  , zeroOffset
-  , zeroWidthSpan
-  )
 import System.Exit (exitFailure)
-import Test.QuickCheck
-  ( Gen
-  , Property
-  , Testable
-  , conjoin
-  , counterexample
-  , forAll
-  , property
-  , quickCheckResult
-  , withMaxSuccess
-  , (===)
-  )
-import Test.QuickCheck.Gen (chooseInt)
-import Test.QuickCheck.Test (isSuccess)
+import Test.QuickCheck hiding (label)
 
 main :: IO ()
 main = do
@@ -59,120 +25,142 @@ main = do
       ]
   unless (and outcomes) exitFailure
 
-check :: Testable propertyValue => String -> propertyValue -> IO Bool
-check label propertyValue = do
+check :: String -> IO Property -> IO Bool
+check label loadProperty = do
   putStrLn ("[test] " <> label)
+  propertyValue <- loadProperty
   result <- quickCheckResult (withMaxSuccess 200 propertyValue)
   pure (isSuccess result)
 
-testEmptySourcePosition :: Property
-testEmptySourcePosition =
-  offsetPosition (mkSource (SourceName "empty") Text.empty) zeroOffset
-    === Just (Position 1 1)
+testEmptySourcePosition :: IO Property
+testEmptySourcePosition = do
+  source <- newSource (SourceName "empty") Text.empty
+  pure (offsetPosition source zeroOffset === Just (Position 1 1))
 
-testCrLfPosition :: Property
-testCrLfPosition =
-  let source = mkSource (SourceName "crlf") "a\r\nb"
-   in conjoin
+testCrLfPosition :: IO Property
+testCrLfPosition = do
+  source <- newSource (SourceName "crlf") "a\r\nb"
+  pure
+    ( conjoin
         [ positionAt source 2 === Just (Position 2 1)
         , positionAt source 3 === Just (Position 2 1)
         , positionAt source 4 === Just (Position 2 2)
         ]
+    )
 
-testMixedNewlinePosition :: Property
-testMixedNewlinePosition =
-  let source = mkSource (SourceName "mixed") "a\rb\nc\r"
-   in conjoin
+testMixedNewlinePosition :: IO Property
+testMixedNewlinePosition = do
+  source <- newSource (SourceName "mixed") "a\rb\nc\r"
+  pure
+    ( conjoin
         [ positionAt source 2 === Just (Position 2 1)
         , positionAt source 4 === Just (Position 3 1)
         , positionAt source 6 === Just (Position 4 1)
         ]
+    )
 
-testUnicodeScalarPosition :: Property
-testUnicodeScalarPosition =
-  let source = mkSource (SourceName "unicode") "💡e\x0301"
-   in conjoin
+testUnicodeScalarPosition :: IO Property
+testUnicodeScalarPosition = do
+  source <- newSource (SourceName "unicode") "💡e\x0301"
+  pure
+    ( conjoin
         [ unOffset (sourceLength source) === 3
         , positionAt source 1 === Just (Position 1 2)
         , positionAt source 3 === Just (Position 1 4)
         ]
+    )
 
-testOffsetArithmetic :: Property
+testOffsetArithmetic :: IO Property
 testOffsetArithmetic =
-  case offsetFromInt maxBound of
-    Nothing -> counterexample "maxBound offset construction failed" False
-    Just largest ->
-      conjoin
-        [ advanceOffset (-1) zeroOffset === Nothing
-        , advanceOffset 1 largest === Nothing
-        , advanceOffset 2 zeroOffset === offsetFromInt 2
-        ]
+  pure $
+    case offsetFromInt maxBound of
+      Nothing -> counterexample "maxBound offset construction failed" False
+      Just largest ->
+        conjoin
+          [ advanceOffset (-1) zeroOffset === Nothing
+          , advanceOffset 1 largest === Nothing
+          , advanceOffset 2 zeroOffset === offsetFromInt 2
+          ]
 
-testSpanBounds :: Property
-testSpanBounds =
-  let source = mkSource (SourceName "span") "abc"
-   in case (offsetFromInt 0, offsetFromInt 2, offsetFromInt 3, offsetFromInt 4) of
-        (Just zero, Just two, Just three, Just four) ->
-          conjoin
-            [ property (mkSpan source zero three /= Nothing)
-            , mkSpan source two zero === Nothing
-            , mkSpan source zero four === Nothing
-            ]
-        _ -> counterexample "valid offset construction failed" False
+testSpanBounds :: IO Property
+testSpanBounds = do
+  source <- newSource (SourceName "span") "abc"
+  pure $
+    case (offsetFromInt 0, offsetFromInt 2, offsetFromInt 3, offsetFromInt 4) of
+      (Just zero, Just two, Just three, Just four) ->
+        conjoin
+          [ property (mkSpan source zero three /= Nothing)
+          , mkSpan source two zero === Nothing
+          , mkSpan source zero four === Nothing
+          ]
+      _ -> counterexample "valid offset construction failed" False
 
-testSpanMerging :: Property
-testSpanMerging =
-  let source = mkSource (SourceName "source") "abcd"
-      otherSource = mkSource (SourceName "other") "abcd"
-      revisedSource = mkSource (SourceName "source") "abcdefgh"
-   in case (spanAt source 0 2, spanAt source 1 4, spanAt otherSource 0 1, spanAt revisedSource 4 8) of
-        (Just left, Just right, Just other, Just revised) ->
-          conjoin
-            [ case mergeSpans left right of
-                Just merged ->
-                  conjoin
-                    [ unOffset (spanStart merged) === 0
-                    , unOffset (spanEnd merged) === 4
-                    ]
-                Nothing -> counterexample "same-source spans did not merge" False
-            , mergeSpans left other === Nothing
-            , mergeSpans left revised === Nothing
-            ]
-        _ -> counterexample "test span construction failed" False
+testSpanMerging :: IO Property
+testSpanMerging = do
+  source <- newSource (SourceName "source") "abcd"
+  otherName <- newSource (SourceName "other") "abcd"
+  revised <- newSource (SourceName "source") "wxyz"
+  duplicate <- newSource (SourceName "source") "abcd"
+  pure $
+    case (spanAt source 0 2, spanAt source 1 4, spanAt otherName 0 1, spanAt revised 0 4, spanAt duplicate 0 1) of
+      (Just left, Just right, Just other, Just revision, Just duplicateSpan) ->
+        conjoin
+          [ case mergeSpans left right of
+              Just merged ->
+                conjoin
+                  [ unOffset (spanStart merged) === 0
+                  , unOffset (spanEnd merged) === 4
+                  ]
+              Nothing -> counterexample "same-snapshot spans did not merge" False
+          , mergeSpans left other === Nothing
+          , mergeSpans left revision === Nothing
+          , mergeSpans left duplicateSpan === Nothing
+          ]
+      _ -> counterexample "test span construction failed" False
 
-testZeroWidthSpans :: Property
-testZeroWidthSpans =
-  let source = mkSource (SourceName "zero") "abc"
-   in case (offsetFromInt 3, zeroWidthSpan source =<< offsetFromInt 3) of
-        (Just endOffset, Just atEnd) ->
-          let atStart = emptySpan source
-           in conjoin
-                [ spanSource atStart === SourceName "zero"
-                , spanStart atStart === zeroOffset
-                , spanEnd atStart === zeroOffset
-                , spanStart atEnd === endOffset
-                , spanEnd atEnd === endOffset
-                ]
-        _ -> counterexample "zero-width span construction failed" False
+testZeroWidthSpans :: IO Property
+testZeroWidthSpans = do
+  source <- newSource (SourceName "zero") "abc"
+  pure $
+    case (offsetFromInt 3, zeroWidthSpan source =<< offsetFromInt 3) of
+      (Just endOffset, Just atEnd) ->
+        let atStart = emptySpan source
+         in conjoin
+              [ spanSource atStart === SourceName "zero"
+              , spanStart atStart === zeroOffset
+              , spanEnd atStart === zeroOffset
+              , spanStart atEnd === endOffset
+              , spanEnd atEnd === endOffset
+              , property (not ("abc" `Text.isInfixOf` Text.pack (show atEnd)))
+              ]
+      _ -> counterexample "zero-width span construction failed" False
 
-testSourceAccessors :: Property
-testSourceAccessors =
-  let source = mkSource (SourceName "accessor") "💡"
-   in conjoin
+testSourceAccessors :: IO Property
+testSourceAccessors = do
+  source <- newSource (SourceName "accessor") "💡"
+  pure
+    ( conjoin
         [ sourceName source === SourceName "accessor"
         , sourceText source === "💡"
+        , property (not ("💡" `Text.isInfixOf` Text.pack (show source)))
         ]
+    )
 
-propertySourceLength :: Property
+propertySourceLength :: IO Property
 propertySourceLength =
-  forAll shortText $ \value ->
-    unOffset (sourceLength (mkSource (SourceName "property") value)) === Text.length value
+  pure $
+    forAll shortText $ \value ->
+      ioProperty $ do
+        source <- newSource (SourceName "property") value
+        pure (unOffset (sourceLength source) === Text.length value)
 
-propertyValidOffsetsHavePositions :: Property
+propertyValidOffsetsHavePositions :: IO Property
 propertyValidOffsetsHavePositions =
-  forAll shortText $ \value ->
-    let source = mkSource (SourceName "property") value
-     in counterexample (show value) (property (all (hasPosition source) [0 .. Text.length value]))
+  pure $
+    forAll shortText $ \value ->
+      ioProperty $ do
+        source <- newSource (SourceName "property") value
+        pure (counterexample (show value) (property (all (hasPosition source) [0 .. Text.length value])))
 
 hasPosition :: Source -> Int -> Bool
 hasPosition source value =

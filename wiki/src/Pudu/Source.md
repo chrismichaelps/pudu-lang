@@ -32,8 +32,8 @@ newtype SourceName = SourceName { unSourceName :: Text }
 newtype Offset = Offset { unOffset :: Int }
   deriving stock (Eq, Ord, Show)
 
-data Source -- constructor hidden; caches decoded scalar length
-data Span   -- constructor hidden; retains content-backed snapshot identity
+data Source -- constructor hidden; bounded O(1) Show, no structural Eq
+data Span   -- constructor hidden; O(1) Eq and bounded O(1) Show
 
 data Position = Position
   { positionLine :: !Int
@@ -41,7 +41,7 @@ data Position = Position
   }
   deriving stock (Eq, Ord, Show)
 
-mkSource :: SourceName -> Text -> Source
+newSource :: SourceName -> Text -> IO Source
 sourceName :: Source -> SourceName
 sourceText :: Source -> Text
 sourceLength :: Source -> Offset
@@ -62,11 +62,12 @@ offsetPosition :: Source -> Offset -> Maybe Position
 ### Governance
 
 - Offsets are zero-based Unicode scalar indices in the decoded `Text` representation for v0.1, not raw UTF-8 bytes; the distinction is recorded here to avoid false byte-offset claims.
-- Spans are half-open `[start,end)` and retain a hidden snapshot identity consisting of source name plus immutable decoded content. Equal display names do not make different snapshots mergeable.
+- Spans are half-open `[start,end)` and retain an opaque `Unique` minted once at source ingestion. Equal display names or content do not make separately ingested snapshots mergeable.
 - Lines/columns are one-based for user display.
 - Constructors validate ordering and source bounds; raw record constructors are not exported.
-- `mkSource` computes scalar length once. Span checks and `sourceLength` use the cached strict field, so token emission cannot rescan the full source for every span.
-- Public accessors are total. Source/span/offset accessors and cached length are O(1); `offsetPosition` is O(prefix scalars); `mergeSpans` may compare snapshot text and is O(source scalars) in the equal-name worst case.
+- `newSource` computes scalar length once. Span checks and `sourceLength` use the cached strict field, so token emission cannot rescan the full source for every span.
+- Public accessors are total. Source/span/offset accessors, cached length, span equality, `mergeSpans`, and bounded `Show` are O(1); `offsetPosition` is O(prefix scalars).
+- `newSource` is the only identity-minting effect. All span construction, traversal, merging, and later compiler phases remain pure.
 
 ### Linkage
 
@@ -75,17 +76,18 @@ offsetPosition :: Source -> Offset -> Maybe Position
 
 ## Algorithm
 
-1. Store source identity, decoded text, and its strict cached scalar length without mutation.
+1. At ingestion, mint an opaque process-unique snapshot identity and store it with source name, decoded text, and strict cached scalar length.
 2. Construct a canonical zero-width span at offset zero from an explicit source snapshot.
 3. Construct non-negative offsets and reject negative advancement or `Int` overflow before addition.
 4. Validate span offsets as non-negative, ordered, and no greater than the cached source length.
-5. Merge only spans with equal name-and-content snapshot identity, choosing minimum start and maximum end.
+5. Merge only spans carrying the same opaque snapshot identity, choosing minimum start and maximum end in O(1).
 6. Convert an offset with a strict `Text` fold over the prefix, counting CRLF as one break without allocating an intermediate character list.
 
 ## Negative Logic (Prohibited Paths)
 
 - Do not expose invalid raw span construction.
 - Do not compare/merge spans from different source snapshots, even when their display names match.
+- Do not derive structural `Eq` for `Source`, or structural `Ord`/unbounded `Show` for `Span`; these would traverse or reveal source content.
 - Do not cache mutable line maps in this value; introduce an immutable index module only after profiling proves need.
 - Do not use `String` indexing.
 
@@ -96,7 +98,7 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - Advancing by a negative amount or beyond `maxBound :: Int` returns `Nothing` without wrapping.
 - CRLF counts as one line break for display; lone CR and LF each count as line breaks.
 - Combining characters count as scalar columns, not grapheme clusters; renderer may improve display width later without changing semantic spans.
-- Two sources with the same name but different content produce non-mergeable spans. Same-name, same-content values are observationally the same immutable snapshot and may merge.
+- Every separate `newSource` call creates a distinct snapshot. Spans merge only when derived from the same `Source` value, even when another source has identical name and content.
 
 ## Depth
 
@@ -110,7 +112,8 @@ DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions
 - **Q:** Can offset arithmetic rely on machine `Int` wraparound? **A:** No; validate the delta and remaining headroom before addition. _Rationale:_ wrapped offsets could forge apparently valid spans. _Rejected:_ add first and validate the wrapped result.
 - **Q:** Recompute `Text.length` for every span? **A:** No; cache scalar length in the hidden immutable source value. _Rationale:_ lexer token emission must remain linear rather than rescan the source per token. _Rejected:_ repeated full-text length checks; exposing an unchecked cached field.
 - **Q:** Materialize a `[Char]` to compute positions? **A:** No; fold `Text` strictly with CRLF state. _Rationale:_ position rendering should allocate no source-sized list. _Rejected:_ `Text.unpack` traversal.
-- **Q:** Is display name sufficient source identity? **A:** No; spans retain hidden name-and-content snapshot identity. _Rationale:_ editors and incremental builds reuse file names across revisions, and cross-revision merges would corrupt locations. _Rejected:_ comparing only `SourceName`; forgeable numeric snapshot IDs in a pure API.
+- **Q:** Is display name or source content sufficient identity? **A:** No; `newSource` mints an opaque runtime `Unique` at ingestion and spans copy that compact identity. _Rationale:_ editors reuse names, content equality is O(source), hashes can collide, and caller-supplied numeric IDs are forgeable. _Rejected:_ comparing only `SourceName`; content-backed equality; unchecked IDs; global unsafe counters.
+- **Q:** Does IO identity pollute compiler phases? **A:** No; only source ingestion mints identity. _Rationale:_ loading/inserting a source is already a boundary operation, while every consumer receives an immutable value and remains pure. _Rejected:_ source-sized equality in hot paths to preserve a superficially pure constructor.
 
 ## Variants
 
