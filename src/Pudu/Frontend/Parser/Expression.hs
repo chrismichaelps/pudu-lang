@@ -96,11 +96,15 @@ parseIf :: BlockParser -> Parser (Located Expression)
 parseIf blockParser = do
   keyword <- advanceToken
   condition <- parseExpression blockParser
-  thenBlock <- blockParser
-  elseExpression <- parseElse blockParser
-  let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
-  pure (Located (mergedOrLeft (tokenSpan keyword) final)
-    (IfExpression condition thenBlock elseExpression))
+  case locatedValue condition of
+    InvalidExpression ->
+      pure (Located (mergedOrLeft (tokenSpan keyword) (locatedSpan condition)) InvalidExpression)
+    _ -> do
+      thenBlock <- blockParser
+      elseExpression <- parseElse blockParser
+      let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
+      pure (Located (mergedOrLeft (tokenSpan keyword) final)
+        (IfExpression condition thenBlock elseExpression))
 
 parseElse :: BlockParser -> Parser (Maybe (Located Expression))
 parseElse blockParser = do
@@ -110,7 +114,7 @@ parseElse blockParser = do
     Just _ -> do
       kind <- peekKind
       case kind of
-        Keyword KwIf -> Just <$> parseIf blockParser
+        Keyword KwIf -> Just <$> parseExpressionAt blockParser 0
         _ | isSymbol "{" kind -> Just <$> blockExpression blockParser
         _ -> do
           spanValue <- currentSpan
@@ -150,11 +154,13 @@ parsePostfixStep :: BlockParser -> Located Expression -> TokenKind -> Parser (Lo
 parsePostfixStep blockParser expression kind
   | isSymbol "(" kind = do
       _ <- advanceToken
-      arguments <- parseArguments blockParser
-      closing <- expectSymbol ")" "to close the function arguments"
-      let call = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
-            (CallExpression expression arguments)
-      parsePostfix blockParser call
+      (arguments, closing) <- parseArguments blockParser
+      case closing of
+        Just closingToken -> do
+          let call = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closingToken))
+                (CallExpression expression arguments)
+          parsePostfix blockParser call
+        Nothing -> pure (Located (callRecoverySpan expression arguments) InvalidExpression)
   | otherwise = do
       _ <- advanceToken
       member <- expectIdentifier "after ."
@@ -165,26 +171,35 @@ parsePostfixStep blockParser expression kind
 isPostfixStart :: TokenKind -> Bool
 isPostfixStart kind = isSymbol "(" kind || isSymbol "." kind
 
-parseArguments :: BlockParser -> Parser [Located Expression]
+parseArguments :: BlockParser -> Parser ([Located Expression], Maybe Token)
 parseArguments blockParser = do
   kind <- peekKind
-  if isSymbol ")" kind then pure []
+  if isSymbol ")" kind then advanceToken >>= \closing -> pure ([], Just closing)
     else parseExpression blockParser >>= \first -> parseArgumentTail blockParser [first]
 
-parseArgumentTail :: BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseArgumentTail :: BlockParser -> [Located Expression] -> Parser ([Located Expression], Maybe Token)
 parseArgumentTail blockParser reversed = do
   comma <- matchSymbol ","
   case comma of
-    Nothing -> pure (reverse reversed)
+    Nothing -> do
+      closing <- expectSymbol ")" "to close the function arguments"
+      pure (reverse reversed, Just closing)
     Just _ -> do
       kind <- peekKind
       if isSymbol ")" kind
-        then pure (reverse reversed)
+        then advanceToken >>= \closing -> pure (reverse reversed, Just closing)
         else do
           bounded <- withRecursionBudget $ do
+            before <- peekToken
             next <- parseExpression blockParser
-            parseArgumentTail blockParser (next : reversed)
-          pure (maybe (reverse reversed) id bounded)
+            after <- peekToken
+            if before == after
+              then pure (reverse reversed, Nothing)
+              else parseArgumentTail blockParser (next : reversed)
+          pure (maybe (reverse reversed, Nothing) id bounded)
+
+callRecoverySpan :: Located Expression -> [Located Expression] -> Span
+callRecoverySpan expression = foldl' mergedOrLeft (locatedSpan expression) . map locatedSpan
 
 parseBinaryTail :: BlockParser -> Int -> Located Expression -> Parser (Located Expression)
 parseBinaryTail blockParser minimumPrecedence left = do

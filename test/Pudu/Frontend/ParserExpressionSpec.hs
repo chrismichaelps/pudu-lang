@@ -22,6 +22,7 @@ parserExpressionProperties =
   , ("expression recovery emits exact diagnostics", testRecovery)
   , ("reserved postfix syntax fails explicitly", testReservedPostfix)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
+  , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   ]
 
 testPrecedence :: IO Property
@@ -79,7 +80,13 @@ testHostileChains = do
   binaries <- parse ("a" <> Text.concat (replicate 520 " + a"))
   arguments <- parse ("f(" <> Text.intercalate "," (replicate 520 "a") <> ")")
   pure $ conjoin [codes members === ["E1099"], codes binaries === ["E1099"],
-    countCode "E1099" arguments === 1]
+    codes arguments === ["E1099"], diagnosticOffsets arguments === [1022]]
+
+testHostileConditionals :: IO Property
+testHostileConditionals = do
+  let input = "if true {}" <> Text.concat (replicate 519 " else if true {}")
+  result <- parse input
+  pure $ conjoin [codes result === ["E1099"], diagnosticOffsets result === [8179]]
 
 parse :: Text -> IO (Located Expression, TokenKind, [Diagnostic])
 parse input = do
@@ -109,9 +116,6 @@ diagnosticOffsets (_, _, diagnostics) = map (unOffset . spanStart . diagnosticSp
 
 resultKind :: (Located Expression, TokenKind, [Diagnostic]) -> TokenKind
 resultKind (_, kind, _) = kind
-
-countCode :: Text -> (Located Expression, TokenKind, [Diagnostic]) -> Int
-countCode expected = length . filter (== expected) . codes
 
 shape :: Located Expression -> Text
 shape (Located _ expression) = case expression of
