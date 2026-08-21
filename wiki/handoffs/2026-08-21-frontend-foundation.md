@@ -58,6 +58,8 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Repaired the preserved state/name implementations against opaque diagnostics and closed symbols; added EOF, progress, budget, casing, and trailing-dot properties.
 - [Role: Forensic Guardian → Architect] Merged the state/name partition through PR #19 after canonical EOF, linear cursor, bounded path, semantic, forensic, optimized, and locked-CI gates passed.
 - [Role: Architect → DNA Engineer] Resolved [[Parser Type]] ownership, closed punctuation, E1020 recovery, delimiter behavior, and shared recursion budgeting before implementation admission.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Parser Type]] mirror and maps before staging source.
+- [Role: Shadow → Forensic Guardian] Implemented bounded reference, tuple/unit, named, and generic parsing with focused success, recovery, and hostile-nesting properties.
 
 ## Decided (do not re-litigate)
 
@@ -74,7 +76,7 @@ tags: [handoff]
 
 ## Exact next action
 
-DNA Engineer: commit the complete [[Parser Type]] mirror and maps before staging its implementation.
+Forensic Guardian: audit type parser grammar fidelity, progress, recovery diagnostics, recursion budgets, source/wiki parity, size, and validation.
 
 ## Links
 
