@@ -1,9 +1,9 @@
 ---
 date: 2026-08-21
 topic: frontend-foundation
-from_role: DNA Engineer
-to_role: Shadow
-status: IMPLEMENT
+from_role: Shadow
+to_role: Forensic Guardian
+status: REVIEW
 maturity: EXPLORING
 tags: [handoff]
 ---
@@ -26,6 +26,7 @@ tags: [handoff]
 - [Role: Forensic Guardian → Architect] Split the oversized token/cursor slice into issues #5 and #12; issue #6 now depends on the cursor.
 - [Role: Architect → DNA Engineer] Resolved [[Token]] as a closed keyword/symbol vocabulary with exact mappings and lossless lexeme/trivia fields.
 - [Role: DNA Engineer → Shadow] Committed the complete [[Token]] mirror and Grill Log before implementation.
+- [Role: Shadow → Forensic Guardian] Implemented [[Token]] with exhaustive keyword/symbol mappings and a separate losslessness/property suite.
 
 ## Decided (do not re-litigate)
 
@@ -37,14 +38,14 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #5: implement and validate only [[Token]]; issue #12 owns strict cursor state.
+- Issue #5: independent semantic/forensic review, locked CI, and merge remain; issue #12 owns strict cursor state.
 - Issues #12, #6, #7, and #8 complete the dependency-ordered lexer chain.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Shadow: implement `@root/src/Pudu/Frontend/Token.hs` exactly from [[Token]], add a separate Token property suite, and exclude cursor/scanner/parser files from the branch.
+Forensic Guardian: review issue #5 for exact grammar vocabulary, exhaustive/unique round trips, lossless token/trivia representation, module-page-first history, explicit scope exclusion, and development/optimized/locked-CI evidence.
 
 ## Links
 
