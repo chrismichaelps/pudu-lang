@@ -3,7 +3,9 @@ module Pudu.Frontend.Lexer.ScannerSpec (scannerProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic
-  ( diagnosticCode, diagnosticCodeText, diagnosticSpan )
+  ( Severity (Error), diagnosticCode, diagnosticCodeText, diagnosticMessage
+  , diagnosticSeverity, diagnosticSpan
+  )
 import Pudu.Frontend.Lexer.Cursor
   ( LexerCursor, completeCursor, consumeWhile, cursorOffset, newCursor
   , outputDiagnostics, outputTokens, peekScalar
@@ -16,7 +18,7 @@ import Pudu.Frontend.Token
   , tokenLeadingTrivia, tokenLexeme, triviaKind, triviaText
   )
 import Pudu.Source
-  ( Source, SourceName (SourceName), newSource, spanEnd, spanStart, unOffset )
+  ( Source, SourceName (SourceName), newSource, sourceText, spanEnd, spanStart, unOffset )
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 scannerProperties :: [(String, IO Property)]
@@ -88,6 +90,8 @@ testUnterminatedBlock = do
           [ tokenKind eof === EndOfFile
           , map triviaText (tokenLeadingTrivia eof) === ["/*a/*b*/"]
           , diagnosticCodeText (diagnosticCode finding) === "E0003"
+          , diagnosticSeverity finding === Error
+          , diagnosticMessage finding === "unterminated block comment"
           , unOffset (spanStart (diagnosticSpan finding)) === 0
           , unOffset (spanEnd (diagnosticSpan finding)) === 8
           , reconstruct [eof] === "/*a/*b*/"
@@ -148,7 +152,11 @@ scanWords cursor = do
 
 isCompleteTrivia :: Source -> Bool
 isCompleteTrivia source = case scanTrivia (newCursor source) >>= completeCursor of
-  Just _ -> True
+  Just output -> case outputTokens output of
+    [eof] ->
+      map triviaText (tokenLeadingTrivia eof) == [sourceText source]
+        && null (outputDiagnostics output)
+    _ -> False
   Nothing -> False
 
 reconstruct :: [Token] -> Text
