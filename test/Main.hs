@@ -3,10 +3,12 @@ module Main (main) where
 import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Source
+import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
+  mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
+  spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
 import System.Exit (exitFailure)
-import Test.QuickCheck hiding (label)
-
+import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, forAll, ioProperty, isSuccess,
+  property, quickCheckResult, withMaxSuccess, (===))
 main :: IO ()
 main = do
   outcomes <-
@@ -24,19 +26,16 @@ main = do
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       ]
   unless (and outcomes) exitFailure
-
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)
   propertyValue <- loadProperty
   result <- quickCheckResult (withMaxSuccess 200 propertyValue)
   pure (isSuccess result)
-
 testEmptySourcePosition :: IO Property
 testEmptySourcePosition = do
   source <- newSource (SourceName "empty") Text.empty
   pure (offsetPosition source zeroOffset === Just (Position 1 1))
-
 testCrLfPosition :: IO Property
 testCrLfPosition = do
   source <- newSource (SourceName "crlf") "a\r\nb"

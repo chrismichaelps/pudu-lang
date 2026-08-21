@@ -40,7 +40,9 @@ data SourceIdentity = SourceIdentity
   { identityUnique :: !Unique
   , identityName :: !SourceName
   }
-  deriving stock (Eq)
+
+instance Eq SourceIdentity where
+  left == right = identityUnique left == identityUnique right
 
 {-| @Source.Text.Value — pairs an immutable snapshot with cached bounds -}
 data Source = Source

@@ -32,8 +32,8 @@ newtype SourceName = SourceName { unSourceName :: Text }
 newtype Offset = Offset { unOffset :: Int }
   deriving stock (Eq, Ord, Show)
 
-data Source -- constructor hidden; bounded O(1) Show, no structural Eq
-data Span   -- constructor hidden; O(1) Eq and bounded O(1) Show
+data Source -- constructor hidden; content-bounded O(name length) Show, no Eq
+data Span   -- constructor hidden; O(1) Eq and content-bounded O(name length) Show
 
 data Position = Position
   { positionLine :: !Int
@@ -66,7 +66,7 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - Lines/columns are one-based for user display.
 - Constructors validate ordering and source bounds; raw record constructors are not exported.
 - `newSource` computes scalar length once. Span checks and `sourceLength` use the cached strict field, so token emission cannot rescan the full source for every span.
-- Public accessors are total. Source/span/offset accessors, cached length, span equality, `mergeSpans`, and bounded `Show` are O(1); `offsetPosition` is O(prefix scalars).
+- Public accessors are total. Accessors, cached length, span equality, and `mergeSpans` are O(1); content-free `Show` is O(source-name length); `offsetPosition` is O(prefix scalars).
 - `newSource` is the only identity-minting effect. All span construction, traversal, merging, and later compiler phases remain pure.
 
 ### Linkage
