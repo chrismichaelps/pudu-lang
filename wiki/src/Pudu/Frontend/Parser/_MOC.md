@@ -11,7 +11,7 @@ tags: [moc, module]
 - [[Parser Expression]] — bounded precedence, postfix, literal, block-capability, and conditional expression grammar.
 - Future partitions add declaration and public-facade modules after these dependencies merge.
 
-Dependency direction avoids import cycles: State → Name/Type → Expression; Declaration later injects block parsing into Expression.
+Dependency direction avoids import cycles: State → Name/Type/Expression; Declaration later injects block parsing into Expression.
 
 ## Referenced by
 

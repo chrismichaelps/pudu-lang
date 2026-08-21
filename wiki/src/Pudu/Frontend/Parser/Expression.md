@@ -38,11 +38,11 @@ parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 - Assignment is right-associative; every other admitted binary operator is left-associative, matching [[grammar/pudu]].
 - Calls admit empty arguments and one trailing comma; member access requires an identifier.
 - Every recursive prefix, postfix, argument-list, and binary-tail descent uses [[Parser State]]'s shared budget.
-- Unknown/reserved advanced constructs emit `E1040` and produce `InvalidExpression`; malformed `else` emits `E1042` without inventing a branch.
+- Unknown expression starts emit `E1040`; malformed `else` emits `E1042`; reserved index/`?`/`.await` postfix forms not yet represented by [[Syntax Tree]] emit `E1043` and produce `InvalidExpression` rather than being silently accepted.
 
 ### Linkage
 
-- **Requires:** [[Parser State]], [[Parser Name]], [[Syntax Tree]], [[grammar/pudu]].
+- **Requires:** [[Parser State]], [[Syntax Tree]], [[grammar/pudu]].
 - **Consumed by:** the future declaration parser partition.
 
 ## Algorithm
@@ -55,7 +55,7 @@ Use budgeted precedence climbing: parse prefix, apply postfix, then consume clos
 
 ## Edge Cases
 
-- Empty call list and trailing commas valid; missing right operand yields one invalid node/diagnostic; parenthesized expression preserves merged span.
+- Empty call lists and trailing commas are valid; missing operands preserve closing delimiters and yield one invalid node/diagnostic; parenthesized expressions preserve merged spans.
 
 ## Depth
 
@@ -74,4 +74,4 @@ DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Name]] · [[Syntax Tree]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Syntax Tree]] · [[Frontend]]
