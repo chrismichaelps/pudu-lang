@@ -12,7 +12,7 @@ tags: [moc, module]
 | Status | Count | Modules |
 | --- | ---: | --- |
 | DEEP | 1 | [[Lexer Cursor]] |
-| MEDIUM | 5 | [[Source]], [[Diagnostic Model]], [[Token]], [[Trivia Scanner]], [[Identifier Scanner]] |
+| MEDIUM | 7 | [[Source]], [[Diagnostic Model]], [[Token]], [[Trivia Scanner]], [[Identifier Scanner]], [[Number Scanner]], [[Symbol Scanner]] |
 
 ## Referenced by
 

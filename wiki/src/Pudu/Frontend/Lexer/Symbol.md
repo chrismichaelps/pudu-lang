@@ -1,7 +1,7 @@
 ---
 type: module
 path: "@root/src/Pudu/Frontend/Lexer/Symbol.hs"
-fidelity: Proposed
+fidelity: Active
 domain: "[[Source Text]]"
 subsystem: "[[Frontend]]"
 grammar: "[[grammar/haskell]]"

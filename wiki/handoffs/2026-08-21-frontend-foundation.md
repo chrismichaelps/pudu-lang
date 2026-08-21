@@ -38,6 +38,7 @@ tags: [handoff]
 - [Role: Forensic Guardian → Architect] Merged issue #6 through PR #15 after exact-head scanner, forensic, optimized, and locked-CI gates passed.
 - [Role: Architect → DNA Engineer] Resolved issue #7 numeric ownership, range ambiguity, E0004 recovery, and closed longest-match symbols.
 - [Role: DNA Engineer → Shadow] Committed complete [[Number Scanner]] and [[Symbol Scanner]] mirrors before implementation.
+- [Role: Shadow → Forensic Guardian] Implemented textual number validation, exact E0004 recovery, longest-match symbols, ambiguity/stress properties, and optimized gates.
 
 ## Decided (do not re-litigate)
 
@@ -49,17 +50,17 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #7 is active; issue #8 then completes the lexer and unblocks parser integration.
+- Issue #7 requires final integration; issue #8 then completes the lexer and unblocks parser integration.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Shadow: implement issue #7 from [[Number Scanner]] and [[Symbol Scanner]] without quoted/facade/parser behavior.
+Forensic Guardian: audit issue #7 numeric ownership, E0004 exactness, longest-match exhaustiveness, text-only magnitude handling, scope, and validation.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Engineering Delivery]]
 
 ## Referenced by
 
