@@ -14,6 +14,10 @@ Transform [[Source Text]] into a faithful recovery-capable syntax representation
 
 Lexer · parser · tokens · trivia · source spans · untyped syntax · recovery nodes.
 
+## Active Modules
+
+[[Token]] defines the closed lossless vocabulary. [[Lexer Cursor]] owns strict source traversal and segment emission beneath later category scanners.
+
 ## Boundaries
 
 - Receives immutable source-domain values.
@@ -27,4 +31,4 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[src/Pudu/Frontend/_MOC]]
+[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[Lexer Cursor]] · [[src/Pudu/Frontend/_MOC]]
