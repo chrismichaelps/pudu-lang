@@ -16,7 +16,7 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Active Modules
 
-[[Token]] defines the closed lossless vocabulary. [[Lexer Facade]] exposes total tokenization over its modular scanners. [[Syntax]] exposes located names and the data-only recovery tree without semantic annotations.
+[[Token]] defines the vocabulary; [[Lexer Facade]] exposes lossless tokenization; [[Syntax]] exposes the recovery tree. [[Parser State]] owns bounded indexed traversal and [[Parser Name]] owns segmented-path syntax.
 
 ## Boundaries
 
@@ -31,4 +31,4 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[Lexer Facade]] · [[Lexer Cursor]] · [[Syntax]] · [[src/Pudu/Frontend/_MOC]]
+[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Parser State]] · [[Parser Name]] · [[src/Pudu/Frontend/_MOC]]
