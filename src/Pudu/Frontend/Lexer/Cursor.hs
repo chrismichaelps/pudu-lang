@@ -6,6 +6,7 @@ module Pudu.Frontend.Lexer.Cursor
   , captureSince
   , completeCursor
   , consumeScalars
+  , consumeWhile
   , cursorAtEnd
   , cursorOffset
   , cursorStartsWith
@@ -108,6 +109,19 @@ consumeScalars requested cursor
                 , cursorSuffix = remainingText
                 }
 
+consumeWhile :: (Char -> Bool) -> LexerCursor -> LexerCursor
+consumeWhile predicate cursor =
+  let (advanced, remainingText) = consumeMatching predicate 0 (cursorSuffix cursor)
+   in if advanced == 0
+        then cursor
+        else case advancePoint advanced cursor of
+          Nothing -> cursor
+          Just nextPoint ->
+            cursor
+              { cursorPoint = nextPoint
+              , cursorSuffix = remainingText
+              }
+
 markCursor :: LexerCursor -> CursorMark
 markCursor LexerCursor{cursorPoint, cursorSuffix} =
   CursorMark{markPoint = cursorPoint, markSuffix = cursorSuffix}
@@ -200,6 +214,15 @@ consumePrefix remaining advanced suffix
           let nextAdvanced = advanced + 1
            in nextAdvanced
                 `seq` consumePrefix (remaining - 1) nextAdvanced remainingText
+
+consumeMatching :: (Char -> Bool) -> Int -> Text -> (Int, Text)
+consumeMatching predicate advanced suffix =
+  case Text.uncons suffix of
+    Just (scalar, remainingText)
+      | predicate scalar ->
+          let nextAdvanced = advanced + 1
+           in nextAdvanced `seq` consumeMatching predicate nextAdvanced remainingText
+    _ -> (advanced, suffix)
 
 advancePoint :: Int -> LexerCursor -> Maybe Span
 advancePoint amount LexerCursor{cursorSource, cursorPoint} = do
