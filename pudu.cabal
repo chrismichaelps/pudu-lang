@@ -31,6 +31,8 @@ library
     Pudu.Diagnostic
     Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Lexer.Identifier
+    Pudu.Frontend.Lexer.Number
+    Pudu.Frontend.Lexer.Symbol
     Pudu.Frontend.Lexer.Trivia
     Pudu.Frontend.Token
     Pudu.Source
@@ -47,6 +49,7 @@ test-suite pudu-test
   other-modules:
     Pudu.DiagnosticSpec
     Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.Lexer.NumberSymbolSpec
     Pudu.Frontend.Lexer.ScannerSpec
     Pudu.Frontend.TokenSpec
   build-depends:

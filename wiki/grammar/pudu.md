@@ -17,7 +17,8 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 - `//` starts a line comment. `/* ... */` block comments nest; an unterminated block comment is retained as trivia and produces `E0003` over the complete consumed comment.
 - Identifiers start with a Unicode letter or `_` and continue with Unicode letters, decimal digits, or `_`; keywords are ASCII lowercase and reserved. Full Unicode XID conformance is deferred until a pinned Unicode-table dependency is admitted.
 - Value identifiers may use `snake_case` or `camelCase`; public API formatter preference is `snake_case`. Types, traits, modules, and variants use `PascalCase`. Constant declarations use `UPPER_SNAKE_CASE`.
-- Decimal digits may contain `_` only between digits. Integer bases use `0b`, `0o`, or `0x`.
+- Numeric-literal digits are ASCII. `_` may occur only between digits. Integer bases use lowercase `0b`, `0o`, or `0x` and require at least one base-valid digit.
+- Decimal floats require either `.` followed by a decimal digit or an `e`/`E` exponent. Exponents allow one optional `+`/`-` and require digits. A dot not followed by a digit remains punctuation, so `1..2` is integer, range, integer. Malformed owned numeric candidates are retained as `Invalid` and produce `E0004`.
 - Strings are UTF-8 text with `\n`, `\r`, `\t`, `\\`, `\"`, `\0`, and `\u{HEX}` escapes. String interpolation is reserved but not admitted in the 0.1 core; an unescaped `{` or `}` produces E0008 rather than silently becoming text. A later semantic slice will admit `{expression}` segments and `{{`/`}}` brace escapes together.
 - Character literals contain exactly one Unicode scalar value after escapes.
 
