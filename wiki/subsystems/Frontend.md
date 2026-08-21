@@ -16,7 +16,7 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Active Modules
 
-[[Token]] defines the vocabulary; [[Lexer Facade]] exposes lossless tokenization; [[Syntax]] exposes the recovery tree. [[Parser State]] owns bounded suffix traversal, [[Parser Name]] owns segmented paths, [[Parser Type]] owns unresolved types, [[Parser Expression]] owns precedence, and [[Parser Import]] owns explicit module dependencies.
+[[Token]] defines the vocabulary; [[Lexer Facade]] exposes lossless tokenization; [[Syntax]] exposes the recovery tree. [[Parser State]] owns bounded suffix traversal, [[Parser Name]] owns spelling classes and segmented paths, [[Parser Type]] owns unresolved types, [[Parser Expression]] owns precedence, [[Parser Import]] owns explicit module dependencies, and [[Parser Binding]] owns scope-safe binding syntax.
 
 ## Boundaries
 
@@ -31,4 +31,4 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Parser State]] · [[Parser Name]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[src/Pudu/Frontend/_MOC]]
+[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Parser State]] · [[Parser Name]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[src/Pudu/Frontend/_MOC]]

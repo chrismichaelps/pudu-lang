@@ -44,7 +44,7 @@ parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Token]], [[Syntax Tree]], [[grammar/pudu]].
-- **Consumed by:** the future declaration parser partition.
+- **Consumed by:** current [[Parser Binding]] and future declaration partitions.
 
 ## Algorithm
 
@@ -76,4 +76,4 @@ DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Token]] · [[Syntax Tree]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Binding]] · [[Token]] · [[Syntax Tree]] · [[Frontend]]

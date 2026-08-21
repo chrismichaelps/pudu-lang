@@ -94,4 +94,4 @@ DEPTH 0.77 (DEEP). It hides every dangerous parser invariant behind a compact gr
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Name]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Name]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]

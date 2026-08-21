@@ -143,4 +143,4 @@ DEPTH 0.58 (MEDIUM). A compact closed interface centralizes the language's lexic
 
 ## Referenced by
 
-[[src/Pudu/Frontend/_MOC]] · [[Source]] · [[Parser State]] · [[Parser Expression]] · [[Parser Import]] · [[Frontend]]
+[[src/Pudu/Frontend/_MOC]] · [[Source]] · [[Parser State]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]

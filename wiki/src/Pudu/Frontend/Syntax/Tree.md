@@ -102,4 +102,4 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Parser Import]] · [[Frontend]]
+[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]

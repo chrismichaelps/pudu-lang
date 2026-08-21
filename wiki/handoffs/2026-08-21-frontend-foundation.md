@@ -1,9 +1,9 @@
 ---
 date: 2026-08-21
 topic: frontend-foundation
-from_role: Forensic Guardian
-to_role: Architect
-status: READY
+from_role: Architect
+to_role: DNA Engineer
+status: DESIGN
 maturity: EXPLORING
 tags: [handoff]
 ---
@@ -69,6 +69,7 @@ tags: [handoff]
 - [Role: DNA Engineer → Shadow] Committed the complete [[Parser Import]] mirror, declaration map, grammar clarification, and backlinks before staging source.
 - [Role: Shadow → Forensic Guardian] Implemented modular import parsing, reusable uppercase aliases, cascade-free shared budgets, and focused success, failure, regression, diagnostic, and hostile-input properties.
 - [Role: Forensic Guardian → Architect] Validated the modular import partition through PR #22 with exact-head Language Architect, forensic, development, optimized, package, size, private-boundary, and locked-CI gates passing.
+- [Role: Architect → DNA Engineer] Resolved [[Parser Binding]] as separate top-constant/local-binding entry points with explicit name classes, injected block capability, recovery boundaries, and no module `let`/`var` admission.
 
 ## Decided (do not re-litigate)
 
@@ -80,16 +81,16 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: implement the modular binding declaration partition before function/block/orchestration behavior.
+- Issue #3: commit and implement the modular binding declaration partition before function/block/orchestration behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Architect: resolve and commit the mirrored Parser Binding contract before staging its implementation.
+DNA Engineer: commit [[Parser Binding]], name-class governance, maps, changelog, and backlinks before staging source.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Parser Binding]] · [[Engineering Delivery]]
 
 ## Referenced by
 

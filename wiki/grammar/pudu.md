@@ -58,6 +58,7 @@ Rules:
 - Imports are absolute. Wildcard imports are prohibited.
 - Declarations are private unless `export`.
 - `constant_ident` is an identifier composed of uppercase Unicode letters, decimal digits, and `_`, beginning with an uppercase letter or `_`; at least one uppercase letter is required.
+- `lower_ident` begins with `_` or a Unicode letter that is not uppercase; remaining characters follow the identifier lexical rule. The single `_` spelling is reserved for discard patterns and is not a binding name.
 - Module-scope values are `const` only. Runtime `let` and `var` bindings are admitted inside blocks, preventing module-load execution and global mutable state.
 - `let` is immutable, `var` is mutable, and `const` is evaluated and stored at compile time.
 - Exported functions require explicit parameter and return types; private functions may infer omitted types when inference is unambiguous.

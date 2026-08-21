@@ -39,7 +39,7 @@ parseTypeList :: Text -> Parser [Located TypeSyntax]
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Name]], [[Syntax Tree]], [[Pudu Type]].
-- **Consumed by:** the future declaration parser partition.
+- **Consumed by:** current [[Parser Binding]] and future declaration partitions.
 
 ## Algorithm
 
@@ -69,4 +69,4 @@ DEPTH 0.68 (MEDIUM). Hides recursive type grammar and delimiter recovery behind 
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Name]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Name]] · [[Parser Binding]] · [[Frontend]]

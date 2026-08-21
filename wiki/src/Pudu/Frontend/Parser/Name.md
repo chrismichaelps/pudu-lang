@@ -27,22 +27,26 @@ Parse located identifiers and non-empty dotted module/name paths with clear casi
 parseModuleName :: Parser (Located ModuleName)
 parseNamePath :: Parser (Located (NonEmpty Text))
 expectUpperIdentifier :: Text -> Parser (Located Text)
+expectValueIdentifier :: Text -> Parser (Located Text)
+expectConstantIdentifier :: Text -> Parser (Located Text)
 ```
 
 ### Governance
 
 - Module segments begin with an uppercase Unicode letter; violation is E1011 but structure is preserved.
 - Standalone module aliases reuse the same E1011 uppercase rule through `expectUpperIdentifier`.
+- Value names begin with `_` or a non-uppercase Unicode letter and are not the single `_`; violations emit `E1012` while preserving spelling.
+- Constant names contain only uppercase Unicode letters, decimal digits, and `_`, begin with uppercase or `_`, contain at least one uppercase letter, and emit `E1013` on violation.
 - Dots require a following identifier; no trailing empty segment.
 
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Syntax Name]], [[Syntax Located]].
-- **Consumed by:** current [[Parser Type]] and [[Parser Import]], plus future declaration modules.
+- **Consumed by:** current [[Parser Type]], [[Parser Import]], and [[Parser Binding]], plus future declaration modules.
 
 ## Algorithm
 
-Expect one identifier, loop over dot+identifier, merge first/last spans, and validate module casing.
+Expect identifiers once, apply the requested module/value/constant spelling predicate, loop over dot+identifier for paths, and merge first/last spans.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -50,7 +54,7 @@ Expect one identifier, loop over dot+identifier, merge first/last spans, and val
 
 ## Edge Cases
 
-- One segment succeeds; trailing dot diagnoses at the missing segment.
+- One segment succeeds; trailing dot diagnoses at the missing segment; a missing synthetic identifier does not cascade into a spelling diagnostic.
 
 ## Depth
 
@@ -59,6 +63,7 @@ DEPTH 0.57 (MEDIUM). Centralizes repeated dotted-path and casing behavior.
 ## Grill Log
 
 - **Q:** Enforce module-path/file match here? **A:** No; parser lacks manifest path. _Rationale:_ Tooling/Semantics owns cross-input validation. _Rejected:_ hidden filesystem access.
+- **Q:** Are uncased Unicode letters valid value-name starts? **A:** Yes; reject uppercase rather than requiring lowercase. _Rationale:_ scripts without case remain usable while PascalCase stays distinguishable. _Rejected:_ ASCII-only names; `isLower` as the sole admission test.
 
 ## Variants
 
@@ -66,4 +71,4 @@ DEPTH 0.57 (MEDIUM). Centralizes repeated dotted-path and casing behavior.
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Parser Import]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Parser Import]] · [[Parser Binding]] · [[Frontend]]
