@@ -29,6 +29,7 @@ library
   hs-source-dirs:   src
   exposed-modules:
     Pudu.Diagnostic
+    Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Token
     Pudu.Source
   build-depends:
@@ -43,6 +44,7 @@ test-suite pudu-test
   main-is:          Main.hs
   other-modules:
     Pudu.DiagnosticSpec
+    Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.TokenSpec
   build-depends:
     base >=4.20 && <4.23,

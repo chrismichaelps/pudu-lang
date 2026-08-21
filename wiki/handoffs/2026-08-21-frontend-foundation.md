@@ -1,9 +1,9 @@
 ---
 date: 2026-08-21
 topic: frontend-foundation
-from_role: DNA Engineer
-to_role: Shadow
-status: BUILD
+from_role: Shadow
+to_role: Forensic Guardian
+status: REVIEW
 maturity: EXPLORING
 tags: [handoff]
 ---
@@ -30,6 +30,7 @@ tags: [handoff]
 - [Role: Forensic Guardian → Architect] Merged issue #5 through PR #13 after exact grammar, losslessness, locked-CI, Language Architect, and Forensic Guardian gates passed.
 - [Role: Architect → DNA Engineer] Promoted issue #12 to Ready and constrained its cursor to strict suffix traversal, opaque snapshot marks, and one completion path.
 - [Role: DNA Engineer → Shadow] Resolved [[Lexer Cursor]] with committed-point segment ownership so scanners cannot skip, overlap, or duplicate source.
+- [Role: Shadow → Forensic Guardian] Implemented the strict cursor and focused properties for scalar traversal, snapshot capture, segment ownership, losslessness, diagnostics, and EOF completion.
 
 ## Decided (do not re-litigate)
 
@@ -41,13 +42,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issues #12, #6, #7, and #8 complete the dependency-ordered lexer chain; #12 is active.
+- Issue #12 requires independent review, locked CI, and merge; issues #6, #7, and #8 then complete the dependency-ordered lexer chain.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Shadow: implement issue #12 exactly from [[Lexer Cursor]], add focused success/failure/regression properties, and touch no scanner/parser behavior.
+Forensic Guardian: review issue #12 for mirror parity, scalar-linear traversal, snapshot and committed-point safety, losslessness, deterministic completion, scope, and validation evidence.
 
 ## Links
 

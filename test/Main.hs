@@ -4,6 +4,7 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DiagnosticSpec (diagnosticProperties)
+import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
 import Pudu.Frontend.TokenSpec (tokenProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
@@ -29,7 +30,8 @@ main = do
       ]
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
   tokenOutcomes <- traverse (uncurry check) tokenProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes)) exitFailure
+  cursorOutcomes <- traverse (uncurry check) cursorProperties
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)
