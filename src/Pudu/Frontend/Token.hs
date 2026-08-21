@@ -71,7 +71,6 @@ data SymbolKind
   | SymPipe
   | SymAssign
   | SymThinArrow
-  | SymFatArrow
   | SymQuestion
   | SymBang
   | SymMinus
@@ -195,7 +194,6 @@ symbolText symbol =
     SymPipe -> "|"
     SymAssign -> "="
     SymThinArrow -> "->"
-    SymFatArrow -> "=>"
     SymQuestion -> "?"
     SymBang -> "!"
     SymMinus -> "-"
