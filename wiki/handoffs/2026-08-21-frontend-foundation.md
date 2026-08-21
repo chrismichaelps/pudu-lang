@@ -39,6 +39,14 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved issue #7 numeric ownership, range ambiguity, E0004 recovery, and closed longest-match symbols.
 - [Role: DNA Engineer → Shadow] Committed complete [[Number Scanner]] and [[Symbol Scanner]] mirrors before implementation.
 - [Role: Shadow → Forensic Guardian] Implemented textual number validation, exact E0004 recovery, longest-match symbols, ambiguity/stress properties, and optimized gates.
+- [Role: Forensic Guardian → Architect] Merged issue #7 through PR #16 after exact-head semantic, forensic, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Split issue #8 into bounded quoted-scanner and facade integrations; resolved [[Quoted Scanner]] delimiter ownership, scalar-safe escape decoding, and E0002/E0005–E0008 recovery.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Quoted Scanner]] mirror and Grill Log before implementation.
+- [Role: Shadow → Forensic Guardian] Implemented quoted decoding and focused success, failure, recovery, losslessness, and long-literal properties; PR #17 review required completing the same issue with its bounded facade.
+- [Role: Forensic Guardian → Architect] Kept issue #8 atomic, resolved [[Lexer Facade]], and constrained the combined PR below 600 changed lines rather than closing a partial issue.
+- [Role: Architect → DNA Engineer] Committed the complete facade mirror and Grill Log before its implementation.
+- [Role: DNA Engineer → Shadow] Re-anchored implementation to the facade mirror and assigned only facade, focused integration tests, and package exposure.
+- [Role: Shadow → Forensic Guardian] Implemented the total facade, fixed scanner precedence, exact E0099 recovery, conservative lossless invariant fallback, generated losslessness properties, and development/optimized gates.
 
 ## Decided (do not re-litigate)
 
@@ -50,17 +58,17 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #7 requires final integration; issue #8 then completes the lexer and unblocks parser integration.
+- Issue #8 requires exact-head semantic, forensic, and locked-CI gates in PR #17; completion unblocks parser integration.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: audit issue #7 numeric ownership, E0004 exactness, longest-match exhaustiveness, text-only magnitude handling, scope, and validation.
+Forensic Guardian: repeat exact-head issue #8 parity, totality, diagnostic, size, private-boundary, and validation review for PR #17.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Lexer Cursor]] · [[Trivia Scanner]] · [[Identifier Scanner]] · [[Number Scanner]] · [[Symbol Scanner]] · [[Quoted Scanner]] · [[Engineering Delivery]]
 
 ## Referenced by
 

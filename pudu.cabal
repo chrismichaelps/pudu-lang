@@ -29,9 +29,11 @@ library
   hs-source-dirs:   src
   exposed-modules:
     Pudu.Diagnostic
+    Pudu.Frontend.Lexer
     Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Lexer.Identifier
     Pudu.Frontend.Lexer.Number
+    Pudu.Frontend.Lexer.Quoted
     Pudu.Frontend.Lexer.Symbol
     Pudu.Frontend.Lexer.Trivia
     Pudu.Frontend.Token
@@ -49,7 +51,9 @@ test-suite pudu-test
   other-modules:
     Pudu.DiagnosticSpec
     Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.LexerSpec
     Pudu.Frontend.Lexer.NumberSymbolSpec
+    Pudu.Frontend.Lexer.QuotedSpec
     Pudu.Frontend.Lexer.ScannerSpec
     Pudu.Frontend.TokenSpec
   build-depends:
