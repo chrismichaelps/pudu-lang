@@ -26,17 +26,19 @@ Parse located identifiers and non-empty dotted module/name paths with clear casi
 ```haskell
 parseModuleName :: Parser (Located ModuleName)
 parseNamePath :: Parser (Located (NonEmpty Text))
+expectUpperIdentifier :: Text -> Parser (Located Text)
 ```
 
 ### Governance
 
 - Module segments begin with an uppercase Unicode letter; violation is E1011 but structure is preserved.
+- Standalone module aliases reuse the same E1011 uppercase rule through `expectUpperIdentifier`.
 - Dots require a following identifier; no trailing empty segment.
 
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Syntax Name]], [[Syntax Located]].
-- **Consumed by:** current [[Parser Type]] plus the future declaration module.
+- **Consumed by:** current [[Parser Type]] and [[Parser Import]], plus future declaration modules.
 
 ## Algorithm
 
@@ -64,4 +66,4 @@ DEPTH 0.57 (MEDIUM). Centralizes repeated dotted-path and casing behavior.
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Frontend]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser State]] · [[Parser Type]] · [[Parser Import]] · [[Frontend]]

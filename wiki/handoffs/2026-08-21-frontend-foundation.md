@@ -1,9 +1,9 @@
 ---
 date: 2026-08-21
 topic: frontend-foundation
-from_role: Shadow
-to_role: Forensic Guardian
-status: REVIEW
+from_role: Forensic Guardian
+to_role: Architect
+status: READY
 maturity: EXPLORING
 tags: [handoff]
 ---
@@ -64,6 +64,11 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved [[Parser Expression]] associativity, closed operator ownership, block capability injection, recovery diagnostics, and hostile-chain budgeting before implementation admission.
 - [Role: DNA Engineer → Shadow] Committed the complete [[Parser Expression]] mirror, normative associativity, maps, and backlinks before staging source.
 - [Role: Shadow → Forensic Guardian] Implemented closed-vocabulary precedence climbing, unary/postfix/conditional parsing, explicit reserved-postfix recovery, and hostile-chain properties.
+- [Role: Forensic Guardian → Architect] Merged the expression partition through PR #21 after cascade-free budget recovery, exact hostile spans, semantic, forensic, optimized, and locked-CI gates passed.
+- [Role: Architect → DNA Engineer] Split declaration grammar into modular import/binding/function/block/orchestration files and resolved [[Parser Import]] alias/selection exclusivity, trailing commas, diagnostics, progress, and budgets first.
+- [Role: DNA Engineer → Shadow] Committed the complete [[Parser Import]] mirror, declaration map, grammar clarification, and backlinks before staging source.
+- [Role: Shadow → Forensic Guardian] Implemented modular import parsing, reusable uppercase aliases, cascade-free shared budgets, and focused success, failure, regression, diagnostic, and hostile-input properties.
+- [Role: Forensic Guardian → Architect] Validated the modular import partition through PR #22 with exact-head Language Architect, forensic, development, optimized, package, size, private-boundary, and locked-CI gates passing.
 
 ## Decided (do not re-litigate)
 
@@ -75,16 +80,16 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: validate and merge expression syntax before declaration behavior.
+- Issue #3: implement the modular binding declaration partition before function/block/orchestration behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Forensic Guardian: audit expression precedence, associativity, progress, diagnostics, delimiter recovery, budgets, source/wiki parity, size, and validation.
+Architect: resolve and commit the mirrored Parser Binding contract before staging its implementation.
 
 ## Links
 
-[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Parser Type]] · [[Parser Expression]] · [[Engineering Delivery]]
+[[grammar/haskell]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Frontend]] · [[Token]] · [[Lexer Facade]] · [[Syntax]] · [[Syntax Located]] · [[Syntax Name]] · [[Syntax Tree]] · [[Parser Type]] · [[Parser Expression]] · [[Parser Import]] · [[Engineering Delivery]]
 
 ## Referenced by
 

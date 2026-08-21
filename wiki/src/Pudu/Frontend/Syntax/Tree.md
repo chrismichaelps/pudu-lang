@@ -74,7 +74,7 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 ### Linkage
 
 - **Requires:** [[Syntax Located]], [[Syntax Name]], [[Pudu Program]], [[Pudu Type]].
-- **Consumed by:** [[Syntax]], current [[Parser Expression]], and future parser-declaration/name-resolution modules.
+- **Consumed by:** [[Syntax]], current [[Parser Expression]] and [[Parser Import]], and future parser-declaration/name-resolution modules.
 
 ## Algorithm
 
@@ -102,4 +102,4 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Frontend]]
+[[src/Pudu/Frontend/Syntax/_MOC]] · [[Syntax]] · [[Parser Expression]] · [[Parser Import]] · [[Frontend]]
