@@ -72,7 +72,7 @@ offsetPosition :: Source -> Offset -> Maybe Position
 ### Linkage
 
 - **Requires:** [[Source Text]], [[grammar/haskell]].
-- **Consumed by:** [[Diagnostic Model]] and later compiler phases.
+- **Consumed by:** [[Diagnostic Model]], [[Token]], and later compiler phases.
 
 ## Algorithm
 
@@ -121,4 +121,4 @@ DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions
 
 ## Referenced by
 
-[[src/Pudu/_MOC]] · [[Diagnostic Model]]
+[[src/Pudu/_MOC]] · [[Diagnostic Model]] · [[Token]]

@@ -22,11 +22,11 @@ Pudu is a statically typed native systems language for developers who need predi
 ## Governance Dashboard
 
 - **Maturity:** EXPLORING — fewer than 20k lines, pre-release, one active implementation team.
-- **Depth distribution:** 2 MEDIUM implementation modules ([[Source]], [[Diagnostic Model]]); deeper compiler slices remain planned.
+- **Depth distribution:** 3 MEDIUM implementation modules ([[Source]], [[Diagnostic Model]], [[Token]]); deeper compiler slices remain planned.
 - **Seam health:** [[Native Toolchain]] is EXPLORATORY and HEALTHY by design specification.
 - **Lifecycle:** 1 EXPLORATORY seam; no collapse-eligible seams.
 - **Chain risk:** none; internal compiler phases remain within bounded subsystems.
-- **Momentum:** depth ↑ · coupling → · debt → (diagnostic boundary follows the validated source model).
+- **Momentum:** depth ↑ · coupling → · debt → (closed lexical vocabulary follows source and diagnostics).
 - **Deepening policy:** SKIP speculative abstraction; deepen only core-path boundaries.
 
 ## Referenced by

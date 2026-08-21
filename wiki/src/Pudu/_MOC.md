@@ -7,7 +7,7 @@ tags: [moc, module]
 
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
-- Tokenization and later compiler phases are introduced only by their dependency-ordered issues.
+- [[src/Pudu/Frontend/_MOC|Frontend modules]] — closed lexical vocabulary; later phases enter through dependency-ordered issues.
 
 ## Referenced by
 
