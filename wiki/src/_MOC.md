@@ -5,13 +5,13 @@ tags: [moc, module]
 
 # Module Map
 
-- [[src/Pudu/_MOC|Pudu modules]] — validated source-location foundation.
+- [[src/Pudu/_MOC|Pudu modules]] — validated source-location and diagnostic foundations.
 
 ## Depth Baseline
 
 | Status | Count | Modules |
 | --- | ---: | --- |
-| MEDIUM | 1 | [[Source]] |
+| MEDIUM | 2 | [[Source]], [[Diagnostic Model]] |
 
 ## Referenced by
 
