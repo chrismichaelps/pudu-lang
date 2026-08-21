@@ -8,7 +8,9 @@ tags: [moc, module, frontend]
 - [[Token]] — closed keyword/symbol vocabulary with lossless token and trivia values.
 - [[Lexer Facade]] — total public tokenization and diagnostics boundary.
 - [[src/Pudu/Frontend/Lexer/_MOC|Lexer modules]] — strict traversal plus modular trivia, identifier, number, symbol, and quoted scanners.
-- Syntax and parser modules enter history only through their dependency-ordered issues.
+- [[Syntax]] — untyped recovery-capable surface API.
+- [[src/Pudu/Frontend/Syntax/_MOC|Syntax modules]] — located values, segmented names, and the recursive data-only tree.
+- Parser modules enter history after the syntax dependency.
 
 ## Referenced by
 
