@@ -72,6 +72,9 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved [[Parser Binding]] as separate top-constant/local-binding entry points with explicit name classes, injected block capability, recovery boundaries, and no module `let`/`var` admission.
 - [Role: Shadow → Forensic Guardian] Implemented [[Parser Binding]] with `E1012`/`E1013` name-class validation, optional type annotations, mandatory initializers, single-`E1001` unadmitted-keyword recovery, and focused success, failure, regression, diagnostic, and hostile-budget properties; development and `-O2` suites pass 83x200.
 
+- [Role: Architect → Shadow] Resolved the newline statement boundary: a line break ends a statement unless the previous line ends with a binary operator or the next line begins with `.`, `?`, or `.await`; line-initial `(`/`[` never continue an expression.
+- [Role: Shadow → Forensic Guardian] Implemented [[Parser Block]] with statement ordering, trailing-expression results, bare and valued `return`, trivia-derived line significance in [[Parser Expression]], latched `E1099` exhaustion in [[Parser State]], and focused boundary, continuation, nesting, recovery, and hostile-input properties; development and `-O2` suites pass 90x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -79,15 +82,16 @@ tags: [handoff]
 - Tokens preserve exact lexemes and leading trivia; invalid input stays in the stream.
 - Recovery AST is never exposed as a compilable module when errors exist.
 - First parser slice covers module/import/binding/function/block/literal/name/unary/binary/call/member/return/if constructs.
+- Statements are delimited by line breaks and braces. Continuation is decided from the operator token's own leading trivia; no terminator token is ever synthesized and no semicolon enters the grammar.
 
 ## Open / Remaining
 
-- Issue #3: resolve and implement the modular function, block, and declaration-orchestration partitions; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
+- Issue #3: resolve and implement the modular function and declaration-orchestration partitions; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Architect: resolve the [[Parser Block]] and function-declaration mirrors — statement/result ownership, `;` ownership, and block-capability wiring — before any function/block source is staged.
+Architect: resolve the function-declaration mirror — parameter lists, default arguments, `->` return syntax, `async`, and expression-bodied `fn` — before any function source is staged; the declaration orchestrator follows it and closes issue #3.
 
 ## Links
 

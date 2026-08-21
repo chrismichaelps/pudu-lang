@@ -19,6 +19,7 @@ import Pudu.Frontend.Parser.State
   , matchKeyword
   , matchSymbol
   , peekKind
+  , peekStartsLine
   , peekToken
   , withRecursionBudget
   )
@@ -122,13 +123,17 @@ parseElse blockParser = do
             (Just "add if or a block after else")
           pure (Just (Located spanValue InvalidExpression))
 
+{-| Postfix continuation is line-sensitive per [[grammar/pudu]]: a line-initial
+    `(` or `[` starts a new statement, while a line-initial `.`, `?`, or
+    `.await` continues a fluent chain. -}
 parsePostfix :: BlockParser -> Located Expression -> Parser (Located Expression)
 parsePostfix blockParser expression = do
   kind <- peekKind
+  newLine <- peekStartsLine
   reserved <- isReservedPostfix kind
-  if reserved
+  if reserved && not (newLine && isSymbol "[" kind)
     then parseReservedPostfix expression kind
-    else if isPostfixStart kind
+    else if isPostfixStart kind && not (newLine && isSymbol "(" kind)
       then do
         bounded <- withRecursionBudget (parsePostfixStep blockParser expression kind)
         pure (maybe expression id bounded)
@@ -204,8 +209,11 @@ callRecoverySpan expression = foldl' mergedOrLeft (locatedSpan expression) . map
 parseBinaryTail :: BlockParser -> Int -> Located Expression -> Parser (Located Expression)
 parseBinaryTail blockParser minimumPrecedence left = do
   kind <- peekKind
+  newLine <- peekStartsLine
   case binaryInfo kind of
-    Just (operator, precedence, rightAssociative) | precedence >= minimumPrecedence -> do
+    Just (operator, precedence, rightAssociative)
+      | precedence >= minimumPrecedence
+      , not newLine -> do
       bounded <- withRecursionBudget $ do
         _ <- advanceToken
         let rightMinimum = if rightAssociative then precedence else precedence + 1

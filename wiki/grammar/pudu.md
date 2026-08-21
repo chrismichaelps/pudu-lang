@@ -44,6 +44,9 @@ top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_de
 const_decl       = "const", constant_ident, (":", type_ref)?, "=", expression ;
 local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expression
                  | "const", constant_ident, (":", type_ref)?, "=", expression ;
+block            = "{", statement*, "}" ;
+statement        = local_binding | return_stmt | expression ;
+return_stmt      = "return", expression? ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 type_decl        = "type", upper_ident, type_params?, "=", (record_type | sum_type | type_ref) ;
@@ -61,6 +64,8 @@ Rules:
 - `lower_ident` begins with `_` or a Unicode letter that is not uppercase; remaining characters follow the identifier lexical rule. The single `_` spelling is reserved for discard patterns and is not a binding name.
 - Module-scope values are `const` only. Runtime `let` and `var` bindings are admitted inside blocks, preventing module-load execution and global mutable state.
 - `let` is immutable, `var` is mutable, and `const` is evaluated and stored at compile time.
+- A statement ends at a line break unless the expression is explicitly continued. A line break continues the previous statement when the preceding line ends with a binary operator awaiting its right operand, or when the following line begins with `.`, `?`, or `.await`. A line-initial `(` or `[` starts a new statement and never becomes a call or index. Keywords that cannot begin a statement, such as `else`, always continue the construct that requires them.
+- A block yields its final unterminated expression statement, or `()` when its last entry is a binding or `return`.
 - Exported functions require explicit parameter and return types; private functions may infer omitted types when inference is unambiguous.
 - Default arguments are type-checked in the function declaration's lexical environment. They may reference module constants and earlier parameters, but not caller locals, later parameters, mutable global state, async operations, or unsafe operations. At a call, supplied arguments evaluate first from left to right; omitted defaults then evaluate in parameter order using already bound earlier parameter values. Any declared recoverable failure is part of the call expression's ordinary failure behavior.
 

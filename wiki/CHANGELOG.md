@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Parser Block]] · implement newline-delimited block statements, block results, `return` statements, line-sensitive expression continuation, and latched `E1099` recovery · risk HIGH · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Binding]] · implement module constants and local `let`/`var`/`const` bindings with `E1012`/`E1013` name classes, single-`E1001` unadmitted-keyword recovery, and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Binding]] · specify scope-safe module constants and local bindings with value/constant name classes and injected initializer blocks · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Import]] · implement modular bounded absolute imports, exclusive alias/selection suffixes, trailing commas, and E1030/E1031 recovery · risk MED · depth n/a→MEDIUM · issue #3

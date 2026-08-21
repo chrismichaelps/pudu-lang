@@ -35,6 +35,7 @@ initialParserState :: Source -> [Token] -> ParserState
 runParser :: Source -> Parser a -> [Token] -> (a, [Diagnostic])
 peekToken :: Parser Token
 peekKind :: Parser TokenKind
+peekStartsLine :: Parser Bool
 lookaheadKind :: Int -> Parser TokenKind
 isAtEnd :: Parser Bool
 advanceToken :: Parser Token
@@ -49,6 +50,7 @@ emitParseDiagnostic :: Diagnostic -> Parser ()
 emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
 currentSpan :: Parser Span
 withRecursionBudget :: Parser a -> Parser (Maybe a)
+budgetExhausted :: Parser Bool
 isDeclarationStart :: TokenKind -> Bool
 synchronizeDeclaration :: Parser ()
 ```
@@ -60,7 +62,8 @@ synchronizeDeclaration :: Parser ()
 - Expectations diagnose without host failure; synthetic tokens are never returned as ordinary input.
 - Textual symbol requests resolve through the closed `SymbolKind` vocabulary; parser modules cannot construct symbol kinds from raw text.
 - Parser-owned error construction validates opaque diagnostic codes once in this module.
-- Recursion budget exhaustion emits E1099 once for the active branch.
+- Recursion budget exhaustion emits E1099 exactly once per parse and latches; `budgetExhausted` exposes that latch so grammar loops stop instead of re-descending into the same hostile nesting.
+- `peekStartsLine` reports whether the current token is preceded by a line terminator in its own leading trivia. Line significance is answered from preserved trivia only; no terminator token is synthesized, so [[Lexer Facade]] losslessness and the token vocabulary stay unchanged.
 
 ### Linkage
 
@@ -73,7 +76,7 @@ Normalize tokens to one source-end EOF, retain the unconsumed suffix, thread str
 
 ## Negative Logic (Prohibited Paths)
 
-- No partial indexing, global state, exception recovery, grammar-specific AST construction, or unbounded recursive descent.
+- No partial indexing, global state, exception recovery, grammar-specific AST construction, unbounded recursive descent, or synthesized terminator tokens.
 
 ## Edge Cases
 
@@ -86,6 +89,8 @@ DEPTH 0.77 (DEEP). It hides every dangerous parser invariant behind a compact gr
 ## Grill Log
 
 - **Q:** Indexed sequence or remaining-token cursor? **A:** Keep the strict remaining suffix. _Rationale:_ peek/advance are O(1), bounded lookahead is O(k), and a full parse remains linear without partial array indexing. _Rejected:_ `Seq.lookup` O(log n); repeated `drop` from the original list; unsafe mutable cursor.
+- **Q:** Why latch budget exhaustion instead of emitting per exhausted branch? **A:** Keep one E1099 for the whole parse and let loops query the latch. _Rationale:_ the budget is restored while unwinding, so an iterating grammar such as [[Parser Block]] would otherwise re-enter the same depth and produce an E1099/E1001 pair per repetition. _Rejected:_ per-branch diagnostics with later deduplication, which still leaves the delimiter cascade; abandoning the parse, which loses recovered declarations.
+- **Q:** How do newline-delimited statements reach the grammar? **A:** Expose one `peekStartsLine` query over the current token's preserved leading trivia. _Rationale:_ [[grammar/pudu]] delimits statements by line breaks, and trivia already carries the exact text, so grammar modules decide continuation without a lexer change. _Rejected:_ inserting virtual terminator tokens, which breaks lossless reconstruction; re-reading the source text during parsing.
 - **Q:** Custom parser monad acceptable? **A:** Internal only and small. _Rationale:_ state/error recovery is domain-specific and explicit. _Rejected:_ public framework abstraction.
 
 ## Variants

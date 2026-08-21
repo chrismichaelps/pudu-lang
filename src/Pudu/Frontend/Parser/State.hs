@@ -2,6 +2,7 @@
 module Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
+  , budgetExhausted
   , currentSpan
   , emitParseDiagnostic
   , emitParseError
@@ -17,6 +18,7 @@ module Pudu.Frontend.Parser.State
   , matchKind
   , matchSymbol
   , peekKind
+  , peekStartsLine
   , peekToken
   , runParser
   , synchronizeDeclaration
@@ -25,6 +27,7 @@ module Pudu.Frontend.Parser.State
 
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -39,6 +42,7 @@ import Pudu.Frontend.Token
     , KwLet, KwMacro, KwStruct, KwTrait, KwType, KwVar)
   , Token (..)
   , TokenKind (..)
+  , Trivia (triviaText)
   , keywordText
   , symbolFromText
   )
@@ -49,6 +53,7 @@ data ParserState = ParserState
   { parserRemaining :: ![Token]
   , parserDiagnosticsRev :: ![Diagnostic]
   , parserRecursionBudget :: !Int
+  , parserBudgetExhausted :: !Bool
   , parserFallbackEof :: !Token
   }
 
@@ -83,6 +88,7 @@ initialParserState source tokens =
         { parserRemaining = normalizeTokens fallback tokens
         , parserDiagnosticsRev = []
         , parserRecursionBudget = 512
+        , parserBudgetExhausted = False
         , parserFallbackEof = fallback
         }
 
@@ -93,6 +99,16 @@ runParser source (Parser action) tokens =
 
 peekToken :: Parser Token
 peekToken = Parser $ \state -> (tokenAt 0 state, state)
+
+{-| Line significance is answered from preserved leading trivia. No terminator
+    token is synthesized, so lossless reconstruction stays intact. -}
+peekStartsLine :: Parser Bool
+peekStartsLine = startsLine <$> peekToken
+
+startsLine :: Token -> Bool
+startsLine = any (Text.any isLineBreak . triviaText) . tokenLeadingTrivia
+ where
+  isLineBreak character = character == '\n' || character == '\r'
 
 peekKind :: Parser TokenKind
 peekKind = tokenKind <$> peekToken
@@ -167,6 +183,12 @@ emitParseError codeText spanValue message help =
     Just value -> emitParseDiagnostic value
     Nothing -> pure ()
 
+{-| Report whether the shared nesting budget has already been exhausted during
+    this parse. Grammar loops stop instead of re-descending, so one hostile
+    input reports exactly one E1099 and no unwinding delimiter cascade. -}
+budgetExhausted :: Parser Bool
+budgetExhausted = Parser $ \state -> (parserBudgetExhausted state, state)
+
 currentSpan :: Parser Span
 currentSpan = tokenSpan <$> peekToken
 
@@ -178,8 +200,10 @@ withRecursionBudget (Parser action) =
         let token = tokenAt 0 state
             finding = parseDiagnostic "E1099" (tokenSpan token) "parser nesting limit exceeded"
               (Just "simplify the nested expression or split it into smaller declarations")
-            diagnostics = maybe (parserDiagnosticsRev state) (: parserDiagnosticsRev state) finding
-         in (Nothing, state{parserDiagnosticsRev = diagnostics})
+            diagnostics
+              | parserBudgetExhausted state = parserDiagnosticsRev state
+              | otherwise = maybe (parserDiagnosticsRev state) (: parserDiagnosticsRev state) finding
+         in (Nothing, state{parserDiagnosticsRev = diagnostics, parserBudgetExhausted = True})
       else
         let reduced = state{parserRecursionBudget = parserRecursionBudget state - 1}
             (value, afterAction) = action reduced

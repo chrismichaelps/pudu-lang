@@ -35,6 +35,7 @@ parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 - The future declaration parser injects its block parser, avoiding a module cycle.
 - Prefix parses literals, single-segment names, parentheses/grouping, block, `if`, and `!`/`-`/`&`/`&mut` unary forms.
 - Postfix call/member binds tighter than every binary operator.
+- Line breaks are significant to continuation, matching [[grammar/pudu]]: a binary operator or a postfix `(`/`[` that begins a new line does not extend the expression, while a line-initial `.`, `?`, or `.await` does. Continuation is decided from the operator token's own leading trivia, so no synthetic terminator token is ever inserted.
 - Assignment is right-associative; every other admitted binary operator is left-associative, matching [[grammar/pudu]].
 - Calls admit empty arguments and one trailing comma; member access requires an identifier.
 - Every recursive prefix, nested `else if`, postfix, argument-list, and binary-tail descent uses [[Parser State]]'s shared budget.
@@ -52,11 +53,12 @@ Use budgeted precedence climbing: parse prefix, apply postfix, then consume clos
 
 ## Negative Logic (Prohibited Paths)
 
-- No statement/declaration parsing, raw-text symbol construction, semantic operator lookup, implicit semicolon insertion, or recursion without budget.
+- No statement/declaration parsing, raw-text symbol construction, semantic operator lookup, semicolon ownership, synthesized terminator tokens, or recursion without budget.
 
 ## Edge Cases
 
 - Empty call lists and trailing commas are valid; missing operands preserve closing delimiters and yield one invalid node/diagnostic; parenthesized expressions preserve merged spans.
+- Line sensitivity applies inside grouping and argument lists as well, so `(a` followed by a line-initial `- b` stops the operand and reports the missing `)` instead of silently spanning the break. Closing delimiters, commas, and `else` are matched regardless of line position because none of them can begin a statement.
 
 ## Depth
 
@@ -69,6 +71,8 @@ DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span
 - **Q:** How are symbols classified? **A:** Match `SymbolKind` constructors and render through `symbolText`. _Rationale:_ the lexer vocabulary remains the single exhaustive punctuation authority. _Rejected:_ raw `Text` token construction.
 - **Q:** How are hostile flat chains bounded? **A:** Charge recursive postfix, argument, and binary continuation steps to the same 512-level parser budget. _Rationale:_ flat attacker input must not exhaust the host stack. _Rejected:_ guarding only parenthesized recursion.
 - **Q:** How does budget exhaustion avoid delimiter cascades? **A:** Argument parsing returns explicit completion evidence and checks token progress. _Rationale:_ an `E1099` at an unconsumed argument must not be misreported as a missing close. _Rejected:_ unconditional `expectSymbol` after exhausted descent.
+
+- **Q:** How are statement boundaries expressed without semicolons? **A:** Gate binary and `(`/`[` postfix continuation on the operator token starting a new line, while `.`/`?`/`.await` continue across breaks. _Rationale:_ [[grammar/pudu]] delimits statements by newlines and braces; fluent chains stay idiomatic while `f()` followed by a line-initial `-value` remains two statements. _Rejected:_ semicolon insertion into the token stream, which breaks losslessness; unconditional greedy continuation, which makes every line-initial unary operator ambiguous; leading-operator continuation for all operators, which keeps the same ambiguity.
 
 ## Variants
 
