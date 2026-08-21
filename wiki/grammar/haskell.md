@@ -60,7 +60,7 @@ Official anchors: [GHCup](https://www.haskell.org/ghcup/) · [GHC](https://www.h
 
 ## Performance Laws
 
-- Compile with `-O2` for release and `-O0` for fast development/test cycles.
+- `cabal.project` disables optimization for fast development/test cycles. CI/release commands pass `--enable-optimization=2`; package files do not hard-code `-O0`, which keeps `cabal check` distribution-clean.
 - Use strict accumulators in source traversal, symbol tables, and diagnostics collection.
 - Avoid repeated `Text` concatenation in loops; use builders or accumulated chunks.
 - Do not optimize without a benchmark or allocation profile demonstrating the bottleneck.
