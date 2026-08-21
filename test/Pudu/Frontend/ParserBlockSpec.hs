@@ -104,6 +104,7 @@ testRecovery = do
     [ counterexample "missing brace" (codes unclosed === ["E1001"])
     , shape unclosed === "[let a=1]"
     , counterexample "unrecognized statement" (codes unrecognized === ["E1040"])
+    , diagnosticOffsets unrecognized === [4]
     , counterexample "recovery keeps the following statement"
         (shape unrecognized === "[invalid]=>a")
     , remainingKind unrecognized === EndOfFile

@@ -75,6 +75,8 @@ tags: [handoff]
 - [Role: Architect → Shadow] Resolved the newline statement boundary: a line break ends a statement unless the previous line ends with a binary operator or the next line begins with `.`, `?`, or `.await`; line-initial `(`/`[` never continue an expression.
 - [Role: Shadow → Forensic Guardian] Implemented [[Parser Block]] with statement ordering, trailing-expression results, bare and valued `return`, trivia-derived line significance in [[Parser Expression]], latched `E1099` exhaustion in [[Parser State]], and focused boundary, continuation, nesting, recovery, and hostile-input properties; development and `-O2` suites pass 90x200.
 
+- [Role: Shadow → Forensic Guardian] Implemented [[Parser Function]] with async/value-name signatures, parameters carrying optional types and defaults, optional `->` return types, block and expression bodies, `E1032` missing-body and `E1033` reserved-generic recovery, and focused signature, parameter, body, recovery, and hostile-input properties; development and `-O2` suites pass 96x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -86,12 +88,12 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: resolve and implement the modular function and declaration-orchestration partitions; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
+- Issue #3: resolve and implement the declaration-orchestration partition — `export` ownership, module declaration, import ordering, declaration synchronization, and the compilation unit — which closes the issue; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Architect: resolve the function-declaration mirror — parameter lists, default arguments, `->` return syntax, `async`, and expression-bodied `fn` — before any function source is staged; the declaration orchestrator follows it and closes issue #3.
+Architect: resolve the declaration-orchestrator mirror — `export` ownership, one module declaration, import-before-declaration ordering, `E1039` unsupported-keyword synchronization, and compilation-unit validity — before any orchestrator source is staged. The untracked local drafts of `Parser.hs`, `Declaration.hs`, `Compiler.hs`, and their pages predate both the current [[Parser State]] signature and the resolved newline statement boundary, so they are reference only, not a base to admit.
 
 ## Links
 
