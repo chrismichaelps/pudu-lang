@@ -51,6 +51,7 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Selected issue #3's dependency-first syntax slice and resolved the complete [[Syntax]], [[Syntax Located]], [[Syntax Name]], and [[Syntax Tree]] mirrors before history admission.
 - [Role: DNA Engineer → Shadow] Committed the four syntax mirrors and maps before staging their implementation files.
 - [Role: Shadow → Forensic Guardian] Admitted the modular syntax data and direct provenance/name/recovery invariants with package exposure.
+- [Role: Forensic Guardian → Architect] Clarified delivery so issue #3 can use honest sub-600 intermediate `Refs` partitions without opening artificial issues; only its final partition closes the issue.
 
 ## Decided (do not re-litigate)
 
