@@ -36,6 +36,10 @@ library
     Pudu.Frontend.Lexer.Quoted
     Pudu.Frontend.Lexer.Symbol
     Pudu.Frontend.Lexer.Trivia
+    Pudu.Frontend.Syntax
+    Pudu.Frontend.Syntax.Located
+    Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
     Pudu.Source
   build-depends:
@@ -55,6 +59,7 @@ test-suite pudu-test
     Pudu.Frontend.Lexer.NumberSymbolSpec
     Pudu.Frontend.Lexer.QuotedSpec
     Pudu.Frontend.Lexer.ScannerSpec
+    Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
   build-depends:
     base >=4.20 && <4.23,

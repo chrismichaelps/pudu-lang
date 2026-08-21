@@ -9,6 +9,7 @@ import Pudu.Frontend.LexerSpec (lexerProperties)
 import Pudu.Frontend.Lexer.NumberSymbolSpec (numberSymbolProperties)
 import Pudu.Frontend.Lexer.QuotedSpec (quotedProperties)
 import Pudu.Frontend.Lexer.ScannerSpec (scannerProperties)
+import Pudu.Frontend.SyntaxSpec (syntaxProperties)
 import Pudu.Frontend.TokenSpec (tokenProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
@@ -39,7 +40,8 @@ main = do
   numberSymbolOutcomes <- traverse (uncurry check) numberSymbolProperties
   quotedOutcomes <- traverse (uncurry check) quotedProperties
   lexerOutcomes <- traverse (uncurry check) lexerProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes)) exitFailure
+  syntaxOutcomes <- traverse (uncurry check) syntaxProperties
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

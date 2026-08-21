@@ -49,6 +49,8 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented the total facade, fixed scanner precedence, exact E0099 recovery, conservative lossless invariant fallback, generated losslessness properties, and development/optimized gates.
 - [Role: Forensic Guardian → Architect] Merged issue #8 through PR #17 after exact-head semantic, forensic, size, optimized, and locked-CI gates passed.
 - [Role: Architect → DNA Engineer] Selected issue #3's dependency-first syntax slice and resolved the complete [[Syntax]], [[Syntax Located]], [[Syntax Name]], and [[Syntax Tree]] mirrors before history admission.
+- [Role: DNA Engineer → Shadow] Committed the four syntax mirrors and maps before staging their implementation files.
+- [Role: Shadow → Forensic Guardian] Admitted the modular syntax data and direct provenance/name/recovery invariants with package exposure.
 
 ## Decided (do not re-litigate)
 
@@ -60,12 +62,12 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: commit the resolved syntax mirrors first, then admit and validate the modular syntax data before parser behavior.
+- Issue #3: validate and merge the syntax dependency before parser state/name/type behavior.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-DNA Engineer: commit the four complete syntax mirrors and maps before the Shadow stages any syntax implementation file.
+Forensic Guardian: audit syntax mirror parity, recovery poison, non-empty segmented names, provenance invariants, size, and validation.
 
 ## Links
 
