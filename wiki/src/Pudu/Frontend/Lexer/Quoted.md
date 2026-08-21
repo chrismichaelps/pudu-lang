@@ -38,29 +38,15 @@ scanQuoted :: LexerCursor -> Maybe LexerCursor
 
 ## Algorithm
 
-1. Mark and consume the opening delimiter, then traverse through the strict cursor with a reversed decoded-scalar accumulator.
-2. Consume ordinary scalar runs one scalar at a time, dispatch escapes at `\\`, reject raw string braces, and stop before newline or at EOF.
-3. For `\u{...}`, consume the bounded escape candidate, validate digit syntax and scalar range using `Integer`, and convert only a proven scalar value.
-4. On a closing delimiter, validate character cardinality when no earlier defect exists, emit the decoded kind or exact `Invalid`, and attach diagnostics already derived from snapshot-bound submarks.
-5. On unterminated input, emit the complete consumed segment and record E0002 over that exact segment.
+Mark the delimiter, accumulate maximal ordinary chunks, dispatch escapes and raw braces, and stop before newline/EOF. Validate `\u{...}` through `Integer`; on close, validate character cardinality and emit decoded or exact-invalid output. Unterminated recovery emits the consumed segment with E0002.
 
 ## Negative Logic
 
-- No interpolation parsing, doubled-brace escape, multiline literal, byte string, raw-string delimiter, numeric host-bound conversion, scanner rewind, fabricated closing delimiter, or source-text loss.
-- No parser, type, encoding-ingestion, or unknown-token fallback behavior.
-
-## Edge Cases
-
-- `""`, `"a\\nb"`, `"\\u{1F4A1}"`, `'x'`, `'\\n'`, `'\\''`, and `'\\u{10FFFF}'` are valid.
-- `"\\q"` and `'\\q'` are E0005 invalid tokens.
-- `"\\u{}"`, `"\\u{1234567}"`, `"\\u{D800}"`, `"\\u{110000}"`, and `"\\u{12G}"` are E0006 invalid tokens.
-- `''` and `'ab'` are E0007 invalid tokens.
-- `"a{b"` and `"a}b"` are E0008 invalid tokens.
-- `"abc`, `'x`, and either form before CR/LF are E0002 invalid tokens; the newline remains for trivia scanning.
+- No interpolation parsing, doubled-brace escape, multiline/raw/byte string, host-bound numeric conversion, rewind, fabricated delimiter, parser/type/ingestion, unknown-token fallback, or source loss.
 
 ## Depth
 
-DEPTH 0.68 (MEDIUM). The module hides delimiter ownership, escape decoding, scalar-range validation, bounded recovery, decoded/exact duality, and five diagnostic paths behind one scanner entry point.
+DEPTH 0.68 (MEDIUM). Owns delimiter boundaries, scalar-safe escape decoding, recovery, decoded/exact duality, and five diagnostic paths.
 
 ## Grill Log
 

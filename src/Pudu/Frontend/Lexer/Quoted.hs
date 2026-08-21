@@ -16,10 +16,7 @@ data QuoteKind = StringQuote | CharacterQuote
   deriving stock (Eq)
 
 data QuoteState = QuoteState
-  { quoteCursor :: !LexerCursor
-  , decodedChunks :: ![Text]
-  , quoteInvalid :: !Bool
-  }
+  { quoteCursor :: !LexerCursor, decodedChunks :: ![Text], quoteInvalid :: !Bool }
 
 scanQuoted :: LexerCursor -> Maybe LexerCursor
 scanQuoted cursor =
@@ -32,20 +29,13 @@ beginQuote :: QuoteKind -> LexerCursor -> Maybe LexerCursor
 beginQuote kind cursor =
   scanBody kind (markCursor cursor) initialState
   where
-    initialState =
-      QuoteState
-        { quoteCursor = consumeScalars 1 cursor
-        , decodedChunks = []
-        , quoteInvalid = False
-        }
+    initialState = QuoteState (consumeScalars 1 cursor) [] False
 
 scanBody :: QuoteKind -> CursorMark -> QuoteState -> Maybe LexerCursor
 scanBody kind opening state@QuoteState{quoteCursor}
   | cursorAtEnd quoteCursor = finishUnterminated kind opening quoteCursor
-  | maybe False isLineBreak (peekScalar quoteCursor) =
-      finishUnterminated kind opening quoteCursor
-  | peekScalar quoteCursor == Just (closingDelimiter kind) =
-      finishClosed kind opening state
+  | maybe False isLineBreak (peekScalar quoteCursor) = finishUnterminated kind opening quoteCursor
+  | peekScalar quoteCursor == Just (closingDelimiter kind) = finishClosed kind opening state
   | peekScalar quoteCursor == Just '\\' = do
       nextState <- scanEscape kind state
       scanBody kind opening nextState
@@ -58,13 +48,8 @@ scanBody kind opening state@QuoteState{quoteCursor}
           advanced = consumeWhile (isOrdinary kind) quoteCursor
        in do
             (chunk, _) <- captureSince chunkMark advanced
-            scanBody
-              kind
-              opening
-              state
-                { quoteCursor = advanced
-                , decodedChunks = chunk : decodedChunks state
-                }
+            scanBody kind opening state
+              { quoteCursor = advanced, decodedChunks = chunk : decodedChunks state }
 
 scanEscape :: QuoteKind -> QuoteState -> Maybe QuoteState
 scanEscape kind state@QuoteState{quoteCursor} =
@@ -77,12 +62,9 @@ scanEscape kind state@QuoteState{quoteCursor} =
             else rejectEscape escapeMark state (consumeScalars 1 afterSlash) "E0005" "invalid escape sequence"
         Just scalar ->
           case simpleEscape kind scalar of
-            Just decoded ->
-              Just
-                state
-                  { quoteCursor = consumeScalars 1 afterSlash
-                  , decodedChunks = Text.singleton decoded : decodedChunks state
-                  }
+            Just decoded -> Just state
+              { quoteCursor = consumeScalars 1 afterSlash
+              , decodedChunks = Text.singleton decoded : decodedChunks state }
             Nothing
               | isLineBreak scalar || scalar == closingDelimiter kind ->
                   rejectEscape escapeMark state afterSlash "E0005" "invalid escape sequence"
@@ -100,14 +82,9 @@ scanUnicodeEscape kind escapeMark state afterU = do
       advanced = if closed then consumeScalars 1 afterDigits else afterDigits
   (digits, _) <- captureSince digitsMark afterDigits
   case if closed then decodeUnicode digits else Nothing of
-    Just scalar ->
-      Just
-        state
-          { quoteCursor = advanced
-          , decodedChunks = Text.singleton scalar : decodedChunks state
-          }
-    Nothing ->
-      rejectEscape escapeMark state advanced "E0006" "invalid Unicode escape"
+    Just scalar -> Just state
+      { quoteCursor = advanced, decodedChunks = Text.singleton scalar : decodedChunks state }
+    Nothing -> rejectEscape escapeMark state advanced "E0006" "invalid Unicode escape"
 
 rejectEscape :: CursorMark -> QuoteState -> LexerCursor -> Text -> Text -> Maybe QuoteState
 rejectEscape diagnosticMark state advanced code message = do
@@ -134,12 +111,8 @@ finishClosed kind opening state =
               Just (scalar, remaining)
                 | Text.null remaining -> emitToken opening (CharLiteral scalar) closed
               _ -> do
-                diagnosed <-
-                  recordAt
-                    opening
-                    closed
-                    "E0007"
-                    "character literal must contain exactly one Unicode scalar value"
+                diagnosed <- recordAt opening closed "E0007"
+                  "character literal must contain exactly one Unicode scalar value"
                 emitInvalid opening diagnosed
 
 finishUnterminated :: QuoteKind -> CursorMark -> LexerCursor -> Maybe LexerCursor

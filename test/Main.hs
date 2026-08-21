@@ -5,6 +5,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DiagnosticSpec (diagnosticProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
+import Pudu.Frontend.LexerSpec (lexerProperties)
 import Pudu.Frontend.Lexer.NumberSymbolSpec (numberSymbolProperties)
 import Pudu.Frontend.Lexer.QuotedSpec (quotedProperties)
 import Pudu.Frontend.Lexer.ScannerSpec (scannerProperties)
@@ -37,7 +38,8 @@ main = do
   scannerOutcomes <- traverse (uncurry check) scannerProperties
   numberSymbolOutcomes <- traverse (uncurry check) numberSymbolProperties
   quotedOutcomes <- traverse (uncurry check) quotedProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes)) exitFailure
+  lexerOutcomes <- traverse (uncurry check) lexerProperties
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

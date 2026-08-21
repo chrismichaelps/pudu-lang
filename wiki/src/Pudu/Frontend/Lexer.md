@@ -22,11 +22,7 @@ Drive modular scanners in one deterministic order and expose tokens plus ordered
 ## Interface
 
 ```haskell
-data LexResult = LexResult
-  { lexTokens :: ![Token]
-  , lexDiagnostics :: ![Diagnostic]
-  }
-
+data LexResult = LexResult { lexTokens :: ![Token], lexDiagnostics :: ![Diagnostic] }
 lexSource :: Source -> LexResult
 ```
 
@@ -41,25 +37,15 @@ lexSource :: Source -> LexResult
 
 ## Algorithm
 
-1. Tail-recurse over the strict cursor, selecting the first matching scanner in fixed precedence.
-2. Recover an unmatched scalar through an exact invalid token and E0099.
-3. At EOF, complete the cursor and copy its ordered output into `LexResult`.
-4. If completion unexpectedly fails, return an exact whole-source invalid token, one EOF at source end, and E0099 rather than throwing or dropping source.
+Tail-recurse over the strict cursor in fixed precedence, recover one unmatched scalar with E0099, and complete once at EOF. Unexpected invariant failure becomes exact whole-source invalid output plus one EOF, never an exception.
 
 ## Negative Logic
 
-- No parsing, source decoding, scanner backtracking, token filtering, diagnostic rendering, eager literal conversion, exception, or hidden mutable state.
-
-## Edge Cases
-
-- Empty input is one EOF. Trailing trivia attaches to EOF.
-- `/`, `//`, and `/*...*/` select symbol or trivia without ambiguity.
-- `;`, a lone `\\`, a leading combining mark, and a non-ASCII digit each recover as one-scalar E0099 invalid tokens before later valid tokens.
-- Scanner diagnostics E0002–E0008 pass through unchanged; quoted-invalid text never splits into E0099 tokens.
+- No parsing, source decoding, backtracking, token filtering, rendering, eager literal conversion, exception, or mutable state. Empty input is one EOF; trailing trivia attaches to EOF; scanner E0002–E0008 diagnostics pass through unchanged.
 
 ## Depth
 
-DEPTH 0.61 (MEDIUM). The facade owns scanner precedence, total progress, unknown-input recovery, exact completion, and the public lexical result boundary.
+DEPTH 0.61 (MEDIUM). Owns scanner precedence, total progress, unknown recovery, exact completion, and the public result boundary.
 
 ## Grill Log
 

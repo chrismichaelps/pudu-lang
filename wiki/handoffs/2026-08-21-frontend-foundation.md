@@ -45,6 +45,8 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented quoted decoding and focused success, failure, recovery, losslessness, and long-literal properties; PR #17 review required completing the same issue with its bounded facade.
 - [Role: Forensic Guardian → Architect] Kept issue #8 atomic, resolved [[Lexer Facade]], and constrained the combined PR below 600 additions rather than closing a partial issue.
 - [Role: Architect → DNA Engineer] Committed the complete facade mirror and Grill Log before its implementation.
+- [Role: DNA Engineer → Shadow] Re-anchored implementation to the facade mirror and assigned only facade, focused integration tests, and package exposure.
+- [Role: Shadow → Forensic Guardian] Implemented the total facade, fixed scanner precedence, exact E0099 recovery, conservative lossless invariant fallback, generated losslessness properties, and development/optimized gates.
 
 ## Decided (do not re-litigate)
 
@@ -56,13 +58,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #8 requires facade implementation and exact-head gates in PR #17; completion unblocks parser integration.
+- Issue #8 requires exact-head semantic, forensic, and locked-CI gates in PR #17; completion unblocks parser integration.
 - Issue #3: commit complete mirrored module pages with resolved Grill Logs, then implement the modular syntax/parser/compiler slice.
 - Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
 
 ## Exact next action
 
-Shadow: implement [[Lexer Facade]], integrate all scanners, and keep PR #17 below 600 additions before repeated exact-head review.
+Forensic Guardian: repeat exact-head issue #8 parity, totality, diagnostic, size, private-boundary, and validation review for PR #17.
 
 ## Links
 
