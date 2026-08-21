@@ -4,6 +4,7 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DiagnosticSpec (diagnosticProperties)
+import Pudu.Frontend.TokenSpec (tokenProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
@@ -27,7 +28,8 @@ main = do
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       ]
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes)) exitFailure
+  tokenOutcomes <- traverse (uncurry check) tokenProperties
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

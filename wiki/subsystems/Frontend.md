@@ -27,4 +27,4 @@ Lexer · parser · tokens · trivia · source spans · untyped syntax · recover
 
 ## Referenced by
 
-[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]]
+[[architecture/OVERVIEW]] · [[Semantics]] · [[Tooling]] · [[Token]] · [[src/Pudu/Frontend/_MOC]]

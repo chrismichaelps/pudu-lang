@@ -13,6 +13,7 @@ tags: [changelog]
 - 2026-08-21 · [[Source]] · establish opaque snapshot identity, cached Unicode-scalar bounds, overflow-safe offsets, and allocation-conscious positions · risk MED · depth n/a→MEDIUM · issue #2
 - 2026-08-21 · [[Diagnostic Model]] · establish deterministic structured diagnostics, ordered causality, and severity-only error gating · risk MED · depth n/a→MEDIUM · issue #9
 - 2026-08-21 · [[architecture/SEMANTICS]] · fix diagnostic-code shape and severity-family compatibility before phase publication · risk MED · depth grilled→clarified · issue #9
+- 2026-08-21 · [[Token]] · establish closed keyword/symbol vocabulary and lossless token/trivia representation · risk MED · depth n/a→MEDIUM · issue #5
 
 ## Referenced by
 
