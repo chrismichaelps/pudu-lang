@@ -92,6 +92,8 @@ data Pattern
   | AlternativePattern ![Located Pattern] | InvalidPattern
 data FieldPattern = FieldPattern
   { fieldPatternName :: !(Located Text), fieldPatternValue :: !(Maybe (Located Pattern)) }
+data FieldInit = FieldInit
+  { fieldInitName :: !(Located Text), fieldInitValue :: !(Maybe (Located Expression)) }
 data MatchArm = MatchArm
   { armPattern :: !(Located Pattern), armGuard :: !(Maybe (Located Expression))
   , armBody :: !(Located Expression) }
@@ -106,6 +108,8 @@ data Expression
   | MemberExpression !(Located Expression) !(Located Text)
   | IndexExpression !(Located Expression) !(Located Expression)
   | TryExpression !(Located Expression) | AwaitExpression !(Located Expression)
+  | TupleExpression ![Located Expression]
+  | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]

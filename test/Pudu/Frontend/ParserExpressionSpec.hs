@@ -10,6 +10,7 @@ import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
 import Pudu.Frontend.Syntax
   ( Block (..)
   , Expression (..)
+  , FieldInit (..)
   , FieldPattern (..)
   , Literal (..)
   , Located (..)
@@ -19,7 +20,7 @@ import Pudu.Frontend.Syntax
   )
 import Pudu.Frontend.Token (Token (tokenSpan), TokenKind (..))
 import Pudu.Source (SourceName (SourceName), mergeSpans, newSource, spanStart, unOffset)
-import Test.QuickCheck (Property, conjoin, (===))
+import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 parserExpressionProperties :: [(String, IO Property)]
 parserExpressionProperties =
@@ -31,6 +32,7 @@ parserExpressionProperties =
   , ("expression recovery emits exact diagnostics", testRecovery)
   , ("index failure-propagation and await postfix forms parse", testPostfixForms)
   , ("match while loop and for parse as expressions", testControlExpressions)
+  , ("tuples and record constructions parse", testAggregates)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   ]
@@ -102,6 +104,30 @@ testControlExpressions = do
     , validShape forValue === "for item in items"
     ]
 
+testAggregates :: IO Property
+testAggregates = do
+  tuple <- parse "(1, 2, 3)"
+  grouped <- parse "(1 + 2)"
+  record <- parse "User{id: 1, name: n}"
+  shorthand <- parse "User{id, name}"
+  qualified <- parse "Core.User{id: 1}"
+  nested <- parse "Wrapper{inner: User{id: 2}}"
+  blockNotRecord <- parse "if READY {} else {}"
+  parenthesized <- parse "if (User{id: 1}).id > 0 {} else {}"
+  pure $ conjoin
+    [ validShape tuple === "(1,2,3)"
+    , counterexample "one member without a comma groups" (validShape grouped === "(1+2)")
+    , validShape record === "User{id:1,name:n}"
+    , counterexample "a field without a value is shorthand"
+        (validShape shorthand === "User{id,name}")
+    , validShape qualified === "Core.User{id:1}"
+    , validShape nested === "Wrapper{inner:User{id:2}}"
+    , counterexample "a condition keeps its block"
+        (validShape blockNotRecord === "if")
+    , counterexample "parentheses reinstate a record construction"
+        (validShape parenthesized === "if")
+    ]
+
 testHostileChains :: IO Property
 testHostileChains = do
   members <- parse ("root" <> Text.concat (replicate 520 ".x"))
@@ -165,7 +191,15 @@ shape (Located _ expression) = case expression of
   LoopExpression _ -> "loop"
   ForExpression binder iterated _ ->
     "for " <> patternShape binder <> " in " <> shape iterated
+  TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
+  RecordExpression path fields ->
+    moduleNameText path <> "{" <> Text.intercalate "," (map fieldInitShape fields) <> "}"
   InvalidExpression -> "invalid"
+
+fieldInitShape :: Located FieldInit -> Text
+fieldInitShape (Located _ field) =
+  locatedValue (fieldInitName field)
+    <> maybe Text.empty (\value -> ":" <> shape value) (fieldInitValue field)
 
 armShape :: Located MatchArm -> Text
 armShape (Located _ arm) =

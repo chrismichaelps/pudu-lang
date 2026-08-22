@@ -6,6 +6,7 @@ module Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , FieldDeclaration (..)
+  , FieldInit (..)
   , FieldPattern (..)
   , Function (..)
   , FunctionBody (..)
@@ -233,6 +234,14 @@ data FieldPattern = FieldPattern
   }
   deriving stock (Eq, Show)
 
+{-| @Program.Syntax.FieldInit — one field of a record construction; an absent
+    value takes the binding with the field's own name. -}
+data FieldInit = FieldInit
+  { fieldInitName :: !(Located Text)
+  , fieldInitValue :: !(Maybe (Located Expression))
+  }
+  deriving stock (Eq, Show)
+
 {-| @Program.Syntax.MatchArm — one `case` pattern, optional guard, and body -}
 data MatchArm = MatchArm
   { armPattern :: !(Located Pattern)
@@ -253,6 +262,7 @@ data Expression
   | TryExpression !(Located Expression)
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]
+  | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]

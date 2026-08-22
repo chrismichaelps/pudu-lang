@@ -175,8 +175,8 @@ shape (Located _ declaration, _, _) = case declaration of
       , maybe Text.empty typeShape annotation
       , expressionShape value
       ]
-  FunctionDeclaration{} -> "function"
   InvalidDeclaration -> "invalid"
+  _ -> "other"
 
 visibilityText :: Visibility -> Text
 visibilityText visibility = case visibility of
@@ -200,6 +200,7 @@ typeShape (Located _ typeValue) = case typeValue of
   TupleType members -> "(" <> Text.intercalate "," (map typeShape members) <> ")"
   UnitType -> "()"
   InvalidType -> "invalid"
+  _ -> "other"
 
 expressionShape :: Located Expression -> Text
 expressionShape (Located _ expression) = case expression of
@@ -215,3 +216,4 @@ expressionShape (Located _ expression) = case expression of
   BlockExpression _ -> "block"
   IfExpression{} -> "if"
   InvalidExpression -> "invalid"
+  _ -> "other"

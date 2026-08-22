@@ -51,6 +51,8 @@ emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
 currentSpan :: Parser Span
 withRecursionBudget :: Parser a -> Parser (Maybe a)
 budgetExhausted :: Parser Bool
+recordsAdmitted :: Parser Bool
+withRecordAdmission :: Bool -> Parser a -> Parser a
 isDeclarationStart :: TokenKind -> Bool
 synchronizeDeclaration :: Parser ()
 ```
@@ -63,6 +65,7 @@ synchronizeDeclaration :: Parser ()
 - Textual symbol requests resolve through the closed `SymbolKind` vocabulary; parser modules cannot construct symbol kinds from raw text.
 - Parser-owned error construction validates opaque diagnostic codes once in this module.
 - Recursion budget exhaustion emits E1099 exactly once per parse and latches; `budgetExhausted` exposes that latch so grammar loops stop instead of re-descending into the same hostile nesting.
+- `recordsAdmitted` reports whether a record construction may start at the cursor. The flag is withheld only for the expression that precedes a block and is restored on exit, so the grammar decides ambiguity by position rather than by lookahead.
 - `peekStartsLine` reports whether the current token is preceded by a line terminator in its own leading trivia. Line significance is answered from preserved trivia only; no terminator token is synthesized, so [[Lexer Facade]] losslessness and the token vocabulary stay unchanged.
 
 ### Linkage

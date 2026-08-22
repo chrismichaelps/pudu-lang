@@ -3,7 +3,7 @@ module Pudu.Frontend.ParserFunctionSpec (parserFunctionProperties) where
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticSpan)
+import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.State (peekKind, runParser)
@@ -136,9 +136,6 @@ parse visibility input = do
 codes :: Parsed -> [Text]
 codes (_, _, diagnostics) = map (diagnosticCodeText . diagnosticCode) diagnostics
 
-diagnosticOffsets :: Parsed -> [Int]
-diagnosticOffsets (_, _, diagnostics) = map (unOffset . spanStart . diagnosticSpan) diagnostics
-
 remainingKind :: Parsed -> TokenKind
 remainingKind (_, kind, _) = kind
 
@@ -210,6 +207,7 @@ statementShape (Located _ statement) = case statement of
   ReturnStatement Nothing -> "return"
   ReturnStatement (Just expression) -> "return " <> expressionShape expression
   InvalidStatement -> "invalid"
+  _ -> "other"
 
 typeShape :: Located TypeSyntax -> Text
 typeShape (Located _ typeValue) = case typeValue of
@@ -221,6 +219,7 @@ typeShape (Located _ typeValue) = case typeValue of
   TupleType members -> "(" <> Text.intercalate "," (map typeShape members) <> ")"
   UnitType -> "()"
   InvalidType -> "invalid"
+  _ -> "other"
 
 namedShape :: ModuleName -> Text
 namedShape = moduleNameText
@@ -239,3 +238,4 @@ expressionShape (Located _ expression) = case expression of
   BlockExpression _ -> "block"
   IfExpression{} -> "if"
   InvalidExpression -> "invalid"
+  _ -> "other"

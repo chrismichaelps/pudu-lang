@@ -19,9 +19,11 @@ module Pudu.Frontend.Parser.State
   , matchSymbol
   , peekKind
   , peekStartsLine
+  , recordsAdmitted
   , peekToken
   , runParser
   , synchronizeDeclaration
+  , withRecordAdmission
   , withRecursionBudget
   ) where
 
@@ -54,6 +56,7 @@ data ParserState = ParserState
   , parserDiagnosticsRev :: ![Diagnostic]
   , parserRecursionBudget :: !Int
   , parserBudgetExhausted :: !Bool
+  , parserAdmitsRecords :: !Bool
   , parserFallbackEof :: !Token
   }
 
@@ -89,6 +92,7 @@ initialParserState source tokens =
         , parserDiagnosticsRev = []
         , parserRecursionBudget = 512
         , parserBudgetExhausted = False
+        , parserAdmitsRecords = True
         , parserFallbackEof = fallback
         }
 
@@ -186,6 +190,18 @@ emitParseError codeText spanValue message help =
 {-| Report whether the shared nesting budget has already been exhausted during
     this parse. Grammar loops stop instead of re-descending, so one hostile
     input reports exactly one E1099 and no unwinding delimiter cascade. -}
+{-| Whether a record construction may start here. It is withheld only for the
+    expression that precedes a block, where `Name {` would be ambiguous with the
+    block itself, and is reinstated inside any bracketed context. -}
+recordsAdmitted :: Parser Bool
+recordsAdmitted = Parser $ \state -> (parserAdmitsRecords state, state)
+
+withRecordAdmission :: Bool -> Parser a -> Parser a
+withRecordAdmission admitted (Parser action) =
+  Parser $ \state ->
+    let (value, next) = action state{parserAdmitsRecords = admitted}
+     in (value, next{parserAdmitsRecords = parserAdmitsRecords state})
+
 budgetExhausted :: Parser Bool
 budgetExhausted = Parser $ \state -> (parserBudgetExhausted state, state)
 

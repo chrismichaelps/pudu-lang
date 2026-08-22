@@ -178,8 +178,8 @@ declarationShape :: Located Declaration -> Text
 declarationShape (Located _ declaration) = case declaration of
   BindingDeclaration _ bindingKind name _ value ->
     bindingKindText bindingKind <> " " <> locatedValue name <> "=" <> expressionShape value
-  FunctionDeclaration{} -> "function"
   InvalidDeclaration -> "invalid"
+  _ -> "other"
 
 bindingKindText :: BindingKind -> Text
 bindingKindText bindingKind = case bindingKind of
@@ -208,3 +208,4 @@ expressionShape (Located _ expression) = case expression of
   LoopExpression _ -> "loop"
   ForExpression{} -> "for"
   InvalidExpression -> "invalid"
+  _ -> "other"

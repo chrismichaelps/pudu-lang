@@ -28,6 +28,7 @@ type BlockParser = Parser (Located Block)
 
 parseExpression :: BlockParser -> Parser (Located Expression)
 parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
+parseScrutinee :: BlockParser -> Parser (Located Expression)
 ```
 
 ### Governance
@@ -40,6 +41,9 @@ parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 - Line breaks are significant to continuation, matching [[grammar/pudu]]: a binary operator or a postfix `(`/`[` that begins a new line does not extend the expression, while a line-initial `.`, `?`, or `.await` does. Continuation is decided from the operator token's own leading trivia, so no synthetic terminator token is ever inserted.
 - Assignment is right-associative; every other admitted binary operator is left-associative, matching [[grammar/pudu]].
 - Calls admit empty arguments and one trailing comma; member access requires an identifier.
+- Parentheses group one expression, and a comma makes the same syntax a tuple, mirroring the type grammar's `(T)` and `(T, U)`.
+- An uppercase path directly followed by `{` builds a record. A field written without `:` takes the binding with the field's own name, mirroring the record pattern's shorthand.
+- A record construction is withheld in the expression that precedes a block — an `if` or `while` condition, a `match` scrutinee, a `for` iterable — because `if READY { ... }` would otherwise be ambiguous with the block. Records are admitted again inside any bracketed context, so parentheses reinstate one.
 - Every recursive prefix, nested `else if`, postfix, argument-list, and binary-tail descent uses [[Parser State]]'s shared budget.
 - Argument parsing distinguishes a consumed closing delimiter from budget/progress exhaustion so one `E1099` does not cascade into a synthetic missing-`)` diagnostic.
 - Unknown expression starts emit `E1040`; malformed `else` emits `E1042`; a `match` with no arms emits `E1051`.
@@ -75,6 +79,8 @@ DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span
 - **Q:** How does budget exhaustion avoid delimiter cascades? **A:** Argument parsing returns explicit completion evidence and checks token progress. _Rationale:_ an `E1099` at an unconsumed argument must not be misreported as a missing close. _Rejected:_ unconditional `expectSymbol` after exhausted descent.
 
 - **Q:** How are statement boundaries expressed without semicolons? **A:** Gate binary and `(`/`[` postfix continuation on the operator token starting a new line, while `.`/`?`/`.await` continue across breaks. _Rationale:_ [[grammar/pudu]] delimits statements by newlines and braces; fluent chains stay idiomatic while `f()` followed by a line-initial `-value` remains two statements. _Rejected:_ semicolon insertion into the token stream, which breaks losslessness; unconditional greedy continuation, which makes every line-initial unary operator ambiguous; leading-operator continuation for all operators, which keeps the same ambiguity.
+
+- **Q:** How is `Name {` told apart from a block? **A:** By position: a record construction is not admitted where a block may follow, and parentheses reinstate it. _Rationale:_ `if READY { ... }` is genuinely ambiguous, and a lookahead cannot resolve it because `{ value }` is both a plausible block and a plausible record shorthand. _Rejected:_ lookahead heuristics; requiring a keyword before every record; dropping the shorthand.
 
 ## Variants
 

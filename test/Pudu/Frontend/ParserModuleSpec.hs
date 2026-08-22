@@ -9,7 +9,6 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
   , Function (..)
-  , Impl (..)
   , Import (..)
   , Trait (..)
   , TypeDeclarationValue (..)

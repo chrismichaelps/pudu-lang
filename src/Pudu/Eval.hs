@@ -30,8 +30,10 @@ import Pudu.Eval.Match (literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value (Closure (..), Value (..), renderValue, valueKind)
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , FieldInit (..)
   , Declaration (..)
   , Expression (..)
   , Function (..)
@@ -210,6 +212,9 @@ evaluate (Located spanValue expression) = case expression of
   TupleExpression members -> case members of
     [] -> pure UnitValue
     _ -> TupleValue <$> mapM evaluate members
+  RecordExpression path fields -> do
+    values <- mapM (evaluateFieldInit spanValue) fields
+    pure (RecordValue (lastPathSegment path) values)
   BlockExpression block -> evaluateBlock block
   IfExpression condition thenBlock elseBranch -> do
     test <- evaluate condition
@@ -251,6 +256,26 @@ evaluateCall spanValue callee arguments = do
     FunctionValue closure -> callClosure closure values (Just spanValue)
     VariantValue name [] -> pure (VariantValue name values)
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+
+{-| A field written without a value takes the binding with the field's own
+    name, exactly as the record pattern's shorthand binds it. -}
+evaluateFieldInit :: Span -> Located FieldInit -> Evaluator (Text, Value)
+evaluateFieldInit recordSpan (Located _ field) = do
+  let name = locatedValue (fieldInitName field)
+  value <- case fieldInitValue field of
+    Just expression -> evaluate expression
+    Nothing -> do
+      found <- lookupName name
+      case found of
+        Just existing -> pure existing
+        Nothing -> abortAt (Just recordSpan) "E7001" ("undefined name " <> name) Nothing
+  pure (name, value)
+
+lastPathSegment :: ModuleName -> Text
+lastPathSegment (ModuleName segments) = lastSegmentOf segments
+
+lastSegmentOf :: NonEmpty Text -> Text
+lastSegmentOf (first :| rest) = last (first : rest)
 
 evaluateArms :: Span -> Value -> [Located MatchArm] -> Evaluator Value
 evaluateArms spanValue subject arms = case arms of

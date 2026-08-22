@@ -37,14 +37,15 @@ data Closure = Closure
   }
   deriving stock (Eq, Show)
 
-{-| Render a value the way the session prints it. Strings show their quotes so
-    a printed `"1"` is never mistaken for the integer. -}
+{-| Render a value the way the session prints it. Strings and characters show
+    their quotes and escape their control characters, so a printed `"1"` is
+    never mistaken for the integer and a newline never breaks the line. -}
 renderValue :: Value -> Text
 renderValue value = case value of
   IntValue number -> Text.pack (show number)
   FloatValue number -> Text.pack (show number)
   StrValue text -> "\"" <> escape text <> "\""
-  CharValue character -> "'" <> Text.singleton character <> "'"
+  CharValue character -> "'" <> escape (Text.singleton character) <> "'"
   BoolValue flag -> if flag then "true" else "false"
   NullValue -> "null"
   UnitValue -> "()"

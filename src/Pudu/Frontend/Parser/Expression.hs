@@ -3,10 +3,14 @@ module Pudu.Frontend.Parser.Expression
   ( BlockParser
   , parseExpression
   , parseExpressionAt
+  , parseScrutinee
   ) where
 
+import Data.Char (isUpper)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Frontend.Parser.Name (parseModuleName)
 import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
@@ -22,12 +26,20 @@ import Pudu.Frontend.Parser.State
   , expectKeyword
   , peekKind
   , peekStartsLine
+  , recordsAdmitted
+  , withRecordAdmission
   , peekToken
   , withRecursionBudget
   )
 import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Block, Expression (..), Literal (..), MatchArm (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Block
+  , Expression (..)
+  , FieldInit (..)
+  , Literal (..)
+  , MatchArm (..)
+  )
 import Pudu.Frontend.Token
   ( Keyword (KwAwait, KwCase, KwElse, KwFalse, KwFor, KwIf, KwIn, KwLoop, KwMatch
     , KwMut, KwNull, KwTrue, KwWhile)
@@ -42,6 +54,21 @@ type BlockParser = Parser (Located Block)
 
 parseExpression :: BlockParser -> Parser (Located Expression)
 parseExpression blockParser = parseExpressionAt blockParser 0
+
+{-| Parse the expression that precedes a block: an `if` or `while` condition, a
+    `match` scrutinee, or a `for` iterable. A record construction is not
+    admitted here, because `if READY { ... }` would otherwise be ambiguous with
+    the block that follows. Parentheses reinstate it. -}
+parseScrutinee :: BlockParser -> Parser (Located Expression)
+parseScrutinee blockParser = withoutRecords (parseExpressionAt blockParser 0)
+
+{-| Records are admitted again inside any bracketed context, so an argument, an
+    index, or a parenthesized expression may construct one. -}
+withRecords :: Parser a -> Parser a
+withRecords = withRecordAdmission True
+
+withoutRecords :: Parser a -> Parser a
+withoutRecords = withRecordAdmission False
 
 parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 parseExpressionAt blockParser minimumPrecedence = do
@@ -67,12 +94,90 @@ parsePrefix blockParser = do
     Keyword KwWhile -> parseWhile blockParser
     Keyword KwLoop -> parseLoop blockParser
     Keyword KwFor -> parseFor blockParser
-    Identifier name -> advanceToken >> pure (Located (tokenSpan token) (NameExpression (name :| [])))
+    Identifier name -> parseNameOrRecord blockParser token name
     Symbol symbol
-      | symbol == SymLeftParen -> parseGrouped blockParser
+      | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
       | symbol == SymLeftBrace -> blockExpression blockParser
       | symbol `elem` unaryOperators -> parseUnary blockParser token symbol
     _ -> invalidPrefix token
+
+{-| An uppercase name directly followed by `{` builds a record, when records are
+    admitted here; every other name is a plain reference. -}
+parseNameOrRecord :: BlockParser -> Token -> Text -> Parser (Located Expression)
+parseNameOrRecord blockParser token name
+  | not (startsUpper name) = plainName
+  | otherwise = do
+      admitted <- recordsAdmitted
+      opensRecord <- recordFollows
+      if admitted && opensRecord
+        then parseRecordExpression blockParser
+        else plainName
+ where
+  plainName = advanceToken >> pure (Located (tokenSpan token) (NameExpression (name :| [])))
+
+{-| A record construction may be introduced by a qualified path, so the scan
+    walks `Name.Name` segments before deciding whether a `{` follows. The walk
+    is bounded by the path length the name grammar admits. -}
+recordFollows :: Parser Bool
+recordFollows = walk 1 (0 :: Int)
+ where
+  walk offset segments
+    | segments > 64 = pure False
+    | otherwise = do
+        following <- lookaheadKind offset
+        if isSymbol "." following
+          then do
+            segment <- lookaheadKind (offset + 1)
+            case segment of
+              Identifier _ -> walk (offset + 2) (segments + 1)
+              _ -> pure False
+          else pure (isSymbol "{" following)
+
+startsUpper :: Text -> Bool
+startsUpper value = maybe False (isUpper . fst) (Text.uncons value)
+
+parseRecordExpression :: BlockParser -> Parser (Located Expression)
+parseRecordExpression blockParser = do
+  path <- parseModuleName
+  _ <- expectSymbol "{" "to start the record fields"
+  fields <- withRecords (parseFieldInits blockParser [])
+  closing <- expectSymbol "}" "to close the record fields"
+  pure
+    ( Located (mergedOrLeft (locatedSpan path) (tokenSpan closing))
+        (RecordExpression (locatedValue path) fields)
+    )
+
+parseFieldInits :: BlockParser -> [Located FieldInit] -> Parser [Located FieldInit]
+parseFieldInits blockParser reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol "}" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      field <- parseFieldInit blockParser
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          comma <- matchSymbol ","
+          case comma of
+            Nothing -> pure (reverse (field : reversed))
+            Just _ -> parseFieldInits blockParser (field : reversed)
+
+{-| A field written without `:` takes the binding with its own name, mirroring
+    the record pattern's shorthand. -}
+parseFieldInit :: BlockParser -> Parser (Located FieldInit)
+parseFieldInit blockParser = do
+  name <- expectIdentifier "for the record field"
+  colon <- matchSymbol ":"
+  value <- case colon of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> parseExpression blockParser
+  pure
+    ( Located (maybe (locatedSpan name) (mergedOrLeft (locatedSpan name) . locatedSpan) value)
+        FieldInit{fieldInitName = name, fieldInitValue = value}
+    )
 
 literal :: Token -> Literal -> Parser (Located Expression)
 literal token value = do
@@ -142,7 +247,7 @@ parseUnary blockParser operatorToken operator = do
 parseIf :: BlockParser -> Parser (Located Expression)
 parseIf blockParser = do
   keyword <- advanceToken
-  condition <- parseExpression blockParser
+  condition <- parseScrutinee blockParser
   case locatedValue condition of
     InvalidExpression ->
       pure (Located (mergedOrLeft (tokenSpan keyword) (locatedSpan condition)) InvalidExpression)
@@ -177,7 +282,7 @@ parseElse blockParser = do
 parseMatch :: BlockParser -> Parser (Located Expression)
 parseMatch blockParser = do
   keyword <- advanceToken
-  scrutinee <- parseExpression blockParser
+  scrutinee <- parseScrutinee blockParser
   _ <- expectSymbol "{" "to start the match arms"
   arms <- parseArms blockParser []
   closing <- expectSymbol "}" "to close the match arms"
@@ -236,7 +341,7 @@ parseArmBody blockParser = do
 parseWhile :: BlockParser -> Parser (Located Expression)
 parseWhile blockParser = do
   keyword <- advanceToken
-  condition <- parseExpression blockParser
+  condition <- parseScrutinee blockParser
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
@@ -257,7 +362,7 @@ parseFor blockParser = do
   keyword <- advanceToken
   binder <- parsePattern
   _ <- expectKeyword KwIn "between the pattern and the iterated expression"
-  iterated <- parseExpression blockParser
+  iterated <- parseScrutinee blockParser
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
@@ -298,7 +403,7 @@ parsePostfixStep blockParser expression kind await
       parsePostfix blockParser tried
   | isSymbol "[" kind = do
       _ <- advanceToken
-      index <- parseExpression blockParser
+      index <- withRecords (parseExpression blockParser)
       closing <- expectSymbol "]" "to close the index expression"
       let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
             (IndexExpression expression index)
@@ -327,7 +432,7 @@ parseArguments :: BlockParser -> Parser ([Located Expression], Maybe Token)
 parseArguments blockParser = do
   kind <- peekKind
   if isSymbol ")" kind then advanceToken >>= \closing -> pure ([], Just closing)
-    else parseExpression blockParser >>= \first -> parseArgumentTail blockParser [first]
+    else withRecords (parseExpression blockParser) >>= \first -> parseArgumentTail blockParser [first]
 
 parseArgumentTail :: BlockParser -> [Located Expression] -> Parser ([Located Expression], Maybe Token)
 parseArgumentTail blockParser reversed = do
@@ -343,7 +448,7 @@ parseArgumentTail blockParser reversed = do
         else do
           bounded <- withRecursionBudget $ do
             before <- peekToken
-            next <- parseExpression blockParser
+            next <- withRecords (parseExpression blockParser)
             after <- peekToken
             if before == after
               then pure (reverse reversed, Nothing)

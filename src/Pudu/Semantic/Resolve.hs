@@ -15,6 +15,7 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , FieldDeclaration (..)
+  , FieldInit (..)
   , FieldPattern (..)
   , Function (..)
   , FunctionBody (..)
@@ -279,6 +280,9 @@ walkExpression (Located spanValue expression) = case expression of
   TryExpression target -> walkExpression target
   AwaitExpression target -> walkExpression target
   TupleExpression members -> mapM_ walkExpression members
+  RecordExpression path fields -> do
+    resolveConstructorPath spanValue path
+    mapM_ walkFieldInit fields
   BlockExpression block -> walkBlock block
   IfExpression condition thenBlock elseBranch -> do
     walkExpression condition
@@ -295,6 +299,13 @@ walkExpression (Located spanValue expression) = case expression of
       bindPattern binder
       walkBlock body
   InvalidExpression -> pure ()
+
+{-| A field written without a value refers to the binding with the field's own
+    name, so the shorthand resolves like any other reference. -}
+walkFieldInit :: Located FieldInit -> Resolver ()
+walkFieldInit (Located _ field) = case fieldInitValue field of
+  Just value -> walkExpression value
+  Nothing -> resolveValueName (locatedSpan (fieldInitName field)) (locatedValue (fieldInitName field))
 
 walkArm :: Located MatchArm -> Resolver ()
 walkArm (Located _ arm) = inScope $ do

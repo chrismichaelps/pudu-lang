@@ -15,6 +15,7 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , FieldPattern (..)
+  , FieldInit (..)
   , Function (..)
   , Literal (..)
   , MatchArm (..)
@@ -67,6 +68,8 @@ outlineExpression (Located _ expression) = case expression of
   TryExpression target -> outlineExpression target <> "?"
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
+  RecordExpression path fields ->
+    moduleNameText path <> "{" <> Text.intercalate ", " (map outlineFieldInit fields) <> "}"
   BlockExpression block -> "{ " <> Text.intercalate "; " (outlineBlock block) <> " }"
   IfExpression condition _ elseBranch ->
     "if " <> outlineExpression condition
@@ -79,6 +82,11 @@ outlineExpression (Located _ expression) = case expression of
   ForExpression binder iterated _ ->
     "for " <> outlinePattern binder <> " in " <> outlineExpression iterated
   InvalidExpression -> "invalid"
+
+outlineFieldInit :: Located FieldInit -> Text
+outlineFieldInit (Located _ field) =
+  locatedValue (fieldInitName field)
+    <> maybe Text.empty (\value -> ": " <> outlineExpression value) (fieldInitValue field)
 
 outlineArm :: Located MatchArm -> Text
 outlineArm (Located _ arm) =

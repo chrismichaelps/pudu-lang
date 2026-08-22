@@ -91,6 +91,8 @@ tags: [handoff]
 
 - [Role: Shadow → Forensic Guardian] Added line editing, persistent history, Ctrl-C line cancellation, and Tab completion to `puduci` through [[Repl Complete]]. Completion covers colon commands, filenames after `:load`, the keyword vocabulary, wired-in and prelude names, and whatever the session declared or bound. Verified in a real terminal over a pseudo-terminal as well as by the pure completion properties; development and `-O2` suites pass 153x200.
 
+- [Role: Shadow → Forensic Guardian] Audited the whole surface language through `puduci` and closed the last construction gap: records could be declared and matched but not built. Record construction expressions with field shorthand now parse, resolve, and evaluate; they are withheld in the expression before a block so `if READY { ... }` stays a block, and parentheses reinstate them. Character rendering now escapes control characters. Development and `-O2` suites pass 154x200, both warning-clean.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -101,6 +103,7 @@ tags: [handoff]
 - The interactive session is named `puduci` and prompts with `puduci> `. Its completion names come from a snapshot refreshed after each accepted entry, never from compiling inside a keystroke. Session state is pure and lives outside the IO loop, so a rejected entry leaves nothing behind.
 - Evaluation exists before typing and before a backend. Its arithmetic is exact rather than width-dependent, and it says so; typing refines it rather than contradicting it.
 - Wired-in types and the implicit prelude are separate scope layers, following Haskell: primitives cannot be removed, prelude names can be shadowed or replaced by an explicit `import Core.Prelude`.
+- A record construction is withheld where a block may follow and reinstated by parentheses; ambiguity is resolved by position, never by lookahead.
 - Statements are delimited by line breaks and braces. Continuation is decided from the operator token's own leading trivia; no terminator token is ever synthesized and no semicolon enters the grammar.
 
 ## Open / Remaining

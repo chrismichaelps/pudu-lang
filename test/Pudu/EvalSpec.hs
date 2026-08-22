@@ -3,7 +3,7 @@ module Pudu.EvalSpec (evalProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
-import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..), evaluateEntryPoint)
 import Pudu.Eval.Value (renderValue)
 import Pudu.Source (SourceName (SourceName), newSource)
@@ -29,6 +29,8 @@ testArithmetic = do
   comparison <- evaluate "1 < 2 && 3 >= 3"
   concatenation <- evaluate "\"pu\" + \"du\""
   negation <- evaluate "-(2 + 3)"
+  newlineChar <- evaluate "'\\n'"
+  quotedText <- evaluate "\"a\\nb\""
   pure $ conjoin
     [ sums === "7"
     , precedence === "9"
@@ -37,6 +39,9 @@ testArithmetic = do
     , comparison === "true"
     , concatenation === "\"pudu\""
     , negation === "-5"
+    , counterexample "a control character is escaped when shown"
+        (newlineChar === "'\\n'")
+    , quotedText === "\"a\\nb\""
     ]
 
 testBindings :: IO Property
@@ -166,6 +171,16 @@ testData = do
     , "  | Err(Str)"
     ]
     "match Outcome.Err(\"stop\") { case Ok(_) => \"ok\" case Err(reason) => reason }"
+  record <- evaluateWith
+    [ "type User = { id: Int, name: Str }" ]
+    "User{id: 3, name: \"ada\"}.name"
+  shorthand <- runProgram
+    [ "type User = { id: Int, name: Str }" ]
+    [ "let id = 9", "let name = \"pudu\"" ]
+    "User{id, name}.id"
+  recordPattern <- evaluateWith
+    [ "type User = { id: Int, name: Str }" ]
+    "match (User{id: 4, name: \"x\"}) { case User{id} => id * 2 }"
   tuple <- evaluate "(1, \"two\", true)"
   indexed <- evaluate "(10, 20, 30)[1]"
   propagation <- evaluateWith
@@ -177,6 +192,9 @@ testData = do
   pure $ conjoin
     [ variant === "6"
     , qualified === "\"stop\""
+    , counterexample "a record is built and read" (record === "\"ada\"")
+    , counterexample "shorthand takes the binding of the same name" (shorthand === "9")
+    , counterexample "a record pattern destructures it" (recordPattern === "8")
     , tuple === "(1, \"two\", true)"
     , indexed === "20"
     , counterexample "? unwraps a success" (propagation === "7")
