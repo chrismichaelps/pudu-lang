@@ -14,6 +14,7 @@ import Pudu.Frontend.ParserImportSpec (parserImportProperties)
 import Pudu.Frontend.ParserBindingSpec (parserBindingProperties)
 import Pudu.Frontend.ParserBlockSpec (parserBlockProperties)
 import Pudu.Frontend.ParserFunctionSpec (parserFunctionProperties)
+import Pudu.Frontend.ParserModuleSpec (parserModuleProperties)
 import Pudu.Frontend.ParserExpressionSpec (parserExpressionProperties)
 import Pudu.Frontend.ParserTypeSpec (parserTypeProperties)
 import Pudu.Frontend.SyntaxSpec (syntaxProperties)
@@ -53,9 +54,10 @@ main = do
   parserBindingOutcomes <- traverse (uncurry check) parserBindingProperties
   parserBlockOutcomes <- traverse (uncurry check) parserBlockProperties
   parserFunctionOutcomes <- traverse (uncurry check) parserFunctionProperties
+  parserModuleOutcomes <- traverse (uncurry check) parserModuleProperties
   parserTypeOutcomes <- traverse (uncurry check) parserTypeProperties
   parserExpressionOutcomes <- traverse (uncurry check) parserExpressionProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

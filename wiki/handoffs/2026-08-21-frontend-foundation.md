@@ -77,6 +77,9 @@ tags: [handoff]
 
 - [Role: Shadow → Forensic Guardian] Implemented [[Parser Function]] with async/value-name signatures, parameters carrying optional types and defaults, optional `->` return types, block and expression bodies, `E1032` missing-body and `E1033` reserved-generic recovery, and focused signature, parameter, body, recovery, and hostile-input properties; development and `-O2` suites pass 96x200.
 
+- [Role: Architect → Shadow] Resolved [[Parser Declaration]] as composition only: `export` ownership, preserved-but-diagnosed misplaced imports, reserved-declaration skipping over braced bodies, and consumed stray module-scope tokens.
+- [Role: Shadow → Forensic Guardian] Implemented the orchestrator, the [[Parser]] façade over the source-bound state, and [[Compiler Pipeline]]'s source-to-module gate; a 21-line module with fluent chains, continued operators, default arguments, `if`/`return`, and an expression-bodied function parses with zero diagnostics. Development and `-O2` suites pass 103x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -93,7 +96,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Architect: resolve the declaration-orchestrator mirror — `export` ownership, one module declaration, import-before-declaration ordering, `E1039` unsupported-keyword synchronization, and compilation-unit validity — before any orchestrator source is staged. The untracked local drafts of `Parser.hs`, `Declaration.hs`, `Compiler.hs`, and their pages predate both the current [[Parser State]] signature and the resolved newline statement boundary, so they are reference only, not a base to admit.
+Forensic Guardian: review the completed first parser slice for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], and [[grammar/pudu]]'s statement-boundary rule — against the four commits on `feature/3-parser-binding`, then decide whether the next slice is semantic name resolution or the reserved declaration forms.
 
 ## Links
 

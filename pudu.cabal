@@ -28,6 +28,7 @@ library
   import:           warnings
   hs-source-dirs:   src
   exposed-modules:
+    Pudu.Compiler
     Pudu.Diagnostic
     Pudu.Frontend.Lexer
     Pudu.Frontend.Lexer.Cursor
@@ -36,7 +37,9 @@ library
     Pudu.Frontend.Lexer.Quoted
     Pudu.Frontend.Lexer.Symbol
     Pudu.Frontend.Lexer.Trivia
+    Pudu.Frontend.Parser
     Pudu.Frontend.Parser.Name
+    Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block
     Pudu.Frontend.Parser.Declaration.Function
@@ -72,6 +75,7 @@ test-suite pudu-test
     Pudu.Frontend.ParserBindingSpec
     Pudu.Frontend.ParserBlockSpec
     Pudu.Frontend.ParserFunctionSpec
+    Pudu.Frontend.ParserModuleSpec
     Pudu.Frontend.ParserExpressionSpec
     Pudu.Frontend.ParserTypeSpec
     Pudu.Frontend.SyntaxSpec
