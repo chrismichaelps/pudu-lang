@@ -4,6 +4,7 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DiagnosticSpec (diagnosticProperties)
+import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
 import Pudu.Frontend.LexerSpec (lexerProperties)
 import Pudu.Frontend.Lexer.NumberSymbolSpec (numberSymbolProperties)
@@ -21,6 +22,8 @@ import Pudu.Frontend.ParserExpressionSpec (parserExpressionProperties)
 import Pudu.Frontend.ParserTypeSpec (parserTypeProperties)
 import Pudu.Frontend.SyntaxSpec (syntaxProperties)
 import Pudu.Frontend.TokenSpec (tokenProperties)
+import Pudu.EvalSpec (evalProperties)
+import Pudu.Repl.SessionSpec (replProperties)
 import Pudu.Semantic.ResolveSpec (resolveProperties)
 import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, advanceOffset, emptySpan,
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
@@ -45,6 +48,7 @@ main = do
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
       ]
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
+  renderOutcomes <- traverse (uncurry check) renderProperties
   tokenOutcomes <- traverse (uncurry check) tokenProperties
   cursorOutcomes <- traverse (uncurry check) cursorProperties
   scannerOutcomes <- traverse (uncurry check) scannerProperties
@@ -61,9 +65,11 @@ main = do
   parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
   parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   resolveOutcomes <- traverse (uncurry check) resolveProperties
+  evalOutcomes <- traverse (uncurry check) evalProperties
+  replOutcomes <- traverse (uncurry check) replProperties
   parserTypeOutcomes <- traverse (uncurry check) parserTypeProperties
   parserExpressionOutcomes <- traverse (uncurry check) parserExpressionProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> renderOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> replOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

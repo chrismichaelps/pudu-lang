@@ -128,6 +128,7 @@ field_pattern    = lower_ident, (":", pattern)? ;
 ```
 
 ```ebnf
+tuple_expr       = "(", expression, ",", (expression, (",", expression)*, ","?)?, ")" ;
 match_expr       = "match", expression, "{", match_arm+, "}" ;
 match_arm        = "case", pattern, ("if", expression)?, "=>", (expression | block) ;
 while_expr       = "while", expression, block ;
@@ -139,6 +140,7 @@ for_expr         = "for", pattern, "in", expression, block ;
 - A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
 - A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
+- A parenthesized expression groups; adding a comma makes it a tuple, and `(e,)` is the one-member tuple. This mirrors the type grammar, where `(T)` groups and `(T,)` is a tuple.
 - `while`, `loop`, and `for` are expressions of type `()` in v1; their bodies are blocks, and `break`/`continue` are statements valid only inside them.
 - Sum variants are namespaced by their type; qualification is required when ambiguous.
 - Matches are exhaustive for closed types. A guarded arm does not contribute exhaustiveness because its guard may be false.

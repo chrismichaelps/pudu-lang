@@ -6,6 +6,7 @@ module Pudu.Semantic.Resolve.Context
   , declarePreludeName
   , declareNamed
   , inScope
+  , markAmbiguousVariant
   , recordVariantSymbol
   , resolveTypeName
   , resolveValueName
@@ -45,7 +46,8 @@ import Pudu.Source (Span)
 
 {-| @Semantic.Resolve.State — the resolver's private working state -}
 data ResolveState = ResolveState
-  { stateNext :: !Int
+  { stateAmbiguous :: ![Text]
+  , stateNext :: !Int
   , stateScopes :: !ScopeStack
   , stateSymbolsRev :: ![Symbol]
   , stateReferencesRev :: ![Reference]
@@ -93,7 +95,8 @@ runResolver (Resolver action) =
 initialState :: ResolveState
 initialState =
   ResolveState
-    { stateNext = 0
+    { stateAmbiguous = []
+    , stateNext = 0
     , stateScopes = emptyStack
     , stateSymbolsRev = []
     , stateReferencesRev = []
@@ -141,14 +144,19 @@ introduce namespace origin visibility mutable name spanValue = do
       (Just outer, Just here) | isShadowWarned outer -> shadowWarning name here
       _ -> pure ()
 
-{-| Variants live in their type's namespace: the symbol exists for later phases
-    but is never bound as an unqualified name. -}
+{-| A variant is namespaced by its type and is additionally bound unqualified
+    while that spelling is unambiguous, which is the rule [[grammar/pudu]]
+    states: qualification is required only when two types share a variant name. -}
 recordVariantSymbol :: Located Text -> Resolver ()
-recordVariantSymbol name = do
-  symbol <-
-    freshSymbol ValueSpace VariantOrigin Private False
-      (locatedValue name) (Just (locatedSpan name))
-  recordSymbol symbol
+recordVariantSymbol name =
+  introduce ValueSpace VariantOrigin Private False (locatedValue name) (Just (locatedSpan name))
+
+{-| Record that a variant spelling is declared by more than one type. A use of
+    it reports `E2012` and asks for qualification instead of resolving to
+    whichever declaration happened to be seen last. -}
+markAmbiguousVariant :: Text -> Resolver ()
+markAmbiguousVariant name =
+  Resolver $ \state -> ((), state{stateAmbiguous = name : stateAmbiguous state})
 
 freshSymbol
   :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Text -> Maybe Span -> Resolver Symbol
@@ -169,6 +177,18 @@ freshSymbol namespace origin visibility mutable name spanValue = do
     qualified path such as `Outcome.Ok` reaches its declaring type. -}
 resolveValueName :: Span -> Text -> Resolver ()
 resolveValueName spanValue name = do
+  ambiguous <- isAmbiguous name
+  if ambiguous
+    then
+      emit "E2012" Error spanValue ("ambiguous variant name " <> name)
+        (Just "qualify the variant with its type, as in Type.Variant")
+    else resolveUnambiguous spanValue name
+
+isAmbiguous :: Text -> Resolver Bool
+isAmbiguous name = Resolver $ \state -> (name `elem` stateAmbiguous state, state)
+
+resolveUnambiguous :: Span -> Text -> Resolver ()
+resolveUnambiguous spanValue name = do
   value <- lookupCurrent ValueSpace name
   case value of
     Just symbol -> recordReference (Reference spanValue (symbolId symbol))

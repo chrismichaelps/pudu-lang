@@ -46,6 +46,7 @@ import Pudu.Semantic.Resolve.Context
   , ResolverProducts (..)
   , declareBuiltin
   , declarePreludeName
+  , markAmbiguousVariant
   , declareNamed
   , inScope
   , recordVariantSymbol
@@ -93,7 +94,24 @@ resolveUnit moduleValue = do
     inScope $ do
       mapM_ collectImport (moduleImports moduleValue)
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
+      mapM_ markAmbiguousVariant (repeatedVariants (moduleDeclarations moduleValue))
       mapM_ walkDeclaration (moduleDeclarations moduleValue)
+
+{-| A variant spelling declared by two different types cannot be used
+    unqualified, so it is marked before any body is walked. -}
+repeatedVariants :: [Located Declaration] -> [Text]
+repeatedVariants declarations =
+  [name | (name, total) <- tally (concatMap variantNames declarations), total > (1 :: Int)]
+ where
+  tally names = [(name, length (filter (== name) names)) | name <- unique names]
+  unique = foldr (\name seen -> if name `elem` seen then seen else name : seen) []
+
+variantNames :: Located Declaration -> [Text]
+variantNames (Located _ declaration) = case declaration of
+  TypeDeclaration value -> case locatedValue (typeDefinition value) of
+    SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants
+    _ -> []
+  _ -> []
 
 declareWiredIn :: Resolver ()
 declareWiredIn = mapM_ (declareBuiltin TypeSpace) wiredInTypeNames
@@ -260,6 +278,7 @@ walkExpression (Located spanValue expression) = case expression of
   IndexExpression target index -> walkExpression target >> walkExpression index
   TryExpression target -> walkExpression target
   AwaitExpression target -> walkExpression target
+  TupleExpression members -> mapM_ walkExpression members
   BlockExpression block -> walkBlock block
   IfExpression condition thenBlock elseBranch -> do
     walkExpression condition
@@ -293,10 +312,10 @@ bindPattern (Located patternSpan value) = case value of
   RangePattern{} -> pure ()
   TuplePattern members -> mapM_ bindPattern members
   ConstructorPattern path arguments -> do
-    resolvePath patternSpan path
+    resolveConstructorPath patternSpan path
     mapM_ bindPattern arguments
   RecordPattern path fields _ -> do
-    mapM_ (resolvePath patternSpan) path
+    mapM_ (resolveConstructorPath patternSpan) path
     mapM_ bindFieldPattern fields
   AlternativePattern alternatives -> mapM_ bindPattern alternatives
   InvalidPattern -> pure ()
@@ -309,7 +328,7 @@ bindFieldPattern (Located _ field) = case fieldPatternValue field of
 walkType :: Located TypeSyntax -> Resolver ()
 walkType (Located typeSpan value) = case value of
   NamedType path arguments -> do
-    resolvePath typeSpan path
+    resolveTypePath typeSpan path
     mapM_ walkType arguments
   ReferenceType _ target -> walkType target
   TupleType members -> mapM_ walkType members
@@ -323,6 +342,12 @@ walkType (Located typeSpan value) = case value of
 resolveHead :: Span -> NonEmpty Text -> Resolver ()
 resolveHead spanValue (first :| _) = resolveValueName spanValue first
 
-resolvePath :: Span -> ModuleName -> Resolver ()
-resolvePath spanValue (ModuleName (first :| _)) = resolveTypeName spanValue first
+{-| A constructor path resolves like any value name: an unqualified variant is
+    a value binding, and a qualified path such as `Shape.Circle` reaches its
+    type. -}
+resolveConstructorPath :: Span -> ModuleName -> Resolver ()
+resolveConstructorPath spanValue (ModuleName (first :| _)) = resolveValueName spanValue first
+
+resolveTypePath :: Span -> ModuleName -> Resolver ()
+resolveTypePath spanValue (ModuleName (first :| _)) = resolveTypeName spanValue first
 

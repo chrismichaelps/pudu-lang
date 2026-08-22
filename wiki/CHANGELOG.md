@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Pudu REPL]], [[Repl Session]], [[Repl Command]], [[Repl Outline]], and [[Pudu CLI]] · establish the `puduci` interactive session with persistent context, multi-line entry, colon commands, file loading, and the `pudu` executable · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Evaluator]], [[Eval Value]], [[Eval Env]], [[Eval Match]], and [[Eval Operator]] · establish tree-walking evaluation with unwinding control flow, total pattern matching, bounded recursion and iteration, and `E7xxx` runtime diagnostics · risk HIGH · depth n/a→DEEP · issue #3
+- 2026-08-21 · [[Diagnostic Render]] · establish source-quoting diagnostic rendering with carets, related notes, help, and an interactive line mapping · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Expression]] and [[grammar/pudu]] · admit tuple expressions, closing the gap between tuple types and tuple patterns · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-21 · [[Name Resolution]] · admit unqualified variant names while unambiguous and report `E2012` when two types share a spelling, matching the grammar's qualification rule · risk MED · depth DEEP→DEEP · issue #3
 - 2026-08-21 · [[Name Resolution]], [[Symbol Model]], [[Scope Model]], and [[Semantic Prelude]] · establish two-pass lexical name resolution with namespaced symbols, Haskell-style wired-in and implicit-prelude scope layering, and `E2001`/`E2010`/`E2011`/`W2001` diagnostics · risk HIGH · depth n/a→DEEP · issue #3
 - 2026-08-21 · [[Parser Trait]] and [[Parser Type Declaration]] · implement record, sum, and alias `type` declarations, trait contracts with optional default bodies, and `impl` blocks with `E1052` member recovery · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Pattern]] and [[Parser Generic]] · implement the closed pattern vocabulary with alternation, ranges, and record rests, plus shared generic parameters, bounds, and `where` clauses · risk MED · depth n/a→MEDIUM · issue #3

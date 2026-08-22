@@ -30,6 +30,12 @@ library
   exposed-modules:
     Pudu.Compiler
     Pudu.Diagnostic
+    Pudu.Diagnostic.Render
+    Pudu.Eval
+    Pudu.Eval.Env
+    Pudu.Eval.Match
+    Pudu.Eval.Operator
+    Pudu.Eval.Value
     Pudu.Frontend.Lexer
     Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Lexer.Identifier
@@ -56,6 +62,10 @@ library
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
+    Pudu.Repl
+    Pudu.Repl.Command
+    Pudu.Repl.Outline
+    Pudu.Repl.Session
     Pudu.Semantic
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
@@ -66,6 +76,18 @@ library
   build-depends:
     base >=4.20 && <4.23,
     containers >=0.6 && <0.9,
+    directory >=1.3 && <1.4,
+    text >=2.1 && <2.2
+
+executable pudu
+  import:           warnings
+  hs-source-dirs:   app
+  main-is:          Main.hs
+  ghc-options:      -threaded -rtsopts
+  build-depends:
+    base >=4.20 && <4.23,
+    directory >=1.3 && <1.4,
+    pudu,
     text >=2.1 && <2.2
 
 test-suite pudu-test
@@ -75,6 +97,7 @@ test-suite pudu-test
   main-is:          Main.hs
   other-modules:
     Pudu.DiagnosticSpec
+    Pudu.Diagnostic.RenderSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.LexerSpec
     Pudu.Frontend.Lexer.NumberSymbolSpec
@@ -92,6 +115,8 @@ test-suite pudu-test
     Pudu.Frontend.ParserTypeSpec
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
+    Pudu.EvalSpec
+    Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
   build-depends:
     base >=4.20 && <4.23,

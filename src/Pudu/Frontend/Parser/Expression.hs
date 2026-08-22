@@ -84,12 +84,50 @@ blockExpression blockParser = do
   block <- blockParser
   pure (Located (locatedSpan block) (BlockExpression block))
 
+{-| Parentheses group one expression; a comma makes the same syntax a tuple,
+    matching the type grammar's `(T)` and `(T, U)` rule. -}
 parseGrouped :: BlockParser -> Parser (Located Expression)
 parseGrouped blockParser = do
   opening <- expectSymbol "(" "to start the grouped expression"
-  expression <- parseExpression blockParser
-  closing <- expectSymbol ")" "to close the grouped expression"
-  pure expression{locatedSpan = mergedOrLeft (tokenSpan opening) (tokenSpan closing)}
+  empty <- matchSymbol ")"
+  case empty of
+    Just closing ->
+      pure
+        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
+            (TupleExpression [])
+        )
+    Nothing -> do
+      first <- parseExpression blockParser
+      comma <- matchSymbol ","
+      case comma of
+        Nothing -> do
+          closing <- expectSymbol ")" "to close the grouped expression"
+          pure first{locatedSpan = mergedOrLeft (tokenSpan opening) (tokenSpan closing)}
+        Just _ -> do
+          rest <- parseTupleTail blockParser []
+          closing <- expectSymbol ")" "to close the tuple expression"
+          pure
+            ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
+                (TupleExpression (first : rest))
+            )
+
+parseTupleTail :: BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseTupleTail blockParser reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      next <- parseExpression blockParser
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          comma <- matchSymbol ","
+          case comma of
+            Nothing -> pure (reverse (next : reversed))
+            Just _ -> parseTupleTail blockParser (next : reversed)
 
 parseUnary :: BlockParser -> Token -> SymbolKind -> Parser (Located Expression)
 parseUnary blockParser operatorToken operator = do

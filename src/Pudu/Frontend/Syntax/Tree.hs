@@ -252,6 +252,7 @@ data Expression
   | IndexExpression !(Located Expression) !(Located Expression)
   | TryExpression !(Located Expression)
   | AwaitExpression !(Located Expression)
+  | TupleExpression ![Located Expression]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
