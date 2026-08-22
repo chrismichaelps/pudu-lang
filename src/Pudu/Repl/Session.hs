@@ -26,6 +26,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..))
 import Pudu.Semantic (Resolution (..), Symbol (..), boundSymbolNames, moduleSymbolNames)
+import Pudu.Type (Type, TypeInfo, widestWithin)
 import Pudu.Source (Source, SourceName (SourceName), newSource, spanEnd, unOffset)
 
 {-| @Repl.Session.Loaded — a file compiled as the session context -}
@@ -65,6 +66,7 @@ data EntryResult = EntryResult
   , resultDiagnostics :: ![Diagnostic]
   , resultResolution :: !(Maybe Resolution)
   , resultValue :: !(Maybe Value)
+  , resultType :: !(Maybe Type)
   , resultAccepted :: !Bool
   }
 
@@ -109,6 +111,7 @@ submitEntry session entry = do
       kind = classifyEntry lexTokens
       candidate = extend session kind entry
       (buffer, firstLine) = renderBuffer session kind entry
+      entryStart = bufferOffsetOf session kind
   source <- newSource interactiveName buffer
   let result = runCompile source
       compiled = compileDiagnostics result
@@ -127,8 +130,24 @@ submitEntry session entry = do
       , resultResolution = compileResolution result
       , resultValue =
           if accepted && kind == ExpressionEntry then evaluation >>= outcomeValue else Nothing
+      , resultType =
+          if kind == ExpressionEntry
+            then compileTypes result >>= entryType entryStart (Text.length entry)
+            else Nothing
       , resultAccepted = accepted
       }
+
+{-| The type of the submission itself: the widest expression the checker typed
+    inside the entry's own region of the buffer. -}
+entryType :: Int -> Int -> TypeInfo -> Maybe Type
+entryType start width info = widestWithin start (start + width) info
+
+{-| Where the submission starts in the assembled buffer, in scalars. -}
+bufferOffsetOf :: Session -> EntryKind -> Int
+bufferOffsetOf session kind =
+  let (buffer, firstLine) = renderBuffer session kind Text.empty
+      before = take (firstLine - 1) (Text.lines buffer)
+   in sum (map ((+ 1) . Text.length) before)
 
 {-| Only an expression produces a value to show. Declarations and bindings are
     evaluated as part of the buffer so their runtime failures surface, but they

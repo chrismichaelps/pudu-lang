@@ -50,6 +50,7 @@ sessionExports :: Resolution -> [Text]
 - An expression is compiled and evaluated but never remembered: it produces no binding, and replaying it would repeat work without adding context.
 - Only an expression yields a value to show. A declaration or binding is still evaluated as part of the buffer so its runtime failure surfaces, but it prints nothing when it succeeds.
 - Loading splits a file after its last import so session imports land where the grammar requires them, and replaces the context entirely: nothing typed against the previous context survives a load it cannot explain.
+- An expression entry also reports its static type, taken as the widest expression the checker typed inside the entry's own region of the buffer.
 - `inspectSession` compiles the session exactly as it stands, so inspecting a session cannot alter it.
 
 ### Linkage

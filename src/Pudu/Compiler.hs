@@ -12,6 +12,7 @@ import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Pudu.Frontend.Syntax (Module)
 import Pudu.Frontend.Token (Token)
 import Pudu.Semantic (Resolution, resolveModule)
+import Pudu.Type (TypeInfo, checkTypes)
 import Pudu.Source (Source)
 
 {-| @Program.Compiler.FrontendResult — exposes valid frontend products -}
@@ -28,14 +29,17 @@ data CompileResult = CompileResult
   { compileTokens :: ![Token]
   , compileModule :: !(Maybe Module)
   , compileResolution :: !(Maybe Resolution)
+  , compileTypes :: !(Maybe TypeInfo)
   , compileDiagnostics :: ![Diagnostic]
   }
   deriving stock (Eq, Show)
 
-{-| Run lexing, parsing, and name resolution in fixed order. Resolution runs
-    only on a module the parser admitted, so a syntax error never produces a
-    second explanation from a later phase. The module is withheld when any
-    error-severity diagnostic exists. -}
+{-| Run lexing, parsing, name resolution, and type checking in fixed order.
+
+    Each phase runs only on what the previous one admitted, so a defect is
+    explained by the earliest phase that can explain it and never a second time
+    by a later one. The module is withheld when any error-severity diagnostic
+    exists. -}
 runCompile :: Source -> CompileResult
 runCompile source =
   let FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} = runFrontend source
@@ -45,17 +49,29 @@ runCompile source =
             { compileTokens = frontendTokens
             , compileModule = Nothing
             , compileResolution = Nothing
+            , compileTypes = Nothing
             , compileDiagnostics = frontendDiagnostics
             }
         Just parsed ->
           let (resolution, resolutionDiagnostics) = resolveModule parsed
-              diagnostics = sortDiagnostics (frontendDiagnostics <> resolutionDiagnostics)
+              resolved = sortDiagnostics (frontendDiagnostics <> resolutionDiagnostics)
+              (types, typeDiagnostics) =
+                if hasErrors resolved then (Nothing, []) else typedResult parsed
+              diagnostics = sortDiagnostics (resolved <> typeDiagnostics)
            in CompileResult
                 { compileTokens = frontendTokens
                 , compileModule = if hasErrors diagnostics then Nothing else Just parsed
                 , compileResolution = Just resolution
+                , compileTypes = types
                 , compileDiagnostics = diagnostics
                 }
+
+{-| Typing runs only on a module whose names all resolved: an unresolved name
+    has no type, and reporting one would explain the same defect twice. -}
+typedResult :: Module -> (Maybe TypeInfo, [Diagnostic])
+typedResult parsed =
+  let (info, diagnostics) = checkTypes parsed
+   in (Just info, diagnostics)
 
 runFrontend :: Source -> FrontendResult
 runFrontend source =

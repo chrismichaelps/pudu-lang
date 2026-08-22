@@ -93,6 +93,9 @@ tags: [handoff]
 
 - [Role: Shadow → Forensic Guardian] Audited the whole surface language through `puduci` and closed the last construction gap: records could be declared and matched but not built. Record construction expressions with field shorthand now parse, resolve, and evaluate; they are withheld in the expression before a block so `if READY { ... }` stays a block, and parentheses reinstate them. Character rendering now escapes control characters. Development and `-O2` suites pass 154x200, both warning-clean.
 
+- [Role: Architect → Shadow] Opened the typing phase: local bidirectional inference only, declared generics rigid inside their declaration and instantiated per use, exported signatures annotated rather than inferred, and an absorbing error type so one mistake reports once.
+- [Role: Shadow → Forensic Guardian] Implemented [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check]], and the [[Type Boundary]], and wired typing into [[Compiler Pipeline]] and `puduci`'s `:type`. Typing immediately moved two defects earlier: `1 + true` is now a type error rather than a runtime one, and a resolution test's program turned out to be ill-typed. Development and `-O2` suites pass 165x200, both warning-clean.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -113,7 +116,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Forensic Guardian: review the completed surface, semantic, execution, and tooling slices for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], [[Syntax Tree]], [[Token]], [[Name Resolution]], [[Evaluator]], [[Diagnostic Render]], [[Pudu REPL]], and [[grammar/pudu]] — against the commits on `feature/3-parser-binding`, then open the typing slice: type formation, function signatures, and expression checking over the resolved tree.
+Forensic Guardian: review the completed surface, semantic, typing, execution, and tooling slices for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], [[Syntax Tree]], [[Token]], [[Name Resolution]], [[Evaluator]], [[Diagnostic Render]], [[Pudu REPL]], [[Type Check]], and [[grammar/pudu]] — against the commits on `dev`, then open the trait slice: bounds, coherence, and method dispatch over the typed tree.
 
 ## Links
 

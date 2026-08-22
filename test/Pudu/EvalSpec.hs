@@ -211,7 +211,8 @@ testFailures = do
     [ divisor === ["E7004"]
     , modulo === ["E7004"]
     , outOfRange === ["E7004"]
-    , mismatch === ["E7001"]
+    , counterexample "typing rejects a mixed operand before evaluation"
+        (mismatch === ["E3001"])
     , counterexample "an unmatched value is a runtime failure" (noArm === ["E7005"])
     ]
 

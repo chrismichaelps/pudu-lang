@@ -68,6 +68,14 @@ library
     Pudu.Repl.Outline
     Pudu.Repl.Session
     Pudu.Semantic
+    Pudu.Type
+    Pudu.Type.Check
+    Pudu.Type.Check.Pattern
+    Pudu.Type.Check.Rule
+    Pudu.Type.Env
+    Pudu.Type.Formation
+    Pudu.Type.Unify
+    Pudu.Type.Value
     Pudu.Semantic.Prelude
     Pudu.Semantic.Resolve
     Pudu.Semantic.Resolve.Context
@@ -121,6 +129,7 @@ test-suite pudu-test
     Pudu.EvalSpec
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
+    Pudu.Type.CheckSpec
   build-depends:
     base >=4.20 && <4.23,
     pudu,

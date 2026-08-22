@@ -45,7 +45,7 @@ runRepl :: ReplOptions -> IO ()
 - Ctrl-C abandons the line being typed and returns to the prompt with the session untouched, so an interrupt costs a line rather than a session. End of input leaves cleanly.
 - The session value stays pure and threaded through the loop; a reference to it exists only so completion can read what the session declared, and completion never writes to it.
 - A failed entry changes nothing. The session advances only on acceptance, so a mistake cannot leave a half-defined context behind.
-- `:type` reports the runtime shape the evaluator produced and says that static typing enters a later slice, rather than inventing a type it cannot know.
+- `:type` reports the static type the checker gave the submission, falling back to the evaluated value's runtime shape only when the checker recorded nothing for it.
 
 ### Linkage
 

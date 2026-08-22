@@ -43,7 +43,7 @@ testBuiltins :: IO Property
 testBuiltins = do
   result <- resolve
     [ "module M"
-    , "fn sizes(a: Int64, b: Str, c: Option[Bool]) -> Result[Int, Str] { a }"
+    , "fn sizes(a: Int64, b: Str, c: Option[Bool]) -> Int64 { a }"
     ]
   unknown <- resolve
     [ "module M"

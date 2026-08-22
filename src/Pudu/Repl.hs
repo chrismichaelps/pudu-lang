@@ -47,6 +47,7 @@ import Pudu.Repl.Session
   , submitEntry
   )
 import Pudu.Source (SourceName (SourceName), newSource)
+import Pudu.Type (renderType)
 import System.Directory (doesFileExist)
 import System.Console.Haskeline
   ( Completion (..)
@@ -393,13 +394,12 @@ showType options session expression
             interactiveRenderConfig (replStyle options) "<interactive>" (resultFirstLine result)
       if not (null diagnostics)
         then TextIO.putStrLn (renderDiagnosticsWith config (resultSource result) diagnostics)
-        else case resultValue result of
-          Nothing -> TextIO.putStrLn "no value"
-          Just value ->
-            TextIO.putStrLn
-              ( Text.strip expression <> " :: " <> valueKind value
-                  <> "  (runtime shape; static typing enters a later slice)"
-              )
+        else case resultType result of
+          Just typeValue -> TextIO.putStrLn (Text.strip expression <> " :: " <> renderType typeValue)
+          Nothing -> case resultValue result of
+            Nothing -> TextIO.putStrLn "no type"
+            Just value ->
+              TextIO.putStrLn (Text.strip expression <> " :: " <> valueKind value)
 
 showTokens :: Text -> IO ()
 showTokens text
