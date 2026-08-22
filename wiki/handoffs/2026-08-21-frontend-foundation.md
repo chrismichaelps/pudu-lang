@@ -96,6 +96,8 @@ tags: [handoff]
 - [Role: Architect → Shadow] Opened the typing phase: local bidirectional inference only, declared generics rigid inside their declaration and instantiated per use, exported signatures annotated rather than inferred, and an absorbing error type so one mistake reports once.
 - [Role: Shadow → Forensic Guardian] Implemented [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check]], and the [[Type Boundary]], and wired typing into [[Compiler Pipeline]] and `puduci`'s `:type`. Typing immediately moved two defects earlier: `1 + true` is now a type error rather than a runtime one, and a resolution test's program turned out to be ill-typed. Development and `-O2` suites pass 165x200, both warning-clean.
 
+- [Role: Shadow → Forensic Guardian] Closed three gaps the typed REPL exposed: the wired-in `Option` and `Result` had no constructors, generic sums did not instantiate in patterns, and traits had no dispatch. `Some`/`None`/`Ok`/`Err` now exist in resolution, typing, and evaluation; `?` unwraps a `Result` and propagates its failure; and `value.method()` finds an implementation's method, inherits trait defaults, and reads `Self` as the implementing type. Development and `-O2` suites pass 168x200, warning-clean.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.

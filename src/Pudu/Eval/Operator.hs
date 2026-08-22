@@ -9,8 +9,8 @@ module Pudu.Eval.Operator
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Eval.Env (Evaluator, abortAt)
-import Pudu.Eval.Value (Value (..), valueKind)
+import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
+import Pudu.Eval.Value (Closure (..), Value (..), valueKind)
 import Pudu.Source (Span)
 
 applyUnary :: Span -> Text -> Value -> Evaluator Value
@@ -97,18 +97,36 @@ readIndex spanValue container key = case (container, key) of
     abortAt (Just spanValue) "E7001"
       ("cannot index a " <> valueKind container) Nothing
 
+{-| A member is a field when the value has one, and otherwise a method of the
+    value's type. Reading a method binds the receiver, so `value.method()` calls
+    it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
-  RecordValue _ fields -> case lookup member fields of
+  RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
-    Nothing -> abortAt (Just spanValue) "E7001" ("no field " <> member) Nothing
-  VariantValue name _ | name == member -> pure value
+    Nothing -> readMethod spanValue value owner member
+  VariantValue name _
+    | name == member -> pure value
+    | otherwise -> readMethod spanValue value name member
   _ ->
     abortAt (Just spanValue) "E7001"
       ("cannot read " <> member <> " from a " <> valueKind value) Nothing
 
+readMethod :: Span -> Value -> Text -> Text -> Evaluator Value
+readMethod spanValue receiver owner member = do
+  found <- lookupName (owner <> "." <> member)
+  case found of
+    Just (FunctionValue closure) ->
+      pure (FunctionValue closure{closureSelf = Just receiver})
+    _ ->
+      abortAt (Just spanValue) "E7001"
+        ("no field or method " <> member <> " on a " <> owner) Nothing
+
+{-| `?` yields the success value, or returns the failure from the enclosing
+    function unchanged, which is the elaboration [[architecture/SEMANTICS]]
+    gives it. -}
 unwrapTry :: Span -> Value -> Evaluator Value
 unwrapTry spanValue value = case value of
   VariantValue "Ok" [inner] -> pure inner
-  VariantValue "Err" _ -> pure value
+  VariantValue "Err" _ -> unwind (ReturnUnwind value)
   _ -> abortAt (Just spanValue) "E7001" "? expects a Result value" Nothing

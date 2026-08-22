@@ -33,9 +33,11 @@ preludeTypeNames =
   , "Overflow", "DivisionByZero"
   ]
 
-{-| Value-namespace names the implicit prelude module supplies. -}
+{-| Value-namespace names the implicit prelude module supplies, including the
+    constructors of the wired-in `Option` and `Result` sums: their types exist
+    without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
-preludeValueNames = ["panic"]
+preludeValueNames = ["panic", "Some", "None", "Ok", "Err"]
 
 {-| The implicit import is suppressed by an explicit import of the same module,
     matching how an explicit `import Prelude` overrides the implicit one in

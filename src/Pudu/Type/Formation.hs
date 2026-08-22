@@ -1,6 +1,7 @@
 {-| @Type.Formation.Module — forms types from type syntax -}
 module Pudu.Type.Formation
   ( collectDeclared
+  , declaredParameterType
   , formType
   , formOptionalType
   ) where
@@ -13,6 +14,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Parameter (..)
   , FieldDeclaration (..)
   , TypeDeclarationValue (..)
   , TypeDefinition (..)
@@ -51,6 +53,11 @@ formNamed declared rigid name arguments
 
 {-| An absent annotation becomes a fresh inference variable, which is how a
     private binding or parameter participates in local inference. -}
+{-| A parameter's declared type, or a fresh variable when it has none. -}
+declaredParameterType :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
+declaredParameterType declared rigid (Located _ parameter) =
+  formOptionalType declared rigid (parameterType parameter)
+
 formOptionalType :: DeclaredTypes -> [Text] -> Maybe (Located TypeSyntax) -> Checker Type
 formOptionalType declared rigid annotation = case annotation of
   Nothing -> freshVariable
@@ -59,11 +66,23 @@ formOptionalType declared rigid annotation = case annotation of
 lastSegment :: ModuleName -> Text
 lastSegment (ModuleName segments) = NonEmpty.last segments
 
+{-| The sums the compiler wires in. `Option` and `Result` are the language's
+    absence and failure carriers, so their constructors exist without any
+    declaration, exactly as their types do. -}
+builtinVariants :: Map Text (Text, [Text], [Type])
+builtinVariants =
+  Map.fromList
+    [ ("Some", ("Option", ["T"], [RigidType "T"]))
+    , ("None", ("Option", ["T"], []))
+    , ("Ok", ("Result", ["T", "E"], [RigidType "T"]))
+    , ("Err", ("Result", ["T", "E"], [RigidType "E"]))
+    ]
+
 {-| Collect what every type declaration contributes before any body is checked,
     so a declaration may refer to one that appears later in the file. -}
 collectDeclared :: [Located Declaration] -> Checker DeclaredTypes
 collectDeclared declarations = do
-  let shells = foldr addShell emptyDeclared declarations
+  let shells = (foldr addShell emptyDeclared declarations){declaredVariants = builtinVariants}
   foldCollect shells declarations
 
 addShell :: Located Declaration -> DeclaredTypes -> DeclaredTypes
@@ -112,13 +131,20 @@ formField declared rigid (Located _ field) = do
 {-| A variant is recorded under its own name together with the type it belongs
     to, which is how a constructor call and a pattern both find its payload. -}
 formVariant
-  :: DeclaredTypes -> [Text] -> Text -> Located Variant -> Checker (Text, (Text, [Type]))
+  :: DeclaredTypes
+  -> [Text]
+  -> Text
+  -> Located Variant
+  -> Checker (Text, (Text, [Text], [Type]))
 formVariant declared rigid owner (Located _ variant) = do
   payload <- case variantPayload variant of
     UnitPayload -> pure []
     TuplePayload members -> mapM (formType declared rigid) members
     RecordPayload fields -> map snd <$> mapM (formField declared rigid) fields
-  pure (locatedValue (variantName variant), (owner, payload))
+  pure (locatedValue (variantName variant), (owner, rigid, payload))
 
-insertAll :: [(Text, (Text, [Type]))] -> Map Text (Text, [Type]) -> Map Text (Text, [Type])
+insertAll
+  :: [(Text, (Text, [Text], [Type]))]
+  -> Map Text (Text, [Text], [Type])
+  -> Map Text (Text, [Text], [Type])
 insertAll entries existing = foldr (\(key, value) acc -> Map.insert key value acc) existing entries

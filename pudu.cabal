@@ -70,6 +70,7 @@ library
     Pudu.Semantic
     Pudu.Type
     Pudu.Type.Check
+    Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Rule
     Pudu.Type.Env

@@ -183,12 +183,17 @@ testData = do
     "match (User{id: 4, name: \"x\"}) { case User{id} => id * 2 }"
   tuple <- evaluate "(1, \"two\", true)"
   indexed <- evaluate "(10, 20, 30)[1]"
-  propagation <- evaluateWith
-    [ "type Outcome ="
-    , "  | Ok(Int)"
-    , "  | Err(Str)"
-    ]
-    "Ok(7)?"
+  let propagationProgram =
+        [ "fn attempt(flag: Bool) -> Result[Int, Str] {"
+        , "  if flag { Ok(1) } else { Err(\"stop\") }"
+        , "}"
+        , "fn run(flag: Bool) -> Result[Int, Str] {"
+        , "  let value = attempt(flag)?"
+        , "  Ok(value + 1)"
+        , "}"
+        ]
+  propagation <- evaluateWith propagationProgram "run(true)"
+  failure <- evaluateWith propagationProgram "run(false)"
   pure $ conjoin
     [ variant === "6"
     , qualified === "\"stop\""
@@ -197,7 +202,9 @@ testData = do
     , counterexample "a record pattern destructures it" (recordPattern === "8")
     , tuple === "(1, \"two\", true)"
     , indexed === "20"
-    , counterexample "? unwraps a success" (propagation === "7")
+    , counterexample "? unwraps a success" (propagation === "Ok(2)")
+    , counterexample "? returns the failure from its function"
+        (failure === "Err(\"stop\")")
     ]
 
 testFailures :: IO Property

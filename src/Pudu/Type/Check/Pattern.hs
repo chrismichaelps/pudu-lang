@@ -42,8 +42,11 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     variant <- lookupVariant name
     case variant of
       Nothing -> mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
-      Just (owner, payload) -> do
-        _ <- unify patternSpan subjectType (NominalType owner [])
+      Just (owner, ownerParams, declaredPayload) -> do
+        replacements <- freshFor ownerParams
+        let ownerType = NominalType owner (map snd replacements)
+            payload = map (substituteRigid replacements) declaredPayload
+        _ <- unify patternSpan subjectType ownerType
         if length payload == length arguments
           then sequence_ (zipWith (bindPattern declared rigid) arguments payload)
           else do
@@ -57,6 +60,24 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
   InvalidPattern -> pure ()
+
+{-| A generic sum is instantiated at every pattern, so matching `Wrap(1)` gives
+    the payload `Int` rather than the declaration's rigid parameter. -}
+freshFor :: [Text] -> Checker [(Text, Type)]
+freshFor = mapM (\name -> (,) name <$> freshVariable)
+
+substituteRigid :: [(Text, Type)] -> Type -> Type
+substituteRigid replacements typeValue = case typeValue of
+  RigidType name -> maybe typeValue id (lookup name replacements)
+  NominalType name arguments -> NominalType name (map (substituteRigid replacements) arguments)
+  TupleTypeValue members -> TupleTypeValue (map (substituteRigid replacements) members)
+  FunctionTypeValue asynchronous inputs result ->
+    FunctionTypeValue asynchronous
+      (map (substituteRigid replacements) inputs)
+      (substituteRigid replacements result)
+  ReferenceTypeValue mutable target ->
+    ReferenceTypeValue mutable (substituteRigid replacements target)
+  other -> other
 
 recordFieldsFor :: Maybe ModuleName -> Type -> Checker [(Text, Type)]
 recordFieldsFor path subjectType = do

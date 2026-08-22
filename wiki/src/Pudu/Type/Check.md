@@ -34,13 +34,14 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
+- A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
 - `ErrorType` is poison: it unifies with everything, so one mistake produces one diagnostic instead of a cascade through every later use.
 - The checker keeps its own name frames rather than reusing the resolver's symbol table. The duplication is deliberate and bounded; a shared resolved representation is the slice that removes it.
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Boundary]].
 
 ## Algorithm
@@ -55,7 +56,8 @@ Collect declared shapes and signatures, then walk each declaration: a function b
 
 - A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape.
 - A call with fewer arguments than parameters is accepted here because a parameter may declare a default; arity is only rejected when there are too many.
-- A `?` or `.await` expression currently yields a fresh variable, because failure and task normalization belong to the slice that introduces them.
+- `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
+- `.await` currently passes its operand's type through, because task normalization belongs to the slice that introduces async execution.
 
 ## Depth
 

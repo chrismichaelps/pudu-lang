@@ -4,11 +4,12 @@ module Pudu.Type.Check
   ) where
 
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -30,7 +31,7 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , CheckerProducts (..)
-  , DeclaredTypes
+  , DeclaredTypes (..)
   , bindName
   , freshVariable
   , inTypeScope
@@ -44,6 +45,7 @@ import Pudu.Type.Env
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Rule
   ( binaryType
+  , instantiate
   , callType
   , elementType
   , literalType
@@ -51,13 +53,20 @@ import Pudu.Type.Check.Rule
   , nameType
   , unaryType
   )
-import Pudu.Type.Formation (collectDeclared, formOptionalType, formType)
+import Pudu.Type.Check.Method (declareMethods, implAliases, traitTable)
+import Pudu.Type.Formation
+  ( collectDeclared
+  , declaredParameterType
+  , formOptionalType
+  , formType
+  )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Scheme (..)
   , Type (..)
   , boolType
   , integerType
+  , renderType
   )
 
 {-| Check one module. Signatures are collected before any body is checked, so a
@@ -71,18 +80,39 @@ checkUnit :: Module -> Checker ()
 checkUnit moduleValue = do
   declared <- collectDeclared (moduleDeclarations moduleValue)
   withDeclared declared
-  mapM_ (declareSignature declared) (moduleDeclarations moduleValue)
+  declareBuiltinConstructors
+  let traits = traitTable (moduleDeclarations moduleValue)
+  mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
   mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
 
+{-| The constructors of the wired-in sums exist without any declaration, so
+    they are bound before the module's own declarations are. A module that
+    declares its own `Ok` shadows this binding rather than colliding with it. -}
+declareBuiltinConstructors :: Checker ()
+declareBuiltinConstructors = do
+  bindName "Some"
+    (Scheme ["T"] (FunctionTypeValue False [RigidType "T"] optionOf))
+  bindName "None" (Scheme ["T"] optionOf)
+  bindName "Ok"
+    (Scheme ["T", "E"] (FunctionTypeValue False [RigidType "T"] resultOf))
+  bindName "Err"
+    (Scheme ["T", "E"] (FunctionTypeValue False [RigidType "E"] resultOf))
+ where
+  optionOf = NominalType "Option" [RigidType "T"]
+  resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
+
 {-| Give every module-scope declaration a type before bodies are checked. -}
-declareSignature :: DeclaredTypes -> Located Declaration -> Checker ()
-declareSignature declared (Located _ declaration) = case declaration of
+declareSignature
+  :: DeclaredTypes -> Map.Map Text [Located Function] -> Located Declaration -> Checker ()
+declareSignature declared traits (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name annotation _ -> do
     formed <- formOptionalType declared [] annotation
     bindName (locatedValue name) (Scheme [] formed)
   FunctionDeclaration value -> declareFunction declared value
   TypeDeclaration value -> declareConstructors declared value
+  ImplDeclaration value -> declareMethods declared traits value
   _ -> pure ()
+
 
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
@@ -95,9 +125,6 @@ declareFunction declared value = do
 functionRigid :: Function -> [Text]
 functionRigid value = map (locatedValue . typeParamName . locatedValue) (functionTypeParams value)
 
-declaredParameterType :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
-declaredParameterType declared rigid (Located _ parameter) =
-  formOptionalType declared rigid (Tree.parameterType parameter)
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}
@@ -132,12 +159,19 @@ checkDeclaration declared (Located _ declaration) = case declaration of
     _ <- unify (locatedSpan value) expected actual
     bindName (locatedValue name) (Scheme [] expected)
   FunctionDeclaration value -> checkFunction declared value
-  TraitDeclaration value -> mapM_ (checkMember declared) (traitMembers value)
-  ImplDeclaration value -> mapM_ (checkMember declared) (implFunctions value)
+  TraitDeclaration value ->
+    mapM_ (checkMember (traitAliases declared)) (traitMembers value)
+  ImplDeclaration value ->
+    mapM_ (checkMember (implAliases declared value)) (implFunctions value)
   _ -> pure ()
 
 checkMember :: DeclaredTypes -> Located Function -> Checker ()
 checkMember declared (Located _ value) = checkFunction declared value
+
+{-| `Self` inside a trait is the implementing type, which is unknown while the
+    trait itself is checked, so it stays a rigid parameter there. -}
+traitAliases :: DeclaredTypes -> DeclaredTypes
+traitAliases = id
 
 {-| Check a function body against its declared result. An exported function
     must annotate what it promises, because [[grammar/pudu]] makes an exported
@@ -226,12 +260,59 @@ checkStatement declared rigid (Located _ statement) = case statement of
   ContinueStatement -> pure ()
   InvalidStatement -> pure ()
 
+{-| `?` unwraps a `Result` and propagates its failure, so it is admitted only
+    inside a function that returns a `Result` carrying the same failure type.
+    Conversion through `From` is the slice that introduces trait resolution. -}
+tryType :: Span -> Type -> Checker Type
+tryType spanValue targetType = do
+  success <- freshVariable
+  failure <- freshVariable
+  _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
+  declaredResult <- returnType >>= zonk
+  case declaredResult of
+    NominalType "Result" [_, declaredFailure] -> do
+      _ <- unify spanValue declaredFailure failure
+      pure success
+    VariableType _ -> do
+      resultSuccess <- freshVariable
+      _ <- unify spanValue declaredResult (NominalType "Result" [resultSuccess, failure])
+      pure success
+    ErrorType -> pure ErrorType
+    _ -> do
+      report "E3011" spanValue
+        ("? needs a function returning Result, found " <> renderType declaredResult)
+        (Just "declare the function's result as Result, or match the value instead")
+      pure success
+
 returnType :: Checker Type
 returnType = do
   found <- lookupName selfName
   case found of
     Just (Scheme _ (FunctionTypeValue _ _ result)) -> pure result
     _ -> freshVariable
+
+{-| A member in callee position prefers a method over a field of the same
+    name, because `value.name()` reads as a call and a field would have to be
+    parenthesized to be called anyway. -}
+checkCallee :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+checkCallee declared rigid located@(Located calleeSpan expression) = case expression of
+  MemberExpression target member -> do
+    targetType <- checkExpression declared rigid target
+    resolved <- zonk targetType
+    method <- case resolved of
+      NominalType owner _ -> lookupName (owner <> "." <> locatedValue member)
+      _ -> pure Nothing
+    case method of
+      Nothing -> checkExpression declared rigid located
+      Just scheme -> do
+        instantiated <- instantiate scheme
+        let applied = case instantiated of
+              FunctionTypeValue asynchronous (_ : rest) result ->
+                FunctionTypeValue asynchronous rest result
+              other -> other
+        recordExpression calleeSpan applied
+        pure applied
+  _ -> checkExpression declared rigid located
 
 {-| Check one expression and record the type it was given, so tooling can
     report it later. -}
@@ -254,7 +335,7 @@ inferExpression declared rigid spanValue expression = case expression of
     rightType <- checkExpression declared rigid right
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
-    calleeType <- checkExpression declared rigid callee
+    calleeType <- checkCallee declared rigid callee
     argumentTypes <- mapM (checkExpression declared rigid) arguments
     callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
@@ -266,8 +347,8 @@ inferExpression declared rigid spanValue expression = case expression of
     _ <- unify (locatedSpan index) integerType indexType
     elementType spanValue targetType
   TryExpression target -> do
-    _ <- checkExpression declared rigid target
-    freshVariable
+    targetType <- checkExpression declared rigid target
+    tryType spanValue targetType
   AwaitExpression target -> checkExpression declared rigid target
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
   RecordExpression path fields -> recordType declared rigid spanValue path fields

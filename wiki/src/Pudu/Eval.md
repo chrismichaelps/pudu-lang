@@ -60,7 +60,8 @@ Install declarations, evaluate module constants, then evaluate the named entry p
 
 - A control transfer that reaches the top has left every construct that could own it: a return yields its value, a stray break or continue yields unit rather than losing the run.
 - Iteration is defined over the values the evaluator can enumerate without traits — tuples, strings, and variant payloads — and anything else says so instead of silently doing nothing.
-- `?` unwraps `Ok` and returns `Err` unchanged; the enclosing-function propagation it will eventually perform waits for typing.
+- `?` yields the success value or returns the failure from the enclosing function unchanged, which is the elaboration [[architecture/SEMANTICS]] gives it.
+- A member access finds a field first and a method of the value's type second; in callee position the method wins, matching how the same call is typed. A method call binds the receiver as the function's first parameter.
 
 ## Depth
 

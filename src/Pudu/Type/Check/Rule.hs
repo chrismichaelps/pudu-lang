@@ -147,15 +147,31 @@ memberType spanValue targetType member = do
       fields <- lookupField name
       case fields >>= lookup member of
         Just found -> pure found
-        Nothing -> do
-          report "E3005" spanValue (name <> " has no field " <> member)
-            (Just "check the field name against the type declaration")
-          pure ErrorType
+        Nothing -> methodType spanValue name member
+      
     ReferenceTypeValue _ inner -> memberType spanValue inner member
     _ -> do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| A member that is not a field may be a method of the receiver's type. A
+    method call binds the receiver as its first parameter, so the member itself
+    has the method's type with that parameter already supplied. -}
+methodType :: Span -> Text -> Text -> Checker Type
+methodType spanValue owner member = do
+  found <- lookupName (owner <> "." <> member)
+  case found of
+    Nothing -> do
+      report "E3005" spanValue (owner <> " has no field or method " <> member)
+        (Just "check the name against the type declaration and its implementations")
+      pure ErrorType
+    Just scheme -> do
+      instantiated <- instantiate scheme
+      case instantiated of
+        FunctionTypeValue asynchronous (_ : rest) result ->
+          pure (FunctionTypeValue asynchronous rest result)
+        other -> pure other
 
 elementType :: Span -> Type -> Checker Type
 elementType spanValue targetType = do

@@ -33,6 +33,7 @@ isPreludeModule :: ModuleName -> Bool
 ### Governance
 
 - Wired-in names are the grammar's builtin set plus the compiler-controlled `Copy` marker: sized signed and unsigned integers through 128 bits, target-width `Int`/`UInt`, `Float32`, `Float64`, the `Float` alias, `Bool`, `Char`, `Str`, `Never`, `BigInt`, `Decimal`, and the constructors `Option`, `Result`, `Array`, and `Task`. No module can remove them.
+- The wired-in `Option` and `Result` carry their constructors — `Some`, `None`, `Ok`, `Err` — because a type the compiler provides is useless without the variants that build it. A module may declare its own `Ok`, which shadows the wired-in one.
 - Prelude names are ordinary library declarations that happen to be imported implicitly: the traits and failure types [[architecture/SEMANTICS]] already names — `Drop`, `Send`, `Sync`, `Iterator`, `IntoIterator`, `From`, `Overflow`, `DivisionByZero` — and the value `panic`.
 - The implicit import is suppressed by an explicit `import Core.Prelude`, exactly as an explicit `import Prelude` overrides the implicit one in Haskell. A module that names the prelude therefore controls precisely what it takes.
 - A module may declare its own `Drop` or `panic`; shadowing a prelude name is silent, because it displaces a library binding rather than a wired-in type or a user import.

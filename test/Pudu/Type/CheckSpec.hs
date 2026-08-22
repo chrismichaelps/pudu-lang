@@ -20,6 +20,9 @@ typeProperties =
   , ("exported signatures must be annotated", testExportedSignatures)
   , ("a type error reports once and does not cascade", testNoCascade)
   , ("an earlier phase's error suppresses type checking", testPhaseOrder)
+  , ("wired-in Option and Result carry their constructors", testPreludeData)
+  , ("? unwraps a Result inside a Result-returning function", testTry)
+  , ("trait methods dispatch on the receiver type", testTraits)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -234,6 +237,98 @@ testPhaseOrder = do
     ( counterexample "an unresolved name is not also a type error"
         (result === ["E2010"])
     )
+
+testPreludeData :: IO Property
+testPreludeData = do
+  option <- typeOf "Some(1)"
+  none <- codesOfExpression "None"
+  result <- typeOf "Ok(1)"
+  wrongPayload <- codes
+    [ "module M"
+    , "fn run() -> Option[Int] { Some(\"text\") }"
+    ]
+  generic <- codes
+    [ "module M"
+    , "type Wrapper[T] = | Wrap(T) | Empty"
+    , "fn run() -> Int {"
+    , "  match Wrap(1) {"
+    , "    case Wrap(value) => value"
+    , "    case Empty => 0"
+    , "  }"
+    , "}"
+    ]
+  shadowed <- codes
+    [ "module M"
+    , "type Mine = | Ok(Str) | Err(Str)"
+    , "fn run() -> Mine { Ok(\"text\") }"
+    ]
+  pure $ conjoin
+    [ counterexample "Some builds an Option" (option === "Option[Int]")
+    , counterexample "None needs no declaration" (none === [])
+    , counterexample "Ok builds a Result" (Text.isPrefixOf "Result[Int" result === True)
+    , counterexample "a constructor checks its payload" (wrongPayload === ["E3001"])
+    , counterexample "a generic sum instantiates per use" (generic === [])
+    , counterexample "a module may declare its own Ok" (shadowed === [])
+    ]
+
+testTry :: IO Property
+testTry = do
+  admitted <- codes
+    [ "module M"
+    , "fn attempt() -> Result[Int, Str] { Ok(1) }"
+    , "fn run() -> Result[Int, Str] {"
+    , "  let value = attempt()?"
+    , "  Ok(value + 1)"
+    , "}"
+    ]
+  wrongCarrier <- codes
+    [ "module M"
+    , "fn attempt() -> Result[Int, Str] { Ok(1) }"
+    , "fn run() -> Int { attempt()? }"
+    ]
+  wrongFailure <- codes
+    [ "module M"
+    , "fn attempt() -> Result[Int, Str] { Ok(1) }"
+    , "fn run() -> Result[Int, Bool] {"
+    , "  let value = attempt()?"
+    , "  Ok(value)"
+    , "}"
+    ]
+  pure $ conjoin
+    [ admitted === []
+    , counterexample "? needs a Result-returning function" (wrongCarrier === ["E3011"])
+    , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
+    ]
+
+traitProgram :: [Text]
+traitProgram =
+  [ "module M"
+  , "type User = { name: Str }"
+  , "trait Greet {"
+  , "  fn name(self: &Self) -> Str"
+  , "  fn greet(self: &Self) -> Str = \"hello\""
+  , "}"
+  , "impl Greet for User {"
+  , "  fn name(self: &Self) -> Str { self.name }"
+  , "}"
+  ]
+
+testTraits :: IO Property
+testTraits = do
+  implemented <- codes (traitProgram <> ["fn run(user: User) -> Str { user.name() }"])
+  inherited <- codes (traitProgram <> ["fn run(user: User) -> Str { user.greet() }"])
+  wrongResult <- codes (traitProgram <> ["fn run(user: User) -> Int { user.greet() }"])
+  unknownMethod <- codes (traitProgram <> ["fn run(user: User) -> Str { user.missing() }"])
+  selfFields <- codes traitProgram
+  methodType <- typeOfIn (drop 1 traitProgram <> ["fn run(user: User) -> Str { user.greet() }"]) "user.greet"
+  pure $ conjoin
+    [ counterexample "an implemented method is callable" (implemented === [])
+    , counterexample "a default is inherited" (inherited === [])
+    , counterexample "a method result is still checked" (wrongResult === ["E3001"])
+    , counterexample "an unknown method is reported" (unknownMethod === ["E3005"])
+    , counterexample "Self reads the implementing type's fields" (selfFields === [])
+    , counterexample "the receiver is already applied" (methodType === "fn() -> Str")
+    ]
 
 testRecordedTypes :: IO Property
 testRecordedTypes = do

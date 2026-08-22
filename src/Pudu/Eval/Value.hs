@@ -30,10 +30,15 @@ data Value
   | FunctionValue !Closure
   deriving stock (Eq, Show)
 
-{-| @Eval.Value.Closure — a function plus the environment it captured -}
+{-| @Eval.Value.Closure — a callable function.
+
+    `closureSelf` is present when the function was reached as a method: the
+    receiver is bound to the first parameter, which is what `value.method()`
+    means. -}
 data Closure = Closure
   { closureName :: !Text
   , closureFunction :: !Function
+  , closureSelf :: !(Maybe Value)
   }
   deriving stock (Eq, Show)
 

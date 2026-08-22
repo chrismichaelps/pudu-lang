@@ -39,7 +39,7 @@ import Pudu.Type.Value (Scheme, Type (..), TypeVar (..))
 data DeclaredTypes = DeclaredTypes
   { declaredParams :: !(Map Text [Text])
   , declaredFields :: !(Map Text [(Text, Type)])
-  , declaredVariants :: !(Map Text (Text, [Type]))
+  , declaredVariants :: !(Map Text (Text, [Text], [Type]))
   , declaredAliases :: !(Map Text Type)
   }
   deriving stock (Eq, Show)
@@ -165,7 +165,7 @@ lookupField :: Text -> Checker (Maybe [(Text, Type)])
 lookupField name =
   Checker $ \state -> (Map.lookup name (declaredFields (stateDeclared state)), state)
 
-lookupVariant :: Text -> Checker (Maybe (Text, [Type]))
+lookupVariant :: Text -> Checker (Maybe (Text, [Text], [Type]))
 lookupVariant name =
   Checker $ \state -> (Map.lookup name (declaredVariants (stateDeclared state)), state)
 

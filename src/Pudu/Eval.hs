@@ -6,6 +6,8 @@ module Pudu.Eval
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
@@ -37,13 +39,16 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , Function (..)
+  , Impl (..)
   , FunctionBody (..)
   , MatchArm (..)
   , Module (..)
+  , Trait (..)
   , Parameter (..)
   , Pattern
   , Statement (..)
   , TypeDeclarationValue (..)
+  , TypeSyntax (..)
   , TypeDefinition (..)
   , Variant (..)
   )
@@ -88,17 +93,71 @@ run (Evaluator action) = case action emptyEnv of
     promised they would. -}
 loadDeclarations :: [Located Declaration] -> Evaluator ()
 loadDeclarations declarations = do
-  mapM_ installDeclaration declarations
+  installBuiltinConstructors
+  let traits = traitTable declarations
+  mapM_ (installDeclaration traits) declarations
   mapM_ initializeDeclaration declarations
 
-installDeclaration :: Located Declaration -> Evaluator ()
-installDeclaration (Located _ declaration) = case declaration of
+{-| Trait members by trait name, so an implementation inherits the defaults it
+    does not override. -}
+traitTable :: [Located Declaration] -> Map Text [Located Function]
+traitTable declarations =
+  Map.fromList
+    [ (locatedValue (traitName value), traitMembers value)
+    | Located _ (TraitDeclaration value) <- declarations
+    ]
+
+{-| The wired-in sums' constructors exist without a declaration. A module that
+    declares its own is installed afterwards and therefore wins. -}
+installBuiltinConstructors :: Evaluator ()
+installBuiltinConstructors =
+  mapM_ (\name -> bind name (VariantValue name []))
+    ["Some", "None", "Ok", "Err"]
+
+installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
+installDeclaration traits (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value))
+      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
+  ImplDeclaration value -> installMethods traits value
   _ -> pure ()
+
+{-| An implementation's functions are installed under a key naming the type they
+    implement for, so a member access on a value of that type finds them. -}
+installMethods :: Map Text [Located Function] -> Impl -> Evaluator ()
+installMethods traits value = case targetNameOf (implTarget value) of
+  Nothing -> pure ()
+  Just owner -> do
+    mapM_ (installMethod owner) (implFunctions value)
+    mapM_ (installMethod owner) (inheritedDefaults traits value)
+ where
+  installMethod owner (Located _ method) =
+    let name = locatedValue (functionName method)
+     in bind (owner <> "." <> name) (FunctionValue (Closure name method Nothing))
+
+{-| A trait member with a body is a default the implementation inherits when it
+    does not provide its own. -}
+inheritedDefaults :: Map Text [Located Function] -> Impl -> [Located Function]
+inheritedDefaults traits value = case traitNameOf (implTrait value) of
+  Nothing -> []
+  Just traitText ->
+    [ member
+    | member@(Located _ method) <- maybe [] id (Map.lookup traitText traits)
+    , functionBody method /= Nothing
+    , locatedValue (functionName method) `notElem` provided
+    ]
+ where
+  provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
+
+traitNameOf :: Located TypeSyntax -> Maybe Text
+traitNameOf = targetNameOf
+
+targetNameOf :: Located TypeSyntax -> Maybe Text
+targetNameOf (Located _ syntax) = case syntax of
+  NamedType (ModuleName segments) _ -> Just (lastSegmentOf segments)
+  _ -> Nothing
 
 {-| Each variant is bound unqualified and, together with its siblings, under its
     type's name. A variant with a payload starts life as an empty constructor
@@ -128,7 +187,8 @@ callClosure closure arguments callSpan = do
   let value = closureFunction closure
       parameters = functionParameters value
   deeper <- descend callSpan
-  bindings <- bindArguments parameters arguments callSpan
+  let supplied = maybe arguments (: arguments) (closureSelf closure)
+  bindings <- bindArguments parameters supplied callSpan
   outcome <- withFrame bindings $ catchUnwind $ case functionBody value of
     Nothing -> pure UnitValue
     Just (Located _ body) -> case body of
@@ -248,9 +308,12 @@ readPath spanValue (first :| rest) = do
       next <- readMember spanValue value segment
       foldMember next remaining
 
+{-| A member in callee position prefers a method over a field of the same name,
+    matching how the same call is typed: `value.name()` reads as a call, and a
+    field holding a function must be parenthesized to be called. -}
 evaluateCall :: Span -> Located Expression -> [Located Expression] -> Evaluator Value
 evaluateCall spanValue callee arguments = do
-  target <- evaluate callee
+  target <- evaluateCallee callee
   values <- mapM evaluate arguments
   case target of
     FunctionValue closure -> callClosure closure values (Just spanValue)
@@ -276,6 +339,20 @@ lastPathSegment (ModuleName segments) = lastSegmentOf segments
 
 lastSegmentOf :: NonEmpty Text -> Text
 lastSegmentOf (first :| rest) = last (first : rest)
+
+evaluateCallee :: Located Expression -> Evaluator Value
+evaluateCallee located@(Located calleeSpan expression) = case expression of
+  MemberExpression target member -> do
+    receiver <- evaluate target
+    method <- case receiver of
+      RecordValue owner _ -> lookupName (owner <> "." <> locatedValue member)
+      VariantValue owner _ -> lookupName (owner <> "." <> locatedValue member)
+      _ -> pure Nothing
+    case method of
+      Just (FunctionValue closure) ->
+        pure (FunctionValue closure{closureSelf = Just receiver})
+      _ -> readMember calleeSpan receiver (locatedValue member)
+  _ -> evaluate located
 
 evaluateArms :: Span -> Value -> [Located MatchArm] -> Evaluator Value
 evaluateArms spanValue subject arms = case arms of

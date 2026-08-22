@@ -12,6 +12,7 @@ tags: [moc, module]
 - [[Type Unify]] — making two types equal, or explaining why they are not.
 - [[Type Check]] — checking declarations, statements, and expressions.
 - [[Type Check Rule]] — the closed operator, call, member, and index rules.
+- [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
 - [[Type Check Pattern]] — checking patterns against the type they match.
 
 Dependency direction: Value → Env → Unify/Formation → Rule/Pattern → Check → Boundary.
