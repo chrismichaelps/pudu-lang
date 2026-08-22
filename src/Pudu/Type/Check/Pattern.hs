@@ -19,14 +19,14 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Value (Scheme (..), Type (..))
+import Pudu.Type.Value (Type (..), monotype)
 
 {-| Check a pattern against the type it matches, binding the names it
     introduces at the types their positions imply. -}
 bindPattern :: DeclaredTypes -> [Text] -> Located Pattern -> Type -> Checker ()
 bindPattern declared rigid (Located patternSpan pattern') subjectType = case pattern' of
   WildcardPattern -> pure ()
-  BindingPattern name -> bindName (locatedValue name) (Scheme [] subjectType)
+  BindingPattern name -> bindName (locatedValue name) (monotype subjectType)
   LiteralPattern literal -> do
     _ <- unify patternSpan subjectType (literalType literal)
     pure ()
@@ -103,4 +103,4 @@ bindFieldPattern declared rigid expected (Located fieldSpan field) = do
         (Just "check the field name against the type declaration")
   case fieldPatternValue field of
     Just nested -> bindPattern declared rigid nested fieldType
-    Nothing -> bindName name (Scheme [] fieldType)
+    Nothing -> bindName name (monotype fieldType)

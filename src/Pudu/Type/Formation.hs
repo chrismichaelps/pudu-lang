@@ -14,6 +14,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Impl (..)
   , Parameter (..)
   , FieldDeclaration (..)
   , TypeDeclarationValue (..)
@@ -112,8 +113,25 @@ foldCollect declared declarations = case declarations of
     extended <- collectOne declared first
     foldCollect extended rest
 
+{-| Which traits a type implements, read from the module's implementations.
+    Bound satisfaction consults it; coherence across modules is a later
+    slice. -}
+recordImpl :: DeclaredTypes -> Impl -> DeclaredTypes
+recordImpl declared value = case (nameOf (implTarget value), nameOf (implTrait value)) of
+  (Just owner, Just traitText) ->
+    declared
+      { declaredImpls =
+          Map.insertWith (<>) owner [traitText] (declaredImpls declared)
+      }
+  _ -> declared
+ where
+  nameOf (Located _ syntax) = case syntax of
+    NamedType path _ -> Just (lastSegment path)
+    _ -> Nothing
+
 collectOne :: DeclaredTypes -> Located Declaration -> Checker DeclaredTypes
 collectOne declared (Located _ declaration) = case declaration of
+  ImplDeclaration value -> pure (recordImpl declared value)
   TypeDeclaration value -> do
     let name = locatedValue (typeName value)
         rigid = paramNames value

@@ -1,6 +1,8 @@
 {-| @Type.Value.Module — represents formed types -}
 module Pudu.Type.Value
   ( Scheme (..)
+  , monotype
+  , polytype
   , Type (..)
   , TypeVar (..)
   , boolType
@@ -38,12 +40,23 @@ data Type
   | ErrorType
   deriving stock (Eq, Show)
 
-{-| @Type.Value.Scheme — a type with the parameters a call instantiates -}
+{-| @Type.Value.Scheme — a type with the parameters a call instantiates and the
+    trait bounds each of them must satisfy -}
 data Scheme = Scheme
   { schemeParams :: ![Text]
+  , schemeBounds :: ![(Text, [Text])]
   , schemeType :: !Type
   }
   deriving stock (Eq, Show)
+
+{-| A scheme with no parameters and nothing to prove. -}
+monotype :: Type -> Scheme
+monotype typeValue = Scheme{schemeParams = [], schemeBounds = [], schemeType = typeValue}
+
+{-| A scheme over declared parameters carrying their bounds. -}
+polytype :: [Text] -> [(Text, [Text])] -> Type -> Scheme
+polytype params bounds typeValue =
+  Scheme{schemeParams = params, schemeBounds = bounds, schemeType = typeValue}
 
 integerType :: Type
 integerType = NominalType "Int" []

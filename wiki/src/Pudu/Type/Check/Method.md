@@ -17,7 +17,7 @@ aliases: [Type Check Method]
 
 ## Purpose
 
-Give an implementation's functions the types they have as methods of their target, and let an implementation inherit the trait defaults it does not override.
+Give an implementation's functions the types they have as methods of their target, let an implementation inherit the trait defaults it does not override, bind trait members under the trait's own name so a bounded parameter can find them, register and discharge the trait obligations a call raises, and resolve a method on a nominal type or a bounded rigid parameter.
 
 ## Interface
 
@@ -25,6 +25,12 @@ Give an implementation's functions the types they have as methods of their targe
 
 ```haskell
 declareMethods :: DeclaredTypes -> Map Text [Located Function] -> Impl -> Checker ()
+declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
+declareBounds :: Function -> [(Text, [Text])]
+declareBuiltinConstructors :: Checker ()
+dischargeObligations :: Checker ()
+methodScheme :: Type -> Text -> Checker (Maybe Scheme)
+functionRigid :: Function -> [Text]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
 traitTable :: [Located Declaration] -> Map Text [Located Function]
 ```
@@ -33,8 +39,13 @@ traitTable :: [Located Declaration] -> Map Text [Located Function]
 
 - A method is bound under a key naming the type it implements for, not at module scope. A trait method is reached through a value, which is why `show(user)` does not resolve while `user.show()` does.
 - `Self` inside an implementation is its target type. That is what lets a method read the fields of the value it was called on, and it is why the alias is installed before the body is checked.
-- `Self` inside a trait stays rigid: the implementing type is unknown while the trait itself is checked.
+- `Self` inside a trait member body is a rigid parameter added to the rigid list, so `formType` produces `RigidType "Self"` and method calls route through `rigidMethod` and the trait bound `selfBoundAsBound` installs. The implementing type is unknown while the trait is checked, so `Self` cannot be aliased to a nominal type there.
 - A trait member that carries a body is a default. An implementation that does not provide its own gets it, bound at the target type exactly as an overriding method would be.
+- `declareTraitMembers` binds a trait's own members under the trait's name with `Self` rigid, so a call on a parameter bounded by that trait finds them through `methodScheme`'s rigid path.
+- `declareBounds` collects the trait bounds a function's generic parameters carry from both the parameter list and the `where` clause, since [[grammar/pudu]] gives them the same meaning; these become the obligations a call must prove.
+- `dischargeObligations` proves every obligation a call registered, after the enclosing function's body is checked and while the declaration's own parameter bounds are still in scope. A rigid parameter satisfies a bound its own declaration declared; a nominal type satisfies one through its implementations; an unsolved variable proves nothing and is left alone; `E3012` reports an unsatisfied bound.
+- `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
+- `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for.
 - Coherence — that the trait or the target is declared in this module — and overlapping-implementation rejection belong to a later slice; nothing here silently picks between candidates.
 
 ### Linkage
@@ -44,16 +55,18 @@ traitTable :: [Located Declaration] -> Map Text [Located Function]
 
 ## Algorithm
 
-Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target, then bind every trait default the implementation did not override.
+Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target, then bind every trait default the implementation did not override. For a trait, bind its members under the trait's own name with `Self` rigid. For a function, collect its parameter bounds; at each call site, instantiation registers the obligations the bounds impose; after the body, discharge them by checking the resolved argument type against the trait, through `implementsTrait` for a nominal type or `rigidSatisfies` for a rigid parameter.
 
 ## Negative Logic (Prohibited Paths)
 
-- No coherence or overlap checking, no dynamic dispatch, no associated types or constants, no bound satisfaction, and no method resolution across modules.
+- No coherence or overlap checking, no dynamic dispatch, no associated types or constants, and no method resolution across modules.
 
 ## Edge Cases
 
 - An implementation whose target is not a named type contributes no methods rather than inventing a key.
 - A default and an override with the same name bind once, with the override winning, because the override is bound first and the default is filtered out.
+- An unsolved variable at discharge time proves nothing and is left alone rather than guessed at.
+- An `ErrorType` at discharge time is skipped, because the argument's own error already explains the failure.
 
 ## Depth
 

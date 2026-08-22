@@ -16,7 +16,15 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Source (Span)
-import Pudu.Type.Env (Checker, freshVariable, lookupField, lookupName, report)
+import Pudu.Type.Env
+  ( Checker
+  , addObligation
+  , freshVariable
+  , lookupField
+  , lookupName
+  , report
+  , rigidBoundsOf
+  )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Scheme (..)
@@ -42,18 +50,28 @@ literalType literal = case literal of
     instantiated with fresh variables at every use, which is what makes one
     generic function usable at several types. -}
 nameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
-nameType _ names = do
+nameType spanValue names = do
   found <- lookupName (NonEmpty.head names)
   case found of
     Nothing -> pure ErrorType
-    Just scheme -> instantiate scheme
+    Just scheme -> instantiate spanValue scheme
 
-instantiate :: Scheme -> Checker Type
-instantiate (Scheme params typeValue)
-  | null params = pure typeValue
+{-| Instantiate a scheme with fresh variables and register the trait
+    obligations its bounds impose, so a call proves what the declaration
+    demanded once the argument types are known. -}
+instantiate :: Span -> Scheme -> Checker Type
+instantiate spanValue scheme
+  | null (schemeParams scheme) = pure (schemeType scheme)
   | otherwise = do
-      replacements <- mapM (\name -> (,) name <$> freshVariable) params
-      pure (substitute replacements typeValue)
+      replacements <- mapM (\name -> (,) name <$> freshVariable) (schemeParams scheme)
+      mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      pure (substitute replacements (schemeType scheme))
+
+obligationsFor :: Span -> [(Text, Type)] -> (Text, [Text]) -> Checker ()
+obligationsFor spanValue replacements (name, bounds) =
+  case lookup name replacements of
+    Nothing -> pure ()
+    Just assigned -> mapM_ (addObligation spanValue assigned) bounds
 
 substitute :: [(Text, Type)] -> Type -> Type
 substitute replacements typeValue = case typeValue of
@@ -148,12 +166,33 @@ memberType spanValue targetType member = do
       case fields >>= lookup member of
         Just found -> pure found
         Nothing -> methodType spanValue name member
-      
+    RigidType name -> do
+      bounds <- rigidBoundsOf name
+      rigidMethod spanValue name bounds member
     ReferenceTypeValue _ inner -> memberType spanValue inner member
     _ -> do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| A method reached through a bound: the receiver is a parameter, and the trait
+    its declaration named supplies the member. -}
+rigidMethod :: Span -> Text -> [Text] -> Text -> Checker Type
+rigidMethod spanValue name bounds member = case bounds of
+  [] -> do
+    report "E3005" spanValue (name <> " has no method " <> member)
+      (Just "add a trait bound that declares the method")
+    pure ErrorType
+  traitText : rest -> do
+    found <- lookupName (traitText <> "." <> member)
+    case found of
+      Nothing -> rigidMethod spanValue name rest member
+      Just scheme -> do
+        instantiated <- instantiate spanValue scheme
+        case instantiated of
+          FunctionTypeValue asynchronous (_ : inputs) result ->
+            pure (FunctionTypeValue asynchronous inputs result)
+          other -> pure other
 
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself
@@ -167,7 +206,7 @@ methodType spanValue owner member = do
         (Just "check the name against the type declaration and its implementations")
       pure ErrorType
     Just scheme -> do
-      instantiated <- instantiate scheme
+      instantiated <- instantiate spanValue scheme
       case instantiated of
         FunctionTypeValue asynchronous (_ : rest) result ->
           pure (FunctionTypeValue asynchronous rest result)

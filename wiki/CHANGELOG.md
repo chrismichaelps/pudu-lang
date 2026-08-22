@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-22 · [[Type Check]] and [[Type Check Method]] · fix trait default bodies that call other trait methods on `Self` by treating `Self` as a rigid parameter during body checking, routing method calls through `rigidMethod` and the trait bound `selfBoundAsBound` installs; fixes #23, #25, and #26 (generic dispatch through trait defaults) · risk MED · depth DEEP→DEEP · issue #3
+- 2026-08-22 · [[Repl Session]] · add REPL session test coverage for `while`, `loop`/`break`, `for` over tuples and strings, and `continue`, exercising iteration through the interactive session's statement replay and value reporting · risk LOW · depth MEDIUM→MEDIUM · issue #3
 - 2026-08-22 · [[Type Exhaust]] · check match coverage over closed sums and `Bool`, require an irrefutable arm for open domains, exclude guarded arms from coverage, and warn on unreachable arms with `E5001`/`W5001` · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-22 · [[Type Check Method]], [[Evaluator]], and [[Semantic Prelude]] · admit trait method dispatch with `Self` aliasing and inherited defaults, wire the `Option` and `Result` constructors into every phase, and implement `?` propagation with `E3011` · risk HIGH · depth DEEP→DEEP · issue #3
 - 2026-08-22 · [[Type Boundary]], [[Type Check]], [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], and [[Type Check Pattern]] · establish the typing phase with local bidirectional inference, rigid declared generics instantiated per use, record and variant shapes, exported-signature annotation, and `E3xxx` diagnostics; `puduci`'s `:type` now reports static types · risk HIGH · depth n/a→DEEP · issue #3

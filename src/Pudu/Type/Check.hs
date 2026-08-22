@@ -39,6 +39,11 @@ import Pudu.Type.Env
   , lookupName
   , recordExpression
   , report
+  , rigidBoundsOf
+  , rigidSatisfies
+  , takeObligations
+  , implementsTrait
+  , withRigidBounds
   , runChecker
   , withDeclared
   )
@@ -53,7 +58,17 @@ import Pudu.Type.Check.Rule
   , nameType
   , unaryType
   )
-import Pudu.Type.Check.Method (declareMethods, implAliases, traitTable)
+import Pudu.Type.Check.Method
+  ( declareBounds
+  , declareMethods
+  , declareBuiltinConstructors
+  , declareTraitMembers
+  , dischargeObligations
+  , functionRigid
+  , implAliases
+  , methodScheme
+  , traitTable
+  )
 import Pudu.Type.Exhaust (checkExhaustive)
 import Pudu.Type.Formation
   ( collectDeclared
@@ -64,6 +79,8 @@ import Pudu.Type.Formation
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Scheme (..)
+  , monotype
+  , polytype
   , Type (..)
   , boolType
   , integerType
@@ -85,22 +102,7 @@ checkUnit moduleValue = do
   let traits = traitTable (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
   mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
-
-{-| The constructors of the wired-in sums exist without any declaration, so
-    they are bound before the module's own declarations are. A module that
-    declares its own `Ok` shadows this binding rather than colliding with it. -}
-declareBuiltinConstructors :: Checker ()
-declareBuiltinConstructors = do
-  bindName "Some"
-    (Scheme ["T"] (FunctionTypeValue False [RigidType "T"] optionOf))
-  bindName "None" (Scheme ["T"] optionOf)
-  bindName "Ok"
-    (Scheme ["T", "E"] (FunctionTypeValue False [RigidType "T"] resultOf))
-  bindName "Err"
-    (Scheme ["T", "E"] (FunctionTypeValue False [RigidType "E"] resultOf))
- where
-  optionOf = NominalType "Option" [RigidType "T"]
-  resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
+  dischargeObligations
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature
@@ -108,10 +110,11 @@ declareSignature
 declareSignature declared traits (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name annotation _ -> do
     formed <- formOptionalType declared [] annotation
-    bindName (locatedValue name) (Scheme [] formed)
+    bindName (locatedValue name) (monotype formed)
   FunctionDeclaration value -> declareFunction declared value
   TypeDeclaration value -> declareConstructors declared value
   ImplDeclaration value -> declareMethods declared traits value
+  TraitDeclaration value -> declareTraitMembers declared value
   _ -> pure ()
 
 
@@ -121,11 +124,9 @@ declareFunction declared value = do
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
   bindName (locatedValue (functionName value))
-    (Scheme rigid (FunctionTypeValue (functionAsync value) inputs result))
-
-functionRigid :: Function -> [Text]
-functionRigid value = map (locatedValue . typeParamName . locatedValue) (functionTypeParams value)
-
+    ( polytype rigid (declareBounds value)
+        (FunctionTypeValue (functionAsync value) inputs result)
+    )
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}
@@ -141,8 +142,8 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
     payload <- variantPayload declared rigid variant
     let name = locatedValue (Tree.variantName variant)
         scheme
-          | null payload = Scheme rigid ownerType
-          | otherwise = Scheme rigid (FunctionTypeValue False payload ownerType)
+          | null payload = polytype rigid [] ownerType
+          | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
     bindName name scheme
 
 variantPayload :: DeclaredTypes -> [Text] -> Tree.Variant -> Checker [Type]
@@ -158,16 +159,21 @@ checkDeclaration declared (Located _ declaration) = case declaration of
     expected <- formOptionalType declared [] annotation
     actual <- checkExpression declared [] value
     _ <- unify (locatedSpan value) expected actual
-    bindName (locatedValue name) (Scheme [] expected)
-  FunctionDeclaration value -> checkFunction declared value
+    bindName (locatedValue name) (monotype expected)
+  FunctionDeclaration value -> checkFunction declared Nothing value
   TraitDeclaration value ->
-    mapM_ (checkMember (traitAliases declared)) (traitMembers value)
+    mapM_ (checkMember (traitAliases declared) (Just (locatedValue (traitName value)))) (traitMembers value)
   ImplDeclaration value ->
-    mapM_ (checkMember (implAliases declared value)) (implFunctions value)
+    mapM_ (checkMember (implAliases declared value) Nothing) (implFunctions value)
   _ -> pure ()
 
-checkMember :: DeclaredTypes -> Located Function -> Checker ()
-checkMember declared (Located _ value) = checkFunction declared value
+{-| Check a trait or impl member body. A trait member receives the trait's own
+    name as `Self`'s bound, so a default body may call other trait methods on
+    `self` through the bindings `declareTraitMembers` already published. An impl
+    member needs no such bound: `Self` is aliased to the target nominal type, so
+    method calls resolve through `methodScheme`'s nominal path. -}
+checkMember :: DeclaredTypes -> Maybe Text -> Located Function -> Checker ()
+checkMember declared selfBound (Located _ value) = checkFunction declared selfBound value
 
 {-| `Self` inside a trait is the implementing type, which is unknown while the
     trait itself is checked, so it stays a rigid parameter there. -}
@@ -176,15 +182,21 @@ traitAliases = id
 
 {-| Check a function body against its declared result. An exported function
     must annotate what it promises, because [[grammar/pudu]] makes an exported
-    signature a compatibility boundary that callers read without the body. -}
-checkFunction :: DeclaredTypes -> Function -> Checker ()
-checkFunction declared value = do
-  let rigid = functionRigid value
+    signature a compatibility boundary that callers read without the body.
+
+    A trait member receives its trait's name as `Self`'s bound, so a default
+    body may call other trait methods on `self`. The bound is threaded rather
+    than discovered from the environment because the trait name is a property
+    of the declaration being checked, not of the surrounding scope. -}
+checkFunction :: DeclaredTypes -> Maybe Text -> Function -> Checker ()
+checkFunction declared selfBound value = do
+  let rigid = functionRigid value <> foldMap selfRigid selfBound
+      bounds = declareBounds value <> foldMap selfBoundAsBound selfBound
   requireExportedAnnotations value
-  inTypeScope $ do
+  withRigidBounds bounds $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
     result <- formOptionalType declared rigid (functionReturn value)
-    bindName selfName (Scheme [] (FunctionTypeValue (functionAsync value) inputs result))
+    bindName selfName (monotype (FunctionTypeValue (functionAsync value) inputs result))
     case functionBody value of
       Nothing -> pure ()
       Just (Located bodySpan body) -> do
@@ -193,6 +205,19 @@ checkFunction declared value = do
           ExpressionBody expression -> checkExpression declared rigid expression
         _ <- unify bodySpan result actual
         pure ()
+    dischargeObligations
+
+{-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
+    which lets a default body call other trait methods on `self`. -}
+selfBoundAsBound :: Text -> [(Text, [Text])]
+selfBoundAsBound traitName = [("Self", [traitName])]
+
+{-| `Self` is rigid inside a trait member so that `formType` produces
+    `RigidType "Self"` rather than `NominalType "Self"`, routing method
+    calls through `rigidMethod` and the trait bound installed by
+    `selfBoundAsBound`. -}
+selfRigid :: Text -> [Text]
+selfRigid _ = ["Self"]
 
 selfName :: Text
 selfName = "__return"
@@ -225,7 +250,7 @@ bindParameter declared rigid (Located _ parameter) = do
       actual <- checkExpression declared rigid expression
       _ <- unify (locatedSpan expression) formed actual
       pure ()
-  bindName (locatedValue (Tree.parameterName parameter)) (Scheme [] formed)
+  bindName (locatedValue (Tree.parameterName parameter)) (monotype formed)
   pure formed
 
 {-| A block's type is its trailing expression, or unit when it has none. -}
@@ -242,7 +267,7 @@ checkStatement declared rigid (Located _ statement) = case statement of
     expected <- formOptionalType declared rigid annotation
     actual <- checkExpression declared rigid value
     unified <- unify (locatedSpan value) expected actual
-    bindName (locatedValue name) (Scheme [] unified)
+    bindName (locatedValue name) (monotype unified)
   DeclarationStatement other -> checkDeclaration declared other
   ExpressionStatement expression -> do
     _ <- checkExpression declared rigid expression
@@ -289,7 +314,7 @@ returnType :: Checker Type
 returnType = do
   found <- lookupName selfName
   case found of
-    Just (Scheme _ (FunctionTypeValue _ _ result)) -> pure result
+    Just (Scheme _ _ (FunctionTypeValue _ _ result)) -> pure result
     _ -> freshVariable
 
 {-| A member in callee position prefers a method over a field of the same
@@ -300,13 +325,11 @@ checkCallee declared rigid located@(Located calleeSpan expression) = case expres
   MemberExpression target member -> do
     targetType <- checkExpression declared rigid target
     resolved <- zonk targetType
-    method <- case resolved of
-      NominalType owner _ -> lookupName (owner <> "." <> locatedValue member)
-      _ -> pure Nothing
+    method <- methodScheme resolved (locatedValue member)
     case method of
       Nothing -> checkExpression declared rigid located
       Just scheme -> do
-        instantiated <- instantiate scheme
+        instantiated <- instantiate calleeSpan scheme
         let applied = case instantiated of
               FunctionTypeValue asynchronous (_ : rest) result ->
                 FunctionTypeValue asynchronous rest result

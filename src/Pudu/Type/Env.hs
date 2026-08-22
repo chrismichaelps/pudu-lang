@@ -13,7 +13,13 @@ module Pudu.Type.Env
   , lookupVariant
   , recordExpression
   , report
+  , rigidBoundsOf
+  , rigidSatisfies
+  , takeObligations
   , warn
+  , withRigidBounds
+  , implementsTrait
+  , addObligation
   , resolveVariable
   , runChecker
   , setVariable
@@ -43,6 +49,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredFields :: !(Map Text [(Text, Type)])
   , declaredVariants :: !(Map Text (Text, [Text], [Type]))
   , declaredOwners :: !(Map Text [Text])
+  , declaredImpls :: !(Map Text [Text])
   , declaredAliases :: !(Map Text Type)
   }
   deriving stock (Eq, Show)
@@ -54,6 +61,7 @@ emptyDeclared =
     , declaredFields = Map.empty
     , declaredVariants = Map.empty
     , declaredOwners = Map.empty
+    , declaredImpls = Map.empty
     , declaredAliases = Map.empty
     }
 
@@ -68,6 +76,8 @@ data CheckerState = CheckerState
   , stateFrames :: ![Map Text Scheme]
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
+  , stateObligations :: ![(Span, Type, Text)]
+  , stateRigidBounds :: !(Map Text [Text])
   , stateDiagnosticsRev :: ![Diagnostic]
   }
 
@@ -116,6 +126,8 @@ initialState =
     , stateFrames = [Map.empty]
     , stateDeclared = emptyDeclared
     , stateTypes = []
+    , stateObligations = []
+    , stateRigidBounds = Map.empty
     , stateDiagnosticsRev = []
     }
 
@@ -187,6 +199,50 @@ recordExpression spanValue typeValue =
 
 keyOf :: Span -> SpanKey
 keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+
+{-| Record that a type must implement a trait. Obligations are proved after the
+    body is checked, when inference has solved what the argument types are. -}
+addObligation :: Span -> Type -> Text -> Checker ()
+addObligation spanValue typeValue traitText =
+  Checker $ \state ->
+    ((), state{stateObligations = (spanValue, typeValue, traitText) : stateObligations state})
+
+takeObligations :: Checker [(Span, Type, Text)]
+takeObligations =
+  Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
+
+{-| The bounds the enclosing declaration's own parameters carry, which is how a
+    generic body may call another generic that demands the same trait. -}
+withRigidBounds :: [(Text, [Text])] -> Checker a -> Checker ()
+withRigidBounds bounds action = do
+  previous <- currentRigidBounds
+  setRigidBounds (Map.fromList bounds)
+  _ <- action
+  setRigidBounds previous
+
+currentRigidBounds :: Checker (Map Text [Text])
+currentRigidBounds = Checker $ \state -> (stateRigidBounds state, state)
+
+setRigidBounds :: Map Text [Text] -> Checker ()
+setRigidBounds bounds = Checker $ \state -> ((), state{stateRigidBounds = bounds})
+
+{-| The traits a rigid parameter was declared to satisfy. A method call on it
+    is answered by those traits, which is what a bound is for. -}
+rigidBoundsOf :: Text -> Checker [Text]
+rigidBoundsOf name =
+  Checker $ \state -> (maybe [] id (Map.lookup name (stateRigidBounds state)), state)
+
+rigidSatisfies :: Text -> Text -> Checker Bool
+rigidSatisfies name traitText =
+  Checker $ \state ->
+    (maybe False (elem traitText) (Map.lookup name (stateRigidBounds state)), state)
+
+implementsTrait :: Text -> Text -> Checker Bool
+implementsTrait owner traitText =
+  Checker $ \state ->
+    ( maybe False (elem traitText) (Map.lookup owner (declaredImpls (stateDeclared state)))
+    , state
+    )
 
 report :: Text -> Span -> Text -> Maybe Text -> Checker ()
 report = emitWith Error
