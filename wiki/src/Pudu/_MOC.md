@@ -7,7 +7,8 @@ tags: [moc, module]
 
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
-- [[Compiler Pipeline]] — the fixed lex-then-parse phase boundary and error gate.
+- [[Compiler Pipeline]] — the fixed lex, parse, resolve phase boundary and error gate.
+- [[src/Pudu/Semantic/_MOC|Semantic modules]] — symbols, scopes, the prelude layering, and name resolution.
 - [[src/Pudu/Frontend/_MOC|Frontend modules]] — lossless lexing, recovery-capable untyped syntax, and the complete first parser slice.
 
 ## Referenced by

@@ -18,7 +18,7 @@ import Pudu.Frontend.Parser.State
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Constraint (..), TypeParam (..), TypeSyntax)
-import Pudu.Frontend.Token (Keyword (KwWhere), Token (..), TokenKind (..))
+import Pudu.Frontend.Token (Keyword (KwWhere), TokenKind (..))
 import Pudu.Source (Span, mergeSpans)
 
 {-| Parse `[T, U: Bound + Other]`. Generic parameters are optional everywhere

@@ -83,6 +83,9 @@ tags: [handoff]
 - [Role: Architect → Shadow] Resolved the remaining v1 surface grammar in [[grammar/pudu]]: pattern vocabulary, `case`-introduced match arms, `while`/`loop`/`for` expressions, `break`/`continue` statements, record/sum/alias `type` definitions, trait members with optional defaults, `impl` blocks, generic parameters with bounds, and `where` clauses.
 - [Role: Shadow → Forensic Guardian] Extended [[Syntax Tree]] and [[Token]] for the full surface, then implemented [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], the control and postfix expression forms, and loop statements. `E1033` and `E1043` are retired as features rather than reserved diagnostics; `E1050`, `E1051`, and `E1052` cover pattern, empty-match, and non-function-member recovery. Development and `-O2` suites pass 120x200.
 
+- [Role: Architect → Shadow] Opened the semantic phase: resolution is two-pass at module scope, namespaces are separate, block bindings take effect after their initializer, variants stay in their type's namespace, and imports become opaque external symbols until a module graph exists.
+- [Role: Shadow → Forensic Guardian] Implemented [[Symbol Model]], [[Scope Model]], [[Semantic Prelude]], and [[Name Resolution]], and extended [[Compiler Pipeline]] with `runCompile`. Prelude handling follows Haskell's split: wired-in types the compiler owns, an implicitly imported `Core.Prelude` module that an explicit import suppresses. Development and `-O2` suites pass 133x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -90,6 +93,7 @@ tags: [handoff]
 - Tokens preserve exact lexemes and leading trivia; invalid input stays in the stream.
 - Recovery AST is never exposed as a compilable module when errors exist.
 - First parser slice covers module/import/binding/function/block/literal/name/unary/binary/call/member/return/if constructs.
+- Wired-in types and the implicit prelude are separate scope layers, following Haskell: primitives cannot be removed, prelude names can be shadowed or replaced by an explicit `import Core.Prelude`.
 - Statements are delimited by line breaks and braces. Continuation is decided from the operator token's own leading trivia; no terminator token is ever synthesized and no semicolon enters the grammar.
 
 ## Open / Remaining

@@ -20,7 +20,6 @@ import Pudu.Frontend.Parser.State
   , matchSymbol
   , budgetExhausted
   , expectKeyword
-  , matchKind
   , peekKind
   , peekStartsLine
   , peekToken

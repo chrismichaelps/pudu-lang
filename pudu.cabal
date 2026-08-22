@@ -56,6 +56,12 @@ library
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
+    Pudu.Semantic
+    Pudu.Semantic.Prelude
+    Pudu.Semantic.Resolve
+    Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Scope
+    Pudu.Semantic.Symbol
     Pudu.Source
   build-depends:
     base >=4.20 && <4.23,
@@ -86,6 +92,7 @@ test-suite pudu-test
     Pudu.Frontend.ParserTypeSpec
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
+    Pudu.Semantic.ResolveSpec
   build-depends:
     base >=4.20 && <4.23,
     pudu,

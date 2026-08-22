@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Name Resolution]], [[Symbol Model]], [[Scope Model]], and [[Semantic Prelude]] · establish two-pass lexical name resolution with namespaced symbols, Haskell-style wired-in and implicit-prelude scope layering, and `E2001`/`E2010`/`E2011`/`W2001` diagnostics · risk HIGH · depth n/a→DEEP · issue #3
 - 2026-08-21 · [[Parser Trait]] and [[Parser Type Declaration]] · implement record, sum, and alias `type` declarations, trait contracts with optional default bodies, and `impl` blocks with `E1052` member recovery · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Pattern]] and [[Parser Generic]] · implement the closed pattern vocabulary with alternation, ranges, and record rests, plus shared generic parameters, bounds, and `where` clauses · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Syntax Tree]] and [[Token]] · extend the surface data to patterns, match arms, loops, jumps, function types, generics, and the type/trait/impl declaration family, and admit `=>` into the closed symbol vocabulary · risk HIGH · depth MEDIUM→MEDIUM · issue #3

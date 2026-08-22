@@ -34,18 +34,29 @@ data FrontendResult = FrontendResult
   deriving stock (Eq, Show)
 
 runFrontend :: Source -> FrontendResult
+
+data CompileResult = CompileResult
+  { compileTokens :: ![Token]
+  , compileModule :: !(Maybe Module)
+  , compileResolution :: !(Maybe Resolution)
+  , compileDiagnostics :: ![Diagnostic]
+  }
+  deriving stock (Eq, Show)
+
+runCompile :: Source -> CompileResult
 ```
 
 ### Governance
 
-- Phase order is fixed: lex then parse.
+- Phase order is fixed: lex, parse, then resolve names.
+- Resolution runs only on a module the parser admitted, so a syntax error never earns a second explanation from a later phase, matching the earliest-phase rule in [[architecture/SEMANTICS]].
 - Parser still runs after lexical errors when a token stream exists, allowing useful independent diagnostics.
 - The module result becomes `Nothing` when any error-severity diagnostic exists; raw parser result is not exposed as compilable.
 - Diagnostics are combined and sorted once at the boundary.
 
 ### Linkage
 
-- **Requires:** [[Source]], [[Lexer]], [[Parser]], [[Token]], [[Syntax]], [[Diagnostic Model]].
+- **Requires:** [[Source]], [[Lexer]], [[Parser]], [[Name Resolution]], [[Token]], [[Syntax]], [[Diagnostic Model]].
 - **Consumed by:** CLI, tests, later compilation/evaluation entry points.
 
 ## Algorithm
