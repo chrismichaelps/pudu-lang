@@ -33,6 +33,7 @@ import Pudu.Repl.Session
   , contextSummary
   , emptySession
   , loadModule
+  , sessionDeclaredNames
   , sessionExports
   , submitEntry
   )
@@ -291,7 +292,11 @@ browseSession options session = do
   case resolution of
     Nothing -> TextIO.putStrLn "nothing to browse"
     Just found -> case sessionExports found of
-      [] -> TextIO.putStrLn "the session context exports nothing"
+      [] -> case sessionDeclaredNames found of
+        [] -> TextIO.putStrLn "the session context declares nothing"
+        declared -> do
+          TextIO.putStrLn "nothing is exported; the context declares:"
+          mapM_ TextIO.putStrLn declared
       names -> mapM_ TextIO.putStrLn names
 
 reportContext :: ReplOptions -> [Diagnostic] -> IO ()

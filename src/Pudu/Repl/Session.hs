@@ -9,6 +9,7 @@ module Pudu.Repl.Session
   , inspectSession
   , emptySession
   , loadModule
+  , sessionDeclaredNames
   , sessionExports
   , submitEntry
   ) where
@@ -23,7 +24,7 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..))
-import Pudu.Semantic (Resolution (..), Symbol (..))
+import Pudu.Semantic (Resolution (..), Symbol (..), moduleSymbolNames)
 import Pudu.Source (Source, SourceName (SourceName), newSource, spanEnd, unOffset)
 
 {-| @Repl.Session.Loaded — a file compiled as the session context -}
@@ -236,14 +237,24 @@ importCut parsed =
 sessionExports :: Resolution -> [Text]
 sessionExports resolution = map symbolName (resolutionExports resolution)
 
+{-| Names the session context declares, with the synthetic entry function
+    filtered out: it is an assembly detail, not something the reader wrote. -}
+sessionDeclaredNames :: Resolution -> [Text]
+sessionDeclaredNames resolution =
+  filter (/= sessionFunction) (moduleSymbolNames resolution)
+
+{-| Summarize the context one line per entry. A multi-line entry shows its
+    first line with an ellipsis rather than replaying its whole body. -}
 contextSummary :: Session -> [Text]
 contextSummary session =
   concat
-    [ map ("import  " <>) (sessionImports session)
-    , map ("declare " <>) (map firstLine (sessionDeclarations session))
-    , map ("bind    " <>) (sessionStatements session)
+    [ map (("import  " <>) . summarize) (sessionImports session)
+    , map (("declare " <>) . summarize) (sessionDeclarations session)
+    , map (("bind    " <>) . summarize) (sessionStatements session)
     ]
- where
-  firstLine value = case Text.lines value of
-    found : _ -> found
-    [] -> value
+
+summarize :: Text -> Text
+summarize value = case Text.lines value of
+  [single] -> single
+  found : _ -> found <> " ..."
+  [] -> value
