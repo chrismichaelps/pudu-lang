@@ -30,6 +30,8 @@ parseTypeList :: Text -> Parser [Located TypeSyntax]
 
 ### Governance
 
+- `async? fn(A, B) -> T` parses as a first-class function type; the async marker and declared result are preserved so capability and recoverable failure survive into later phases.
+
 - `&mut` is reference syntax; `mut` elsewhere is not consumed.
 - `()` is unit; `(T)` groups; `(T,)`/`(T,U)` are tuples.
 - Type arguments allow a trailing comma and require closing `]`.

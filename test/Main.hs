@@ -15,6 +15,8 @@ import Pudu.Frontend.ParserBindingSpec (parserBindingProperties)
 import Pudu.Frontend.ParserBlockSpec (parserBlockProperties)
 import Pudu.Frontend.ParserFunctionSpec (parserFunctionProperties)
 import Pudu.Frontend.ParserModuleSpec (parserModuleProperties)
+import Pudu.Frontend.ParserPatternSpec (parserPatternProperties)
+import Pudu.Frontend.ParserTypeDeclarationSpec (parserTypeDeclarationProperties)
 import Pudu.Frontend.ParserExpressionSpec (parserExpressionProperties)
 import Pudu.Frontend.ParserTypeSpec (parserTypeProperties)
 import Pudu.Frontend.SyntaxSpec (syntaxProperties)
@@ -55,9 +57,11 @@ main = do
   parserBlockOutcomes <- traverse (uncurry check) parserBlockProperties
   parserFunctionOutcomes <- traverse (uncurry check) parserFunctionProperties
   parserModuleOutcomes <- traverse (uncurry check) parserModuleProperties
+  parserPatternOutcomes <- traverse (uncurry check) parserPatternProperties
+  parserTypeDeclarationOutcomes <- traverse (uncurry check) parserTypeDeclarationProperties
   parserTypeOutcomes <- traverse (uncurry check) parserTypeProperties
   parserExpressionOutcomes <- traverse (uncurry check) parserExpressionProperties
-  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> diagnosticOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

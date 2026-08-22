@@ -80,6 +80,9 @@ tags: [handoff]
 - [Role: Architect → Shadow] Resolved [[Parser Declaration]] as composition only: `export` ownership, preserved-but-diagnosed misplaced imports, reserved-declaration skipping over braced bodies, and consumed stray module-scope tokens.
 - [Role: Shadow → Forensic Guardian] Implemented the orchestrator, the [[Parser]] façade over the source-bound state, and [[Compiler Pipeline]]'s source-to-module gate; a 21-line module with fluent chains, continued operators, default arguments, `if`/`return`, and an expression-bodied function parses with zero diagnostics. Development and `-O2` suites pass 103x200.
 
+- [Role: Architect → Shadow] Resolved the remaining v1 surface grammar in [[grammar/pudu]]: pattern vocabulary, `case`-introduced match arms, `while`/`loop`/`for` expressions, `break`/`continue` statements, record/sum/alias `type` definitions, trait members with optional defaults, `impl` blocks, generic parameters with bounds, and `where` clauses.
+- [Role: Shadow → Forensic Guardian] Extended [[Syntax Tree]] and [[Token]] for the full surface, then implemented [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], the control and postfix expression forms, and loop statements. `E1033` and `E1043` are retired as features rather than reserved diagnostics; `E1050`, `E1051`, and `E1052` cover pattern, empty-match, and non-function-member recovery. Development and `-O2` suites pass 120x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -96,7 +99,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Forensic Guardian: review the completed first parser slice for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], and [[grammar/pudu]]'s statement-boundary rule — against the four commits on `feature/3-parser-binding`, then decide whether the next slice is semantic name resolution or the reserved declaration forms.
+Forensic Guardian: review the completed surface-grammar slice for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], [[Syntax Tree]], [[Token]], and [[grammar/pudu]] — against the commits on `feature/3-parser-binding`, then open the semantic slice with name resolution over the now-complete surface tree.
 
 ## Links
 

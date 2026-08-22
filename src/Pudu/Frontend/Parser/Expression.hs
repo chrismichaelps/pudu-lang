@@ -18,15 +18,20 @@ import Pudu.Frontend.Parser.State
   , lookaheadKind
   , matchKeyword
   , matchSymbol
+  , budgetExhausted
+  , expectKeyword
+  , matchKind
   , peekKind
   , peekStartsLine
   , peekToken
   , withRecursionBudget
   )
+import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Block, Expression (..), Literal (..))
+import Pudu.Frontend.Syntax.Tree (Block, Expression (..), Literal (..), MatchArm (..))
 import Pudu.Frontend.Token
-  ( Keyword (KwAwait, KwElse, KwFalse, KwIf, KwMut, KwNull, KwTrue)
+  ( Keyword (KwAwait, KwCase, KwElse, KwFalse, KwFor, KwIf, KwIn, KwLoop, KwMatch
+    , KwMut, KwNull, KwTrue, KwWhile)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
@@ -59,6 +64,10 @@ parsePrefix blockParser = do
     Keyword KwFalse -> literal token (BoolValue False)
     Keyword KwNull -> literal token NullValue
     Keyword KwIf -> parseIf blockParser
+    Keyword KwMatch -> parseMatch blockParser
+    Keyword KwWhile -> parseWhile blockParser
+    Keyword KwLoop -> parseLoop blockParser
+    Keyword KwFor -> parseFor blockParser
     Identifier name -> advanceToken >> pure (Located (tokenSpan token) (NameExpression (name :| [])))
     Symbol symbol
       | symbol == SymLeftParen -> parseGrouped blockParser
@@ -126,37 +135,137 @@ parseElse blockParser = do
 {-| Postfix continuation is line-sensitive per [[grammar/pudu]]: a line-initial
     `(` or `[` starts a new statement, while a line-initial `.`, `?`, or
     `.await` continues a fluent chain. -}
+{-| `match` scrutinizes one expression and requires at least one `case` arm.
+    Arms are separated by line breaks like every other construct. -}
+parseMatch :: BlockParser -> Parser (Located Expression)
+parseMatch blockParser = do
+  keyword <- advanceToken
+  scrutinee <- parseExpression blockParser
+  _ <- expectSymbol "{" "to start the match arms"
+  arms <- parseArms blockParser []
+  closing <- expectSymbol "}" "to close the match arms"
+  case arms of
+    [] ->
+      emitParseError "E1051" (tokenSpan closing) "match requires at least one case arm"
+        (Just "add a case arm, or replace the match with an if expression")
+    _ -> pure ()
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (tokenSpan closing))
+        (MatchExpression scrutinee arms)
+    )
+
+parseArms :: BlockParser -> [Located MatchArm] -> Parser [Located MatchArm]
+parseArms blockParser reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol "}" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      arm <- parseArm blockParser
+      after <- peekToken
+      if before == after
+        then advanceToken >> pure (reverse reversed)
+        else parseArms blockParser (arm : reversed)
+
+parseArm :: BlockParser -> Parser (Located MatchArm)
+parseArm blockParser = do
+  keyword <- expectKeyword KwCase "to start a match arm"
+  pattern' <- parsePattern
+  guard <- parseGuard blockParser
+  _ <- expectSymbol "=>" "before the arm body"
+  body <- parseArmBody blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        MatchArm{armPattern = pattern', armGuard = guard, armBody = body}
+    )
+
+parseGuard :: BlockParser -> Parser (Maybe (Located Expression))
+parseGuard blockParser = do
+  guardKeyword <- matchKeyword KwIf
+  case guardKeyword of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> parseExpression blockParser
+
+parseArmBody :: BlockParser -> Parser (Located Expression)
+parseArmBody blockParser = do
+  kind <- peekKind
+  if isSymbol "{" kind
+    then blockExpression blockParser
+    else parseExpression blockParser
+
+{-| `while`, `loop`, and `for` are expressions whose bodies are blocks; their
+    value is `()` in this slice, which typing — not parsing — enforces. -}
+parseWhile :: BlockParser -> Parser (Located Expression)
+parseWhile blockParser = do
+  keyword <- advanceToken
+  condition <- parseExpression blockParser
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (WhileExpression condition body)
+    )
+
+parseLoop :: BlockParser -> Parser (Located Expression)
+parseLoop blockParser = do
+  keyword <- advanceToken
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (LoopExpression body)
+    )
+
+parseFor :: BlockParser -> Parser (Located Expression)
+parseFor blockParser = do
+  keyword <- advanceToken
+  binder <- parsePattern
+  _ <- expectKeyword KwIn "between the pattern and the iterated expression"
+  iterated <- parseExpression blockParser
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (ForExpression binder iterated body)
+    )
+
 parsePostfix :: BlockParser -> Located Expression -> Parser (Located Expression)
 parsePostfix blockParser expression = do
   kind <- peekKind
   newLine <- peekStartsLine
-  reserved <- isReservedPostfix kind
-  if reserved && not (newLine && isSymbol "[" kind)
-    then parseReservedPostfix expression kind
-    else if isPostfixStart kind && not (newLine && isSymbol "(" kind)
-      then do
-        bounded <- withRecursionBudget (parsePostfixStep blockParser expression kind)
-        pure (maybe expression id bounded)
-      else pure expression
+  await <- isAwaitPostfix kind
+  let lineBreaks = newLine && (isSymbol "(" kind || isSymbol "[" kind)
+  if (isPostfixStart kind || await) && not lineBreaks
+    then do
+      bounded <- withRecursionBudget (parsePostfixStep blockParser expression kind await)
+      pure (maybe expression id bounded)
+    else pure expression
 
-isReservedPostfix :: TokenKind -> Parser Bool
-isReservedPostfix kind
-  | isSymbol "[" kind || isSymbol "?" kind = pure True
+isAwaitPostfix :: TokenKind -> Parser Bool
+isAwaitPostfix kind
   | isSymbol "." kind = (== Keyword KwAwait) <$> lookaheadKind 1
   | otherwise = pure False
 
-parseReservedPostfix :: Located Expression -> TokenKind -> Parser (Located Expression)
-parseReservedPostfix expression kind = do
-  first <- advanceToken
-  final <- if isSymbol "." kind then advanceToken else pure first
-  let diagnosticSpan = mergedOrLeft (tokenSpan first) (tokenSpan final)
-      expressionSpan = mergedOrLeft (locatedSpan expression) (tokenSpan final)
-  emitParseError "E1043" diagnosticSpan "postfix expression form is reserved"
-    (Just "indexing, failure propagation, and await syntax enter in later semantic slices")
-  pure (Located expressionSpan InvalidExpression)
-
-parsePostfixStep :: BlockParser -> Located Expression -> TokenKind -> Parser (Located Expression)
-parsePostfixStep blockParser expression kind
+{-| Postfix forms bind tighter than every unary and binary operator: call,
+    member, index, `?` failure propagation, and `.await`. -}
+parsePostfixStep :: BlockParser -> Located Expression -> TokenKind -> Bool -> Parser (Located Expression)
+parsePostfixStep blockParser expression kind await
+  | await = do
+      _ <- advanceToken
+      keyword <- advanceToken
+      let awaited = Located (mergedOrLeft (locatedSpan expression) (tokenSpan keyword))
+            (AwaitExpression expression)
+      parsePostfix blockParser awaited
+  | isSymbol "?" kind = do
+      question <- advanceToken
+      let tried = Located (mergedOrLeft (locatedSpan expression) (tokenSpan question))
+            (TryExpression expression)
+      parsePostfix blockParser tried
+  | isSymbol "[" kind = do
+      _ <- advanceToken
+      index <- parseExpression blockParser
+      closing <- expectSymbol "]" "to close the index expression"
+      let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
+            (IndexExpression expression index)
+      parsePostfix blockParser indexed
   | isSymbol "(" kind = do
       _ <- advanceToken
       (arguments, closing) <- parseArguments blockParser
@@ -174,7 +283,8 @@ parsePostfixStep blockParser expression kind
       parsePostfix blockParser selection
 
 isPostfixStart :: TokenKind -> Bool
-isPostfixStart kind = isSymbol "(" kind || isSymbol "." kind
+isPostfixStart kind =
+  isSymbol "(" kind || isSymbol "." kind || isSymbol "[" kind || isSymbol "?" kind
 
 parseArguments :: BlockParser -> Parser ([Located Expression], Maybe Token)
 parseArguments blockParser = do

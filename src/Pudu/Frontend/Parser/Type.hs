@@ -10,6 +10,7 @@ import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
   , emitParseError
+  , expectKeyword
   , expectSymbol
   , isSymbol
   , matchKeyword
@@ -21,7 +22,11 @@ import Pudu.Frontend.Parser.State
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree (TypeSyntax (..))
-import Pudu.Frontend.Token (Keyword (KwMut), Token (tokenKind, tokenSpan), TokenKind (..))
+import Pudu.Frontend.Token
+  ( Keyword (KwAsync, KwFn, KwMut)
+  , Token (tokenKind, tokenSpan)
+  , TokenKind (..)
+  )
 import Pudu.Source (Span, mergeSpans)
 
 parseTypeSyntax :: Parser (Located TypeSyntax)
@@ -68,10 +73,34 @@ parseTypeList closing = do
 
 parseTypeAtom :: Parser (Located TypeSyntax)
 parseTypeAtom = do
-  opening <- matchSymbol "("
-  case opening of
-    Just token -> parseParenthesized (tokenSpan token)
-    Nothing -> parseNamed
+  kind <- peekKind
+  case kind of
+    Keyword KwAsync -> parseFunctionType
+    Keyword KwFn -> parseFunctionType
+    _ -> do
+      opening <- matchSymbol "("
+      case opening of
+        Just token -> parseParenthesized (tokenSpan token)
+        Nothing -> parseNamed
+
+{-| Parse `async? fn(A, B) -> T`. The async marker and the declared return type
+    are preserved so a first-class function type keeps its capability and its
+    recoverable-failure spelling. -}
+parseFunctionType :: Parser (Located TypeSyntax)
+parseFunctionType = do
+  start <- peekToken
+  asyncKeyword <- matchKeyword KwAsync
+  _ <- expectKeyword KwFn "to start a function type"
+  _ <- expectSymbol "(" "before the function type inputs"
+  inputs <- parseTypeList ")"
+  _ <- expectSymbol ")" "after the function type inputs"
+  _ <- expectSymbol "->" "before the function type result"
+  result <- parseTypeSyntax
+  pure
+    Located
+      { locatedSpan = mergedOrLeft (tokenSpan start) (locatedSpan result)
+      , locatedValue = FunctionType (maybe False (const True) asyncKeyword) inputs result
+      }
 
 parseParenthesized :: Span -> Parser (Located TypeSyntax)
 parseParenthesized openingSpan = do

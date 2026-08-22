@@ -7,7 +7,16 @@ import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnost
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
-import Pudu.Frontend.Syntax (Block (..), Expression (..), Literal (..), Located (..))
+import Pudu.Frontend.Syntax
+  ( Block (..)
+  , Expression (..)
+  , FieldPattern (..)
+  , Literal (..)
+  , Located (..)
+  , MatchArm (..)
+  , Pattern (..)
+  , moduleNameText
+  )
 import Pudu.Frontend.Token (Token (tokenSpan), TokenKind (..))
 import Pudu.Source (SourceName (SourceName), mergeSpans, newSource, spanStart, unOffset)
 import Test.QuickCheck (Property, conjoin, (===))
@@ -20,7 +29,8 @@ parserExpressionProperties =
   , ("postfix calls and members bind before binary operators", testPostfix)
   , ("unary borrow and conditional blocks preserve structure", testUnaryIf)
   , ("expression recovery emits exact diagnostics", testRecovery)
-  , ("reserved postfix syntax fails explicitly", testReservedPostfix)
+  , ("index failure-propagation and await postfix forms parse", testPostfixForms)
+  , ("match while loop and for parse as expressions", testControlExpressions)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   ]
@@ -66,13 +76,31 @@ testRecovery = do
     codes malformedElse === ["E1042"], diagnosticOffsets malformedElse === [16],
     codes delimited === ["E1040"], resultKind delimited === EndOfFile]
 
-testReservedPostfix :: IO Property
-testReservedPostfix = do
+testPostfixForms :: IO Property
+testPostfixForms = do
   index <- parse "a[0]"
-  propagation <- parse "a?"
-  awaiting <- parse "a.await"
-  pure $ conjoin [codes index === ["E1043"], codes propagation === ["E1043"],
-    codes awaiting === ["E1043"], diagnosticOffsets awaiting === [1]]
+  propagation <- parse "read()?"
+  awaiting <- parse "fetch().await"
+  chained <- parse "rows[i].value?.await"
+  pure $ conjoin
+    [ validShape index === "a[0]"
+    , validShape propagation === "read()?"
+    , validShape awaiting === "fetch().await"
+    , validShape chained === "rows[i].value?.await"
+    ]
+
+testControlExpressions :: IO Property
+testControlExpressions = do
+  matched <- parse "match value {\n  case Ok(v) if v > 0 => v\n  case _ => 0\n}"
+  loopValue <- parse "loop {}"
+  whileValue <- parse "while ready {}"
+  forValue <- parse "for item in items {}"
+  pure $ conjoin
+    [ validShape matched === "match(value){Ok(v) if (v>0)=>v;_=>0}"
+    , validShape loopValue === "loop"
+    , validShape whileValue === "while(ready)"
+    , validShape forValue === "for item in items"
+    ]
 
 testHostileChains :: IO Property
 testHostileChains = do
@@ -125,9 +153,49 @@ shape (Located _ expression) = case expression of
   BinaryExpression left operator right -> "(" <> shape left <> operator <> shape right <> ")"
   CallExpression callee arguments -> shape callee <> "(" <> Text.intercalate "," (map shape arguments) <> ")"
   MemberExpression target member -> shape target <> "." <> locatedValue member
+  IndexExpression target index -> shape target <> "[" <> shape index <> "]"
+  TryExpression target -> shape target <> "?"
+  AwaitExpression target -> shape target <> ".await"
   BlockExpression _ -> "block"
   IfExpression{} -> "if"
+  MatchExpression scrutinee arms ->
+    "match(" <> shape scrutinee <> "){"
+      <> Text.intercalate ";" (map armShape arms) <> "}"
+  WhileExpression condition _ -> "while(" <> shape condition <> ")"
+  LoopExpression _ -> "loop"
+  ForExpression binder iterated _ ->
+    "for " <> patternShape binder <> " in " <> shape iterated
   InvalidExpression -> "invalid"
+
+armShape :: Located MatchArm -> Text
+armShape (Located _ arm) =
+  patternShape (armPattern arm)
+    <> maybe Text.empty (\guard -> " if " <> shape guard) (armGuard arm)
+    <> "=>" <> shape (armBody arm)
+
+patternShape :: Located Pattern -> Text
+patternShape (Located _ value) = case value of
+  WildcardPattern -> "_"
+  BindingPattern name -> locatedValue name
+  LiteralPattern literalValue -> literalShape literalValue
+  RangePattern lower inclusive upper ->
+    literalShape lower <> (if inclusive then "..=" else "..") <> literalShape upper
+  TuplePattern members -> "(" <> Text.intercalate "," (map patternShape members) <> ")"
+  ConstructorPattern path arguments ->
+    moduleNameText path
+      <> if null arguments then Text.empty
+         else "(" <> Text.intercalate "," (map patternShape arguments) <> ")"
+  RecordPattern path fields rest ->
+    maybe Text.empty moduleNameText path
+      <> "{" <> Text.intercalate "," (map fieldShape fields)
+      <> (if rest then ",.." else Text.empty) <> "}"
+  AlternativePattern alternatives -> Text.intercalate "|" (map patternShape alternatives)
+  InvalidPattern -> "invalid"
+
+fieldShape :: Located FieldPattern -> Text
+fieldShape (Located _ field) =
+  locatedValue (fieldPatternName field)
+    <> maybe Text.empty (\value -> ":" <> patternShape value) (fieldPatternValue field)
 
 literalShape :: Literal -> Text
 literalShape literalValue = case literalValue of

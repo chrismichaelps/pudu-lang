@@ -45,12 +45,22 @@ const_decl       = "const", constant_ident, (":", type_ref)?, "=", expression ;
 local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expression
                  | "const", constant_ident, (":", type_ref)?, "=", expression ;
 block            = "{", statement*, "}" ;
-statement        = local_binding | return_stmt | expression ;
+statement        = local_binding | return_stmt | break_stmt | continue_stmt | expression ;
 return_stmt      = "return", expression? ;
+break_stmt       = "break" ;
+continue_stmt    = "continue" ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
+params           = param, (",", param)*, ","? ;
+param            = lower_ident, (":", type_ref)?, ("=", expression)? ;
 type_decl        = "type", upper_ident, type_params?, "=", (record_type | sum_type | type_ref) ;
+record_type      = "{", field_decl, (",", field_decl)*, ","?, "}" ;
+field_decl       = "mut"?, lower_ident, ":", type_ref ;
+sum_type         = "|"?, variant, ("|", variant)+ ;
+variant          = upper_ident, ("(", type_list, ")" | record_type)? ;
 trait_decl       = "trait", upper_ident, type_params?, where_clause?, "{", trait_member*, "}" ;
+trait_member     = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
+                   ("->", type_ref)?, where_clause?, (block | "=", expression)? ;
 impl_decl        = "impl", type_params?, type_ref, "for", type_ref, where_clause?, "{", function_decl*, "}" ;
 ```
 
@@ -80,7 +90,8 @@ parenthesized_type = "(", ")"
                    | "(", type_ref, ",", type_list?, ")" ;
 named_type       = module_path_or_type, ("[", type_list, "]")? ;
 type_list        = type_ref, (",", type_ref)*, ","? ;
-type_params      = "[", type_param, (",", type_param)*, "]" ;
+type_params      = "[", type_param, (",", type_param)*, ","?, "]" ;
+type_param       = upper_ident, (":", type_ref, ("+", type_ref)*)? ;
 where_clause     = "where", constraint, (",", constraint)* ;
 constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
 ```
@@ -105,7 +116,30 @@ type Result[T, E] =
   | Err(E)
 ```
 
+```ebnf
+pattern          = pattern_alt, ("|", pattern_alt)* ;
+pattern_alt      = "_"
+                 | lower_ident
+                 | literal, ((".." | "..="), literal)?
+                 | "(", pattern, (",", pattern)*, ","?, ")"
+                 | module_path_or_type, ("(", pattern, (",", pattern)*, ","?, ")")?
+                 | module_path_or_type?, "{", field_pattern, (",", field_pattern)*, (",", "..")?, ","?, "}" ;
+field_pattern    = lower_ident, (":", pattern)? ;
+```
+
+```ebnf
+match_expr       = "match", expression, "{", match_arm+, "}" ;
+match_arm        = "case", pattern, ("if", expression)?, "=>", (expression | block) ;
+while_expr       = "while", expression, block ;
+loop_expr        = "loop", block ;
+for_expr         = "for", pattern, "in", expression, block ;
+```
+
 - Record fields are immutable unless explicitly marked `mut` in the type declaration.
+- A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
+- A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.
+- `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
+- `while`, `loop`, and `for` are expressions of type `()` in v1; their bodies are blocks, and `break`/`continue` are statements valid only inside them.
 - Sum variants are namespaced by their type; qualification is required when ambiguous.
 - Matches are exhaustive for closed types. A guarded arm does not contribute exhaustiveness because its guard may be false.
 - Pattern alternatives must bind identical names with identical inferred types.

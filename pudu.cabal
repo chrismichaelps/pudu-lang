@@ -39,10 +39,14 @@ library
     Pudu.Frontend.Lexer.Trivia
     Pudu.Frontend.Parser
     Pudu.Frontend.Parser.Name
+    Pudu.Frontend.Parser.Pattern
     Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block
     Pudu.Frontend.Parser.Declaration.Function
+    Pudu.Frontend.Parser.Declaration.Generic
+    Pudu.Frontend.Parser.Declaration.Trait
+    Pudu.Frontend.Parser.Declaration.Type
     Pudu.Frontend.Parser.Declaration.Import
     Pudu.Frontend.Parser.Expression
     Pudu.Frontend.Parser.State
@@ -76,6 +80,8 @@ test-suite pudu-test
     Pudu.Frontend.ParserBlockSpec
     Pudu.Frontend.ParserFunctionSpec
     Pudu.Frontend.ParserModuleSpec
+    Pudu.Frontend.ParserPatternSpec
+    Pudu.Frontend.ParserTypeDeclarationSpec
     Pudu.Frontend.ParserExpressionSpec
     Pudu.Frontend.ParserTypeSpec
     Pudu.Frontend.SyntaxSpec

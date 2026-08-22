@@ -1,14 +1,15 @@
 {-| @Program.Parser.Declaration.Function — parses function signatures and bodies -}
 module Pudu.Frontend.Parser.Declaration.Function
   ( parseFunction
+  , parseFunctionValue
   ) where
 
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
+import Pudu.Frontend.Parser.Declaration.Generic (parseTypeParams, parseWhereClause)
 import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.Name (expectValueIdentifier)
 import Pudu.Frontend.Parser.State
   ( Parser
-  , advanceToken
   , budgetExhausted
   , currentSpan
   , emitParseError
@@ -26,89 +27,57 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Expression (..)
+  , Function (..)
   , FunctionBody (..)
   , Parameter (..)
   , TypeSyntax
   , Visibility
   )
-import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwFn, KwWhere)
-  , Token (..)
-  , TokenKind (..)
-  )
+import Pudu.Frontend.Token (Keyword (KwAsync, KwFn), Token (..), TokenKind (..))
 import Pudu.Source (Span, mergeSpans)
 
-{-| Parse `async? fn name(params) -> type? body`. Visibility is resolved by the
-    orchestrator that consumed `export`, so this module never invents public
-    API. -}
+{-| Parse a module-scope or impl-scope function, whose body is mandatory. -}
 parseFunction :: Visibility -> Parser (Located Declaration)
 parseFunction visibility = do
+  value <- parseFunctionValue visibility True
+  pure (Located (locatedSpan value) (FunctionDeclaration (locatedValue value)))
+
+{-| Parse `async? fn name[params](inputs) -> type? where? body`. A trait member
+    may declare a signature with no body, which is the only case where
+    `bodyRequired` is `False`. -}
+parseFunctionValue :: Visibility -> Bool -> Parser (Located Function)
+parseFunctionValue visibility bodyRequired = do
   start <- peekToken
   asyncKeyword <- matchKeyword KwAsync
   _ <- expectKeyword KwFn "to start a function"
   name <- expectValueIdentifier "after fn"
-  skipReservedGenerics
+  typeParams <- parseTypeParams
   _ <- expectSymbol "(" "before the parameter list"
   parameters <- parseParameters []
   _ <- expectSymbol ")" "after the parameter list"
   returnType <- parseReturnType
-  skipReservedWhere
-  body <- parseBody
+  constraints <- parseWhereClause
+  body <- parseBody bodyRequired
+  let endSpan = maybe (tokenSpan start) locatedSpan body
   pure
-    ( Located (mergedOrLeft (tokenSpan start) (locatedSpan body))
-        (FunctionDeclaration visibility (isAsync asyncKeyword) name parameters returnType body)
+    ( Located (mergedOrLeft (tokenSpan start) endSpan)
+        Function
+          { functionVisibility = visibility
+          , functionAsync = maybe False (const True) asyncKeyword
+          , functionName = name
+          , functionTypeParams = typeParams
+          , functionParameters = parameters
+          , functionReturn = returnType
+          , functionConstraints = constraints
+          , functionBody = body
+          }
     )
- where
-  isAsync = maybe False (const True)
-
-{-| Generic parameters are grammatical but have no syntax-tree representation in
-    this slice. Diagnose once and skip the balanced bracket region so the rest
-    of the signature still parses. -}
-skipReservedGenerics :: Parser ()
-skipReservedGenerics = do
-  opening <- matchSymbol "["
-  case opening of
-    Nothing -> pure ()
-    Just token -> do
-      emitParseError "E1033" (tokenSpan token) "generic parameters are reserved"
-        (Just "type parameters and where clauses enter in a later semantic slice")
-      skipBracketed 1
-
-skipBracketed :: Int -> Parser ()
-skipBracketed depth
-  | depth <= 0 = pure ()
-  | otherwise = do
-      kind <- peekKind
-      case kind of
-        EndOfFile -> pure ()
-        _ | isSymbol "[" kind -> advanceToken >> skipBracketed (depth + 1)
-          | isSymbol "]" kind -> advanceToken >> skipBracketed (depth - 1)
-          | otherwise -> advanceToken >> skipBracketed depth
-
-{-| A `where` clause is bounded by the body it precedes, so recovery stops at
-    the first `{` or `=` rather than guessing constraint structure. -}
-skipReservedWhere :: Parser ()
-skipReservedWhere = do
-  clause <- matchKeyword KwWhere
-  case clause of
-    Nothing -> pure ()
-    Just token -> do
-      emitParseError "E1033" (tokenSpan token) "where clauses are reserved"
-        (Just "type parameters and where clauses enter in a later semantic slice")
-      skipToBody
-
-skipToBody :: Parser ()
-skipToBody = do
-  kind <- peekKind
-  case kind of
-    EndOfFile -> pure ()
-    _ | isSymbol "{" kind || isSymbol "=" kind -> pure ()
-      | otherwise -> advanceToken >> skipToBody
 
 parseParameters :: [Located Parameter] -> Parser [Located Parameter]
 parseParameters reversed = do
   kind <- peekKind
-  if isSymbol ")" kind || kind == EndOfFile
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
     then pure (reverse reversed)
     else do
       bounded <- withRecursionBudget $ do
@@ -164,33 +133,37 @@ parseReturnType = do
     Nothing -> pure Nothing
     Just _ -> Just <$> parseTypeSyntax
 
-{-| A body is mandatory. Its opening `{` is admitted even on a new line because
-    a signature alone is never a complete declaration. A latched budget stops
-    body parsing without a diagnostic so one `E1099` never cascades into a
-    missing-body report. -}
-parseBody :: Parser (Located FunctionBody)
-parseBody = do
+{-| A body's opening `{` is admitted even on a new line because a signature
+    alone is never a complete declaration. A latched budget stops body parsing
+    without a diagnostic so one `E1099` never cascades into a missing body. -}
+parseBody :: Bool -> Parser (Maybe (Located FunctionBody))
+parseBody bodyRequired = do
   kind <- peekKind
   exhausted <- budgetExhausted
   if exhausted
-    then do
-      spanValue <- currentSpan
-      pure (Located spanValue (ExpressionBody (Located spanValue InvalidExpression)))
+    then pure Nothing
     else if isSymbol "{" kind
-    then do
-      block <- parseBlock
-      pure (Located (locatedSpan block) (BlockBody block))
-    else do
-      equals <- matchSymbol "="
-      case equals of
-        Just _ -> do
-          value <- parseExpression parseBlock
-          pure (Located (locatedSpan value) (ExpressionBody value))
-        Nothing -> do
-          spanValue <- currentSpan
-          emitParseError "E1032" spanValue "expected a function body"
-            (Just "add a block, or = followed by one expression")
-          pure (Located spanValue (ExpressionBody (Located spanValue InvalidExpression)))
+      then do
+        block <- parseBlock
+        pure (Just (Located (locatedSpan block) (BlockBody block)))
+      else do
+        equals <- matchSymbol "="
+        case equals of
+          Just _ -> do
+            value <- parseExpression parseBlock
+            pure (Just (Located (locatedSpan value) (ExpressionBody value)))
+          Nothing
+            | not bodyRequired -> pure Nothing
+            | otherwise -> do
+                spanValue <- currentSpan
+                emitParseError "E1032" spanValue "expected a function body"
+                  (Just "add a block, or = followed by one expression")
+                pure
+                  ( Just
+                      ( Located spanValue
+                          (ExpressionBody (Located spanValue InvalidExpression))
+                      )
+                  )
 
 mergedOrLeft :: Span -> Span -> Span
 mergedOrLeft left right = maybe left id (mergeSpans left right)

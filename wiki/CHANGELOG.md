@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Parser Trait]] and [[Parser Type Declaration]] · implement record, sum, and alias `type` declarations, trait contracts with optional default bodies, and `impl` blocks with `E1052` member recovery · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Pattern]] and [[Parser Generic]] · implement the closed pattern vocabulary with alternation, ranges, and record rests, plus shared generic parameters, bounds, and `where` clauses · risk MED · depth n/a→MEDIUM · issue #3
+- 2026-08-21 · [[Syntax Tree]] and [[Token]] · extend the surface data to patterns, match arms, loops, jumps, function types, generics, and the type/trait/impl declaration family, and admit `=>` into the closed symbol vocabulary · risk HIGH · depth MEDIUM→MEDIUM · issue #3
+- 2026-08-21 · [[Parser Expression]] · admit `match`, `while`, `loop`, `for`, indexing, `?` propagation, and `.await`, replacing the reserved `E1043` postfix diagnostic · risk HIGH · depth DEEP→DEEP · issue #3
 - 2026-08-21 · [[Parser Declaration]], [[Parser]], and [[Compiler Pipeline]] · complete the first frontend slice with compilation-unit orchestration, `export` ownership, `E1034`/`E1038`/`E1039` recovery, and source-to-module phase gating · risk HIGH · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Function]] · implement `async`/`fn` signatures, parameters with optional types and defaults, return types, block and expression bodies, and `E1032`/`E1033` recovery · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Parser Block]] · implement newline-delimited block statements, block results, `return` statements, line-sensitive expression continuation, and latched `E1099` recovery · risk HIGH · depth n/a→MEDIUM · issue #3

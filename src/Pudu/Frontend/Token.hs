@@ -70,6 +70,7 @@ data SymbolKind
   | SymColon
   | SymPipe
   | SymAssign
+  | SymFatArrow
   | SymThinArrow
   | SymQuestion
   | SymBang
@@ -193,6 +194,7 @@ symbolText symbol =
     SymColon -> ":"
     SymPipe -> "|"
     SymAssign -> "="
+    SymFatArrow -> "=>"
     SymThinArrow -> "->"
     SymQuestion -> "?"
     SymBang -> "!"

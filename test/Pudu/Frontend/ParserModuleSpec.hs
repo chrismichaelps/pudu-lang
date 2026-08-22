@@ -8,7 +8,11 @@ import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
+  , Function (..)
+  , Impl (..)
   , Import (..)
+  , Trait (..)
+  , TypeDeclarationValue (..)
   , Located (..)
   , Module (..)
   , Visibility (..)
@@ -27,6 +31,7 @@ parserModuleProperties =
   , ("misplaced imports are preserved with E1034", testImportOrdering)
   , ("module let and var are rejected once without cascade", testModuleBindings)
   , ("reserved and unexpected module entries recover exactly", testModuleRecovery)
+  , ("every admitted declaration form parses in one module", testAllDeclarationForms)
   , ("the frontend withholds a module only when errors exist", testFrontendGating)
   ]
 
@@ -103,6 +108,64 @@ testModuleRecovery = do
         (moduleShape stray === "M||invalid,const A")
     ]
 
+richSource :: Text
+richSource =
+  Text.unlines
+    [ "module Core.Domain"
+    , "import Core.Text {Builder}"
+    , ""
+    , "export type User = { id: Int64, mut name: Str }"
+    , ""
+    , "export type Outcome[T] ="
+    , "  | Ok(T)"
+    , "  | Err(Str)"
+    , ""
+    , "type Handler = fn(User) -> Outcome[User]"
+    , ""
+    , "export trait Show {"
+    , "  fn show(self: &Self) -> Str"
+    , "  fn describe(self: &Self) -> Str = \"value\""
+    , "}"
+    , ""
+    , "impl[T] Show for Outcome[T] where T: Show {"
+    , "  fn show(self: &Self) -> Str {"
+    , "    match self {"
+    , "      case Ok(inner) if inner.ready => inner.show()"
+    , "      case Ok(_) => \"pending\""
+    , "      case Err(message) => message"
+    , "    }"
+    , "  }"
+    , "}"
+    , ""
+    , "export async fn run(users: List[User], retries: Int = 3) -> Outcome[User] {"
+    , "  var attempts = 0"
+    , "  for user in users {"
+    , "    if attempts > retries {"
+    , "      break"
+    , "    }"
+    , "    let shown = user.show()"
+    , "    attempts = attempts &+ 1"
+    , "  }"
+    , "  while attempts > 0 {"
+    , "    attempts = attempts - 1"
+    , "  }"
+    , "  let first = users[0]"
+    , "  let loaded = fetch(first).await"
+    , "  Ok(loaded?)"
+    , "}"
+    ]
+
+testAllDeclarationForms :: IO Property
+testAllDeclarationForms = do
+  result <- parse richSource
+  frontendResult <- frontend richSource
+  pure $ conjoin
+    [ counterexample "diagnostics" (codes result === [])
+    , moduleShape result
+        === "Core.Domain|Core.Text {Builder}|type User,type Outcome,type Handler,trait Show,impl,fn run"
+    , counterexample "the frontend admits the module" (property (frontendHasModule frontendResult))
+    ]
+
 testFrontendGating :: IO Property
 testFrontendGating = do
   valid <- frontend completeSource
@@ -148,8 +211,10 @@ visibilities (moduleValue, _) = case moduleValue of
 declarationVisibility :: Located Declaration -> Visibility
 declarationVisibility (Located _ declaration) = case declaration of
   BindingDeclaration visibility _ _ _ _ -> visibility
-  FunctionDeclaration visibility _ _ _ _ _ -> visibility
-  InvalidDeclaration -> Private
+  FunctionDeclaration value -> functionVisibility value
+  TypeDeclaration value -> typeVisibility value
+  TraitDeclaration value -> traitVisibility value
+  _ -> Private
 
 moduleShape :: Parsed -> Text
 moduleShape (Nothing, _) = "none"
@@ -170,5 +235,8 @@ importShape (Located _ value) =
 declarationShape :: Located Declaration -> Text
 declarationShape (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name _ _ -> "const " <> locatedValue name
-  FunctionDeclaration _ _ name _ _ _ -> "fn " <> locatedValue name
+  FunctionDeclaration value -> "fn " <> locatedValue (functionName value)
+  TypeDeclaration value -> "type " <> locatedValue (typeName value)
+  TraitDeclaration value -> "trait " <> locatedValue (traitName value)
+  ImplDeclaration _ -> "impl"
   InvalidDeclaration -> "invalid"

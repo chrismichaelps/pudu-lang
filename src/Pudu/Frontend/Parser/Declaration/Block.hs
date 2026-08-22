@@ -18,7 +18,11 @@ import Pudu.Frontend.Parser.State
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Block (..), Statement (..))
-import Pudu.Frontend.Token (Keyword (KwConst, KwLet, KwReturn, KwVar), Token (..), TokenKind (..))
+import Pudu.Frontend.Token
+  ( Keyword (KwBreak, KwConst, KwContinue, KwLet, KwReturn, KwVar)
+  , Token (..)
+  , TokenKind (..)
+  )
 import Pudu.Source (Span, mergeSpans)
 
 {-| Parse `{ statement* }`. This module is the fixed point of the
@@ -68,9 +72,18 @@ parseStatement = do
     Keyword KwVar -> declarationStatement
     Keyword KwConst -> declarationStatement
     Keyword KwReturn -> parseReturn
+    Keyword KwBreak -> keywordStatement BreakStatement
+    Keyword KwContinue -> keywordStatement ContinueStatement
     _ -> do
       expression <- parseExpression parseBlock
       pure (Located (locatedSpan expression) (ExpressionStatement expression))
+
+{-| `break` and `continue` carry no value in this slice; whether they sit
+    inside a loop is a semantic rule, not a parsing one. -}
+keywordStatement :: Statement -> Parser (Located Statement)
+keywordStatement statement = do
+  keyword <- advanceToken
+  pure (Located (tokenSpan keyword) statement)
 
 declarationStatement :: Parser (Located Statement)
 declarationStatement = do

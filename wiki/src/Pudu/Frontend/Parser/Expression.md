@@ -17,7 +17,7 @@ aliases: [Parser Expression]
 
 ## Purpose
 
-Parse initial-slice literal/name/block/if/unary/binary/call/member expressions with centralized precedence and no dependency cycle on declaration parsing.
+Parse the admitted expression vocabulary — literals, names, blocks, `if`, `match`, `while`, `loop`, `for`, unary and binary operators, and the full postfix family — with centralized precedence and no dependency cycle on declaration parsing.
 
 ## Interface
 
@@ -34,22 +34,24 @@ parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 
 - The future declaration parser injects its block parser, avoiding a module cycle.
 - Prefix parses literals, single-segment names, parentheses/grouping, block, `if`, and `!`/`-`/`&`/`&mut` unary forms.
-- Postfix call/member binds tighter than every binary operator.
+- The postfix family is call, member, index, `?` failure propagation, and `.await`; every member of it binds tighter than every unary and binary operator, matching [[grammar/pudu]]'s precedence table.
+- `match` scrutinizes one expression and requires at least one `case` arm, reported as `E1051` when absent; an arm is `case pattern (if guard)? => (expression | block)` using [[Parser Pattern]].
+- `while`, `loop`, and `for` are expressions whose bodies are blocks; `for` binds a pattern before `in`. Their `()` value and the validity of `break`/`continue` inside them are semantic rules.
 - Line breaks are significant to continuation, matching [[grammar/pudu]]: a binary operator or a postfix `(`/`[` that begins a new line does not extend the expression, while a line-initial `.`, `?`, or `.await` does. Continuation is decided from the operator token's own leading trivia, so no synthetic terminator token is ever inserted.
 - Assignment is right-associative; every other admitted binary operator is left-associative, matching [[grammar/pudu]].
 - Calls admit empty arguments and one trailing comma; member access requires an identifier.
 - Every recursive prefix, nested `else if`, postfix, argument-list, and binary-tail descent uses [[Parser State]]'s shared budget.
 - Argument parsing distinguishes a consumed closing delimiter from budget/progress exhaustion so one `E1099` does not cascade into a synthetic missing-`)` diagnostic.
-- Unknown expression starts emit `E1040`; malformed `else` emits `E1042`; reserved index/`?`/`.await` postfix forms not yet represented by [[Syntax Tree]] emit `E1043` and produce `InvalidExpression` rather than being silently accepted.
+- Unknown expression starts emit `E1040`; malformed `else` emits `E1042`; a `match` with no arms emits `E1051`.
 
 ### Linkage
 
-- **Requires:** [[Parser State]], [[Token]], [[Syntax Tree]], [[grammar/pudu]].
+- **Requires:** [[Parser State]], [[Parser Pattern]], [[Token]], [[Syntax Tree]], [[grammar/pudu]].
 - **Consumed by:** current [[Parser Binding]] and future declaration partitions.
 
 ## Algorithm
 
-Use budgeted precedence climbing: parse prefix, apply postfix, then consume closed-vocabulary binary operators whose binding power meets the threshold; recursively parse the right operand with an associativity-adjusted minimum. `if` parses condition plus the injected block capability, with optional block or nested-`if` else branch.
+Use budgeted precedence climbing: parse prefix, apply postfix, then consume closed-vocabulary binary operators whose binding power meets the threshold; recursively parse the right operand with an associativity-adjusted minimum. `if`, `while`, `loop`, `for`, and `match` parse through the injected block capability; `match` loops `case` arms until `}` with required token progress.
 
 ## Negative Logic (Prohibited Paths)
 

@@ -7,6 +7,8 @@ import Pudu.Frontend.Parser.Declaration.Binding (parseTopConst)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.Declaration.Import (parseImport)
+import Pudu.Frontend.Parser.Declaration.Trait (parseImpl, parseTrait)
+import Pudu.Frontend.Parser.Declaration.Type (parseTypeDeclaration)
 import Pudu.Frontend.Parser.Name (parseModuleName)
 import Pudu.Frontend.Parser.State
   ( Parser
@@ -110,6 +112,9 @@ parseTopDeclaration kind = do
     Keyword KwVar -> rejectedModuleBinding visibility
     Keyword KwFn -> parseFunction visibility
     Keyword KwAsync -> parseFunction visibility
+    Keyword KwType -> parseTypeDeclaration visibility
+    Keyword KwTrait -> parseTrait visibility
+    Keyword KwImpl -> parseImpl
     Keyword reserved | isReservedDeclaration reserved -> reservedDeclaration
     _ -> unexpectedModuleToken
 
@@ -122,9 +127,12 @@ rejectedModuleBinding visibility = do
   synchronizeDeclaration
   pure rejected
 
+{-| `enum`, `struct`, `macro`, and `comptime` remain reserved: their meaning is
+    not yet represented by [[Syntax Tree]], and record/sum shapes are declared
+    with `type` in [[grammar/pudu]]. -}
 isReservedDeclaration :: Keyword -> Bool
 isReservedDeclaration keyword =
-  keyword `elem` [KwType, KwEnum, KwStruct, KwTrait, KwImpl, KwMacro, KwComptime]
+  keyword `elem` [KwEnum, KwStruct, KwMacro, KwComptime]
 
 {-| Reserved declaration forms are diagnosed and synchronized, never accepted
     as valid syntax for a construct the compiler cannot yet represent. -}
@@ -132,7 +140,7 @@ reservedDeclaration :: Parser (Located Declaration)
 reservedDeclaration = do
   token <- peekToken
   emitParseError "E1039" (tokenSpan token) "declaration form is reserved"
-    (Just "type, enum, struct, trait, impl, macro, and comptime declarations enter in later slices")
+    (Just "enum, struct, macro, and comptime declarations enter in later slices; use type for records and sums")
   _ <- advanceToken
   skipReservedRegion 0
   pure (Located (tokenSpan token) InvalidDeclaration)
@@ -159,7 +167,7 @@ unexpectedModuleToken :: Parser (Located Declaration)
 unexpectedModuleToken = do
   token <- peekToken
   emitParseError "E1038" (tokenSpan token) "expected a declaration at module scope"
-    (Just "start a module-scope declaration with export, const, fn, or async fn")
+    (Just "start a module-scope declaration with export, const, fn, async fn, type, trait, or impl")
   _ <- advanceToken
   kind <- peekKind
   if kind == EndOfFile || isSymbol "}" kind || isDeclarationStart kind

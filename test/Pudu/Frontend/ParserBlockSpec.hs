@@ -30,6 +30,7 @@ parserBlockProperties =
   , ("return carries a value only on its own line", testReturnStatements)
   , ("nested blocks resolve the parser recursion", testNesting)
   , ("unclosed and unrecognized statements recover exactly", testRecovery)
+  , ("loops and jumps parse as statements", testLoopStatements)
   , ("long statement lists stay linear while brace floods share the budget", testHostileBlocks)
   ]
 
@@ -110,6 +111,21 @@ testRecovery = do
     , remainingKind unrecognized === EndOfFile
     ]
 
+testLoopStatements :: IO Property
+testLoopStatements = do
+  whileBlock <- parse "{\n  while ready {\n    step()\n  }\n}"
+  breakBlock <- parse "{\n  loop {\n    break\n  }\n}"
+  continueBlock <- parse "{\n  for item in items {\n    continue\n  }\n}"
+  jumps <- parse "{\n  break\n  continue\n}"
+  pure $ conjoin
+    [ shape whileBlock === "[]=>while"
+    , shape breakBlock === "[]=>loop"
+    , shape continueBlock === "[]=>for"
+    , counterexample "jumps are statements" (shape jumps === "[break;continue]")
+    , codes whileBlock === []
+    , codes continueBlock === []
+    ]
+
 testHostileBlocks :: IO Property
 testHostileBlocks = do
   statements <- parse ("{" <> Text.concat (replicate 520 "\na") <> "\n}")
@@ -154,6 +170,8 @@ statementShape (Located _ statement) = case statement of
   ExpressionStatement expression -> expressionShape expression
   ReturnStatement Nothing -> "return"
   ReturnStatement (Just expression) -> "return " <> expressionShape expression
+  BreakStatement -> "break"
+  ContinueStatement -> "continue"
   InvalidStatement -> "invalid"
 
 declarationShape :: Located Declaration -> Text
@@ -180,6 +198,13 @@ expressionShape (Located _ expression) = case expression of
   CallExpression callee arguments ->
     expressionShape callee <> "(" <> Text.intercalate "," (map expressionShape arguments) <> ")"
   MemberExpression target member -> expressionShape target <> "." <> locatedValue member
+  IndexExpression target index -> expressionShape target <> "[" <> expressionShape index <> "]"
+  TryExpression target -> expressionShape target <> "?"
+  AwaitExpression target -> expressionShape target <> ".await"
   BlockExpression _ -> "block"
   IfExpression{} -> "if"
+  MatchExpression{} -> "match"
+  WhileExpression{} -> "while"
+  LoopExpression _ -> "loop"
+  ForExpression{} -> "for"
   InvalidExpression -> "invalid"

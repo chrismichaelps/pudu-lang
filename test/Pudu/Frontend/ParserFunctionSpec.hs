@@ -9,7 +9,10 @@ import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.State (peekKind, runParser)
 import Pudu.Frontend.Syntax
   ( Block (..)
+  , Constraint (..)
   , Declaration (..)
+  , Function (..)
+  , TypeParam (..)
   , Expression (..)
   , FunctionBody (..)
   , Literal (..)
@@ -33,7 +36,7 @@ parserFunctionProperties =
   , ("parameters admit types defaults and one trailing comma", testParameters)
   , ("bodies accept blocks and expression forms", testBodies)
   , ("missing bodies and malformed lists diagnose exactly", testRecovery)
-  , ("reserved generic syntax reports E1033 once and keeps parsing", testReservedGenerics)
+  , ("generic parameters bounds and where clauses parse", testGenerics)
   , ("long parameter lists stay linear while nested defaults share the budget", testHostileParameters)
   ]
 
@@ -90,17 +93,19 @@ testRecovery = do
     , remainingKind missingBody === EndOfFile
     ]
 
-testReservedGenerics :: IO Property
-testReservedGenerics = do
+testGenerics :: IO Property
+testGenerics = do
   typeParameters <- parse Private "fn map[T, U](value: T) -> U {}"
-  whereClause <- parse Private "fn sort(values: List) where T: Ord {}"
+  bounded <- parse Private "fn sort[T: Ord + Clone](values: List[T]) {}"
+  whereClause <- parse Private "fn store[T](value: T) where T: Send + Sync {}"
   pure $ conjoin
-    [ counterexample "type parameters" (codes typeParameters === ["E1033"])
-    , diagnosticOffsets typeParameters === [6]
-    , counterexample "the rest of the signature still parses"
-        (shape typeParameters === "private fn map(value:T)->U {}")
-    , counterexample "where clause" (codes whereClause === ["E1033"])
-    , shape whereClause === "private fn sort(values:List)->_ {}"
+    [ counterexample "type parameters"
+        (shape typeParameters === "private fn map[T,U](value:T)->U {}")
+    , counterexample "bounds"
+        (shape bounded === "private fn sort[T:Ord+Clone](values:List<T>)->_ {}")
+    , counterexample "where clause"
+        (shape whereClause === "private fn store[T](value:T)->_ where T:Send+Sync {}")
+    , codes whereClause === []
     ]
 
 testHostileParameters :: IO Property
@@ -117,7 +122,7 @@ testHostileParameters = do
 
 parameterCount :: Parsed -> Int
 parameterCount (Located _ declaration, _, _) = case declaration of
-  FunctionDeclaration _ _ _ parameters _ _ -> length parameters
+  FunctionDeclaration value -> length (functionParameters value)
   _ -> -1
 
 parse :: Visibility -> Text -> IO Parsed
@@ -142,17 +147,41 @@ spanOffsets (Located spanValue _, _, _) = (unOffset (spanStart spanValue), unOff
 
 shape :: Parsed -> Text
 shape (Located _ declaration, _, _) = case declaration of
-  FunctionDeclaration visibility asynchronous name parameters returnType body ->
+  FunctionDeclaration value ->
     Text.intercalate " "
-      [ visibilityText visibility <> (if asynchronous then " async" else Text.empty)
+      [ visibilityText (functionVisibility value)
+          <> (if functionAsync value then " async" else Text.empty)
       , "fn"
-      , locatedValue name
-          <> "(" <> Text.intercalate "," (map parameterShape parameters) <> ")"
-          <> "->" <> maybe "_" typeShape returnType
-      , bodyShape body
+      , locatedValue (functionName value)
+          <> typeParamShape (functionTypeParams value)
+          <> "(" <> Text.intercalate "," (map parameterShape (functionParameters value)) <> ")"
+          <> "->" <> maybe "_" typeShape (functionReturn value)
+          <> whereShape (functionConstraints value)
+      , maybe "none" bodyShape (functionBody value)
       ]
-  BindingDeclaration{} -> "binding"
-  InvalidDeclaration -> "invalid"
+  _ -> "other"
+
+typeParamShape :: [Located TypeParam] -> Text
+typeParamShape params
+  | null params = Text.empty
+  | otherwise = "[" <> Text.intercalate "," (map oneParam params) <> "]"
+ where
+  oneParam (Located _ value) =
+    locatedValue (typeParamName value)
+      <> boundsShape (typeParamBounds value)
+
+whereShape :: [Located Constraint] -> Text
+whereShape constraints
+  | null constraints = Text.empty
+  | otherwise = " where " <> Text.intercalate "," (map oneConstraint constraints)
+ where
+  oneConstraint (Located _ value) =
+    locatedValue (constraintSubject value) <> boundsShape (constraintBounds value)
+
+boundsShape :: [Located TypeSyntax] -> Text
+boundsShape bounds
+  | null bounds = Text.empty
+  | otherwise = ":" <> Text.intercalate "+" (map typeShape bounds)
 
 visibilityText :: Visibility -> Text
 visibilityText visibility = case visibility of

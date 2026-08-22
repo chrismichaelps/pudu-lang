@@ -42,7 +42,7 @@ data SymbolKind
   | SymLeftBracket | SymRightBracket
   | SymLeftBrace | SymRightBrace
   | SymComma | SymDot | SymColon | SymPipe
-  | SymAssign | SymThinArrow | SymQuestion
+  | SymAssign | SymFatArrow | SymThinArrow | SymQuestion
   | SymBang | SymMinus | SymAmpersand | SymStar | SymSlash | SymPercent | SymPlus
   | SymWrapMultiply | SymSaturatingMultiply
   | SymWrapAdd | SymWrapSubtract | SymSaturatingAdd | SymSaturatingSubtract

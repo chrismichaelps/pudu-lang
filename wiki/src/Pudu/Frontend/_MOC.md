@@ -11,7 +11,7 @@ tags: [moc, module, frontend]
 - [[Syntax]] — untyped recovery-capable surface API.
 - [[src/Pudu/Frontend/Syntax/_MOC|Syntax modules]] — located values, segmented names, and the recursive data-only tree.
 - [[Parser]] — public parsing boundary producing a recovered module and its diagnostics.
-- [[src/Pudu/Frontend/Parser/_MOC|Parser modules]] — strict bounded state plus name, type, expression, import, binding, block, function, and orchestration grammar.
+- [[src/Pudu/Frontend/Parser/_MOC|Parser modules]] — strict bounded state plus name, type, pattern, expression, import, binding, block, function, generic, type-declaration, trait, and orchestration grammar.
 
 ## Referenced by
 

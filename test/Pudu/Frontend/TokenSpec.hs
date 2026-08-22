@@ -9,6 +9,7 @@ import Pudu.Frontend.Token
       ( SymAssign
       , SymDot
       , SymEqual
+      , SymFatArrow
       , SymMinus
       , SymPlus
       , SymRangeExclusive
@@ -69,8 +70,8 @@ testSymbolVocabulary =
         [ symbolTexts === expectedSymbolTexts
         , property (length symbolTexts == length (nub symbolTexts))
         , property (all (\symbol -> symbolFromText (symbolText symbol) == Just symbol) allSymbols)
-        , map symbolFromText [".", "..", "..=", "-", "->", "=", "=="]
-            === map Just [SymDot, SymRangeExclusive, SymRangeInclusive, SymMinus, SymThinArrow, SymAssign, SymEqual]
+        , map symbolFromText [".", "..", "..=", "-", "->", "=", "==", "=>"]
+            === map Just [SymDot, SymRangeExclusive, SymRangeInclusive, SymMinus, SymThinArrow, SymAssign, SymEqual, SymFatArrow]
         ]
     )
 
@@ -173,7 +174,7 @@ expectedKeywordTexts =
 
 expectedSymbolTexts :: [Text]
 expectedSymbolTexts =
-  [ "(", ")", "[", "]", "{", "}", ",", ".", ":", "|", "=", "->", "?", "!", "-"
+  [ "(", ")", "[", "]", "{", "}", ",", ".", ":", "|", "=", "=>", "->", "?", "!", "-"
   , "&", "*", "/", "%", "+", "&*", "*|", "&+", "&-", "+|", "-|", "..", "..=", "<"
   , "<=", ">", ">=", "==", "!=", "&&", "||"
   ]
