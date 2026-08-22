@@ -8,10 +8,12 @@ module Pudu.Type.Env
   , freshVariable
   , inTypeScope
   , lookupField
+  , lookupOwnerVariants
   , lookupName
   , lookupVariant
   , recordExpression
   , report
+  , warn
   , resolveVariable
   , runChecker
   , setVariable
@@ -23,7 +25,7 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
-  , Severity (Error)
+  , Severity (..)
   , diagnostic
   , mkDiagnosticCode
   , sortDiagnostics
@@ -40,6 +42,7 @@ data DeclaredTypes = DeclaredTypes
   { declaredParams :: !(Map Text [Text])
   , declaredFields :: !(Map Text [(Text, Type)])
   , declaredVariants :: !(Map Text (Text, [Text], [Type]))
+  , declaredOwners :: !(Map Text [Text])
   , declaredAliases :: !(Map Text Type)
   }
   deriving stock (Eq, Show)
@@ -50,6 +53,7 @@ emptyDeclared =
     { declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredVariants = Map.empty
+    , declaredOwners = Map.empty
     , declaredAliases = Map.empty
     }
 
@@ -165,6 +169,12 @@ lookupField :: Text -> Checker (Maybe [(Text, Type)])
 lookupField name =
   Checker $ \state -> (Map.lookup name (declaredFields (stateDeclared state)), state)
 
+{-| Every variant a sum declares, in declaration order. Exhaustiveness reads it
+    to know what a match must still cover. -}
+lookupOwnerVariants :: Text -> Checker (Maybe [Text])
+lookupOwnerVariants owner =
+  Checker $ \state -> (Map.lookup owner (declaredOwners (stateDeclared state)), state)
+
 lookupVariant :: Text -> Checker (Maybe (Text, [Text], [Type]))
 lookupVariant name =
   Checker $ \state -> (Map.lookup name (declaredVariants (stateDeclared state)), state)
@@ -179,15 +189,23 @@ keyOf :: Span -> SpanKey
 keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
 
 report :: Text -> Span -> Text -> Maybe Text -> Checker ()
-report code spanValue message help =
-  case build code spanValue message help of
+report = emitWith Error
+
+{-| A warning does not gate compilation; it is how a rule that is advisory
+    rather than prohibitive reaches the reader. -}
+warn :: Text -> Span -> Text -> Maybe Text -> Checker ()
+warn = emitWith Warning
+
+emitWith :: Severity -> Text -> Span -> Text -> Maybe Text -> Checker ()
+emitWith severity code spanValue message help =
+  case build severity code spanValue message help of
     Nothing -> pure ()
     Just value ->
       Checker $ \state ->
         ((), state{stateDiagnosticsRev = value : stateDiagnosticsRev state})
 
-build :: Text -> Span -> Text -> Maybe Text -> Maybe Diagnostic
-build code spanValue message help = do
+build :: Severity -> Text -> Span -> Text -> Maybe Text -> Maybe Diagnostic
+build severity code spanValue message help = do
   validCode <- mkDiagnosticCode code
-  value <- diagnostic validCode Error spanValue message
+  value <- diagnostic validCode severity spanValue message
   pure (maybe value (`withHelp` value) help)

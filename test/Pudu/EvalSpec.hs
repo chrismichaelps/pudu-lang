@@ -220,7 +220,8 @@ testFailures = do
     , outOfRange === ["E7004"]
     , counterexample "typing rejects a mixed operand before evaluation"
         (mismatch === ["E3001"])
-    , counterexample "an unmatched value is a runtime failure" (noArm === ["E7005"])
+    , counterexample "an unmatched value is rejected before it can be evaluated"
+        (noArm === ["E5001"])
     ]
 
 evaluate :: Text -> IO Text

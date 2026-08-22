@@ -29,7 +29,7 @@ The exported signatures are the module header's export list.
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
-- Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
+- Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared. Coverage diagnostics use `E5xxx`, and a warning is available for rules that are advisory rather than prohibitive.
 
 ### Linkage
 

@@ -74,6 +74,7 @@ library
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Rule
     Pudu.Type.Env
+    Pudu.Type.Exhaust
     Pudu.Type.Formation
     Pudu.Type.Unify
     Pudu.Type.Value

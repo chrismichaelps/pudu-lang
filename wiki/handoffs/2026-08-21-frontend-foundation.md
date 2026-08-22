@@ -98,6 +98,8 @@ tags: [handoff]
 
 - [Role: Shadow → Forensic Guardian] Closed three gaps the typed REPL exposed: the wired-in `Option` and `Result` had no constructors, generic sums did not instantiate in patterns, and traits had no dispatch. `Some`/`None`/`Ok`/`Err` now exist in resolution, typing, and evaluation; `?` unwraps a `Result` and propagates its failure; and `value.method()` finds an implementation's method, inherits trait defaults, and reads `Self` as the implementing type. Development and `-O2` suites pass 168x200, warning-clean.
 
+- [Role: Shadow → Forensic Guardian] Implemented [[Type Exhaust]]: a match over a closed sum or `Bool` must cover every constructor, an open domain needs an irrefutable arm, a guarded arm never counts toward coverage, and an arm after an irrefutable one warns. The check moved another defect earlier — an unmatched value that used to fail at run time is now refused at compile time. Development and `-O2` suites pass 169x200, warning-clean.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.

@@ -41,7 +41,7 @@ evaluateModule :: Module -> EvalOutcome
 - Arguments bind left to right; a parameter with no argument evaluates its default in the environment the earlier parameters already extended, matching the declared evaluation order.
 - Assignment writes the binding where it was declared rather than creating a new one in the innermost frame.
 - Recursion and iteration are bounded. Exceeding either reports `E7002` rather than exhausting the host, which keeps an interactive session usable after a runaway program.
-- Runtime failures are ordinary diagnostics: `E7001` shape and definedness, `E7002` limits, `E7003` arity, `E7004` domain errors such as division by zero and index range, `E7005` no matching arm, `E7006` a jump outside a loop.
+- Runtime failures are ordinary diagnostics: `E7001` shape and definedness, `E7002` limits, `E7003` arity, `E7004` domain errors such as division by zero and index range, `E7005` no matching arm — a defensive path once exhaustiveness checking runs, but still reported rather than crashing — `E7006` a jump outside a loop.
 
 ### Linkage
 

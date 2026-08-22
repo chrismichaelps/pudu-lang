@@ -33,6 +33,7 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - Inference is local and bidirectional, matching [[architecture/SEMANTICS]]'s inference boundary: an absent annotation becomes a fresh variable the body solves, and no caller is ever inspected to type a callee.
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
+- A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.

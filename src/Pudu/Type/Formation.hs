@@ -78,11 +78,18 @@ builtinVariants =
     , ("Err", ("Result", ["T", "E"], [RigidType "E"]))
     ]
 
+builtinOwners :: Map Text [Text]
+builtinOwners = Map.fromList [("Option", ["Some", "None"]), ("Result", ["Ok", "Err"])]
+
 {-| Collect what every type declaration contributes before any body is checked,
     so a declaration may refer to one that appears later in the file. -}
 collectDeclared :: [Located Declaration] -> Checker DeclaredTypes
 collectDeclared declarations = do
-  let shells = (foldr addShell emptyDeclared declarations){declaredVariants = builtinVariants}
+  let shells =
+        (foldr addShell emptyDeclared declarations)
+          { declaredVariants = builtinVariants
+          , declaredOwners = builtinOwners
+          }
   foldCollect shells declarations
 
 addShell :: Located Declaration -> DeclaredTypes -> DeclaredTypes
@@ -116,7 +123,11 @@ collectOne declared (Located _ declaration) = case declaration of
         pure declared{declaredFields = Map.insert name formed (declaredFields declared)}
       SumDefinition variants -> do
         entries <- mapM (formVariant declared rigid name) variants
-        pure declared{declaredVariants = insertAll entries (declaredVariants declared)}
+        pure
+          declared
+            { declaredVariants = insertAll entries (declaredVariants declared)
+            , declaredOwners = Map.insert name (map fst entries) (declaredOwners declared)
+            }
       AliasDefinition aliased -> do
         formed <- formType declared rigid aliased
         pure declared{declaredAliases = Map.insert name formed (declaredAliases declared)}

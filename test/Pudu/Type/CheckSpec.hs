@@ -23,6 +23,7 @@ typeProperties =
   , ("wired-in Option and Result carry their constructors", testPreludeData)
   , ("? unwraps a Result inside a Result-returning function", testTry)
   , ("trait methods dispatch on the receiver type", testTraits)
+  , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -328,6 +329,68 @@ testTraits = do
     , counterexample "an unknown method is reported" (unknownMethod === ["E3005"])
     , counterexample "Self reads the implementing type's fields" (selfFields === [])
     , counterexample "the receiver is already applied" (methodType === "fn() -> Str")
+    ]
+
+colorProgram :: [Text]
+colorProgram = ["module M", "type Color = | Red | Green | Blue"]
+
+testExhaustiveness :: IO Property
+testExhaustiveness = do
+  complete <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case Green => 2"
+    , "    case Blue => 3"
+    , "  }"
+    , "}"
+    ])
+  missing <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case Green => 2"
+    , "  }"
+    , "}"
+    ])
+  wildcard <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case _ => 0"
+    , "  }"
+    , "}"
+    ])
+  guarded <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case Green => 2"
+    , "    case other if true => 3"
+    , "  }"
+    , "}"
+    ])
+  option <- codes ["module M", "fn run(value: Option[Int]) -> Int { match value { case Some(v) => v } }"]
+  openDomain <- codes ["module M", "fn run(value: Int) -> Int { match value { case 1 => 1 } }"]
+  unreachable <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case _ => 0"
+    , "    case Red => 1"
+    , "  }"
+    , "}"
+    ])
+  payloadTested <- codes ["module M", "fn run(value: Option[Int]) -> Int { match value { case Some(1) => 1 case None => 0 } }"]
+  pure $ conjoin
+    [ counterexample "every constructor covered" (complete === [])
+    , counterexample "a missing constructor is reported" (missing === ["E5001"])
+    , counterexample "a wildcard covers the rest" (wildcard === [])
+    , counterexample "a guarded arm does not cover" (guarded === ["E5001"])
+    , counterexample "Option must cover None" (option === ["E5001"])
+    , counterexample "an open domain needs a wildcard" (openDomain === ["E5001"])
+    , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
+    , counterexample "a tested payload does not cover its constructor"
+        (payloadTested === ["E5001"])
     ]
 
 testRecordedTypes :: IO Property

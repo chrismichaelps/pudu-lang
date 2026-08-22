@@ -54,6 +54,7 @@ import Pudu.Type.Check.Rule
   , unaryType
   )
 import Pudu.Type.Check.Method (declareMethods, implAliases, traitTable)
+import Pudu.Type.Exhaust (checkExhaustive)
 import Pudu.Type.Formation
   ( collectDeclared
   , declaredParameterType
@@ -364,7 +365,9 @@ inferExpression declared rigid spanValue expression = case expression of
         unify spanValue thenType elseType
   MatchExpression scrutinee arms -> do
     subjectType <- checkExpression declared rigid scrutinee
-    checkArms declared rigid spanValue subjectType arms
+    result <- checkArms declared rigid spanValue subjectType arms
+    checkExhaustive spanValue subjectType arms
+    pure result
   WhileExpression condition body -> do
     conditionType <- checkExpression declared rigid condition
     _ <- unify (locatedSpan condition) boolType conditionType
