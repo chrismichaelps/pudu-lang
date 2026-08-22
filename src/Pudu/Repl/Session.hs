@@ -10,6 +10,7 @@ module Pudu.Repl.Session
   , emptySession
   , loadModule
   , sessionDeclaredNames
+  , sessionVisibleNames
   , sessionExports
   , submitEntry
   ) where
@@ -24,7 +25,7 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..))
-import Pudu.Semantic (Resolution (..), Symbol (..), moduleSymbolNames)
+import Pudu.Semantic (Resolution (..), Symbol (..), boundSymbolNames, moduleSymbolNames)
 import Pudu.Source (Source, SourceName (SourceName), newSource, spanEnd, unOffset)
 
 {-| @Repl.Session.Loaded — a file compiled as the session context -}
@@ -242,6 +243,12 @@ sessionExports resolution = map symbolName (resolutionExports resolution)
 sessionDeclaredNames :: Resolution -> [Text]
 sessionDeclaredNames resolution =
   filter (/= sessionFunction) (moduleSymbolNames resolution)
+
+{-| Every name the reader can type at the prompt, including the locals their
+    `let` and `var` entries bound. -}
+sessionVisibleNames :: Resolution -> [Text]
+sessionVisibleNames resolution =
+  filter (/= sessionFunction) (boundSymbolNames resolution)
 
 {-| Summarize the context one line per entry. A multi-line entry shows its
     first line with an ellipsis rather than replaying its whole body. -}

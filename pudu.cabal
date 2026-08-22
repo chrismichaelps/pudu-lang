@@ -64,6 +64,7 @@ library
     Pudu.Frontend.Token
     Pudu.Repl
     Pudu.Repl.Command
+    Pudu.Repl.Complete
     Pudu.Repl.Outline
     Pudu.Repl.Session
     Pudu.Semantic
@@ -77,6 +78,8 @@ library
     base >=4.20 && <4.23,
     containers >=0.6 && <0.9,
     directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    haskeline >=0.8 && <0.9,
     text >=2.1 && <2.2
 
 executable pudu

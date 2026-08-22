@@ -41,12 +41,15 @@ runRepl :: ReplOptions -> IO ()
 - An entry that is still open keeps reading. Continuation ends at a closing `}` that balances the entry or at a blank line; the blank line is what lets a form whose next line begins with `|`, `.`, or `?` be entered without a lookahead the prompt cannot perform. `:{` and `:}` bracket a block explicitly.
 - Diagnostics are reported against the line the reader typed, never against the generated preamble, using [[Diagnostic Render]]'s interactive configuration.
 - Colour is a caller decision passed in from the entry point; the session never inspects the terminal itself.
+- The line reader provides editing, history, and completion. History is kept in `.puduci_history` in the reader's home directory, and Tab completion is answered by [[Repl Complete]] from a snapshot of the session's names refreshed after each accepted entry.
+- Ctrl-C abandons the line being typed and returns to the prompt with the session untouched, so an interrupt costs a line rather than a session. End of input leaves cleanly.
+- The session value stays pure and threaded through the loop; a reference to it exists only so completion can read what the session declared, and completion never writes to it.
 - A failed entry changes nothing. The session advances only on acceptance, so a mistake cannot leave a half-defined context behind.
 - `:type` reports the runtime shape the evaluator produced and says that static typing enters a later slice, rather than inventing a type it cannot know.
 
 ### Linkage
 
-- **Requires:** [[Repl Session]], [[Repl Command]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]].
+- **Requires:** [[Repl Session]], [[Repl Command]], [[Repl Complete]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]].
 - **Consumed by:** the `pudu` executable.
 
 ## Algorithm
@@ -71,11 +74,12 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 
 - **Q:** Should the session evaluate entries, or only check them? **A:** Evaluate. _Rationale:_ a session that answers `3` to `1 + 2` is how a language gets exercised; a checker that prints nothing teaches nothing. _Rejected:_ a check-only prompt until typing exists.
 - **Q:** Where does session state live? **A:** In [[Repl Session]], threaded through the loop. _Rationale:_ pure state makes the session's behaviour testable without a terminal, and it is what lets a rejected entry leave nothing behind. _Rejected:_ a mutable reference; state hidden in the IO loop.
+- **Q:** Where does completion get its names? **A:** From a snapshot refreshed after each accepted entry, not from the compiler on every keystroke. _Rationale:_ Tab must be instant, and the loop has already compiled the session it would otherwise recompile. _Rejected:_ compiling inside the completion callback; a fixed keyword-only list, which would never offer what the reader just defined.
 - **Q:** How does a multi-line form end without lookahead? **A:** At a balancing `}` or a blank line. _Rationale:_ brace-terminated forms end naturally, and the blank line covers the leading-`|` and leading-`.` continuations the language admits. _Rejected:_ peeking the next line, which would print a prompt for input that may not be needed; requiring `:{` for every multi-line form.
 
 ## Variants
 
-- Line editing and history need a terminal library; the loop is shaped so that the reader can be replaced without touching the session.
+- The reader is replaceable without touching the session: an editor front end or a protocol server can drive the same submission call.
 
 ## Referenced by
 

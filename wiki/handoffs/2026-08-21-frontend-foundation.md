@@ -89,6 +89,8 @@ tags: [handoff]
 - [Role: Architect → Shadow] Opened the execution and tooling slice: an evaluator so the language can be run before a backend exists, a source-quoting diagnostic renderer, and `puduci`, the interactive session.
 - [Role: Shadow → Forensic Guardian] Implemented [[Diagnostic Render]], [[Evaluator]] with its four submodules, [[Pudu REPL]] with [[Repl Session]], [[Repl Command]], and [[Repl Outline]], and the [[Pudu CLI]]. Writing the evaluator's tests exposed three real defects — `return` and `break` were swallowed by nested blocks, and tuple expressions were missing from the grammar entirely — all three fixed here. Development and `-O2` suites pass 152x200.
 
+- [Role: Shadow → Forensic Guardian] Added line editing, persistent history, Ctrl-C line cancellation, and Tab completion to `puduci` through [[Repl Complete]]. Completion covers colon commands, filenames after `:load`, the keyword vocabulary, wired-in and prelude names, and whatever the session declared or bound. Verified in a real terminal over a pseudo-terminal as well as by the pure completion properties; development and `-O2` suites pass 153x200.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -96,7 +98,7 @@ tags: [handoff]
 - Tokens preserve exact lexemes and leading trivia; invalid input stays in the stream.
 - Recovery AST is never exposed as a compilable module when errors exist.
 - First parser slice covers module/import/binding/function/block/literal/name/unary/binary/call/member/return/if constructs.
-- The interactive session is named `puduci` and prompts with `puduci> `. Session state is pure and lives outside the IO loop, so a rejected entry leaves nothing behind.
+- The interactive session is named `puduci` and prompts with `puduci> `. Its completion names come from a snapshot refreshed after each accepted entry, never from compiling inside a keystroke. Session state is pure and lives outside the IO loop, so a rejected entry leaves nothing behind.
 - Evaluation exists before typing and before a backend. Its arithmetic is exact rather than width-dependent, and it says so; typing refines it rather than contradicting it.
 - Wired-in types and the implicit prelude are separate scope layers, following Haskell: primitives cannot be removed, prelude names can be shadowed or replaced by an explicit `import Core.Prelude`.
 - Statements are delimited by line breaks and braces. Continuation is decided from the operator token's own leading trivia; no terminator token is ever synthesized and no semicolon enters the grammar.

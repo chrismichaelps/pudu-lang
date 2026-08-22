@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-21 · [[Pudu REPL]] and [[Repl Complete]] · add line editing, persistent history, Ctrl-C line cancellation, and Tab completion over commands, filenames, keywords, wired-in types, prelude names, and session bindings · risk MED · depth MEDIUM→MEDIUM · issue #3
 - 2026-08-21 · [[Pudu REPL]], [[Repl Session]], [[Repl Command]], [[Repl Outline]], and [[Pudu CLI]] · establish the `puduci` interactive session with persistent context, multi-line entry, colon commands, file loading, and the `pudu` executable · risk MED · depth n/a→MEDIUM · issue #3
 - 2026-08-21 · [[Evaluator]], [[Eval Value]], [[Eval Env]], [[Eval Match]], and [[Eval Operator]] · establish tree-walking evaluation with unwinding control flow, total pattern matching, bounded recursion and iteration, and `E7xxx` runtime diagnostics · risk HIGH · depth n/a→DEEP · issue #3
 - 2026-08-21 · [[Diagnostic Render]] · establish source-quoting diagnostic rendering with carets, related notes, help, and an interactive line mapping · risk MED · depth n/a→MEDIUM · issue #3

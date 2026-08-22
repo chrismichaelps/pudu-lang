@@ -11,6 +11,7 @@ import Pudu.Diagnostic.Render
   )
 import Pudu.Eval.Value (renderValue)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
+import Pudu.Repl.Complete (CompletionSource (..), completionsFor, wantsFilename)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -18,6 +19,7 @@ import Pudu.Repl.Session
   , contextSummary
   , emptySession
   , inspectSession
+  , sessionDeclaredNames
   , sessionExports
   , submitEntry
   )
@@ -31,6 +33,7 @@ replProperties =
   , ("a rejected entry leaves the session unchanged", testRejection)
   , ("diagnostics are reported against the typed line", testInteractiveLocation)
   , ("inspection reports the session context without changing it", testInspection)
+  , ("completion offers commands paths and session names", testCompletion)
   ]
 
 testCommandParsing :: IO Property
@@ -118,6 +121,35 @@ testInspection = do
     [ counterexample "inspection is clean" (map codeOf diagnostics === [])
     , maybe [] sessionExports resolution === ["shown"]
     , counterexample "inspection did not disturb the session" (valueOf after === "1")
+    ]
+
+testCompletion :: IO Property
+testCompletion = do
+  declared <- submit emptySession "fn measure(n: Int) -> Int { n }"
+  (resolution, _) <- inspectSession (resultSession declared)
+  let source = CompletionSource{sourceSessionNames = maybe [] sessionDeclaredNames resolution}
+      empty = CompletionSource{sourceSessionNames = []}
+  pure $ conjoin
+    [ counterexample "commands complete at the start of a line"
+        (completionsFor empty Text.empty ":q" === [":quit"])
+    , counterexample "a colon later in the line is not a command"
+        (completionsFor empty "value " ":q" === [])
+    , counterexample "keywords complete"
+        (completionsFor empty Text.empty "impo" === ["import"])
+    , counterexample "wired-in types complete"
+        (completionsFor empty Text.empty "Int1" === ["Int128", "Int16"])
+    , counterexample "prelude names complete"
+        (completionsFor empty Text.empty "Iterat" === ["Iterator"])
+    , counterexample "session declarations complete"
+        (completionsFor source Text.empty "meas" === ["measure"])
+    , counterexample "an unknown prefix offers nothing"
+        (completionsFor source Text.empty "zzz" === [])
+    , counterexample "a filename is wanted after :load"
+        (property (wantsFilename ":load "))
+    , counterexample "a filename is not wanted before the space"
+        (property (not (wantsFilename ":load")))
+    , counterexample "a filename is not wanted for other commands"
+        (property (not (wantsFilename ":type ")))
     ]
 
 submit :: Session -> Text -> IO EntryResult

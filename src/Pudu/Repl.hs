@@ -7,6 +7,8 @@ module Pudu.Repl
   ) where
 
 import Control.Monad (unless)
+import Control.Monad.IO.Class (liftIO)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -24,6 +26,12 @@ import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
 import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
 import Pudu.Repl.Command (Command (..), Entry (..), commandHelp, parseEntry)
+import Pudu.Repl.Complete
+  ( CompletionSource (..)
+  , completionsFor
+  , isNameCharacter
+  , wantsFilename
+  )
 import Pudu.Repl.Outline (outlineBlock)
 import Pudu.Repl.Session
   ( EntryResult (..)
@@ -34,20 +42,28 @@ import Pudu.Repl.Session
   , emptySession
   , loadModule
   , sessionDeclaredNames
+  , sessionVisibleNames
   , sessionExports
   , submitEntry
   )
 import Pudu.Source (SourceName (SourceName), newSource)
 import System.Directory (doesFileExist)
-import System.IO
-  ( BufferMode (LineBuffering)
-  , hFlush
-  , hSetBuffering
-  , hSetEncoding
-  , isEOF
-  , stdout
-  , utf8
+import System.Console.Haskeline
+  ( Completion (..)
+  , CompletionFunc
+  , InputT
+  , Settings (..)
+  , completeFilename
+  , defaultSettings
+  , getInputLine
+  , handleInterrupt
+  , outputStrLn
+  , runInputT
+  , withInterrupt
   )
+import System.Directory (getHomeDirectory)
+import System.FilePath ((</>))
+import System.IO (BufferMode (LineBuffering), hSetBuffering, hSetEncoding, stdout, utf8)
 
 {-| @Repl.Options — everything the caller decides before the loop starts -}
 data ReplOptions = ReplOptions
@@ -71,9 +87,11 @@ prompt = "puduci> "
 continuationPrompt :: Text
 continuationPrompt = "puduci| "
 
-{-| Run the session until the reader quits or input ends. State is threaded
-    explicitly; nothing here is global, so a session is reproducible from its
-    inputs alone. -}
+{-| Run the session until the reader quits or input ends.
+
+    The session value itself stays pure and is threaded through the loop. A
+    reference to it is kept only so completion can see what the session has
+    declared; completion never writes to it. -}
 runRepl :: ReplOptions -> IO ()
 runRepl options = do
   hSetEncoding stdout utf8
@@ -82,24 +100,89 @@ runRepl options = do
   session <- case replInitialLoad options of
     Nothing -> pure emptySession
     Just path -> performLoad options emptySession path
-  loop options session
+  visible <- newIORef =<< nameSourceFor session
+  settings <- sessionSettings visible
+  runInputT settings (withInterrupt (loop options visible session))
 
-loop :: ReplOptions -> Session -> IO ()
-loop options session = do
-  line <- readEntry prompt
-  case line of
-    Nothing -> TextIO.putStrLn "Leaving puduci."
-    Just raw -> case parseEntry raw of
-      BlankEntry -> loop options session
-      CommandEntry command -> do
-        outcome <- runCommand options session command
-        case outcome of
-          Nothing -> TextIO.putStrLn "Leaving puduci."
-          Just next -> loop options next
-      SourceEntry text -> do
-        complete <- readContinuation text
-        next <- runSource options session complete
-        loop options next
+{-| History lives beside the reader's other tool history, and completion is
+    session-aware. -}
+sessionSettings :: IORef CompletionSource -> IO (Settings IO)
+sessionSettings visible = do
+  home <- getHomeDirectory
+  pure
+    (defaultSettings :: Settings IO)
+      { historyFile = Just (home </> ".puduci_history")
+      , autoAddHistory = True
+      , complete = sessionCompletion visible
+      }
+
+{-| Complete a colon command at the start of a line, a filename after a command
+    that takes one, and otherwise a name the session can see. -}
+sessionCompletion :: IORef CompletionSource -> CompletionFunc IO
+sessionCompletion visible (leftReversed, right) = do
+  let before = Text.pack (reverse leftReversed)
+      word = Text.takeWhileEnd completionCharacter before
+      prefix = Text.dropEnd (Text.length word) before
+  if wantsFilename prefix
+    then completeFilename (leftReversed, right)
+    else do
+      source <- readIORef visible
+      let matches = completionsFor source prefix word
+          finished = Text.isPrefixOf ":" word
+      pure (drop (Text.length word) leftReversed, map (toCompletion finished) matches)
+
+completionCharacter :: Char -> Bool
+completionCharacter character = isNameCharacter character || character == ':'
+
+{-| A completed command is finished, so a space follows it and its argument can
+    be typed straight away. A completed name is not: `measure` is usually
+    followed by `(`, and an inserted space would have to be deleted. -}
+toCompletion :: Bool -> Text -> Completion
+toCompletion finished value =
+  Completion
+    { replacement = Text.unpack value
+    , display = Text.unpack value
+    , isFinished = finished
+    }
+
+{-| The names completion offers: whatever the session context declares. -}
+nameSourceFor :: Session -> IO CompletionSource
+nameSourceFor session = do
+  (resolution, _) <- inspectSession session
+  pure CompletionSource{sourceSessionNames = maybe [] sessionVisibleNames resolution}
+
+loop :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
+loop options visible session =
+  handleInterrupt (interrupted options visible session) $ do
+    line <- readEntry prompt
+    case line of
+      Nothing -> say "Leaving puduci."
+      Just raw -> case parseEntry raw of
+        BlankEntry -> loop options visible session
+        CommandEntry command -> do
+          outcome <- runCommand options session command
+          case outcome of
+            Nothing -> say "Leaving puduci."
+            Just next -> continueWith options visible next
+        SourceEntry text -> do
+          whole <- readContinuation text
+          next <- runSource options session whole
+          continueWith options visible next
+
+{-| Ctrl-C abandons the line being typed and returns to the prompt with the
+    session untouched, so an interrupt costs a line rather than a session. -}
+interrupted :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
+interrupted options visible session = do
+  say "interrupted"
+  loop options visible session
+
+continueWith :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
+continueWith options visible session = do
+  liftIO (writeIORef visible =<< nameSourceFor session)
+  loop options visible session
+
+say :: Text -> InputT IO ()
+say = outputStrLn . Text.unpack
 
 {-| A construct that is still open keeps reading at the continuation prompt.
 
@@ -107,13 +190,13 @@ loop options session = do
     entry or at a blank line. The blank line is what lets a form whose next line
     starts with `|`, `.`, or `?` — a sum type or a fluent chain — be entered
     without a lookahead the prompt cannot perform. -}
-readContinuation :: Text -> IO Text
+readContinuation :: Text -> InputT IO Text
 readContinuation first = do
-  complete <- isComplete first
-  if complete then pure first else continue first
+  complete <- liftIO (isComplete first)
+  if complete then pure first else continueEntry first
 
-continue :: Text -> IO Text
-continue accumulated = do
+continueEntry :: Text -> InputT IO Text
+continueEntry accumulated = do
   more <- readEntry continuationPrompt
   case more of
     Nothing -> pure accumulated
@@ -121,22 +204,16 @@ continue accumulated = do
       | Text.null (Text.strip next) -> pure accumulated
       | otherwise -> do
           let extended = accumulated <> "\n" <> next
-          complete <- isComplete extended
-          if complete && closesBlock next then pure extended else continue extended
+          complete <- liftIO (isComplete extended)
+          if complete && closesBlock next then pure extended else continueEntry extended
 
 {-| A line whose last token is `}` finishes a braced construct, so the reader
     does not have to add a blank line after every function or match. -}
 closesBlock :: Text -> Bool
 closesBlock line = Text.isSuffixOf "}" (Text.stripEnd line)
 
-readEntry :: Text -> IO (Maybe Text)
-readEntry shown = do
-  TextIO.putStr shown
-  hFlush stdout
-  ended <- isEOF
-  if ended
-    then TextIO.putStrLn "" >> pure Nothing
-    else Just . Text.pack <$> getLine
+readEntry :: Text -> InputT IO (Maybe Text)
+readEntry shown = fmap Text.pack <$> getInputLine (Text.unpack shown)
 
 {-| An entry is complete when every bracket it opened is closed. The check runs
     over real tokens, so a brace inside a string or a comment can never leave
@@ -175,36 +252,37 @@ openDepth = foldl step 0
       | symbolText symbol `elem` [")", "]", "}"] -> max 0 (total - 1)
     _ -> total
 
-runCommand :: ReplOptions -> Session -> Command -> IO (Maybe Session)
+runCommand :: ReplOptions -> Session -> Command -> InputT IO (Maybe Session)
 runCommand options session command = case command of
   Quit -> pure Nothing
-  Help -> showHelp >> pure (Just session)
-  Reset -> TextIO.putStrLn "session cleared" >> pure (Just emptySession)
+  Help -> liftIO showHelp >> pure (Just session)
+  Reset -> say "session cleared" >> pure (Just emptySession)
   Load path
     | Text.null (Text.strip path) -> do
-        TextIO.putStrLn "usage: :load <file>"
+        say "usage: :load <file>"
         pure (Just session)
-    | otherwise -> Just <$> performLoad options session (Text.unpack (Text.strip path))
+    | otherwise ->
+        Just <$> liftIO (performLoad options session (Text.unpack (Text.strip path)))
   Reload -> case sessionLoaded session of
-    Nothing -> TextIO.putStrLn "no file is loaded" >> pure (Just session)
-    Just loaded -> Just <$> performLoad options session (loadedPath loaded)
-  Browse -> browseSession options session >> pure (Just session)
+    Nothing -> say "no file is loaded" >> pure (Just session)
+    Just loaded -> Just <$> liftIO (performLoad options session (loadedPath loaded))
+  Browse -> liftIO (browseSession options session) >> pure (Just session)
   ShowContext -> do
     let entries = contextSummary session
     if null entries
-      then TextIO.putStrLn "the session is empty"
-      else mapM_ TextIO.putStrLn entries
+      then say "the session is empty"
+      else mapM_ say entries
     pure (Just session)
-  ShowType expression -> showType options session expression >> pure (Just session)
-  ShowTokens text -> showTokens text >> pure (Just session)
-  ShowAst text -> showAst options text >> pure (Just session)
+  ShowType expression -> liftIO (showType options session expression) >> pure (Just session)
+  ShowTokens text -> liftIO (showTokens text) >> pure (Just session)
+  ShowAst text -> liftIO (showAst options text) >> pure (Just session)
   BeginBlock -> Just <$> readBlock options session
   EndBlock -> do
-    TextIO.putStrLn "no multi-line block is open"
+    say "no multi-line block is open"
     pure (Just session)
   Unknown name -> do
-    TextIO.putStrLn ("unknown command ':" <> name <> "'")
-    TextIO.putStrLn "use :? for help."
+    say ("unknown command ':" <> name <> "'")
+    say "use :? for help."
     pure (Just session)
 
 showHelp :: IO ()
@@ -218,10 +296,10 @@ showHelp = do
     TextIO.putStrLn ("   " <> pad name <> description)
   pad name = name <> Text.replicate (max 1 (28 - Text.length name)) " "
 
-runSource :: ReplOptions -> Session -> Text -> IO Session
+runSource :: ReplOptions -> Session -> Text -> InputT IO Session
 runSource options session text = do
-  result <- submitEntry session text
-  reportEntry options result
+  result <- liftIO (submitEntry session text)
+  liftIO (reportEntry options result)
   pure (resultSession result)
 
 reportEntry :: ReplOptions -> EntryResult -> IO ()
@@ -237,7 +315,7 @@ reportEntry options result = do
 
 {-| `:{` reads until `:}`, so a declaration can be pasted or typed across lines
     even when its brackets balance on an early line. -}
-readBlock :: ReplOptions -> Session -> IO Session
+readBlock :: ReplOptions -> Session -> InputT IO Session
 readBlock options session = collect []
  where
   collect gathered = do

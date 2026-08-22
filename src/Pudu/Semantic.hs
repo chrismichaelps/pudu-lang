@@ -6,6 +6,7 @@ module Pudu.Semantic
   , Symbol (..)
   , SymbolId (..)
   , SymbolOrigin (..)
+  , boundSymbolNames
   , moduleSymbolNames
   , resolveModule
   ) where
@@ -23,5 +24,17 @@ import Pudu.Semantic.Symbol
 {-| Names a module declared, whether exported or not. Tooling uses this to show
     what a context holds when nothing in it is public. -}
 moduleSymbolNames :: Resolution -> [Text]
-moduleSymbolNames resolution =
-  [symbolName symbol | symbol <- resolutionSymbols resolution, symbolOrigin symbol == ModuleOrigin]
+moduleSymbolNames resolution = namesWithOrigin resolution [ModuleOrigin]
+
+{-| Every name a reader could refer to from the top of a session: module
+    declarations, the variants they introduce, and local bindings. -}
+boundSymbolNames :: Resolution -> [Text]
+boundSymbolNames resolution =
+  namesWithOrigin resolution [ModuleOrigin, LocalOrigin, VariantOrigin]
+
+namesWithOrigin :: Resolution -> [SymbolOrigin] -> [Text]
+namesWithOrigin resolution origins =
+  [ symbolName symbol
+  | symbol <- resolutionSymbols resolution
+  , symbolOrigin symbol `elem` origins
+  ]
