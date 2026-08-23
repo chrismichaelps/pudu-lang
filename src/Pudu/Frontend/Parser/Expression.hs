@@ -487,6 +487,7 @@ operatorInfo :: SymbolKind -> Maybe (Text, Int, Bool)
 operatorInfo symbol = case symbol of
   SymAssign -> binary 0 True
   SymLogicalOr -> binary 1 False
+  SymPipe -> binary 1 False
   SymLogicalAnd -> binary 2 False
   SymEqual -> binary 3 False
   SymNotEqual -> binary 3 False
@@ -496,17 +497,20 @@ operatorInfo symbol = case symbol of
   SymGreaterEqual -> binary 4 False
   SymRangeExclusive -> binary 5 False
   SymRangeInclusive -> binary 5 False
-  SymPlus -> binary 6 False
-  SymMinus -> binary 6 False
-  SymWrapAdd -> binary 6 False
-  SymWrapSubtract -> binary 6 False
-  SymSaturatingAdd -> binary 6 False
-  SymSaturatingSubtract -> binary 6 False
-  SymStar -> binary 7 False
-  SymSlash -> binary 7 False
-  SymPercent -> binary 7 False
-  SymWrapMultiply -> binary 7 False
-  SymSaturatingMultiply -> binary 7 False
+  SymCaret -> binary 5 False
+  SymLeftShift -> binary 6 False
+  SymRightShift -> binary 6 False
+  SymPlus -> binary 7 False
+  SymMinus -> binary 7 False
+  SymWrapAdd -> binary 7 False
+  SymWrapSubtract -> binary 7 False
+  SymSaturatingAdd -> binary 7 False
+  SymSaturatingSubtract -> binary 7 False
+  SymStar -> binary 8 False
+  SymSlash -> binary 8 False
+  SymPercent -> binary 8 False
+  SymWrapMultiply -> binary 8 False
+  SymSaturatingMultiply -> binary 8 False
   _ -> Nothing
  where
   binary precedence rightAssociative = Just (symbolText symbol, precedence, rightAssociative)
@@ -566,7 +570,7 @@ invalidAtCurrent :: Parser (Located Expression)
 invalidAtCurrent = currentSpan >>= \spanValue -> pure (Located spanValue InvalidExpression)
 
 unaryOperators :: [SymbolKind]
-unaryOperators = [SymBang, SymMinus, SymAmpersand]
+unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde]
 
 isRecoveryBoundary :: TokenKind -> Bool
 isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}"]
