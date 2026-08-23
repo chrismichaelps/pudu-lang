@@ -26,7 +26,8 @@ import Pudu.Frontend.Syntax.Tree
   , Trait (..)
   , TypeParam (..)
   )
-import Control.Monad (unless)
+import Control.Monad (filterM, unless)
+import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -40,7 +41,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
-import Pudu.Type.Value (Scheme, Type (..), polytype, renderType)
+import Pudu.Type.Value (Scheme, Type (..), monotype, polytype, renderType)
 
 {-| Trait members by trait name, so an implementation can inherit the defaults
     it does not override. -}
@@ -204,19 +205,26 @@ boundName (Located _ syntax) = case syntax of
 
 {-| Find a method for a receiver: on a nominal type through its
     implementations, on a rigid parameter through the traits its bounds
-    declared. -}
-methodScheme :: Type -> Text -> Checker (Maybe Scheme)
-methodScheme receiver member = case receiver of
+    declared. When two or more bounds provide the same member, the lookup is
+    ambiguous and reports `E3013` once and returns an error scheme, so the
+    caller does not fall through to `rigidMethod` and report it a second
+    time. -}
+methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+methodScheme spanValue receiver member = case receiver of
   NominalType owner _ -> lookupName (owner <> "." <> member)
   RigidType name -> do
     bounds <- rigidBoundsOf name
-    firstMethod bounds
+    providers <- filterM provides bounds
+    case providers of
+      [] -> pure Nothing
+      [traitText] -> lookupName (traitText <> "." <> member)
+      _ -> do
+        report "E3013" spanValue
+          (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
+          (Just "disambiguate with a qualified call or remove a trait bound")
+        pure (Just (monotype ErrorType))
   _ -> pure Nothing
  where
-  firstMethod bounds = case bounds of
-    [] -> pure Nothing
-    traitText : rest -> do
-      found <- lookupName (traitText <> "." <> member)
-      case found of
-        Just scheme -> pure (Just scheme)
-        Nothing -> firstMethod rest
+  provides traitText = do
+    found <- lookupName (traitText <> "." <> member)
+    pure (case found of Nothing -> False; Just _ -> True)

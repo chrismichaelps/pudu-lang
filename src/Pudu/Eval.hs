@@ -30,7 +30,7 @@ import Pudu.Eval.Env
   )
 import Pudu.Eval.Match (literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
-import Pudu.Eval.Value (Closure (..), Value (..), renderValue, valueKind)
+import Pudu.Eval.Value (Builtin (..), Closure (..), Value (..), renderValue, valueKind)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
@@ -107,12 +107,14 @@ traitTable declarations =
     | Located _ (TraitDeclaration value) <- declarations
     ]
 
-{-| The wired-in sums' constructors exist without a declaration. A module that
-    declares its own is installed afterwards and therefore wins. -}
+{-| The wired-in sums' constructors and the prelude's builtin functions exist
+    without a declaration. A module that declares its own is installed
+    afterwards and therefore wins. -}
 installBuiltinConstructors :: Evaluator ()
-installBuiltinConstructors =
+installBuiltinConstructors = do
   mapM_ (\name -> bind name (VariantValue name []))
     ["Some", "None", "Ok", "Err"]
+  bind "panic" (BuiltinValue PanicBuiltin)
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
 installDeclaration traits (Located _ declaration) = case declaration of
@@ -318,7 +320,17 @@ evaluateCall spanValue callee arguments = do
   case target of
     FunctionValue closure -> callClosure closure values (Just spanValue)
     VariantValue name [] -> pure (VariantValue name values)
+    BuiltinValue PanicBuiltin -> callPanic spanValue values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+
+{-| `panic` stops evaluation with `E7007`, taking the caller's message when one
+    is supplied and a default otherwise, because a panic is a violated
+    invariant rather than a recoverable domain failure. -}
+callPanic :: Span -> [Value] -> Evaluator Value
+callPanic spanValue values =
+  case values of
+    [StrValue message] -> abortAt (Just spanValue) "E7007" message Nothing
+    _ -> abortAt (Just spanValue) "E7007" "panic" (Just "panic takes one string argument")
 
 {-| A field written without a value takes the binding with the field's own
     name, exactly as the record pattern's shorthand binds it. -}

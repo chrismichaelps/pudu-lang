@@ -214,6 +214,7 @@ testFailures = do
   outOfRange <- codesOf "(1, 2)[5]"
   mismatch <- codesOf "1 + true"
   noArm <- codesOf "match 9 { case 1 => 1 }"
+  panic <- codesOf "panic(\"boom\")"
   pure $ conjoin
     [ divisor === ["E7004"]
     , modulo === ["E7004"]
@@ -222,6 +223,8 @@ testFailures = do
         (mismatch === ["E3001"])
     , counterexample "an unmatched value is rejected before it can be evaluated"
         (noArm === ["E5001"])
+    , counterexample "panic stops evaluation with E7007"
+        (panic === ["E7007"])
     ]
 
 evaluate :: Text -> IO Text

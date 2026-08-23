@@ -1,6 +1,7 @@
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
-  ( Closure (..)
+  ( Builtin (..)
+  , Closure (..)
   , Value (..)
   , renderValue
   , valueKind
@@ -28,6 +29,14 @@ data Value
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
   | FunctionValue !Closure
+  | BuiltinValue !Builtin
+  deriving stock (Eq, Show)
+
+{-| A wired-in function the evaluator recognizes by name rather than by closure.
+    `panic` is the prelude's unrecoverable abort: it takes a message and stops
+    evaluation with `E7007`, matching [[architecture/SEMANTICS]]'s rule that
+    panics represent violated invariants, not recoverable domain failure. -}
+data Builtin = PanicBuiltin
   deriving stock (Eq, Show)
 
 {-| @Eval.Value.Closure — a callable function.
@@ -61,6 +70,7 @@ renderValue value = case value of
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
+  BuiltinValue PanicBuiltin -> "<builtin panic>"
  where
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
@@ -83,3 +93,4 @@ valueKind value = case value of
   RecordValue name _ -> name
   VariantValue name _ -> name
   FunctionValue _ -> "function"
+  BuiltinValue _ -> "builtin"

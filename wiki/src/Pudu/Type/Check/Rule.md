@@ -42,6 +42,7 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 ## Edge Cases
 
 - An unsolved receiver produces a fresh variable rather than a diagnostic, so a member access on a not-yet-known type is not prematurely rejected.
+- When two or more trait bounds provide the same member on a rigid receiver, the call is ambiguous and reports `E3013` rather than silently picking the first trait.
 
 ## Depth
 

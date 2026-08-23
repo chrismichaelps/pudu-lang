@@ -165,7 +165,7 @@ setDepth :: Int -> Evaluator ()
 setDepth depth = Evaluator $ \env -> Done () env{envDepth = depth}
 
 callLimit :: Int
-callLimit = 256
+callLimit = 4096
 
 abortAt :: Maybe Span -> Text -> Text -> Maybe Text -> Evaluator a
 abortAt spanValue code message help =

@@ -28,7 +28,7 @@ The exported signatures are the module header's export list.
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
-- A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
+- A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it. The compiler wires in `Float` as an alias for `Float64`, because [[grammar/pudu]] makes the alias transparent at the type level and a reader who writes `Float` expects the same type as `Float64`.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
 ### Linkage

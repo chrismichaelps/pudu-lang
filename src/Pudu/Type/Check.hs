@@ -39,10 +39,6 @@ import Pudu.Type.Env
   , lookupName
   , recordExpression
   , report
-  , rigidBoundsOf
-  , rigidSatisfies
-  , takeObligations
-  , implementsTrait
   , withRigidBounds
   , runChecker
   , withDeclared
@@ -325,7 +321,7 @@ checkCallee declared rigid located@(Located calleeSpan expression) = case expres
   MemberExpression target member -> do
     targetType <- checkExpression declared rigid target
     resolved <- zonk targetType
-    method <- methodScheme resolved (locatedValue member)
+    method <- methodScheme calleeSpan resolved (locatedValue member)
     case method of
       Nothing -> checkExpression declared rigid located
       Just scheme -> do

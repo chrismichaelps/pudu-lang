@@ -45,6 +45,7 @@ Direct structural recursion over the value or syntax shape; no caching, no mutat
 ## Edge Cases
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
+- The call depth limit is 4096, which is high enough for real recursive programs while still preventing stack overflow on infinite recursion.
 
 ## Depth
 
