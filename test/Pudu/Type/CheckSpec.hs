@@ -23,7 +23,9 @@ typeProperties =
   , ("wired-in Option and Result carry their constructors", testPreludeData)
   , ("? unwraps a Result inside a Result-returning function", testTry)
   , ("trait methods dispatch on the receiver type", testTraits)
+  , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
+  , ("trait bounds are proved at the call site", testBounds)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -331,6 +333,39 @@ testTraits = do
     , counterexample "the receiver is already applied" (methodType === "fn() -> Str")
     ]
 
+{-| A trait default body that calls another trait method on `self` must resolve
+    through the rigid `Self` bound, finding the method in the trait's own
+    member table. This covers the case where a default composes other trait
+    methods that the implementation inherits. -}
+defaultCallProgram :: [Text]
+defaultCallProgram =
+  [ "module M"
+  , "type Bot = { id: Int }"
+  , "trait Service {"
+  , "  fn id(self: &Self) -> Int"
+  , "  fn label(self: &Self) -> Str = \"bot\""
+  , "  fn report(self: &Self) -> Str { self.label() }"
+  , "}"
+  , "impl Service for Bot {"
+  , "  fn id(self: &Self) -> Int { self.id }"
+  , "}"
+  ]
+
+testTraitDefaultCalls :: IO Property
+testTraitDefaultCalls = do
+  defaultBody <- codes (defaultCallProgram <> ["fn run(b: Bot) -> Str { b.report() }"])
+  genericDispatch <- codes
+    (defaultCallProgram <> ["fn run[T: Service](value: T) -> Str { value.report() }"])
+  wrongResult <- codes (defaultCallProgram <> ["fn run(b: Bot) -> Int { b.report() }"])
+  pure $ conjoin
+    [ counterexample "a default body calls another trait method on Self"
+        (defaultBody === [])
+    , counterexample "generic dispatch through a default that calls a trait method"
+        (genericDispatch === [])
+    , counterexample "the default body's result is still checked"
+        (wrongResult === ["E3001"])
+    ]
+
 colorProgram :: [Text]
 colorProgram = ["module M", "type Color = | Red | Green | Blue"]
 
@@ -391,6 +426,43 @@ testExhaustiveness = do
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])
+    ]
+
+boundProgram :: [Text]
+boundProgram =
+  [ "module M"
+  , "type User = { name: Str }"
+  , "trait Show {"
+  , "  fn show(self: &Self) -> Str"
+  , "}"
+  , "impl Show for User {"
+  , "  fn show(self: &Self) -> Str { self.name }"
+  , "}"
+  , "fn display[T: Show](value: T) -> Str { value.show() }"
+  ]
+
+testBounds :: IO Property
+testBounds = do
+  satisfied <- codes (boundProgram <> ["fn run() -> Str { display(User{name: \"a\"}) }"])
+  unsatisfied <- codes (boundProgram <> ["fn run() -> Str { display(5) }"])
+  forwarded <- codes (boundProgram <> ["fn again[T: Show](value: T) -> Str { display(value) }"])
+  unbounded <- codes (boundProgram <> ["fn again[T](value: T) -> Str { display(value) }"])
+  whereClause <- codes (boundProgram <>
+    [ "fn again[T](value: T) -> Str where T: Show { display(value) }" ])
+  missingMethod <- codes
+    [ "module M"
+    , "trait Show { fn show(self: &Self) -> Str }"
+    , "fn display[T: Show](value: T) -> Str { value.missing() }"
+    ]
+  pure $ conjoin
+    [ counterexample "an implementing type satisfies the bound" (satisfied === [])
+    , counterexample "a type without the implementation is reported"
+        (unsatisfied === ["E3012"])
+    , counterexample "a bounded parameter forwards its bound" (forwarded === [])
+    , counterexample "an unbounded parameter cannot" (unbounded === ["E3012"])
+    , counterexample "a where clause carries the same bound" (whereClause === [])
+    , counterexample "a bound supplies only its own methods"
+        (missingMethod === ["E3005"])
     ]
 
 testRecordedTypes :: IO Property

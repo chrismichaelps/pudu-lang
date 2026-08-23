@@ -59,6 +59,7 @@ Collect declared shapes and signatures, then walk each declaration: a function b
 - A call with fewer arguments than parameters is accepted here because a parameter may declare a default; arity is only rejected when there are too many.
 - `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
 - `.await` currently passes its operand's type through, because task normalization belongs to the slice that introduces async execution.
+- A trait member body treats `Self` as a rigid parameter (added to the rigid list alongside the member's own type params), so `formType` produces `RigidType "Self"` rather than `NominalType "Self"`. This routes `self.method()` calls through `rigidMethod` and the trait bound installed by `selfBoundAsBound`, letting a default body call other trait methods on `self`. An impl member does not add `Self` to rigid: `Self` is aliased to the target nominal type through `implAliases`, so method calls resolve through the nominal path.
 
 ## Depth
 
