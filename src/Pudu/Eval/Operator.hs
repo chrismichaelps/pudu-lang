@@ -7,6 +7,7 @@ module Pudu.Eval.Operator
   , unwrapTry
   ) where
 
+import Data.Bits (complement, shiftL, shiftR, xor, (.|.))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
@@ -18,6 +19,7 @@ applyUnary spanValue operator value = case (operator, value) of
   ("-", IntValue number) -> pure (IntValue (negate number))
   ("-", FloatValue number) -> pure (FloatValue (negate number))
   ("!", BoolValue flag) -> pure (BoolValue (not flag))
+  ("~", IntValue number) -> pure (IntValue (complement number))
   ("&", _) -> pure value
   ("&mut", _) -> pure value
   _ ->
@@ -59,6 +61,10 @@ integerOperation spanValue operator left right = case operator of
       else pure (IntValue (rem left right))
   ".." -> pure (TupleValue (map IntValue [left .. right - 1]))
   "..=" -> pure (TupleValue (map IntValue [left .. right]))
+  "<<" -> pure (IntValue (shiftL left (fromInteger right)))
+  ">>" -> pure (IntValue (shiftR left (fromInteger right)))
+  "^" -> pure (IntValue (xor left right))
+  "|" -> pure (IntValue (left .|. right))
   _ -> comparisonOnly spanValue operator left right
 
 floatOperation :: Span -> Text -> Double -> Double -> Evaluator Value

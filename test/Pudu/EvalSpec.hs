@@ -31,6 +31,11 @@ testArithmetic = do
   negation <- evaluate "-(2 + 3)"
   newlineChar <- evaluate "'\\n'"
   quotedText <- evaluate "\"a\\nb\""
+  leftShift <- evaluate "1 << 4"
+  rightShift <- evaluate "64 >> 2"
+  bitwiseXor <- evaluate "6 ^ 3"
+  bitwiseOr <- evaluate "1 | 2"
+  bitwiseNot <- evaluate "~0"
   pure $ conjoin
     [ sums === "7"
     , precedence === "9"
@@ -42,6 +47,11 @@ testArithmetic = do
     , counterexample "a control character is escaped when shown"
         (newlineChar === "'\\n'")
     , quotedText === "\"a\\nb\""
+    , counterexample "left shift moves bits left" (leftShift === "16")
+    , counterexample "right shift moves bits right" (rightShift === "16")
+    , counterexample "xor sets bits in one operand only" (bitwiseXor === "5")
+    , counterexample "bitwise or unions bits" (bitwiseOr === "3")
+    , counterexample "complement of zero is negative one" (bitwiseNot === "-1")
     ]
 
 testBindings :: IO Property

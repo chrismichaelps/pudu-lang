@@ -153,7 +153,7 @@ for_expr         = "for", pattern, "in", expression, block ;
 
 ## Expression Grammar and Precedence
 
-From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; range `.. ..=`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||`; assignment; control expressions.
+From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut ~`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; shift `<< >>`; range and bitwise XOR `.. ..= ^`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||` and bitwise OR `|`; assignment; control expressions.
 
 - Assignment is right-associative. Every other admitted binary band is left-associative; semantic typing rejects operator chains whose intermediate result cannot serve as the next operand.
 - Assignment is a statement-like expression of type `()` and requires a mutable place.

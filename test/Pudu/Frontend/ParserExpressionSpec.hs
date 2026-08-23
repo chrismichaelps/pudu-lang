@@ -55,7 +55,7 @@ testPrecedence = do
 testBinaryVocabulary :: IO Property
 testBinaryVocabulary = do
   let operators = ["=", "||", "&&", "==", "!=", "<", "<=", ">", ">=", "..", "..=",
-        "+", "-", "&+", "&-", "+|", "-|", "*", "/", "%", "&*", "*|"]
+        "<<", ">>", "^", "|", "+", "-", "&+", "&-", "+|", "-|", "*", "/", "%", "&*", "*|"]
   results <- traverse (\operator -> parse ("a " <> operator <> " b")) operators
   pure (map validShape results === map (\operator -> "(a" <> operator <> "b)") operators)
 

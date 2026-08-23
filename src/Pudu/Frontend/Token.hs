@@ -88,6 +88,10 @@ data SymbolKind
   | SymSaturatingSubtract
   | SymRangeExclusive
   | SymRangeInclusive
+  | SymLeftShift
+  | SymRightShift
+  | SymCaret
+  | SymTilde
   | SymLess
   | SymLessEqual
   | SymGreater
@@ -212,6 +216,10 @@ symbolText symbol =
     SymSaturatingSubtract -> "-|"
     SymRangeExclusive -> ".."
     SymRangeInclusive -> "..="
+    SymLeftShift -> "<<"
+    SymRightShift -> ">>"
+    SymCaret -> "^"
+    SymTilde -> "~"
     SymLess -> "<"
     SymLessEqual -> "<="
     SymGreater -> ">"

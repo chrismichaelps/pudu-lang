@@ -47,6 +47,7 @@ data SymbolKind
   | SymWrapMultiply | SymSaturatingMultiply
   | SymWrapAdd | SymWrapSubtract | SymSaturatingAdd | SymSaturatingSubtract
   | SymRangeExclusive | SymRangeInclusive
+  | SymLeftShift | SymRightShift | SymCaret | SymTilde
   | SymLess | SymLessEqual | SymGreater | SymGreaterEqual
   | SymEqual | SymNotEqual | SymLogicalAnd | SymLogicalOr
   deriving stock (Eq, Ord, Show, Enum, Bounded)
@@ -120,7 +121,7 @@ symbolText :: SymbolKind -> Text
 
 - `with` and `scope` are reserved for structured concurrency and round-trip like every other keyword.
 - `Module`, `WITH`, empty text, prefixes, and whitespace-padded text are not keywords.
-- Ambiguous symbol prefixes remain distinct exact values: `.`, `..`, `..=`, `-`, `->`, `=`, and `==`.
+- Ambiguous symbol prefixes remain distinct exact values: `.`, `..`, `..=`, `-`, `->`, `=`, `==`, `<`, `<<`, `<=`, `>`, `>>`, and `>=`. The longest-match scanner in [[Lexer Symbol]] resolves `<` vs `<<` and `>` vs `>>` by consuming the longer spelling first.
 - `_` is not punctuation; the identifier scanner owns wildcard/underscore classification.
 - Semicolon is not canonical Pudu syntax and is not admitted as a symbol.
 - `Invalid` retains rejected text so later recovery can always advance without losing source fidelity.
