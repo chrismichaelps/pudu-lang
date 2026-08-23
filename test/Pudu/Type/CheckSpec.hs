@@ -26,6 +26,8 @@ typeProperties =
   , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("trait bounds are proved at the call site", testBounds)
+  , ("ambiguous trait method dispatch reports E3013", testAmbiguousMethod)
+  , ("Float aliases to Float64 at the type level", testFloatAlias)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -463,6 +465,31 @@ testBounds = do
     , counterexample "a where clause carries the same bound" (whereClause === [])
     , counterexample "a bound supplies only its own methods"
         (missingMethod === ["E3005"])
+    ]
+
+ambiguousProgram :: [Text]
+ambiguousProgram =
+  [ "module M"
+  , "trait A { fn name(self: &Self) -> Str }"
+  , "trait B { fn name(self: &Self) -> Str }"
+  , "fn run[T: A + B](value: T) -> Str { value.name() }"
+  ]
+
+testAmbiguousMethod :: IO Property
+testAmbiguousMethod = do
+  ambiguous <- codes ambiguousProgram
+  pure $ conjoin
+    [ counterexample "two trait bounds providing the same member is ambiguous"
+        (ambiguous === ["E3013"])
+    ]
+
+testFloatAlias :: IO Property
+testFloatAlias = do
+  floatIsAlias <- typeOfIn ["fn run() -> Float { 3.14 }"] "3.14"
+  float64Direct <- typeOfIn ["fn run() -> Float64 { 3.14 }"] "3.14"
+  pure $ conjoin
+    [ counterexample "Float renders as Float64" (floatIsAlias === "Float64")
+    , counterexample "Float64 is itself" (float64Direct === "Float64")
     ]
 
 testRecordedTypes :: IO Property
