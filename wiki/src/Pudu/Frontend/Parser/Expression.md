@@ -47,6 +47,7 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 - Every recursive prefix, nested `else if`, postfix, argument-list, and binary-tail descent uses [[Parser State]]'s shared budget.
 - Argument parsing distinguishes a consumed closing delimiter from budget/progress exhaustion so one `E1099` does not cascade into a synthetic missing-`)` diagnostic.
 - Unknown expression starts emit `E1040`; malformed `else` emits `E1042`; a `match` with no arms emits `E1051`.
+- Reserved keywords (`enum`, `struct`, `task`, `spawn`, `module`, `mut`) in expression position emit `E1041` with targeted guidance: `enum`/`struct` point to `type`, `task`/`spawn` point to `async fn` and `scope`, `module` explains it is file-only, and `mut` points to `var`. Recovery skips to the line boundary so one keyword produces one diagnostic instead of a cascade.
 
 ### Linkage
 

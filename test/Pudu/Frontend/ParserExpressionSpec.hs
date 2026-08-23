@@ -3,7 +3,13 @@ module Pudu.Frontend.ParserExpressionSpec (parserExpressionProperties) where
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText, diagnosticSpan)
+import Pudu.Diagnostic
+  ( Diagnostic
+  , diagnosticCode
+  , diagnosticCodeText
+  , diagnosticHelp
+  , diagnosticSpan
+  )
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
@@ -30,6 +36,7 @@ parserExpressionProperties =
   , ("postfix calls and members bind before binary operators", testPostfix)
   , ("unary borrow and conditional blocks preserve structure", testUnaryIf)
   , ("expression recovery emits exact diagnostics", testRecovery)
+  , ("reserved keywords produce E1041 with guidance", testReservedKeywords)
   , ("index failure-propagation and await postfix forms parse", testPostfixForms)
   , ("match while loop and for parse as expressions", testControlExpressions)
   , ("tuples and record constructions parse", testAggregates)
@@ -77,6 +84,35 @@ testRecovery = do
   pure $ conjoin [codes missing === ["E1040"], codes invalid === ["E1040"],
     codes malformedElse === ["E1042"], diagnosticOffsets malformedElse === [16],
     codes delimited === ["E1040"], resultKind delimited === EndOfFile]
+
+testReservedKeywords :: IO Property
+testReservedKeywords = do
+  enumKw <- parse "enum Color { Red, Green, Blue }"
+  structKw <- parse "struct Point { x: Int, y: Int }"
+  taskKw <- parse "task foo() -> Int { 42 }"
+  spawnKw <- parse "spawn bar()"
+  moduleKw <- parse "module M"
+  mutKw <- parse "mut x = 5"
+  pure $ conjoin
+    [ counterexample "enum produces E1041" (codes enumKw === ["E1041"])
+    , counterexample "enum help points to type" (helps enumKw === ["enum is reserved; use type for sum and record declarations"])
+    , counterexample "struct produces E1041" (codes structKw === ["E1041"])
+    , counterexample "struct help points to type" (helps structKw === ["struct is reserved; use type for record declarations"])
+    , counterexample "task produces E1041" (codes taskKw === ["E1041"])
+    , counterexample "task help points to async fn and scope" (helps taskKw === ["task is reserved; use async fn and scope for structured concurrency"])
+    , counterexample "spawn produces E1041" (codes spawnKw === ["E1041"])
+    , counterexample "spawn help points to async fn and scope" (helps spawnKw === ["spawn is reserved; use async fn and scope for structured concurrency"])
+    , counterexample "module produces E1041" (codes moduleKw === ["E1041"])
+    , counterexample "module help explains file-only" (helps moduleKw === ["module declarations are only valid at the top of a file"])
+    , counterexample "mut produces E1041" (codes mutKw === ["E1041"])
+    , counterexample "mut help points to var" (helps mutKw === ["use var for mutable bindings; mut modifies references and fields"])
+    , counterexample "enum recovers without cascade" (resultKind enumKw === EndOfFile)
+    , counterexample "struct recovers without cascade" (resultKind structKw === EndOfFile)
+    , counterexample "task recovers without cascade" (resultKind taskKw === EndOfFile)
+    , counterexample "spawn recovers without cascade" (resultKind spawnKw === EndOfFile)
+    , counterexample "module recovers without cascade" (resultKind moduleKw === EndOfFile)
+    , counterexample "mut recovers without cascade" (resultKind mutKw === EndOfFile)
+    ]
 
 testPostfixForms :: IO Property
 testPostfixForms = do
@@ -164,6 +200,9 @@ validShape (expression, remainingKind, diagnostics)
 
 codes :: (Located Expression, TokenKind, [Diagnostic]) -> [Text]
 codes (_, _, diagnostics) = map (diagnosticCodeText . diagnosticCode) diagnostics
+
+helps :: (Located Expression, TokenKind, [Diagnostic]) -> [Text]
+helps (_, _, diagnostics) = map (maybe Text.empty id . diagnosticHelp) diagnostics
 
 diagnosticOffsets :: (Located Expression, TokenKind, [Diagnostic]) -> [Int]
 diagnosticOffsets (_, _, diagnostics) = map (unOffset . spanStart . diagnosticSpan) diagnostics
