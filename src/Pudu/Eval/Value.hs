@@ -1,12 +1,16 @@
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
   ( Builtin (..)
+  , ArrayMethod (..)
   , Closure (..)
   , Value (..)
   , renderValue
   , valueKind
   ) where
 
+import Data.Foldable (toList)
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Tree (Function)
@@ -26,10 +30,12 @@ data Value
   | NullValue
   | UnitValue
   | TupleValue ![Value]
+  | ArrayValue !(Seq Value)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
   | FunctionValue !Closure
   | BuiltinValue !Builtin
+  | ArrayMethodValue !ArrayMethod !Value
   deriving stock (Eq, Show)
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
@@ -37,6 +43,25 @@ data Value
     evaluation with `E7007`, matching [[architecture/SEMANTICS]]'s rule that
     panics represent violated invariants, not recoverable domain failure. -}
 data Builtin = PanicBuiltin
+  deriving stock (Eq, Show)
+
+{-| Tags the built-in array method so [[Evaluator]] can apply it with the right
+    arity and semantics. The receiver is carried so `arr.push(x)` evaluates as
+    `push(arr, x)`. -}
+data ArrayMethod
+  = ArrayLength
+  | ArrayGet
+  | ArrayIndexOf
+  | ArrayContains
+  | ArrayPush
+  | ArrayPop
+  | ArrayInsert
+  | ArrayRemove
+  | ArraySlice
+  | ArrayReverse
+  | ArrayMap
+  | ArrayFilter
+  | ArrayReduce
   deriving stock (Eq, Show)
 
 {-| @Eval.Value.Closure — a callable function.
@@ -64,6 +89,7 @@ renderValue value = case value of
   NullValue -> "null"
   UnitValue -> "()"
   TupleValue members -> "(" <> Text.intercalate ", " (map renderValue members) <> ")"
+  ArrayValue members -> "[" <> Text.intercalate ", " (map renderValue (toList members)) <> "]"
   RecordValue name fields ->
     name <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
   VariantValue name payload
@@ -71,6 +97,7 @@ renderValue value = case value of
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
+  ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
  where
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
@@ -90,7 +117,25 @@ valueKind value = case value of
   NullValue -> "null"
   UnitValue -> "unit"
   TupleValue _ -> "tuple"
+  ArrayValue _ -> "array"
   RecordValue name _ -> name
   VariantValue name _ -> name
   FunctionValue _ -> "function"
   BuiltinValue _ -> "builtin"
+  ArrayMethodValue _ _ -> "array method"
+
+arrayMethodName :: ArrayMethod -> Text
+arrayMethodName method = case method of
+  ArrayLength -> "length"
+  ArrayGet -> "get"
+  ArrayIndexOf -> "indexOf"
+  ArrayContains -> "contains"
+  ArrayPush -> "push"
+  ArrayPop -> "pop"
+  ArrayInsert -> "insert"
+  ArrayRemove -> "remove"
+  ArraySlice -> "slice"
+  ArrayReverse -> "reverse"
+  ArrayMap -> "map"
+  ArrayFilter -> "filter"
+  ArrayReduce -> "reduce"

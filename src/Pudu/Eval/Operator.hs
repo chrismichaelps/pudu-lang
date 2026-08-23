@@ -8,10 +8,11 @@ module Pudu.Eval.Operator
   ) where
 
 import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
-import Pudu.Eval.Value (Closure (..), Value (..), valueKind)
+import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), valueKind)
 import Pudu.Source (Span)
 
 applyUnary :: Span -> Text -> Value -> Evaluator Value
@@ -96,6 +97,12 @@ readIndex spanValue container key = case (container, key) of
   (TupleValue members, IntValue index)
     | index >= 0 && fromInteger index < length members -> pure (members !! fromInteger index)
     | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
+  (ArrayValue members, IntValue index)
+    | index >= 0 && fromInteger index < Seq.length members ->
+        case Seq.lookup (fromInteger index) members of
+          Just value -> pure value
+          Nothing -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
+    | otherwise -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
   (StrValue text, IntValue index)
     | index >= 0 && fromInteger index < Text.length text ->
         pure (CharValue (Text.index text (fromInteger index)))
@@ -109,6 +116,7 @@ readIndex spanValue container key = case (container, key) of
     it with `value` as its first argument. -}
 readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
+  ArrayValue _ -> readArrayMember spanValue value member
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
@@ -118,6 +126,36 @@ readMember spanValue value member = case value of
   _ ->
     abortAt (Just spanValue) "E7001"
       ("cannot read " <> member <> " from a " <> valueKind value) Nothing
+
+{-| Array accessor methods are built into the evaluator: `length`, `get`,
+    `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`,
+    `reverse`, `map`, `filter`, `reduce`. Each is a curried builtin that
+    carries the receiver so `arr.push(x)` evaluates as `push(arr, x)`. -}
+readArrayMember :: Span -> Value -> Text -> Evaluator Value
+readArrayMember spanValue array member =
+  case lookup member arrayMethods of
+    Just method -> pure (ArrayMethodValue method array)
+    Nothing ->
+      abortAt (Just spanValue) "E7001"
+        ("no method " <> member <> " on an array") Nothing
+
+{-| Method names paired with their method tags. -}
+arrayMethods :: [(Text, ArrayMethod)]
+arrayMethods =
+  [ ("length", ArrayLength)
+  , ("get", ArrayGet)
+  , ("indexOf", ArrayIndexOf)
+  , ("contains", ArrayContains)
+  , ("push", ArrayPush)
+  , ("pop", ArrayPop)
+  , ("insert", ArrayInsert)
+  , ("remove", ArrayRemove)
+  , ("slice", ArraySlice)
+  , ("reverse", ArrayReverse)
+  , ("map", ArrayMap)
+  , ("filter", ArrayFilter)
+  , ("reduce", ArrayReduce)
+  ]
 
 readMethod :: Span -> Value -> Text -> Text -> Evaluator Value
 readMethod spanValue receiver owner member = do

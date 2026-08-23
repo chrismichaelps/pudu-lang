@@ -34,7 +34,7 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 ### Governance
 
 - The future declaration parser injects its block parser, avoiding a module cycle.
-- Prefix parses literals, single-segment names, parentheses/grouping, block, `if`, and `!`/`-`/`&`/`&mut`/`~` unary forms.
+- Prefix parses literals, single-segment names, parentheses/grouping, blocks, array literals `[a, b, c]`, `if`, and `!`/`-`/`&`/`&mut`/`~` unary forms.
 - The postfix family is call, member, index, `?` failure propagation, and `.await`; every member of it binds tighter than every unary and binary operator, matching [[grammar/pudu]]'s precedence table.
 - Binary precedence bands (tightest to loosest): multiplicative `* / % &* *|` (8); additive `+ - &+ &- +| -|` (7); shift and bitwise AND `<< >> &` (6); range and XOR `.. ..= ^` (5); comparison `< <= > >=` (4); equality `== !=` (3); `&&` (2); `||` and `|` (1); assignment `=` (0, right-associative). Shifts are left-associative and bind between additive and range, following the C/Rust convention that shifts are looser than arithmetic but tighter than comparison. `&` shares the shift band because bitwise AND is tighter than XOR and OR but looser than additive, matching C. `^` shares the range band so `a ^ b..c` parses as `(a ^ b)..c`; `|` shares the logical-or band because bitwise OR is looser than every arithmetic and comparison operator.
 - `match` scrutinizes one expression and requires at least one `case` arm, reported as `E1051` when absent; an arm is `case pattern (if guard)? => (expression | block)` using [[Parser Pattern]].

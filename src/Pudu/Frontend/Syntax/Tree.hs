@@ -262,6 +262,7 @@ data Expression
   | TryExpression !(Located Expression)
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]
+  | ArrayExpression ![Located Expression]
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))

@@ -54,7 +54,7 @@ resolveModule :: Module -> (Resolution, [Diagnostic])
 
 ## Algorithm
 
-Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic.
+Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic. An `ArrayExpression` walks each element expression so names inside array literals resolve like any other expression context.
 
 ## Negative Logic (Prohibited Paths)
 
