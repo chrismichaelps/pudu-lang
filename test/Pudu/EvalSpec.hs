@@ -35,6 +35,7 @@ testArithmetic = do
   rightShift <- evaluate "64 >> 2"
   bitwiseXor <- evaluate "6 ^ 3"
   bitwiseOr <- evaluate "1 | 2"
+  bitwiseAnd <- evaluate "6 & 3"
   bitwiseNot <- evaluate "~0"
   pure $ conjoin
     [ sums === "7"
@@ -51,6 +52,7 @@ testArithmetic = do
     , counterexample "right shift moves bits right" (rightShift === "16")
     , counterexample "xor sets bits in one operand only" (bitwiseXor === "5")
     , counterexample "bitwise or unions bits" (bitwiseOr === "3")
+    , counterexample "bitwise and masks bits" (bitwiseAnd === "2")
     , counterexample "complement of zero is negative one" (bitwiseNot === "-1")
     ]
 
