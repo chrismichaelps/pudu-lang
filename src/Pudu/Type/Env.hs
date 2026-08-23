@@ -212,11 +212,14 @@ takeObligations =
   Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
 
 {-| The bounds the enclosing declaration's own parameters carry, which is how a
-    generic body may call another generic that demands the same trait. -}
+    generic body may call another generic that demands the same trait. Bounds
+    from the parameter list and the `where` clause are merged with `(<>`) so a
+    parameter that carries bounds in both places keeps all of them rather than
+    the last entry overwriting the first. -}
 withRigidBounds :: [(Text, [Text])] -> Checker a -> Checker ()
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
-  setRigidBounds (Map.fromList bounds)
+  setRigidBounds (Map.fromListWith (<>) bounds)
   _ <- action
   setRigidBounds previous
 
