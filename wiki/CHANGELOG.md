@@ -5,6 +5,7 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-23 · [[Parser Expression]] · add `E1041` reserved-keyword guidance for `enum`/`struct`/`task`/`spawn`/`module`/`mut` in expression position with line-boundary recovery to prevent cascading parse errors · risk LOW · depth DEEP→DEEP · issues #46 #47 #48
 - 2026-08-23 · [[Type Check Method]] · fix duplicate `E3013` on ambiguous trait method dispatch by returning `Just (monotype ErrorType)` from `methodScheme` so `checkCallee` does not fall through to `rigidMethod` and report the diagnostic a second time · risk LOW · depth DEEP→DEEP · issues #35 #38 #30 #31 #32
 - 2026-08-23 · [[Evaluator]], [[Eval Value]], [[Eval Env]] · add `panic` builtin (`E7007`), raise call depth limit from 256 to 4096, report ambiguous trait method dispatch with `E3013`, merge rigid bounds with `Map.fromListWith`, and wire `Float` as an alias for `Float64` · risk MED · depth DEEP→DEEP · issues #35 #38 #30 #31 #32
 - 2026-08-22 · [[Type Check]] and [[Type Check Method]] · fix trait default bodies that call other trait methods on `Self` by treating `Self` as a rigid parameter during body checking, routing method calls through `rigidMethod` and the trait bound `selfBoundAsBound` installs; fixes #23, #25, and #26 (generic dispatch through trait defaults) · risk MED · depth DEEP→DEEP · issue #3

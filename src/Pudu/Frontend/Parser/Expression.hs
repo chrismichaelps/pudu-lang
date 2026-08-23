@@ -41,8 +41,8 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAwait, KwCase, KwElse, KwFalse, KwFor, KwIf, KwIn, KwLoop, KwMatch
-    , KwMut, KwNull, KwTrue, KwWhile)
+  ( Keyword (KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFor, KwIf, KwIn, KwLoop
+    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwTask, KwTrue, KwWhile)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
@@ -99,6 +99,8 @@ parsePrefix blockParser = do
       | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
       | symbol == SymLeftBrace -> blockExpression blockParser
       | symbol `elem` unaryOperators -> parseUnary blockParser token symbol
+    Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
+      reservedPrefix token guidance
     _ -> invalidPrefix token
 
 {-| An uppercase name directly followed by `{` builds a record, when records are
@@ -518,6 +520,47 @@ invalidPrefix token = do
     kind | isRecoveryBoundary kind -> pure ()
     _ -> advanceToken >> pure ()
   pure (Located (tokenSpan token) InvalidExpression)
+
+{-| Reserved keywords that appear in expression position — typically because the
+    REPL submits them as entries — produce a targeted diagnostic instead of the
+    generic E1040. Each message points the reader toward the canonical form, so
+    `enum`/`struct` point to `type`, `task`/`spawn` point to `async`/`scope`,
+    `module` explains it is file-only, and `mut` points to `var`. -}
+reservedKeywordGuidance :: Keyword -> Maybe Text
+reservedKeywordGuidance keyword = case keyword of
+  KwEnum -> Just "enum is reserved; use type for sum and record declarations"
+  KwStruct -> Just "struct is reserved; use type for record declarations"
+  KwTask -> Just "task is reserved; use async fn and scope for structured concurrency"
+  KwSpawn -> Just "spawn is reserved; use async fn and scope for structured concurrency"
+  KwModule -> Just "module declarations are only valid at the top of a file"
+  KwMut -> Just "use var for mutable bindings; mut modifies references and fields"
+  _ -> Nothing
+
+reservedPrefix :: Token -> Text -> Parser (Located Expression)
+reservedPrefix token guidance = do
+  emitParseError "E1041" (tokenSpan token) "reserved keyword in expression position"
+    (Just guidance)
+  _ <- advanceToken
+  skipToLineBoundary
+  pure (Located (tokenSpan token) InvalidExpression)
+
+{-| Consume the remaining tokens on the reserved keyword's line so a construct
+    like `task my_task() -> Int { 42 }` reports one E1041 rather than a cascade
+    of downstream parse errors. Recovery stops only at EOF or a line-initial
+    token, never consuming the next line's first token. Closing delimiters and
+    commas are skipped because they belong to the same line as the reserved
+    keyword; stopping at them would leave trailing tokens that produce cascading
+    errors. -}
+skipToLineBoundary :: Parser ()
+skipToLineBoundary = do
+  kind <- peekKind
+  case kind of
+    EndOfFile -> pure ()
+    _ -> do
+      startsNewLine <- peekStartsLine
+      if startsNewLine
+        then pure ()
+        else advanceToken >> skipToLineBoundary
 
 invalidAtCurrent :: Parser (Located Expression)
 invalidAtCurrent = currentSpan >>= \spanValue -> pure (Located spanValue InvalidExpression)
