@@ -82,6 +82,12 @@ builtinVariants =
 builtinOwners :: Map Text [Text]
 builtinOwners = Map.fromList [("Option", ["Some", "None"]), ("Result", ["Ok", "Err"])]
 
+{-| Type aliases the compiler wires in. `Float` aliases `Float64` because
+    [[grammar/pudu]] makes the alias transparent at the type level, and a
+    reader who writes `Float` expects the same type as `Float64`. -}
+builtinAliases :: Map Text Type
+builtinAliases = Map.fromList [("Float", NominalType "Float64" [])]
+
 {-| Collect what every type declaration contributes before any body is checked,
     so a declaration may refer to one that appears later in the file. -}
 collectDeclared :: [Located Declaration] -> Checker DeclaredTypes
@@ -90,6 +96,7 @@ collectDeclared declarations = do
         (foldr addShell emptyDeclared declarations)
           { declaredVariants = builtinVariants
           , declaredOwners = builtinOwners
+          , declaredAliases = builtinAliases
           }
   foldCollect shells declarations
 
