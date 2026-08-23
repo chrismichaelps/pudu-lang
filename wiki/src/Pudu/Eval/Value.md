@@ -17,7 +17,7 @@ aliases: [Eval Value]
 
 ## Purpose
 
-Own runtime values and their rendering for [[Evaluator]].
+Own runtime values, builtin functions, and their rendering for [[Evaluator]].
 
 ## Interface
 
@@ -45,6 +45,7 @@ Direct structural recursion over the value or syntax shape; no caching, no mutat
 ## Edge Cases
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
+- `BuiltinValue PanicBuiltin` is the prelude's `panic`: calling it stops evaluation with `E7007`, which represents a violated invariant rather than a recoverable domain failure.
 
 ## Depth
 
