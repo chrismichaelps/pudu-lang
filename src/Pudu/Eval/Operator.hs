@@ -7,7 +7,7 @@ module Pudu.Eval.Operator
   , unwrapTry
   ) where
 
-import Data.Bits (complement, shiftL, shiftR, xor, (.|.))
+import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
@@ -64,6 +64,7 @@ integerOperation spanValue operator left right = case operator of
   "<<" -> pure (IntValue (shiftL left (fromInteger right)))
   ">>" -> pure (IntValue (shiftR left (fromInteger right)))
   "^" -> pure (IntValue (xor left right))
+  "&" -> pure (IntValue (left .&. right))
   "|" -> pure (IntValue (left .|. right))
   _ -> comparisonOnly spanValue operator left right
 

@@ -500,6 +500,7 @@ operatorInfo symbol = case symbol of
   SymCaret -> binary 5 False
   SymLeftShift -> binary 6 False
   SymRightShift -> binary 6 False
+  SymAmpersand -> binary 6 False
   SymPlus -> binary 7 False
   SymMinus -> binary 7 False
   SymWrapAdd -> binary 7 False
