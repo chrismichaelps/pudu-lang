@@ -76,6 +76,7 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 
 - **Q:** Should methods live at module scope? **A:** No; they are keyed by their target type. _Rationale:_ two types may implement the same trait, and a flat scope would make one shadow the other. _Rejected:_ flat method names; a global method table keyed by name alone.
 - **Q:** Field or method when both spell the same name? **A:** The method, in callee position only. _Rationale:_ `value.name()` reads as a call, and a field holding a function can still be called by parenthesizing it. _Rejected:_ field always wins, which makes a method unreachable; method always wins, which hides a field.
+- **Q:** What should `methodScheme` return when bounds are ambiguous? **A:** `Just (monotype ErrorType)`, not `Nothing`. _Rationale:_ `checkCallee` falls through to `checkExpression` on `Nothing`, which re-enters `rigidMethod` and reports `E3013` a second time. Returning an error scheme keeps the call site typed as an error and stops the duplicate. _Rejected:_ returning `Nothing`, which duplicated the diagnostic; suppressing `E3013` in `rigidMethod`, which would lose the diagnostic for non-call member access.
 
 ## Referenced by
 

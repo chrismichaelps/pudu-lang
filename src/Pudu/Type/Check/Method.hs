@@ -41,7 +41,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
-import Pudu.Type.Value (Scheme, Type (..), polytype, renderType)
+import Pudu.Type.Value (Scheme, Type (..), monotype, polytype, renderType)
 
 {-| Trait members by trait name, so an implementation can inherit the defaults
     it does not override. -}
@@ -206,7 +206,9 @@ boundName (Located _ syntax) = case syntax of
 {-| Find a method for a receiver: on a nominal type through its
     implementations, on a rigid parameter through the traits its bounds
     declared. When two or more bounds provide the same member, the lookup is
-    ambiguous and reports `E3013` rather than silently picking the first. -}
+    ambiguous and reports `E3013` once and returns an error scheme, so the
+    caller does not fall through to `rigidMethod` and report it a second
+    time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 methodScheme spanValue receiver member = case receiver of
   NominalType owner _ -> lookupName (owner <> "." <> member)
@@ -220,7 +222,7 @@ methodScheme spanValue receiver member = case receiver of
         report "E3013" spanValue
           (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
           (Just "disambiguate with a qualified call or remove a trait bound")
-        pure Nothing
+        pure (Just (monotype ErrorType))
   _ -> pure Nothing
  where
   provides traitText = do
