@@ -32,6 +32,7 @@ library
     Pudu.Diagnostic
     Pudu.Diagnostic.Render
     Pudu.Eval
+    Pudu.Eval.Array
     Pudu.Eval.Env
     Pudu.Eval.Match
     Pudu.Eval.Operator

@@ -21,7 +21,7 @@ Own runtime values, builtin functions, and their rendering for [[Evaluator]].
 
 ## Interface
 
-The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit.
+The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit. `ArrayValue` wraps a `Data.Sequence.Seq Value` from `containers`, giving O(1) append and O(log n) index access with structural sharing for immutable updates.
 
 ### Governance
 

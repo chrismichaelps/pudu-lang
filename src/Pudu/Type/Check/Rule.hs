@@ -162,6 +162,7 @@ memberType spanValue targetType member = do
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
+    NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType name _ -> do
       fields <- lookupField name
       case fields >>= lookup member of
@@ -175,6 +176,36 @@ memberType spanValue targetType member = do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| Built-in array methods. Each returns a function type with the receiver
+    already bound, matching the evaluator's `ArrayMethodValue` semantics. The
+    element type is threaded through so `map` and `filter` type-check. -}
+arrayMethodType :: Span -> Text -> Type -> Checker Type
+arrayMethodType spanValue member element = case member of
+  "length" -> pure (FunctionTypeValue False [] integerType)
+  "get" -> pure (FunctionTypeValue False [integerType] element)
+  "indexOf" -> pure (FunctionTypeValue False [element] integerType)
+  "contains" -> pure (FunctionTypeValue False [element] boolType)
+  "push" -> pure (FunctionTypeValue False [element] arrayType)
+  "pop" -> pure (FunctionTypeValue False [] arrayType)
+  "insert" -> pure (FunctionTypeValue False [integerType, element] arrayType)
+  "remove" -> pure (FunctionTypeValue False [integerType] arrayType)
+  "slice" -> pure (FunctionTypeValue False [integerType, integerType] arrayType)
+  "reverse" -> pure (FunctionTypeValue False [] arrayType)
+  "map" -> do
+    result <- freshVariable
+    pure (FunctionTypeValue False [FunctionTypeValue False [element] result] (arrayOf result))
+  "filter" -> pure (FunctionTypeValue False [FunctionTypeValue False [element] boolType] arrayType)
+  "reduce" -> do
+    acc <- freshVariable
+    pure (FunctionTypeValue False [FunctionTypeValue False [acc, element] acc, acc] acc)
+  _ -> do
+    report "E3005" spanValue ("Array has no method " <> member)
+      (Just "check the method name against the documented array methods")
+    pure ErrorType
+ where
+  arrayType = NominalType "Array" [element]
+  arrayOf t = NominalType "Array" [t]
 
 {-| A method reached through a bound: the receiver is a parameter, and the trait
     its declaration named supplies the member. When two or more bounds provide

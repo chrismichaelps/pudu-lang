@@ -129,6 +129,7 @@ field_pattern    = lower_ident, (":", pattern)? ;
 
 ```ebnf
 tuple_expr       = "(", expression, ",", (expression, (",", expression)*, ","?)?, ")" ;
+array_expr       = "[", (expression, (",", expression)*, ","?)?, "]" ;
 record_expr      = module_path_or_type, "{", field_init, (",", field_init)*, ","?, "}" ;
 field_init       = lower_ident, (":", expression)? ;
 match_expr       = "match", expression, "{", match_arm+, "}" ;
@@ -138,6 +139,7 @@ loop_expr        = "loop", block ;
 for_expr         = "for", pattern, "in", expression, block ;
 ```
 
+- An array literal `[a, b, c]` builds an `Array[T]` value. `[]` is the empty array. Arrays are immutable persistent sequences backed by a fingertree: `push`, `insert`, and `remove` return new arrays with structural sharing, so no update copies the entire collection. Built-in methods: `length()`, `get(i)`, `indexOf(x)`, `contains(x)`, `push(x)`, `pop()`, `insert(i, x)`, `remove(i)`, `slice(i, j)`, `reverse()`, `map(f)`, `filter(f)`, `reduce(f, init)`. Indexing an array with `arr[i]` reads the element; out-of-bounds is `E7004`. `for x in arr` iterates elements.
 - Record fields are immutable unless explicitly marked `mut` in the type declaration.
 - A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
 - A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.

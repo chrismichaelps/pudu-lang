@@ -17,7 +17,7 @@ aliases: [Eval Operator]
 
 ## Purpose
 
-Own operator and access semantics for [[Evaluator]].
+Own operator and access semantics for [[Evaluator]]. `readIndex` handles tuples, strings, and arrays; `readMember` dispatches fields and methods including the full array accessor method table (42 methods: core accessors, mutation, higher-order, construction, aggregation, ordering, and transformation).
 
 ## Interface
 

@@ -33,7 +33,7 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ## Algorithm
 
-Dispatch on the operator, the receiver's type, or the pattern's shape, unifying against what the construct requires.
+Dispatch on the operator, the receiver's type, or the pattern's shape, unifying against what the construct requires. A `NominalType "Array" [element]` receiver routes to `arrayMethodType`, which returns the function type for each built-in array method (`length`, `get`, `indexOf`, `contains`, `push`, `pop`, `insert`, `remove`, `slice`, `reverse`, `map`, `filter`, `reduce`), threading the element type through higher-order methods so `map` and `filter` type-check correctly.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -43,6 +43,7 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 
 - An unsolved receiver produces a fresh variable rather than a diagnostic, so a member access on a not-yet-known type is not prematurely rejected.
 - When two or more trait bounds provide the same member on a rigid receiver, the call is ambiguous and reports `E3013` rather than silently picking the first trait.
+- An array method on a `NominalType "Array" [element]` receiver returns the method's built-in function type without consulting the trait or declaration table, because array methods are wired into the evaluator, not declared in user code. An unrecognized method name reports `E3005`.
 
 ## Depth
 

@@ -98,6 +98,7 @@ parsePrefix blockParser = do
     Symbol symbol
       | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
       | symbol == SymLeftBrace -> blockExpression blockParser
+      | symbol == SymLeftBracket -> parseArrayLiteral blockParser
       | symbol `elem` unaryOperators -> parseUnary blockParser token symbol
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
@@ -235,6 +236,49 @@ parseTupleTail blockParser reversed = do
           case comma of
             Nothing -> pure (reverse (next : reversed))
             Just _ -> parseTupleTail blockParser (next : reversed)
+
+{-| An array literal `[a, b, c]` admits expressions separated by commas with an
+    optional trailing comma. `[]` is the empty array. Records are admitted inside
+    the bracketed context so `Some{value: 1}` works as an element. -}
+parseArrayLiteral :: BlockParser -> Parser (Located Expression)
+parseArrayLiteral blockParser = do
+  opening <- expectSymbol "[" "to start the array literal"
+  empty <- matchSymbol "]"
+  case empty of
+    Just closing ->
+      pure
+        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
+            (ArrayExpression [])
+        )
+    Nothing -> do
+      first <- withRecords (parseExpression blockParser)
+      rest <- parseArrayTail blockParser []
+      closing <- expectSymbol "]" "to close the array literal"
+      pure
+        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
+            (ArrayExpression (first : rest))
+        )
+
+parseArrayTail :: BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseArrayTail blockParser reversed = do
+  comma <- matchSymbol ","
+  case comma of
+    Nothing -> pure (reverse reversed)
+    Just _ -> do
+      kind <- peekKind
+      if isSymbol "]" kind
+        then pure (reverse reversed)
+        else do
+          bounded <- withRecursionBudget $ do
+            before <- peekToken
+            next <- withRecords (parseExpression blockParser)
+            after <- peekToken
+            if before == after
+              then pure (reverse reversed, True)
+              else do
+                rest <- parseArrayTail blockParser (next : reversed)
+                pure (rest, False)
+          pure (maybe (reverse reversed) fst bounded)
 
 parseUnary :: BlockParser -> Token -> SymbolKind -> Parser (Located Expression)
 parseUnary blockParser operatorToken operator = do

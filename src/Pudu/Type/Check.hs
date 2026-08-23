@@ -3,6 +3,7 @@ module Pudu.Type.Check
   ( checkModule
   ) where
 
+import Control.Monad (foldM)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -371,6 +372,12 @@ inferExpression declared rigid spanValue expression = case expression of
     tryType spanValue targetType
   AwaitExpression target -> checkExpression declared rigid target
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
+  ArrayExpression members -> do
+    elementTypes <- mapM (checkExpression declared rigid) members
+    inferredElementType <- case elementTypes of
+      [] -> freshVariable
+      first : rest -> foldM (unify spanValue) first rest
+    pure (NominalType "Array" [inferredElementType])
   RecordExpression path fields -> recordType declared rigid spanValue path fields
   BlockExpression block -> checkBlock declared rigid block
   IfExpression condition thenBlock elseBranch -> do
