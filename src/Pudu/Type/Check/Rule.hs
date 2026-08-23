@@ -11,6 +11,7 @@ module Pudu.Type.Check.Rule
   , unaryType
   ) where
 
+import Control.Monad (filterM)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -176,23 +177,36 @@ memberType spanValue targetType member = do
       pure ErrorType
 
 {-| A method reached through a bound: the receiver is a parameter, and the trait
-    its declaration named supplies the member. -}
+    its declaration named supplies the member. When two or more bounds provide
+    the same member, the call is ambiguous and receives `E3013` rather than
+    silently picking the first trait. -}
 rigidMethod :: Span -> Text -> [Text] -> Text -> Checker Type
-rigidMethod spanValue name bounds member = case bounds of
-  [] -> do
-    report "E3005" spanValue (name <> " has no method " <> member)
-      (Just "add a trait bound that declares the method")
-    pure ErrorType
-  traitText : rest -> do
+rigidMethod spanValue name bounds member = do
+  providers <- filterM provides bounds
+  case providers of
+    [] -> do
+      report "E3005" spanValue (name <> " has no method " <> member)
+        (Just "add a trait bound that declares the method")
+      pure ErrorType
+    [traitText] -> do
+      found <- lookupName (traitText <> "." <> member)
+      case found of
+        Nothing -> pure ErrorType
+        Just scheme -> do
+          instantiated <- instantiate spanValue scheme
+          case instantiated of
+            FunctionTypeValue asynchronous (_ : inputs) result ->
+              pure (FunctionTypeValue asynchronous inputs result)
+            other -> pure other
+    _ -> do
+      report "E3013" spanValue
+        (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
+        (Just "disambiguate with a qualified call or remove a trait bound")
+      pure ErrorType
+ where
+  provides traitText = do
     found <- lookupName (traitText <> "." <> member)
-    case found of
-      Nothing -> rigidMethod spanValue name rest member
-      Just scheme -> do
-        instantiated <- instantiate spanValue scheme
-        case instantiated of
-          FunctionTypeValue asynchronous (_ : inputs) result ->
-            pure (FunctionTypeValue asynchronous inputs result)
-          other -> pure other
+    pure (case found of Nothing -> False; Just _ -> True)
 
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself

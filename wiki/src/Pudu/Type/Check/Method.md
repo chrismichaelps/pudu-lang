@@ -29,7 +29,7 @@ declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareBounds :: Function -> [(Text, [Text])]
 declareBuiltinConstructors :: Checker ()
 dischargeObligations :: Checker ()
-methodScheme :: Type -> Text -> Checker (Maybe Scheme)
+methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 functionRigid :: Function -> [Text]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
 traitTable :: [Located Declaration] -> Map Text [Located Function]
@@ -45,7 +45,7 @@ traitTable :: [Located Declaration] -> Map Text [Located Function]
 - `declareBounds` collects the trait bounds a function's generic parameters carry from both the parameter list and the `where` clause, since [[grammar/pudu]] gives them the same meaning; these become the obligations a call must prove.
 - `dischargeObligations` proves every obligation a call registered, after the enclosing function's body is checked and while the declaration's own parameter bounds are still in scope. A rigid parameter satisfies a bound its own declaration declared; a nominal type satisfies one through its implementations; an unsolved variable proves nothing and is left alone; `E3012` reports an unsatisfied bound.
 - `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
-- `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for.
+- `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for. When two or more bounds provide the same member, the lookup is ambiguous and reports `E3013` rather than silently picking the first.
 - Coherence — that the trait or the target is declared in this module — and overlapping-implementation rejection belong to a later slice; nothing here silently picks between candidates.
 
 ### Linkage

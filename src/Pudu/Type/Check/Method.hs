@@ -26,7 +26,8 @@ import Pudu.Frontend.Syntax.Tree
   , Trait (..)
   , TypeParam (..)
   )
-import Control.Monad (unless)
+import Control.Monad (filterM, unless)
+import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
@@ -204,19 +205,24 @@ boundName (Located _ syntax) = case syntax of
 
 {-| Find a method for a receiver: on a nominal type through its
     implementations, on a rigid parameter through the traits its bounds
-    declared. -}
-methodScheme :: Type -> Text -> Checker (Maybe Scheme)
-methodScheme receiver member = case receiver of
+    declared. When two or more bounds provide the same member, the lookup is
+    ambiguous and reports `E3013` rather than silently picking the first. -}
+methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
+methodScheme spanValue receiver member = case receiver of
   NominalType owner _ -> lookupName (owner <> "." <> member)
   RigidType name -> do
     bounds <- rigidBoundsOf name
-    firstMethod bounds
+    providers <- filterM provides bounds
+    case providers of
+      [] -> pure Nothing
+      [traitText] -> lookupName (traitText <> "." <> member)
+      _ -> do
+        report "E3013" spanValue
+          (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
+          (Just "disambiguate with a qualified call or remove a trait bound")
+        pure Nothing
   _ -> pure Nothing
  where
-  firstMethod bounds = case bounds of
-    [] -> pure Nothing
-    traitText : rest -> do
-      found <- lookupName (traitText <> "." <> member)
-      case found of
-        Just scheme -> pure (Just scheme)
-        Nothing -> firstMethod rest
+  provides traitText = do
+    found <- lookupName (traitText <> "." <> member)
+    pure (case found of Nothing -> False; Just _ -> True)
