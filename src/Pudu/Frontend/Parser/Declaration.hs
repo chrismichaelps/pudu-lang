@@ -7,6 +7,7 @@ import Pudu.Frontend.Parser.Declaration.Binding (parseTopConst)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.Declaration.Import (parseImport)
+import Pudu.Frontend.Parser.Declaration.Macro (parseMacro)
 import Pudu.Frontend.Parser.Declaration.Trait (parseImpl, parseTrait)
 import Pudu.Frontend.Parser.Declaration.Type (parseTypeDeclaration)
 import Pudu.Frontend.Parser.Name (parseModuleName)
@@ -114,6 +115,7 @@ parseTopDeclaration kind = do
     Keyword KwAsync -> parseFunction visibility
     Keyword KwUnsafe -> parseFunction visibility
     Keyword KwComptime -> parseFunction visibility
+    Keyword KwMacro -> parseMacro visibility
     Keyword KwType -> parseTypeDeclaration visibility
     Keyword KwTrait -> parseTrait visibility
     Keyword KwImpl -> parseImpl
@@ -134,7 +136,7 @@ rejectedModuleBinding visibility = do
     with `type` in [[grammar/pudu]]. -}
 isReservedDeclaration :: Keyword -> Bool
 isReservedDeclaration keyword =
-  keyword `elem` [KwEnum, KwStruct, KwMacro]
+  keyword `elem` [KwEnum, KwStruct]
 
 {-| Reserved declaration forms are diagnosed and synchronized, never accepted
     as valid syntax for a construct the compiler cannot yet represent. -}

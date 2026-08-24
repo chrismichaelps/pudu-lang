@@ -60,7 +60,7 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 
 - A module-scope `const` is evaluated at compile time, after typing and only when typing succeeded. [[architecture/SEMANTICS]] makes such a constant a compile-time value, so its initializer's failure is a compile diagnostic produced by the same bounded evaluator that runs the program.
 
-- Phase order is fixed: lex, parse, resolve names, then check types.
+- Phase order is fixed: lex, parse, expand macros, resolve names, check types, then evaluate module constants.
 - Each phase runs only on what the previous one admitted — resolution on a parsed module, typing on a resolved one — so a syntax error never earns a second explanation from a later phase, matching the earliest-phase rule in [[architecture/SEMANTICS]].
 - Parser still runs after lexical errors when a token stream exists, allowing useful independent diagnostics.
 - The module result becomes `Nothing` when any error-severity diagnostic exists; raw parser result is not exposed as compilable.

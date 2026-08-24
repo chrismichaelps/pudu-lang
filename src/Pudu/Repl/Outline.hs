@@ -18,6 +18,7 @@ import Pudu.Frontend.Syntax.Tree
   , FieldPattern (..)
   , FieldInit (..)
   , Function (..)
+  , Macro (..)
   , Literal (..)
   , MatchArm (..)
   , Pattern (..)
@@ -51,6 +52,7 @@ outlineDeclaration (Located _ declaration) = case declaration of
   TypeDeclaration value -> "type " <> locatedValue (typeName value)
   TraitDeclaration _ -> "trait"
   ImplDeclaration _ -> "impl"
+  MacroDeclaration value -> "macro " <> locatedValue (macroName value)
   InvalidDeclaration -> "invalid"
 
 outlineExpression :: Located Expression -> Text
@@ -70,6 +72,8 @@ outlineExpression (Located _ expression) = case expression of
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
+  MacroCall name arguments ->
+    locatedValue name <> "!(" <> Text.intercalate ", " (map outlineExpression arguments) <> ")"
   UnsafeExpression capabilities body ->
     "unsafe" <> capabilityAnnotation capabilities
       <> " { " <> Text.intercalate "; " (outlineBlock body) <> " }"

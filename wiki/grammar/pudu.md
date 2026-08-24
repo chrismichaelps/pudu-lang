@@ -41,6 +41,11 @@ import_suffix    = "as", upper_ident
                  | "{", import_item, (",", import_item)*, ","?, "}" ;
 import_item      = ident ;
 top_declaration  = "export"?, (const_decl | function_decl | type_decl | trait_decl | impl_decl | macro_decl) ;
+macro_decl       = "macro", lower_ident, "(", macro_params?, ")", ("=", expression | block) ;
+macro_params     = macro_param, (",", macro_param)*, ","? ;
+macro_param      = lower_ident, ":", macro_kind ;
+macro_kind       = "expr" | "ident" | "block" ;
+macro_call       = lower_ident, "!", "(", (expression, (",", expression)*, ","?)?, ")" ;
 const_decl       = "const", constant_ident, (":", type_ref)?, "=", expression ;
 local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expression
                  | "const", constant_ident, (":", type_ref)?, "=", expression ;
@@ -228,7 +233,11 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - A compile-time function is an ordinary function too. Runtime code may call it; the marker adds a guarantee rather than restricting where it is usable.
 - A module-scope `const` is evaluated when the module is compiled, so a failure in its initializer — division by zero, an exhausted evaluation budget, a constant reading one declared later — is a compile diagnostic rather than something the program discovers when it runs.
 - Compile-time evaluation has configurable step and memory limits; exceeding them is a diagnostic.
-- v1 macros are hygienic declarative syntax macros over token trees. They cannot access files, network, environment, compiler internals, or arbitrary host code.
+- v1 macros are hygienic syntax transformers with typed parameters. They cannot access files, network, environment, compiler internals, or arbitrary host code. [[Macro Design]] records why typed parameters were chosen over a token-tree matcher.
+- Each parameter declares the syntax it accepts — `expr`, `ident`, or `block` — so a mismatched argument is reported against the call. Arity is exact.
+- A call is written `name!(...)`, so expansion is visible without knowing which names are macros. Arguments are parsed before substitution, so an expansion cannot change the grouping the caller wrote.
+- Every binding a macro body introduces is renamed at each expansion, so it can neither capture a name at the call site nor be captured by one.
+- Expansion is bounded; a macro that expands into itself reports where the expansion started.
 - Expanded tokens retain call-site and definition-site provenance for diagnostics.
 - Macros cannot introduce unhygienic bindings without an explicit future escape hatch.
 
@@ -273,7 +282,7 @@ function_decl    = "unsafe", capabilities?, ... ;
 ## Senior Definition Needed
 
 - Stable syntax for unsafe foreign declarations and C ABI layouts will be finalized before the FFI slice.
-- Declarative macro matcher/repetition syntax will be finalized before macro implementation.
+- Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 - `Decimal` precision/rounding context will be finalized with the numeric standard-library slice. Until that decision is accepted, writing the type is rejected with `E3022` rather than admitted with invented rounding.
 
 ## Referenced by

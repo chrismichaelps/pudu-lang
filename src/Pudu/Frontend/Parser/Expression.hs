@@ -173,7 +173,9 @@ capabilityFor kind = case kind of
     admitted here; every other name is a plain reference. -}
 parseNameOrRecord :: BlockParser -> Token -> Text -> Parser (Located Expression)
 parseNameOrRecord blockParser token name
-  | not (startsUpper name) = plainName
+  | not (startsUpper name) = do
+      macroCall <- macroFollows
+      if macroCall then parseMacroCall blockParser token name else plainName
   | otherwise = do
       admitted <- recordsAdmitted
       opensRecord <- recordFollows
@@ -200,6 +202,54 @@ recordFollows = walk 1 (0 :: Int)
               Identifier _ -> walk (offset + 2) (segments + 1)
               _ -> pure False
           else pure (isSymbol "{" following)
+
+{-| A macro call is written `name!(...)`, so expansion is visible at the call
+    rather than depending on knowing which names are macros. -}
+macroFollows :: Parser Bool
+macroFollows = do
+  bang <- lookaheadKind 1
+  opening <- lookaheadKind 2
+  pure (isSymbol "!" bang && isSymbol "(" opening)
+
+parseMacroCall :: BlockParser -> Token -> Text -> Parser (Located Expression)
+parseMacroCall blockParser token name = do
+  _ <- advanceToken
+  _ <- advanceToken
+  _ <- expectSymbol "(" "before the macro arguments"
+  arguments <- parseMacroArguments blockParser []
+  closing <- expectSymbol ")" "to close the macro arguments"
+  pure
+    ( Located (mergedOrLeft (tokenSpan token) (tokenSpan closing))
+        (MacroCall (Located (tokenSpan token) name) arguments)
+    )
+
+parseMacroArguments :: BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseMacroArguments blockParser reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      argument <- withRecords (parseArgumentSyntax blockParser)
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          comma <- matchSymbol ","
+          case comma of
+            Nothing -> pure (reverse (argument : reversed))
+            Just _ -> parseMacroArguments blockParser (argument : reversed)
+
+{-| A macro argument may be a block, which an ordinary expression position would
+    read as a record or a nested scope; parsing it here keeps `block` parameters
+    writable as `{ ... }`. -}
+parseArgumentSyntax :: BlockParser -> Parser (Located Expression)
+parseArgumentSyntax blockParser = do
+  kind <- peekKind
+  if isSymbol "{" kind
+    then blockExpression blockParser
+    else parseExpression blockParser
 
 startsUpper :: Text -> Bool
 startsUpper value = maybe False (isUpper . fst) (Text.uncons value)

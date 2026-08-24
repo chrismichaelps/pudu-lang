@@ -14,6 +14,9 @@ module Pudu.Frontend.Syntax.Tree
   , Impl (..)
   , Import (..)
   , Literal (..)
+  , Macro (..)
+  , MacroKind (..)
+  , MacroParam (..)
   , MatchArm (..)
   , Module (..)
   , Parameter (..)
@@ -84,6 +87,7 @@ data Declaration
   | TypeDeclaration !TypeDeclarationValue
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
+  | MacroDeclaration !Macro
   | InvalidDeclaration
   deriving stock (Eq, Show)
 
@@ -176,6 +180,32 @@ data Impl = Impl
   , implFunctions :: ![Located Function]
   }
   deriving stock (Eq, Show)
+
+{-| @Program.Syntax.Macro — a typed syntax transformer.
+
+    Each parameter declares the kind of syntax it accepts, which is what lets a
+    mismatch be reported against the call rather than against a matcher, and
+    what lets the expander know which identifiers the body introduced. -}
+data Macro = Macro
+  { macroVisibility :: !Visibility
+  , macroName :: !(Located Text)
+  , macroParameters :: ![Located MacroParam]
+  , macroBody :: !(Located Expression)
+  }
+  deriving stock (Eq, Show)
+
+data MacroParam = MacroParam
+  { macroParamName :: !(Located Text)
+  , macroParamKind :: !MacroKind
+  }
+  deriving stock (Eq, Show)
+
+{-| @Program.Syntax.MacroKind — the syntax a macro parameter accepts -}
+data MacroKind
+  = ExpressionKind
+  | IdentifierKind
+  | BlockKind
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| @Program.Syntax.Parameter — preserves function input syntax -}
 data Parameter = Parameter
@@ -279,6 +309,7 @@ data Expression
   | TupleExpression ![Located Expression]
   | ArrayExpression ![Located Expression]
   | UnsafeExpression ![Located Capability] !(Located Block)
+  | MacroCall !(Located Text) ![Located Expression]
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
