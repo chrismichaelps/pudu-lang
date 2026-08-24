@@ -1,6 +1,7 @@
 {-| @Type.Check.Module — checks declarations, statements, and expressions -}
 module Pudu.Type.Check
   ( checkModule
+  , checkModuleDetailed
   , checkModuleWith
   ) where
 
@@ -103,6 +104,7 @@ import Pudu.Type.Formation
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( NominalId (..)
+  , Scheme (..)
   , nominalKey
   , monotype
   , polytype
@@ -120,8 +122,20 @@ checkModule = checkModuleWith mempty
 
 checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 checkModuleWith imported moduleValue =
+  let (types, schemes, diagnostics) = checkModuleDetailed imported moduleValue
+   in schemes `seq` (types, diagnostics)
+
+{-| Everything one check produced: the type of each expression, the scheme the
+    module frame ended with for each declared name, and the diagnostics.
+
+    Tooling that documents or searches a module needs the schemes, and asking
+    it to re-derive them from the written syntax would let its answers drift
+    from the compiler's. -}
+checkModuleDetailed
+  :: ImportTypes -> Module -> ([((Int, Int), Type)], [(Text, Scheme)], [Diagnostic])
+checkModuleDetailed imported moduleValue =
   let products = runChecker (checkUnit imported moduleValue)
-   in (producedTypes products, producedDiagnostics products)
+   in (producedTypes products, producedSchemes products, producedDiagnostics products)
 
 checkUnit :: ImportTypes -> Module -> Checker ()
 checkUnit imported moduleValue = do
@@ -203,7 +217,7 @@ checkDeclaration declared (Located _ declaration) = case declaration of
     actual <- checkExpression declared [] value
     _ <- unify (locatedSpan value) expected actual
     bindName (locatedValue name) (monotype expected)
-  FunctionDeclaration value -> checkFunction declared Nothing value
+  FunctionDeclaration value -> checkFunctionWith ModuleScopeFunction declared Nothing value
   TraitDeclaration value ->
     let name = locatedValue (traitName value)
         identity = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
@@ -220,7 +234,18 @@ checkDeclaration declared (Located _ declaration) = case declaration of
 {-| Check a trait member with a rigid `Self` bound, or an implementation member
     with `Self` aliased to its canonical target. -}
 checkMember :: DeclaredTypes -> Maybe NominalId -> Located Function -> Checker ()
-checkMember declared selfBound (Located _ value) = checkFunction declared selfBound value
+checkMember declared selfBound (Located _ value) =
+  checkFunctionWith MemberFunction declared selfBound value
+
+{-| @Type.Check.FunctionRole — whether a function owns the module-scope name it
+    is written under.
+
+    A member does not: its scheme is recorded under a qualified key, and the
+    plain name may belong to an unrelated free function in the same module.
+    Tying a member's body to whatever that name happens to hold would unify two
+    signatures that were never meant to meet. -}
+data FunctionRole = ModuleScopeFunction | MemberFunction
+  deriving stock (Eq, Show)
 
 {-| `Self` inside a trait is the implementing type, which is unknown while the
     trait itself is checked, so it stays a rigid parameter there. -}
@@ -230,16 +255,29 @@ traitAliases = id
 {-| Check a function body against its declared result. Exported signatures are
     annotated interfaces; a trait member receives its canonical trait as the
     rigid `Self` bound used by default-body method calls. -}
-checkFunction :: DeclaredTypes -> Maybe NominalId -> Function -> Checker ()
-checkFunction declared selfBound value = do
+checkFunctionWith :: FunctionRole -> DeclaredTypes -> Maybe NominalId -> Function -> Checker ()
+checkFunctionWith role declared selfBound value = do
   let rigid = functionRigid value <> foldMap selfRigid selfBound
       bounds = declareBounds declared value <> foldMap selfBoundAsBound selfBound
   requireFunctionAnnotations value
   requireComptimePurity value
+  declaredScheme <- case role of
+    ModuleScopeFunction -> lookupName (locatedValue (functionName value))
+    MemberFunction -> pure Nothing
   withRigidBounds bounds $ withComptime (functionComptime value) $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
     result <- formOptionalType declared rigid (functionReturn value)
     bindName selfName (monotype (FunctionTypeValue (functionAsync value) inputs result))
+    {-| Tie the signature the module was given to the one this body is checked
+        against. Without this the two hold separate variables for every
+        position the declaration did not annotate, and whatever the body proves
+        never reaches the name a caller — or a reader asking what the function
+        is — actually sees.
+
+        This unifies rather than replaces: the declared signature is still the
+        one that was announced to the rest of the module, and a body that
+        contradicts it must still fail against it. -}
+    mapM_ (adoptDeclaredSignature value inputs result) declaredScheme
     case functionBody value of
       Nothing -> pure ()
       Just (Located bodySpan body) -> do
@@ -258,6 +296,23 @@ checkFunction declared selfBound value = do
         pure ()
     finalizeIntegerLiterals
     dischargeObligations
+
+{-| Unify a body's signature with the one the module already holds for the
+    name, position by position.
+
+    Only a signature of the same arity is tied: a mismatch there is a defect
+    the declaration pass already reported, and unifying through it would
+    produce a second, more confusing message. -}
+adoptDeclaredSignature :: Function -> [Type] -> Type -> Scheme -> Checker ()
+adoptDeclaredSignature value inputs result scheme = case schemeType scheme of
+  FunctionTypeValue _ declaredInputs declaredResult
+    | length declaredInputs == length inputs -> do
+        mapM_ tie (zip declaredInputs inputs)
+        tie (declaredResult, result)
+  _ -> pure ()
+ where
+  headSpan = locatedSpan (functionName value)
+  tie (left, right) = () <$ unify headSpan left right
 
 {-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
     which lets a default body call other trait methods on `self`. -}

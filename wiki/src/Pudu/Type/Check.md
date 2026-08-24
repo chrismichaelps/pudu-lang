@@ -30,6 +30,17 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- A function body is checked against the *same* signature the module was given for its name, not a
+  freshly formed copy. Without this tie the two hold separate variables for every position the
+  declaration did not annotate, and whatever the body proves never reaches the name a caller — or a
+  reader asking what the function is — actually sees: `fn add(a, b) { a + b }` reported two
+  unresolved variables rather than `Int -> Int`.
+- The tie is a unification, not a replacement: the declared signature is still the one announced to
+  the rest of the module, and a body contradicting it must still fail against it.
+- Only a module-scope function is tied. A member's scheme is recorded under a qualified key, and
+  the plain name may belong to an unrelated free function in the same module; tying a member's body
+  to whatever that name holds would unify two signatures that were never meant to meet.
+
 - Signatures are collected before any body is checked, so a function may call one declared later, exactly as resolution already promised for names.
 - Inference is local and bidirectional, matching [[architecture/SEMANTICS]]'s inference boundary: an absent annotation on a synchronous private function becomes a fresh variable the body solves, and no caller is ever inspected to type a callee.
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.

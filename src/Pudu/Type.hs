@@ -1,9 +1,11 @@
 {-| @Type.Module — exposes the typing boundary -}
 module Pudu.Type
-  ( Scheme (..)
+  ( ModuleTypes (..)
+  , Scheme (..)
   , Type (..)
   , TypeInfo (..)
   , checkTypes
+  , checkTypesDetailed
   , checkTypesWith
   , renderType
   , typeAt
@@ -20,6 +22,7 @@ import Pudu.Type.Check (checkModule)
 import qualified Pudu.Type.Check as Check
 import Pudu.Type.Interface (ImportTypes)
 import Pudu.Type.Value (Scheme (..), Type (..), renderType)
+import Data.Text (Text)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
     it occupies. Tooling reads it to answer "what is this?" without re-running
@@ -31,6 +34,28 @@ checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypes moduleValue =
   let (entries, diagnostics) = checkModule moduleValue
    in (TypeInfo (Map.fromList entries), diagnostics)
+
+{-| @Type.ModuleTypes — one check's full result.
+
+    `moduleSchemes` is the compiler's own answer for every module-scope name:
+    the generalised type inference settled on, with the bounds it must prove.
+    Documentation and search read it so that what a tool reports and what the
+    compiler believes cannot disagree. -}
+data ModuleTypes = ModuleTypes
+  { moduleTypeInfo :: !TypeInfo
+  , moduleSchemes :: ![(Text, Scheme)]
+  }
+  deriving stock (Eq, Show)
+
+checkTypesDetailed :: ImportTypes -> Module -> (ModuleTypes, [Diagnostic])
+checkTypesDetailed imported moduleValue =
+  let (entries, schemes, diagnostics) = Check.checkModuleDetailed imported moduleValue
+   in ( ModuleTypes
+          { moduleTypeInfo = TypeInfo (Map.fromList entries)
+          , moduleSchemes = schemes
+          }
+      , diagnostics
+      )
 
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 checkTypesWith imported moduleValue =

@@ -34,6 +34,10 @@ renderType :: Type -> Text
 
 ### Governance
 
+- `checkTypesDetailed` reports the module frame's final schemes alongside the per-expression types.
+  Tooling that documents or searches a module needs the generalised type of every declared name,
+  and re-deriving it from written syntax would let a tool's answers drift from the compiler's.
+
 - The published `TypeInfo` is keyed by the span an expression occupies, so tooling answers "what is this?" without re-running the checker.
 - `widestWithin` answers for a region rather than an exact span, which is what an interactive entry or an editor selection can supply.
 - Checking runs only on a module whose names all resolved. An unresolved name has no type, and reporting one would explain the same defect twice.

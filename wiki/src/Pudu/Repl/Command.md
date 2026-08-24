@@ -33,6 +33,10 @@ commandHelp :: [(Text, Text)]
 
 ### Governance
 
+- `:doc` and `:search` carry their argument untrimmed like the other inspection commands: the
+  parser does not know what is documented or searchable, and inventing that knowledge here would
+  put the vocabulary in two places.
+
 - A leading `:` introduces a command; everything else is program text, and a blank line is neither.
 - The vocabulary is closed and its order is priority: an abbreviation resolves to the first command it prefixes, and an exact spelling always wins over a prefix.
 - An unrecognized command keeps the name that was typed so the session can report it back accurately.

@@ -1,0 +1,270 @@
+{-| @Doc.Module — builds a searchable index of what a module declares -}
+module Pudu.Doc
+  ( DocEntry (..)
+  , DocIndex (..)
+  , DocKind (..)
+  , buildIndex
+  , entriesFor
+  , kindLabel
+  , renderEntry
+  , renderEntryLines
+  , renderEntryLinesWith
+  ) where
+
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Pudu.Doc.Signature (SigType (..), Signature (..), renderSignature, schemeSignature)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Frontend.Syntax.Tree
+  ( Declaration (..)
+  , Function (..)
+  , Impl (..)
+  , Macro (..)
+  , Module (..)
+  , Trait (..)
+  , TypeDeclarationValue (..)
+  , TypeSyntax (..)
+  )
+import Pudu.Frontend.Token (Token (..), Trivia (..), TriviaKind (DocComment, Whitespace))
+import Pudu.Source (spanEnd, spanStart, unOffset)
+import Pudu.Type (ModuleTypes (..), Scheme)
+
+{-| @Doc.Kind — what a documented name is.
+
+    The kind is what a reader filters on and what an editor draws an icon for,
+    so it names the declaration form rather than the internal representation. -}
+data DocKind
+  = DocFunction
+  | DocTraitMethod !Text
+  | DocMethod !Text
+  | DocConstant
+  | DocType
+  | DocTrait
+  | DocMacro
+  deriving stock (Eq, Ord, Show)
+
+{-| @Doc.Entry — one documented name.
+
+    `docSignature` comes from the checker, never from the written annotation, so
+    an unannotated declaration is still searchable and an annotated one is
+    described as the compiler understood it. `docSpan` is what an editor jumps
+    to, and `docComment` is what it shows on hover. -}
+data DocEntry = DocEntry
+  { docName :: !Text
+  , docKind :: !DocKind
+  , docModule :: !Text
+  , docSignature :: !(Maybe Signature)
+  , docComment :: ![Text]
+  , docSpan :: !(Int, Int)
+  }
+  deriving stock (Eq, Show)
+
+{-| @Doc.Index — every documented name in one module, in declaration order. -}
+newtype DocIndex = DocIndex {indexEntries :: [DocEntry]}
+  deriving stock (Eq, Show)
+
+instance Semigroup DocIndex where
+  DocIndex left <> DocIndex right = DocIndex (left <> right)
+
+instance Monoid DocIndex where
+  mempty = DocIndex []
+
+{-| Build the index for one checked module.
+
+    Three sources meet here and each answers only what it is authoritative for:
+    the module says what was declared and where, the checker says what type each
+    declaration has, and the token stream says what was documented. Nothing is
+    re-derived from a source that only approximates it — in particular the
+    signature is never reconstructed from the written syntax, because the
+    written syntax is optional and the inferred type is not. -}
+buildIndex :: [Token] -> ModuleTypes -> Module -> DocIndex
+buildIndex tokens types moduleValue =
+  DocIndex (concatMap entry (moduleDeclarations moduleValue))
+ where
+  owner = moduleNameText (locatedValue (moduleName moduleValue))
+  schemes = Map.fromList (moduleSchemes types)
+  docs = docComments tokens
+
+  entry (Located declarationSpan declaration) = case declaration of
+    BindingDeclaration _ _ name _ _ ->
+      [make (locatedValue name) DocConstant declarationSpan (locatedValue name)]
+    FunctionDeclaration value ->
+      [ make
+          (locatedValue (functionName value))
+          DocFunction
+          declarationSpan
+          (locatedValue (functionName value))
+      ]
+    TypeDeclaration value ->
+      [make (locatedValue (typeName value)) DocType declarationSpan (locatedValue (typeName value))]
+    TraitDeclaration value ->
+      make (locatedValue (traitName value)) DocTrait declarationSpan (locatedValue (traitName value))
+        : map (traitMember (locatedValue (traitName value))) (traitMembers value)
+    ImplDeclaration value -> map (implMember value) (implFunctions value)
+    MacroDeclaration value ->
+      [make (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
+    InvalidDeclaration -> []
+
+  traitMember holder (Located memberSpan value) =
+    make
+      (locatedValue (functionName value))
+      (DocTraitMethod holder)
+      memberSpan
+      (holder <> "." <> locatedValue (functionName value))
+
+  implMember holder (Located memberSpan value) =
+    make
+      (locatedValue (functionName value))
+      (DocMethod (implLabel holder))
+      memberSpan
+      (implLabel holder <> "." <> locatedValue (functionName value))
+
+  make name kind spanValue key =
+    DocEntry
+      { docName = name
+      , docKind = kind
+      , docModule = owner
+      , docSignature = concreteSelf kind . schemeSignature <$> lookupScheme key name
+      , docComment = Map.findWithDefault [] (unOffset (spanStart spanValue)) docs
+      , docSpan = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+      }
+
+  {-| Find the scheme the checker recorded for this declaration.
+
+      A member is keyed by the nominal type it belongs to, and that type may be
+      qualified by the module that declared it — so a trait's own member is
+      under `Owner.Trait.method` while a method on a builtin is under
+      `Int.method`. Trying the candidates in order of specificity finds the
+      right one without the index having to reimplement the checker's naming.
+
+      The plain name is the last candidate rather than the first: a module with
+      both a free `label` and a `Label.label` must not describe one as the
+      other. -}
+  lookupScheme :: Text -> Text -> Maybe Scheme
+  lookupScheme key name =
+    case mapMaybe (`Map.lookup` schemes) candidates of
+      found : _ -> Just found
+      [] -> Nothing
+   where
+    candidates
+      | key == name = [name]
+      | otherwise = [owner <> "." <> key, key, name]
+
+{-| Report an implementation's methods against the type they are implemented
+    for rather than against `Self`.
+
+    The checker keeps `Self` rigid inside an implementation because that is what
+    lets one method call another, but a reader looking up `Int.before` is asking
+    about `Int`, and answering with `Self` would make them resolve the binding
+    themselves. A trait's own member keeps `Self`: there it is the point. -}
+concreteSelf :: DocKind -> Signature -> Signature
+concreteSelf kind signature = case kind of
+  DocMethod holder ->
+    signature
+      { signatureArguments = map (substitute holder) (signatureArguments signature)
+      , signatureResult = substitute holder (signatureResult signature)
+      }
+  _ -> signature
+ where
+  substitute holder sigType = case sigType of
+    SigVar "Self" -> SigCon holder []
+    SigCon "Self" [] -> SigCon holder []
+    SigCon name arguments -> SigCon name (map (substitute holder) arguments)
+    SigRef mutable target -> SigRef mutable (substitute holder target)
+    SigTuple members -> SigTuple (map (substitute holder) members)
+    SigFun inputs result -> SigFun (map (substitute holder) inputs) (substitute holder result)
+    other -> other
+
+{-| The head of an implementation, used to qualify the methods it provides.
+
+    Only the head name is needed: the checker keys a method by the nominal type
+    it is implemented for, and the arguments of that type do not distinguish two
+    implementations that would already have been rejected as overlapping. -}
+implLabel :: Impl -> Text
+implLabel value = case locatedValue (implTarget value) of
+  NamedType path _ -> moduleNameText path
+  ReferenceType _ inner -> case locatedValue inner of
+    NamedType path _ -> moduleNameText path
+    _ -> "?"
+  _ -> "?"
+
+{-| Doc comments keyed by the offset of the token they lead.
+
+    A declaration's documentation is the run of `///` lines (or one `/** */`
+    block) immediately before it, with nothing but whitespace between. A comment
+    separated from the declaration by another comment is not documentation for
+    it: the reader who wrote a note between the two meant the note, not the
+    attachment. -}
+docComments :: [Token] -> Map Int [Text]
+docComments tokens =
+  Map.fromList (mapMaybe attached tokens)
+ where
+  attached token = case leading token of
+    [] -> Nothing
+    found -> Just (unOffset (spanStart (tokenSpan token)), found)
+
+  leading = concatMap body . takeTrailingRun . tokenLeadingTrivia
+
+  takeTrailingRun = reverse . takeWhile isDoc . reverse . filter (not . isBlank)
+
+  isBlank trivia = triviaKind trivia == Whitespace
+  isDoc trivia = triviaKind trivia == DocComment
+
+  body = docLines . triviaText
+
+{-| Strip a doc comment's markers and its common indentation, so what a reader
+    wrote is what a reader sees. -}
+docLines :: Text -> [Text]
+docLines raw
+  | Text.isPrefixOf "///" raw = [Text.strip (Text.drop 3 raw)]
+  | Text.isPrefixOf "/**" raw =
+      map cleanBlockLine (Text.lines (Text.dropEnd 2 (Text.drop 3 raw)))
+  | otherwise = [Text.strip raw]
+ where
+  cleanBlockLine = Text.strip . Text.dropWhile (== '*') . Text.stripStart
+
+{-| Every entry for a name, in declaration order. A name can appear more than
+    once — a method on two implementations, for instance — and reporting only
+    the first would hide the ambiguity a reader is asking about. -}
+entriesFor :: Text -> DocIndex -> [DocEntry]
+entriesFor name = filter ((== name) . docName) . indexEntries
+
+kindLabel :: DocKind -> Text
+kindLabel kind = case kind of
+  DocFunction -> "fn"
+  DocTraitMethod holder -> "fn (trait " <> holder <> ")"
+  DocMethod holder -> "fn (" <> holder <> ")"
+  DocConstant -> "const"
+  DocType -> "type"
+  DocTrait -> "trait"
+  DocMacro -> "macro"
+
+{-| One line, the way a search result lists it: the name, its type, and where it
+    came from. -}
+renderEntry :: DocEntry -> Text
+renderEntry value =
+  docName value
+    <> maybe Text.empty (\signature -> " :: " <> renderSignature signature) (docSignature value)
+
+{-| The full description, the way a documentation listing shows it. -}
+renderEntryLines :: DocEntry -> [Text]
+renderEntryLines = renderEntryLinesWith True
+
+{-| The same description, with the owning module named only when it tells the
+    reader something.
+
+    At the prompt it does not: every answer comes from the session the reader is
+    sitting in, and printing its synthetic module name would be noise dressed as
+    provenance. -}
+renderEntryLinesWith :: Bool -> DocEntry -> [Text]
+renderEntryLinesWith withProvenance value =
+  (renderEntry value : provenance) <> docComment value
+ where
+  provenance
+    | withProvenance = [kindLabel (docKind value) <> " · " <> docModule value]
+    | otherwise = [kindLabel (docKind value)]
+

@@ -28,6 +28,8 @@ data Command
   | ShowSetting !Text
   | ClearSetting !Text
   | ShowState !Text
+  | ShowDoc !Text
+  | Search !Text
   | BeginBlock
   | EndBlock
   | Unknown !Text
@@ -79,6 +81,8 @@ build canonical argument = case canonical of
   "set" -> ShowSetting argument
   "unset" -> ClearSetting argument
   "show" -> ShowState argument
+  "doc" -> ShowDoc argument
+  "search" -> Search argument
   _ -> Unknown canonical
 
 {-| An abbreviation resolves to the first command that it prefixes, so the
@@ -98,6 +102,7 @@ commandNames :: [Text]
 commandNames =
   [ "quit", "help", "load", "reload", "reset"
   , "type", "info", "kind", "instances"
+  , "doc", "search"
   , "tokens", "ast", "browse", "context", "show", "set", "unset"
   ]
 
@@ -117,6 +122,8 @@ commandHelp =
   , (":set +t", "print the type after each result; :unset +t stops")
   , (":set +s", "print how long each entry took; :unset +s stops")
   , (":show <topic>", "bindings, imports, declarations, or settings")
+  , (":doc <name>", "show a name's documentation and inferred type")
+  , (":search <query>", "find a name, or a type such as Array[a] -> a")
   , (":tokens <text>", "show the token stream for one line")
   , (":ast <text>", "show the parsed structure of one line")
   , (":{ ... :}", "enter a multi-line block")

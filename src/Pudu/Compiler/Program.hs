@@ -2,6 +2,7 @@
 module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , programDocs
   , rootCompileResult
   ) where
 
@@ -9,6 +10,7 @@ import Control.Exception (IOException, try)
 import Data.Graph (SCC, flattenSCC, stronglyConnComp)
 import Data.List (isSuffixOf, sort)
 import Data.List.NonEmpty (toList)
+import Data.Maybe (fromMaybe)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
@@ -20,6 +22,7 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
+import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -51,6 +54,19 @@ data ProgramResult = ProgramResult
   , programDiagnostics :: ![Diagnostic]
   , programContext :: !CompileContext
   }
+
+{-| Every documented name in the program, in dependency order.
+
+    Ordering by `programOrder` rather than by module name means a search over a
+    whole program lists a dependency's answer before the module that uses it,
+    which is the order a reader follows a definition in. -}
+programDocs :: ProgramResult -> DocIndex
+programDocs result =
+  foldMap forModule (programOrder result)
+ where
+  forModule name = case Map.lookup name (programModules result) of
+    Nothing -> mempty
+    Just compiled -> fromMaybe mempty (compileDocs compiled)
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)

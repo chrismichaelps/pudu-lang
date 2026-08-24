@@ -8,6 +8,7 @@ module Pudu.Repl.Session
   , contextSummary
   , inspectSession
   , inspectContext
+  , inspectDocs
   , emptySession
   , loadModule
   , sessionDeclaredNames
@@ -25,6 +26,7 @@ import Pudu.Compiler.Program
   , rootCompileResult
   )
 import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Doc (DocIndex)
 import Pudu.Eval (EvalOutcome (..), evaluateEntryPoint)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
@@ -189,6 +191,18 @@ evaluateFor result _ = case compileModule result of
 
 {-| Compile the session exactly as it stands, with no new entry. `:browse` and
     `:context` use this so inspection cannot alter what the session holds. -}
+{-| The session's own documentation index.
+
+    It is produced by the same compile the session would run, so `:doc` and
+    `:search` describe exactly the code in front of the reader — including
+    entries typed at the prompt a moment earlier, which no pre-built index
+    could know about. -}
+inspectDocs :: Session -> IO (Maybe DocIndex)
+inspectDocs session = do
+  let (buffer, _) = renderBuffer session StatementEntry Text.empty
+  source <- newSource interactiveName buffer
+  pure (compileDocs (runCompileWith (sessionContext session) source))
+
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 inspectSession session = do
   (resolution, _, diagnostics) <- inspectContext session

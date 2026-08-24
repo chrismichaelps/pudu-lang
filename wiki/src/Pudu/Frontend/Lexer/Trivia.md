@@ -27,6 +27,13 @@ scanTrivia :: LexerCursor -> Maybe LexerCursor
 
 ## Governance
 
+- A `///` line and a `/** */` block are lexed as `DocComment`, their own trivia kind. Documentation
+  attaches to the declaration that follows it, and deciding that from a text prefix at every
+  consumer would put one rule in several places.
+- A `////` ruler is an ordinary comment. A row of slashes is a visual separator, and treating it as
+  documentation would attach a line of noise to the next declaration.
+- `/**/` is an empty block comment, not an empty doc comment.
+
 - A non-match returns `Nothing`; success consumes and commits at least one scalar.
 - Whitespace follows the locked `base` Unicode `isSpace` classification and is emitted as one maximal `Whitespace` trivia segment.
 - A line comment begins with `//`, excludes CR/LF from its `LineComment` segment, and stops at EOF or before the line terminator so the next call preserves that terminator as whitespace.

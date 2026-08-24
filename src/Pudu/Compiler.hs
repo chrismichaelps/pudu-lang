@@ -20,7 +20,8 @@ import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..), evaluateModule)
 import Pudu.Frontend.Expand (expandModule)
 import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, resolveModuleWith)
-import Pudu.Type (TypeInfo, checkTypesWith)
+import Pudu.Doc (DocIndex, buildIndex)
+import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
 import Pudu.Type.Interface (TypeInterface, importsFor)
 import Pudu.Source (Source)
 
@@ -39,6 +40,7 @@ data CompileResult = CompileResult
   , compileModule :: !(Maybe Module)
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
+  , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
   }
   deriving stock (Eq, Show)
@@ -74,6 +76,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileModule = Nothing
             , compileResolution = Nothing
             , compileTypes = Nothing
+            , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
             }
         Just original ->
@@ -85,8 +88,9 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
               resolved =
                 sortDiagnostics
                   (frontendDiagnostics <> expansionDiagnostics <> resolutionDiagnostics)
-              (types, typeDiagnostics) =
+              (typing, typeDiagnostics) =
                 if hasErrors resolved then (Nothing, []) else typedResult context parsed
+              types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
               constantDiagnostics =
                 if hasErrors typed then [] else foldConstants parsed
@@ -96,6 +100,8 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 , compileModule = if hasErrors diagnostics then Nothing else Just parsed
                 , compileResolution = Just resolution
                 , compileTypes = types
+                , compileDocs =
+                    (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                 , compileDiagnostics = diagnostics
                 }
 
@@ -114,11 +120,11 @@ foldConstants parsed = outcomeDiagnostics (evaluateModule parsed)
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}
-typedResult :: CompileContext -> Module -> (Maybe TypeInfo, [Diagnostic])
+typedResult :: CompileContext -> Module -> (Maybe ModuleTypes, [Diagnostic])
 typedResult context parsed =
   let imported = importsFor (contextTypes context) parsed
-      (info, diagnostics) = checkTypesWith imported parsed
-   in (Just info, diagnostics)
+      (checked, diagnostics) = checkTypesDetailed imported parsed
+   in (Just checked, diagnostics)
 
 runFrontend :: Source -> FrontendResult
 runFrontend source =

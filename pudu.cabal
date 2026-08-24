@@ -69,6 +69,11 @@ library
     Pudu.Frontend.Token
     Pudu.FloatLiteral
     Pudu.IntegerLiteral
+    Pudu.Doc
+    Pudu.Doc.Json
+    Pudu.Doc.Query
+    Pudu.Doc.Search
+    Pudu.Doc.Signature
     Pudu.Repl
     Pudu.Repl.Command
     Pudu.Repl.Describe
@@ -144,6 +149,7 @@ test-suite pudu-test
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
     Pudu.EvalSpec
+    Pudu.DocSpec
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec

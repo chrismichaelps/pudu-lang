@@ -26,7 +26,7 @@ import Pudu.Frontend.Token
       , IntegerLiteral, Invalid, Keyword, StringLiteral, Symbol
       )
   , Trivia (Trivia)
-  , TriviaKind (BlockComment, LineComment, Whitespace)
+  , TriviaKind (BlockComment, DocComment, LineComment, Whitespace)
   , keywordFromText
   , keywordText
   , symbolFromText
@@ -65,7 +65,7 @@ testKeywordVocabulary =
 
 testTriviaVocabulary :: IO Property
 testTriviaVocabulary =
-  pure ([minBound .. maxBound] === [Whitespace, LineComment, BlockComment])
+  pure ([minBound .. maxBound] === [Whitespace, LineComment, BlockComment, DocComment])
 
 testSymbolVocabulary :: IO Property
 testSymbolVocabulary =
