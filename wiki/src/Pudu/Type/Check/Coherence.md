@@ -29,6 +29,8 @@ checkCoherence :: [Located Declaration] -> Checker ()
 
 ### Governance
 
+- An implementation of a compiler-controlled marker is rejected with `E3021`. [[architecture/SEMANTICS]] makes `Copy` the compiler's decision, so a written implementation would claim a guarantee only ownership checking can give.
+
 - [[grammar/pudu]] prohibits overlapping implementations. This issue enforces the exact duplicate case: two implementation heads whose trait and target syntax are structurally identical after generic-parameter normalization.
 - [[grammar/pudu]] also requires the current module to declare either the implemented trait or the target's nominal type. A foreign trait implemented for a foreign target reports `E3014` at the target span.
 - Ownership follows declaration identity after transparent alias expansion. Declaring an alias for a foreign type or trait does not make that declaration local; generic alias parameters are substituted before the owner is classified.

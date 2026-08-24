@@ -38,6 +38,8 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ### Governance
 
+- A bound naming a compiler-controlled marker is proved by [[Type Marker]] from the type's structure when no implementation was written, which is what lets `Int` satisfy `Copy` without any module declaring it.
+
 - A method is bound under a key naming the type it implements for, not at module scope. A trait method is reached through a value, which is why `show(user)` does not resolve while `user.show()` does.
 - `Self` inside an implementation is its target type. That is what lets a method read the fields of the value it was called on, and it is why the alias is installed before the body is checked.
 - `Self` inside a trait member body is a rigid parameter added to the rigid list, so `formType` produces `RigidType "Self"` and method calls route through `rigidMethod` and the trait bound `selfBoundAsBound` installs. The implementing type is unknown while the trait is checked, so `Self` cannot be aliased to a nominal type there.

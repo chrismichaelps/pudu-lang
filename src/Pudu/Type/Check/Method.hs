@@ -43,6 +43,7 @@ import Pudu.Type.Env
   , rigidSatisfies
   , takeObligations
   )
+import Pudu.Type.Marker (isMarkerTrait, satisfiesMarker)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
 import Pudu.Type.Value
@@ -215,13 +216,30 @@ dischargeObligations = do
         satisfied <- rigidSatisfies name traitText
         unless satisfied (unsatisfied spanValue resolved traitText)
       NominalType owner _ -> do
-        satisfied <- implementsTrait owner traitText
+        implemented <- implementsTrait owner traitText
+        satisfied <- if implemented then pure True else marker traitText resolved
         unless satisfied (unsatisfied spanValue resolved traitText)
-      _ -> unsatisfied spanValue resolved traitText
+      _ -> do
+        satisfied <- marker traitText resolved
+        unless satisfied (unsatisfied spanValue resolved traitText)
+
+  {-| A compiler-controlled marker is decided by the value's structure, not by
+      a declaration, so it is consulted when no implementation was written. -}
+  marker traitIdentity resolved
+    | isMarkerTrait traitIdentity = satisfiesMarker traitIdentity resolved
+    | otherwise = pure False
+  {-| A marker cannot be implemented by hand, so telling the reader to write an
+      implementation would send them at a diagnostic that rejects it. -}
   unsatisfied spanValue resolved traitIdentity =
     report "E3012" spanValue
       (renderType resolved <> " does not implement " <> nominalName traitIdentity)
-      (Just "implement the trait for this type, or relax the bound")
+      ( Just
+          ( if isMarkerTrait traitIdentity
+              then
+                "this marker follows the type's structure; a value that owns a resource does not satisfy it"
+              else "implement the trait for this type, or relax the bound"
+          )
+      )
 
 {-| The constructors of the wired-in sums exist without any declaration, so
     they are bound before the module's own declarations are. A module that
