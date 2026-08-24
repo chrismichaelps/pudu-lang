@@ -14,6 +14,7 @@ module Pudu.Eval.Value
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
+import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.FloatLiteral (FloatWidth)
@@ -49,7 +50,9 @@ data Value
     `panic` is the prelude's unrecoverable abort: it takes a message and stops
     evaluation with `E7007`, matching [[architecture/SEMANTICS]]'s rule that
     panics represent violated invariants, not recoverable domain failure. -}
-data Builtin = PanicBuiltin
+data Builtin
+  = PanicBuiltin
+  | CharFromCodeBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
@@ -69,6 +72,7 @@ data Builtin = PanicBuiltin
     equipped to answer. -}
 data CharMethod
   = CharCode
+  | CharToText
   deriving stock (Eq, Show)
 
 data StringMethod
@@ -101,6 +105,7 @@ data ArrayMethod
   | ArrayInsert
   | ArrayRemove
   | ArraySlice
+  | ArrayConcat
   | ArrayReverse
   | ArrayMap
   | ArrayFilter
@@ -111,11 +116,19 @@ data ArrayMethod
 
     `closureSelf` is present when the function was reached as a method: the
     receiver is bound to the first parameter, which is what `value.method()`
-    means. -}
+    means.
+
+    `closureCaptured` is present for a function *literal* and absent for a
+    declaration. A declaration is called in the environment it is called from,
+    which is what lets a module's functions see each other and an imported
+    module's frame stay reachable. A literal cannot work that way: it may be
+    returned, stored, and called long after the block that gave its free names
+    meaning has ended, so it carries that environment with it. -}
 data Closure = Closure
   { closureName :: !Text
   , closureFunction :: !Function
   , closureSelf :: !(Maybe Value)
+  , closureCaptured :: !(Maybe [Map Text Value])
   }
   deriving stock (Eq, Show)
 
@@ -141,6 +154,7 @@ renderValue value = case value of
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
   TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
+  BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
   StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
@@ -178,6 +192,7 @@ valueKind value = case value of
 charMethodName :: CharMethod -> Text
 charMethodName method = case method of
   CharCode -> "code"
+  CharToText -> "toText"
 
 stringMethodName :: StringMethod -> Text
 stringMethodName method = case method of
@@ -210,6 +225,7 @@ arrayMethodName method = case method of
   ArrayInsert -> "insert"
   ArrayRemove -> "remove"
   ArraySlice -> "slice"
+  ArrayConcat -> "concat"
   ArrayReverse -> "reverse"
   ArrayMap -> "map"
   ArrayFilter -> "filter"

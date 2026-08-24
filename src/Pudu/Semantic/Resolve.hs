@@ -99,7 +99,7 @@ resolvePrepared prepared importDiagnostics moduleValue =
 isExported :: Symbol -> Bool
 isExported symbol = symbolVisibility symbol /= Private && symbolOrigin symbol == ModuleOrigin
 
-{-| Scope layering follows the same shape Haskell uses: wired-in names first,
+{-| Scope layering runs outermost first: wired-in names first,
     then the implicit prelude module, then the module's own imports and
     declarations. An inner layer shadows an outer one silently. -}
 resolveUnit :: Maybe [[ImportBinding]] -> Module -> Resolver ()
@@ -314,6 +314,7 @@ walkExpression (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> walkBlock body
   MacroCall _ arguments -> mapM_ walkExpression arguments
   ScopeExpression body -> walkBlock body
+  LambdaExpression value -> walkFunction value
   RecordExpression path fields -> do
     resolveConstructorPath spanValue path
     mapM_ walkFieldInit fields

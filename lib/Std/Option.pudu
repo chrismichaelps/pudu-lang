@@ -52,3 +52,86 @@ export fn okOr[T, E](value: Option[T], failure: E) -> Result[T, E] {
     case None => Err(failure)
   }
 }
+
+/// The value, or a fallback computed only when there is none.
+/// The fallback is a function so it runs only when it is needed, which matters
+/// when computing it is expensive or can itself fail.
+export fn unwrapOrElse[T](value: Option[T], fallback: fn() -> T) -> T {
+  match value {
+    case Some(found) => found
+    case None => fallback()
+  }
+}
+
+/// The value transformed, if there is one.
+export fn map[A, B](value: Option[A], transform: fn(A) -> B) -> Option[B] {
+  match value {
+    case Some(found) => Some(transform(found))
+    case None => None
+  }
+}
+
+/// The value transformed into another option, flattened.
+export fn andThen[A, B](value: Option[A], transform: fn(A) -> Option[B]) -> Option[B] {
+  match value {
+    case Some(found) => transform(found)
+    case None => None
+  }
+}
+
+/// The value if it is present and the predicate accepts it.
+export fn keepIf[T](value: Option[T], accept: fn(T) -> Bool) -> Option[T] {
+  match value {
+    case Some(found) => if accept(found) { Some(found) } else { None }
+    case None => None
+  }
+}
+
+/// The result of transforming the value, or a fallback when there is none.
+/// The arguments are in the order a reader meets them: the value, what to do
+/// with it, and what to do without it.
+export fn fold[A, B](value: Option[A], transform: fn(A) -> B, fallback: B) -> B {
+  match value {
+    case Some(found) => transform(found)
+    case None => fallback
+  }
+}
+
+/// Whether the value is present and the predicate accepts it.
+export fn holds[T](value: &Option[T], predicate: fn(T) -> Bool) -> Bool {
+  match value {
+    case Some(found) => predicate(found)
+    case None => false
+  }
+}
+
+/// A nested option flattened by one level.
+export fn flatten[T](value: Option[Option[T]]) -> Option[T] {
+  match value {
+    case Some(found) => found
+    case None => None
+  }
+}
+
+/// Every present value, with the absent ones dropped.
+export fn present[T](values: &Array[Option[T]]) -> Array[T] {
+  var out = []
+  for value in values {
+    match value {
+      case Some(found) => { out = out.push(found) }
+      case None => { }
+    }
+  }
+  out
+}
+
+/// Two options paired, present only when both are.
+export fn zip[A, B](left: Option[A], right: Option[B]) -> Option[(A, B)] {
+  match left {
+    case Some(first) => match right {
+      case Some(second) => Some((first, second))
+      case None => None
+    }
+    case None => None
+  }
+}

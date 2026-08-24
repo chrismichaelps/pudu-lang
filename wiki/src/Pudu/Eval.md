@@ -34,6 +34,17 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- A function literal captures the environment it was written in; a declaration does not. A
+  declaration is called in the environment it is called from, which is what lets a module's functions
+  see each other and an imported module's frame stay reachable. A literal may be returned, stored,
+  and called long after the block that gave its free names meaning has ended.
+- A literal captures every frame in scope rather than only the names its body mentions. Capturing
+  selectively would need the resolver's answer about free names, and the two would have to agree
+  forever; capturing the environment means they cannot disagree.
+- A member chain of plain identifiers is tried as one dotted name before it is read as a field
+  access, so a module's function can be passed as a value. `Std.Char.toUpper` is one binding;
+  `record.field.inner` is two reads, and is untouched because its base is bound.
+
 - Text indices count Unicode scalars, not bytes, so `charAt` and `slice` agree with what a reader
   counting characters expects. It is the same choice indexing already makes.
 - An index outside the text is `E7004`. A silent clamp turns a logic error into wrong output that

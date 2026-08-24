@@ -1,5 +1,11 @@
 module Std.List
 
+/// Whether the array has no elements.
+export fn isEmpty[T](items: &Array[T]) -> Bool { items.length() == 0 }
+
+/// The number of elements.
+export fn length[T](items: &Array[T]) -> Int { items.length() }
+
 /// The first element, or `None` for an empty array.
 /// Nothing in `Std` is partial: this is why there is no `head` that panics.
 export fn first[T](items: &Array[T]) -> Option[T] {
@@ -8,125 +14,569 @@ export fn first[T](items: &Array[T]) -> Option[T] {
 
 /// The last element, or `None` for an empty array.
 export fn last[T](items: &Array[T]) -> Option[T] {
-  if items.length() == 0 { None } else { Some(items[items.length() - 1]) }
+  let size = items.length()
+  if size == 0 { None } else { Some(items[size - 1]) }
 }
 
-/// Whether the array has no elements.
-export fn isEmpty[T](items: &Array[T]) -> Bool { items.length() == 0 }
+/// The elements in reverse order.
+export fn reversed[T](items: &Array[T]) -> Array[T] { items.reverse() }
 
-/// The elements in reverse order, as a new array.
-/// The name says the copy: `Std` never hides an allocation behind a verb that
-/// sounds free.
-export fn reversed(items: &Array[Int]) -> Array[Int] {
-  var out = []
-  var index = items.length()
-  while index > 0 {
-    index = index - 1
-    out = out.push(items[index])
+/// One array followed by another.
+export fn concat[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  left.concat(*right)
+}
+
+/// The first `wanted` elements, or every element when the array is shorter.
+/// A negative count takes nothing.
+export fn take[T](items: &Array[T], wanted: Int) -> Array[T] {
+  items.slice(0, clampIndex(wanted, items.length()))
+}
+
+/// Every element after the first `skipped`.
+export fn drop[T](items: &Array[T], skipped: Int) -> Array[T] {
+  let size = items.length()
+  items.slice(clampIndex(skipped, size), size)
+}
+
+/// The elements from `from` up to but not including `to`.
+export fn slice[T](items: &Array[T], from: Int, to: Int) -> Array[T] {
+  let size = items.length()
+  items.slice(clampIndex(from, size), clampIndex(to, size))
+}
+
+/// Whether any element equals the given value.
+/// Equality is structural, which is what the runtime compares; there is no
+/// `Eq` bound to write until the language has one.
+export fn contains[T](items: &Array[T], wanted: T) -> Bool {
+  items.contains(wanted)
+}
+
+/// The position of the first element equal to the given value.
+/// The runtime answers `-1` for absent; this is the form a caller can match on
+/// without remembering which sentinel means absent.
+export fn indexOf[T](items: &Array[T], wanted: T) -> Option[Int] {
+  let at = items.indexOf(wanted)
+  if at < 0 { None } else { Some(at) }
+}
+
+/// How many elements equal the given value.
+export fn count[T](items: &Array[T], wanted: T) -> Int {
+  var total = 0
+  for item in items {
+    if item == wanted { total = total + 1 }
   }
-  out
+  total
 }
 
 /// The sum of every element. An empty array sums to zero.
 export fn sum(items: &Array[Int]) -> Int {
-  var total = 0
-  for item in items { total = total + item }
-  total
+  items.reduce(fn(total: Int, item: Int) -> Int => total + item, 0)
 }
 
 /// The product of every element. An empty array multiplies to one.
 export fn product(items: &Array[Int]) -> Int {
-  var total = 1
-  for item in items { total = total * item }
-  total
+  items.reduce(fn(total: Int, item: Int) -> Int => total * item, 1)
 }
 
 /// The smallest element, or `None` for an empty array.
 export fn minimum(items: &Array[Int]) -> Option[Int] {
   if items.length() == 0 { None } else {
-    var best = items[0]
-    for item in items { if item < best { best = item } else { } }
-    Some(best)
+    let smaller = fn(best: Int, item: Int) -> Int => if item < best { item } else { best }
+    Some(items.reduce(smaller, items[0]))
   }
 }
 
 /// The largest element, or `None` for an empty array.
 export fn maximum(items: &Array[Int]) -> Option[Int] {
   if items.length() == 0 { None } else {
-    var best = items[0]
-    for item in items { if item > best { best = item } else { } }
-    Some(best)
+    let larger = fn(best: Int, item: Int) -> Int => if item > best { item } else { best }
+    Some(items.reduce(larger, items[0]))
   }
 }
 
-/// Whether any element equals the given value.
-export fn contains(items: &Array[Int], wanted: Int) -> Bool {
-  for item in items { if item == wanted { return true } else { } }
-  false
+/// Every element transformed.
+export fn map[A, B](items: &Array[A], transform: fn(A) -> B) -> Array[B] {
+  items.map(transform)
 }
 
-/// The position of the first element equal to the given value.
-export fn indexOf(items: &Array[Int], wanted: Int) -> Option[Int] {
+/// Every element the predicate accepts.
+export fn filter[T](items: &Array[T], keep: fn(T) -> Bool) -> Array[T] {
+  items.filter(keep)
+}
+
+/// Combine every element into one, left to right.
+export fn fold[T, A](items: &Array[T], combine: fn(A, T) -> A, start: A) -> A {
+  items.reduce(combine, start)
+}
+
+/// Whether every element satisfies the predicate. True for an empty array.
+export fn all[T](items: &Array[T], holds: fn(T) -> Bool) -> Bool {
+  items.filter(holds).length() == items.length()
+}
+
+/// Whether any element satisfies the predicate. False for an empty array.
+export fn any[T](items: &Array[T], holds: fn(T) -> Bool) -> Bool {
+  items.filter(holds).length() > 0
+}
+
+/// The elements in ascending order.
+/// Merge sort: the input is halved with `slice` and rejoined with `concat`,
+/// both of which the runtime does on the structure rather than by rebuilding.
+export fn sorted(items: &Array[Int]) -> Array[Int] {
+  let size = items.length()
+  if size <= 1 { items.slice(0, size) } else {
+    let middle = size / 2
+    let front = sorted(&items.slice(0, middle))
+    let back = sorted(&items.slice(middle, size))
+    merge(&front, &back)
+  }
+}
+
+/// Two ascending arrays interleaved into one.
+/// Exported because merging already-sorted input is worth doing without sorting
+/// it again, which is the whole reason a merge sort has this step.
+export fn merge(left: &Array[Int], right: &Array[Int]) -> Array[Int] {
+  var out = []
+  var leftIndex = 0
+  var rightIndex = 0
+  let leftCount = left.length()
+  let rightCount = right.length()
+  while leftIndex < leftCount && rightIndex < rightCount {
+    if left[leftIndex] <= right[rightIndex] {
+      out = out.push(left[leftIndex])
+      leftIndex = leftIndex + 1
+    } else {
+      out = out.push(right[rightIndex])
+      rightIndex = rightIndex + 1
+    }
+  }
+  out.concat(left.slice(leftIndex, leftCount)).concat(right.slice(rightIndex, rightCount))
+}
+
+/// Every element but the first, or an empty array when there is none.
+/// Named for what it is rather than for the position it drops, because the
+/// partial version other languages call `tail` is not offered here at all.
+export fn rest[T](items: &Array[T]) -> Array[T] {
+  items.slice(1, items.length())
+}
+
+/// Every element but the last, or an empty array when there is none.
+export fn initial[T](items: &Array[T]) -> Array[T] {
+  let size = items.length()
+  if size == 0 { items.slice(0, 0) } else { items.slice(0, size - 1) }
+}
+
+/// The array split at a position: the first `at` elements, then the rest.
+export fn splitAt[T](items: &Array[T], at: Int) -> (Array[T], Array[T]) {
+  (take(items, at), drop(items, at))
+}
+
+/// The longest leading run of elements the predicate accepts.
+export fn takeWhile[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
+  items.slice(0, prefixLength(items, holds))
+}
+
+/// Everything after the longest leading run the predicate accepts.
+export fn dropWhile[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
+  items.slice(prefixLength(items, holds), items.length())
+}
+
+/// The longest leading run the predicate accepts, and the rest.
+export fn span[T](items: &Array[T], holds: fn(T) -> Bool) -> (Array[T], Array[T]) {
+  let at = prefixLength(items, holds)
+  (items.slice(0, at), items.slice(at, items.length()))
+}
+
+/// The longest leading run the predicate *rejects*, and the rest.
+/// This is `span` with the predicate negated: `span` keeps while it holds, and
+/// this one keeps until it does.
+export fn breakWhen[T](items: &Array[T], holds: fn(T) -> Bool) -> (Array[T], Array[T]) {
+  var at = 0
+  let size = items.length()
+  while at < size && !holds(items[at]) { at = at + 1 }
+  (items.slice(0, at), items.slice(at, size))
+}
+
+/// The elements the predicate accepts, and the elements it rejects.
+export fn partition[T](items: &Array[T], keep: fn(T) -> Bool) -> (Array[T], Array[T]) {
+  var kept = []
+  var rejected = []
+  for item in items {
+    if keep(item) { kept = kept.push(item) } else { rejected = rejected.push(item) }
+  }
+  (kept, rejected)
+}
+
+/// The first element the predicate accepts, or `None`.
+export fn find[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[T] {
+  for item in items {
+    if holds(item) { return Some(item) }
+  }
+  None
+}
+
+/// The position of the first element the predicate accepts, or `None`.
+export fn findIndex[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[Int] {
   var index = 0
-  while index < items.length() {
-    if items[index] == wanted { return Some(index) } else { }
+  let size = items.length()
+  while index < size {
+    if holds(items[index]) { return Some(index) }
     index = index + 1
   }
   None
 }
 
-/// How many elements equal the given value.
-export fn count(items: &Array[Int], wanted: Int) -> Int {
-  var total = 0
-  for item in items { if item == wanted { total = total + 1 } else { } }
-  total
-}
-
-/// The first `wanted` elements, or every element when the array is shorter.
-export fn take(items: &Array[Int], wanted: Int) -> Array[Int] {
+/// Every position whose element the predicate accepts.
+export fn findIndices[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[Int] {
   var out = []
   var index = 0
-  while index < items.length() {
-    if index >= wanted { return out } else { }
+  let size = items.length()
+  while index < size {
+    if holds(items[index]) { out = out.push(index) }
+    index = index + 1
+  }
+  out
+}
+
+/// Every position holding the given value.
+export fn indicesOf[T](items: &Array[T], wanted: T) -> Array[Int] {
+  var out = []
+  var index = 0
+  let size = items.length()
+  while index < size {
+    if items[index] == wanted { out = out.push(index) }
+    index = index + 1
+  }
+  out
+}
+
+/// Whether one array begins with another.
+export fn isPrefixOf[T](prefix: &Array[T], items: &Array[T]) -> Bool {
+  let size = prefix.length()
+  if size > items.length() { false } else { items.slice(0, size) == *prefix }
+}
+
+/// Whether one array ends with another.
+export fn isSuffixOf[T](suffix: &Array[T], items: &Array[T]) -> Bool {
+  let size = suffix.length()
+  let total = items.length()
+  if size > total { false } else { items.slice(total - size, total) == *suffix }
+}
+
+/// The remainder after a prefix, or `None` when the prefix is not there.
+export fn stripPrefix[T](prefix: &Array[T], items: &Array[T]) -> Option[Array[T]] {
+  if isPrefixOf(prefix, items) {
+    Some(items.slice(prefix.length(), items.length()))
+  } else {
+    None
+  }
+}
+
+/// A separator placed between every pair of elements.
+export fn intersperse[T](items: &Array[T], separator: T) -> Array[T] {
+  var out = []
+  var index = 0
+  let size = items.length()
+  while index < size {
+    if index > 0 { out = out.push(separator) }
     out = out.push(items[index])
     index = index + 1
   }
   out
 }
 
-/// Every element after the first `skipped`, or nothing when the array is
-/// shorter.
-export fn drop(items: &Array[Int], skipped: Int) -> Array[Int] {
+/// Every array joined end to end.
+export fn flatten[T](groups: &Array[Array[T]]) -> Array[T] {
   var out = []
-  var index = skipped
-  while index < items.length() {
-    out = out.push(items[index])
+  for members in groups { out = out.concat(members) }
+  out
+}
+
+/// Every array joined with a separator array between them.
+export fn intercalate[T](groups: &Array[Array[T]], separator: &Array[T]) -> Array[T] {
+  var out = []
+  var index = 0
+  let size = groups.length()
+  while index < size {
+    if index > 0 { out = out.concat(*separator) }
+    out = out.concat(groups[index])
     index = index + 1
   }
   out
 }
 
-/// One array followed by another, as a new array.
-export fn concat(left: &Array[Int], right: &Array[Int]) -> Array[Int] {
+/// Every element transformed into an array, and those arrays joined.
+export fn flatMap[A, B](items: &Array[A], transform: fn(A) -> Array[B]) -> Array[B] {
+  flatten(&items.map(transform))
+}
+
+/// Runs of adjacent equal elements.
+export fn group[T](items: &Array[T]) -> Array[Array[T]] {
   var out = []
-  for item in left { out = out.push(item) }
-  for item in right { out = out.push(item) }
+  var current = []
+  for item in items {
+    if current.length() == 0 || current[0] == item {
+      current = current.push(item)
+    } else {
+      out = out.push(current)
+      current = [item]
+    }
+  }
+  if current.length() > 0 { out = out.push(current) }
   out
 }
 
-/// The elements in ascending order, as a new array.
-/// Insertion sort: `Std` ships the algorithm whose behaviour it can state, and
-/// a comparison-parameterised sort waits for the language to admit anonymous
-/// functions.
-export fn sorted(items: &Array[Int]) -> Array[Int] {
+/// The elements with later duplicates removed, keeping the first of each.
+export fn distinct[T](items: &Array[T]) -> Array[T] {
   var out = []
   for item in items {
-    var index = 0
-    while index < out.length() {
-      if out[index] > item { break } else { }
-      index = index + 1
-    }
-    out = out.insert(index, item)
+    if !out.contains(item) { out = out.push(item) }
   }
   out
+}
+
+/// The first occurrence of a value removed, if it is there.
+export fn removeFirst[T](items: &Array[T], unwanted: T) -> Array[T] {
+  let at = items.indexOf(unwanted)
+  if at < 0 { items.slice(0, items.length()) } else { items.remove(at) }
+}
+
+/// Every element of the first array that is not in the second.
+export fn difference[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  var out = []
+  for item in left {
+    if !right.contains(item) { out = out.push(item) }
+  }
+  out
+}
+
+/// The first array followed by every element of the second it does not contain.
+export fn union[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  var out = distinct(left)
+  for item in right {
+    if !out.contains(item) { out = out.push(item) }
+  }
+  out
+}
+
+/// Every element of the first array that is also in the second.
+export fn intersection[T](left: &Array[T], right: &Array[T]) -> Array[T] {
+  var out = []
+  for item in left {
+    if right.contains(item) { out = out.push(item) }
+  }
+  out
+}
+
+/// Corresponding elements paired, stopping at the shorter array.
+export fn zip[A, B](left: &Array[A], right: &Array[B]) -> Array[(A, B)] {
+  var out = []
+  var index = 0
+  let size = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < size {
+    out = out.push((left[index], right[index]))
+    index = index + 1
+  }
+  out
+}
+
+/// Corresponding elements combined, stopping at the shorter array.
+export fn zipWith[A, B, C](left: &Array[A], right: &Array[B], combine: fn(A, B) -> C) -> Array[C] {
+  var out = []
+  var index = 0
+  let size = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < size {
+    out = out.push(combine(left[index], right[index]))
+    index = index + 1
+  }
+  out
+}
+
+/// Every element paired with its position.
+export fn enumerate[T](items: &Array[T]) -> Array[(Int, T)] {
+  var out = []
+  var index = 0
+  let size = items.length()
+  while index < size {
+    out = out.push((index, items[index]))
+    index = index + 1
+  }
+  out
+}
+
+/// Pairs separated back into two arrays.
+export fn unzip[A, B](pairs: &Array[(A, B)]) -> (Array[A], Array[B]) {
+  var lefts = []
+  var rights = []
+  for pair in pairs {
+    lefts = lefts.push(pair[0])
+    rights = rights.push(pair[1])
+  }
+  (lefts, rights)
+}
+
+/// The value paired with the first matching key, or `None`.
+export fn lookup[K, V](pairs: &Array[(K, V)], wanted: K) -> Option[V] {
+  for pair in pairs {
+    if pair[0] == wanted { return Some(pair[1]) }
+  }
+  None
+}
+
+/// A value repeated a number of times. A count below one produces nothing.
+export fn replicate[T](times: Int, value: T) -> Array[T] {
+  var out = []
+  var remaining = times
+  while remaining > 0 {
+    out = out.push(value)
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// The whole numbers from `from` up to but not including `to`.
+export fn range(from: Int, to: Int) -> Array[Int] {
+  var out = []
+  var current = from
+  while current < to {
+    out = out.push(current)
+    current = current + 1
+  }
+  out
+}
+
+/// Repeated application of a function, starting from a seed.
+/// The count is required: Pudu evaluates strictly and has no infinite arrays,
+/// so a repeated application must be told when to stop.
+export fn iterate[T](times: Int, seed: T, step: fn(T) -> T) -> Array[T] {
+  var out = []
+  var current = seed
+  var remaining = times
+  while remaining > 0 {
+    out = out.push(current)
+    current = step(current)
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// Every running total, starting from the initial value.
+/// The result is one longer than the input, because the initial value is a
+/// running total too.
+export fn scan[T, A](items: &Array[T], combine: fn(A, T) -> A, start: A) -> Array[A] {
+  var out = [start]
+  var accumulated = start
+  for item in items {
+    accumulated = combine(accumulated, item)
+    out = out.push(accumulated)
+  }
+  out
+}
+
+/// Combine every element into one, right to left.
+export fn foldRight[T, A](items: &Array[T], combine: fn(T, A) -> A, start: A) -> A {
+  var accumulated = start
+  var index = items.length()
+  while index > 0 {
+    index = index - 1
+    accumulated = combine(items[index], accumulated)
+  }
+  accumulated
+}
+
+/// Every prefix, shortest first, including the empty one and the whole array.
+export fn prefixes[T](items: &Array[T]) -> Array[Array[T]] {
+  var out = []
+  var index = 0
+  let size = items.length()
+  while index <= size {
+    out = out.push(items.slice(0, index))
+    index = index + 1
+  }
+  out
+}
+
+/// Every suffix, longest first, including the whole array and the empty one.
+export fn suffixes[T](items: &Array[T]) -> Array[Array[T]] {
+  var out = []
+  var index = 0
+  let size = items.length()
+  while index <= size {
+    out = out.push(items.slice(index, size))
+    index = index + 1
+  }
+  out
+}
+
+/// The elements ordered by a comparison the caller supplies.
+/// `before` answers whether its first argument sorts before its second; a
+/// comparison that is not a total order produces an unspecified order rather
+/// than a failure, which is the same promise every comparison sort makes.
+export fn sortBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
+  let size = items.length()
+  if size <= 1 { items.slice(0, size) } else {
+    let middle = size / 2
+    let front = sortBy(&items.slice(0, middle), before)
+    let back = sortBy(&items.slice(middle, size), before)
+    mergeBy(&front, &back, before)
+  }
+}
+
+/// Two arrays ordered by the same comparison interleaved into one.
+export fn mergeBy[T](left: &Array[T], right: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
+  var out = []
+  var leftIndex = 0
+  var rightIndex = 0
+  let leftCount = left.length()
+  let rightCount = right.length()
+  while leftIndex < leftCount && rightIndex < rightCount {
+    if before(right[rightIndex], left[leftIndex]) {
+      out = out.push(right[rightIndex])
+      rightIndex = rightIndex + 1
+    } else {
+      out = out.push(left[leftIndex])
+      leftIndex = leftIndex + 1
+    }
+  }
+  out.concat(left.slice(leftIndex, leftCount)).concat(right.slice(rightIndex, rightCount))
+}
+
+/// The element a comparison ranks first, or `None` for an empty array.
+export fn minimumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var best = items[0]
+    for item in items {
+      if before(item, best) { best = item }
+    }
+    Some(best)
+  }
+}
+
+/// The element a comparison ranks last, or `None` for an empty array.
+export fn maximumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var best = items[0]
+    for item in items {
+      if before(best, item) { best = item }
+    }
+    Some(best)
+  }
+}
+
+/// How many elements the predicate accepts.
+export fn countWhere[T](items: &Array[T], holds: fn(T) -> Bool) -> Int {
+  items.filter(holds).length()
+}
+
+/// The length of the longest leading run the predicate accepts.
+fn prefixLength[T](items: &Array[T], holds: fn(T) -> Bool) -> Int {
+  var at = 0
+  let size = items.length()
+  while at < size && holds(items[at]) { at = at + 1 }
+  at
+}
+
+/// Confine an index to the array's bounds, which is what every slice needs.
+fn clampIndex(index: Int, limit: Int) -> Int {
+  if index < 0 { 0 } else { if index > limit { limit } else { index } }
 }

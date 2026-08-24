@@ -37,11 +37,11 @@ preludeTypeNames =
     constructors of the wired-in `Option` and `Result` sums: their types exist
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
-preludeValueNames = ["panic", "Some", "None", "Ok", "Err"]
+preludeValueNames = ["panic", "charFromCode", "Some", "None", "Ok", "Err"]
 
 {-| The implicit import is suppressed by an explicit import of the same module,
     matching how an explicit `import Prelude` overrides the implicit one in
-    Haskell. -}
+    an implicitly imported module. -}
 isPreludeModule :: ModuleName -> Bool
 isPreludeModule (ModuleName segments) = NonEmpty.toList segments == preludeSegments
 

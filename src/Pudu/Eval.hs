@@ -18,7 +18,9 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Env
   ( Env (..)
+  , captureEnvironment
   , currentFrame
+  , withCaptured
   , pushFrame
   , Eval (..)
   , adoptChild
@@ -52,6 +54,7 @@ import Pudu.Eval.Array
   , arrayInsert
   , arrayRemove
   , arraySlice
+  , arrayConcat
   , arrayReverse
   , arrayIndexOf
   , arrayContains
@@ -72,6 +75,7 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Import (..)
   , Block (..)
+  , lambdaName
   , FieldInit (..)
   , Declaration (..)
   , Expression (..)
@@ -238,12 +242,13 @@ installBuiltinConstructors = do
   mapM_ (\name -> bind name (VariantValue name []))
     ["Some", "None", "Ok", "Err"]
   bind "panic" (BuiltinValue PanicBuiltin)
+  bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
 installDeclaration traits (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing))
+      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
@@ -260,7 +265,7 @@ installMethods traits value = case targetNameOf (implTarget value) of
  where
   installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
-        implementation = FunctionValue (Closure name method Nothing)
+        implementation = FunctionValue (Closure name method Nothing Nothing)
     bind (owner <> "." <> name) implementation
     case traitNameOf (implTrait value) of
       Nothing -> pure ()
@@ -330,7 +335,7 @@ runClosure :: Closure -> [(Text, Value)] -> Maybe Span -> Evaluator Value
 runClosure closure bindings callSpan = do
   let value = closureFunction closure
   deeper <- descend callSpan
-  outcome <- withFrame bindings $ catchUnwind $ case functionBody value of
+  outcome <- withCaptured (closureCaptured closure) $ withFrame bindings $ catchUnwind $ case functionBody value of
     Nothing -> pure UnitValue
     Just (Located _ body) -> case body of
       BlockBody block -> evaluateBlock block
@@ -400,8 +405,16 @@ evaluate (Located spanValue expression) = case expression of
   BinaryExpression left operator right -> applyBinary spanValue left operator right
   CallExpression callee arguments -> evaluateCall spanValue callee arguments
   MemberExpression target member -> do
-    value <- evaluate target
-    readMember spanValue value (locatedValue member)
+    {-| A member access on a linked module is a name, not a read: `Std.Char.toUpper`
+        is one binding, while `record.field.inner` is two reads. Trying the whole
+        chain as a path first is what lets a module's function be passed as a
+        value, which is how `mapChars(text, Char.toUpper)` works at all. -}
+    linked <- pathValue expression
+    case linked of
+      Just value -> pure value
+      Nothing -> do
+        value <- evaluate target
+        readMember spanValue value (locatedValue member)
   IndexExpression target index -> do
     container <- evaluate target
     key <- evaluate index
@@ -417,6 +430,13 @@ evaluate (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> evaluateBlock body
   MacroCall _ _ ->
     abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
+  LambdaExpression value -> do
+    {-| A literal captures the environment it was written in, so calling it
+        later means what it meant then. A declaration does not, and the two
+        cases are distinguished by this field rather than by asking what kind
+        of function it is. -}
+    captured <- captureEnvironment
+    pure (FunctionValue (Closure lambdaName value Nothing (Just captured)))
   ScopeExpression body -> evaluateScope spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
@@ -466,6 +486,23 @@ readPath spanValue path@(first :| rest) = do
       next <- readMember spanValue value segment
       foldMember next remaining
 
+{-| A member chain read as one dotted name, when every part of it is a plain
+    identifier and the whole thing is bound. Anything else is `Nothing`, so an
+    ordinary field read is untouched. -}
+pathValue :: Expression -> Evaluator (Maybe Value)
+pathValue expression = case flattenPath expression of
+  Nothing -> pure Nothing
+  Just path -> lookupName (Text.intercalate "." path)
+
+{-| The segments of a chain of names and member accesses, or nothing when any
+    part of it is a real expression. -}
+flattenPath :: Expression -> Maybe [Text]
+flattenPath expression = case expression of
+  NameExpression names -> Just (toList names)
+  MemberExpression (Located _ target) member ->
+    (<> [locatedValue member]) <$> flattenPath target
+  _ -> Nothing
+
 {-| The longest dotted prefix of a path that is bound, with the segments it did
     not consume. A single segment is not reported here: it is the ordinary case
     and the caller handles it without this search. -}
@@ -498,6 +535,7 @@ evaluateCall spanValue callee arguments = do
     FunctionValue closure -> callClosure closure values (Just spanValue)
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
+    BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
@@ -537,11 +575,28 @@ receiverOwner value = case value of
   VariantValue owner _ -> Just owner
   _ -> Nothing
 
+{-| Turn a scalar value into a character.
+
+    Not every integer is a Unicode scalar value: the surrogate range and
+    anything past U+10FFFF are not, so the answer is an `Option` rather than a
+    character the program would then carry around as a lie. -}
+callCharFromCode :: Span -> [Value] -> Evaluator Value
+callCharFromCode spanValue arguments = case arguments of
+  [IntValue code]
+    | code >= 0
+    , code <= 0x10FFFF
+    , not (code >= 0xD800 && code <= 0xDFFF) ->
+        pure (VariantValue "Some" [CharValue (toEnum (fromInteger code))])
+    | otherwise -> pure (VariantValue "None" [])
+  _ ->
+    abortAt (Just spanValue) "E7002" "charFromCode expects one integer" Nothing
+
 {-| Apply a built-in character method. -}
 callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 callCharMethod spanValue method receiver arguments = case (method, receiver, arguments) of
   (CharCode, CharValue character, []) -> pure (IntValue (fromIntegral (fromEnum character)))
-  _ -> abortAt (Just spanValue) "E7002" "wrong arguments for code" Nothing
+  (CharToText, CharValue character, []) -> pure (StrValue (Text.singleton character))
+  _ -> abortAt (Just spanValue) "E7002" "wrong arguments for a character method" Nothing
 
 {-| Apply a built-in text method.
 
@@ -659,6 +714,10 @@ callArrayMethod spanValue method receiver arguments = case method of
   ArraySlice -> case arguments of
     [IntValue start, IntValue end'] -> pure (arraySlice receiver (fromInteger start) (fromInteger end'))
     _ -> wrongArity "slice" 2
+  ArrayConcat -> case arguments of
+    [other@(ArrayValue _)] -> pure (arrayConcat receiver other)
+    [_] -> abortAt (Just spanValue) "E7001" "concat expects an array" Nothing
+    _ -> wrongArity "concat" 1
   ArrayReverse -> case arguments of
     [] -> pure (arrayReverse receiver)
     _ -> wrongArity "reverse" 0

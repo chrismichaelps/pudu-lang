@@ -29,3 +29,71 @@ export fn isUpper(value: Char) -> Bool { value >= 'A' && value <= 'Z' }
 export fn toDigit(value: Char) -> Option[Int] {
   if isDigit(value) { Some(value.code() - '0'.code()) } else { None }
 }
+
+/// The upper-case form of an ASCII letter; anything else is unchanged.
+export fn toUpper(value: Char) -> Char {
+  if isLower(value) { shift(value, 0 - 32) } else { value }
+}
+
+/// The lower-case form of an ASCII letter; anything else is unchanged.
+export fn toLower(value: Char) -> Char {
+  if isUpper(value) { shift(value, 32) } else { value }
+}
+
+/// Whether a character is an ASCII hexadecimal digit.
+export fn isHexDigit(value: Char) -> Bool {
+  isDigit(value) || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')
+}
+
+/// Whether a character is an ASCII octal digit.
+export fn isOctDigit(value: Char) -> Bool { value >= '0' && value <= '7' }
+
+/// Whether a character is an ASCII punctuation mark.
+export fn isPunctuation(value: Char) -> Bool {
+  isPrintable(value) && !isAlphanumeric(value) && value != ' '
+}
+
+/// Whether a character is a printable ASCII character.
+export fn isPrintable(value: Char) -> Bool {
+  value.code() >= 32 && value.code() < 127
+}
+
+/// Whether a character is an ASCII control character.
+export fn isControl(value: Char) -> Bool {
+  value.code() < 32 || value.code() == 127
+}
+
+/// Whether a character is in the ASCII range at all.
+/// Everything else in this module answers about ASCII, so this is how a caller
+/// learns whether the answers apply.
+export fn isAscii(value: Char) -> Bool { value.code() < 128 }
+
+/// The value of a hexadecimal digit, or `None` for anything else.
+export fn toHexDigit(value: Char) -> Option[Int] {
+  if isDigit(value) { Some(value.code() - '0'.code()) }
+  else {
+    if value >= 'a' && value <= 'f' { Some(value.code() - 'a'.code() + 10) }
+    else {
+      if value >= 'A' && value <= 'F' { Some(value.code() - 'A'.code() + 10) } else { None }
+    }
+  }
+}
+
+/// The digit character for a value from 0 to 9, or `None` for anything else.
+export fn fromDigit(value: Int) -> Option[Char] {
+  if value >= 0 && value <= 9 { charFromCode('0'.code() + value) } else { None }
+}
+
+/// The character with a given scalar value, or `None` when there is none.
+/// Re-exported from the prelude so a caller reaching for character conversion
+/// finds it beside everything else about characters.
+export fn fromCode(value: Int) -> Option[Char] { charFromCode(value) }
+
+/// A character moved by a scalar offset, unchanged when the result is not a
+/// scalar value. Only used for ASCII case folding, where it always is.
+fn shift(value: Char, offset: Int) -> Char {
+  match charFromCode(value.code() + offset) {
+    case Some(found) => found
+    case None => value
+  }
+}

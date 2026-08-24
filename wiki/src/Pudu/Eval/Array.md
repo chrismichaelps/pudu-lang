@@ -25,6 +25,11 @@ Exports `arrayFromList`, `arrayToList`, `arrayLength`, `arrayIndex`, `arrayPush`
 
 ### Governance
 
+- `concat` is a runtime operation, not a library loop. The array is a finger tree, so joining two is
+  logarithmic in the smaller one, while appending element by element is `O(m log n)`. A library that
+  reimplemented it would be slower than the structure it was built on — which is the general rule
+  the standard library follows: anything the structure can do better than a loop belongs here.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.

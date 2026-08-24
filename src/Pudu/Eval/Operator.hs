@@ -167,6 +167,7 @@ readStringMember spanValue text member =
 readCharMember :: Span -> Value -> Text -> Evaluator Value
 readCharMember spanValue character member
   | member == "code" = pure (CharMethodValue CharCode character)
+  | member == "toText" = pure (CharMethodValue CharToText character)
   | otherwise =
       abortAt (Just spanValue) "E7001"
         ("no method " <> member <> " on a character") Nothing
@@ -204,6 +205,7 @@ arrayMethods =
   , ("insert", ArrayInsert)
   , ("remove", ArrayRemove)
   , ("slice", ArraySlice)
+  , ("concat", ArrayConcat)
   , ("reverse", ArrayReverse)
   , ("map", ArrayMap)
   , ("filter", ArrayFilter)
