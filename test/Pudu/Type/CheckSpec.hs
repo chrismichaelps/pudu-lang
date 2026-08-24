@@ -16,7 +16,10 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("literals and operators take their declared types", testOperators)
+  [ ("a match reads through a borrow", testMatchThroughBorrow)
+  , ("built-in text methods are typed exactly", testTextMethods)
+  , ("a discarded collection result is reported", testDiscardedResult)
+  , ("literals and operators take their declared types", testOperators)
   , ("integer literals select every width and enforce exact bounds", testIntegerLiterals)
   , ("floating suffixes select honest precision and reject overflow", testFloatLiterals)
   , ("annotations are checked against their value", testAnnotations)
@@ -1317,6 +1320,104 @@ region source needle = case Text.breakOnEnd needle source of
   (before, _)
     | Text.null before -> Nothing
     | otherwise -> Just (Text.length before - Text.length needle, Text.length before)
+
+{-| A built-in collection method answers with a new collection, so writing one
+    as a statement does nothing at all — silently. The warning fires there and
+    nowhere else: assigning the result back is correct, and discarding the
+    answer to a question is merely pointless. -}
+{-| Text carries a closed set of methods the compiler knows the semantics of,
+    so each is typed exactly and an unknown one is reported rather than
+    dispatched. -}
+{-| A match reads its subject; it does not consume it. Looking through a borrow
+    is what lets a function take `&Option[T]` and still match on it, which every
+    generic helper in the standard library needs. -}
+testMatchThroughBorrow :: IO Property
+testMatchThroughBorrow = do
+  borrowed <- codes
+    [ "module M"
+    , "fn ask(value: &Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "    case None => false"
+    , "  }"
+    , "}"
+    ]
+  owned <- codes
+    [ "module M"
+    , "fn ask(value: Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "    case None => false"
+    , "  }"
+    , "}"
+    ]
+  stillExhaustive <- codes
+    [ "module M"
+    , "fn ask(value: &Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "  }"
+    , "}"
+    ]
+  charCode <- typeOf "'a'.code()"
+  unknownChar <- codesOfExpression "'a'.isDigit()"
+  pure $ conjoin
+    [ counterexample "a borrowed subject matches" (borrowed === [])
+    , counterexample "an owned subject still matches" (owned === [])
+    , counterexample "exhaustiveness is still checked through the borrow"
+        (stillExhaustive === ["E5001"])
+    , counterexample "a character answers for its code" (charCode === "Int")
+    , counterexample "a character has no other method" (unknownChar === ["E3005"])
+    ]
+
+testTextMethods :: IO Property
+testTextMethods = do
+  lengthType <- typeOf "\"abc\".length()"
+  charType <- typeOf "\"abc\".charAt(0)"
+  sliceType <- typeOf "\"abc\".slice(0, 2)"
+  splitType <- typeOf "\"a,b\".split(\",\")"
+  charsType <- typeOf "\"ab\".chars()"
+  emptyType <- typeOf "\"\".isEmpty()"
+  unknown <- codesOfExpression "\"abc\".shout()"
+  badArgument <- codesOfExpression "\"abc\".charAt(\"x\")"
+  pure $ conjoin
+    [ counterexample "length answers an integer" (lengthType === "Int")
+    , counterexample "charAt answers a character" (charType === "Char")
+    , counterexample "slice answers text" (sliceType === "Str")
+    , counterexample "split answers an array of text" (splitType === "Array[Str]")
+    , counterexample "chars answers an array of characters" (charsType === "Array[Char]")
+    , counterexample "isEmpty answers a boolean" (emptyType === "Bool")
+    , counterexample "an unknown text method is E3005" (unknown === ["E3005"])
+    , counterexample "an argument is checked" (badArgument === ["E3001"])
+    ]
+
+testDiscardedResult :: IO Property
+testDiscardedResult = do
+  discarded <- codes
+    ["module M", "fn run() -> Int {", "  var out = [1]", "  out.push(2)", "  5", "}"]
+  assigned <- codes
+    ["module M", "fn run() -> Int {", "  var out = [1]", "  out = out.push(2)", "  5", "}"]
+  asked <- codes
+    ["module M", "fn run() -> Int {", "  let out = [1]", "  out.contains(2)", "  5", "}"]
+  reversedResult <- codes
+    ["module M", "fn run() -> Int {", "  let out = [1]", "  out.reverse()", "  5", "}"]
+  userMethod <- codes
+    [ "module M"
+    , "type Bag = { size: Int }"
+    , "trait Fill { fn push(self: &Self, value: Int) -> Int }"
+    , "impl Fill for Bag { fn push(self: &Self, value: Int) -> Int { value } }"
+    , "fn run(bag: Bag) -> Int {"
+    , "  bag.push(2)"
+    , "  5"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "a discarded push is W3002" (discarded === ["W3002"])
+    , counterexample "assigning the result back is correct" (assigned === [])
+    , counterexample "discarding an answer is not warned about" (asked === [])
+    , counterexample "a discarded reverse is W3002" (reversedResult === ["W3002"])
+    , counterexample "a user method of the same name is not warned about" (userMethod === [])
+    ]
 
 codes :: [Text] -> IO [Text]
 codes inputLines = do

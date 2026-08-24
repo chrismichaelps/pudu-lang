@@ -302,6 +302,8 @@ memberType spanValue targetType member = do
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
     NominalType "Array" [element] -> arrayMethodType spanValue member element
+    NominalType "Str" [] -> stringMethodType spanValue member
+    NominalType "Char" [] -> charMethodType spanValue member
     NominalType name _ -> do
       fields <- lookupField name
       case fields >>= lookup member of
@@ -315,6 +317,54 @@ memberType spanValue targetType member = do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| The one built-in character method.
+
+    A character answers for its scalar value and nothing else; every
+    classification question belongs to `Std.Char`, where the answer is written
+    in the language and can be read. -}
+charMethodType :: Span -> Text -> Checker Type
+charMethodType spanValue member = case member of
+  "code" -> pure (FunctionTypeValue False [] integerType)
+  _ -> do
+    report "E3005" spanValue ("Char has no method " <> member)
+      (Just "a character answers for its code; ask Std.Char about its kind")
+    pure ErrorType
+
+{-| Built-in text methods, typed exactly.
+
+    Every one answers with a new value rather than changing its receiver, which
+    is why `Str` needs no mutable form and why the same `W3002` that catches a
+    discarded array result catches a discarded text one.
+
+    `indexOf` answers `-1` for absent rather than `Option[Int]`, matching the
+    array method of the same name. One vocabulary answering two ways would be
+    worse than either answer. -}
+stringMethodType :: Span -> Text -> Checker Type
+stringMethodType spanValue member = case member of
+  "length" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "charAt" -> pure (FunctionTypeValue False [integerType] charType)
+  "indexOf" -> pure (FunctionTypeValue False [stringType] integerType)
+  "contains" -> pure (FunctionTypeValue False [stringType] boolType)
+  "startsWith" -> pure (FunctionTypeValue False [stringType] boolType)
+  "endsWith" -> pure (FunctionTypeValue False [stringType] boolType)
+  "slice" -> pure (FunctionTypeValue False [integerType, integerType] stringType)
+  "trim" -> pure (FunctionTypeValue False [] stringType)
+  "toUpper" -> pure (FunctionTypeValue False [] stringType)
+  "toLower" -> pure (FunctionTypeValue False [] stringType)
+  "replace" -> pure (FunctionTypeValue False [stringType, stringType] stringType)
+  "repeat" -> pure (FunctionTypeValue False [integerType] stringType)
+  "split" -> pure (FunctionTypeValue False [stringType] (arrayOf stringType))
+  "chars" -> pure (FunctionTypeValue False [] (arrayOf charType))
+  "lines" -> pure (FunctionTypeValue False [] (arrayOf stringType))
+  "reverse" -> pure (FunctionTypeValue False [] stringType)
+  _ -> do
+    report "E3005" spanValue ("Str has no method " <> member)
+      (Just "check the method name against the documented text methods")
+    pure ErrorType
+ where
+  arrayOf element = NominalType "Array" [element]
 
 {-| Built-in array methods. Each returns a function type with the receiver
     already bound, matching the evaluator's `ArrayMethodValue` semantics. The
@@ -429,12 +479,20 @@ ambiguous spanValue owner member providers = do
  where
   qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
 
+{-| The type one index into a value produces.
+
+    A borrow is followed rather than rejected. Indexing reads through a
+    reference in every language that has both, and requiring `(*items)[0]`
+    would make every function that takes `&Array[T]` — which is every function
+    that does not want to copy one — read worse than the version that copies.
+    The borrow's own mutability is unchanged by reading through it. -}
 elementType :: Span -> Type -> Checker Type
 elementType spanValue targetType = do
   resolved <- zonk targetType
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
+    ReferenceTypeValue _ referent -> elementType spanValue referent
     NominalType "Str" [] -> pure charType
     NominalType "Array" [element] -> pure element
     TupleTypeValue members -> case members of

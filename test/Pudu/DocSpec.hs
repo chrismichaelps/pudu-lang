@@ -59,6 +59,8 @@ testDocComments = do
     , "fn twice(n: Int) -> Int { n * 2 }"
     , "// an ordinary note"
     , "fn plain(n: Int) -> Int { n }"
+    , "/// Documented and exported."
+    , "export fn shown(n: Int) -> Int { n }"
     , "/** A block form. */"
     , "fn blocked(n: Int) -> Int { n }"
     ]
@@ -69,6 +71,8 @@ testDocComments = do
         (commentOf "plain" index === [])
     , counterexample "a block doc comment is documentation"
         (commentOf "blocked" index === ["A block form."])
+    , counterexample "an export modifier does not detach the documentation"
+        (commentOf "shown" index === ["Documented and exported."])
     ]
 
 {-| Search by shape, which is the question a reader with a type but no name

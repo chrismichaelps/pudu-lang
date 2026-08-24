@@ -1,10 +1,18 @@
 module Pudu.Compiler.ProgramSpec (programProperties) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileContext (..))
-import Pudu.Compiler.Program (ProgramResult (..), compileProgram)
+import Pudu.Compiler (CompileContext (..), CompileResult (..))
+import Pudu.Compiler.Program
+  ( ProgramResult (..)
+  , compileProgram
+  , programDependencies
+  , rootCompileResult
+  )
+import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval.Value (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Repl.Session
@@ -24,6 +32,8 @@ programProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("REPL loads retain the program interface context", testReplLoadContext)
+  , ("the standard library resolves from the distribution", testStandardLibrary)
+  , ("an imported module is linked into evaluation", testProgramEvaluation)
   ]
 
 testImportedMethods :: IO Property
@@ -93,6 +103,69 @@ testInterfaceEdges = do
     , counterexample "an unreadable root is a structured loader failure"
         (unreadableRoot === ["E2014"])
     ]
+
+{-| The `Std` namespace resolves without the program declaring anything, and
+    the program's own tree still wins when it declares a standard module
+    itself — deliberately and visibly, since the file is in its own source
+    root. -}
+testStandardLibrary :: IO Property
+testStandardLibrary = do
+  uses <- codes "test-fixtures/stdlib/UsesStd.pudu"
+  shadows <- codes "test-fixtures/stdshadow/ShadowsStd.pudu"
+  missing <- codes "test-fixtures/stdlib/MissingStd.pudu"
+  missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
+  ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
+  resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
+  pure $ conjoin
+    [ counterexample "a standard import compiles with no program-local module" (uses === [])
+    , counterexample "a program may shadow a standard module" (shadows === [])
+    , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
+    , counterexample "the diagnostic names the module that could not be read"
+        (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)
+    , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
+    , counterexample "the standard module joins the program graph"
+        (elem "Std.Math" resolved === True)
+    ]
+
+{-| A program's imports are linked before its entry point runs, so a call into
+    an imported module finds the function it named — including one in the
+    standard library, and including a helper that module keeps private. -}
+testProgramEvaluation :: IO Property
+testProgramEvaluation = do
+  ran <- runEntry "test-fixtures/stdlib/RunsStd.pudu"
+  everything <- runEntry "test-fixtures/stdlib/UsesAll.pudu"
+  aliased <- runEntry "test-fixtures/program29/B.pudu"
+  pure $ conjoin
+    [ counterexample "an aliased and a selected import both evaluate"
+        (ran === Just "35")
+    , counterexample "generic and text modules link together"
+        (everything === Just "8")
+    , counterexample "a program with no entry point evaluates to unit"
+        (aliased === Just "()")
+    ]
+
+runEntry :: FilePath -> IO (Maybe Text)
+runEntry path = do
+  program <- compileProgram path
+  case rootCompileResult program >>= compileModule of
+    Nothing -> pure Nothing
+    Just parsed ->
+      pure
+        ( fmap renderValue
+            ( outcomeValue
+                (evaluateProgramEntry (programDependencies program) "main" parsed)
+            )
+        )
+
+moduleNames :: FilePath -> IO [Text]
+moduleNames path = do
+  result <- compileProgram path
+  pure (map moduleNameText (programOrder result))
+
+messages :: FilePath -> IO [Text]
+messages path = do
+  result <- compileProgram path
+  pure (map diagnosticMessage (programDiagnostics result))
 
 codes :: FilePath -> IO [Text]
 codes path = do

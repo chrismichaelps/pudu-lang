@@ -39,6 +39,14 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 
 ### Governance
 
+- Documentation is the nearest documented token **before** a declaration, bounded below by where
+  the previous declaration ended. A declaration's span starts at its `fn` or `type` keyword, not at
+  the `export` in front of it, so keying on the span alone silently detaches every exported
+  declaration's documentation. The bound is what stops a declaration reaching back into another
+  one's comment.
+- A member's bound is its enclosing declaration rather than the previous top-level one, so a
+  trait's first member cannot claim the trait's own documentation.
+
 - **A signature is never reconstructed from written syntax.** It comes from the scheme the checker
   ended with, so a declaration with no annotations is still described, and one with annotations is
   described as the compiler understood it rather than as it was spelled. This is the module's

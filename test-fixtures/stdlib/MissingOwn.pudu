@@ -1,0 +1,5 @@
+module MissingOwn
+
+import Local.NotAThing
+
+export fn run() -> Int { 1 }

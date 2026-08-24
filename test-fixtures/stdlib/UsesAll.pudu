@@ -1,0 +1,15 @@
+module UsesAll
+
+import Std.Char as Char
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text as Text
+
+export fn main() -> Int {
+  var total = 0
+  for character in "a1b2c3".chars() {
+    total = total + Option.unwrapOr(Char.toDigit(character), 0)
+  }
+  let parsed: Result[Int, Str] = Ok(total)
+  Result.unwrapOr(parsed, 0) + Text.countOccurrences("banana", "an")
+}

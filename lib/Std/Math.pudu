@@ -1,0 +1,74 @@
+module Std.Math
+
+/// The smaller of two values.
+export fn min(left: Int, right: Int) -> Int {
+  if left < right { left } else { right }
+}
+
+/// The larger of two values.
+export fn max(left: Int, right: Int) -> Int {
+  if left > right { left } else { right }
+}
+
+/// The distance of a value from zero.
+export fn abs(value: Int) -> Int {
+  if value < 0 { 0 - value } else { value }
+}
+
+/// Confine a value to a range, inclusive at both ends.
+/// A range whose lower bound exceeds its upper bound yields the lower bound,
+/// which is the only answer that satisfies neither caller silently.
+export fn clamp(value: Int, lower: Int, upper: Int) -> Int {
+  if value < lower { lower } else { min(value, upper) }
+}
+
+/// The sign of a value: -1, 0, or 1.
+export fn signum(value: Int) -> Int {
+  if value > 0 { 1 } else { if value < 0 { 0 - 1 } else { 0 } }
+}
+
+/// The greatest common divisor, by Euclid's algorithm.
+/// The result is never negative, so it can be used as a divisor without a
+/// caller having to check its sign.
+export fn gcd(left: Int, right: Int) -> Int {
+  var remaining = abs(right)
+  var current = abs(left)
+  while remaining != 0 {
+    let next = current % remaining
+    current = remaining
+    remaining = next
+  }
+  current
+}
+
+/// The least common multiple. Zero with either argument zero, since no positive
+/// multiple of zero exists.
+export fn lcm(left: Int, right: Int) -> Int {
+  if left == 0 { 0 } else { if right == 0 { 0 } else { abs(left / gcd(left, right) * right) } }
+}
+
+/// A value raised to a non-negative power, by repeated squaring.
+/// A negative exponent yields 1, matching integer exponentiation everywhere
+/// else: the true answer is not an Int, and this signature promises one.
+export fn pow(base: Int, exponent: Int) -> Int {
+  var result = 1
+  var remaining = exponent
+  var factor = base
+  while remaining > 0 {
+    if remaining % 2 == 1 { result = result * factor } else { }
+    factor = factor * factor
+    remaining = remaining / 2
+  }
+  result
+}
+
+/// Whether a value divides another with no remainder.
+export fn divides(divisor: Int, value: Int) -> Bool {
+  if divisor == 0 { false } else { value % divisor == 0 }
+}
+
+/// Whether a value is even.
+export fn isEven(value: Int) -> Bool { value % 2 == 0 }
+
+/// Whether a value is odd.
+export fn isOdd(value: Int) -> Bool { value % 2 != 0 }

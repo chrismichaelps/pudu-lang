@@ -5,7 +5,16 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler.Program (ProgramResult (..), compileProgram, programDocs)
+import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Program
+  ( ProgramResult (..)
+  , compileProgram
+  , programDependencies
+  , programDocs
+  , rootCompileResult
+  )
+import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Doc.Json (encodeIndex)
 import Pudu.Doc.Search (Match (..), searchText)
@@ -30,6 +39,10 @@ main = do
     [] -> startRepl style Nothing
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
+    ("run" : path : _) -> runProgram style path
+    ("run" : []) -> do
+      hPutStrLn stderr "pudu run: no file given"
+      exitFailure
     ("doc" : "--json" : paths) -> documentPaths JsonOutput paths
     ("doc" : paths) -> documentPaths TextOutput paths
     ("search" : query : paths) -> searchPaths (Text.pack query) paths
@@ -73,6 +86,51 @@ checkOne style path = do
     TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
   TextIO.putStrLn (Text.pack path <> ": " <> renderSummary diagnostics)
   pure (hasErrors diagnostics)
+
+{-| Compile a program and run its entry point.
+
+    The entry point is `main` in the root module. Its dependencies are linked
+    first, in dependency order, so a call into an imported module — including
+    the standard library — finds the function it named.
+
+    A program with errors is not run. Evaluating a module whose meaning was
+    never established produces a second, less useful account of the same
+    defect. -}
+runProgram :: RenderStyle -> FilePath -> IO ()
+runProgram style path = do
+  program <- compileProgram path
+  let diagnostics = programDiagnostics program
+  unless (null diagnostics) $
+    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+  if hasErrors diagnostics
+    then exitFailure
+    else case rootCompileResult program >>= compileModule of
+      Nothing -> do
+        hPutStrLn stderr "pudu run: the program produced no module"
+        exitFailure
+      Just parsed -> do
+        let outcome =
+              evaluateProgramEntry (programDependencies program) entryPointName parsed
+        mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
+        case outcomeValue outcome of
+          Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure
+          Just value -> reportResult value
+          Nothing -> exitFailure
+
+{-| The entry point every runnable program declares. -}
+entryPointName :: Text
+entryPointName = "main"
+
+{-| A run reports its result only when there is one to report, so a program
+    whose `main` returns unit prints nothing and a shell pipeline stays
+    usable. -}
+reportResult :: Value -> IO ()
+reportResult value = case value of
+  UnitValue -> exitSuccess
+  _ -> TextIO.putStrLn (renderValue value) >> exitSuccess
+
+renderRuntime :: RenderStyle -> ProgramResult -> Diagnostic -> Text
+renderRuntime style program value = renderProgramDiagnostics style program [value]
 
 {-| @Program.Cli.DocOutput — who the index is being written for.
 
@@ -164,6 +222,7 @@ usage =
     , "  pudu                 start the puduci interactive session"
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
+    , "  pudu run <file>      compile a program and run its main function"
     , "  pudu doc <file>...   describe every name a program declares"
     , "  pudu doc --json ...  the same index, for an editor or a search server"
     , "  pudu search <query> <file>...  find a name, or a type shape such as"

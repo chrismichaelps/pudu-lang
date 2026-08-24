@@ -1,0 +1,4 @@
+module Std.Math
+
+/// A deliberately different min, to prove the program's own tree wins.
+export fn min(left: Int, right: Int) -> Int { left }

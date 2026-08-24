@@ -44,6 +44,10 @@ sessionExports :: Resolution -> [Text]
 
 ### Governance
 
+- A loaded program's dependencies are kept with the session and linked into every entry's
+  evaluation, so a call into an imported module works at the prompt exactly as it does in the
+  program that was loaded.
+
 - Entries are kept as source text and recompiled together. That is what lets a later declaration change how an earlier one resolves, and it keeps the session's meaning identical to the meaning of the equivalent file.
 - A submission is classified by its leading token: `import` and the declaration keywords go to module scope, `let`, `var`, and the jump and loop keywords are statements, and everything else is an expression.
 - The compiled buffer is a complete module: the session's imports, then its declarations, then one synthetic function holding every statement entered so far. Statements and expressions are placed inside that function.

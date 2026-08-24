@@ -2,6 +2,7 @@
 module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , programDependencies
   , programDocs
   , rootCompileResult
   ) where
@@ -22,6 +23,7 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
+import Pudu.Compiler.Library (isStandardModule, searchRoots)
 import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -67,6 +69,21 @@ programDocs result =
   forModule name = case Map.lookup name (programModules result) of
     Nothing -> mempty
     Just compiled -> fromMaybe mempty (compileDocs compiled)
+
+{-| The program's dependencies, in the order they must be linked.
+
+    The root is excluded: it is the module being evaluated, not one of its
+    dependencies, and linking it twice would run its constants twice. A module
+    that failed to compile is excluded too — there is nothing to link — and the
+    diagnostics already say why. -}
+programDependencies :: ProgramResult -> [(Text.Text, Module)]
+programDependencies result =
+  [ (moduleNameText name, parsed)
+  | name <- programOrder result
+  , Just name /= programRoot result
+  , Just compiled <- [Map.lookup name (programModules result)]
+  , Just parsed <- [compileModule compiled]
+  ]
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)
@@ -123,8 +140,8 @@ discover sourceRoot frontends sources diagnostics pending = case pending of
   (locatedImport, requested) : rest
     | Map.member requested frontends -> discover sourceRoot frontends sources diagnostics rest
     | otherwise -> do
-        let path = modulePath sourceRoot requested
-        loaded <- readSource path
+        roots <- searchRoots sourceRoot requested
+        loaded <- readFirst [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
             discover sourceRoot frontends sources
@@ -194,6 +211,17 @@ modulePath :: FilePath -> ModuleName -> FilePath
 modulePath sourceRoot name =
   normalise (sourceRoot </> joinPath (map Text.unpack (toList (moduleNameSegments name))) <> ".pudu")
 
+{-| Read the first path that exists, keeping the last failure so a module that
+    is nowhere is reported against the search rather than against one guess. -}
+readFirst :: [FilePath] -> IO (Either IOException Source)
+readFirst [] = readSource ""
+readFirst [path] = readSource path
+readFirst (path : rest) = do
+  loaded <- readSource path
+  case loaded of
+    Right source -> pure (Right source)
+    Left _ -> readFirst rest
+
 readSource :: FilePath -> IO (Either IOException Source)
 readSource path = do
   loaded <- try (TextIO.readFile path)
@@ -207,7 +235,15 @@ missingModule requested locatedImport = do
   value <- maybe [] pure
     (diagnostic code Error (locatedSpan locatedImport)
       ("cannot read module " <> moduleNameText requested))
-  pure (withHelp "create the module at its canonical source-root path, or fix the import" value)
+  pure (withHelp helpText value)
+ where
+  {-| A missing `Std` module is almost always a misspelling of a module that
+      exists, not a file the author forgot to write, so the help points at the
+      library rather than at their own source root. -}
+  helpText
+    | isStandardModule requested =
+        "check the spelling against the standard library, or set PUDU_LIB if it is installed elsewhere"
+    | otherwise = "create the module at its canonical source-root path, or fix the import"
 
 pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
 pathMismatch requested actual = do

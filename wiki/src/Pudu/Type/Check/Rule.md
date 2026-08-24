@@ -21,6 +21,26 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- `Char` carries exactly one built-in method, `code`. Classification — digit, letter, whitespace —
+  is `Std.Char`'s work in the language, where the answer can be read and argued with. Building it
+  into the compiler would settle Unicode questions the compiler is not yet equipped to answer, and
+  would settle them invisibly.
+
+- `Str` carries a closed set of built-in methods, typed exactly, for the same reason `Array` does:
+  a method whose semantics the compiler knows can be given a precise type, and an unknown one is
+  reported rather than dispatched.
+- Every text method answers with a **new** value rather than changing its receiver. That is why
+  `Str` needs no mutable form, and why the same `W3002` that catches a discarded array result
+  catches a discarded text one.
+- `indexOf` answers `-1` for absent rather than `Option[Int]`, matching the array method of the
+  same name. One vocabulary answering two ways would be worse than either answer; `Std.Text.find`
+  provides the `Option` form for callers who want to match on it.
+
+- Indexing follows a borrow rather than rejecting it. Every language with both reads through a
+  reference, and requiring `(*items)[0]` would make every function taking `&Array[T]` — which is
+  every function that does not want to copy one — read worse than the version that copies. The
+  borrow's own mutability is unchanged by reading through it.
+
 - Every rule is the one [[grammar/pudu]] states for that construct; nothing here invents a coercion the language does not have.
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.

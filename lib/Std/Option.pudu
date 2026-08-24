@@ -1,0 +1,54 @@
+module Std.Option
+
+/// Whether a value is present.
+export fn isSome[T](value: &Option[T]) -> Bool {
+  match value {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Whether a value is absent.
+export fn isNone[T](value: &Option[T]) -> Bool {
+  match value {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+/// The value, or a fallback when there is none.
+/// There is no `unwrap` that panics: nothing in `Std` is partial, and a caller
+/// who has no fallback wants `okOr` and the failure that goes with it.
+export fn unwrapOr[T](value: Option[T], fallback: T) -> T {
+  match value {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// The value as an array of nought or one element, which is how a caller
+/// iterates over a maybe-absent value without matching on it.
+export fn toArray[T](value: Option[T]) -> Array[T] {
+  match value {
+    case Some(found) => [found]
+    case None => []
+  }
+}
+
+/// The first value if it is present, otherwise the second.
+export fn orElse[T](first: Option[T], second: Option[T]) -> Option[T] {
+  match first {
+    case Some(found) => Some(found)
+    case None => second
+  }
+}
+
+/// A present value, or a declared failure when there is none.
+/// This is the bridge from "might be absent" to "explains why", and it is the
+/// only honest way to leave `Option` behind.
+export fn okOr[T, E](value: Option[T], failure: E) -> Result[T, E] {
+  match value {
+    case Some(found) => Ok(found)
+    case None => Err(failure)
+  }
+}

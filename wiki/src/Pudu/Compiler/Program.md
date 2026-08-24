@@ -39,6 +39,12 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 
 ### Governance
 
+- A module is looked for in the roots [[Compiler Library]] names, in order: the program's own
+  source root, then — for a `Std` module only — the standard library's. The first root that has the
+  file wins, so a program can shadow a standard module by declaring it in its own tree.
+- A missing `Std` module is reported with help that points at the library, because it is almost
+  always a misspelling of a module that exists rather than a file the author forgot to write.
+
 - The root source is parsed first. Its declared module name and file suffix determine the source root; `A.B` maps to `A/B.pudu` below that root.
 - Imported module names are absolute. Each name maps to one canonical path and each canonical path is read at most once.
 - Missing/unreadable imports become `E2014` at the importing path. An unreadable root also becomes `E2014`, against a retained empty source snapshot carrying the requested path. Host `IOException` values never escape the boundary.

@@ -22,6 +22,7 @@ evalProperties =
   , ("borrowing and dereferencing read the same value", testBorrowing)
   , ("unsafe regions evaluate their block", testUnsafeRegions)
   , ("structured scopes join every task they start", testScopes)
+  , ("built-in text methods answer with new values", testTextMethods)
   ]
 
 testScopes :: IO Property
@@ -355,6 +356,42 @@ evaluateStatements :: [Text] -> IO Text
 evaluateStatements statements = case reverse statements of
   final : leading -> runProgram [] (reverse leading) final
   [] -> pure "none"
+
+{-| Text is a value: every method answers with a new one, indices count Unicode
+    scalars, and an index outside the text is a diagnostic rather than a clamped
+    answer that looks correct. -}
+testTextMethods :: IO Property
+testTextMethods = do
+  upper <- evaluate "\"aB\".toUpper()"
+  trimmed <- evaluate "\"  x \".trim()"
+  split <- evaluate "\"a,b\".split(\",\")"
+  chars <- evaluate "\"hi\".chars()"
+  charAt <- evaluate "\"héllo\".charAt(1)"
+  scalarLength <- evaluate "\"héllo\".length()"
+  sliced <- evaluate "\"hello\".slice(1, 3)"
+  clamped <- evaluate "\"hi\".slice(0, 99)"
+  absent <- evaluate "\"hello\".indexOf(\"zz\")"
+  replaced <- evaluate "\"banana\".replace(\"a\", \"o\")"
+  reversed <- evaluate "\"abc\".reverse()"
+  unchanged <- runProgram [] ["var name = \"a\"", "name.toUpper()"] "name"
+  outOfRange <- codesOf "\"hi\".charAt(9)"
+  negativeRepeat <- codesOf "\"hi\".repeat(-1)"
+  pure $ conjoin
+    [ counterexample "case folds" (upper === "\"AB\"")
+    , counterexample "whitespace is stripped" (trimmed === "\"x\"")
+    , counterexample "split yields the fields" (split === "[\"a\", \"b\"]")
+    , counterexample "chars yields characters" (chars === "['h', 'i']")
+    , counterexample "indices count scalars, not bytes" (charAt === "'\233'")
+    , counterexample "length counts scalars, not bytes" (scalarLength === "5")
+    , counterexample "a slice takes the range" (sliced === "\"el\"")
+    , counterexample "a slice past the end is the rest" (clamped === "\"hi\"")
+    , counterexample "an absent needle answers -1" (absent === "-1")
+    , counterexample "replace changes every occurrence" (replaced === "\"bonono\"")
+    , counterexample "reverse reverses" (reversed === "\"cba\"")
+    , counterexample "the receiver is unchanged" (unchanged === "\"a\"")
+    , counterexample "an index outside the text is E7004" (outOfRange === ["E7004"])
+    , counterexample "a negative repeat is E7004" (negativeRepeat === ["E7004"])
+    ]
 
 evaluateWith :: [Text] -> Text -> IO Text
 evaluateWith declarations expression = runProgram declarations [] expression
