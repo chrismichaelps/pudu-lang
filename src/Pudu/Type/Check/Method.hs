@@ -28,7 +28,7 @@ import Pudu.Frontend.Syntax.Tree
   , Trait (..)
   , TypeParam (..)
   )
-import Control.Monad (filterM, unless)
+import Control.Monad (filterM, unless, when)
 import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
@@ -36,6 +36,10 @@ import Pudu.Type.Env
   , bindImportedMethod
   , bindName
   , implementsTrait
+  , ambiguousProviders
+  , markAmbiguousMethod
+  , methodProvider
+  , recordMethodProvider
   , lookupName
   , isImportedMethod
   , report
@@ -152,6 +156,12 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
   result <- formOptionalType aliases rigid (functionReturn method)
   existing <- lookupName key
   importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
+  provider <- methodProvider key
+  let providing = implTraitName declared value
+      localCollision =
+        not rejectCollision
+          && maybe False (\earlier -> Just earlier /= providing) provider
+  let scheme = polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result)
   if importedCollision
     then do
       report "E3013" methodSpan
@@ -159,7 +169,9 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
         (Just "import only one providing trait or use a qualified call")
       bindName key (monotype ErrorType)
     else do
-      let scheme = polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result)
+      when localCollision $
+        markAmbiguousMethod key (maybe [] pure provider <> maybe [] pure providing)
+      mapM_ (recordMethodProvider key) providing
       if rejectCollision then bindImportedMethod key scheme else bindName key scheme
 
 {-| `Self` inside an implementation is its target type, which is what lets a
@@ -284,7 +296,18 @@ boundName declared (Located _ syntax) = case syntax of
     time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 methodScheme spanValue receiver member = case receiver of
-  NominalType owner _ -> lookupName (nominalKey owner <> "." <> member)
+  NominalType owner _ -> do
+    let key = nominalKey owner <> "." <> member
+    providers <- ambiguousProviders key
+    case providers of
+      [] -> lookupName key
+      _ -> do
+        report "E3013" spanValue
+          (member <> " is ambiguous for " <> nominalName owner)
+          (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+        pure (Just (monotype ErrorType))
+   where
+    qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
   RigidType name -> do
     bounds <- rigidBoundsOf name
     providers <- filterM provides bounds

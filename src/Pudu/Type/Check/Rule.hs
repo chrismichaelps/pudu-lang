@@ -31,6 +31,7 @@ import Pudu.Type.Env
   , addObligation
   , constrainIntegerLiteral
   , freshVariable
+  , ambiguousProviders
   , lookupField
   , lookupName
   , negateIntegerLiteral
@@ -380,18 +381,33 @@ rigidMethod spanValue name bounds member = do
     has the method's type with that parameter already supplied. -}
 methodType :: Span -> NominalId -> Text -> Checker Type
 methodType spanValue owner member = do
-  found <- lookupName (nominalKey owner <> "." <> member)
-  case found of
-    Nothing -> do
+  let key = nominalKey owner <> "." <> member
+  providers <- ambiguousProviders key
+  found <- lookupName key
+  case (providers, found) of
+    (_ : _, _) -> ambiguous spanValue owner member providers
+    (_, Nothing) -> do
       report "E3005" spanValue (nominalName owner <> " has no field or method " <> member)
         (Just "check the name against the type declaration and its implementations")
       pure ErrorType
-    Just scheme -> do
+    (_, Just scheme) -> do
       instantiated <- instantiate spanValue scheme
       case instantiated of
         FunctionTypeValue asynchronous (_ : rest) result ->
           pure (FunctionTypeValue asynchronous rest result)
         other -> pure other
+
+{-| Two traits providing one member for one type is legal; choosing between
+    them is not something the compiler may do quietly. The call site names the
+    candidates and the qualified form that picks one. -}
+ambiguous :: Span -> NominalId -> Text -> [NominalId] -> Checker Type
+ambiguous spanValue owner member providers = do
+  report "E3013" spanValue
+    (member <> " is ambiguous for " <> nominalName owner)
+    (Just ("call it qualified: " <> Text.intercalate " or " (map qualifiedForm providers)))
+  pure ErrorType
+ where
+  qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
 
 elementType :: Span -> Type -> Checker Type
 elementType spanValue targetType = do
