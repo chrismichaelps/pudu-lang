@@ -100,6 +100,10 @@ tags: [handoff]
 
 - [Role: Shadow → Forensic Guardian] Implemented [[Type Exhaust]]: a match over a closed sum or `Bool` must cover every constructor, an open domain needs an irrefutable arm, a guarded arm never counts toward coverage, and an arm after an irrefutable one warns. The check moved another defect earlier — an unmatched value that used to fail at run time is now refused at compile time. Development and `-O2` suites pass 169x200, warning-clean.
 
+- [Role: Architect → DNA Engineer] Bounded issue #27 to exact duplicate implementation heads. Orphan ownership remains issue #28, and general unification overlap waits for resolved typed implementation identities.
+- [Role: DNA Engineer → Shadow] Resolved [[Type Check Coherence]] before final implementation: qualified paths stay distinct, implementation generic binders normalize by position, and every admitted type syntax receives a structural key.
+- [Role: Shadow → Forensic Guardian] Implemented `E3015` duplicate-head rejection, structured diagnostic assertions, qualified/generic/non-nominal edge cases, and exactly-once regression coverage. A real `puduci` session rejects both ordinary and alpha-renamed duplicates; development and `-O2` suites pass, and focused alpha-normalization and membership mutants are killed.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -115,12 +119,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #3: resolve and implement the declaration-orchestration partition — `export` ownership, module declaration, import ordering, declaration synchronization, and the compilation unit — which closes the issue; the untracked local drafts of `Parser.hs`, `Declaration.hs`, and `Compiler.hs` predate the current [[Parser State]] `runParser` signature and are not admitted history.
-- Run locked GHC 9.14.1 release gates and reconcile contract changes into pages first.
+- Issue #28 needs a ready contract for orphan ownership over nominal declaration identity; transparent aliases and non-nominal targets must not bypass it.
+- General implementation overlap beyond exact alpha-equivalent heads needs resolved typed implementation identities and unification rather than syntax heuristics.
+- Run the locked GHC 9.14.1 gate in CI; the local toolchain currently provides GHC 9.10.3.
 
 ## Exact next action
 
-Forensic Guardian: review the completed surface, semantic, typing, execution, and tooling slices for wiki parity — [[Parser Binding]], [[Parser Block]], [[Parser Function]], [[Parser Declaration]], [[Parser]], [[Parser State]], [[Parser Expression]], [[Parser Pattern]], [[Parser Generic]], [[Parser Type Declaration]], [[Parser Trait]], [[Syntax Tree]], [[Token]], [[Name Resolution]], [[Evaluator]], [[Diagnostic Render]], [[Pudu REPL]], [[Type Check]], and [[grammar/pudu]] — against the commits on `dev`, then open the trait slice: bounds, coherence, and method dispatch over the typed tree.
+Architect: make issue #28 executable from [[grammar/pudu]]'s orphan rule, explicitly defining nominal ownership, transparent aliases, non-nominal targets, diagnostic span/help, and success/failure/regression/mutation gates before updating [[Type Check Coherence]].
 
 ## Links
 

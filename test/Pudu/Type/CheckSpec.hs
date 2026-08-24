@@ -3,8 +3,14 @@ module Pudu.Type.CheckSpec (typeProperties) where
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
-import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
-import Pudu.Source (SourceName (SourceName), newSource)
+import Pudu.Diagnostic
+  ( diagnosticCode
+  , diagnosticCodeText
+  , diagnosticHelp
+  , diagnosticMessage
+  , diagnosticSpan
+  )
+import Pudu.Source (SourceName (SourceName), newSource, spanStart, unOffset)
 import Pudu.Type (renderType, widestWithin)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -27,6 +33,7 @@ typeProperties =
   , ("matches are checked for coverage and reachability", testExhaustiveness)
   , ("trait bounds are proved at the call site", testBounds)
   , ("ambiguous trait method dispatch reports E3013", testAmbiguousMethod)
+  , ("duplicate trait implementation heads are rejected", testCoherence)
   , ("Float aliases to Float64 at the type level", testFloatAlias)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
@@ -482,6 +489,87 @@ testAmbiguousMethod = do
     [ counterexample "two trait bounds providing the same member is ambiguous"
         (ambiguous === ["E3013"])
     ]
+
+testCoherence :: IO Property
+testCoherence = do
+  let duplicateProgram =
+        [ "module M"
+        , "type Local = { value: Int }"
+        , "trait Mark { fn mark(self: &Self) -> Int = 1 }"
+        , "impl Mark for Local {}"
+        , "impl Mark for Local {}"
+        ]
+      duplicateSource = Text.unlines duplicateProgram
+  duplicateResult <- compile duplicateSource
+  qualifiedDistinct <- codes
+    [ "module M"
+    , "import A"
+    , "import B"
+    , "impl A.Mark for Int {}"
+    , "impl B.Mark for Int {}"
+    ]
+  qualifiedDuplicate <- codes
+    [ "module M"
+    , "import A"
+    , "impl A.Mark for Int {}"
+    , "impl A.Mark for Int {}"
+    ]
+  alphaEquivalent <- codes
+    [ "module M"
+    , "type Box[T] = { value: T }"
+    , "trait Mark {}"
+    , "impl[T] Mark for Box[T] {}"
+    , "impl[U] Mark for Box[U] {}"
+    ]
+  distinctArguments <- codes
+    [ "module M"
+    , "type Box[T] = { value: T }"
+    , "trait Mark {}"
+    , "impl Mark for Box[Int] {}"
+    , "impl Mark for Box[Str] {}"
+    ]
+  structural <- codes
+    [ "module M"
+    , "trait Mark {}"
+    , "impl Mark for &Int {}"
+    , "impl Mark for &Int {}"
+    ]
+  repeated <- codes
+    [ "module M"
+    , "type Local = { value: Int }"
+    , "trait Mark { fn mark(self: &Self) -> Int = 1 }"
+    , "impl Mark for Local {}"
+    , "impl Mark for Local {}"
+    , "impl Mark for Local {}"
+    ]
+  pure $ conjoin
+    [ counterexample "the duplicate diagnostic preserves code message help and target span"
+        (duplicateDiagnostic duplicateSource duplicateResult)
+    , counterexample "qualified traits with the same basename stay distinct"
+        (qualifiedDistinct === [])
+    , counterexample "the same qualified head is rejected"
+        (qualifiedDuplicate === ["E3015"])
+    , counterexample "generic binder renaming does not evade the check"
+        (alphaEquivalent === ["E3015"])
+    , counterexample "different concrete arguments are distinct exact heads"
+        (distinctArguments === [])
+    , counterexample "non-nominal syntax does not bypass duplicate detection"
+        (structural === ["E3015"])
+    , counterexample "each implementation after the first reports once"
+        (repeated === ["E3015", "E3015"])
+    ]
+
+duplicateDiagnostic :: Text -> CompileResult -> Property
+duplicateDiagnostic source result =
+  case (compileDiagnostics result, region source "Local") of
+    ([value], Just (expectedStart, _)) -> conjoin
+      [ diagnosticCodeText (diagnosticCode value) === "E3015"
+      , diagnosticMessage value === "duplicate implementation: Mark is already implemented for Local"
+      , diagnosticHelp value === Just "remove one implementation; duplicate implementation heads are prohibited"
+      , unOffset (spanStart (diagnosticSpan value)) === expectedStart
+      ]
+    (values, location) ->
+      counterexample ("unexpected diagnostics or location: " <> show (length values, location)) False
 
 testFloatAlias :: IO Property
 testFloatAlias = do
