@@ -16,6 +16,10 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Env
   ( Eval (..)
+  , adoptChild
+  , closeScope
+  , openScope
+  , releaseChild
   , Evaluator (..)
   , abortAt
   , ascend
@@ -216,7 +220,10 @@ callClosure closure arguments callSpan = do
       supplied = maybe arguments (: arguments) (closureSelf closure)
   bindings <- bindArguments parameters supplied callSpan
   if functionAsync value
-    then pure (TaskValue closure bindings callSpan)
+    then do
+      let task = TaskValue closure bindings callSpan
+      adoptChild task
+      pure task
     else runClosure closure bindings callSpan
 
 {-| Start a prepared closure body. Async calls retain these bindings in a cold
@@ -312,6 +319,7 @@ evaluate (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> evaluateBlock body
   MacroCall _ _ ->
     abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
+  ScopeExpression body -> evaluateScope spanValue body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
     pure (RecordValue (lastPathSegment path) values)
@@ -475,11 +483,37 @@ applyFunction spanValue function arguments = case function of
   ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
+{-| Evaluate a structured scope.
+
+    Every task started inside becomes a child of the scope. On normal exit the
+    children that were never awaited are joined in the order they started, so no
+    task outlives the region that began it and a failure among them is selected
+    by position rather than by a race. On a control transfer out of the body the
+    children are joined first, which is the cleanup the semantics require before
+    the transfer continues. -}
+evaluateScope :: Span -> Located Block -> Evaluator Value
+evaluateScope spanValue body = do
+  openScope
+  outcome <- catchUnwind (evaluateBlock body)
+  children <- closeScope
+  mapM_ (joinChild spanValue) children
+  case outcome of
+    Right value -> pure value
+    Left transfer -> unwind transfer
+
+{-| Join one child. A child that already failed propagates its failure, which is
+    what keeps a scope from reporting success while a task it owned did not. -}
+joinChild :: Span -> Value -> Evaluator ()
+joinChild spanValue child = do
+  _ <- awaitTask spanValue child
+  pure ()
+
 {-| Await starts the retained async body. The tree evaluator has no scheduler,
     but preserving this cold boundary keeps calls and awaits observably ordered. -}
 awaitTask :: Span -> Value -> Evaluator Value
 awaitTask spanValue task = case task of
   TaskValue closure bindings callSpan -> do
+    releaseChild task
     result <- runClosure closure bindings callSpan
     case result of
       VariantValue "Ok" _ -> unwrapTry spanValue result

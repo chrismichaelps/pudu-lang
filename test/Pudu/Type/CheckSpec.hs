@@ -44,6 +44,7 @@ typeProperties =
   , ("reserved types are refused until their decision is made", testReservedTypes)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("compile-time functions keep their evaluator pure", testComptime)
+  , ("a structured scope requires an async function", testScopes)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -998,6 +999,23 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+testScopes :: IO Property
+testScopes = do
+  inAsync <- codes
+    [ "module M"
+    , "async fn run() -> Result[Int, Str] { async with scope { Ok(1) } }"
+    ]
+  inSync <- codes ["module M", "fn run() -> Int { async with scope { 1 } }"]
+  scopeType <- typeOfIn
+    [ "async fn run() -> Result[Int, Str] { async with scope { Ok(1) } }" ]
+    "async with scope { Ok(1) }"
+  pure $ conjoin
+    [ counterexample "an async function may open a scope" (inAsync === [])
+    , counterexample "a synchronous one may not" (inSync === ["E3026"])
+    , counterexample "a scope has its block's type"
+        (Text.isPrefixOf "Result[Int" scopeType === True)
+    ]
 
 comptimeProgram :: [Text]
 comptimeProgram =

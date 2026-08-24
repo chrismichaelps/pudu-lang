@@ -21,7 +21,34 @@ evalProperties =
   , ("async calls stay cold until an async entry awaits them", testAsync)
   , ("borrowing and dereferencing read the same value", testBorrowing)
   , ("unsafe regions evaluate their block", testUnsafeRegions)
+  , ("structured scopes join every task they start", testScopes)
   ]
+
+testScopes :: IO Property
+testScopes = do
+  awaitedChild <- evaluateAsyncWith
+    [ "async fn work(n: Int) -> Result[Int, Str] { Ok(n * 2) }" ]
+    "async with scope { let first = work(5).await  Ok(first) }"
+  unawaitedChild <- evaluateAsyncWith
+    [ "async fn work(n: Int) -> Result[Int, Str] { Ok(n * 2) }" ]
+    "async with scope { work(3)  Ok(1) }"
+  failingChild <- evaluateAsyncWith
+    [ "async fn failing() -> Result[Int, Str] { Err(\"child failed\") }" ]
+    "async with scope { failing()  Ok(1) }"
+  earliestFailure <- evaluateAsyncWith
+    [ "async fn first() -> Result[Int, Str] { Err(\"first\") }"
+    , "async fn second() -> Result[Int, Str] { Err(\"second\") }"
+    ]
+    "async with scope { first()  second()  Ok(1) }"
+  pure $ conjoin
+    [ counterexample "a scope yields its block's value" (awaitedChild === "10")
+    , counterexample "an unawaited child still runs before the scope yields"
+        (unawaitedChild === "1")
+    , counterexample "a child's failure leaves the scope"
+        (failingChild === "Err(\"child failed\")")
+    , counterexample "the earliest failing child supplies the failure"
+        (earliestFailure === "Err(\"first\")")
+    ]
 
 testUnsafeRegions :: IO Property
 testUnsafeRegions = do

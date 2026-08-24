@@ -201,6 +201,7 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
   BlockExpression block -> rebuild (BlockExpression <$> expandBlock macros depth block)
   UnsafeExpression capabilities block ->
     rebuild (UnsafeExpression capabilities <$> expandBlock macros depth block)
+  ScopeExpression block -> rebuild (ScopeExpression <$> expandBlock macros depth block)
   IfExpression condition thenBlock elseBranch ->
     rebuild
       ( IfExpression
@@ -344,6 +345,7 @@ introducedNames :: Located Expression -> [Text]
 introducedNames (Located _ expression) = case expression of
   BlockExpression block -> blockNames block
   UnsafeExpression _ block -> blockNames block
+  ScopeExpression block -> blockNames block
   IfExpression _ thenBlock elseBranch ->
     blockNames thenBlock <> foldMap introducedNames elseBranch
   WhileExpression _ body -> blockNames body
@@ -394,6 +396,7 @@ substituteExpression bindings renames callSpan (Located _ expression) = case exp
   BlockExpression block -> at (BlockExpression (recurseBlock block))
   UnsafeExpression capabilities block ->
     at (UnsafeExpression capabilities (recurseBlock block))
+  ScopeExpression block -> at (ScopeExpression (recurseBlock block))
   IfExpression condition thenBlock elseBranch ->
     at (IfExpression (recurse condition) (recurseBlock thenBlock) (fmap recurse elseBranch))
   MatchExpression scrutinee arms ->

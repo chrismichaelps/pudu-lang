@@ -74,6 +74,8 @@ outlineExpression (Located _ expression) = case expression of
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
   MacroCall name arguments ->
     locatedValue name <> "!(" <> Text.intercalate ", " (map outlineExpression arguments) <> ")"
+  ScopeExpression body ->
+    "async with scope { " <> Text.intercalate "; " (outlineBlock body) <> " }"
   UnsafeExpression capabilities body ->
     "unsafe" <> capabilityAnnotation capabilities
       <> " { " <> Text.intercalate "; " (outlineBlock body) <> " }"

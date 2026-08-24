@@ -25,6 +25,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- Scope frames record the children a structured scope started, in order. The frame is a stack like the environment's, so a nested scope owns only what it began and a task started outside every scope stays cold — which is what makes a detached task unrepresentable.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.

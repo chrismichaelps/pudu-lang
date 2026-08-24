@@ -233,6 +233,7 @@ shape (Located _ expression) = case expression of
   TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate "," (map shape members) <> "]"
   UnsafeExpression _ _ -> "unsafe"
+  ScopeExpression _ -> "scope"
   MacroCall name arguments ->
     locatedValue name <> "!(" <> Text.intercalate "," (map shape arguments) <> ")"
   RecordExpression path fields ->

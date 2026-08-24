@@ -213,7 +213,13 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 - `async fn` returns a lazy `Task[T, E]`; calling it does not execute until awaited or spawned in a scope. A declared `Result[T, E]` return supplies those task channels and is not nested inside the task.
 - `.await` is legal only inside `async fn` or an async block and is a cancellation point.
+```ebnf
+scope_expr       = "async", "with", "scope", block ;
+```
+
 - `async with scope { ... }` creates a structured task scope. Spawned tasks cannot outlive it.
+- A task started inside a scope becomes its child. Awaiting the task joins it there; a child never awaited is joined when the scope exits, in the order the children started. A scope may be opened only inside an `async fn`, because joining is an await.
+- Leaving a scope by a control transfer joins its children first, so the transfer continues only after the region it left is empty.
 - Leaving a scope normally awaits children; leaving by failure or cancellation cancels children, runs cleanup, then waits for termination.
 - Cancellation is distinct from domain `Result` failure and cannot be swallowed accidentally.
 - A value crossing into a concurrently executing task must satisfy `Send`; shared cross-task references additionally require `Sync` and cannot outlive the scope.

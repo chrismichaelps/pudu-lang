@@ -5,6 +5,11 @@ module Pudu.Eval.Env
   , Eval (..)
   , Unwind (..)
   , abortAt
+  , adoptChild
+  , closeScope
+  , insideScope
+  , openScope
+  , releaseChild
   , catchUnwind
   , ascend
   , bind
@@ -38,7 +43,41 @@ import Pudu.Source (Span)
 data Env = Env
   { envFrames :: ![Map Text Value]
   , envDepth :: !Int
+  , envScopes :: ![[Value]]
   }
+
+{-| Open a structured task scope. Every child started inside it is recorded so
+    the scope can join them before it yields. -}
+openScope :: Evaluator ()
+openScope = Evaluator $ \env -> Done () env{envScopes = [] : envScopes env}
+
+{-| Close the innermost scope, returning the children it started in the order
+    they were started. Deterministic order is what makes failure selection
+    predictable rather than a race. -}
+closeScope :: Evaluator [Value]
+closeScope =
+  Evaluator $ \env -> case envScopes env of
+    [] -> Done [] env
+    children : rest -> Done (reverse children) env{envScopes = rest}
+
+{-| Record a child in the innermost open scope, if any. A task started outside
+    every scope stays cold, which is what keeps a detached task impossible. -}
+adoptChild :: Value -> Evaluator ()
+adoptChild child =
+  Evaluator $ \env -> case envScopes env of
+    [] -> Done () env
+    children : rest -> Done () env{envScopes = (child : children) : rest}
+
+{-| Drop a child from the innermost scope because it was awaited explicitly, so
+    the scope does not run it a second time at exit. -}
+releaseChild :: Value -> Evaluator ()
+releaseChild child =
+  Evaluator $ \env -> case envScopes env of
+    [] -> Done () env
+    children : rest -> Done () env{envScopes = filter (/= child) children : rest}
+
+insideScope :: Evaluator Bool
+insideScope = Evaluator $ \env -> Done (not (null (envScopes env))) env
 
 {-| @Eval.Unwind — a control transfer in flight.
 
@@ -100,7 +139,7 @@ catchUnwind (Evaluator action) =
     Aborted stop -> Aborted stop
 
 emptyEnv :: Env
-emptyEnv = Env{envFrames = [Map.empty], envDepth = 0}
+emptyEnv = Env{envFrames = [Map.empty], envDepth = 0, envScopes = []}
 
 bind :: Text -> Value -> Evaluator ()
 bind name value =

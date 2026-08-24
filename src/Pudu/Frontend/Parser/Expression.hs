@@ -42,8 +42,8 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFor, KwIf, KwIn, KwLoop
-    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwTask, KwTrue, KwUnsafe, KwWhile)
+  ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFor, KwIf, KwIn, KwLoop
+    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwScope, KwTask, KwTrue, KwUnsafe, KwWhile, KwWith)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
@@ -94,6 +94,7 @@ parsePrefix blockParser = do
     Keyword KwMatch -> parseMatch blockParser
     Keyword KwWhile -> parseWhile blockParser
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
+    Keyword KwAsync -> parseScope blockParser
     Keyword KwLoop -> parseLoop blockParser
     Keyword KwFor -> parseFor blockParser
     Identifier name -> parseNameOrRecord blockParser token name
@@ -105,6 +106,22 @@ parsePrefix blockParser = do
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
     _ -> invalidPrefix token
+
+{-| Parse `async with scope { ... }`, the structured task scope.
+
+    Every child a scope starts is joined before the scope's value is produced,
+    so no task outlives the region that started it. The keywords are spelled out
+    because the construct is a promise about lifetime, not a modifier. -}
+parseScope :: BlockParser -> Parser (Located Expression)
+parseScope blockParser = do
+  keyword <- advanceToken
+  _ <- expectKeyword KwWith "after async to open a structured scope"
+  _ <- expectKeyword KwScope "after with to open a structured scope"
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (ScopeExpression body)
+    )
 
 {-| Parse `unsafe { ... }` or `unsafe(raw, null) { ... }`.
 
