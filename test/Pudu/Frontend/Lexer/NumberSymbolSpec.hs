@@ -32,7 +32,10 @@ numberSymbolProperties =
 testValidIntegers :: IO Property
 testValidIntegers = do
   let stress = Text.replicate 10000 "9"
-      literals = ["0", "1_000", "0b10_01", "0o7", "0xdead_BEEF", stress]
+      literals =
+        [ "0", "1_000", "127i8", "255u8", "0b10_01i16"
+        , "0o7u32", "0xdead_BEEF", "0xffu8", stress
+        ]
   outcomes <- traverse scanNumberOutput literals
   pure $ case sequence outcomes of
     Just outputs -> conjoin (zipWith (validNumber IntegerLiteral) literals outputs)
@@ -48,7 +51,10 @@ testValidFloats = do
 
 testMalformedNumbers :: IO Property
 testMalformedNumbers = do
-  let literals = ["0x", "0XFF", "0b2", "0o8", "0xG", "1_", "1__2", "1e", "1e+", "1e_2"]
+  let literals =
+        [ "0x", "0XFF", "0b2", "0o8", "0xG", "1_", "1__2"
+        , "1e", "1e+", "1e_2", "1foo", "1I8", "1u7", "0x1u7"
+        ]
   outcomes <- traverse scanNumberOutput literals
   pure $ case sequence outcomes of
     Just outputs -> conjoin (zipWith malformedNumber literals outputs)

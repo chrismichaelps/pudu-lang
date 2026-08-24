@@ -89,7 +89,7 @@ Supporting judgements:
 - Exported and asynchronous signatures are fully annotated and checked without inspecting callers. Async annotations form the success/failure channels of every cold `Task` independently of declaration order.
 - Inference never chooses an implicit lossy numeric conversion, trait implementation among overlapping candidates, or failure conversion lacking a unique `From` implementation.
 - Generalization occurs only for syntactic values at immutable `let` bindings; mutable bindings remain monomorphic to avoid unsound value restriction interactions.
-- Unresolved type variables at a public or statement boundary produce a diagnostic rather than defaulting, except integer literals may default to `Int` when the value fits.
+- Unresolved type variables at a public or statement boundary produce a diagnostic rather than defaulting, except an unsuffixed integer-literal variable defaults to `Int` when the value fits. Context may instead select any compiler-wired integer type; a suffix fixes that selection before context unification.
 
 ## Expression Evaluation Order
 
@@ -164,6 +164,7 @@ drop p:                     Available → Moved
 
 ## Numeric Semantics
 
+- Integer literal magnitude is arbitrary precision until its deferred literal constraint is resolved. Context or a width suffix selects a compiler-wired integer type; otherwise the literal defaults to `Int`. The selected mathematical interval is checked before evaluation, with `E3018` for overflow and no implicit narrowing.
 - Integer representations are two's-complement; `Int`/`UInt` width equals the compilation target pointer width and is recorded in artifact metadata.
 - Checked fixed-width arithmetic either yields the exact mathematical result or a typed overflow failure; it never invokes undefined behavior.
 - Wrapping and saturating operators are separate typed operations and cannot be introduced by optimization.

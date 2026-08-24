@@ -29,10 +29,14 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
   WildcardPattern -> pure ()
   BindingPattern name -> bindName (locatedValue name) (monotype subjectType)
   LiteralPattern literal -> do
-    _ <- unify patternSpan subjectType (literalType literal)
+    literalTypeValue <- literalType patternSpan literal
+    _ <- unify patternSpan subjectType literalTypeValue
     pure ()
-  RangePattern lower _ _ -> do
-    _ <- unify patternSpan subjectType (literalType lower)
+  RangePattern lower _ upper -> do
+    lowerType <- literalType patternSpan lower
+    upperType <- literalType patternSpan upper
+    _ <- unify patternSpan subjectType lowerType
+    _ <- unify patternSpan subjectType upperType
     pure ()
   TuplePattern members -> do
     memberTypes <- mapM (const freshVariable) members

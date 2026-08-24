@@ -118,6 +118,8 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Selected issue #41 as the next maturity slice and resolved its boundary: async calls normalize to `Task[S, E]`, `.await` enforces async capability and failure propagation, and the evaluator represents a cold prepared task without claiming scheduling or cancellation.
 - [Role: DNA Engineer → Shadow] Implemented async task normalization, `E3016`/`E3017`, compatible failure propagation, cold prepared evaluator tasks, and async-only host entry driving. Focused type/runtime properties cover ordinary and failing channels, success/failure await, illegal capability/operand use, and cold-call behavior.
 - [Role: Shadow → DNA Engineer] Closed the forward-call inference edge by requiring complete async parameter/return annotations with `E3010`; added exact diagnostic contracts plus static/runtime forward-declaration cases. Clean development and optimized suites pass, `cabal check` is clean, and normalization, capability, cold-execution, and annotation-boundary mutants are killed.
+- [Role: Architect → DNA Engineer] Selected issue #34 as the next numeric maturity slice. Resolved literals as exact token text plus shared arbitrary-precision decoding and deferred checker constraints; context or a closed width suffix selects the type, only unresolved unsuffixed literals default to `Int`, and `E3018` owns mathematical fit failure.
+- [Role: DNA Engineer → Shadow] Implemented shared strict base decoding, the closed signed/unsigned suffix set, creation-scoped deferred constraints, exact target-width fit diagnostics, pattern/evaluator integration, contextual control-flow inference, and regression coverage. Clean O0/O2 suites pass, `cabal check` is clean, and all five numeric mutants are killed.
 - [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
 - [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
@@ -142,7 +144,7 @@ tags: [handoff]
 
 ## Exact next action
 
-DNA Engineer: run the real `puduci` task-normalization/await gate, then commit issue #41 without modifying the tested tree and promote it through CI.
+Shadow: run the real Pudu REPL gate for suffix typing, contextual `Int8`, arbitrary-precision evaluation, default `Int`, and exact `E3018`; then commit issue #34 without modifying the tested tree and promote it through CI.
 
 ## Links
 
