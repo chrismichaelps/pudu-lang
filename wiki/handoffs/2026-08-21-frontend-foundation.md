@@ -120,6 +120,8 @@ tags: [handoff]
 - [Role: Shadow → DNA Engineer] Closed the forward-call inference edge by requiring complete async parameter/return annotations with `E3010`; added exact diagnostic contracts plus static/runtime forward-declaration cases. Clean development and optimized suites pass, `cabal check` is clean, and normalization, capability, cold-execution, and annotation-boundary mutants are killed.
 - [Role: Architect → DNA Engineer] Selected issue #34 as the next numeric maturity slice. Resolved literals as exact token text plus shared arbitrary-precision decoding and deferred checker constraints; context or a closed width suffix selects the type, only unresolved unsuffixed literals default to `Int`, and `E3018` owns mathematical fit failure.
 - [Role: DNA Engineer → Shadow] Implemented shared strict base decoding, the closed signed/unsigned suffix set, creation-scoped deferred constraints, exact target-width fit diagnostics, pattern/evaluator integration, contextual control-flow inference, and regression coverage. Clean O0/O2 suites pass, `cabal check` is clean, and all five numeric mutants are killed.
+- [Role: Architect → DNA Engineer] Selected issue #36 as the adjacent numeric usability slice. Resolved explicit `f32`/`f64` token suffixes, unsuffixed `Float64`, selected-width `E3019`, and retained runtime precision so binary32 arithmetic rounds honestly rather than existing only as a static label.
+- [Role: DNA Engineer → Shadow] Implemented total suffix conversion, exact `Float32`/`Float64` static selection, `E3019`, retained runtime width, binary32 literal/result normalization, and expression/pattern/scanner coverage. Clean O0/O2 suites pass, `cabal check` is clean, and all five float mutants are killed.
 - [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
 - [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
@@ -144,7 +146,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Shadow: run the real Pudu REPL gate for suffix typing, contextual `Int8`, arbitrary-precision evaluation, default `Int`, and exact `E3018`; then commit issue #34 without modifying the tested tree and promote it through CI.
+Shadow: run the real Pudu REPL gate for `f32`/`f64` types, binary32 literal and arithmetic rounding, negative zero, and exact `E3019`; then commit issue #36 without modifying the tested tree and promote it through CI.
 
 ## Links
 

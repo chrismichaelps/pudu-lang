@@ -28,10 +28,11 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
+- Float operations require equal retained widths and normalize every arithmetic result through [[Float Literal]]. Comparisons preserve IEEE host behavior at the already-normalized operands.
 
 ### Linkage
 
-- **Requires:** [[Eval Value]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Float Literal]], [[Eval Value]], [[Syntax Tree]], [[Diagnostic Model]].
 - **Consumed by:** [[Evaluator]].
 
 ## Algorithm
@@ -45,6 +46,7 @@ Direct structural recursion over the value or syntax shape; no caching, no mutat
 ## Edge Cases
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
+- A binary32 addition such as `16777216.0f32 + 1.0f32` remains `16777216.0`; retaining a binary64 intermediate would violate the runtime width.
 
 ## Depth
 
@@ -53,6 +55,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Grill Log
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
+- **Q:** Round only `Float32` literals? **A:** No; normalize each arithmetic result too. _Rationale:_ binary32 precision applies to operations, not just source conversion. _Rejected:_ hidden binary64 intermediates; rounding only when a value is printed.
 
 ## Referenced by
 

@@ -65,6 +65,7 @@ library
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
+    Pudu.FloatLiteral
     Pudu.IntegerLiteral
     Pudu.Repl
     Pudu.Repl.Command

@@ -21,6 +21,8 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Pudu.Frontend.Syntax.Tree as Tree
+import Pudu.FloatLiteral
+  ( ParsedFloat (..), floatWidthType, parseFloatLiteral )
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
@@ -38,11 +40,10 @@ import Pudu.Type.Env
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Scheme (..)
-  , NominalId
+  , NominalId (..)
   , Type (..)
   , boolType
   , charType
-  , floatType
   , integerType
   , nominalKey
   , nominalName
@@ -56,7 +57,17 @@ literalType spanValue literal = case literal of
     Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
       constrainIntegerLiteral spanValue parsedIntegerValue (integerSuffixType <$> parsedIntegerSuffix)
     Nothing -> pure ErrorType
-  Tree.FloatValue _ -> pure floatType
+  Tree.FloatValue text -> case parseFloatLiteral text of
+    Just ParsedFloat{parsedFloatFits = True, parsedFloatWidth} ->
+      pure (NominalType (NominalId Nothing (floatWidthType parsedFloatWidth)) [])
+    Just ParsedFloat{parsedFloatWidth} -> do
+      report "E3019" spanValue
+        ( "floating literal " <> text <> " does not fit "
+            <> floatWidthType parsedFloatWidth
+        )
+        (Just "choose Float64 or reduce the literal magnitude")
+      pure ErrorType
+    Nothing -> pure ErrorType
   Tree.StringValue _ -> pure stringType
   Tree.CharValue _ -> pure charType
   Tree.BoolValue _ -> pure boolType

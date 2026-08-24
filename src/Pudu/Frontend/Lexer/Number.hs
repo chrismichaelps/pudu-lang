@@ -11,6 +11,7 @@ import Pudu.Frontend.Lexer.Cursor
   )
 import Pudu.Frontend.Token
   ( TokenKind (FloatLiteral, IntegerLiteral, Invalid) )
+import Pudu.FloatLiteral (floatSuffix)
 import Pudu.IntegerLiteral (integerSuffix, splitIntegerSuffix)
 
 data NumberScan = NumberScan
@@ -49,7 +50,9 @@ scanDecimal cursor =
       afterExponent = maybe afterFraction scannedCursor exponentScan
       exponentValid = maybe True scannedValid exponentScan
       isFloat = maybe False (const True) fraction || maybe False (const True) exponentScan
-      suffixScan = if isFloat then Nothing else scanIntegerSuffix afterExponent
+      suffixScan = if isFloat
+        then scanNumericSuffix (hasSuffix floatSuffix) afterExponent
+        else scanNumericSuffix (hasSuffix integerSuffix) afterExponent
       finalCursor = maybe afterExponent fst suffixScan
       suffixValid = maybe True snd suffixScan
    in NumberScan finalCursor (integerValid && fractionValid && exponentValid && suffixValid) isFloat
@@ -80,15 +83,18 @@ scanExponent cursor =
            in Just (NumberScan advanced valid True)
     _ -> Nothing
 
-scanIntegerSuffix :: LexerCursor -> Maybe (LexerCursor, Bool)
-scanIntegerSuffix cursor = case peekScalar cursor of
+scanNumericSuffix :: (Text -> Bool) -> LexerCursor -> Maybe (LexerCursor, Bool)
+scanNumericSuffix classify cursor = case peekScalar cursor of
   Just scalar
     | isAsciiLetter scalar ->
         let mark = markCursor cursor
             advanced = consumeWhile isAsciiAlphaNumeric cursor
-            valid = maybe False (maybe False (const True) . integerSuffix . fst) (captureSince mark advanced)
+            valid = maybe False (classify . fst) (captureSince mark advanced)
          in Just (advanced, valid)
   _ -> Nothing
+
+hasSuffix :: (Text -> Maybe value) -> Text -> Bool
+hasSuffix classify = maybe False (const True) . classify
 
 finishNumber :: CursorMark -> NumberScan -> Maybe LexerCursor
 finishNumber mark NumberScan{scannedCursor, scannedValid, scannedFloat} = do

@@ -10,21 +10,20 @@ module Pudu.Eval.Value
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
 
 {-| @Eval.Value.Runtime — one evaluated result.
 
-    Integers are arbitrary precision and floats are host doubles: without a
-    typing phase there is no declared width to wrap or saturate against, so the
-    evaluator computes exactly and leaves width-dependent behaviour to the
-    slice that introduces types. -}
+    Integers are arbitrary precision. Floats retain their source-selected width
+    beside normalized `Double` storage so binary32 operations cannot silently
+    use binary64 intermediates. -}
 data Value
   = IntValue !Integer
-  | FloatValue !Double
+  | FloatValue !FloatWidth !Double
   | StrValue !Text
   | CharValue !Char
   | BoolValue !Bool
@@ -84,7 +83,7 @@ data Closure = Closure
 renderValue :: Value -> Text
 renderValue value = case value of
   IntValue number -> Text.pack (show number)
-  FloatValue number -> Text.pack (show number)
+  FloatValue _ number -> Text.pack (show number)
   StrValue text -> "\"" <> escape text <> "\""
   CharValue character -> "'" <> escape (Text.singleton character) <> "'"
   BoolValue flag -> if flag then "true" else "false"
@@ -113,7 +112,7 @@ escape =
 valueKind :: Value -> Text
 valueKind value = case value of
   IntValue _ -> "integer"
-  FloatValue _ -> "float"
+  FloatValue _ _ -> "float"
   StrValue _ -> "string"
   CharValue _ -> "char"
   BoolValue _ -> "bool"

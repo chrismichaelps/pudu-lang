@@ -17,7 +17,7 @@ aliases: [Number Scanner]
 
 ## Purpose
 
-Consume one ASCII numeric candidate, preserve its exact spelling, classify integer/float shape, and recover malformed owned candidates without converting magnitude. Integer candidates include the closed width suffixes owned by [[Integer Literal]].
+Consume one ASCII numeric candidate, preserve its exact spelling, classify integer/float shape, and recover malformed owned candidates without converting magnitude. Integer and floating candidates include the closed width suffixes owned by [[Integer Literal]] and [[Float Literal]].
 
 ## Interface
 
@@ -30,9 +30,9 @@ scanNumber :: LexerCursor -> Maybe LexerCursor
 - Only ASCII `0..9` begins a number. A non-match returns `Nothing`; every match commits a positive-width token.
 - Decimal/base digit runs admit `_` only between valid digits. Bases are lowercase `0b`, `0o`, and `0x`; the post-prefix candidate consumes ASCII alphanumeric/underscore text so invalid base digits cannot silently split.
 - Decimal fraction ownership begins only when `.` is followed immediately by an ASCII digit. This preserves dot/member and `1..2` range boundaries.
-- `e`/`E` begins an owned exponent after a decimal integer/fraction; one optional sign is admitted, and a valid separated decimal digit run is required.
+- `e`/`E` begins an owned exponent after a decimal integer/fraction; one optional sign is admitted, and a valid separated decimal digit run is required. A completed float may then own the closed `f32` or `f64` suffix from [[Float Literal]].
 - Valid base/decimal integers emit `IntegerLiteral`; a valid fraction or exponent emits `FloatLiteral`. Payload and lexeme both retain exact source text; no host numeric conversion occurs.
-- A decimal integer followed contiguously by ASCII alphanumeric text owns that text as a suffix candidate. Only `i8`/`i16`/`i32`/`i64`/`i128` and `u8`/`u16`/`u32`/`u64`/`u128` are valid. Base candidates split the same known suffix before validating their digits.
+- A numeric token followed contiguously by ASCII alphanumeric text owns that text as a suffix candidate. Integers admit only `i8`/`i16`/`i32`/`i64`/`i128` and `u8`/`u16`/`u32`/`u64`/`u128`; floats admit only `f32`/`f64`. Base candidates split only an integer suffix before validating their digits.
 - An invalid owned candidate emits `Invalid` with identical text and records one `E0004` `Error` over the complete token: `malformed numeric literal`.
 
 ## Algorithm
@@ -49,8 +49,8 @@ scanNumber :: LexerCursor -> Maybe LexerCursor
 
 ## Edge Cases
 
-- `0`, `1_000`, `127i8`, `255u8`, `0b10_01`, `0xffu8`, `0o7`, `0xFF`, `1.0`, `1e9`, and `1.0E-9` are valid.
-- `1foo`, `1I8`, and `0x1u7` are owned malformed candidates and report one `E0004`.
+- `0`, `1_000`, `127i8`, `255u8`, `0b10_01`, `0xffu8`, `0o7`, `0xFF`, `1.0`, `1.0f32`, `1e9f64`, and `1.0E-9` are valid.
+- `1foo`, `1I8`, `0x1u7`, `1.0F32`, and `1e3f16` are owned malformed candidates and report one `E0004`.
 - `0x`, `0b2`, `1_`, `1__2`, `1e`, `1e+`, and `1e_2` are invalid E0004 tokens.
 - `1.`, `1.foo`, `1..2`, and `1..=2` stop the integer before punctuation.
 - Arbitrarily long magnitudes remain textual and linear in source length.
@@ -65,6 +65,7 @@ DEPTH 0.64 (MEDIUM). The module owns numeric candidate boundaries, separator val
 - **Q:** Let `1.` start a float? **A:** No; require a digit after the dot. _Rationale:_ dot/member and range punctuation must remain deterministic. _Rejected:_ scanner backtracking after consuming dot.
 - **Q:** Split malformed base digits into later tokens? **A:** No; once a base prefix is owned, consume its alphanumeric candidate and emit one E0004. _Rationale:_ the earliest phase can explain the defect accurately and still advance. _Rejected:_ `0` plus identifier `xg`.
 - **Q:** Tokenize a valid width suffix separately? **A:** No; keep it in the integer token. _Rationale:_ the suffix selects the literal's type and an unknown contiguous suffix is one malformed numeric candidate. _Rejected:_ parser-side token adjacency; accepting suffix typos as identifiers.
+- **Q:** Reuse integer suffix validation for floats? **A:** No; choose the suffix vocabulary after fraction/exponent classification. _Rationale:_ `1.0f32` is a float token while integer-looking `1f32` remains malformed under the grammar's explicit float shape. _Rejected:_ converting integer-shaped tokens to floats by suffix; one union vocabulary for both token kinds.
 
 ## Referenced by
 

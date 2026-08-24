@@ -165,6 +165,7 @@ drop p:                     Available → Moved
 ## Numeric Semantics
 
 - Integer literal magnitude is arbitrary precision until its deferred literal constraint is resolved. Context or a width suffix selects a compiler-wired integer type; otherwise the literal defaults to `Int`. The selected mathematical interval is checked before evaluation, with `E3018` for overflow and no implicit narrowing.
+- Floating literals default to binary64. `f32` and `f64` explicitly select binary32 and binary64; `E3019` rejects a finite source spelling outside the selected range. The interpreter retains this width and rounds every `Float32` literal and arithmetic result to binary32, so static precision is observable and honest.
 - Integer representations are two's-complement; `Int`/`UInt` width equals the compilation target pointer width and is recorded in artifact metadata.
 - Checked fixed-width arithmetic either yields the exact mathematical result or a typed overflow failure; it never invokes undefined behavior.
 - Wrapping and saturating operators are separate typed operations and cannot be introduced by optimization.

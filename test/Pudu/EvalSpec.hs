@@ -40,6 +40,12 @@ testArithmetic = do
   bitwiseNot <- evaluate "~0"
   suffixedBase <- evaluate "0xffu8"
   signedBoundary <- evaluate "-128i8"
+  roundedFloat32Literal <- evaluate "16777217.0f32 == 16777216.0f32"
+  roundedFloat32Sum <- evaluate "16777216.0f32 + 1.0f32 == 16777216.0f32"
+  retainedFloat64Sum <- evaluate "16777216.0f64 + 1.0f64 == 16777217.0f64"
+  negativeFloatZero <- evaluate "-0.0f32"
+  floatRangeMatch <- evaluate
+    "match 1.5f32 { case 1.0f32..2.0f32 => true case _ => false }"
   pure $ conjoin
     [ sums === "7"
     , precedence === "9"
@@ -59,6 +65,11 @@ testArithmetic = do
     , counterexample "complement of zero is negative one" (bitwiseNot === "-1")
     , counterexample "integer suffixes do not alter the runtime value" (suffixedBase === "255")
     , counterexample "signed boundaries retain their mathematical value" (signedBoundary === "-128")
+    , counterexample "a Float32 literal rounds to binary32" (roundedFloat32Literal === "true")
+    , counterexample "Float32 arithmetic rounds every result" (roundedFloat32Sum === "true")
+    , counterexample "Float64 arithmetic retains binary64 precision" (retainedFloat64Sum === "true")
+    , counterexample "unary minus preserves negative floating zero" (negativeFloatZero === "-0.0")
+    , counterexample "Float32 range patterns retain their width" (floatRangeMatch === "true")
     ]
 
 testBindings :: IO Property
