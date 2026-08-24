@@ -145,6 +145,32 @@ is joined by the same rules, so the library cannot leak a task the language woul
 | `Std.Crypto` | `cryptonite` | hashes, HMAC, constant-time comparison, secure random |
 | `Std.Db` | `postgresql-simple` | typed SQL, parameter binding, connection pooling |
 
+## What ships today
+
+| Module | State | Notes |
+|---|---|---|
+| `Std.Math` | shipped | integer arithmetic, `gcd`, `lcm`, `pow`, `clamp`, `signum` |
+| `Std.List` | shipped | `first`, `last`, `sum`, `minimum`, `indexOf`, `take`, `sorted` |
+| `Std.Text` | shipped | `find`, `stripPrefix`, `padLeft`, `join`, `words`, `capitalize` |
+| `Std.Option` | shipped | `isSome`, `unwrapOr`, `orElse`, `okOr` |
+| `Std.Result` | shipped | `isOk`, `unwrapOr`, `ok`, `err`, `orElse` |
+| `Std.Char` | shipped | ASCII classification and `toDigit` |
+
+Everything else in the tables above is designed and unwritten. Two things block the rest, and both
+are language work rather than library work:
+
+- **Anonymous functions.** `map`, `filter`, `sortBy`, and every parser combinator need a function
+  literal. Named functions can be passed today, which is why `Array.map` works, but a library built
+  on that alone would force a top-level declaration for every one-line transformation.
+- **Input and output.** `Std.Io`, `Std.Http`, `Std.Net`, `Std.Process`, and `Std.Db` need a foreign
+  interface, which needs the `foreign` capability from [[Unsafe Capabilities]] and a decision about
+  how a foreign type's ownership is described.
+
+Writing the six modules above already found five language gaps — indexing through a borrow,
+matching through a borrow, `Str` having no methods at all, `export` detaching documentation, and a
+discarded collection result being silent. That is the design working as intended: the library is
+written in Pudu so that the places it cannot be are visible.
+
 ## What "production ready" is required to mean
 
 These are constraints on every module above, and a module that cannot meet one does not ship.
