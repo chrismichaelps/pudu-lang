@@ -7,6 +7,7 @@ module Pudu.Repl.Session
   , classifyEntry
   , contextSummary
   , inspectSession
+  , inspectContext
   , emptySession
   , loadModule
   , sessionDeclaredNames
@@ -190,10 +191,19 @@ evaluateFor result _ = case compileModule result of
     `:context` use this so inspection cannot alter what the session holds. -}
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 inspectSession session = do
+  (resolution, _, diagnostics) <- inspectContext session
+  pure (resolution, diagnostics)
+
+{-| Compile the session as it stands and return its resolution, its parsed
+    module, and its diagnostics. Commands that describe the session read the
+    module directly, which keeps them answering from the same text the session
+    would compile rather than from a second record that could drift. -}
+inspectContext :: Session -> IO (Maybe Resolution, Maybe Module, [Diagnostic])
+inspectContext session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
   let result = runCompileWith (sessionContext session) source
-  pure (compileResolution result, compileDiagnostics result)
+  pure (compileResolution result, compileModule result, compileDiagnostics result)
 
 interactiveName :: SourceName
 interactiveName = SourceName "<interactive>"

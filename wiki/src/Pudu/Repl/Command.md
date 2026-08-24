@@ -38,6 +38,7 @@ commandHelp :: [(Text, Text)]
 - An unrecognized command keeps the name that was typed so the session can report it back accurately.
 - Parsing is pure and total: it never fails, never performs IO, and never interprets the command's argument.
 - `commandHelp` is the single source of the help text, so a command cannot exist without being documented.
+- The inspection commands (`:info`, `:kind`, `:instances`) and the state commands (`:set`, `:unset`, `:show`) carry their argument as untrimmed text: the parser does not know which settings or topics exist, and inventing that knowledge here would put the vocabulary in two places.
 
 ### Linkage
 
