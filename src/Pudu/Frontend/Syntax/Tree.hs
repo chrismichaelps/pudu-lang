@@ -94,6 +94,7 @@ data Function = Function
   { functionVisibility :: !Visibility
   , functionAsync :: !Bool
   , functionUnsafe :: !(Maybe [Located Capability])
+  , functionComptime :: !Bool
   , functionName :: !(Located Text)
   , functionTypeParams :: ![Located TypeParam]
   , functionParameters :: ![Located Parameter]

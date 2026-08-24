@@ -17,6 +17,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Pudu.Frontend.Syntax (Module, ModuleName)
 import Pudu.Frontend.Token (Token)
+import Pudu.Eval (EvalOutcome (..), evaluateModule)
 import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, resolveModuleWith)
 import Pudu.Type (TypeInfo, checkTypesWith)
 import Pudu.Type.Interface (TypeInterface, importsFor)
@@ -82,7 +83,10 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
               resolved = sortDiagnostics (frontendDiagnostics <> resolutionDiagnostics)
               (types, typeDiagnostics) =
                 if hasErrors resolved then (Nothing, []) else typedResult context parsed
-              diagnostics = sortDiagnostics (resolved <> typeDiagnostics)
+              typed = sortDiagnostics (resolved <> typeDiagnostics)
+              constantDiagnostics =
+                if hasErrors typed then [] else foldConstants parsed
+              diagnostics = sortDiagnostics (typed <> constantDiagnostics)
            in CompileResult
                 { compileTokens = frontendTokens
                 , compileModule = if hasErrors diagnostics then Nothing else Just parsed
@@ -90,6 +94,19 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 , compileTypes = types
                 , compileDiagnostics = diagnostics
                 }
+
+{-| Evaluate the module's constants at compile time.
+
+    [[architecture/SEMANTICS]] makes a module-scope `const` a compile-time
+    value, so its initializer runs here rather than when the program does. A
+    failure — division by zero, an exhausted evaluation budget, a constant that
+    reads one declared later — is therefore a compile diagnostic, and the same
+    bounded evaluator that runs the program produces it.
+
+    Folding runs only on a module that typed, so an initializer whose meaning
+    was never established is not evaluated for a second opinion. -}
+foldConstants :: Module -> [Diagnostic]
+foldConstants parsed = outcomeDiagnostics (evaluateModule parsed)
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}

@@ -37,7 +37,7 @@ import Pudu.Frontend.Syntax.Tree
   , Visibility
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwFn, KwNull, KwUnsafe)
+  ( Keyword (KwAsync, KwComptime, KwFn, KwNull, KwUnsafe)
   , Token (..)
   , TokenKind (..)
   )
@@ -55,6 +55,7 @@ parseFunction visibility = do
 parseFunctionValue :: Visibility -> Bool -> Parser (Located Function)
 parseFunctionValue visibility bodyRequired = do
   start <- peekToken
+  comptimeKeyword <- matchKeyword KwComptime
   unsafety <- parseUnsafety
   asyncKeyword <- matchKeyword KwAsync
   _ <- expectKeyword KwFn "to start a function"
@@ -73,6 +74,7 @@ parseFunctionValue visibility bodyRequired = do
           { functionVisibility = visibility
           , functionAsync = maybe False (const True) asyncKeyword
           , functionUnsafe = unsafety
+          , functionComptime = maybe False (const True) comptimeKeyword
           , functionName = name
           , functionTypeParams = typeParams
           , functionParameters = parameters

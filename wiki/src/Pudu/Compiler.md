@@ -58,6 +58,8 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 
 ### Governance
 
+- A module-scope `const` is evaluated at compile time, after typing and only when typing succeeded. [[architecture/SEMANTICS]] makes such a constant a compile-time value, so its initializer's failure is a compile diagnostic produced by the same bounded evaluator that runs the program.
+
 - Phase order is fixed: lex, parse, resolve names, then check types.
 - Each phase runs only on what the previous one admitted — resolution on a parsed module, typing on a resolved one — so a syntax error never earns a second explanation from a later phase, matching the earliest-phase rule in [[architecture/SEMANTICS]].
 - Parser still runs after lexical errors when a token stream exists, allowing useful independent diagnostics.
