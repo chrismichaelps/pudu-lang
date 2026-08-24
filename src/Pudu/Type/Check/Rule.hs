@@ -429,12 +429,20 @@ ambiguous spanValue owner member providers = do
  where
   qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
 
+{-| The type one index into a value produces.
+
+    A borrow is followed rather than rejected. Indexing reads through a
+    reference in every language that has both, and requiring `(*items)[0]`
+    would make every function that takes `&Array[T]` — which is every function
+    that does not want to copy one — read worse than the version that copies.
+    The borrow's own mutability is unchanged by reading through it. -}
 elementType :: Span -> Type -> Checker Type
 elementType spanValue targetType = do
   resolved <- zonk targetType
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
+    ReferenceTypeValue _ referent -> elementType spanValue referent
     NominalType "Str" [] -> pure charType
     NominalType "Array" [element] -> pure element
     TupleTypeValue members -> case members of

@@ -1,0 +1,8 @@
+module UsesStd
+
+import Std.Math as Math
+import Std.List {sum}
+
+export fn total(items: Array[Int]) -> Int {
+  Math.clamp(sum(&items), 0, 100)
+}

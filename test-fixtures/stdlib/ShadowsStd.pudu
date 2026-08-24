@@ -1,0 +1,5 @@
+module ShadowsStd
+
+import Std.Math {min}
+
+export fn pick() -> Int { min(1, 2) }

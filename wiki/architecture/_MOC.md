@@ -17,6 +17,8 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/SEMANTICS|Pudu Semantic System]] — normative static, dynamic, ownership, failure, and concurrency meaning.
 - [[architecture/FMCF Workflow|FMCF Workflow]] — repository-specific operating contract.
 - [[architecture/DELIVERY|Engineering Delivery]] — branches, issues, agents, reviews, gates, and releases.
+- [[architecture/MACROS|Macro Design]] — the macro form as hygienic typed syntax transformers, and what was rejected.
+- [[architecture/STDLIB|Standard Library Design]] — the `Std` namespace, the shipped modules, the import DX, and what production-ready is required to mean.
 - [[architecture/PERFORMANCE|Performance Constitution]] — compiler throughput, low-level IR, optimization barriers, and benchmarks.
 
 ## Governance Dashboard

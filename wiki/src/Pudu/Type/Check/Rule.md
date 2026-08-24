@@ -21,6 +21,11 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- Indexing follows a borrow rather than rejecting it. Every language with both reads through a
+  reference, and requiring `(*items)[0]` would make every function taking `&Array[T]` — which is
+  every function that does not want to copy one — read worse than the version that copies. The
+  borrow's own mutability is unchanged by reading through it.
+
 - Every rule is the one [[grammar/pudu]] states for that construct; nothing here invents a coercion the language does not have.
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.

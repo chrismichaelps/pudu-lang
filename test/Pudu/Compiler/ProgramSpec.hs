@@ -1,6 +1,7 @@
 module Pudu.Compiler.ProgramSpec (programProperties) where
 
 import Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler (CompileContext (..))
@@ -24,6 +25,7 @@ programProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("REPL loads retain the program interface context", testReplLoadContext)
+  , ("the standard library resolves from the distribution", testStandardLibrary)
   ]
 
 testImportedMethods :: IO Property
@@ -93,6 +95,39 @@ testInterfaceEdges = do
     , counterexample "an unreadable root is a structured loader failure"
         (unreadableRoot === ["E2014"])
     ]
+
+{-| The `Std` namespace resolves without the program declaring anything, and
+    the program's own tree still wins when it declares a standard module
+    itself — deliberately and visibly, since the file is in its own source
+    root. -}
+testStandardLibrary :: IO Property
+testStandardLibrary = do
+  uses <- codes "test-fixtures/stdlib/UsesStd.pudu"
+  shadows <- codes "test-fixtures/stdlib/ShadowsStd.pudu"
+  missing <- codes "test-fixtures/stdlib/MissingStd.pudu"
+  missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
+  ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
+  resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
+  pure $ conjoin
+    [ counterexample "a standard import compiles with no program-local module" (uses === [])
+    , counterexample "a program may shadow a standard module" (shadows === [])
+    , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
+    , counterexample "the diagnostic names the module that could not be read"
+        (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)
+    , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
+    , counterexample "the standard module joins the program graph"
+        (elem "Std.Math" resolved === True)
+    ]
+
+moduleNames :: FilePath -> IO [Text]
+moduleNames path = do
+  result <- compileProgram path
+  pure (map moduleNameText (programOrder result))
+
+messages :: FilePath -> IO [Text]
+messages path = do
+  result <- compileProgram path
+  pure (map diagnosticMessage (programDiagnostics result))
 
 codes :: FilePath -> IO [Text]
 codes path = do

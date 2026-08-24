@@ -1,0 +1,132 @@
+module Std.List
+
+/// The first element, or `None` for an empty array.
+/// Nothing in `Std` is partial: this is why there is no `head` that panics.
+export fn first[T](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else { Some(items[0]) }
+}
+
+/// The last element, or `None` for an empty array.
+export fn last[T](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else { Some(items[items.length() - 1]) }
+}
+
+/// Whether the array has no elements.
+export fn isEmpty[T](items: &Array[T]) -> Bool { items.length() == 0 }
+
+/// The elements in reverse order, as a new array.
+/// The name says the copy: `Std` never hides an allocation behind a verb that
+/// sounds free.
+export fn reversed(items: &Array[Int]) -> Array[Int] {
+  var out = []
+  var index = items.length()
+  while index > 0 {
+    index = index - 1
+    out.push(items[index])
+  }
+  out
+}
+
+/// The sum of every element. An empty array sums to zero.
+export fn sum(items: &Array[Int]) -> Int {
+  var total = 0
+  for item in items { total = total + item }
+  total
+}
+
+/// The product of every element. An empty array multiplies to one.
+export fn product(items: &Array[Int]) -> Int {
+  var total = 1
+  for item in items { total = total * item }
+  total
+}
+
+/// The smallest element, or `None` for an empty array.
+export fn minimum(items: &Array[Int]) -> Option[Int] {
+  if items.length() == 0 { None } else {
+    var best = items[0]
+    for item in items { if item < best { best = item } else { } }
+    Some(best)
+  }
+}
+
+/// The largest element, or `None` for an empty array.
+export fn maximum(items: &Array[Int]) -> Option[Int] {
+  if items.length() == 0 { None } else {
+    var best = items[0]
+    for item in items { if item > best { best = item } else { } }
+    Some(best)
+  }
+}
+
+/// Whether any element equals the given value.
+export fn contains(items: &Array[Int], wanted: Int) -> Bool {
+  for item in items { if item == wanted { return true } else { } }
+  false
+}
+
+/// The position of the first element equal to the given value.
+export fn indexOf(items: &Array[Int], wanted: Int) -> Option[Int] {
+  var index = 0
+  while index < items.length() {
+    if items[index] == wanted { return Some(index) } else { }
+    index = index + 1
+  }
+  None
+}
+
+/// How many elements equal the given value.
+export fn count(items: &Array[Int], wanted: Int) -> Int {
+  var total = 0
+  for item in items { if item == wanted { total = total + 1 } else { } }
+  total
+}
+
+/// The first `wanted` elements, or every element when the array is shorter.
+export fn take(items: &Array[Int], wanted: Int) -> Array[Int] {
+  var out = []
+  var index = 0
+  while index < items.length() {
+    if index >= wanted { return out } else { }
+    out.push(items[index])
+    index = index + 1
+  }
+  out
+}
+
+/// Every element after the first `skipped`, or nothing when the array is
+/// shorter.
+export fn drop(items: &Array[Int], skipped: Int) -> Array[Int] {
+  var out = []
+  var index = skipped
+  while index < items.length() {
+    out.push(items[index])
+    index = index + 1
+  }
+  out
+}
+
+/// One array followed by another, as a new array.
+export fn concat(left: &Array[Int], right: &Array[Int]) -> Array[Int] {
+  var out = []
+  for item in left { out.push(item) }
+  for item in right { out.push(item) }
+  out
+}
+
+/// The elements in ascending order, as a new array.
+/// Insertion sort: `Std` ships the algorithm whose behaviour it can state, and
+/// a comparison-parameterised sort waits for the language to admit anonymous
+/// functions.
+export fn sorted(items: &Array[Int]) -> Array[Int] {
+  var out = []
+  for item in items {
+    var index = 0
+    while index < out.length() {
+      if out[index] > item { break } else { }
+      index = index + 1
+    }
+    out.insert(index, item)
+  }
+  out
+}

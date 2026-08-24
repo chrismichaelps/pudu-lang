@@ -22,6 +22,7 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
+import Pudu.Compiler.Library (isStandardModule, searchRoots)
 import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -123,8 +124,8 @@ discover sourceRoot frontends sources diagnostics pending = case pending of
   (locatedImport, requested) : rest
     | Map.member requested frontends -> discover sourceRoot frontends sources diagnostics rest
     | otherwise -> do
-        let path = modulePath sourceRoot requested
-        loaded <- readSource path
+        roots <- searchRoots sourceRoot requested
+        loaded <- readFirst [modulePath root requested | root <- roots]
         case loaded of
           Left _ ->
             discover sourceRoot frontends sources
@@ -194,6 +195,17 @@ modulePath :: FilePath -> ModuleName -> FilePath
 modulePath sourceRoot name =
   normalise (sourceRoot </> joinPath (map Text.unpack (toList (moduleNameSegments name))) <> ".pudu")
 
+{-| Read the first path that exists, keeping the last failure so a module that
+    is nowhere is reported against the search rather than against one guess. -}
+readFirst :: [FilePath] -> IO (Either IOException Source)
+readFirst [] = readSource ""
+readFirst [path] = readSource path
+readFirst (path : rest) = do
+  loaded <- readSource path
+  case loaded of
+    Right source -> pure (Right source)
+    Left _ -> readFirst rest
+
 readSource :: FilePath -> IO (Either IOException Source)
 readSource path = do
   loaded <- try (TextIO.readFile path)
@@ -207,7 +219,15 @@ missingModule requested locatedImport = do
   value <- maybe [] pure
     (diagnostic code Error (locatedSpan locatedImport)
       ("cannot read module " <> moduleNameText requested))
-  pure (withHelp "create the module at its canonical source-root path, or fix the import" value)
+  pure (withHelp helpText value)
+ where
+  {-| A missing `Std` module is almost always a misspelling of a module that
+      exists, not a file the author forgot to write, so the help points at the
+      library rather than at their own source root. -}
+  helpText
+    | isStandardModule requested =
+        "check the spelling against the standard library, or set PUDU_LIB if it is installed elsewhere"
+    | otherwise = "create the module at its canonical source-root path, or fix the import"
 
 pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
 pathMismatch requested actual = do

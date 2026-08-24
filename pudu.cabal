@@ -30,6 +30,7 @@ library
   hs-source-dirs:   src
   exposed-modules:
     Pudu.Compiler
+    Pudu.Compiler.Library
     Pudu.Compiler.Program
     Pudu.Diagnostic
     Pudu.Diagnostic.Render

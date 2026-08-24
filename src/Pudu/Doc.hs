@@ -11,6 +11,7 @@ module Pudu.Doc
   , renderEntryLinesWith
   ) where
 
+import qualified Data.List as List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -83,55 +84,90 @@ instance Monoid DocIndex where
     written syntax is optional and the inferred type is not. -}
 buildIndex :: [Token] -> ModuleTypes -> Module -> DocIndex
 buildIndex tokens types moduleValue =
-  DocIndex (concatMap entry (moduleDeclarations moduleValue))
+  DocIndex (concat (snd (List.mapAccumL step moduleStart (moduleDeclarations moduleValue))))
  where
+  moduleStart = unOffset (spanStart (moduleSpan moduleValue))
+
+  {-| Declarations are walked in source order so each one knows where the
+      previous one ended. That bound is what makes "the documentation just above
+      this declaration" a precise notion rather than a guess. -}
+  step previousEnd located@(Located declarationSpan _) =
+    ( unOffset (spanEnd declarationSpan)
+    , entry previousEnd located
+    )
+
   owner = moduleNameText (locatedValue (moduleName moduleValue))
   schemes = Map.fromList (moduleSchemes types)
   docs = docComments tokens
 
-  entry (Located declarationSpan declaration) = case declaration of
+  entry lowerBound (Located declarationSpan declaration) = case declaration of
     BindingDeclaration _ _ name _ _ ->
-      [make (locatedValue name) DocConstant declarationSpan (locatedValue name)]
+      [make lowerBound (locatedValue name) DocConstant declarationSpan (locatedValue name)]
     FunctionDeclaration value ->
       [ make
+          lowerBound
           (locatedValue (functionName value))
           DocFunction
           declarationSpan
           (locatedValue (functionName value))
       ]
     TypeDeclaration value ->
-      [make (locatedValue (typeName value)) DocType declarationSpan (locatedValue (typeName value))]
+      [make lowerBound (locatedValue (typeName value)) DocType declarationSpan (locatedValue (typeName value))]
     TraitDeclaration value ->
-      make (locatedValue (traitName value)) DocTrait declarationSpan (locatedValue (traitName value))
-        : map (traitMember (locatedValue (traitName value))) (traitMembers value)
-    ImplDeclaration value -> map (implMember value) (implFunctions value)
+      make lowerBound (locatedValue (traitName value)) DocTrait declarationSpan (locatedValue (traitName value))
+        : memberEntries (traitMember (locatedValue (traitName value))) declarationSpan (traitMembers value)
+    ImplDeclaration value -> memberEntries (implMember value) declarationSpan (implFunctions value)
     MacroDeclaration value ->
-      [make (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
+      [make lowerBound (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
     InvalidDeclaration -> []
 
-  traitMember holder (Located memberSpan value) =
+  {-| A member's documentation is bounded by its enclosing declaration rather
+      than by the previous top-level one, so the first member cannot claim the
+      trait's own documentation. -}
+  memberEntries render holderSpan members =
+    snd (List.mapAccumL memberStep (unOffset (spanStart holderSpan)) members)
+   where
+    memberStep previousEnd located@(Located memberSpan _) =
+      (unOffset (spanEnd memberSpan), render previousEnd located)
+
+  traitMember holder lowerBound (Located memberSpan value) =
     make
+      lowerBound
       (locatedValue (functionName value))
       (DocTraitMethod holder)
       memberSpan
       (holder <> "." <> locatedValue (functionName value))
 
-  implMember holder (Located memberSpan value) =
+  implMember holder lowerBound (Located memberSpan value) =
     make
+      lowerBound
       (locatedValue (functionName value))
       (DocMethod (implLabel holder))
       memberSpan
       (implLabel holder <> "." <> locatedValue (functionName value))
 
-  make name kind spanValue key =
+  make lowerBound name kind spanValue key =
     DocEntry
       { docName = name
       , docKind = kind
       , docModule = owner
       , docSignature = concreteSelf kind . schemeSignature <$> lookupScheme key name
-      , docComment = Map.findWithDefault [] (unOffset (spanStart spanValue)) docs
+      , docComment = docsBefore lowerBound (unOffset (spanStart spanValue))
       , docSpan = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
       }
+
+  {-| The documentation immediately above a declaration.
+
+      A declaration's span starts at its `fn` or `type` keyword, not at the
+      `export` in front of it, so the doc comment leads a token the span does
+      not contain. Looking backwards for the nearest documented token — but no
+      further back than the previous declaration ended — attaches it correctly
+      whatever modifiers were written, and cannot reach past a declaration into
+      another one's documentation. -}
+  docsBefore lowerBound start =
+    case Map.lookupLE start docs of
+      Just (offset, found) | offset >= lowerBound -> found
+      _ -> []
 
   {-| Find the scheme the checker recorded for this declaration.
 
