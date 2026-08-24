@@ -314,6 +314,56 @@ adoptDeclaredSignature value inputs result scheme = case schemeType scheme of
   headSpan = locatedSpan (functionName value)
   tie (left, right) = () <$ unify headSpan left right
 
+{-| Warn when a statement throws away a value that is the whole point of the
+    call that produced it.
+
+    A built-in collection method never mutates its receiver; it returns a new
+    collection. So `items.push(value)` written as a statement does nothing at
+    all, and does it silently — the statement type-checks, the program runs, and
+    the array is unchanged. This is not a style preference: there is no reading
+    of that line under which it is correct.
+
+    The check is deliberately narrow. It fires only for the closed set of
+    built-in methods the compiler already knows the semantics of, on a receiver
+    the checker has confirmed is a collection. A general "unused result" warning
+    would need to know which functions are pure, which Pudu does not track, and
+    guessing would either miss this case or bury it in noise. -}
+reportDiscardedResult :: DeclaredTypes -> [Text] -> Located Expression -> Checker ()
+reportDiscardedResult declared rigid (Located spanValue expression) = case expression of
+  CallExpression callee _ -> case locatedValue callee of
+    MemberExpression receiver member
+      | locatedValue member `elem` nonMutatingMethods -> do
+          receiverType <- checkExpression declared rigid receiver
+          resolved <- zonk receiverType
+          when (isCollection resolved) $
+            warn "W3002"
+              spanValue
+              ( locatedValue member
+                  <> " returns a new collection and this result is discarded"
+              )
+              ( Just
+                  ( "assign it back, as in value = value."
+                      <> locatedValue member
+                      <> "(...), or remove the call"
+                  )
+              )
+    _ -> pure ()
+  _ -> pure ()
+ where
+  isCollection resolved = case resolved of
+    NominalType identity _ -> nominalName identity `elem` ["Array", "Str"]
+    ReferenceTypeValue _ inner -> isCollection inner
+    _ -> False
+
+{-| The built-in methods that answer with a new collection rather than changing
+    the one they were given. `length`, `get`, `indexOf`, and `contains` are
+    absent because discarding an answer to a question is merely pointless, not
+    wrong: a reader who wrote it was asking, and the compiler has nothing to
+    tell them that the line does not already say. -}
+nonMutatingMethods :: [Text]
+nonMutatingMethods =
+  ["push", "pop", "insert", "remove", "slice", "reverse", "map", "filter"]
+
 {-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
     which lets a default body call other trait methods on `self`. -}
 selfBoundAsBound :: NominalId -> [(Text, [NominalId])]
@@ -406,7 +456,7 @@ checkStatement declared rigid (Located _ statement) = case statement of
   DeclarationStatement other -> checkDeclaration declared other
   ExpressionStatement expression -> do
     _ <- checkExpression declared rigid expression
-    pure ()
+    reportDiscardedResult declared rigid expression
   ReturnStatement value -> do
     actual <- case value of
       Nothing -> pure UnitTypeValue

@@ -30,6 +30,19 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- A statement that discards the result of a built-in collection method reports `W3002`. Those
+  methods answer with a new collection rather than changing the one they were given, so
+  `items.push(value)` written as a statement does nothing at all — and does it silently. There is no
+  reading of that line under which it is correct, which is why it is a diagnostic rather than a
+  style preference.
+- The check is deliberately narrow: the closed set of built-in methods whose semantics the compiler
+  already knows, on a receiver the checker has confirmed is a collection. A general unused-result
+  warning would need to know which functions are pure, which Pudu does not track, and guessing would
+  either miss this case or bury it in noise.
+- `length`, `get`, `indexOf`, and `contains` are excluded. Discarding an answer to a question is
+  pointless, not wrong, and the compiler has nothing to tell a reader that the line does not already
+  say.
+
 - A function body is checked against the *same* signature the module was given for its name, not a
   freshly formed copy. Without this tie the two hold separate variables for every position the
   declaration did not annotate, and whatever the body proves never reaches the name a caller — or a
