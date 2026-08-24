@@ -24,6 +24,8 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, report)
+import Pudu.Type.Marker (isUserImplementable)
+import Pudu.Type.Value (NominalId (..))
 
 data ImplementationKey = ImplementationKey !TypeKey !TypeKey
   deriving stock (Eq, Ord)
@@ -52,9 +54,28 @@ data TypeKey
 checkCoherence :: [Located Declaration] -> Checker ()
 checkCoherence declarations = do
   let local = collectLocalDeclarations declarations
+  mapM_ checkCompilerControlled (implementations declarations)
   mapM_ (checkOwnership local) (implementations declarations)
   _ <- foldM checkDuplicate Set.empty (implementationHeads declarations)
   pure ()
+
+{-| `Copy` is compiler-controlled: [[architecture/SEMANTICS]] rejects a
+    user-written implementation of it, because ownership checking decides which
+    values duplicate from their structure. Writing one would claim a guarantee
+    the compiler is the only party able to give. -}
+checkCompilerControlled :: Impl -> Checker ()
+checkCompilerControlled value = case traitHeadName (locatedValue (implTrait value)) of
+  Just name
+    | not (isUserImplementable (NominalId Nothing name)) ->
+        report "E3021" (locatedSpan (implTrait value))
+          (name <> " is compiler-controlled and cannot be implemented")
+          (Just "remove the implementation; the compiler decides this marker from the type's structure")
+  _ -> pure ()
+
+traitHeadName :: TypeSyntax -> Maybe Text
+traitHeadName syntax = case syntax of
+  NamedType path _ -> unqualifiedName path
+  _ -> Nothing
 
 implementations :: [Located Declaration] -> [Impl]
 implementations declarations =

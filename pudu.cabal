@@ -84,6 +84,7 @@ library
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation
+    Pudu.Type.Marker
     Pudu.Type.Interface
     Pudu.Type.Unify
     Pudu.Type.Value

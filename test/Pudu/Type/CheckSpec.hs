@@ -39,6 +39,7 @@ typeProperties =
   , ("duplicate trait implementation heads are rejected", testCoherence)
   , ("Float aliases to Float64 at the type level", testFloatAlias)
   , ("references are dereferenced explicitly in both directions", testDereference)
+  , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -993,6 +994,62 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+markerProgram :: [Text]
+markerProgram =
+  [ "module M"
+  , "type Point = { x: Int, y: Int }"
+  , "type Handle = { label: Str }"
+  , "type Choice = | Yes | No | Amount(Int)"
+  , "fn copies[T: Copy](value: T) -> T { value }"
+  , "fn sends[T: Send](value: T) -> T { value }"
+  , "fn shares[T: Sync](value: T) -> T { value }"
+  ]
+
+testMarkers :: IO Property
+testMarkers = do
+  scalars <- codes (markerProgram <>
+    [ "fn run() -> Int { copies(1) }"
+    , "fn float() -> Float64 { copies(1.5) }"
+    , "fn flag() -> Bool { copies(true) }"
+    , "fn letter() -> Char { copies('a') }"
+    ])
+  aggregates <- codes (markerProgram <>
+    [ "fn pair() -> (Int, Bool) { copies((1, true)) }"
+    , "fn record() -> Point { copies(Point{x: 1, y: 2}) }"
+    , "fn variant() -> Choice { copies(Amount(3)) }"
+    ])
+  sharedBorrow <- codes (markerProgram <> ["fn run(p: Point) -> &Point { copies(&p) }"])
+  ownedText <- codes (markerProgram <> ["fn run() -> Str { copies(\"owned\") }"])
+  owningRecord <- codes (markerProgram <> ["fn run(h: Handle) -> Handle { copies(h) }"])
+  exclusiveBorrow <- codes (markerProgram <> ["fn run(p: Point) -> &mut Point { copies(&mut p) }"])
+  collection <- codes (markerProgram <> ["fn run(xs: Array[Int]) -> Array[Int] { copies(xs) }"])
+  sendableText <- codes (markerProgram <> ["fn run() -> Str { sends(\"text\") }"])
+  sharedText <- codes (markerProgram <> ["fn run() -> Str { shares(\"text\") }"])
+  sendableCollection <- codes (markerProgram <>
+    ["fn run(xs: Array[Int]) -> Array[Int] { sends(xs) }"])
+  userCopyImpl <- codes
+    [ "module M"
+    , "type Point = { x: Int }"
+    , "trait Copy { fn dummy(self: &Self) -> Int }"
+    , "impl Copy for Point {"
+    , "  fn dummy(self: &Self) -> Int { self.x }"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "every scalar copies" (scalars === [])
+    , counterexample "an aggregate of copyable components copies" (aggregates === [])
+    , counterexample "a shared borrow copies" (sharedBorrow === [])
+    , counterexample "owned text does not copy" (ownedText === ["E3012"])
+    , counterexample "a record holding text does not copy" (owningRecord === ["E3012"])
+    , counterexample "an exclusive borrow never copies" (exclusiveBorrow === ["E3012"])
+    , counterexample "a growable collection does not copy" (collection === ["E3012"])
+    , counterexample "text crosses into a task" (sendableText === [])
+    , counterexample "text is shareable" (sharedText === [])
+    , counterexample "a collection of sendable elements is sendable"
+        (sendableCollection === [])
+    , counterexample "Copy cannot be implemented by hand" (userCopyImpl === ["E3021"])
+    ]
 
 userProgram :: [Text]
 userProgram = ["module M", "type User = { name: Str }"]

@@ -15,6 +15,7 @@ module Pudu.Type.Env
   , inTypeScope
   , lookupField
   , lookupOwnerVariants
+  , lookupTypeParams
   , lookupName
   , isImportedMethod
   , lookupVariant
@@ -370,6 +371,12 @@ withDeclared declared = Checker $ \state -> ((), state{stateDeclared = declared}
 lookupField :: NominalId -> Checker (Maybe [(Text, Type)])
 lookupField name =
   Checker $ \state -> (Map.lookup name (declaredFields (stateDeclared state)), state)
+
+{-| The generic parameters a nominal declaration introduced, so a structural
+    walk can substitute a use's arguments into its declared components. -}
+lookupTypeParams :: NominalId -> Checker (Maybe [Text])
+lookupTypeParams owner =
+  Checker $ \state -> (Map.lookup owner (declaredParams (stateDeclared state)), state)
 
 {-| Every variant a sum declares, in declaration order. Exhaustiveness reads it
     to know what a match must still cover. -}
