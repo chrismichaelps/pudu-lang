@@ -1,6 +1,9 @@
 {-| @Type.Value.Module — represents formed types -}
 module Pudu.Type.Value
-  ( Scheme (..)
+  ( NominalId (..)
+  , Scheme (..)
+  , canonicalNominal
+  , nominalKey
   , monotype
   , polytype
   , Type (..)
@@ -17,10 +20,29 @@ module Pudu.Type.Value
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.String (IsString (..))
+import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 
 {-| @Type.Value.Var — one inference variable -}
 newtype TypeVar = TypeVar Int
   deriving stock (Eq, Ord, Show)
+
+data NominalId = NominalId
+  { nominalModule :: !(Maybe ModuleName)
+  , nominalName :: !Text
+  }
+  deriving stock (Eq, Ord, Show)
+
+instance IsString NominalId where
+  fromString = NominalId Nothing . Text.pack
+
+canonicalNominal :: ModuleName -> Text -> NominalId
+canonicalNominal owner = NominalId (Just owner)
+
+nominalKey :: NominalId -> Text
+nominalKey value = case nominalModule value of
+  Nothing -> nominalName value
+  Just owner -> moduleNameText owner <> "." <> nominalName value
 
 {-| @Type.Value.Type — a formed type.
 
@@ -29,7 +51,7 @@ newtype TypeVar = TypeVar Int
     tuples, functions, and references are structural. `ErrorType` is poison: it
     unifies with everything so one mistake does not cascade. -}
 data Type
-  = NominalType !Text ![Type]
+  = NominalType !NominalId ![Type]
   | TupleTypeValue ![Type]
   | FunctionTypeValue !Bool ![Type] !Type
   | ReferenceTypeValue !Bool !Type
@@ -44,7 +66,7 @@ data Type
     trait bounds each of them must satisfy -}
 data Scheme = Scheme
   { schemeParams :: ![Text]
-  , schemeBounds :: ![(Text, [Text])]
+  , schemeBounds :: ![(Text, [NominalId])]
   , schemeType :: !Type
   }
   deriving stock (Eq, Show)
@@ -54,7 +76,7 @@ monotype :: Type -> Scheme
 monotype typeValue = Scheme{schemeParams = [], schemeBounds = [], schemeType = typeValue}
 
 {-| A scheme over declared parameters carrying their bounds. -}
-polytype :: [Text] -> [(Text, [Text])] -> Type -> Scheme
+polytype :: [Text] -> [(Text, [NominalId])] -> Type -> Scheme
 polytype params bounds typeValue =
   Scheme{schemeParams = params, schemeBounds = bounds, schemeType = typeValue}
 
@@ -94,9 +116,9 @@ variableName identifier
 {-| Render a type the way a diagnostic quotes it. -}
 renderType :: Type -> Text
 renderType typeValue = case typeValue of
-  NominalType name arguments
-    | null arguments -> name
-    | otherwise -> name <> "[" <> Text.intercalate ", " (map renderType arguments) <> "]"
+  NominalType identity arguments
+    | null arguments -> nominalName identity
+    | otherwise -> nominalName identity <> "[" <> Text.intercalate ", " (map renderType arguments) <> "]"
   TupleTypeValue members -> "(" <> Text.intercalate ", " (map renderType members) <> ")"
   FunctionTypeValue asynchronous inputs result ->
     (if asynchronous then "async fn(" else "fn(")

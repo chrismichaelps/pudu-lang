@@ -111,6 +111,8 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved issue #29 around a filesystem-owning program compiler, authoritative semantic/type interfaces, canonical module-qualified identities, body-free signatures, in-scope trait implementation visibility, SCC signature cycles, and one shared CLI/REPL load boundary; runtime dependency execution remains explicitly separate.
 - [Role: DNA Engineer → Shadow] Partitioned the oversized vertical slice at its pure semantic seam and completed [[Semantic Interface]] plus facade/resolver mirrors before implementation admission.
 - [Role: Shadow → Forensic Guardian] Implemented namespace-aware export indexing, authoritative selected-import `E2013`, module qualifier bindings, opaque fallback only for unavailable interfaces, and `resolveModuleWith`. The full development and optimized suites pass; filesystem and type-interface work remains local for the next issue #29 partitions.
+- [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
+- [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
 ## Decided (do not re-litigate)
 
@@ -133,7 +135,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Architect: rebase the retained issue #29 work after the semantic-interface partition merges, then admit the canonical type/interface partition.
+Forensic Guardian: validate the canonical identity partition and real REPL evidence, then admit body-free type interfaces as the next issue #29 partition.
 
 ## Links
 

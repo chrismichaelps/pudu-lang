@@ -4,14 +4,15 @@ module Pudu.Type.Check.Pattern
   ) where
 
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
 import Pudu.Type.Check.Rule (countText, literalType)
 import Pudu.Type.Env
   ( Checker
-  , DeclaredTypes
+  , DeclaredTypes (..)
   , bindName
   , freshVariable
   , lookupField
@@ -55,7 +56,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
               (Just "match one pattern per declared payload element")
             mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
   RecordPattern path fields _ -> do
-    declaredFieldTypes <- recordFieldsFor path subjectType
+    declaredFieldTypes <- recordFieldsFor declared path subjectType
     mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
@@ -79,11 +80,11 @@ substituteRigid replacements typeValue = case typeValue of
     ReferenceTypeValue mutable (substituteRigid replacements target)
   other -> other
 
-recordFieldsFor :: Maybe ModuleName -> Type -> Checker [(Text, Type)]
-recordFieldsFor path subjectType = do
+recordFieldsFor :: DeclaredTypes -> Maybe ModuleName -> Type -> Checker [(Text, Type)]
+recordFieldsFor declared path subjectType = do
   resolved <- zonk subjectType
   let name = case path of
-        Just modulePath -> Just (NonEmpty.last (moduleNameSegments modulePath))
+        Just modulePath -> Map.lookup (moduleNameText modulePath) (declaredNames declared)
         Nothing -> case resolved of
           NominalType nominal _ -> Just nominal
           _ -> Nothing

@@ -25,6 +25,7 @@ Own checking patterns against the type they match for [[Type Check]].
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.
 - These rules never recurse into sub-expressions; the walk in [[Type Check]] owns that, which is what keeps the two modules free of a cycle.
+- Record-pattern owner annotations are formed through `declaredNames` using their full qualified path, so imported nominal identity is canonical and two equal basenames from different modules cannot unify accidentally. Constructor patterns continue to resolve through the variant table because the AST carries the constructor spelling rather than an owner path.
 
 ### Linkage
 

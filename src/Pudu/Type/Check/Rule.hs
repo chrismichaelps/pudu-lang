@@ -4,10 +4,13 @@ module Pudu.Type.Check.Rule
   , countText
   , binaryType
   , elementType
+  , enclosingReturnType
   , instantiate
   , literalType
   , memberType
   , nameType
+  , qualifiedMemberType
+  , tryType
   , unaryType
   ) where
 
@@ -29,11 +32,14 @@ import Pudu.Type.Env
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( Scheme (..)
+  , NominalId
   , Type (..)
   , boolType
   , charType
   , floatType
   , integerType
+  , nominalKey
+  , nominalName
   , renderType
   , stringType
   )
@@ -52,10 +58,47 @@ literalType literal = case literal of
     generic function usable at several types. -}
 nameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 nameType spanValue names = do
-  found <- lookupName (NonEmpty.head names)
+  found <- lookupName (Text.intercalate "." (NonEmpty.toList names))
   case found of
     Nothing -> pure ErrorType
     Just scheme -> instantiate spanValue scheme
+
+qualifiedMemberType :: Span -> Tree.Expression -> Text -> Checker (Maybe Type)
+qualifiedMemberType spanValue target member = case target of
+  Tree.NameExpression names -> do
+    found <- lookupName (Text.intercalate "." (NonEmpty.toList names <> [member]))
+    case found of
+      Nothing -> pure Nothing
+      Just scheme -> Just <$> instantiate spanValue scheme
+  _ -> pure Nothing
+
+enclosingReturnType :: Text -> Checker Type
+enclosingReturnType binding = do
+  found <- lookupName binding
+  case found of
+    Just (Scheme _ _ (FunctionTypeValue _ _ result)) -> pure result
+    _ -> freshVariable
+
+tryType :: Span -> Type -> Type -> Checker Type
+tryType spanValue targetType declaredResult = do
+  success <- freshVariable
+  failure <- freshVariable
+  _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
+  resolvedResult <- zonk declaredResult
+  case resolvedResult of
+    NominalType "Result" [_, declaredFailure] -> do
+      _ <- unify spanValue declaredFailure failure
+      pure success
+    VariableType _ -> do
+      resultSuccess <- freshVariable
+      _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
+      pure success
+    ErrorType -> pure ErrorType
+    _ -> do
+      report "E3011" spanValue
+        ("? needs a function returning Result, found " <> renderType resolvedResult)
+        (Just "declare the function's result as Result, or match the value instead")
+      pure success
 
 {-| Instantiate a scheme with fresh variables and register the trait
     obligations its bounds impose, so a call proves what the declaration
@@ -68,7 +111,7 @@ instantiate spanValue scheme
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       pure (substitute replacements (schemeType scheme))
 
-obligationsFor :: Span -> [(Text, Type)] -> (Text, [Text]) -> Checker ()
+obligationsFor :: Span -> [(Text, Type)] -> (Text, [NominalId]) -> Checker ()
 obligationsFor spanValue replacements (name, bounds) =
   case lookup name replacements of
     Nothing -> pure ()
@@ -211,7 +254,7 @@ arrayMethodType spanValue member element = case member of
     its declaration named supplies the member. When two or more bounds provide
     the same member, the call is ambiguous and receives `E3013` rather than
     silently picking the first trait. -}
-rigidMethod :: Span -> Text -> [Text] -> Text -> Checker Type
+rigidMethod :: Span -> Text -> [NominalId] -> Text -> Checker Type
 rigidMethod spanValue name bounds member = do
   providers <- filterM provides bounds
   case providers of
@@ -220,7 +263,7 @@ rigidMethod spanValue name bounds member = do
         (Just "add a trait bound that declares the method")
       pure ErrorType
     [traitText] -> do
-      found <- lookupName (traitText <> "." <> member)
+      found <- lookupName (nominalKey traitText <> "." <> member)
       case found of
         Nothing -> pure ErrorType
         Just scheme -> do
@@ -231,23 +274,23 @@ rigidMethod spanValue name bounds member = do
             other -> pure other
     _ -> do
       report "E3013" spanValue
-        (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
+        (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
         (Just "disambiguate with a qualified call or remove a trait bound")
       pure ErrorType
  where
   provides traitText = do
-    found <- lookupName (traitText <> "." <> member)
+    found <- lookupName (nominalKey traitText <> "." <> member)
     pure (case found of Nothing -> False; Just _ -> True)
 
 {-| A member that is not a field may be a method of the receiver's type. A
     method call binds the receiver as its first parameter, so the member itself
     has the method's type with that parameter already supplied. -}
-methodType :: Span -> Text -> Text -> Checker Type
+methodType :: Span -> NominalId -> Text -> Checker Type
 methodType spanValue owner member = do
-  found <- lookupName (owner <> "." <> member)
+  found <- lookupName (nominalKey owner <> "." <> member)
   case found of
     Nothing -> do
-      report "E3005" spanValue (owner <> " has no field or method " <> member)
+      report "E3005" spanValue (nominalName owner <> " has no field or method " <> member)
         (Just "check the name against the type declaration and its implementations")
       pure ErrorType
     Just scheme -> do
