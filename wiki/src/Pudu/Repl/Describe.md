@@ -39,7 +39,7 @@ importSummary :: Module -> [Text]
 - Every answer is rendered from the session's own parsed module. The prompt therefore reports what
   the session would compile, not what a parallel bookkeeping record remembers, so the two cannot
   drift apart.
-- `describeKind` reports **arity**, not a kind in the Haskell sense: Pudu has no kind system, and
+- `describeKind` reports **arity**, not a kind in the type-theoretic sense: Pudu has no kind system, and
   claiming one would describe a language that does not exist. `type -> type` says the constructor
   still expects an argument, which is the question a reader is actually asking.
 - Wired-in constructors answer from the same arity table the checker uses, because a reader cannot
@@ -75,7 +75,7 @@ DEPTH 0.40 (SHALLOW by intent). It is a projection of the parsed module for the 
 
 ## Grill Log
 
-- **Q:** Should `:kind` print `*` and `* -> *` like Haskell? **A:** No. _Rationale:_ borrowing a
+- **Q:** Should `:kind` print `*` and `* -> *`? **A:** No. _Rationale:_ borrowing a
   notation implies borrowing the kind system behind it, which Pudu does not have; `type -> type`
   says the same thing without the false promise. _Rejected:_ star notation; inventing a kind
   language purely for the prompt.

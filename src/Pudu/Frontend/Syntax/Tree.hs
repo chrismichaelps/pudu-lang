@@ -10,6 +10,7 @@ module Pudu.Frontend.Syntax.Tree
   , FieldInit (..)
   , FieldPattern (..)
   , Function (..)
+  , lambdaName
   , FunctionBody (..)
   , Impl (..)
   , Import (..)
@@ -207,6 +208,14 @@ data MacroKind
   | BlockKind
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
+{-| The name a function literal is known by.
+
+    Every closure carries a name for diagnostics and for `renderValue`, and a
+    literal has none the reader wrote. This spelling cannot collide with a
+    declared name, because an identifier cannot contain a space. -}
+lambdaName :: Text
+lambdaName = "<fn>"
+
 {-| @Program.Syntax.Parameter — preserves function input syntax -}
 data Parameter = Parameter
   { parameterName :: !(Located Text)
@@ -311,6 +320,7 @@ data Expression
   | UnsafeExpression ![Located Capability] !(Located Block)
   | MacroCall !(Located Text) ![Located Expression]
   | ScopeExpression !(Located Block)
+  | LambdaExpression !Function
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))

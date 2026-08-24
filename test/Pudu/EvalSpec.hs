@@ -23,6 +23,8 @@ evalProperties =
   , ("unsafe regions evaluate their block", testUnsafeRegions)
   , ("structured scopes join every task they start", testScopes)
   , ("built-in text methods answer with new values", testTextMethods)
+  , ("function literals capture the environment they were written in", testClosures)
+  , ("array concatenation joins two arrays", testArrayConcat)
   ]
 
 testScopes :: IO Property
@@ -310,7 +312,7 @@ testFailures :: IO Property
 testFailures = do
   divisor <- codesOf "1 / 0"
   modulo <- codesOf "1 % 0"
-  outOfRange <- codesOf "(1, 2)[5]"
+  outOfRange <- codesOf "[1, 2][5]"
   mismatch <- codesOf "1 + true"
   noArm <- codesOf "match 9 { case 1 => 1 }"
   panic <- codesOf "panic(\"boom\")"
@@ -360,6 +362,50 @@ evaluateStatements statements = case reverse statements of
 {-| Text is a value: every method answers with a new one, indices count Unicode
     scalars, and an index outside the text is a diagnostic rather than a clamped
     answer that looks correct. -}
+{-| A literal is called long after the block that gave its free names meaning
+    has ended, so it carries that environment with it. Two literals made from
+    one function must not share it. -}
+testClosures :: IO Property
+testClosures = do
+  captured <- evaluateWith
+    [ "fn adder(step: Int) -> fn(Int) -> Int { fn(n: Int) -> Int => n + step }"
+    ]
+    "adder(10)(5)"
+  independent <- runProgram
+    [ "fn adder(step: Int) -> fn(Int) -> Int { fn(n: Int) -> Int => n + step }"
+    ]
+    [ "let addTen = adder(10)"
+    , "let addOne = adder(1)"
+    ]
+    "addTen(5) + addOne(5)"
+  passed <- evaluateWith
+    [ "fn apply(f: fn(Int) -> Int, n: Int) -> Int { f(n) }" ]
+    "apply(fn(x) => x * 3, 7)"
+  overLocal <- runProgram [] ["let base = 100", "let shift = fn(x: Int) -> Int => x + base"] "shift(1)"
+  inMap <- evaluate "[1, 2, 3].map(fn(n) => n * 10)"
+  pure $ conjoin
+    [ counterexample "a literal keeps the value it closed over" (captured === "15")
+    , counterexample "two literals do not share one capture" (independent === "21")
+    , counterexample "a literal is an ordinary argument" (passed === "21")
+    , counterexample "a literal sees the block it was written in" (overLocal === "101")
+    , counterexample "a literal drives a built-in method" (inMap === "[10, 20, 30]")
+    ]
+
+{-| Joining is a runtime operation because the structure can do it far better
+    than a library loop can. -}
+testArrayConcat :: IO Property
+testArrayConcat = do
+  joined <- evaluate "[1, 2].concat([3, 4])"
+  leftEmpty <- evaluate "[].concat([1])"
+  rightEmpty <- evaluate "[1].concat([])"
+  chained <- evaluate "[1].concat([2]).concat([3])"
+  pure $ conjoin
+    [ counterexample "two arrays join in order" (joined === "[1, 2, 3, 4]")
+    , counterexample "an empty left side is the right side" (leftEmpty === "[1]")
+    , counterexample "an empty right side is the left side" (rightEmpty === "[1]")
+    , counterexample "joining chains" (chained === "[1, 2, 3]")
+    ]
+
 testTextMethods :: IO Property
 testTextMethods = do
   upper <- evaluate "\"aB\".toUpper()"

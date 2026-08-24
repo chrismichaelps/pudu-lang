@@ -7,8 +7,8 @@ export fn isBlank(value: Str) -> Bool { value.trim().isEmpty() }
 /// The built-in `indexOf` answers `-1`; this is the form a caller can match on
 /// without remembering which sentinel means absent.
 export fn find(haystack: Str, needle: Str) -> Option[Int] {
-  let at = haystack.indexOf(needle)
-  if at < 0 { None } else { Some(at) }
+  let found = haystack.indexOf(needle)
+  if found < 0 { None } else { Some(found) }
 }
 
 /// Text with a prefix removed, or unchanged when it is not there.
@@ -80,11 +80,11 @@ export fn words(value: Str) -> Array[Str] { splitNonEmpty(value.trim(), " ") }
 export fn countOccurrences(haystack: Str, needle: Str) -> Int {
   if needle.isEmpty() { 0 } else {
     var total = 0
-    var rest = haystack
-    while rest.contains(needle) {
-      let at = rest.indexOf(needle)
+    var remaining = haystack
+    while remaining.contains(needle) {
+      let found = remaining.indexOf(needle)
       total = total + 1
-      rest = rest.slice(at + needle.length(), rest.length())
+      remaining = remaining.slice(found + needle.length(), remaining.length())
     }
     total
   }
@@ -100,4 +100,233 @@ export fn capitalize(value: Str) -> Str {
 /// Whether two texts are equal ignoring case.
 export fn equalsIgnoreCase(left: Str, right: Str) -> Bool {
   left.toLower() == right.toLower()
+}
+
+/// Text of exactly one character.
+export fn singleton(value: Char) -> Str { "" + textOf(value) }
+
+/// A character placed before some text.
+export fn cons(front: Char, tail: Str) -> Str { textOf(front) + tail }
+
+/// A character placed after some text.
+export fn snoc(front: Str, tail: Char) -> Str { front + textOf(tail) }
+
+/// The first character and the rest, or `None` for empty text.
+export fn uncons(value: Str) -> Option[(Char, Str)] {
+  if value.isEmpty() { None } else {
+    Some((value.charAt(0), value.slice(1, value.length())))
+  }
+}
+
+/// Everything but the last character and that character, or `None` when empty.
+export fn unsnoc(value: Str) -> Option[(Str, Char)] {
+  let size = value.length()
+  if size == 0 { None } else {
+    Some((value.slice(0, size - 1), value.charAt(size - 1)))
+  }
+}
+
+/// The character at a position, or `None` when there is none.
+/// The built-in `charAt` fails outside the text; this is the total form.
+export fn at(value: Str, index: Int) -> Option[Char] {
+  if index < 0 || index >= value.length() { None } else { Some(value.charAt(index)) }
+}
+
+/// The first character, or `None` for empty text.
+export fn head(value: Str) -> Option[Char] { at(value, 0) }
+
+/// The last character, or `None` for empty text.
+export fn last(value: Str) -> Option[Char] { at(value, value.length() - 1) }
+
+/// Everything but the first character.
+export fn rest(value: Str) -> Str { value.slice(1, value.length()) }
+
+/// Everything but the last character.
+export fn initial(value: Str) -> Str {
+  let size = value.length()
+  if size == 0 { value } else { value.slice(0, size - 1) }
+}
+
+/// Every character transformed.
+export fn mapChars(value: Str, transform: fn(Char) -> Char) -> Str {
+  var out = ""
+  for character in value.chars() { out = out + textOf(transform(character)) }
+  out
+}
+
+/// Only the characters the predicate accepts.
+export fn filterChars(value: Str, keep: fn(Char) -> Bool) -> Str {
+  var out = ""
+  for character in value.chars() {
+    if keep(character) { out = out + textOf(character) }
+  }
+  out
+}
+
+/// The longest leading run of characters the predicate accepts.
+export fn takeWhile(value: Str, holds: fn(Char) -> Bool) -> Str {
+  value.slice(0, prefixLength(value, holds))
+}
+
+/// Everything after the longest leading run the predicate accepts.
+export fn dropWhile(value: Str, holds: fn(Char) -> Bool) -> Str {
+  value.slice(prefixLength(value, holds), value.length())
+}
+
+/// The longest leading run the predicate accepts, and the rest.
+export fn span(value: Str, holds: fn(Char) -> Bool) -> (Str, Str) {
+  let cut = prefixLength(value, holds)
+  (value.slice(0, cut), value.slice(cut, value.length()))
+}
+
+/// The text before the first occurrence of a needle, and the rest including it.
+/// A miss answers with the whole text and empty text, so a caller that
+/// concatenates the two halves always gets back what it started with.
+export fn breakOn(value: Str, needle: Str) -> (Str, Str) {
+  let found = value.indexOf(needle)
+  if found < 0 { (value, "") } else {
+    (value.slice(0, found), value.slice(found, value.length()))
+  }
+}
+
+/// The text split at a position.
+export fn splitAt(value: Str, position: Int) -> (Str, Str) {
+  let size = value.length()
+  let boundary = clampIndex(position, size)
+  (value.slice(0, boundary), value.slice(boundary, size))
+}
+
+/// The characters the predicate accepts, and the characters it rejects.
+export fn partition(value: Str, keep: fn(Char) -> Bool) -> (Str, Str) {
+  var kept = ""
+  var rejected = ""
+  for character in value.chars() {
+    if keep(character) { kept = kept + textOf(character) }
+    else { rejected = rejected + textOf(character) }
+  }
+  (kept, rejected)
+}
+
+/// Whitespace removed from the start.
+export fn trimStart(value: Str) -> Str { dropWhile(value, isSpace) }
+
+/// Whitespace removed from the end.
+export fn trimEnd(value: Str) -> Str {
+  var size = value.length()
+  while size > 0 && isSpace(value.charAt(size - 1)) { size = size - 1 }
+  value.slice(0, size)
+}
+
+/// Text padded on both sides to at least `width` characters.
+export fn center(value: Str, width: Int, filler: Str) -> Str {
+  var out = value
+  var left = true
+  while out.length() < width {
+    if left { out = filler + out } else { out = out + filler }
+    left = !left
+  }
+  out
+}
+
+/// The text in pieces of at most `size` characters.
+export fn chunksOf(value: Str, size: Int) -> Array[Str] {
+  var out = []
+  if size <= 0 { out } else {
+    var index = 0
+    let total = value.length()
+    while index < total {
+      let end = if index + size > total { total } else { index + size }
+      out = out.push(value.slice(index, end))
+      index = index + size
+    }
+    out
+  }
+}
+
+/// Every character, as an array.
+export fn toChars(value: Str) -> Array[Char] { value.chars() }
+
+/// Text rebuilt from characters.
+export fn fromChars(characters: &Array[Char]) -> Str {
+  var out = ""
+  for character in characters { out = out + textOf(character) }
+  out
+}
+
+/// The longest text both begin with, and what remains of each after it.
+export fn commonPrefix(left: Str, right: Str) -> (Str, Str, Str) {
+  var shared = 0
+  let limit = if left.length() < right.length() { left.length() } else { right.length() }
+  while shared < limit && left.charAt(shared) == right.charAt(shared) { shared = shared + 1 }
+  ( left.slice(0, shared)
+  , left.slice(shared, left.length())
+  , right.slice(shared, right.length())
+  )
+}
+
+/// Whether every character satisfies the predicate. True for empty text.
+export fn allChars(value: Str, holds: fn(Char) -> Bool) -> Bool {
+  for character in value.chars() {
+    if !holds(character) { return false }
+  }
+  true
+}
+
+/// Whether any character satisfies the predicate. False for empty text.
+export fn anyChar(value: Str, holds: fn(Char) -> Bool) -> Bool {
+  for character in value.chars() {
+    if holds(character) { return true }
+  }
+  false
+}
+
+/// How many characters satisfy the predicate.
+export fn countChars(value: Str, holds: fn(Char) -> Bool) -> Int {
+  var total = 0
+  for character in value.chars() {
+    if holds(character) { total = total + 1 }
+  }
+  total
+}
+
+/// The position of the first character the predicate accepts, or `None`.
+export fn findIndex(value: Str, holds: fn(Char) -> Bool) -> Option[Int] {
+  var index = 0
+  let size = value.length()
+  while index < size {
+    if holds(value.charAt(index)) { return Some(index) }
+    index = index + 1
+  }
+  None
+}
+
+/// The first character the predicate accepts, or `None`.
+export fn findChar(value: Str, holds: fn(Char) -> Bool) -> Option[Char] {
+  for character in value.chars() {
+    if holds(character) { return Some(character) }
+  }
+  None
+}
+
+/// Whether text is a space, tab, carriage return, or newline.
+/// Repeated here rather than imported so `Std.Text` stands on its own; the same
+/// ASCII set `Std.Char` uses.
+fn isSpace(value: Char) -> Bool {
+  value == ' ' || value == '\t' || value == '\r' || value == '\n'
+}
+
+/// One character as text, which is the conversion the language provides.
+fn textOf(value: Char) -> Str { value.toText() }
+
+/// The length of the longest leading run the predicate accepts.
+fn prefixLength(value: Str, holds: fn(Char) -> Bool) -> Int {
+  var cut = 0
+  let size = value.length()
+  while cut < size && holds(value.charAt(cut)) { cut = cut + 1 }
+  cut
+}
+
+/// Confine an index to the text's bounds.
+fn clampIndex(index: Int, limit: Int) -> Int {
+  if index < 0 { 0 } else { if index > limit { limit } else { index } }
 }

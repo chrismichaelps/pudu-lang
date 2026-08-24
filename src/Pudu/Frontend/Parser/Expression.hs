@@ -28,21 +28,30 @@ import Pudu.Frontend.Parser.State
   , peekStartsLine
   , recordsAdmitted
   , withRecordAdmission
+  , lookaheadKind
   , peekToken
   , withRecursionBudget
   )
+import Pudu.Frontend.Parser.Name (expectValueIdentifier)
 import Pudu.Frontend.Parser.Pattern (parsePattern)
+import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block
   , Capability (..)
   , Expression (..)
   , FieldInit (..)
+  , Function (..)
+  , FunctionBody (..)
   , Literal (..)
   , MatchArm (..)
+  , Parameter (..)
+  , TypeSyntax
+  , Visibility (Private)
+  , lambdaName
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFor, KwIf, KwIn, KwLoop
+  ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
     , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwScope, KwTask, KwTrue, KwUnsafe, KwWhile, KwWith)
   , SymbolKind (..)
   , Token (..)
@@ -82,6 +91,8 @@ parseExpressionAt blockParser minimumPrecedence = do
 parsePrefix :: BlockParser -> Parser (Located Expression)
 parsePrefix blockParser = do
   token <- peekToken
+  following <- lookaheadKind 1
+  let nextIsFunction = following == Keyword KwFn
   case tokenKind token of
     IntegerLiteral value -> literal token (IntegerValue value)
     FloatLiteral value -> literal token (FloatValue value)
@@ -94,7 +105,10 @@ parsePrefix blockParser = do
     Keyword KwMatch -> parseMatch blockParser
     Keyword KwWhile -> parseWhile blockParser
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
-    Keyword KwAsync -> parseScope blockParser
+    Keyword KwFn -> parseLambda blockParser
+    Keyword KwAsync
+      | nextIsFunction -> parseLambda blockParser
+      | otherwise -> parseScope blockParser
     Keyword KwLoop -> parseLoop blockParser
     Keyword KwFor -> parseFor blockParser
     Identifier name -> parseNameOrRecord blockParser token name
@@ -106,6 +120,109 @@ parsePrefix blockParser = do
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
     _ -> invalidPrefix token
+
+{-| Parse a function literal: `fn(x) => x + 1` or `fn(x: Int) -> Int { ... }`.
+
+    The `fn` keyword is reused rather than a new sigil introduced, because the
+    function *type* is already written `fn(A) -> T` and a literal that spells
+    itself the same way needs nothing explained. It cannot be ambiguous: `fn`
+    could not previously begin an expression at all.
+
+    Both bodies are admitted for the same reason a declaration admits both. `=>`
+    reads as "answers with", matching its meaning in a match arm, and the block
+    form is there when the answer takes more than one step.
+
+    A literal's parameters take no defaults. A default is part of a named
+    function's documented interface, and a literal has no name to document; a
+    caller looking at a value of type `fn(Int) -> Int` has nowhere to learn that
+    one of its arguments was optional. -}
+parseLambda :: BlockParser -> Parser (Located Expression)
+parseLambda blockParser = do
+  start <- peekToken
+  asyncKeyword <- matchKeyword KwAsync
+  _ <- expectKeyword KwFn "to start a function literal"
+  _ <- expectSymbol "(" "before the parameter list"
+  parameters <- parseLambdaParameters []
+  _ <- expectSymbol ")" "after the parameter list"
+  returnType <- parseLambdaReturn
+  body <- parseLambdaBody blockParser
+  let endSpan = maybe (tokenSpan start) locatedSpan body
+  pure
+    ( Located (mergedOrLeft (tokenSpan start) endSpan)
+        ( LambdaExpression
+            Function
+              { functionVisibility = Private
+              , functionAsync = maybe False (const True) asyncKeyword
+              , functionUnsafe = Nothing
+              , functionComptime = False
+              , functionName = Located (tokenSpan start) lambdaName
+              , functionTypeParams = []
+              , functionParameters = parameters
+              , functionReturn = returnType
+              , functionConstraints = []
+              , functionBody = body
+              }
+        )
+    )
+
+{-| A literal's parameters: a name and an optional type, separated by commas. -}
+parseLambdaParameters :: [Located Parameter] -> Parser [Located Parameter]
+parseLambdaParameters reversed = do
+  closing <- isSymbol ")" <$> peekKind
+  if closing
+    then pure (reverse reversed)
+    else do
+      name <- expectValueIdentifier "in the parameter list"
+      annotation <- parseLambdaAnnotation
+      let parameter =
+            Located (locatedSpan name)
+              Parameter
+                { parameterName = name
+                , parameterType = annotation
+                , parameterDefault = Nothing
+                }
+          extended = parameter : reversed
+      separator <- matchSymbol ","
+      case separator of
+        Just _ -> parseLambdaParameters extended
+        Nothing -> pure (reverse extended)
+
+parseLambdaAnnotation :: Parser (Maybe (Located TypeSyntax))
+parseLambdaAnnotation = do
+  colon <- matchSymbol ":"
+  case colon of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> parseTypeSyntax
+
+parseLambdaReturn :: Parser (Maybe (Located TypeSyntax))
+parseLambdaReturn = do
+  arrow <- matchSymbol "->"
+  case arrow of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> parseTypeSyntax
+
+{-| `=>` answers with one expression; `{` opens a block. Anything else is an
+    incomplete literal, and saying which two forms exist is more useful than
+    naming the token that was found. -}
+parseLambdaBody :: BlockParser -> Parser (Maybe (Located FunctionBody))
+parseLambdaBody blockParser = do
+  arrow <- matchSymbol "=>"
+  case arrow of
+    Just _ -> do
+      value <- parseExpression blockParser
+      pure (Just (Located (locatedSpan value) (ExpressionBody value)))
+    Nothing -> do
+      opening <- isSymbol "{" <$> peekKind
+      if opening
+        then do
+          block <- blockParser
+          pure (Just (Located (locatedSpan block) (BlockBody block)))
+        else do
+          token <- peekToken
+          emitParseError "E1032" (tokenSpan token)
+            "expected a function literal's body"
+            (Just "follow the parameter list with => and one expression, or a block")
+          pure Nothing
 
 {-| Parse `async with scope { ... }`, the structured task scope.
 

@@ -320,12 +320,15 @@ memberType spanValue targetType member = do
 
 {-| The one built-in character method.
 
-    A character answers for its scalar value and nothing else; every
-    classification question belongs to `Std.Char`, where the answer is written
-    in the language and can be read. -}
+    A character answers for its scalar value and for itself as text. Both are
+    conversions nothing in the language can express: a character is not a
+    one-element string, and no operator relates them. Every *classification*
+    question — digit, letter, whitespace — belongs to `Std.Char`, where the
+    answer is written in the language and can be read. -}
 charMethodType :: Span -> Text -> Checker Type
 charMethodType spanValue member = case member of
   "code" -> pure (FunctionTypeValue False [] integerType)
+  "toText" -> pure (FunctionTypeValue False [] stringType)
   _ -> do
     report "E3005" spanValue ("Char has no method " <> member)
       (Just "a character answers for its code; ask Std.Char about its kind")
@@ -380,6 +383,7 @@ arrayMethodType spanValue member element = case member of
   "insert" -> pure (FunctionTypeValue False [integerType, element] arrayType)
   "remove" -> pure (FunctionTypeValue False [integerType] arrayType)
   "slice" -> pure (FunctionTypeValue False [integerType, integerType] arrayType)
+  "concat" -> pure (FunctionTypeValue False [arrayType] arrayType)
   "reverse" -> pure (FunctionTypeValue False [] arrayType)
   "map" -> do
     result <- freshVariable
@@ -467,6 +471,35 @@ methodType spanValue owner member = do
           pure (FunctionTypeValue asynchronous rest result)
         other -> pure other
 
+{-| The type of one member of a tuple.
+
+    A tuple's members have different types, so the position must be known when
+    the type is decided. A computed index cannot be: the checker would have to
+    pick one member's type and would then be wrong for every other index — which
+    it was, silently, reporting `(Int, Str)[1]` as `Int` while the value was
+    text. Requiring a literal is what makes the answer true. -}
+tupleMemberType :: Span -> Maybe Integer -> [Type] -> Checker Type
+tupleMemberType spanValue position members = case position of
+  Nothing -> do
+    report "E3027" spanValue "a tuple must be indexed by a literal position"
+      ( Just
+          ( "write the position directly, as in value[0]; a tuple's members have "
+              <> "different types, so a computed index has no single type"
+          )
+      )
+    pure ErrorType
+  Just index
+    | index < 0 || index >= fromIntegral (length members) -> do
+        report "E3027" spanValue
+          ( "a tuple of "
+              <> Text.pack (show (length members))
+              <> " has no member at position "
+              <> Text.pack (show index)
+          )
+          (Just "index a tuple within its own length")
+        pure ErrorType
+    | otherwise -> pure (members !! fromInteger index)
+
 {-| Two traits providing one member for one type is legal; choosing between
     them is not something the compiler may do quietly. The call site names the
     candidates and the qualified form that picks one. -}
@@ -486,18 +519,16 @@ ambiguous spanValue owner member providers = do
     would make every function that takes `&Array[T]` — which is every function
     that does not want to copy one — read worse than the version that copies.
     The borrow's own mutability is unchanged by reading through it. -}
-elementType :: Span -> Type -> Checker Type
-elementType spanValue targetType = do
+elementType :: Span -> Maybe Integer -> Type -> Checker Type
+elementType spanValue position targetType = do
   resolved <- zonk targetType
   case resolved of
     ErrorType -> pure ErrorType
     VariableType _ -> freshVariable
-    ReferenceTypeValue _ referent -> elementType spanValue referent
+    ReferenceTypeValue _ referent -> elementType spanValue position referent
     NominalType "Str" [] -> pure charType
     NominalType "Array" [element] -> pure element
-    TupleTypeValue members -> case members of
-      first : _ -> pure first
-      [] -> pure ErrorType
+    TupleTypeValue members -> tupleMemberType spanValue position members
     _ -> do
       report "E3006" spanValue ("a " <> renderType resolved <> " cannot be indexed")
         (Just "index a string, an array, or a tuple")

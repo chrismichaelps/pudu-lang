@@ -72,3 +72,115 @@ export fn isEven(value: Int) -> Bool { value % 2 == 0 }
 
 /// Whether a value is odd.
 export fn isOdd(value: Int) -> Bool { value % 2 != 0 }
+
+/// The next whole number.
+export fn succ(value: Int) -> Int { value + 1 }
+
+/// The previous whole number.
+export fn pred(value: Int) -> Int { value - 1 }
+
+/// One value taken from another, with the arguments in the order a reader
+/// meets them: `subtract(3, 10)` is seven.
+export fn subtract(amount: Int, value: Int) -> Int { value - amount }
+
+/// Truncating division, or `None` when the divisor is nought.
+/// Nothing in `Std` is partial: the operator fails at run time, and this is the
+/// form that reports the failure instead.
+export fn divide(value: Int, divisor: Int) -> Option[Int] {
+  if divisor == 0 { None } else { Some(value / divisor) }
+}
+
+/// The remainder of a truncating division, or `None` for a nought divisor.
+export fn remainder(value: Int, divisor: Int) -> Option[Int] {
+  if divisor == 0 { None } else { Some(value % divisor) }
+}
+
+/// The quotient and the remainder together, or `None` for a nought divisor.
+export fn divMod(value: Int, divisor: Int) -> Option[(Int, Int)] {
+  if divisor == 0 { None } else { Some((value / divisor, value % divisor)) }
+}
+
+/// A value squared.
+export fn square(value: Int) -> Int { value * value }
+
+/// A value cubed.
+export fn cube(value: Int) -> Int { value * value * value }
+
+/// The product of every whole number from one up to the value.
+/// A value below one has an empty product, which is one.
+export fn factorial(value: Int) -> Int {
+  var total = 1
+  var current = 2
+  while current <= value {
+    total = total * current
+    current = current + 1
+  }
+  total
+}
+
+/// The greatest whole number whose square does not exceed the value.
+/// Newton's method on whole numbers; a negative value has no square root and
+/// answers with `None` rather than a number that is not one.
+export fn isqrt(value: Int) -> Option[Int] {
+  if value < 0 { None } else {
+    if value < 2 { Some(value) } else {
+      var guess = value
+      var next = (value + 1) / 2
+      while next < guess {
+        guess = next
+        next = (guess + value / guess) / 2
+      }
+      Some(guess)
+    }
+  }
+}
+
+/// Whether a value is prime. Values below two are not.
+export fn isPrime(value: Int) -> Bool {
+  if value < 2 { false } else {
+    if value < 4 { true } else {
+      if value % 2 == 0 { false } else {
+        var divisor = 3
+        while divisor * divisor <= value {
+          if value % divisor == 0 { return false }
+          divisor = divisor + 2
+        }
+        true
+      }
+    }
+  }
+}
+
+/// Whether a value lies between two bounds, inclusive at both ends.
+export fn between(value: Int, lower: Int, upper: Int) -> Bool {
+  value >= lower && value <= upper
+}
+
+/// The smaller of two values, chosen by a comparison the caller supplies.
+export fn minBy[T](left: T, right: T, before: fn(T, T) -> Bool) -> T {
+  if before(right, left) { right } else { left }
+}
+
+/// The larger of two values, chosen by a comparison the caller supplies.
+export fn maxBy[T](left: T, right: T, before: fn(T, T) -> Bool) -> T {
+  if before(left, right) { right } else { left }
+}
+
+/// A value raised to a power, or `None` when the exponent is negative.
+/// The total companion to `pow`, which answers one for a negative exponent
+/// because its signature promises an `Int`.
+export fn checkedPow(base: Int, exponent: Int) -> Option[Int] {
+  if exponent < 0 { None } else { Some(pow(base, exponent)) }
+}
+
+/// The number of decimal digits, counting a lone nought as one and ignoring a
+/// minus sign.
+export fn digitCount(value: Int) -> Int {
+  var remaining = abs(value)
+  var total = 1
+  while remaining >= 10 {
+    remaining = remaining / 10
+    total = total + 1
+  }
+  total
+}

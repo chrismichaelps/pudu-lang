@@ -1,0 +1,54 @@
+module Std.Function
+
+/// The value itself. Useful wherever a transformation is required and none is
+/// wanted, such as `flatten` written as `flatMap(items, identity)`.
+export fn identity[T](value: T) -> T { value }
+
+/// A function that ignores its argument and answers with a fixed value.
+export fn constant[A, B](value: A, _ignored: B) -> A { value }
+
+/// A function with its two arguments exchanged.
+export fn flip[A, B, C](f: fn(A, B) -> C, left: B, right: A) -> C { f(right, left) }
+
+/// One function after another: `compose(f, g, x)` is `f(g(x))`.
+/// The outer function is written first, which is the order it is applied last.
+export fn compose[A, B, C](outer: fn(B) -> C, inner: fn(A) -> B, value: A) -> C {
+  outer(inner(value))
+}
+
+/// One function after another, reading left to right.
+/// `pipe(f, g, x)` is `g(f(x))`, which is the order a reader follows data.
+export fn pipe[A, B, C](first: fn(A) -> B, second: fn(B) -> C, value: A) -> C {
+  second(first(value))
+}
+
+/// A function applied to a value, for the places where a function is a value
+/// and applying it needs to be one too.
+export fn apply[A, B](f: fn(A) -> B, value: A) -> B { f(value) }
+
+/// A function applied twice.
+export fn twice[T](f: fn(T) -> T, value: T) -> T { f(f(value)) }
+
+/// A function applied a number of times. A count below one is the value itself.
+export fn times[T](count: Int, f: fn(T) -> T, value: T) -> T {
+  var out = value
+  var remaining = count
+  while remaining > 0 {
+    out = f(out)
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// A function applied until a condition holds.
+/// The step count is bounded because a strict language cannot recover from a
+/// condition that never holds; exhausting the bound answers with what it had.
+export fn until[T](limit: Int, holds: fn(T) -> Bool, f: fn(T) -> T, value: T) -> T {
+  var out = value
+  var remaining = limit
+  while remaining > 0 && !holds(out) {
+    out = f(out)
+    remaining = remaining - 1
+  }
+  out
+}

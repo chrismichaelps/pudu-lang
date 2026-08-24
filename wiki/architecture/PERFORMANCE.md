@@ -7,6 +7,37 @@ aliases: [Performance Constitution]
 
 # Performance Constitution
 
+## The standard library is a thin layer
+
+`Std.List` delegates to the array's own operations rather than rebuilding arrays by hand. The array
+is a finger tree, and the difference is not a constant factor:
+
+| Operation | Delegated | Rebuilt by hand |
+|---|---|---|
+| `length`, `isEmpty` | O(1) | O(1) |
+| `first`, `last` | O(1) | O(1) |
+| `take`, `drop`, `slice` | O(log n) via split | O(n log n) via repeated push |
+| `concat` | O(log(min(n, m))) via join | O(m log n) |
+| `reversed` | O(n) structural | O(n log n) |
+| `contains`, `indexOf`, `count` | O(n) | O(n) |
+| `sum`, `product`, `minimum`, `maximum` | O(n) | O(n) |
+| `sorted` | O(n log n) merge sort | O(n²) insertion sort |
+
+Three rules follow, and they apply to every collection module:
+
+- **Never rebuild what the structure can split or join.** A `while` loop with `push` is the wrong
+  answer to `take`, `drop`, `slice`, and `concat`; each has a logarithmic operation underneath it.
+- **Accept the lower bound where one exists.** `sum` must read every element and comparison sorting
+  cannot beat `n log n`. A library that pretends otherwise is either wrong or is quietly a different
+  data structure — a running aggregate, a prefix-sum array, a segment tree — and should say so by
+  being one.
+- **When the library cannot be fast, the runtime is what to fix.** If a hot operation has no
+  structural form, that is a missing runtime primitive, not a reason for a cleverer loop.
+
+Doc comments state what a function does, not its complexity. A complexity that appears in a doc
+comment is a promise made in the place least likely to be updated when the implementation changes;
+this table is where the promise lives.
+
 Pudu performance has two distinct products: fast compiler/tool response and fast predictable generated programs. Neither may trade away [[architecture/SEMANTICS]].
 
 ## Compiler Throughput Laws

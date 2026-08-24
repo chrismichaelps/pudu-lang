@@ -230,7 +230,7 @@ testRuntimeErrors :: IO Property
 testRuntimeErrors = do
   divZero <- submit emptySession "1 / 0"
   divZeroStmt <- submit emptySession "let x = 1 / 0"
-  indexRange <- submit emptySession "(1, 2, 3)[5]"
+  indexRange <- submit emptySession "[1, 2, 3][5]"
   undefinedName <- submit emptySession "missing + 1"
   nonExhaustive <- submit emptySession "match 5 {\n  case 0 => 0\n}"
   typeMismatch <- submit emptySession "1 + \"a\""
@@ -238,7 +238,7 @@ testRuntimeErrors = do
   pure $ conjoin
     [ counterexample "division by zero is E7004" (codesOf divZero === ["E7004"])
     , counterexample "a runtime error rejects the entry" (not (resultAccepted divZeroStmt))
-    , counterexample "index out of range is E7004" (codesOf indexRange === ["E7004"])
+    , counterexample "an array index out of range is E7004" (codesOf indexRange === ["E7004"])
     , counterexample "an undefined name is E2010" (codesOf undefinedName === ["E2010"])
     , counterexample "a non-exhaustive match is E5001" (codesOf nonExhaustive === ["E5001"])
     , counterexample "a type mismatch is E3001" (codesOf typeMismatch === ["E3001"])
@@ -327,8 +327,8 @@ testOperators = do
   orShort <- submit emptySession "true || (1 / 0 == 0)"
   tupleIndex <- submit emptySession "(10, 20, 30)[1]"
   stringIndex <- submit emptySession "\"hello\"[1]"
-  negativeIndex <- submit emptySession "(1, 2, 3)[-1]"
-  outOfRange <- submit emptySession "(1, 2)[10]"
+  negativeIndex <- submit emptySession "[1, 2, 3][-1]"
+  outOfRange <- submit emptySession "[1, 2][10]"
   stringConcat <- submit emptySession "\"foo\" + \"bar\""
   unaryNeg <- submit emptySession "-42"
   unaryNot <- submit emptySession "!false"

@@ -53,6 +53,8 @@ import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
 import Pudu.Type.Value
   ( NominalId (..)
   , Scheme
+  , charType
+  , integerType
   , Type (..)
   , monotype
   , nominalKey
@@ -265,6 +267,12 @@ declareBuiltinConstructors = do
     (polytype ["T", "E"] [] (FunctionTypeValue False [RigidType "T"] resultOf))
   bindName "Err"
     (polytype ["T", "E"] [] (FunctionTypeValue False [RigidType "E"] resultOf))
+  {-| The one conversion that cannot be written in the language: a scalar value
+      is an integer, and a character is not a one-element string, so nothing in
+      the language relates them. It answers with `Option` because not every
+      integer is a scalar value. -}
+  bindName "charFromCode"
+    (monotype (FunctionTypeValue False [integerType] (NominalType "Option" [charType])))
  where
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]

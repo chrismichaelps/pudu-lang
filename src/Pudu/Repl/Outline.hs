@@ -11,7 +11,9 @@ import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
+  ( Function (..)
+  , Parameter (..)
+  , Block (..)
   , Capability (..)
   , Declaration (..)
   , Expression (..)
@@ -74,6 +76,8 @@ outlineExpression (Located _ expression) = case expression of
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
   MacroCall name arguments ->
     locatedValue name <> "!(" <> Text.intercalate ", " (map outlineExpression arguments) <> ")"
+  LambdaExpression value ->
+    "fn(" <> Text.intercalate ", " (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ") => ..."
   ScopeExpression body ->
     "async with scope { " <> Text.intercalate "; " (outlineBlock body) <> " }"
   UnsafeExpression capabilities body ->

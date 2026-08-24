@@ -28,12 +28,12 @@ export async fn fetch(url: Str) -> Result[Json, Http.Error] {
 
 ## Why a shipped standard library, and why now
 
-Every language that deferred this decision paid for it twice. Haskell's `base` is small and its real
-library surface — `text`, `bytestring`, `containers`, `time`, `aeson`, `http-client` — lives in
-packages that a beginner must discover, choose between, and pin. The discovery cost is real: a
-newcomer writing their first HTTP call chooses between four clients with different error models, and
-the choice is invisible in their source. C++ made the opposite trade in the other direction, shipping
-a standard library whose oldest corners now constrain what the newest ones can look like.
+Every language that deferred this decision paid for it twice. Ship a minimal core and the real
+library surface — text, byte strings, containers, time, serialization, HTTP — ends up in packages a
+beginner must discover, choose between, and pin. The discovery cost is real: a newcomer writing
+their first HTTP call chooses between four clients with different error models, and the choice is
+invisible in their source. Shipping everything early makes the opposite mistake: a standard library
+whose oldest corners constrain what its newest ones can look like.
 
 Pudu takes the middle position deliberately:
 
@@ -60,30 +60,31 @@ The split matters because `Core` cannot be extended without changing the languag
 
 ## The modules
 
-Each entry names its Haskell reference point, because that ecosystem has already discovered what the
-right shape is, and the cost of rediscovering it is measured in years.
+The shapes below are the ones decades of library design have converged on. Where Pudu departs from
+the common shape, the reason is stated; where it does not, rediscovering the shape would cost years
+and buy nothing.
 
 ### Data
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Text` | `text` | Unicode text, slicing, builders, case folding, encode/decode |
-| `Std.Bytes` | `bytestring` | byte sequences, binary get/put, base64 and hex |
-| `Std.List` | `Data.List` | the operations `Array[T]` does not already carry |
-| `Std.Map` | `containers` | ordered maps, by comparison |
-| `Std.Set` | `containers` | ordered sets |
-| `Std.HashMap` | `unordered-containers` | hash maps, by `Hash` |
-| `Std.Deque` | `containers` | double-ended queue |
-| `Std.Math` | `base` | numerics, saturating and checked arithmetic, constants |
-| `Std.Fmt` | `formatting` | typed formatting, no format-string interpretation at run time |
-| `Std.Uuid` | `uuid` | v4 and v7 identifiers |
+| Module | Provides |
+|---|---|
+| `Std.Text` | Unicode text, slicing, builders, case folding, encode/decode |
+| `Std.Bytes` | byte sequences, binary get/put, base64 and hex |
+| `Std.List` | the operations `Array[T]` does not already carry |
+| `Std.Map` | ordered maps, by comparison |
+| `Std.Set` | ordered sets |
+| `Std.HashMap` | hash maps, by `Hash` |
+| `Std.Deque` | double-ended queue |
+| `Std.Math` | numerics, saturating and checked arithmetic, constants |
+| `Std.Fmt` | typed formatting, no format-string interpretation at run time |
+| `Std.Uuid` | v4 and v7 identifiers |
 
 ### Time
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Time` | `time` | `Instant`, `Duration`, `Date`, `TimeOfDay`, `Zoned`, arithmetic |
-| `Std.Time.Format` | `time` | RFC 3339 and strftime-shaped parsing and rendering |
+| Module | Provides |
+|---|---|
+| `Std.Time` | `Instant`, `Duration`, `Date`, `TimeOfDay`, `Zoned`, arithmetic |
+| `Std.Time.Format` | RFC 3339 and strftime-shaped parsing and rendering |
 
 `Std.Time` separates a **`Instant`** (a point on the monotonic or system clock) from a **`Date`** (a
 civil calendar value with no instant until a zone is applied). The distinction is the single most
@@ -92,12 +93,12 @@ unreportable.
 
 ### Text processing
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Text.Parse` | `megaparsec` | parser combinators with position-carrying errors |
-| `Std.Json` | `aeson` | `Json` values, decoding to declared types, streaming encode |
-| `Std.Csv` | `cassava` | row and record decoding |
-| `Std.Toml` | `tomland` | configuration |
+| Module | Provides |
+|---|---|
+| `Std.Text.Parse` | parser combinators with position-carrying errors |
+| `Std.Json` | `Json` values, decoding to declared types, streaming encode |
+| `Std.Csv` | row and record decoding |
+| `Std.Toml` | configuration |
 
 `Std.Text.Parse` is a combinator library rather than a regular-expression engine. A regex is a second
 language embedded in a string, invisible to the type checker and to `pudu doc`; a combinator parser
@@ -106,31 +107,31 @@ produces. A regex module remains open — see the deferred list.
 
 ### System
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Io` | `base` | files, handles, streaming reads and writes |
-| `Std.Path` | `filepath` | path construction and decomposition, platform-aware |
-| `Std.Env` | `base` | arguments, environment, exit |
-| `Std.Process` | `process` | subprocesses, pipes, exit status |
-| `Std.Log` | `katip` | structured, levelled, context-carrying logging |
+| Module | Provides |
+|---|---|
+| `Std.Io` | files, handles, streaming reads and writes |
+| `Std.Path` | path construction and decomposition, platform-aware |
+| `Std.Env` | arguments, environment, exit |
+| `Std.Process` | subprocesses, pipes, exit status |
+| `Std.Log` | structured, levelled, context-carrying logging |
 
 ### Network
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Http` | `http-client` | client: requests, responses, redirects, timeouts, pooling |
-| `Std.Http.Server` | `warp` / `wai` | server: routing, handlers, middleware |
-| `Std.Net` | `network` | addresses, TCP, UDP |
-| `Std.Tls` | `tls` | transport security for the above |
-| `Std.Url` | `network-uri` | parsing, building, percent-encoding |
+| Module | Provides |
+|---|---|
+| `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
+| `Std.Http.Server` | server: routing, handlers, middleware |
+| `Std.Net` | addresses, TCP, UDP |
+| `Std.Tls` | transport security for the above |
+| `Std.Url` | parsing, building, percent-encoding |
 
 ### Concurrency
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Concurrent` | `async` | task groups over the language's own `async with scope` |
-| `Std.Channel` | `stm` | bounded and unbounded channels |
-| `Std.Sync` | `stm` | mutex, semaphore, once, atomic cells |
+| Module | Provides |
+|---|---|
+| `Std.Concurrent` | task groups over the language's own `async with scope` |
+| `Std.Channel` | bounded and unbounded channels |
+| `Std.Sync` | mutex, semaphore, once, atomic cells |
 
 `Std.Concurrent` is a thin layer over the structured scopes the language already has. It does not
 introduce a second concurrency model: a task started through it is a child of the enclosing scope and
@@ -138,38 +139,55 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ### Correctness
 
-| Module | Reference | Provides |
-|---|---|---|
-| `Std.Test` | `hspec` + `QuickCheck` | assertions, property generation, shrinking |
-| `Std.Bench` | `criterion` | timing with statistics, not one stopwatch reading |
-| `Std.Crypto` | `cryptonite` | hashes, HMAC, constant-time comparison, secure random |
-| `Std.Db` | `postgresql-simple` | typed SQL, parameter binding, connection pooling |
+| Module | Provides |
+|---|---|
+| `Std.Test` | assertions, property generation, shrinking |
+| `Std.Bench` | timing with statistics, not one stopwatch reading |
+| `Std.Crypto` | hashes, HMAC, constant-time comparison, secure random |
+| `Std.Db` | typed SQL, parameter binding, connection pooling |
 
 ## What ships today
 
-| Module | State | Notes |
+Nine modules, 214 documented exports, every one written in Pudu.
+
+| Module | Exports | Covers |
 |---|---|---|
-| `Std.Math` | shipped | integer arithmetic, `gcd`, `lcm`, `pow`, `clamp`, `signum` |
-| `Std.List` | shipped | `first`, `last`, `sum`, `minimum`, `indexOf`, `take`, `sorted` |
-| `Std.Text` | shipped | `find`, `stripPrefix`, `padLeft`, `join`, `words`, `capitalize` |
-| `Std.Option` | shipped | `isSome`, `unwrapOr`, `orElse`, `okOr` |
-| `Std.Result` | shipped | `isOk`, `unwrapOr`, `ok`, `err`, `orElse` |
-| `Std.Char` | shipped | ASCII classification and `toDigit` |
+| `Std.List` | 65 | the collection surface: folds, scans, slicing, searching, set operations, zipping, sorting |
+| `Std.Text` | 44 | slicing, splitting, padding, per-character transformation, prefix and suffix work |
+| `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked forms of the partial operators |
+| `Std.Char` | 18 | ASCII classification, case folding, digit conversion in both directions |
+| `Std.Result` | 16 | transforming either side, collecting many results into one |
+| `Std.Option` | 15 | transforming, filtering, and collecting values that may be absent |
+| `Std.Bool` | 10 | the operators as functions, plus `select` and the array folds |
+| `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
+| `Std.Function` | 9 | identity, composition in both directions, repeated application |
 
-Everything else in the tables above is designed and unwritten. Two things block the rest, and both
-are language work rather than library work:
+Everything else in the tables above is designed and unwritten. One thing blocks the rest, and it is
+runtime work rather than library work: `Std.Io`, `Std.Http`, `Std.Net`, `Std.Process`, and `Std.Db`
+need a foreign interface, which needs the `foreign` capability from [[Unsafe Capabilities]] and a
+decision about how a foreign type's ownership is described.
 
-- **Anonymous functions.** `map`, `filter`, `sortBy`, and every parser combinator need a function
-  literal. Named functions can be passed today, which is why `Array.map` works, but a library built
-  on that alone would force a top-level declaration for every one-line transformation.
-- **Input and output.** `Std.Io`, `Std.Http`, `Std.Net`, `Std.Process`, and `Std.Db` need a foreign
-  interface, which needs the `foreign` capability from [[Unsafe Capabilities]] and a decision about
-  how a foreign type's ownership is described.
+## What writing it found
 
-Writing the six modules above already found five language gaps — indexing through a borrow,
-matching through a borrow, `Str` having no methods at all, `export` detaching documentation, and a
-discarded collection result being silent. That is the design working as intended: the library is
-written in Pudu so that the places it cannot be are visible.
+The design says the library is written **in Pudu** precisely so that every place it cannot be is a
+place the language is missing something. Writing these nine modules found nine such places, and each
+one became a language change rather than a workaround:
+
+| What the library could not write | What the language gained |
+|---|---|
+| `items[0]` on a `&Array[T]` | indexing follows a borrow |
+| matching on a `&Option[T]` | a match reads through a borrow |
+| any text operation at all | `Str` gained seventeen built-in methods |
+| `map`, `filter`, `sortBy` | function literals with capture |
+| joining two arrays | `Array.concat`, structural rather than a loop |
+| an integer as a character | `charFromCode` in the prelude |
+| a character as text | `Char.toText` |
+| documentation on an exported name | doc comments attach past modifiers |
+| `out.push(x)` doing nothing | `W3002` for a discarded collection result |
+
+One of them was a soundness bug rather than a gap: `(Int, Str)[1]` reported `Int` while the value
+was text, because a tuple's members were all typed as the first member's type. A tuple is now
+indexed by a literal position, and `E3027` reports anything else.
 
 ## What "production ready" is required to mean
 
@@ -252,12 +270,12 @@ dependencies are its own files plus the compiler it is built with, and that is t
 
 ## Grill Log
 
-- **Q:** Why not follow Haskell exactly and ship a minimal `base`, leaving the rest to packages?
-  **A:** Because the discovery cost is paid by every newcomer and the fragmentation cost is paid by
-  every reader. Haskell's split is historical rather than designed — `text` is not in `base` because
-  `String` was there first — and copying the outcome without the history would be copying a
-  constraint Pudu does not have. _Rejected:_ a minimal core plus a curated "platform" list, which is
-  the same fragmentation with a blessing attached.
+- **Q:** Why not ship a minimal core and leave the rest to packages? **A:** Because the discovery
+  cost is paid by every newcomer and the fragmentation cost is paid by every reader. Where that split
+  exists elsewhere it is usually historical rather than designed — an early type that could not be
+  removed, so its replacement had to live outside — and inheriting the outcome without the history
+  would be inheriting a constraint Pudu does not have. _Rejected:_ a minimal core plus a curated
+  "platform" list, which is the same fragmentation with a blessing attached.
 - **Q:** Why not put these under `Core` alongside the prelude? **A:** Because `Core` names what the
   language definition depends on, and a change there is a change to the language. `Std.Http` must be
   able to gain a method without that being true. _Rejected:_ one flat namespace.

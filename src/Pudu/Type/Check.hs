@@ -12,6 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
@@ -42,6 +43,7 @@ import Pudu.Type.Env
   , finalizeIntegerLiteralsSince
   , freshVariable
   , inTypeScope
+  , inTypeScopeWith
   , integerLiteralCheckpoint
   , ambiguousProviders
   , UnsafeFrame (..)
@@ -314,6 +316,44 @@ adoptDeclaredSignature value inputs result scheme = case schemeType scheme of
   headSpan = locatedSpan (functionName value)
   tie (left, right) = () <$ unify headSpan left right
 
+{-| The constant an index expression names, when it names one.
+
+    A tuple's members have different types, so indexing one is only meaningful
+    at a known position. Everything else — an array, a string, a computed index
+    — does not care, and reports `Nothing`. -}
+literalIndex :: Located Expression -> Maybe Integer
+literalIndex (Located _ expression) = case expression of
+  LiteralExpression (Tree.IntegerValue text) ->
+    parsedIntegerValue <$> parseIntegerLiteral text
+  _ -> Nothing
+
+{-| Type a function literal.
+
+    The literal is checked exactly like a declaration's body — its parameters
+    bound, its result unified with what the body produced — and answers with the
+    function type a caller sees. Sharing the path is what keeps a literal and a
+    declaration from drifting into two dialects of the same thing.
+
+    A literal is not generalised. Its type is fixed at the point it is written,
+    so a literal used at two types is an error the reader can see, rather than a
+    silent second instantiation of something they wrote once. Generalisation
+    belongs to a declaration, which has a name to attach it to. -}
+lambdaType :: DeclaredTypes -> [Text] -> Function -> Checker Type
+lambdaType declared rigid value = inTypeScopeWith $ do
+  inputs <- mapM (bindParameter declared rigid) (functionParameters value)
+  result <- formOptionalType declared rigid (functionReturn value)
+  let signature = FunctionTypeValue (functionAsync value) inputs result
+  bindName selfName (monotype signature)
+  case functionBody value of
+    Nothing -> pure ()
+    Just (Located bodySpan body) -> do
+      actual <- case body of
+        BlockBody block -> checkBlock declared rigid block
+        ExpressionBody expression -> checkExpression declared rigid expression
+      _ <- unify bodySpan result actual
+      pure ()
+  zonk signature
+
 {-| The type a borrow refers to, following as many references as were written.
 
     A `&&T` is unusual but writable, and stopping after one would report a
@@ -551,7 +591,7 @@ checkComptimeCall spanValue callee = do
 
 {-| Names a compile-time body may reach that are not user declarations. -}
 comptimeBuiltins :: [Text]
-comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic"]
+comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic", "charFromCode"]
 
 {-| A granted capability that the region never reached for is noise: it widens
     the audited surface without buying anything, so leaving the region reports
@@ -684,7 +724,7 @@ inferExpression declared rigid spanValue expression = case expression of
     targetType <- checkExpression declared rigid target
     indexType <- checkExpression declared rigid index
     _ <- unify (locatedSpan index) integerType indexType
-    elementType spanValue targetType
+    elementType spanValue (literalIndex index) targetType
   TryExpression target -> do
     checkpoint <- integerLiteralCheckpoint
     targetType <- checkExpression declared rigid target
@@ -707,6 +747,7 @@ inferExpression declared rigid spanValue expression = case expression of
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Array" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
+  LambdaExpression value -> lambdaType declared rigid value
   ScopeExpression body -> do
     (asynchronous, _) <- enclosingFunctionType selfName
     unless asynchronous $

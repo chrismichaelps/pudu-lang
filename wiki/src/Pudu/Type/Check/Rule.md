@@ -21,6 +21,11 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- A tuple is indexed by a **literal** position. Its members have different types, so the position
+  must be known when the type is decided; it was not, and `(Int, Str)[1]` reported `Int` while the
+  value was text — a type the checker guaranteed and the program did not have. `E3027` reports a
+  computed or out-of-range position.
+
 - `Char` carries exactly one built-in method, `code`. Classification — digit, letter, whitespace —
   is `Std.Char`'s work in the language, where the answer can be read and argued with. Building it
   into the compiler would settle Unicode questions the compiler is not yet equipped to answer, and

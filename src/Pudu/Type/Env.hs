@@ -25,6 +25,7 @@ module Pudu.Type.Env
   , finalizeIntegerLiteralsSince
   , integerLiteralCheckpoint
   , inTypeScope
+  , inTypeScopeWith
   , lookupField
   , lookupOwnerVariants
   , lookupTypeParams
@@ -402,10 +403,19 @@ lookupName name = Checker $ \state -> (search (stateFrames state), state)
 
 {-| Run an action in a fresh name frame; the frame is discarded on exit. -}
 inTypeScope :: Checker a -> Checker ()
-inTypeScope action = do
+inTypeScope action = () <$ inTypeScopeWith action
+
+{-| A scope that answers with what its action produced.
+
+    A function literal needs this: its type is computed inside the scope its
+    parameters live in, and discarding the answer would mean recomputing it
+    outside where the parameters are gone. -}
+inTypeScopeWith :: Checker a -> Checker a
+inTypeScopeWith action = do
   push
-  _ <- action
+  value <- action
   pop
+  pure value
  where
   push = Checker $ \state -> ((), state{stateFrames = Map.empty : stateFrames state})
   pop =

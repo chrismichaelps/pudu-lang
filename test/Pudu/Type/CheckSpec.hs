@@ -16,7 +16,9 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a match reads through a borrow", testMatchThroughBorrow)
+  [ ("a tuple is indexed by a literal position", testTupleIndex)
+  , ("function literals are typed and inferred", testLambdaTypes)
+  , ("a match reads through a borrow", testMatchThroughBorrow)
   , ("built-in text methods are typed exactly", testTextMethods)
   , ("a discarded collection result is reported", testDiscardedResult)
   , ("literals and operators take their declared types", testOperators)
@@ -1331,6 +1333,64 @@ region source needle = case Text.breakOnEnd needle source of
 {-| A match reads its subject; it does not consume it. Looking through a borrow
     is what lets a function take `&Option[T]` and still match on it, which every
     generic helper in the standard library needs. -}
+{-| A literal is checked exactly like a declaration's body, and answers with
+    the function type a caller sees. Its parameter types are inferred from the
+    place it is used, which is what makes `items.map(fn(x) => x + 1)` readable
+    without annotations. -}
+{-| A tuple's members have different types, so the position must be known when
+    the type is decided. It was not: `(Int, Str)[1]` reported `Int` while the
+    value was text, which is a type the checker guaranteed and the program did
+    not have. -}
+testTupleIndex :: IO Property
+testTupleIndex = do
+  firstMember <- typeOf "(1, \"x\")[0]"
+  secondMember <- typeOf "(1, \"x\")[1]"
+  computed <- codes
+    ["module M", "fn run() -> Int {", "  var index = 1", "  (1, \"x\")[index]", "}"]
+  beyond <- codesOfExpression "(1, \"x\")[5]"
+  negative <- codesOfExpression "(1, \"x\")[-1]"
+  arrayIndex <- typeOf "[1, 2][1]"
+  pure $ conjoin
+    [ counterexample "the first member has the first type" (firstMember === "Int")
+    , counterexample "the second member has the second type" (secondMember === "Str")
+    , counterexample "a computed position is E3027" (computed === ["E3027"])
+    , counterexample "a position beyond the tuple is E3027" (beyond === ["E3027"])
+    , counterexample "a negative position is E3027" (negative === ["E3027"])
+    , counterexample "an array is still indexed by any expression" (arrayIndex === "Int")
+    ]
+
+testLambdaTypes :: IO Property
+testLambdaTypes = do
+  annotated <- typeOf "fn(n: Int) -> Int => n * 2"
+  inferredUse <- typeOf "[1, 2].map(fn(n) => n * 2)"
+  higherOrder <- codes
+    [ "module M"
+    , "fn apply(f: fn(Int) -> Int, n: Int) -> Int { f(n) }"
+    , "fn run() -> Int { apply(fn(x) => x * 3, 7) }"
+    ]
+  returned <- codes
+    [ "module M"
+    , "fn adder(step: Int) -> fn(Int) -> Int { fn(n: Int) -> Int => n + step }"
+    ]
+  wrongBody <- codesOfExpression "fn(n: Int) -> Int => \"text\""
+  wrongArgument <- codes
+    [ "module M"
+    , "fn apply(f: fn(Int) -> Int) -> Int { f(1) }"
+    , "fn run() -> Int { apply(fn(x: Str) -> Int => 1) }"
+    ]
+  pure $ conjoin
+    [ counterexample "an annotated literal has its written type"
+        (annotated === "fn(Int) -> Int")
+    , counterexample "an unannotated literal is inferred from its use"
+        (inferredUse === "Array[Int]")
+    , counterexample "a literal satisfies a function parameter" (higherOrder === [])
+    , counterexample "a literal may be returned" (returned === [])
+    , counterexample "a body is checked against the declared result"
+        (wrongBody === ["E3001"])
+    , counterexample "a literal's own parameter type is checked at the call"
+        (wrongArgument === ["E3001"])
+    ]
+
 testMatchThroughBorrow :: IO Property
 testMatchThroughBorrow = do
   borrowed <- codes

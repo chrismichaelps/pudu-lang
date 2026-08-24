@@ -9,6 +9,7 @@ module Pudu.Eval.Array
   , arrayInsert
   , arrayRemove
   , arraySlice
+  , arrayConcat
   , arrayReverse
   , arrayIndexOf
   , arrayContains
@@ -18,11 +19,11 @@ import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Value (Value (..))
 
-{-| Build an array value from a Haskell list of evaluated values. -}
+{-| Build an array value from a list of evaluated values. -}
 arrayFromList :: [Value] -> Value
 arrayFromList = ArrayValue . Seq.fromList
 
-{-| Flatten an array value to a Haskell list for iteration. -}
+{-| Flatten an array value to a list for iteration. -}
 arrayToList :: Value -> Maybe [Value]
 arrayToList (ArrayValue members) = Just (toList members)
 arrayToList _ = Nothing
@@ -79,6 +80,16 @@ arraySlice (ArrayValue members) start end'
           j = max i (min end' len)
        in ArrayValue (Seq.take (j - i) (Seq.drop i members))
 arraySlice _ _ _ = NullValue
+
+{-| O(log(min(n, m))) concatenation.
+
+    This is why it belongs in the runtime rather than in a library loop: joining
+    two fingertrees is logarithmic in the smaller one, while appending element by
+    element is O(m log n). A library that reimplemented it would be slower than
+    the structure it was built on. -}
+arrayConcat :: Value -> Value -> Value
+arrayConcat (ArrayValue left) (ArrayValue right) = ArrayValue (left Seq.>< right)
+arrayConcat _ _ = NullValue
 
 {-| O(n) reversed array. -}
 arrayReverse :: Value -> Value

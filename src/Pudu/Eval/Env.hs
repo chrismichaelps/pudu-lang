@@ -14,7 +14,9 @@ module Pudu.Eval.Env
   , ascend
   , bind
   , callLimit
+  , captureEnvironment
   , currentFrame
+  , withCaptured
   , descend
   , emptyEnv
   , expectBool
@@ -173,6 +175,29 @@ withFrame bindings action = do
   pushFrame (Map.fromList bindings)
   value <- action
   popFrame
+  pure value
+
+{-| The environment as it stands, for a function literal to carry away.
+
+    A literal captures every frame in scope rather than only the names its body
+    mentions. Capturing selectively would need the resolver's answer about free
+    names, and the two would have to agree forever; capturing the environment
+    means they cannot disagree. -}
+captureEnvironment :: Evaluator [Map Text Value]
+captureEnvironment = Evaluator $ \env -> Done (envFrames env) env
+
+{-| Run an action in a captured environment, restoring the caller's afterwards.
+
+    A declaration passes `Nothing` and runs where it was called, which is what
+    lets a module's functions see each other. A literal passes the frames it
+    captured, so a free name means what it meant where the literal was
+    written — not what it happens to mean where it is finally called. -}
+withCaptured :: Maybe [Map Text Value] -> Evaluator a -> Evaluator a
+withCaptured Nothing action = action
+withCaptured (Just frames) action = do
+  restored <- Evaluator $ \env -> Done (envFrames env) env{envFrames = frames}
+  value <- action
+  Evaluator $ \env -> Done () env{envFrames = restored}
   pure value
 
 withNewFrame :: Evaluator a -> Evaluator a

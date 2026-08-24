@@ -30,6 +30,13 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- A function literal is checked exactly like a declaration's body: parameters bound, result unified
+  with what the body produced. Sharing the path is what keeps a literal and a declaration from
+  drifting into two dialects of the same thing.
+- A literal is **not** generalised. Its type is fixed where it is written, so a literal used at two
+  types is an error the reader can see rather than a silent second instantiation of something they
+  wrote once. Generalisation belongs to a declaration, which has a name to attach it to.
+
 - A match reads its subject through a borrow. A match does not consume what it inspects, and every
   generic helper that takes `&Option[T]` needs to pattern-match on it; refusing would leave no way
   to write one except by copying. Whether an arm may *bind* by value out of a borrowed subject is an

@@ -1,0 +1,25 @@
+module UsesWide
+
+import Std.Bool as Bool
+import Std.Char as Char
+import Std.Function as Function
+import Std.List as List
+import Std.Math as Math
+import Std.Option as Option
+import Std.Text as Text
+import Std.Tuple as Tuple
+
+export fn main() -> Int {
+  let items = [5, 3, 9, 1, 7, 3]
+  var total = 0
+  total = total + List.countWhere(&items, fn(n: Int) -> Bool => Math.isOdd(n))
+  total = total + List.length(&List.distinct(&items))
+  total = total + Option.unwrapOr(List.findIndex(&items, fn(n: Int) -> Bool => n == 9), 0)
+  total = total + Math.factorial(4)
+  total = total + Option.unwrapOr(Math.isqrt(81), 0)
+  total = total + Bool.toInt(Math.isPrime(13))
+  total = total + Text.countChars("a1b2c3", Char.isDigit)
+  total = total + Tuple.second(Tuple.swap((11, 0)))
+  total = total + Function.times(3, fn(n: Int) -> Int => n + 1, 0)
+  total
+}

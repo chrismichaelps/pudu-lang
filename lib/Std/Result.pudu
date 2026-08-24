@@ -57,3 +57,93 @@ export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
     case Err(_) => []
   }
 }
+
+/// The success transformed, if there was one.
+export fn map[T, E, U](value: Result[T, E], transform: fn(T) -> U) -> Result[U, E] {
+  match value {
+    case Ok(found) => Ok(transform(found))
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// The failure transformed, if there was one.
+/// This is how a caller adapts one module's failure vocabulary into its own
+/// without discarding what went wrong.
+export fn mapErr[T, E, F](value: Result[T, E], transform: fn(E) -> F) -> Result[T, F] {
+  match value {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err(transform(problem))
+  }
+}
+
+/// The success transformed into another result, flattened.
+export fn andThen[T, E, U](value: Result[T, E], transform: fn(T) -> Result[U, E]) -> Result[U, E] {
+  match value {
+    case Ok(found) => transform(found)
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// The success, or a fallback computed from the failure.
+export fn unwrapOrElse[T, E](value: Result[T, E], recover: fn(E) -> T) -> T {
+  match value {
+    case Ok(found) => found
+    case Err(problem) => recover(problem)
+  }
+}
+
+/// One of two transformations, whichever side the result holds.
+/// Success comes first, matching the order the cases are written everywhere
+/// else a result is inspected.
+export fn fold[T, E, A](value: Result[T, E], onOk: fn(T) -> A, onErr: fn(E) -> A) -> A {
+  match value {
+    case Ok(found) => onOk(found)
+    case Err(problem) => onErr(problem)
+  }
+}
+
+/// A nested result flattened by one level.
+export fn flatten[T, E](value: Result[Result[T, E], E]) -> Result[T, E] {
+  match value {
+    case Ok(found) => found
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Every success, with the failures dropped.
+export fn successes[T, E](values: &Array[Result[T, E]]) -> Array[T] {
+  var out = []
+  for value in values {
+    match value {
+      case Ok(found) => { out = out.push(found) }
+      case Err(_) => { }
+    }
+  }
+  out
+}
+
+/// Every failure, with the successes dropped.
+export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
+  var out = []
+  for value in values {
+    match value {
+      case Ok(_) => { }
+      case Err(problem) => { out = out.push(problem) }
+    }
+  }
+  out
+}
+
+/// Every success, or the first failure.
+/// This is how a caller turns many fallible steps into one answer without
+/// deciding, at each step, whether to keep going.
+export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
+  var out = []
+  for value in values {
+    match value {
+      case Ok(found) => { out = out.push(found) }
+      case Err(problem) => { return Err(problem) }
+    }
+  }
+  Ok(out)
+}

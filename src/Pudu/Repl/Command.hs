@@ -44,7 +44,7 @@ data Entry
 
 {-| Parse one input line. A leading `:` introduces a command; everything else is
     program text. Command names may be abbreviated to any unambiguous prefix,
-    matching the convention a Haskell user already knows from `:l` and `:t`. -}
+    matching the one-letter forms a prompt reader already expects. -}
 parseEntry :: Text -> Entry
 parseEntry raw
   | Text.null trimmed = BlankEntry

@@ -18,6 +18,8 @@ import Pudu.Frontend.Syntax
   , Expression (..)
   , FieldInit (..)
   , FieldPattern (..)
+  , Function (..)
+  , Parameter (..)
   , Literal (..)
   , Located (..)
   , MatchArm (..)
@@ -33,6 +35,7 @@ parserExpressionProperties =
   [ ("binary precedence and associativity are explicit", testPrecedence)
   , ("closed binary vocabulary parses exhaustively", testBinaryVocabulary)
   , ("literal vocabulary maps into expression nodes", testLiterals)
+  , ("function literals parse in both body forms", testLambdas)
   , ("postfix calls and members bind before binary operators", testPostfix)
   , ("unary borrow and conditional blocks preserve structure", testUnaryIf)
   , ("expression recovery emits exact diagnostics", testRecovery)
@@ -63,6 +66,28 @@ testLiterals :: IO Property
 testLiterals = do
   results <- traverse parse ["1", "1.5", "\"hi\"", "'x'", "true", "false", "null"]
   pure (map validShape results === ["1", "1.5", "hi", "x", "true", "false", "null"])
+
+{-| The `fn` keyword introduces a literal wherever an expression may start. It
+    is the same spelling the function *type* already uses, and it could not
+    previously begin an expression, so nothing became ambiguous. -}
+testLambdas :: IO Property
+testLambdas = do
+  arrow <- parse "fn(x) => x + 1"
+  block <- parse "fn(x: Int) -> Int {}"
+  empty <- parse "fn() => 1"
+  several <- parse "fn(a, b) => a"
+  asynchronous <- parse "async fn(x) => x"
+  applied <- parse "items.map(fn(x) => x)"
+  missingBody <- codes <$> parse "fn(x) x"
+  pure $ conjoin
+    [ counterexample "an arrow body parses" (validShape arrow === "fn(x)")
+    , counterexample "a block body parses" (validShape block === "fn(x)")
+    , counterexample "no parameters parses" (validShape empty === "fn()")
+    , counterexample "several parameters parse" (validShape several === "fn(a,b)")
+    , counterexample "an async literal parses" (validShape asynchronous === "fn(x)")
+    , counterexample "a literal is an ordinary argument" (validShape applied === "items.map(fn(x))")
+    , counterexample "a missing body names both forms" (missingBody === ["E1032"])
+    ]
 
 testPostfix :: IO Property
 testPostfix = do
@@ -217,6 +242,8 @@ shape (Located _ expression) = case expression of
   UnaryExpression operator operand -> "(" <> operator <> shape operand <> ")"
   BinaryExpression left operator right -> "(" <> shape left <> operator <> shape right <> ")"
   CallExpression callee arguments -> shape callee <> "(" <> Text.intercalate "," (map shape arguments) <> ")"
+  LambdaExpression value ->
+    "fn(" <> Text.intercalate "," (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ")"
   MemberExpression target member -> shape target <> "." <> locatedValue member
   IndexExpression target index -> shape target <> "[" <> shape index <> "]"
   TryExpression target -> shape target <> "?"
