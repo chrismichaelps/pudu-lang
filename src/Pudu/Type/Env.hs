@@ -73,7 +73,7 @@ import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Value
-  ( NominalId (..), Scheme, Type (..), TypeVar (..), integerType, renderType )
+  ( NominalId (..), Scheme (..), Type (..), TypeVar (..), integerType, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -138,6 +138,7 @@ data IntegerConstraint = IntegerConstraint
 {-| @Type.Env.Products — the types a run recorded and what it diagnosed -}
 data CheckerProducts = CheckerProducts
   { producedTypes :: ![(SpanKey, Type)]
+  , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
   }
 
@@ -168,8 +169,23 @@ runChecker (Checker action) =
    in CheckerProducts
         { producedTypes =
             reverse (map (fmap (resolveFinal (stateSubstitution finalState))) (stateTypes finalState))
+        , producedSchemes = finalSchemes finalState
         , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
         }
+
+{-| The module frame as inference left it, with every variable resolved.
+
+    Documentation and search read this rather than the written annotations,
+    so an unannotated declaration still has the signature the compiler gave
+    it, and an annotated one is reported exactly as the compiler understood
+    it rather than as it was spelled. -}
+finalSchemes :: CheckerState -> [(Text, Scheme)]
+finalSchemes state = case reverse (stateFrames state) of
+  [] -> []
+  moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
+ where
+  resolveScheme (name, scheme) =
+    (name, scheme{schemeType = resolveFinal (stateSubstitution state) (schemeType scheme)})
 
 initialState :: CheckerState
 initialState =

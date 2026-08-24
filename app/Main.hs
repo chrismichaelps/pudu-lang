@@ -5,7 +5,10 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler.Program (ProgramResult (..), compileProgram)
+import Pudu.Compiler.Program (ProgramResult (..), compileProgram, programDocs)
+import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
+import Pudu.Doc.Json (encodeIndex)
+import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
@@ -27,6 +30,12 @@ main = do
     [] -> startRepl style Nothing
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
+    ("doc" : "--json" : paths) -> documentPaths JsonOutput paths
+    ("doc" : paths) -> documentPaths TextOutput paths
+    ("search" : query : paths) -> searchPaths (Text.pack query) paths
+    ("search" : []) -> do
+      hPutStrLn stderr "pudu search: no query given"
+      exitFailure
     ("--version" : _) -> TextIO.putStrLn versionLine
     ("version" : _) -> TextIO.putStrLn versionLine
     ("--help" : _) -> usage
@@ -65,6 +74,61 @@ checkOne style path = do
   TextIO.putStrLn (Text.pack path <> ": " <> renderSummary diagnostics)
   pure (hasErrors diagnostics)
 
+{-| @Program.Cli.DocOutput — who the index is being written for.
+
+    Text is for a reader at a terminal; JSON is for an editor or a search
+    server. They are the same index, and nothing is included in one that the
+    other cannot express, so a tool never has to scrape the human form. -}
+data DocOutput = TextOutput | JsonOutput
+  deriving stock (Eq, Show)
+
+{-| Index every named file and its imports.
+
+    Documentation is produced even when the program has errors: a module that
+    fails to check is exactly when a reader most wants to see what it declares,
+    and the entries that did check are still true. Errors are reported to
+    stderr so the index on stdout stays machine-readable. -}
+documentPaths :: DocOutput -> [FilePath] -> IO ()
+documentPaths output paths
+  | null paths = do
+      hPutStrLn stderr "pudu doc: no files given"
+      exitFailure
+  | otherwise = do
+      index <- indexPaths paths
+      case output of
+        JsonOutput -> TextIO.putStrLn (encodeIndex index)
+        TextOutput -> mapM_ describe (indexEntries index)
+ where
+  describe entry = do
+    mapM_ TextIO.putStrLn (renderEntryLines entry)
+    TextIO.putStrLn Text.empty
+
+{-| Answer one query against every named file and its imports. -}
+searchPaths :: Text -> [FilePath] -> IO ()
+searchPaths query paths
+  | null paths = do
+      hPutStrLn stderr "pudu search: no files given"
+      exitFailure
+  | otherwise = do
+      index <- indexPaths paths
+      case searchText query index of
+        [] -> do
+          TextIO.putStrLn ("no results for " <> query)
+          exitFailure
+        matches -> mapM_ (mapM_ TextIO.putStrLn . renderEntryLines . matchEntry) matches
+
+{-| Build one index over every named program, reporting each program's
+    diagnostics to stderr so they cannot corrupt the index on stdout. -}
+indexPaths :: [FilePath] -> IO DocIndex
+indexPaths paths = mconcat <$> mapM one paths
+ where
+  one path = do
+    program <- compileProgram path
+    let diagnostics = programDiagnostics program
+    unless (null diagnostics) $
+      hPutStrLn stderr (Text.unpack (Text.pack path <> ": " <> renderSummary diagnostics))
+    pure (programDocs program)
+
 renderProgramDiagnostics :: RenderStyle -> ProgramResult -> [Diagnostic] -> Text
 renderProgramDiagnostics style program =
   Text.intercalate "\n" . map renderOne
@@ -100,6 +164,10 @@ usage =
     , "  pudu                 start the puduci interactive session"
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
+    , "  pudu doc <file>...   describe every name a program declares"
+    , "  pudu doc --json ...  the same index, for an editor or a search server"
+    , "  pudu search <query> <file>...  find a name, or a type shape such as"
+    , "                       'Array[a] -> a'"
     , "  pudu version         print the version"
     , "  pudu help            print this message"
     ]

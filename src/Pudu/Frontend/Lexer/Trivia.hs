@@ -8,12 +8,16 @@ import Pudu.Frontend.Lexer.Cursor
   , cursorAtEnd, cursorOffset, cursorStartsWith, emitTrivia, markCursor
   , peekScalar, recordDiagnostic
   )
-import Pudu.Frontend.Token (TriviaKind (BlockComment, LineComment, Whitespace))
+import Pudu.Frontend.Token (TriviaKind (BlockComment, DocComment, LineComment, Whitespace))
 
 scanTrivia :: LexerCursor -> Maybe LexerCursor
 scanTrivia cursor
   | maybe False isSpace (peekScalar cursor) = scanWhitespace cursor
+  | cursorStartsWith "////" cursor = scanLineComment cursor
+  | cursorStartsWith "///" cursor = scanDocLine cursor
   | cursorStartsWith "//" cursor = scanLineComment cursor
+  | cursorStartsWith "/**/" cursor = scanBlockComment cursor
+  | cursorStartsWith "/**" cursor = scanBlockComment' DocComment cursor
   | cursorStartsWith "/*" cursor = scanBlockComment cursor
   | otherwise = Nothing
 
@@ -27,29 +31,41 @@ scanLineComment cursor =
       body = consumeWhile (not . isLineBreak) (consumeScalars 2 cursor)
    in emitTrivia mark LineComment body
 
-scanBlockComment :: LexerCursor -> Maybe LexerCursor
-scanBlockComment cursor =
+{-| A `///` line documents what follows it. A `////` ruler does not: a row of
+    slashes is a visual separator, and treating it as documentation would attach
+    a line of noise to the next declaration. -}
+scanDocLine :: LexerCursor -> Maybe LexerCursor
+scanDocLine cursor =
   let mark = markCursor cursor
-   in scanBlockDepth mark 1 (consumeScalars 2 cursor)
+      body = consumeWhile (not . isLineBreak) (consumeScalars 3 cursor)
+   in emitTrivia mark DocComment body
 
-scanBlockDepth :: CursorMark -> Int -> LexerCursor -> Maybe LexerCursor
-scanBlockDepth mark depth cursor
+scanBlockComment :: LexerCursor -> Maybe LexerCursor
+scanBlockComment = scanBlockComment' BlockComment
+
+scanBlockComment' :: TriviaKind -> LexerCursor -> Maybe LexerCursor
+scanBlockComment' kind cursor =
+  let mark = markCursor cursor
+   in scanBlockDepth' kind mark 1 (consumeScalars 2 cursor)
+
+scanBlockDepth' :: TriviaKind -> CursorMark -> Int -> LexerCursor -> Maybe LexerCursor
+scanBlockDepth' kind mark depth cursor
   | cursorAtEnd cursor = emitUnterminated mark cursor
   | cursorStartsWith "/*" cursor =
       let nextDepth = depth + 1
-       in nextDepth `seq` scanBlockDepth mark nextDepth (consumeScalars 2 cursor)
+       in nextDepth `seq` scanBlockDepth' kind mark nextDepth (consumeScalars 2 cursor)
   | cursorStartsWith "*/" cursor =
       let advanced = consumeScalars 2 cursor
        in if depth == 1
-            then emitTrivia mark BlockComment advanced
-            else scanBlockDepth mark (depth - 1) advanced
+            then emitTrivia mark kind advanced
+            else scanBlockDepth' kind mark (depth - 1) advanced
   | otherwise =
       let chunk = consumeWhile isBlockBodyScalar cursor
           advanced =
             if cursorOffset chunk == cursorOffset cursor
               then consumeScalars 1 cursor
               else chunk
-       in scanBlockDepth mark depth advanced
+       in scanBlockDepth' kind mark depth advanced
 
 emitUnterminated :: CursorMark -> LexerCursor -> Maybe LexerCursor
 emitUnterminated mark cursor = do

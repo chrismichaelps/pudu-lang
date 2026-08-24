@@ -115,8 +115,13 @@ data TokenKind
   | Invalid !Text
   deriving stock (Eq, Ord, Show)
 
-{-| @Source.Token.TriviaKind — classifies preserved non-semantic text -}
-data TriviaKind = Whitespace | LineComment | BlockComment
+{-| @Source.Token.TriviaKind — classifies preserved non-semantic text.
+
+    A doc comment is lexed as its own kind rather than recognized later by
+    inspecting comment text: documentation is attached to the declaration that
+    follows it, and deciding that from a prefix at every consumer would put the
+    same rule in several places. -}
+data TriviaKind = Whitespace | LineComment | BlockComment | DocComment
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| @Source.Token.Trivia — preserves comments and whitespace -}

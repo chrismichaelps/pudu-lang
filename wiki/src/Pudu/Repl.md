@@ -35,6 +35,13 @@ runRepl :: ReplOptions -> IO ()
 
 ### Governance
 
+- `:doc` and `:search` read an index built by the session's own compile, so they describe the
+  declaration the reader typed a moment ago. A pre-built index could not know about it.
+- A submission with no tokens of its own — a `///` line and nothing else — is documentation waiting
+  for the declaration it documents, so the prompt keeps reading rather than evaluating nothing.
+- Search results at the prompt are capped at a screenful. A prompt is not a results page: past that
+  the reader has stopped reading and should refine the query.
+
 - Session settings live in an `IORef` reached through `ReplContext` rather than being threaded as
   a loop parameter: they are prompt state, like the completion snapshot beside them, and a command
   that flips one must be visible to the entry evaluated after it.

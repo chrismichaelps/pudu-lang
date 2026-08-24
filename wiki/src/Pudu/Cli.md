@@ -27,11 +27,19 @@ Provide the `pudu` executable: start `puduci`, check files, and report version a
 pudu                 start the puduci interactive session
 pudu repl [file]     start puduci, optionally loading a file
 pudu check <file>... compile files and report diagnostics
+pudu doc <file>...   describe every name a program declares
+pudu doc --json ...  the same index, for an editor or a search server
+pudu search <query> <file>...  find a name, or a type shape
 pudu version         print the version
 pudu help            print usage
 ```
 
 ### Governance
+
+- `pudu doc` and `pudu search` write the index to stdout and every diagnostic to stderr, so a
+  program with errors still yields a machine-readable index rather than a corrupted one.
+- `pudu doc --json` and `pudu doc` emit the same index. Nothing is expressible in the human form
+  that the machine form omits, so a tool never has to scrape the terminal output.
 
 - The entry point decides presentation and the library decides meaning: colour, exit codes, and stream choice live here, and nothing here parses or evaluates Pudu.
 - Colour is used only for an interactive terminal and never when `NO_COLOR` is set, so piped and redirected output stays plain and diffable.

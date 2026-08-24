@@ -33,6 +33,8 @@ import Pudu.Repl.Complete
   , isNameCharacter
   , wantsFilename
   )
+import Pudu.Doc (entriesFor, renderEntryLinesWith)
+import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Repl.Describe
   ( declarationSummary
   , describeInstances
@@ -46,6 +48,7 @@ import Pudu.Repl.Session
   , LoadedModule (..)
   , Session (..)
   , inspectContext
+  , inspectDocs
   , inspectSession
   , contextSummary
   , emptySession
@@ -256,9 +259,17 @@ isComplete text = do
   source <- newSource (SourceName "<interactive>") text
   let LexResult{lexTokens} = lexSource source
       significant = filter (\token -> tokenKind token /= EndOfFile) lexTokens
-  pure (openDepth significant <= 0 && not (awaitsOperand significant))
+  pure
+    ( not (null significant)
+        && openDepth significant <= 0
+        && not (awaitsOperand significant)
+    )
 
-{-| A line that ends with an operator, a separator, or a `=` is still waiting
+{-| A submission with no tokens of its own is documentation waiting for the
+    declaration it documents, so the prompt keeps reading. Typing `/// ...` and
+    pressing enter is the start of an entry, not an entry.
+
+    A line that ends with an operator, a separator, or a `=` is still waiting
     for its right-hand side, which is the same continuation rule the language
     itself applies across line breaks. -}
 awaitsOperand :: [Token] -> Bool
@@ -322,6 +333,31 @@ runCommand context session command = case command of
     lines' <- liftIO (showState context session (Text.strip topic))
     mapM_ say lines'
     pure (Just session)
+  ShowDoc name
+    | Text.null (Text.strip name) -> do
+        say "usage: :doc <name>"
+        pure (Just session)
+    | otherwise -> do
+        index <- liftIO (inspectDocs session)
+        let found = foldMap (entriesFor (Text.strip name)) index
+        mapM_ say $
+          if null found
+            then ["not in scope: '" <> Text.strip name <> "'"]
+            else concatMap (renderEntryLinesWith False) found
+        pure (Just session)
+  Search query
+    | Text.null (Text.strip query) -> do
+        say "usage: :search <name or type>"
+        say "a type query looks like 'Array[a] -> a'"
+        pure (Just session)
+    | otherwise -> do
+        index <- liftIO (inspectDocs session)
+        let found = foldMap (searchText (Text.strip query)) index
+        mapM_ say $
+          if null found
+            then ["no results for " <> Text.strip query]
+            else concatMap (renderEntryLinesWith False . matchEntry) (take searchLimit found)
+        pure (Just session)
   Unknown name -> do
     say ("unknown command ':" <> name <> "'")
     say "use :? for help."
@@ -354,6 +390,13 @@ runCommand context session command = case command of
       Just update -> do
         liftIO (modifyIORef' (contextSettings context) (update wanted))
         pure (Just session)
+
+{-| How many search results one prompt shows.
+
+    A prompt is not a results page: past a screenful the reader has stopped
+    reading and should refine the query instead. -}
+searchLimit :: Int
+searchLimit = 20
 
 {-| A prompt that says nothing has an answer too; say it rather than fall
     silent, so the reader knows the command ran. -}

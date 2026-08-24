@@ -58,6 +58,12 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 
 ### Governance
 
+- A successful type check also produces a [[Doc Index]]. Documentation is a compiler product, not a
+  separate pass over the same files: building it anywhere else would mean re-deriving types that
+  the checker already computed, and letting the two disagree.
+- The index is produced even when the module has errors, because a reader consults documentation
+  most when the code is not working.
+
 - A module-scope `const` is evaluated at compile time, after typing and only when typing succeeded. [[architecture/SEMANTICS]] makes such a constant a compile-time value, so its initializer's failure is a compile diagnostic produced by the same bounded evaluator that runs the program.
 
 - Phase order is fixed: lex, parse, expand macros, resolve names, check types, then evaluate module constants.

@@ -14,6 +14,7 @@ tags: [moc, module]
 - [[src/Pudu/Semantic/_MOC|Semantic modules]] — symbols, scopes, the prelude layering, and name resolution.
 - [[src/Pudu/Type/_MOC|Type modules]] — type formation, unification, and bidirectional checking.
 - [[src/Pudu/Eval/_MOC|Evaluator modules]] — tree-walking execution, runtime values, and bounded control flow.
+- [[src/Pudu/Doc/_MOC|Documentation modules]] — the searchable index of what a program declares, and the type search over it.
 - [[src/Pudu/Repl/_MOC|REPL modules]] — the `puduci` session, its commands, and its structural outline.
 - [[Diagnostic Render]] — human-readable diagnostics with source excerpts and carets.
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
