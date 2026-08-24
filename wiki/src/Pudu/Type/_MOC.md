@@ -14,7 +14,7 @@ tags: [moc, module]
 - [[Type Check Rule]] — the closed operator, call, member, and index rules.
 - [[Type Exhaust]] — match coverage and arm reachability.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
-- [[Type Check Coherence]] — qualified, alpha-normalized duplicate checks over implementation syntax.
+- [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.
 - [[Type Check Pattern]] — checking patterns against the type they match.
 
 Dependency direction: Value → Env → Unify/Formation → Rule/Pattern/Method/Coherence → Check → Boundary.

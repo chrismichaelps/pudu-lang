@@ -34,7 +34,7 @@ parseImpl :: Parser (Located Declaration)
 - Both forms share [[Parser Function]]'s single signature parser, so parameters, defaults, return types, and generics cannot drift between a declaration and its implementation.
 - Traits declare behavior without stored state, so a non-function member reports `E1052` once and recovery skips to the next `fn` or the closing brace rather than diagnosing every token it contains.
 - `impl` has no visibility of its own: an implementation is as public as the trait and type it connects, which is a semantic rule rather than a syntactic marker.
-- Coherence — that the trait or the implementing type is declared in this module — and the prohibition on overlapping implementations belong to later phases.
+- Coherence is deliberately not parser work: [[Type Check Coherence]] enforces module ownership and exact duplicate heads, while general unification overlap remains a later resolved-type rule.
 - Generic parameters and `where` clauses come from [[Parser Generic]] in both forms.
 
 ### Linkage
@@ -48,7 +48,7 @@ For a trait, consume `trait`, the uppercase name, optional generics and `where`,
 
 ## Negative Logic (Prohibited Paths)
 
-- No coherence, overlap, or orphan checking; no default-method resolution; no associated types or constants; no dynamic-dispatch forms; no stored state in traits.
+- No coherence checking in the parser; the typing phase owns orphan and duplicate-head diagnostics. No default-method resolution, associated types or constants, dynamic-dispatch forms, or stored state in traits.
 
 ## Edge Cases
 

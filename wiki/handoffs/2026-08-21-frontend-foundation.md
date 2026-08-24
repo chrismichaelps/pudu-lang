@@ -104,6 +104,10 @@ tags: [handoff]
 - [Role: DNA Engineer → Shadow] Resolved [[Type Check Coherence]] before final implementation: qualified paths stay distinct, implementation generic binders normalize by position, and every admitted type syntax receives a structural key.
 - [Role: Shadow → Forensic Guardian] Implemented `E3015` duplicate-head rejection, structured diagnostic assertions, qualified/generic/non-nominal edge cases, and exactly-once regression coverage. A real `puduci` session rejects both ordinary and alpha-renamed duplicates; development and `-O2` suites pass, and focused alpha-normalization and membership mutants are killed.
 
+- [Role: Architect → DNA Engineer] Corrected issue #28's reproduction to a third module that owns neither side, then fixed the contract to the normative either/or rule: a local trait or the expanded local nominal target owns the implementation.
+- [Role: DNA Engineer → Shadow] Resolved [[Type Check Coherence]] before implementation: record/sum declarations are nominal owners, transparent aliases are expanded with generic substitution, alias cycles are total, and non-nominal roots contribute no target ownership.
+- [Role: Shadow → Forensic Guardian] Implemented `E3014` at the target span with structured message/help assertions and positive/negative coverage for either-side ownership, qualified foreign roots, local/foreign/generic/chained aliases, non-nominal targets, and implementation-binder shadowing of same-named aliases, nominals, and traits. Fresh development and `-O2` suites pass; real `puduci` sessions reject foreign/foreign and accept local-trait/foreign-target heads; the either-side, alias-substitution, alias-as-owner, and binder-precedence mutants are killed.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -119,13 +123,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #28 needs a ready contract for orphan ownership over nominal declaration identity; transparent aliases and non-nominal targets must not bypass it.
+- Issue #29 must replace opaque imported names with cross-module declaration identity before dispatch can find implementations outside the current module.
 - General implementation overlap beyond exact alpha-equivalent heads needs resolved typed implementation identities and unification rather than syntax heuristics.
 - Run the locked GHC 9.14.1 gate in CI; the local toolchain currently provides GHC 9.10.3.
 
 ## Exact next action
 
-Architect: make issue #28 executable from [[grammar/pudu]]'s orphan rule, explicitly defining nominal ownership, transparent aliases, non-nominal targets, diagnostic span/help, and success/failure/regression/mutation gates before updating [[Type Check Coherence]].
+Architect: make issue #29 executable by defining the module graph, imported declaration identities, implementation visibility, cycle behavior, and REPL loading boundary before changing [[Name Resolution]] or [[Type Check Method]].
 
 ## Links
 
