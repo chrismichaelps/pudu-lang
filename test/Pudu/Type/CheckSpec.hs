@@ -16,7 +16,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("built-in text methods are typed exactly", testTextMethods)
+  [ ("a match reads through a borrow", testMatchThroughBorrow)
+  , ("built-in text methods are typed exactly", testTextMethods)
   , ("a discarded collection result is reported", testDiscardedResult)
   , ("literals and operators take their declared types", testOperators)
   , ("integer literals select every width and enforce exact bounds", testIntegerLiterals)
@@ -1327,6 +1328,48 @@ region source needle = case Text.breakOnEnd needle source of
 {-| Text carries a closed set of methods the compiler knows the semantics of,
     so each is typed exactly and an unknown one is reported rather than
     dispatched. -}
+{-| A match reads its subject; it does not consume it. Looking through a borrow
+    is what lets a function take `&Option[T]` and still match on it, which every
+    generic helper in the standard library needs. -}
+testMatchThroughBorrow :: IO Property
+testMatchThroughBorrow = do
+  borrowed <- codes
+    [ "module M"
+    , "fn ask(value: &Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "    case None => false"
+    , "  }"
+    , "}"
+    ]
+  owned <- codes
+    [ "module M"
+    , "fn ask(value: Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "    case None => false"
+    , "  }"
+    , "}"
+    ]
+  stillExhaustive <- codes
+    [ "module M"
+    , "fn ask(value: &Option[Int]) -> Bool {"
+    , "  match value {"
+    , "    case Some(_) => true"
+    , "  }"
+    , "}"
+    ]
+  charCode <- typeOf "'a'.code()"
+  unknownChar <- codesOfExpression "'a'.isDigit()"
+  pure $ conjoin
+    [ counterexample "a borrowed subject matches" (borrowed === [])
+    , counterexample "an owned subject still matches" (owned === [])
+    , counterexample "exhaustiveness is still checked through the borrow"
+        (stillExhaustive === ["E5001"])
+    , counterexample "a character answers for its code" (charCode === "Int")
+    , counterexample "a character has no other method" (unknownChar === ["E3005"])
+    ]
+
 testTextMethods :: IO Property
 testTextMethods = do
   lengthType <- typeOf "\"abc\".length()"

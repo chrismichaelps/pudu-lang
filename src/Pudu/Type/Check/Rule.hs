@@ -303,6 +303,7 @@ memberType spanValue targetType member = do
     VariableType _ -> freshVariable
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
+    NominalType "Char" [] -> charMethodType spanValue member
     NominalType name _ -> do
       fields <- lookupField name
       case fields >>= lookup member of
@@ -316,6 +317,19 @@ memberType spanValue targetType member = do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| The one built-in character method.
+
+    A character answers for its scalar value and nothing else; every
+    classification question belongs to `Std.Char`, where the answer is written
+    in the language and can be read. -}
+charMethodType :: Span -> Text -> Checker Type
+charMethodType spanValue member = case member of
+  "code" -> pure (FunctionTypeValue False [] integerType)
+  _ -> do
+    report "E3005" spanValue ("Char has no method " <> member)
+      (Just "a character answers for its code; ask Std.Char about its kind")
+    pure ErrorType
 
 {-| Built-in text methods, typed exactly.
 

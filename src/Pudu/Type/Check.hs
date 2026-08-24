@@ -314,6 +314,17 @@ adoptDeclaredSignature value inputs result scheme = case schemeType scheme of
   headSpan = locatedSpan (functionName value)
   tie (left, right) = () <$ unify headSpan left right
 
+{-| The type a borrow refers to, following as many references as were written.
+
+    A `&&T` is unusual but writable, and stopping after one would report a
+    confusing mismatch against a type the reader never intended to match on. -}
+throughBorrow :: Type -> Checker Type
+throughBorrow typeValue = do
+  resolved <- zonk typeValue
+  case resolved of
+    ReferenceTypeValue _ referent -> throughBorrow referent
+    _ -> pure resolved
+
 {-| Warn when a statement throws away a value that is the whole point of the
     call that produced it.
 
@@ -732,7 +743,14 @@ inferExpression declared rigid spanValue expression = case expression of
           _ -> zonk unified
   MatchExpression scrutinee arms -> do
     subjectCheckpoint <- integerLiteralCheckpoint
-    subjectType <- checkExpression declared rigid scrutinee
+    borrowed <- checkExpression declared rigid scrutinee
+    {-| A match reads its subject; it does not consume it. Looking through a
+        borrow is what lets a function take `&Option[T]` and still match on it,
+        and every language with both references and patterns does the same. A
+        pattern that binds by value from a borrowed subject is an ownership
+        question, and ownership checking is where it belongs — not here, where
+        the only available answer would be to refuse the match entirely. -}
+    subjectType <- throughBorrow borrowed
     subjectEnd <- integerLiteralCheckpoint
     result <- checkArms declared rigid spanValue subjectType arms
     finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd

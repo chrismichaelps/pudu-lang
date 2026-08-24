@@ -12,7 +12,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
-import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), valueKind)
+import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), valueKind)
 import Pudu.FloatLiteral (FloatWidth, normalizeFloat)
 import Pudu.Source (Span)
 
@@ -126,6 +126,7 @@ readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
+  CharValue _ -> readCharMember spanValue value member
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
@@ -159,6 +160,16 @@ readStringMember spanValue text member =
     Nothing ->
       abortAt (Just spanValue) "E7001"
         ("no method " <> member <> " on text") Nothing
+
+{-| A character answers only for its scalar value. Everything a reader wants to
+    ask about a character — is it a digit, a letter, whitespace — is answered by
+    `Std.Char` in the language, where the answer can be read and argued with. -}
+readCharMember :: Span -> Value -> Text -> Evaluator Value
+readCharMember spanValue character member
+  | member == "code" = pure (CharMethodValue CharCode character)
+  | otherwise =
+      abortAt (Just spanValue) "E7001"
+        ("no method " <> member <> " on a character") Nothing
 
 stringMethods :: [(Text, StringMethod)]
 stringMethods =

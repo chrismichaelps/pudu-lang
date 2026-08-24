@@ -1,0 +1,31 @@
+module Std.Char
+
+/// Whether a character is an ASCII decimal digit.
+export fn isDigit(value: Char) -> Bool { value >= '0' && value <= '9' }
+
+/// Whether a character is an ASCII letter.
+export fn isLetter(value: Char) -> Bool {
+  (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
+}
+
+/// Whether a character is an ASCII letter or decimal digit.
+export fn isAlphanumeric(value: Char) -> Bool { isLetter(value) || isDigit(value) }
+
+/// Whether a character is a space, tab, carriage return, or newline.
+/// The set is the ASCII one: recognising every Unicode space needs a table the
+/// compiler does not yet carry, and claiming to without one would be worse than
+/// saying so.
+export fn isWhitespace(value: Char) -> Bool {
+  value == ' ' || value == '\t' || value == '\r' || value == '\n'
+}
+
+/// Whether an ASCII letter is lower case. A non-letter is not.
+export fn isLower(value: Char) -> Bool { value >= 'a' && value <= 'z' }
+
+/// Whether an ASCII letter is upper case. A non-letter is not.
+export fn isUpper(value: Char) -> Bool { value >= 'A' && value <= 'Z' }
+
+/// The decimal value of a digit, or `None` for anything else.
+export fn toDigit(value: Char) -> Option[Int] {
+  if isDigit(value) { Some(value.code() - '0'.code()) } else { None }
+}

@@ -59,6 +59,7 @@ import Pudu.Eval.Array
 import Pudu.Eval.Value
   ( ArrayMethod (..)
   , Builtin (..)
+  , CharMethod (..)
   , Closure (..)
   , StringMethod (..)
   , Value (..)
@@ -499,6 +500,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
+    CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -534,6 +536,12 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| Apply a built-in character method. -}
+callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
+callCharMethod spanValue method receiver arguments = case (method, receiver, arguments) of
+  (CharCode, CharValue character, []) -> pure (IntValue (fromIntegral (fromEnum character)))
+  _ -> abortAt (Just spanValue) "E7002" "wrong arguments for code" Nothing
 
 {-| Apply a built-in text method.
 
@@ -691,6 +699,7 @@ applyFunction spanValue function arguments = case function of
   FunctionValue closure -> callClosure closure arguments (Just spanValue)
   ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver arguments
   StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
+  CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.

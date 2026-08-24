@@ -30,6 +30,13 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- A match reads its subject through a borrow. A match does not consume what it inspects, and every
+  generic helper that takes `&Option[T]` needs to pattern-match on it; refusing would leave no way
+  to write one except by copying. Whether an arm may *bind* by value out of a borrowed subject is an
+  ownership question, and it belongs to ownership checking rather than here, where the only
+  available answer would be to refuse the match entirely.
+- Exhaustiveness is still checked against the referent, so looking through a borrow relaxes nothing.
+
 - A statement that discards the result of a built-in collection method reports `W3002`. Those
   methods answer with a new collection rather than changing the one they were given, so
   `items.push(value)` written as a statement does nothing at all — and does it silently. There is no

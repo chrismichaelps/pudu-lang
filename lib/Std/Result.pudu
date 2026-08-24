@@ -1,0 +1,59 @@
+module Std.Result
+
+/// Whether the operation succeeded.
+export fn isOk[T, E](value: &Result[T, E]) -> Bool {
+  match value {
+    case Ok(_) => true
+    case Err(_) => false
+  }
+}
+
+/// Whether the operation failed.
+export fn isErr[T, E](value: &Result[T, E]) -> Bool {
+  match value {
+    case Ok(_) => false
+    case Err(_) => true
+  }
+}
+
+/// The value, or a fallback when the operation failed.
+/// The failure is discarded, which is why this is the only form that takes one:
+/// a caller who needs to know why should match, or propagate with `?`.
+export fn unwrapOr[T, E](value: Result[T, E], fallback: T) -> T {
+  match value {
+    case Ok(found) => found
+    case Err(_) => fallback
+  }
+}
+
+/// The value if there is one, forgetting why there was not.
+export fn ok[T, E](value: Result[T, E]) -> Option[T] {
+  match value {
+    case Ok(found) => Some(found)
+    case Err(_) => None
+  }
+}
+
+/// The failure if there was one.
+export fn err[T, E](value: Result[T, E]) -> Option[E] {
+  match value {
+    case Ok(_) => None
+    case Err(problem) => Some(problem)
+  }
+}
+
+/// The first result if it succeeded, otherwise the second.
+export fn orElse[T, E](first: Result[T, E], second: Result[T, E]) -> Result[T, E] {
+  match first {
+    case Ok(found) => Ok(found)
+    case Err(_) => second
+  }
+}
+
+/// The value as an array of nought or one element.
+export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
+  match value {
+    case Ok(found) => [found]
+    case Err(_) => []
+  }
+}

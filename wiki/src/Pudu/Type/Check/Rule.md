@@ -21,6 +21,11 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- `Char` carries exactly one built-in method, `code`. Classification — digit, letter, whitespace —
+  is `Std.Char`'s work in the language, where the answer can be read and argued with. Building it
+  into the compiler would settle Unicode questions the compiler is not yet equipped to answer, and
+  would settle them invisibly.
+
 - `Str` carries a closed set of built-in methods, typed exactly, for the same reason `Array` does:
   a method whose semantics the compiler knows can be given a precise type, and an unknown one is
   reported rather than dispatched.
