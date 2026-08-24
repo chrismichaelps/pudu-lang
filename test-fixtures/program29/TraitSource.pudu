@@ -1,0 +1,5 @@
+module TraitSource
+
+export trait Label {
+  fn label(self: &Self) -> Str = "foreign"
+}

@@ -1,0 +1,3 @@
+module TransitiveLeaf
+
+export type Leaf = { value: Int }

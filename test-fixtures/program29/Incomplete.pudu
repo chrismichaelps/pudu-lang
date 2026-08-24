@@ -1,0 +1,11 @@
+module Incomplete
+
+export type User = { value: Int }
+
+export trait Read {
+  fn read(self: &Self) -> Int
+}
+
+impl Read for User {
+  fn read(self) { 1 }
+}

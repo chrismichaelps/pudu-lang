@@ -113,6 +113,7 @@ tags: [handoff]
 - [Role: Shadow → Forensic Guardian] Implemented namespace-aware export indexing, authoritative selected-import `E2013`, module qualifier bindings, opaque fallback only for unavailable interfaces, and `resolveModuleWith`. The full development and optimized suites pass; filesystem and type-interface work remains local for the next issue #29 partitions.
 - [Role: DNA Engineer → Shadow] Projected parsed modules into body-free type interfaces with canonical nominal/value import maps, private formation shells, complete-signature filtering, and trait-default availability. Focused projection tests cover success, privacy, incomplete signatures, body removal, selected imports, and default metadata.
 - [Role: DNA Engineer → Shadow] Installed dependency interfaces as the checker's outer environment, including canonical functions, constants, constructors, aliases, selected trait implementations, body-free defaults, mixed imported/local ambiguity, qualified collision diagnostics, and exported-constant `E3010` enforcement.
+- [Role: DNA Engineer → Shadow] Added deterministic filesystem graph discovery, canonical module-path validation, structured `E2014`/`E2015`, memoized transitive loading, SCC signature-cycle ordering, retained source provenance, and contextual compilation against whole-program semantic/type interfaces.
 - [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
 - [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
@@ -137,7 +138,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Forensic Guardian: validate checker interface installation and real REPL evidence, then admit filesystem module discovery and SCC checking as the next issue #29 partition.
+Forensic Guardian: validate filesystem/SCC program compilation and real REPL evidence, then route CLI checking and REPL loading through the admitted program context as the final issue #29 partition.
 
 ## Links
 

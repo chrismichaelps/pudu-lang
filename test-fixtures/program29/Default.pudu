@@ -1,0 +1,5 @@
+module Default
+
+import A {User, Label}
+
+fn label(user: User) -> Str { user.label() }
