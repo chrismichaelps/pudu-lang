@@ -108,6 +108,10 @@ tags: [handoff]
 - [Role: DNA Engineer → Shadow] Resolved [[Type Check Coherence]] before implementation: record/sum declarations are nominal owners, transparent aliases are expanded with generic substitution, alias cycles are total, and non-nominal roots contribute no target ownership.
 - [Role: Shadow → Forensic Guardian] Implemented `E3014` at the target span with structured message/help assertions and positive/negative coverage for either-side ownership, qualified foreign roots, local/foreign/generic/chained aliases, non-nominal targets, and implementation-binder shadowing of same-named aliases, nominals, and traits. Fresh development and `-O2` suites pass; real `puduci` sessions reject foreign/foreign and accept local-trait/foreign-target heads; the either-side, alias-substitution, alias-as-owner, and binder-precedence mutants are killed.
 
+- [Role: Architect → DNA Engineer] Resolved issue #29 around a filesystem-owning program compiler, authoritative semantic/type interfaces, canonical module-qualified identities, body-free signatures, in-scope trait implementation visibility, SCC signature cycles, and one shared CLI/REPL load boundary; runtime dependency execution remains explicitly separate.
+- [Role: DNA Engineer → Shadow] Partitioned the oversized vertical slice at its pure semantic seam and completed [[Semantic Interface]] plus facade/resolver mirrors before implementation admission.
+- [Role: Shadow → Forensic Guardian] Implemented namespace-aware export indexing, authoritative selected-import `E2013`, module qualifier bindings, opaque fallback only for unavailable interfaces, and `resolveModuleWith`. The full development and optimized suites pass; filesystem and type-interface work remains local for the next issue #29 partitions.
+
 ## Decided (do not re-litigate)
 
 - Hand-written strict lexer; hand-written recursive descent parser with precedence climbing.
@@ -123,13 +127,13 @@ tags: [handoff]
 
 ## Open / Remaining
 
-- Issue #29 must replace opaque imported names with cross-module declaration identity before dispatch can find implementations outside the current module.
+- Runtime linking must give imported functions, constants, constructors, and methods executable dependency bodies; issue #29 intentionally closes only the static resolution/type boundary.
 - General implementation overlap beyond exact alpha-equivalent heads needs resolved typed implementation identities and unification rather than syntax heuristics.
 - Run the locked GHC 9.14.1 gate in CI; the local toolchain currently provides GHC 9.10.3.
 
 ## Exact next action
 
-Architect: make issue #29 executable by defining the module graph, imported declaration identities, implementation visibility, cycle behavior, and REPL loading boundary before changing [[Name Resolution]] or [[Type Check Method]].
+Architect: rebase the retained issue #29 work after the semantic-interface partition merges, then admit the canonical type/interface partition.
 
 ## Links
 

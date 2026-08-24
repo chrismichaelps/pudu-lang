@@ -30,6 +30,7 @@ data Resolution = Resolution
   , resolutionExports :: ![Symbol]
   }
 resolveModule :: Module -> (Resolution, [Diagnostic])
+resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 ```
 
 ### Governance
@@ -40,7 +41,7 @@ resolveModule :: Module -> (Resolution, [Diagnostic])
 - Duplicate declarations in one frame report `E2001` with a related span pointing at the first declaration.
 - An unresolved value name reports `E2010`; an unresolved type name reports `E2011`. Each is reported at the offending segment, once.
 - Only the first segment of a dotted path is resolved. Later segments are field, member, or variant selections whose meaning requires types, so resolution neither invents nor rejects them.
-- Imports never re-export. An alias binds one external symbol in both namespaces; a selection list binds each named item in both namespaces, because which namespace an imported item belongs to is only knowable once cross-module resolution exists. An imported name that collides with a module declaration is an `E2001` conflict.
+- Imports never re-export. With no export index, `resolveModule` retains isolated-source opaque imports for compatibility. In a loaded program, `resolveModuleWith` delegates to [[Semantic Interface]]: selections bind only exported namespaces, bare/aliased imports bind one qualifier, and private or absent selections report `E2013`.
 - Variants live in their type's namespace, so an unqualified variant name does not resolve unless it was imported explicitly; `Result.Ok` resolves through its type. This follows [[architecture/SEMANTICS]] rather than adding an implicit local re-export.
 - Shadowing a `var`, a parameter, an import, or a type name warns with `W2001`; an immutable local shadowing another immutable local is silent and legal. Borrow-sensitive shadowing rules belong to ownership checking.
 - Scope layering follows Haskell's shape: wired-in names from [[Semantic Prelude]] occupy the outermost frame, the implicitly imported prelude module the next, and the module's own imports and declarations the innermost. An inner layer shadows an outer one silently, so a program that imports nothing still resolves `Int64` and a module may still define its own `Drop`.
@@ -49,7 +50,7 @@ resolveModule :: Module -> (Resolution, [Diagnostic])
 
 ### Linkage
 
-- **Requires:** [[Symbol Model]], [[Scope Model]], [[Semantic Prelude]], [[Syntax Tree]], [[Diagnostic Model]], [[architecture/SEMANTICS]].
+- **Requires:** [[Semantic Interface]], [[Symbol Model]], [[Scope Model]], [[Semantic Prelude]], [[Syntax Tree]], [[Diagnostic Model]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Semantic]] and future typing, ownership, and lowering phases.
 
 ## Algorithm
@@ -58,7 +59,7 @@ Push the builtin frame, collect module declarations and imports into the module 
 
 ## Negative Logic (Prohibited Paths)
 
-- No type inference or checking, no trait method selection, no exhaustiveness, no ownership or initialization analysis, no constant evaluation, no filesystem or cross-module loading, and no reordering of user declarations.
+- No type inference or checking, no trait method selection, no exhaustiveness, no ownership or initialization analysis, no constant evaluation, no filesystem loading, and no reordering of user declarations. Cross-module facts arrive only as a pure export index.
 
 ## Edge Cases
 
@@ -78,6 +79,7 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 - **Q:** What happens to the second and later segments of a path? **A:** They are left unresolved by design. _Rationale:_ member and variant selection needs the receiver's type; guessing here would produce errors that typing would have to contradict. _Rejected:_ resolving segments against the module table; rejecting unknown members.
 - **Q:** Error or warning for shadowing? **A:** Warning `W2001` for the origins [[architecture/SEMANTICS]] lists, silence otherwise. _Rationale:_ the rule is stated as a lint that may harden later, and hardening it now would reject valid programs. _Rejected:_ hard error; unconditional warning on every shadow.
 - **Q:** Do imports resolve to real symbols? **A:** They become opaque external symbols in both namespaces. _Rationale:_ no cross-module loading exists yet, and treating an imported name as unresolved would flood every real program with errors. _Rejected:_ resolving imports against the filesystem; ignoring imports entirely.
+- **Q:** What changes once a program export index exists? **A:** Imports bind authoritative exported namespaces and module qualifiers; the opaque behavior remains only for isolated `runCompile`. _Rationale:_ loaded interfaces make privacy decidable without IO. _Rejected:_ continuing to guess both namespaces; filesystem lookup in resolution.
 
 ## Variants
 

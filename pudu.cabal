@@ -69,6 +69,7 @@ library
     Pudu.Repl.Outline
     Pudu.Repl.Session
     Pudu.Semantic
+    Pudu.Semantic.Interface
     Pudu.Type
     Pudu.Type.Check
     Pudu.Type.Check.Coherence
