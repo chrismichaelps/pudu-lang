@@ -34,7 +34,7 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
-- Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected, so duplicate implementation heads are rejected before bodies finish checking without suppressing useful body diagnostics.
+- Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected. `E3014` rejects a module that owns neither the trait nor the target's expanded nominal declaration, while `E3015` rejects duplicate heads; body checking can continue to preserve useful independent diagnostics.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
@@ -48,7 +48,7 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ## Algorithm
 
-Collect declared shapes and signatures, check trait implementation coherence over the complete declaration list, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
+Collect declared shapes and signatures, check trait implementation ownership and duplicate-head coherence over the complete declaration list, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
 
 ## Negative Logic (Prohibited Paths)
 

@@ -1,20 +1,24 @@
-{-| @Type.Check.Coherence.Module — rejects duplicate implementation heads -}
+{-| @Type.Check.Coherence.Module — enforces implementation ownership and identity -}
 module Pudu.Type.Check.Coherence
   ( checkCoherence
   ) where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, unless)
 import qualified Data.List.NonEmpty as NonEmpty
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Located (Located (..), mapLocated)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Impl (..)
+  , Trait (..)
+  , TypeDeclarationValue (..)
+  , TypeDefinition (..)
   , TypeParam (..)
   , TypeSyntax (..)
   )
@@ -23,6 +27,14 @@ import Pudu.Type.Env (Checker, report)
 
 data ImplementationKey = ImplementationKey !TypeKey !TypeKey
   deriving stock (Eq, Ord)
+
+data Alias = Alias ![Text] !(Located TypeSyntax)
+
+data LocalDeclarations = LocalDeclarations
+  { localTraits :: !(Set Text)
+  , localNominals :: !(Set Text)
+  , localAliases :: !(Map Text Alias)
+  }
 
 data TypeKey
   = NamedKey !ModuleName ![TypeKey]
@@ -34,19 +46,106 @@ data TypeKey
   | InvalidKey
   deriving stock (Eq, Ord)
 
-{-| Reject every implementation head after the first structurally identical
-    head. Generic binders use positional identities, so alpha-renaming cannot
-    evade the duplicate check. -}
+{-| Reject orphan implementations and every implementation head after the
+    first structurally identical head. Generic binders use positional
+    identities, so alpha-renaming cannot evade the duplicate check. -}
 checkCoherence :: [Located Declaration] -> Checker ()
 checkCoherence declarations = do
+  let local = collectLocalDeclarations declarations
+  mapM_ (checkOwnership local) (implementations declarations)
   _ <- foldM checkDuplicate Set.empty (implementationHeads declarations)
   pure ()
+
+implementations :: [Located Declaration] -> [Impl]
+implementations declarations =
+  [ value
+  | Located _ (ImplDeclaration value) <- declarations
+  ]
 
 implementationHeads :: [Located Declaration] -> [(Span, ImplementationKey)]
 implementationHeads declarations =
   [ (locatedSpan (implTarget value), implementationKey value)
-  | Located _ (ImplDeclaration value) <- declarations
+  | value <- implementations declarations
   ]
+
+collectLocalDeclarations :: [Located Declaration] -> LocalDeclarations
+collectLocalDeclarations = foldl' collect emptyLocalDeclarations
+ where
+  collect local (Located _ declaration) = case declaration of
+    TraitDeclaration value ->
+      local
+        { localTraits = Set.insert (locatedValue (traitName value)) (localTraits local)
+        }
+    TypeDeclaration value -> collectType value local
+    _ -> local
+
+emptyLocalDeclarations :: LocalDeclarations
+emptyLocalDeclarations = LocalDeclarations Set.empty Set.empty Map.empty
+
+collectType :: TypeDeclarationValue -> LocalDeclarations -> LocalDeclarations
+collectType value local =
+  let name = locatedValue (typeName value)
+      parameters = map (locatedValue . typeParamName . locatedValue) (typeTypeParams value)
+   in case locatedValue (typeDefinition value) of
+        AliasDefinition target ->
+          local{localAliases = Map.insert name (Alias parameters target) (localAliases local)}
+        RecordDefinition _ ->
+          local{localNominals = Set.insert name (localNominals local)}
+        SumDefinition _ ->
+          local{localNominals = Set.insert name (localNominals local)}
+        InvalidDefinition -> local
+
+checkOwnership :: LocalDeclarations -> Impl -> Checker ()
+checkOwnership local value =
+  let parameters = Set.fromList
+        (map (locatedValue . typeParamName . locatedValue) (implTypeParams value))
+   in unless (ownsRoot parameters (localTraits local) local (locatedValue (implTrait value))
+        || ownsRoot parameters (localNominals local) local (locatedValue (implTarget value))) $
+    report "E3014" (locatedSpan (implTarget value))
+      "orphan implementation: neither the trait nor target type is declared in this module"
+      (Just "move this implementation to the module that declares the trait or target nominal type; aliases do not confer ownership")
+
+{-| Follow transparent local aliases before asking whether the resulting root
+    declaration belongs to this module. The visited set makes malformed alias
+    cycles total without granting them ownership. -}
+ownsRoot :: Set Text -> Set Text -> LocalDeclarations -> TypeSyntax -> Bool
+ownsRoot parameters owners local = go Set.empty
+ where
+  go visited syntax = case syntax of
+    NamedType path arguments -> case unqualifiedName path of
+      Just name
+        | Set.member name parameters -> False
+        | otherwise ->
+            case Map.lookup name (localAliases local) of
+              Just (Alias aliasParameters target)
+                | length aliasParameters == length arguments
+                , Set.notMember name visited ->
+                    let bindings = Map.fromList (zip aliasParameters arguments)
+                     in go (Set.insert name visited)
+                          (substituteType bindings (locatedValue target))
+              _ -> Set.member name owners
+      Nothing -> False
+    _ -> False
+
+substituteType :: Map Text (Located TypeSyntax) -> TypeSyntax -> TypeSyntax
+substituteType bindings syntax = case syntax of
+  NamedType path arguments -> case (unqualifiedName path, arguments) of
+    (Just name, []) -> maybe syntax locatedValue (Map.lookup name bindings)
+    _ -> NamedType path (map (mapLocated (substituteType bindings)) arguments)
+  ReferenceType mutable target ->
+    ReferenceType mutable (mapLocated (substituteType bindings) target)
+  TupleType members -> TupleType (map (mapLocated (substituteType bindings)) members)
+  FunctionType asynchronous inputs result ->
+    FunctionType asynchronous
+      (map (mapLocated (substituteType bindings)) inputs)
+      (mapLocated (substituteType bindings) result)
+  UnitType -> UnitType
+  InvalidType -> InvalidType
+
+unqualifiedName :: ModuleName -> Maybe Text
+unqualifiedName path = case NonEmpty.toList (moduleNameSegments path) of
+  [name] -> Just name
+  _ -> Nothing
 
 implementationKey :: Impl -> ImplementationKey
 implementationKey value =
@@ -75,8 +174,8 @@ typeKey parameters syntax = case syntax of
 
 parameterIndex :: Map.Map Text Int -> ModuleName -> [Located TypeSyntax] -> Maybe Int
 parameterIndex parameters path arguments =
-  case (NonEmpty.toList (moduleNameSegments path), arguments) of
-    ([name], []) -> Map.lookup name parameters
+  case (unqualifiedName path, arguments) of
+    (Just name, []) -> Map.lookup name parameters
     _ -> Nothing
 
 {-| Retain the first key. A later identical key reports once and does not

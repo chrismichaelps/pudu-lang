@@ -500,19 +500,29 @@ testCoherence = do
         , "impl Mark for Local {}"
         ]
       duplicateSource = Text.unlines duplicateProgram
+      orphanProgram =
+        [ "module M"
+        , "import Traits {Mark}"
+        , "import Models {Remote}"
+        , "impl Mark for Remote {}"
+        ]
+      orphanSource = Text.unlines orphanProgram
   duplicateResult <- compile duplicateSource
+  orphanResult <- compile orphanSource
   qualifiedDistinct <- codes
     [ "module M"
     , "import A"
     , "import B"
-    , "impl A.Mark for Int {}"
-    , "impl B.Mark for Int {}"
+    , "type Local = { value: Int }"
+    , "impl A.Mark for Local {}"
+    , "impl B.Mark for Local {}"
     ]
   qualifiedDuplicate <- codes
     [ "module M"
     , "import A"
-    , "impl A.Mark for Int {}"
-    , "impl A.Mark for Int {}"
+    , "type Local = { value: Int }"
+    , "impl A.Mark for Local {}"
+    , "impl A.Mark for Local {}"
     ]
   alphaEquivalent <- codes
     [ "module M"
@@ -542,9 +552,105 @@ testCoherence = do
     , "impl Mark for Local {}"
     , "impl Mark for Local {}"
     ]
+  foreignTraitLocalTarget <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type Local = { value: Int }"
+    , "impl Mark for Local {}"
+    ]
+  foreignTraitLocalSum <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type Local = | First | Second"
+    , "impl Mark for Local {}"
+    ]
+  localTraitForeignTarget <- codes
+    [ "module M"
+    , "import Models {Remote}"
+    , "trait Mark {}"
+    , "impl Mark for Remote {}"
+    ]
+  foreignAlias <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "import Models {Remote}"
+    , "type Alias = Remote"
+    , "impl Mark for Alias {}"
+    ]
+  localAlias <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type Local = { value: Int }"
+    , "type Alias = Local"
+    , "impl Mark for Alias {}"
+    ]
+  genericAlias <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "import Models {Remote}"
+    , "type Identity[T] = T"
+    , "impl Mark for Identity[Remote] {}"
+    ]
+  genericLocalAlias <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type Local = { value: Int }"
+    , "type Identity[T] = T"
+    , "impl Mark for Identity[Local] {}"
+    ]
+  aliasChain <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "import Models {Remote}"
+    , "type First[T] = Second[T]"
+    , "type Second[U] = U"
+    , "impl Mark for First[Remote] {}"
+    ]
+  traitAlias <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type MarkAlias = Mark"
+    , "impl MarkAlias for Int {}"
+    ]
+  foreignNonNominal <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "impl Mark for &Int {}"
+    ]
+  foreignBuiltin <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "impl Mark for Int {}"
+    ]
+  foreignParameter <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "impl[T] Mark for T {}"
+    ]
+  aliasShadow <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type Local = { value: Int }"
+    , "type T = Local"
+    , "impl[T] Mark for T {}"
+    ]
+  nominalShadow <- codes
+    [ "module M"
+    , "import Traits {Mark}"
+    , "type T = { value: Int }"
+    , "impl[T] Mark for T {}"
+    ]
+  traitShadow <- codes
+    [ "module M"
+    , "import Models {Remote}"
+    , "trait T {}"
+    , "impl[T] T for Remote {}"
+    ]
   pure $ conjoin
     [ counterexample "the duplicate diagnostic preserves code message help and target span"
         (duplicateDiagnostic duplicateSource duplicateResult)
+    , counterexample "the orphan diagnostic preserves code message help and target span"
+        (orphanDiagnostic orphanSource orphanResult)
     , counterexample "qualified traits with the same basename stay distinct"
         (qualifiedDistinct === [])
     , counterexample "the same qualified head is rejected"
@@ -557,7 +663,49 @@ testCoherence = do
         (structural === ["E3015"])
     , counterexample "each implementation after the first reports once"
         (repeated === ["E3015", "E3015"])
+    , counterexample "a foreign trait is owned by a local nominal target"
+        (foreignTraitLocalTarget === [])
+    , counterexample "a local sum declaration supplies nominal ownership"
+        (foreignTraitLocalSum === [])
+    , counterexample "a local trait owns a foreign target"
+        (localTraitForeignTarget === [])
+    , counterexample "a local alias cannot launder a foreign target"
+        (foreignAlias === ["E3014"])
+    , counterexample "an alias of a local nominal target remains locally owned"
+        (localAlias === [])
+    , counterexample "generic alias substitution preserves foreign ownership"
+        (genericAlias === ["E3014"])
+    , counterexample "generic alias substitution reaches a local nominal owner"
+        (genericLocalAlias === [])
+    , counterexample "alias chains substitute arguments before ownership"
+        (aliasChain === ["E3014"])
+    , counterexample "a local alias cannot launder a foreign trait"
+        (traitAlias === ["E3014"])
+    , counterexample "a non-nominal target contributes no local owner"
+        (foreignNonNominal === ["E3014"])
+    , counterexample "a built-in target contributes no local owner"
+        (foreignBuiltin === ["E3014"])
+    , counterexample "an implementation parameter contributes no local owner"
+        (foreignParameter === ["E3014"])
+    , counterexample "a parameter shadows a same-named local alias for ownership"
+        (aliasShadow === ["W2001", "E3014"])
+    , counterexample "a parameter shadows a same-named local nominal for ownership"
+        (nominalShadow === ["W2001", "E3014"])
+    , counterexample "a parameter shadows a same-named local trait for ownership"
+        (traitShadow === ["W2001", "E3014"])
     ]
+
+orphanDiagnostic :: Text -> CompileResult -> Property
+orphanDiagnostic source result =
+  case (compileDiagnostics result, region source "Remote") of
+    ([value], Just (expectedStart, _)) -> conjoin
+      [ diagnosticCodeText (diagnosticCode value) === "E3014"
+      , diagnosticMessage value === "orphan implementation: neither the trait nor target type is declared in this module"
+      , diagnosticHelp value === Just "move this implementation to the module that declares the trait or target nominal type; aliases do not confer ownership"
+      , unOffset (spanStart (diagnosticSpan value)) === expectedStart
+      ]
+    (values, location) ->
+      counterexample ("unexpected diagnostics or location: " <> show (length values, location)) False
 
 duplicateDiagnostic :: Text -> CompileResult -> Property
 duplicateDiagnostic source result =
