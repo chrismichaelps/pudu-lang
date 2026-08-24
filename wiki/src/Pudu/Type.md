@@ -26,6 +26,7 @@ Expose the typing phase: check a resolved module and publish the type each expre
 ```haskell
 newtype TypeInfo
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
+checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 typeAt :: TypeInfo -> Span -> Maybe Type
 widestWithin :: Int -> Int -> TypeInfo -> Maybe Type
 renderType :: Type -> Text
@@ -37,10 +38,11 @@ renderType :: Type -> Text
 - `widestWithin` answers for a region rather than an exact span, which is what an interactive entry or an editor selection can supply.
 - Checking runs only on a module whose names all resolved. An unresolved name has no type, and reporting one would explain the same defect twice.
 - Type diagnostics use the `E3xxx` family from [[architecture/SEMANTICS]]'s diagnostic contract.
+- `checkTypesWith` is the loaded-program entry and `checkTypes` delegates with empty imports, preserving isolated compilation behavior.
 
 ### Linkage
 
-- **Requires:** [[Type Check]], [[Type Value]], [[Syntax Tree]], [[Diagnostic Model]], [[Source]].
+- **Requires:** [[Type Check]], [[Type Interface]], [[Type Value]], [[Syntax Tree]], [[Diagnostic Model]], [[Source]].
 - **Consumed by:** [[Compiler Pipeline]] and [[Pudu REPL]].
 
 ## Algorithm

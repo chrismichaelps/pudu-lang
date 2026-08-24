@@ -72,6 +72,7 @@ library
     Pudu.Semantic.Interface
     Pudu.Type
     Pudu.Type.Check
+    Pudu.Type.Check.Import
     Pudu.Type.Check.Coherence
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
@@ -136,6 +137,7 @@ test-suite pudu-test
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec
+    Pudu.Type.Check.ImportSpec
     Pudu.Type.InterfaceSpec
   build-depends:
     base >=4.20 && <4.23,

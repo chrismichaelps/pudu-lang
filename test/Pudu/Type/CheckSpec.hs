@@ -223,11 +223,15 @@ testExportedSignatures = do
   annotated <- codes ["module M", "export fn run(value: Int) -> Int { value }"]
   missingReturn <- codes ["module M", "export fn run(value: Int) { value }"]
   missingParameter <- codes ["module M", "export fn run(value) -> Int { value }"]
+  annotatedBinding <- codes ["module M", "export const ANSWER: Int = 42"]
+  missingBinding <- codes ["module M", "export const ANSWER = 42"]
   privateInferred <- codes ["module M", "fn run(value) { value }"]
   pure $ conjoin
     [ annotated === []
     , missingReturn === ["E3010"]
     , missingParameter === ["E3010"]
+    , annotatedBinding === []
+    , counterexample "an exported binding has a body-free interface type" (missingBinding === ["E3010"])
     , counterexample "a private function may infer" (privateInferred === [])
     ]
 

@@ -4,6 +4,7 @@ module Pudu.Type
   , Type (..)
   , TypeInfo (..)
   , checkTypes
+  , checkTypesWith
   , renderType
   , typeAt
   , widestWithin
@@ -16,6 +17,8 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
+import qualified Pudu.Type.Check as Check
+import Pudu.Type.Interface (ImportTypes)
 import Pudu.Type.Value (Scheme (..), Type (..), renderType)
 
 {-| @Type.Info — the type each checked expression was given, keyed by the span
@@ -27,6 +30,11 @@ newtype TypeInfo = TypeInfo (Map (Int, Int) Type)
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypes moduleValue =
   let (entries, diagnostics) = checkModule moduleValue
+   in (TypeInfo (Map.fromList entries), diagnostics)
+
+checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
+checkTypesWith imported moduleValue =
+  let (entries, diagnostics) = Check.checkModuleWith imported moduleValue
    in (TypeInfo (Map.fromList entries), diagnostics)
 
 {-| The type of the widest expression the checker typed inside a region of the
