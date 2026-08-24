@@ -4,7 +4,7 @@ module Pudu.Type.Check
   , checkModuleWith
   ) where
 
-import Control.Monad (foldM, when)
+import Control.Monad (foldM, unless, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -14,7 +14,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
+  ( Capability (..)
+  , Block (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
@@ -42,6 +43,15 @@ import Pudu.Type.Env
   , inTypeScope
   , integerLiteralCheckpoint
   , ambiguousProviders
+  , UnsafeFrame (..)
+  , enterUnsafe
+  , insideUnsafe
+  , leaveUnsafe
+  , unsafeFunctionCapabilities
+  , useCapability
+  , useUnsafeRegion
+  , warn
+  , recordUnsafeFunction
   , lookupField
   , lookupName
   , recordExpression
@@ -146,6 +156,10 @@ declareFunction declared value = do
     ( polytype rigid (declareBounds declared value)
         (FunctionTypeValue (functionAsync value) inputs result)
     )
+  case functionUnsafe value of
+    Nothing -> pure ()
+    Just capabilities ->
+      recordUnsafeFunction (locatedValue (functionName value)) (map locatedValue capabilities)
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}
@@ -223,9 +237,17 @@ checkFunction declared selfBound value = do
     case functionBody value of
       Nothing -> pure ()
       Just (Located bodySpan body) -> do
+        {-| An unsafe function's body is itself an unsafe region granting what
+            the declaration named, so the body may use those abilities without
+            opening a region of its own. -}
+        mapM_ (enterUnsafe . map locatedValue) (functionUnsafe value)
         actual <- case body of
           BlockBody block -> checkBlock declared rigid block
           ExpressionBody expression -> checkExpression declared rigid expression
+        {-| A function's unsafety is a contract its callers uphold, not a use
+            its body has to justify, so leaving the body's region reports
+            nothing. Only an explicit `unsafe { ... }` earns that warning. -}
+        mapM_ (const (leaveUnsafe >> pure ())) (functionUnsafe value)
         _ <- unify bodySpan result actual
         pure ()
     finalizeIntegerLiterals
@@ -368,6 +390,70 @@ checkCallee declared rigid located@(Located calleeSpan expression) = case expres
             pure applied
   _ -> checkExpression declared rigid located
 
+{-| A granted capability that the region never reached for is noise: it widens
+    the audited surface without buying anything, so leaving the region reports
+    it. -}
+reportUnusedCapabilities :: Span -> Checker ()
+reportUnusedCapabilities spanValue = do
+  frame <- leaveUnsafe
+  case frame of
+    Nothing -> pure ()
+    Just found -> do
+      let granted = frameGranted found
+          unused = [capability | capability <- granted, capability `notElem` frameUsed found]
+      if null granted
+        then
+          when (null (frameUsed found)) $
+            warn "W3001" spanValue "this unsafe region grants abilities nothing in it uses"
+              (Just "remove the unsafe region, or name the capabilities the code needs")
+        else
+          unless (null unused) $
+            warn "W3001" spanValue
+              ("unsafe region grants unused " <> Text.intercalate ", " (map capabilityName unused))
+              (Just "drop the capabilities the region does not need")
+
+capabilityName :: Capability -> Text
+capabilityName capability = case capability of
+  RawCapability -> "raw"
+  ForeignCapability -> "foreign"
+  UncheckedCapability -> "unchecked"
+  NullCapability -> "null"
+
+{-| Calling an unsafe function requires an unsafe context that grants what the
+    declaration asked for. A blanket declaration requires only that some region
+    is open; a declaration that names capabilities requires each of them, which
+    is what makes the requirement auditable rather than all-or-nothing. -}
+checkUnsafeCall :: Span -> Located Expression -> Checker ()
+checkUnsafeCall spanValue callee = case locatedValue callee of
+  NameExpression (name NonEmpty.:| []) -> do
+    declaredCapabilities <- unsafeFunctionCapabilities name
+    case declaredCapabilities of
+      Nothing -> pure ()
+      Just [] -> do
+        open <- insideUnsafe
+        if open
+          then useUnsafeRegion
+          else
+            report "E3023" spanValue
+              ("unsafe function " <> name <> " called outside an unsafe region")
+              (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
+      Just required -> mapM_ (requireCapability spanValue name) required
+  _ -> pure ()
+
+requireCapability :: Span -> Text -> Capability -> Checker ()
+requireCapability spanValue name capability = do
+  granted <- useCapability capability
+  unless granted $
+    report "E3023" spanValue
+      ( "unsafe function " <> name <> " needs the "
+          <> capabilityName capability <> " capability here"
+      )
+      ( Just
+          ( "wrap the call in unsafe(" <> capabilityName capability
+              <> ") { ... }, or declare the caller with that capability"
+          )
+      )
+
 {-| A callee written as `Name.member` may select a method by the trait that
     declares it or by the type that implements it. The written name is mapped to
     the declaration it identifies before the method key is built, so a local
@@ -419,6 +505,7 @@ inferExpression declared rigid spanValue expression = case expression of
     rightType <- checkExpression declared rigid right
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
+    checkUnsafeCall spanValue callee
     calleeType <- checkCallee declared rigid callee
     argumentTypes <- mapM (checkExpression declared rigid) arguments
     callType spanValue calleeType argumentTypes
@@ -455,6 +542,11 @@ inferExpression declared rigid spanValue expression = case expression of
       [] -> freshVariable
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Array" [inferredElementType])
+  UnsafeExpression capabilities body -> do
+    enterUnsafe (map locatedValue capabilities)
+    bodyType <- checkBlock declared rigid body
+    reportUnusedCapabilities spanValue
+    pure bodyType
   RecordExpression path fields -> recordType declared rigid spanValue path fields
   BlockExpression block -> checkBlock declared rigid block
   IfExpression condition thenBlock elseBranch -> do

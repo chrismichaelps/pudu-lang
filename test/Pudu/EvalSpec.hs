@@ -20,7 +20,23 @@ evalProperties =
   , ("runtime failures report exact diagnostics", testFailures)
   , ("async calls stay cold until an async entry awaits them", testAsync)
   , ("borrowing and dereferencing read the same value", testBorrowing)
+  , ("unsafe regions evaluate their block", testUnsafeRegions)
   ]
+
+testUnsafeRegions :: IO Property
+testUnsafeRegions = do
+  blanket <- evaluateWith ["unsafe fn raw() -> Int { 42 }"] "unsafe { raw() }"
+  named <- evaluateWith ["unsafe(raw) fn ptr() -> Int { 7 }"] "unsafe(raw) { ptr() * 2 }"
+  nested <- evaluateWith
+    [ "unsafe fn inner() -> Int { 3 }"
+    , "unsafe fn outer() -> Int { inner() + 1 }"
+    ]
+    "unsafe { outer() }"
+  pure $ conjoin
+    [ counterexample "a region yields its block's value" (blanket === "42")
+    , counterexample "a named region evaluates the same" (named === "14")
+    , counterexample "an unsafe function may call another" (nested === "4")
+    ]
 
 testBorrowing :: IO Property
 testBorrowing = do

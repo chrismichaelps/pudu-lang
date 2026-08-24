@@ -29,7 +29,8 @@ import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
-import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..))
+import qualified Pudu.Frontend.Token as Token
+import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
 import Pudu.Semantic (Resolution (..), Symbol (..), boundSymbolNames, moduleSymbolNames)
 import Pudu.Type (Type, TypeInfo, widestWithin)
 import Pudu.Source (Source, SourceName (SourceName), newSource, spanEnd, unOffset)
@@ -91,8 +92,9 @@ emptySession =
     keywords are statements; everything else is an expression. -}
 classifyEntry :: [Token] -> EntryKind
 classifyEntry tokens = case dropWhile isEndOfFile tokens of
-  token : _ -> case tokenKind token of
+  token : rest -> case tokenKind token of
     Keyword KwImport -> ImportEntry
+    Keyword KwUnsafe -> if declaresFunction rest then DeclarationEntry else ExpressionEntry
     Keyword keyword | isDeclarationKeyword keyword -> DeclarationEntry
     Keyword keyword | isStatementKeyword keyword -> StatementEntry
     _ -> ExpressionEntry
@@ -100,9 +102,29 @@ classifyEntry tokens = case dropWhile isEndOfFile tokens of
  where
   isEndOfFile token = tokenKind token == EndOfFile
 
+{-| `unsafe` opens a region in expression position and modifies a declaration in
+    declaration position, so the entry is classified by what follows its
+    optional capability list. -}
+declaresFunction :: [Token] -> Bool
+declaresFunction tokens = case map tokenKind (afterCapabilities tokens) of
+  Keyword KwFn : _ -> True
+  Keyword KwAsync : _ -> True
+  _ -> False
+
+afterCapabilities :: [Token] -> [Token]
+afterCapabilities tokens = case tokens of
+  token : rest
+    | isSymbolKind "(" (tokenKind token) -> drop 1 (dropWhile (not . isSymbolKind ")" . tokenKind) rest)
+  _ -> tokens
+
+isSymbolKind :: Text -> TokenKind -> Bool
+isSymbolKind expected kind = case kind of
+  Token.Symbol symbol -> symbolText symbol == expected
+  _ -> False
+
 isDeclarationKeyword :: Keyword -> Bool
 isDeclarationKeyword keyword =
-  keyword `elem` [KwExport, KwConst, KwFn, KwAsync, KwType, KwTrait, KwImpl]
+  keyword `elem` [KwExport, KwConst, KwFn, KwAsync, KwType, KwTrait, KwImpl, KwUnsafe]
 
 isStatementKeyword :: Keyword -> Bool
 isStatementKeyword keyword =

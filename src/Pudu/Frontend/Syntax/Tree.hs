@@ -2,6 +2,7 @@
 module Pudu.Frontend.Syntax.Tree
   ( BindingKind (..)
   , Block (..)
+  , Capability (..)
   , Constraint (..)
   , Declaration (..)
   , Expression (..)
@@ -55,6 +56,18 @@ data Import = Import
 data Visibility = Private | Exported
   deriving stock (Eq, Ord, Show)
 
+{-| @Program.Syntax.Capability — one unchecked ability an unsafe context grants.
+
+    The set is the one [[grammar/pudu]]'s unsafe boundary enumerates, so naming
+    a capability says exactly which invariant the reader is taking on rather
+    than switching every check off at once. -}
+data Capability
+  = RawCapability
+  | ForeignCapability
+  | UncheckedCapability
+  | NullCapability
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+
 {-| @Program.Syntax.BindingKind — distinguishes binding lifetime policy -}
 data BindingKind = Immutable | Mutable | CompileTime
   deriving stock (Eq, Ord, Show)
@@ -80,6 +93,7 @@ data Declaration
 data Function = Function
   { functionVisibility :: !Visibility
   , functionAsync :: !Bool
+  , functionUnsafe :: !(Maybe [Located Capability])
   , functionName :: !(Located Text)
   , functionTypeParams :: ![Located TypeParam]
   , functionParameters :: ![Located Parameter]
@@ -263,6 +277,7 @@ data Expression
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]
   | ArrayExpression ![Located Expression]
+  | UnsafeExpression ![Located Capability] !(Located Block)
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))

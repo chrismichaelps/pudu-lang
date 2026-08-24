@@ -35,6 +35,7 @@ import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Block
+  , Capability (..)
   , Expression (..)
   , FieldInit (..)
   , Literal (..)
@@ -42,7 +43,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Frontend.Token
   ( Keyword (KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFor, KwIf, KwIn, KwLoop
-    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwTask, KwTrue, KwWhile)
+    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwTask, KwTrue, KwUnsafe, KwWhile)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
@@ -92,6 +93,7 @@ parsePrefix blockParser = do
     Keyword KwIf -> parseIf blockParser
     Keyword KwMatch -> parseMatch blockParser
     Keyword KwWhile -> parseWhile blockParser
+    Keyword KwUnsafe -> parseUnsafeBlock blockParser
     Keyword KwLoop -> parseLoop blockParser
     Keyword KwFor -> parseFor blockParser
     Identifier name -> parseNameOrRecord blockParser token name
@@ -103,6 +105,69 @@ parsePrefix blockParser = do
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
     _ -> invalidPrefix token
+
+{-| Parse `unsafe { ... }` or `unsafe(raw, null) { ... }`.
+
+    A capability list names exactly which unchecked abilities the block grants;
+    an empty list grants all of them. Naming them is what makes an unsafe region
+    auditable: the reader sees which invariant is in play without reading the
+    body. -}
+parseUnsafeBlock :: BlockParser -> Parser (Located Expression)
+parseUnsafeBlock blockParser = do
+  keyword <- advanceToken
+  capabilities <- parseCapabilityAnnotation
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (UnsafeExpression capabilities body)
+    )
+
+parseCapabilityAnnotation :: Parser [Located Capability]
+parseCapabilityAnnotation = do
+  opening <- matchSymbol "("
+  case opening of
+    Nothing -> pure []
+    Just _ -> do
+      capabilities <- capabilityList []
+      _ <- expectSymbol ")" "to close the capability list"
+      pure capabilities
+
+capabilityList :: [Located Capability] -> Parser [Located Capability]
+capabilityList reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      capability <- oneCapability
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          comma <- matchSymbol ","
+          let collected = maybe reversed (: reversed) capability
+          case comma of
+            Nothing -> pure (reverse collected)
+            Just _ -> capabilityList collected
+
+oneCapability :: Parser (Maybe (Located Capability))
+oneCapability = do
+  token <- advanceToken
+  case capabilityFor (tokenKind token) of
+    Just capability -> pure (Just (Located (tokenSpan token) capability))
+    Nothing -> do
+      emitParseError "E1044" (tokenSpan token) "unknown unsafe capability"
+        (Just "name one of raw, foreign, unchecked, or null")
+      pure Nothing
+
+capabilityFor :: TokenKind -> Maybe Capability
+capabilityFor kind = case kind of
+  Identifier "raw" -> Just RawCapability
+  Identifier "foreign" -> Just ForeignCapability
+  Identifier "unchecked" -> Just UncheckedCapability
+  Keyword KwNull -> Just NullCapability
+  _ -> Nothing
 
 {-| An uppercase name directly followed by `{` builds a record, when records are
     admitted here; every other name is a plain reference. -}

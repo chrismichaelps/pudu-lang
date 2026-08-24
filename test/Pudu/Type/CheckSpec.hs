@@ -42,6 +42,7 @@ typeProperties =
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("reserved types are refused until their decision is made", testReservedTypes)
+  , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -996,6 +997,49 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+unsafeProgram :: [Text]
+unsafeProgram =
+  [ "module M"
+  , "unsafe fn blanket() -> Int { 42 }"
+  , "unsafe(raw) fn rawOnly() -> Int { 7 }"
+  ]
+
+testUnsafe :: IO Property
+testUnsafe = do
+  declaring <- codes unsafeProgram
+  fromSafe <- codes (unsafeProgram <> ["fn run() -> Int { blanket() }"])
+  wrapped <- codes (unsafeProgram <> ["fn run() -> Int { unsafe { blanket() } }"])
+  precise <- codes (unsafeProgram <> ["fn run() -> Int { unsafe(raw) { rawOnly() } }"])
+  wrongCapability <- codes (unsafeProgram <> ["fn run() -> Int { unsafe(null) { rawOnly() } }"])
+  blanketGrantsAll <- codes (unsafeProgram <> ["fn run() -> Int { unsafe { rawOnly() } }"])
+  fromUnsafeFunction <- codes (unsafeProgram <> ["unsafe fn run() -> Int { blanket() }"])
+  unusedRegion <- codes (unsafeProgram <> ["fn run() -> Int { unsafe { 1 } }"])
+  unusedCapability <- codes (unsafeProgram <>
+    ["fn run() -> Int { unsafe(raw, null) { rawOnly() } }"])
+  regionType <- typeOfIn (drop 1 unsafeProgram <> ["fn run() -> Int { unsafe { blanket() } }"])
+    "unsafe { blanket() }"
+  nullOutside <- codes ["module M", "fn run() -> Int { null }"]
+  nullInside <- codes ["module M", "fn run() -> Int { unsafe(null) { null } }"]
+  unknownCapability <- codes (unsafeProgram <>
+    ["fn run() -> Int { unsafe(bogus) { blanket() } }"])
+  pure $ conjoin
+    [ counterexample "declaring is clean" (declaring === [])
+    , counterexample "a safe caller is rejected" (fromSafe === ["E3023"])
+    , counterexample "a blanket region admits a blanket call" (wrapped === [])
+    , counterexample "a named region admits the call it grants" (precise === [])
+    , counterexample "a region without the capability is rejected"
+        (wrongCapability === ["W3001", "E3023"])
+    , counterexample "a blanket region grants every capability" (blanketGrantsAll === [])
+    , counterexample "an unsafe function's body is a region" (fromUnsafeFunction === [])
+    , counterexample "a region nothing used is reported" (unusedRegion === ["W3001"])
+    , counterexample "an unused capability is reported" (unusedCapability === ["W3001"])
+    , counterexample "a region has the type of its block" (regionType === "Int")
+    , counterexample "null needs its capability" (nullOutside === ["E3024"])
+    , counterexample "null still has no type inside" (nullInside === ["E3024"])
+    , counterexample "the capability vocabulary is closed"
+        (unknownCapability === ["E1044"])
+    ]
 
 testReservedTypes :: IO Property
 testReservedTypes = do

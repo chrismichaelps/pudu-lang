@@ -112,6 +112,7 @@ parseTopDeclaration kind = do
     Keyword KwVar -> rejectedModuleBinding visibility
     Keyword KwFn -> parseFunction visibility
     Keyword KwAsync -> parseFunction visibility
+    Keyword KwUnsafe -> parseFunction visibility
     Keyword KwType -> parseTypeDeclaration visibility
     Keyword KwTrait -> parseTrait visibility
     Keyword KwImpl -> parseImpl

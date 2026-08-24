@@ -26,8 +26,10 @@ import Pudu.FloatLiteral
 import Pudu.Source (Span)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
+import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Type.Env
   ( Checker
+  , useCapability
   , addObligation
   , constrainIntegerLiteral
   , freshVariable
@@ -72,7 +74,7 @@ literalType spanValue literal = case literal of
   Tree.StringValue _ -> pure stringType
   Tree.CharValue _ -> pure charType
   Tree.BoolValue _ -> pure boolType
-  Tree.NullValue -> pure ErrorType
+  Tree.NullValue -> nullLiteralType spanValue
 
 {-| A name's type comes from its declaration. A declared generic is
     instantiated with fresh variables at every use, which is what makes one
@@ -343,6 +345,24 @@ arrayMethodType spanValue member element = case member of
  where
   arrayType = NominalType "Array" [element]
   arrayOf t = NominalType "Array" [t]
+
+{-| `null` lives behind the unsafe boundary: [[grammar/pudu]] permits it only in
+    a foreign-interface expression, and it has no type until raw pointers exist.
+    Outside a granting region the diagnostic names the region to open; inside
+    one it names the slice that will give `null` a type, so a reader who did
+    everything right still learns why it does not work yet. -}
+nullLiteralType :: Span -> Checker Type
+nullLiteralType spanValue = do
+  granted <- useCapability NullCapability
+  if granted
+    then do
+      report "E3024" spanValue "null has no type until raw pointers exist"
+        (Just "the foreign-interface slice introduces the pointer type null inhabits")
+      pure ErrorType
+    else do
+      report "E3024" spanValue "null is only available inside an unsafe region"
+        (Just "open unsafe(null) { ... }; null is a foreign-interface value, not an ordinary one")
+      pure ErrorType
 
 {-| A method reached through a bound: the receiver is a parameter, and the trait
     its declaration named supplies the member. When two or more bounds provide

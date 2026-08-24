@@ -1,6 +1,14 @@
 {-| @Type.Env.Module — owns checker state and declared signatures -}
 module Pudu.Type.Env
   ( Checker
+  , UnsafeFrame (..)
+  , enterUnsafe
+  , insideUnsafe
+  , leaveUnsafe
+  , recordUnsafeFunction
+  , unsafeFunctionCapabilities
+  , useCapability
+  , useUnsafeRegion
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
@@ -57,6 +65,7 @@ import Pudu.Diagnostic
   , sortDiagnostics
   , withHelp
   )
+import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.IntegerLiteral (fitsIntegerType)
 import Pudu.Type.Value
@@ -104,6 +113,8 @@ data CheckerState = CheckerState
   , stateMethodProviders :: !(Map Text NominalId)
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateReservedSpans :: ![(Int, Int)]
+  , stateUnsafeFrames :: ![UnsafeFrame]
+  , stateUnsafeFunctions :: !(Map Text [Capability])
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateRigidBounds :: !(Map Text [NominalId])
@@ -166,6 +177,8 @@ initialState =
     , stateMethodProviders = Map.empty
     , stateAmbiguousMethods = Map.empty
     , stateReservedSpans = []
+    , stateUnsafeFrames = []
+    , stateUnsafeFunctions = Map.empty
     , stateObligations = []
     , stateIntegerLiterals = []
     , stateRigidBounds = Map.empty
@@ -459,6 +472,79 @@ recordMethodProvider key traitIdentity =
 methodProvider :: Text -> Checker (Maybe NominalId)
 methodProvider key =
   Checker $ \state -> (Map.lookup key (stateMethodProviders state), state)
+
+{-| @Type.Env.UnsafeFrame — one unsafe region and what it has actually used.
+
+    Granting a capability nothing needs is worth reporting, so a frame records
+    both what it offered and what the region reached for. -}
+data UnsafeFrame = UnsafeFrame
+  { frameGranted :: ![Capability]
+  , frameUsed :: ![Capability]
+  }
+  deriving stock (Eq, Show)
+
+{-| Enter an unsafe region. An empty grant list is the blanket form and offers
+    every capability; naming some offers exactly those. -}
+enterUnsafe :: [Capability] -> Checker ()
+enterUnsafe granted =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateUnsafeFrames =
+            UnsafeFrame{frameGranted = granted, frameUsed = []} : stateUnsafeFrames state
+        }
+    )
+
+{-| Leave the innermost unsafe region, reporting what it granted and used. -}
+leaveUnsafe :: Checker (Maybe UnsafeFrame)
+leaveUnsafe =
+  Checker $ \state -> case stateUnsafeFrames state of
+    [] -> (Nothing, state)
+    frame : rest -> (Just frame, state{stateUnsafeFrames = rest})
+
+{-| Whether any enclosing region grants the capability, marking it used in the
+    innermost region that offers it. -}
+useCapability :: Capability -> Checker Bool
+useCapability capability =
+  Checker $ \state ->
+    let (found, frames) = markFirst (stateUnsafeFrames state)
+     in (found, state{stateUnsafeFrames = frames})
+ where
+  markFirst frames = case frames of
+    [] -> (False, [])
+    frame : rest
+      | grants frame ->
+          (True, frame{frameUsed = capability : frameUsed frame} : rest)
+      | otherwise ->
+          let (found, marked) = markFirst rest in (found, frame : marked)
+  grants frame = null (frameGranted frame) || capability `elem` frameGranted frame
+
+{-| Whether any unsafe region is open at all, which is what a blanket unsafe
+    function requires of its caller. -}
+insideUnsafe :: Checker Bool
+insideUnsafe = Checker $ \state -> (not (null (stateUnsafeFrames state)), state)
+
+{-| Mark the innermost region as exercised, which is what a blanket unsafe call
+    does: it uses the region without naming a capability. A blanket region
+    grants everything, so everything counts as used. -}
+useUnsafeRegion :: Checker ()
+useUnsafeRegion =
+  Checker $ \state -> case stateUnsafeFrames state of
+    [] -> ((), state)
+    frame : rest ->
+      let exercised
+            | null (frameGranted frame) = [minBound .. maxBound]
+            | otherwise = frameGranted frame
+       in ((), state{stateUnsafeFrames = frame{frameUsed = exercised <> frameUsed frame} : rest})
+
+recordUnsafeFunction :: Text -> [Capability] -> Checker ()
+recordUnsafeFunction name capabilities =
+  Checker $ \state ->
+    ((), state{stateUnsafeFunctions = Map.insert name capabilities (stateUnsafeFunctions state)})
+
+unsafeFunctionCapabilities :: Text -> Checker (Maybe [Capability])
+unsafeFunctionCapabilities name =
+  Checker $ \state -> (Map.lookup name (stateUnsafeFunctions state), state)
 
 {-| Report a reserved type at most once per occurrence. A signature is formed
     both when it is declared and when its body is checked, and one written
