@@ -231,6 +231,7 @@ shape (Located _ expression) = case expression of
   ForExpression binder iterated _ ->
     "for " <> patternShape binder <> " in " <> shape iterated
   TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
+  ArrayExpression members -> "[" <> Text.intercalate "," (map shape members) <> "]"
   RecordExpression path fields ->
     moduleNameText path <> "{" <> Text.intercalate "," (map fieldInitShape fields) <> "}"
   InvalidExpression -> "invalid"

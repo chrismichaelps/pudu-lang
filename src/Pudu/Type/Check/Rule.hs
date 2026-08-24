@@ -160,7 +160,26 @@ unaryType spanValue operator operand = case operator of
     pure operand
   "&" -> pure (ReferenceTypeValue False operand)
   "&mut" -> pure (ReferenceTypeValue True operand)
+  "*" -> dereferenceType spanValue operand
   _ -> pure operand
+
+{-| `*r` reads through a borrow. There is no implicit conversion in either
+    direction, so dereferencing anything that is not a reference is a mistake
+    the reader must fix rather than one the checker quietly absorbs. -}
+dereferenceType :: Span -> Type -> Checker Type
+dereferenceType spanValue operand = do
+  resolved <- zonk operand
+  case resolved of
+    ReferenceTypeValue _ target -> pure target
+    ErrorType -> pure ErrorType
+    VariableType _ -> do
+      target <- freshVariable
+      _ <- unify spanValue (ReferenceTypeValue False target) resolved
+      pure target
+    _ -> do
+      report "E3020" spanValue ("cannot dereference " <> renderType resolved)
+        (Just "dereference a value of reference type, such as one bound by &")
+      pure ErrorType
 
 {-| Operator typing follows [[grammar/pudu]]'s bands: arithmetic keeps its
     operand type, comparison and equality produce `Bool`, boolean operators

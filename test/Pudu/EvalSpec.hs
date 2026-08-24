@@ -19,7 +19,34 @@ evalProperties =
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
   , ("async calls stay cold until an async entry awaits them", testAsync)
+  , ("borrowing and dereferencing read the same value", testBorrowing)
   ]
+
+testBorrowing :: IO Property
+testBorrowing = do
+  readThrough <- evaluateStatements
+    [ "let value = 7"
+    , "let borrowed = &value"
+    , "*borrowed"
+    ]
+  fieldThrough <- evaluateWith
+    [ "type User = { name: Str }" ]
+    "(*(&User{name: \"ada\"})).name"
+  selfDeref <- evaluateWith
+    [ "type User = { name: Str }"
+    , "trait Clone {"
+    , "  fn duplicate(self: &Self) -> Self"
+    , "}"
+    , "impl Clone for User {"
+    , "  fn duplicate(self: &Self) -> Self { *self }"
+    , "}"
+    ]
+    "User{name: \"ada\"}.duplicate().name"
+  pure $ conjoin
+    [ counterexample "a dereference reads the borrowed value" (readThrough === "7")
+    , counterexample "a field is reached through a dereference" (fieldThrough === "\"ada\"")
+    , counterexample "&Self dereferences to the receiver" (selfDeref === "\"ada\"")
+    ]
 
 testArithmetic :: IO Property
 testArithmetic = do

@@ -16,6 +16,9 @@ import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), valueKind)
 import Pudu.FloatLiteral (FloatWidth, normalizeFloat)
 import Pudu.Source (Span)
 
+{-| Borrowing and dereferencing are identities at run time: a reference is the
+    value it refers to, and only typing distinguishes them. The distinction
+    becomes observable when ownership checking and a store exist. -}
 applyUnary :: Span -> Text -> Value -> Evaluator Value
 applyUnary spanValue operator value = case (operator, value) of
   ("-", IntValue number) -> pure (IntValue (negate number))
@@ -24,6 +27,7 @@ applyUnary spanValue operator value = case (operator, value) of
   ("~", IntValue number) -> pure (IntValue (complement number))
   ("&", _) -> pure value
   ("&mut", _) -> pure value
+  ("*", _) -> pure value
   _ ->
     abortAt (Just spanValue) "E7001"
       ("cannot apply " <> operator <> " to a " <> valueKind value) Nothing

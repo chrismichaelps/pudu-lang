@@ -25,6 +25,8 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- A mismatch whose two types differ only by a borrow names the operator that closes the gap: `*` to read the value, `&` to pass a reference. The language converts in neither direction on its own, so the reader has to know which way to write it.
+
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.

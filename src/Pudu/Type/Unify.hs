@@ -102,8 +102,24 @@ mismatch spanValue expected actual = do
   resolvedActual <- zonk actual
   let (expectedText, actualText) = collisionAware resolvedExpected resolvedActual
   report "E3001" spanValue ("expected " <> expectedText <> ", found " <> actualText)
-    (Just "change the value, or change the declared type it must match")
+    (borrowGuidance resolvedExpected resolvedActual)
   pure ErrorType
+
+{-| When only a borrow separates the two types, the help names the operator that
+    closes the gap. Pudu converts in neither direction on its own, so the reader
+    needs to know which way to write it. -}
+borrowGuidance :: Type -> Type -> Maybe Text
+borrowGuidance expected actual = case (expected, actual) of
+  (_, ReferenceTypeValue _ target)
+    | sameShape expected target -> Just "dereference the borrow with * to read the value"
+  (ReferenceTypeValue _ target, _)
+    | sameShape target actual -> Just "borrow the value with & to pass a reference"
+  _ -> Just "change the value, or change the declared type it must match"
+
+{-| Compare without inference variables resolved further: the two types have
+    already been zonked, so structural equality is the honest test. -}
+sameShape :: Type -> Type -> Bool
+sameShape = (==)
 
 collisionAware :: Type -> Type -> (Text, Text)
 collisionAware expected actual = case (expected, actual) of

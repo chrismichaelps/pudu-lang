@@ -68,6 +68,7 @@ outlineExpression (Located _ expression) = case expression of
   TryExpression target -> outlineExpression target <> "?"
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
+  ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
   RecordExpression path fields ->
     moduleNameText path <> "{" <> Text.intercalate ", " (map outlineFieldInit fields) <> "}"
   BlockExpression block -> "{ " <> Text.intercalate "; " (outlineBlock block) <> " }"
