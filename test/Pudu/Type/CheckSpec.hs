@@ -43,6 +43,7 @@ typeProperties =
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("reserved types are refused until their decision is made", testReservedTypes)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
+  , ("compile-time functions keep their evaluator pure", testComptime)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -997,6 +998,52 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+comptimeProgram :: [Text]
+comptimeProgram =
+  [ "module M"
+  , "comptime fn double(n: Int) -> Int { n * 2 }"
+  , "fn runtime(n: Int) -> Int { n + 1 }"
+  ]
+
+testComptime :: IO Property
+testComptime = do
+  declaring <- codes comptimeProgram
+  chained <- codes (comptimeProgram <>
+    ["comptime fn quadruple(n: Int) -> Int { double(double(n)) }"])
+  reachesRuntime <- codes (comptimeProgram <>
+    ["comptime fn impure(n: Int) -> Int { runtime(n) }"])
+  asyncComptime <- codes (comptimeProgram <>
+    ["comptime async fn spawned() -> Int { 1 }"])
+  unsafeComptime <- codes (comptimeProgram <>
+    ["comptime unsafe fn unchecked() -> Int { 1 }"])
+  calledAtRuntime <- codes (comptimeProgram <> ["fn run() -> Int { double(5) }"])
+  constantFolds <- codes (comptimeProgram <> ["const VALUE: Int = double(21)"])
+  constantFails <- codes ["module M", "const VALUE: Int = 1 / 0"]
+  constantBudget <- codes
+    [ "module M"
+    , "fn spin() -> Int {"
+    , "  var total = 0"
+    , "  loop { total = total + 1 }"
+    , "  total"
+    , "}"
+    , "const VALUE: Int = spin()"
+    ]
+  builtinsAllowed <- codes (comptimeProgram <>
+    ["comptime fn wrap(n: Int) -> Option[Int] { Some(n) }"])
+  pure $ conjoin
+    [ counterexample "declaring is clean" (declaring === [])
+    , counterexample "compile-time code may call compile-time code" (chained === [])
+    , counterexample "it may not call a runtime function" (reachesRuntime === ["E3025"])
+    , counterexample "it may not be async" (asyncComptime === ["E3025"])
+    , counterexample "it may not be unsafe" (unsafeComptime === ["E3025"])
+    , counterexample "runtime code may still call it" (calledAtRuntime === [])
+    , counterexample "a constant folds at compile time" (constantFolds === [])
+    , counterexample "a failing constant fails the compile" (constantFails === ["E7004"])
+    , counterexample "an unbounded constant exhausts the budget"
+        (constantBudget === ["E7002"])
+    , counterexample "wired-in constructors stay reachable" (builtinsAllowed === [])
+    ]
 
 unsafeProgram :: [Text]
 unsafeProgram =

@@ -113,6 +113,7 @@ parseTopDeclaration kind = do
     Keyword KwFn -> parseFunction visibility
     Keyword KwAsync -> parseFunction visibility
     Keyword KwUnsafe -> parseFunction visibility
+    Keyword KwComptime -> parseFunction visibility
     Keyword KwType -> parseTypeDeclaration visibility
     Keyword KwTrait -> parseTrait visibility
     Keyword KwImpl -> parseImpl
@@ -133,7 +134,7 @@ rejectedModuleBinding visibility = do
     with `type` in [[grammar/pudu]]. -}
 isReservedDeclaration :: Keyword -> Bool
 isReservedDeclaration keyword =
-  keyword `elem` [KwEnum, KwStruct, KwMacro, KwComptime]
+  keyword `elem` [KwEnum, KwStruct, KwMacro]
 
 {-| Reserved declaration forms are diagnosed and synchronized, never accepted
     as valid syntax for a construct the compiler cannot yet represent. -}

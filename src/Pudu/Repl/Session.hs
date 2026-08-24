@@ -124,7 +124,7 @@ isSymbolKind expected kind = case kind of
 
 isDeclarationKeyword :: Keyword -> Bool
 isDeclarationKeyword keyword =
-  keyword `elem` [KwExport, KwConst, KwFn, KwAsync, KwType, KwTrait, KwImpl, KwUnsafe]
+  keyword `elem` [KwExport, KwConst, KwFn, KwAsync, KwType, KwTrait, KwImpl, KwUnsafe, KwComptime]
 
 isStatementKeyword :: Keyword -> Bool
 isStatementKeyword keyword =

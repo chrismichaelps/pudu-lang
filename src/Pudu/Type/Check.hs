@@ -52,6 +52,10 @@ import Pudu.Type.Env
   , useUnsafeRegion
   , warn
   , recordUnsafeFunction
+  , recordComptimeFunction
+  , isComptimeFunction
+  , inComptime
+  , withComptime
   , lookupField
   , lookupName
   , recordExpression
@@ -160,6 +164,7 @@ declareFunction declared value = do
     Nothing -> pure ()
     Just capabilities ->
       recordUnsafeFunction (locatedValue (functionName value)) (map locatedValue capabilities)
+  when (functionComptime value) (recordComptimeFunction (locatedValue (functionName value)))
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}
@@ -230,7 +235,8 @@ checkFunction declared selfBound value = do
   let rigid = functionRigid value <> foldMap selfRigid selfBound
       bounds = declareBounds declared value <> foldMap selfBoundAsBound selfBound
   requireFunctionAnnotations value
-  withRigidBounds bounds $ inTypeScope $ do
+  requireComptimePurity value
+  withRigidBounds bounds $ withComptime (functionComptime value) $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
     result <- formOptionalType declared rigid (functionReturn value)
     bindName selfName (monotype (FunctionTypeValue (functionAsync value) inputs result))
@@ -390,6 +396,47 @@ checkCallee declared rigid located@(Located calleeSpan expression) = case expres
             pure applied
   _ -> checkExpression declared rigid located
 
+{-| A compile-time function runs in an evaluator with no IO, environment, time,
+    randomness, unsafe, or task operations, so the shapes that could reach one
+    are refused at the declaration rather than discovered when it runs. -}
+requireComptimePurity :: Function -> Checker ()
+requireComptimePurity value
+  | not (functionComptime value) = pure ()
+  | otherwise = do
+      when (functionAsync value) $
+        report "E3025" nameSpan
+          ("comptime function " <> name <> " cannot be async")
+          (Just "compile-time evaluation excludes task operations")
+      case functionUnsafe value of
+        Nothing -> pure ()
+        Just _ ->
+          report "E3025" nameSpan
+            ("comptime function " <> name <> " cannot be unsafe")
+            (Just "compile-time evaluation excludes unchecked operations")
+ where
+  name = locatedValue (functionName value)
+  nameSpan = locatedSpan (functionName value)
+
+{-| A compile-time body may call only other compile-time functions. The
+    guarantee has to be transitive, or a pure-looking function could reach an
+    arbitrary one and the evaluator would meet it at compile time. -}
+checkComptimeCall :: Span -> Located Expression -> Checker ()
+checkComptimeCall spanValue callee = do
+  inside <- inComptime
+  when inside $ case locatedValue callee of
+    NameExpression (name NonEmpty.:| []) -> do
+      comptime <- isComptimeFunction name
+      builtin <- pure (name `elem` comptimeBuiltins)
+      unless (comptime || builtin) $
+        report "E3025" spanValue
+          ("comptime function cannot call " <> name)
+          (Just "declare the callee comptime, or move the call out of compile-time code")
+    _ -> pure ()
+
+{-| Names a compile-time body may reach that are not user declarations. -}
+comptimeBuiltins :: [Text]
+comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic"]
+
 {-| A granted capability that the region never reached for is noise: it widens
     the audited surface without buying anything, so leaving the region reports
     it. -}
@@ -506,6 +553,7 @@ inferExpression declared rigid spanValue expression = case expression of
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
     checkUnsafeCall spanValue callee
+    checkComptimeCall spanValue callee
     calleeType <- checkCallee declared rigid callee
     argumentTypes <- mapM (checkExpression declared rigid) arguments
     callType spanValue calleeType argumentTypes

@@ -5,6 +5,10 @@ module Pudu.Type.Env
   , enterUnsafe
   , insideUnsafe
   , leaveUnsafe
+  , recordComptimeFunction
+  , isComptimeFunction
+  , inComptime
+  , withComptime
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
   , useCapability
@@ -115,6 +119,8 @@ data CheckerState = CheckerState
   , stateReservedSpans :: ![(Int, Int)]
   , stateUnsafeFrames :: ![UnsafeFrame]
   , stateUnsafeFunctions :: !(Map Text [Capability])
+  , stateComptimeFunctions :: ![Text]
+  , stateInComptime :: !Bool
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateRigidBounds :: !(Map Text [NominalId])
@@ -179,6 +185,8 @@ initialState =
     , stateReservedSpans = []
     , stateUnsafeFrames = []
     , stateUnsafeFunctions = Map.empty
+    , stateComptimeFunctions = []
+    , stateInComptime = False
     , stateObligations = []
     , stateIntegerLiterals = []
     , stateRigidBounds = Map.empty
@@ -536,6 +544,32 @@ useUnsafeRegion =
             | null (frameGranted frame) = [minBound .. maxBound]
             | otherwise = frameGranted frame
        in ((), state{stateUnsafeFrames = frame{frameUsed = exercised <> frameUsed frame} : rest})
+
+{-| Which functions may run at compile time. A compile-time body may call only
+    these, which is what makes the guarantee transitive rather than a promise
+    each function makes about itself. -}
+recordComptimeFunction :: Text -> Checker ()
+recordComptimeFunction name =
+  Checker $ \state -> ((), state{stateComptimeFunctions = name : stateComptimeFunctions state})
+
+isComptimeFunction :: Text -> Checker Bool
+isComptimeFunction name =
+  Checker $ \state -> (name `elem` stateComptimeFunctions state, state)
+
+{-| Run an action while checking a compile-time body, restoring the previous
+    setting on exit so a nested ordinary declaration is unaffected. -}
+withComptime :: Bool -> Checker a -> Checker ()
+withComptime inside action = do
+  previous <- inComptime
+  setComptime inside
+  _ <- action
+  setComptime previous
+
+inComptime :: Checker Bool
+inComptime = Checker $ \state -> (stateInComptime state, state)
+
+setComptime :: Bool -> Checker ()
+setComptime inside = Checker $ \state -> ((), state{stateInComptime = inside})
 
 recordUnsafeFunction :: Text -> [Capability] -> Checker ()
 recordUnsafeFunction name capabilities =

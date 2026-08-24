@@ -224,6 +224,9 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 ## Compile-Time and Macro Semantics
 
 - `const` expressions and `comptime fn` execute in a deterministic, resource-limited evaluator with no IO, environment, time, randomness, unsafe, or task operations.
+- `comptime` marks a function that may run in that evaluator. The guarantee is transitive: a compile-time body may call other compile-time functions and wired-in constructors, and nothing else. It may be neither `async` nor `unsafe`, because both name capabilities the compile-time evaluator does not have.
+- A compile-time function is an ordinary function too. Runtime code may call it; the marker adds a guarantee rather than restricting where it is usable.
+- A module-scope `const` is evaluated when the module is compiled, so a failure in its initializer — division by zero, an exhausted evaluation budget, a constant reading one declared later — is a compile diagnostic rather than something the program discovers when it runs.
 - Compile-time evaluation has configurable step and memory limits; exceeding them is a diagnostic.
 - v1 macros are hygienic declarative syntax macros over token trees. They cannot access files, network, environment, compiler internals, or arbitrary host code.
 - Expanded tokens retain call-site and definition-site provenance for diagnostics.
