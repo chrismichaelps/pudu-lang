@@ -38,6 +38,8 @@ testArithmetic = do
   bitwiseOr <- evaluate "1 | 2"
   bitwiseAnd <- evaluate "6 & 3"
   bitwiseNot <- evaluate "~0"
+  suffixedBase <- evaluate "0xffu8"
+  signedBoundary <- evaluate "-128i8"
   pure $ conjoin
     [ sums === "7"
     , precedence === "9"
@@ -55,6 +57,8 @@ testArithmetic = do
     , counterexample "bitwise or unions bits" (bitwiseOr === "3")
     , counterexample "bitwise and masks bits" (bitwiseAnd === "2")
     , counterexample "complement of zero is negative one" (bitwiseNot === "-1")
+    , counterexample "integer suffixes do not alter the runtime value" (suffixedBase === "255")
+    , counterexample "signed boundaries retain their mathematical value" (signedBoundary === "-128")
     ]
 
 testBindings :: IO Property

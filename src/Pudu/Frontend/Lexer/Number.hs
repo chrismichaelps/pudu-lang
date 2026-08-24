@@ -11,6 +11,7 @@ import Pudu.Frontend.Lexer.Cursor
   )
 import Pudu.Frontend.Token
   ( TokenKind (FloatLiteral, IntegerLiteral, Invalid) )
+import Pudu.IntegerLiteral (integerSuffix, splitIntegerSuffix)
 
 data NumberScan = NumberScan
   { scannedCursor :: !LexerCursor
@@ -33,7 +34,7 @@ scanBase cursor (prefixValid, isBaseDigit) =
   let afterPrefix = consumeScalars 2 cursor
       digitsMark = markCursor afterPrefix
       advanced = consumeWhile isBaseCandidate afterPrefix
-      digitsValid = maybe False (validDigitRun isBaseDigit . fst) (captureSince digitsMark advanced)
+      digitsValid = maybe False (validBaseRun isBaseDigit . fst) (captureSince digitsMark advanced)
    in NumberScan advanced (prefixValid && digitsValid) False
 
 scanDecimal :: LexerCursor -> NumberScan
@@ -45,10 +46,13 @@ scanDecimal cursor =
       afterFraction = maybe afterInteger scannedCursor fraction
       fractionValid = maybe True scannedValid fraction
       exponentScan = scanExponent afterFraction
-      finalCursor = maybe afterFraction scannedCursor exponentScan
+      afterExponent = maybe afterFraction scannedCursor exponentScan
       exponentValid = maybe True scannedValid exponentScan
       isFloat = maybe False (const True) fraction || maybe False (const True) exponentScan
-   in NumberScan finalCursor (integerValid && fractionValid && exponentValid) isFloat
+      suffixScan = if isFloat then Nothing else scanIntegerSuffix afterExponent
+      finalCursor = maybe afterExponent fst suffixScan
+      suffixValid = maybe True snd suffixScan
+   in NumberScan finalCursor (integerValid && fractionValid && exponentValid && suffixValid) isFloat
 
 scanFraction :: LexerCursor -> Maybe NumberScan
 scanFraction cursor
@@ -75,6 +79,16 @@ scanExponent cursor =
               valid = maybe False (validDigitRun isAsciiDigit . fst) (captureSince digitsMark advanced)
            in Just (NumberScan advanced valid True)
     _ -> Nothing
+
+scanIntegerSuffix :: LexerCursor -> Maybe (LexerCursor, Bool)
+scanIntegerSuffix cursor = case peekScalar cursor of
+  Just scalar
+    | isAsciiLetter scalar ->
+        let mark = markCursor cursor
+            advanced = consumeWhile isAsciiAlphaNumeric cursor
+            valid = maybe False (maybe False (const True) . integerSuffix . fst) (captureSince mark advanced)
+         in Just (advanced, valid)
+  _ -> Nothing
 
 finishNumber :: CursorMark -> NumberScan -> Maybe LexerCursor
 finishNumber mark NumberScan{scannedCursor, scannedValid, scannedFloat} = do
@@ -107,11 +121,22 @@ validDigitRun isDigit textValue =
       | scalar == '_' = (valid && previousDigit, False, count)
       | otherwise = (False, False, count)
 
+validBaseRun :: (Char -> Bool) -> Text -> Bool
+validBaseRun isDigit candidate =
+  let (digits, _) = splitIntegerSuffix candidate
+   in validDigitRun isDigit digits
+
 isDecimalCandidate :: Char -> Bool
 isDecimalCandidate scalar = isAsciiDigit scalar || scalar == '_'
 
 isBaseCandidate :: Char -> Bool
 isBaseCandidate scalar = isAsciiDigit scalar || isAsciiLower scalar || isAsciiUpper scalar || scalar == '_'
+
+isAsciiLetter :: Char -> Bool
+isAsciiLetter scalar = isAsciiLower scalar || isAsciiUpper scalar
+
+isAsciiAlphaNumeric :: Char -> Bool
+isAsciiAlphaNumeric scalar = isAsciiDigit scalar || isAsciiLetter scalar
 
 isAsciiDigit :: Char -> Bool
 isAsciiDigit scalar = scalar >= '0' && scalar <= '9'

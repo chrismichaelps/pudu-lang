@@ -35,12 +35,17 @@ import Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , finalizeIntegerLiterals
+  , finalizeIntegerLiteralsBetween
+  , finalizeIntegerLiteralsSince
   , freshVariable
   , inTypeScope
+  , integerLiteralCheckpoint
   , lookupField
   , recordExpression
   , report
   , withRigidBounds
+  , validateIntegerLiteralsSince
   , runChecker
   , withDeclared
   )
@@ -114,6 +119,7 @@ checkUnit imported moduleValue = do
   mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
   mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
+  finalizeIntegerLiterals
   dischargeObligations
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
@@ -219,6 +225,7 @@ checkFunction declared selfBound value = do
           ExpressionBody expression -> checkExpression declared rigid expression
         _ <- unify bodySpan result actual
         pure ()
+    finalizeIntegerLiterals
     dischargeObligations
 
 {-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
@@ -366,7 +373,7 @@ checkExpression declared rigid (Located spanValue expression) = do
 
 inferExpression :: DeclaredTypes -> [Text] -> Span -> Expression -> Checker Type
 inferExpression declared rigid spanValue expression = case expression of
-  LiteralExpression literal -> pure (literalType literal)
+  LiteralExpression literal -> literalType spanValue literal
   NameExpression names -> nameType spanValue names
   UnaryExpression operator operand -> do
     actual <- checkExpression declared rigid operand
@@ -392,13 +399,19 @@ inferExpression declared rigid spanValue expression = case expression of
     _ <- unify (locatedSpan index) integerType indexType
     elementType spanValue targetType
   TryExpression target -> do
+    checkpoint <- integerLiteralCheckpoint
     targetType <- checkExpression declared rigid target
+    finalizeIntegerLiteralsSince checkpoint
+    resolvedTarget <- zonk targetType
     declaredResult <- enclosingReturnType selfName
-    tryType spanValue targetType declaredResult
+    tryType spanValue resolvedTarget declaredResult
   AwaitExpression target -> do
+    checkpoint <- integerLiteralCheckpoint
     targetType <- checkExpression declared rigid target
+    finalizeIntegerLiteralsSince checkpoint
+    resolvedTarget <- zonk targetType
     (asynchronous, declaredResult) <- enclosingFunctionType selfName
-    awaitType spanValue asynchronous targetType declaredResult
+    awaitType spanValue asynchronous resolvedTarget declaredResult
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
   ArrayExpression members -> do
     elementTypes <- mapM (checkExpression declared rigid) members
@@ -409,22 +422,40 @@ inferExpression declared rigid spanValue expression = case expression of
   RecordExpression path fields -> recordType declared rigid spanValue path fields
   BlockExpression block -> checkBlock declared rigid block
   IfExpression condition thenBlock elseBranch -> do
+    conditionCheckpoint <- integerLiteralCheckpoint
     conditionType <- checkExpression declared rigid condition
     _ <- unify (locatedSpan condition) boolType conditionType
+    validateIntegerLiteralsSince conditionCheckpoint
+    branchCheckpoint <- integerLiteralCheckpoint
     thenType <- checkBlock declared rigid thenBlock
     case elseBranch of
-      Nothing -> pure UnitTypeValue
+      Nothing -> do
+        finalizeIntegerLiteralsSince branchCheckpoint
+        pure UnitTypeValue
       Just branch -> do
         elseType <- checkExpression declared rigid branch
-        unify spanValue thenType elseType
+        unified <- unify spanValue thenType elseType
+        validateIntegerLiteralsSince branchCheckpoint
+        resolvedThen <- zonk thenType
+        resolvedElse <- zonk elseType
+        case (resolvedThen, resolvedElse) of
+          (ErrorType, _) -> pure ErrorType
+          (_, ErrorType) -> pure ErrorType
+          _ -> zonk unified
   MatchExpression scrutinee arms -> do
+    subjectCheckpoint <- integerLiteralCheckpoint
     subjectType <- checkExpression declared rigid scrutinee
+    subjectEnd <- integerLiteralCheckpoint
     result <- checkArms declared rigid spanValue subjectType arms
-    checkExhaustive spanValue subjectType arms
-    pure result
+    finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
+    resolvedSubject <- zonk subjectType
+    checkExhaustive spanValue resolvedSubject arms
+    zonk result
   WhileExpression condition body -> do
+    conditionCheckpoint <- integerLiteralCheckpoint
     conditionType <- checkExpression declared rigid condition
     _ <- unify (locatedSpan condition) boolType conditionType
+    validateIntegerLiteralsSince conditionCheckpoint
     _ <- checkBlock declared rigid body
     pure UnitTypeValue
   LoopExpression body -> do
@@ -488,10 +519,14 @@ checkArms :: DeclaredTypes -> [Text] -> Span -> Type -> [Located MatchArm] -> Ch
 checkArms declared rigid spanValue subjectType arms = case arms of
   [] -> pure ErrorType
   _ -> do
+    checkpoint <- integerLiteralCheckpoint
     types <- mapM checkArm arms
-    case types of
+    unified <- case types of
       [] -> pure ErrorType
       first : rest -> foldUnify first rest
+    validateIntegerLiteralsSince checkpoint
+    resolved <- mapM zonk types
+    if ErrorType `elem` resolved then pure ErrorType else zonk unified
  where
   checkArm (Located _ arm) = do
     result <- freshVariable

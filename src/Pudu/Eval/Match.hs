@@ -12,6 +12,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
+import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
 
 {-| Pattern matching is total: it either produces the bindings the pattern
     introduces or reports that the pattern did not apply. -}
@@ -67,17 +68,14 @@ check inclusive low high actual
 
 literalValue :: Tree.Literal -> Value
 literalValue literal = case literal of
-  Tree.IntegerValue text -> IntValue (readInteger text)
+  Tree.IntegerValue text -> case parseIntegerLiteral text of
+    Just ParsedInteger{parsedIntegerValue} -> IntValue parsedIntegerValue
+    Nothing -> IntValue 0
   Tree.FloatValue text -> FloatValue (readDouble text)
   Tree.StringValue text -> StrValue text
   Tree.CharValue character -> CharValue character
   Tree.BoolValue flag -> BoolValue flag
   Tree.NullValue -> NullValue
-
-readInteger :: Text -> Integer
-readInteger text = case reads (Text.unpack (Text.filter (/= '_') text)) of
-  (value, _) : _ -> value
-  [] -> 0
 
 readDouble :: Text -> Double
 readDouble text = case reads (Text.unpack (Text.filter (/= '_') text)) of

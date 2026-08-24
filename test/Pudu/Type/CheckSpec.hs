@@ -17,6 +17,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 typeProperties :: [(String, IO Property)]
 typeProperties =
   [ ("literals and operators take their declared types", testOperators)
+  , ("integer literals select every width and enforce exact bounds", testIntegerLiterals)
   , ("annotations are checked against their value", testAnnotations)
   , ("calls check argument types and count", testCalls)
   , ("generic functions instantiate per use", testGenerics)
@@ -57,6 +58,86 @@ testOperators = do
     , counterexample "mixed operands are rejected" (mixed === ["E3001"])
     , counterexample "a boolean operator requires Bool" (logicMismatch === ["E3001"])
     ]
+
+testIntegerLiterals :: IO Property
+testIntegerLiterals = do
+  contextual <- traverse acceptsIntegerType integerTypes
+  suffixTypes <- traverse typeOf integerSuffixes
+  defaulted <- typeOf "1"
+  selected <- typeOfIn ["fn run() -> Int8 { 1 }"] "1"
+  based <- typeOf "0xffu8"
+  signedHigh <- codes ["module M", "fn run() -> Int8 { 127i8 }"]
+  signedLow <- codes ["module M", "fn run() -> Int8 { -128i8 }"]
+  signedOverflow <- codes ["module M", "fn run() -> Int8 { 128i8 }"]
+  signedUnderflow <- codes ["module M", "fn run() -> Int8 { -129i8 }"]
+  unsignedHigh <- codes ["module M", "fn run() -> UInt8 { 255u8 }"]
+  unsignedOverflow <- codes ["module M", "fn run() -> UInt8 { 256u8 }"]
+  unsignedNegative <- codes ["module M", "fn run() -> UInt8 { -1u8 }"]
+  contextualOverflow <- codes ["module M", "fn run() -> UInt8 { 256 }"]
+  hugeBigInt <- codes
+    [ "module M"
+    , "fn run() -> BigInt { 1606938044258990275541962092341162602522202993782792835301376 }"
+    ]
+  hugeDefault <- codes
+    [ "module M"
+    , "fn run() { 1606938044258990275541962092341162602522202993782792835301376 }"
+    ]
+  nonInteger <- codes ["module M", "fn run() -> Bool { 1 }"]
+  arithmetic <- codes ["module M", "fn run() -> Int8 { 1 + 2 }"]
+  let overflowSource = Text.unlines
+        [ "module M"
+        , "fn run() -> Int8 { 128i8 }"
+        ]
+  overflowResult <- compile overflowSource
+  pure $ conjoin
+    [ counterexample "every compiler-wired integer type accepts a fitting literal"
+        (contextual === replicate (length integerTypes) [])
+    , counterexample "every fixed-width suffix selects its exact type"
+        (suffixTypes === integerSuffixTypes)
+    , counterexample "an unconstrained literal defaults to Int" (defaulted === "Int")
+    , counterexample "context selects Int8 before defaulting" (selected === "Int8")
+    , counterexample "a suffix survives a base-prefixed body" (based === "UInt8")
+    , signedHigh === []
+    , signedLow === []
+    , counterexample "signed upper overflow is rejected" (signedOverflow === ["E3018"])
+    , counterexample "signed lower overflow is rejected" (signedUnderflow === ["E3018"])
+    , unsignedHigh === []
+    , counterexample "unsigned upper overflow is rejected" (unsignedOverflow === ["E3018"])
+    , counterexample "negative unsigned literals are rejected" (unsignedNegative === ["E3018"])
+    , counterexample "contextual literals receive the same fit check"
+        (contextualOverflow === ["E3018"])
+    , counterexample "BigInt remains unbounded" (hugeBigInt === [])
+    , counterexample "a context-free huge literal must still fit default Int"
+        (hugeDefault === ["E3018"])
+    , counterexample "integer syntax cannot satisfy a non-integer context"
+        (nonInteger === ["E3001"])
+    , counterexample "operator constraints reach both literals" (arithmetic === [])
+    , diagnosticContract overflowSource "128i8" "E3018"
+        "integer literal 128 does not fit Int8"
+        (Just "choose a wider integer type or change the literal")
+        overflowResult
+    ]
+
+acceptsIntegerType :: Text -> IO [Text]
+acceptsIntegerType name = codes ["module M", "fn run() -> " <> name <> " { 1 }"]
+
+integerTypes :: [Text]
+integerTypes =
+  [ "Int8", "Int16", "Int32", "Int64", "Int128", "Int"
+  , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "UInt", "BigInt"
+  ]
+
+integerSuffixes :: [Text]
+integerSuffixes =
+  [ "1i8", "1i16", "1i32", "1i64", "1i128"
+  , "1u8", "1u16", "1u32", "1u64", "1u128"
+  ]
+
+integerSuffixTypes :: [Text]
+integerSuffixTypes =
+  [ "Int8", "Int16", "Int32", "Int64", "Int128"
+  , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
+  ]
 
 testAnnotations :: IO Property
 testAnnotations = do
@@ -189,6 +270,17 @@ testVariants = do
 testControlFlow :: IO Property
 testControlFlow = do
   branches <- codes ["module M", "fn run(flag: Bool) -> Int { if flag { 1 } else { 2 } }"]
+  contextualBranches <- codes
+    ["module M", "fn run(flag: Bool) -> UInt8 { if flag { 1 } else { 2 } }"]
+  contextualMatch <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> UInt8 {"
+    , "  match flag {"
+    , "    case true => 1"
+    , "    case false => 2"
+    , "  }"
+    , "}"
+    ]
   mixedBranches <- codes ["module M", "fn run(flag: Bool) -> Int { if flag { 1 } else { \"two\" } }"]
   condition <- codes ["module M", "fn run() -> Int { if 1 { 1 } else { 2 } }"]
   loops <- codes
@@ -212,6 +304,8 @@ testControlFlow = do
     ]
   pure $ conjoin
     [ branches === []
+    , counterexample "an outer result selects if literal widths" (contextualBranches === [])
+    , counterexample "an outer result selects match literal widths" (contextualMatch === [])
     , mixedBranches === ["E3001"]
     , counterexample "a condition must be Bool" (condition === ["E3001"])
     , loops === []

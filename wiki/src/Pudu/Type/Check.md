@@ -42,6 +42,7 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 - Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - Async calls normalize their surface result into `Task[S, E]`. `.await` is admitted only inside an async function, accepts only a task, yields `S`, and requires the enclosing surface result to carry a compatible `Result` failure when `E` is not `Never`.
+- Integer expressions register deferred arbitrary-precision literal constraints. Closed semantic boundaries validate literals that their local context has already solved, but preserve unresolved result literals for an enclosing annotation or operator. Boundaries that require a concrete operand shape, such as coverage over a literal scrutinee and `.await`, force only the operand's creation range to settle. The function/module boundary settles the remainder. This defaults only genuinely context-free unsuffixed literals to `Int` without prematurely defaulting a sibling or nested result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A member whose target is a module-name expression first probes the full qualified value key (for example `Alias.make`) before receiver dispatch. This preserves the parser's shared dot syntax without treating module exports as fields or methods.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
@@ -59,7 +60,7 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 ## Negative Logic (Prohibited Paths)
 
-- No specialization, task scheduling, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, caller-dependent inference, dependency traversal, or imported-body checking.
+- No specialization, task scheduling, ownership or borrow analysis, general defaulting of unsolved variables, caller-dependent inference, dependency traversal, or imported-body checking. Integer-literal fit/default constraints are the single numeric exception required by the grammar.
 
 ## Edge Cases
 
@@ -68,6 +69,7 @@ Collect declared shapes and signatures, check trait implementation ownership and
 - `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
 - `.await` reports `E3016` outside an async function and `E3017` for a non-task operand. A task failure uses `E3011` when the enclosing return cannot propagate it; a mismatched `Result` failure type remains ordinary `E3001`.
 - A private async function with an omitted parameter or return annotation reports `E3010` at the omitted contract component; synchronous private inference remains admitted.
+- A literal bound by context to a compiler-wired integer type must fit its signed/unsigned interval. `E3018` names the value and selected type once; a suffix-selected type that conflicts with context remains ordinary `E3001`.
 - A trait member body treats `Self` as a rigid parameter (added to the rigid list alongside the member's own type params), so `formType` produces `RigidType "Self"` rather than `NominalType "Self"`. This routes `self.method()` calls through `rigidMethod` and the trait bound installed by `selfBoundAsBound`, letting a default body call other trait methods on `self`. An impl member does not add `Self` to rigid: `Self` is aliased to the target nominal type through `implAliases`, so method calls resolve through the nominal path.
 
 ## Depth
@@ -83,6 +85,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 - **Q:** Should `.await` merely pass through the task type? **A:** No; it yields the success channel and propagates the failure channel through the enclosing async result. _Rationale:_ a task is a suspended computation, not its eventual value. _Rejected:_ pass-through typing; nested `Task[Result[S, E], Never]`.
 - **Q:** Should imported implementations be appended to the local declarations? **A:** No; install their interface schemes and relationships separately. _Rationale:_ concatenation would make the consumer appear to own dependency impls and re-run `E3014`/`E3015`. _Rejected:_ a synthetic combined module.
 - **Q:** Infer an omitted method annotation again in each consumer? **A:** No; require a complete interface signature with `E3010`. _Rationale:_ a body-free cycle has no stable evidence from which to reconstruct inference, so fresh consumer variables would change the public contract by context. _Rejected:_ contextual reconstruction; carrying dependency bodies into the consumer checker.
+- **Q:** Default integer literals before checking their context? **A:** No; validate solved constraints after annotations, arguments, operators, and branches unify, but leave an unresolved branch/result constraint for its enclosing context. Force a default only when a rule needs a concrete shape or at the body boundary. _Rationale:_ eager global defaulting recreates the issue where every width except `Int` is unusable, while creation-range settlement lets non-task `.await` name `Int` without stealing the contextual type of an `if` or `match` result. _Rejected:_ eager defaulting; defaulting every literal at a nested expression boundary; implicit narrowing from `Int`.
 
 ## Variants
 

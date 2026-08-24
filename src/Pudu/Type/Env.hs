@@ -7,6 +7,11 @@ module Pudu.Type.Env
   , bindImportedMethod
   , emptyDeclared
   , freshVariable
+  , constrainIntegerLiteral
+  , finalizeIntegerLiterals
+  , finalizeIntegerLiteralsBetween
+  , finalizeIntegerLiteralsSince
+  , integerLiteralCheckpoint
   , inTypeScope
   , lookupField
   , lookupOwnerVariants
@@ -15,6 +20,7 @@ module Pudu.Type.Env
   , lookupVariant
   , recordExpression
   , report
+  , negateIntegerLiteral
   , rigidBoundsOf
   , rigidSatisfies
   , takeObligations
@@ -25,14 +31,18 @@ module Pudu.Type.Env
   , resolveVariable
   , runChecker
   , setVariable
+  , validateIntegerLiteralsSince
   , withDeclared
   ) where
 
+import Data.Bits (finiteBitSize)
+import Data.List (partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (..)
@@ -42,7 +52,9 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
-import Pudu.Type.Value (NominalId, Scheme, Type (..), TypeVar (..))
+import Pudu.IntegerLiteral (fitsIntegerType)
+import Pudu.Type.Value
+  ( NominalId (..), Scheme, Type (..), TypeVar (..), integerType, renderType )
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
@@ -84,11 +96,18 @@ data CheckerState = CheckerState
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
   , stateObligations :: ![(Span, Type, NominalId)]
+  , stateIntegerLiterals :: ![IntegerConstraint]
   , stateRigidBounds :: !(Map Text [NominalId])
   , stateDiagnosticsRev :: ![Diagnostic]
   }
 
 type SpanKey = (Int, Int)
+
+data IntegerConstraint = IntegerConstraint
+  { integerConstraintSpan :: !Span
+  , integerConstraintValue :: !Integer
+  , integerConstraintVariable :: !TypeVar
+  }
 
 {-| @Type.Env.Products — the types a run recorded and what it diagnosed -}
 data CheckerProducts = CheckerProducts
@@ -121,7 +140,8 @@ runChecker :: Checker a -> CheckerProducts
 runChecker (Checker action) =
   let (_, finalState) = action initialState
    in CheckerProducts
-        { producedTypes = reverse (stateTypes finalState)
+        { producedTypes =
+            reverse (map (fmap (resolveFinal (stateSubstitution finalState))) (stateTypes finalState))
         , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
         }
 
@@ -135,6 +155,7 @@ initialState =
     , stateDeclared = emptyDeclared
     , stateTypes = []
     , stateObligations = []
+    , stateIntegerLiterals = []
     , stateRigidBounds = Map.empty
     , stateDiagnosticsRev = []
     }
@@ -143,6 +164,157 @@ freshVariable :: Checker Type
 freshVariable =
   Checker $ \state ->
     (VariableType (TypeVar (stateNext state)), state{stateNext = stateNext state + 1})
+
+constrainIntegerLiteral :: Span -> Integer -> Maybe Text -> Checker Type
+constrainIntegerLiteral spanValue value selectedType =
+  Checker $ \state ->
+    let variable = TypeVar (stateNext state)
+        substitutions = case selectedType of
+          Nothing -> stateSubstitution state
+          Just name ->
+            Map.insert variable (NominalType (NominalId Nothing name) []) (stateSubstitution state)
+        constraint = IntegerConstraint spanValue value variable
+     in ( VariableType variable
+        , state
+            { stateNext = stateNext state + 1
+            , stateSubstitution = substitutions
+            , stateIntegerLiterals = constraint : stateIntegerLiterals state
+            }
+        )
+
+negateIntegerLiteral :: Type -> Checker Bool
+negateIntegerLiteral typeValue = case typeValue of
+  VariableType variable ->
+    Checker $ \state ->
+      let (found, constraints) = negateMatching variable (stateIntegerLiterals state)
+       in (found, state{stateIntegerLiterals = constraints})
+  _ -> pure False
+
+finalizeIntegerLiterals :: Checker ()
+finalizeIntegerLiterals = do
+  constraints <- takeIntegerConstraints
+  mapM_ finalizeIntegerConstraint constraints
+
+integerLiteralCheckpoint :: Checker Int
+integerLiteralCheckpoint =
+  Checker $ \state -> (stateNext state, state)
+
+finalizeIntegerLiteralsSince :: Int -> Checker ()
+finalizeIntegerLiteralsSince checkpoint = do
+  constraints <- takeIntegerConstraintsMatching (createdSince checkpoint)
+  mapM_ finalizeIntegerConstraint constraints
+
+finalizeIntegerLiteralsBetween :: Int -> Int -> Checker ()
+finalizeIntegerLiteralsBetween start end = do
+  constraints <- takeIntegerConstraintsMatching (createdBetween start end)
+  mapM_ finalizeIntegerConstraint constraints
+
+validateIntegerLiteralsSince :: Int -> Checker ()
+validateIntegerLiteralsSince checkpoint = do
+  constraints <- takeResolvedIntegerConstraintsSince checkpoint
+  mapM_ finalizeIntegerConstraint constraints
+
+finalizeIntegerConstraint :: IntegerConstraint -> Checker ()
+finalizeIntegerConstraint constraint = do
+  let variable = integerConstraintVariable constraint
+      value = integerConstraintValue constraint
+      spanValue = integerConstraintSpan constraint
+  resolved <- resolveCurrent (VariableType variable)
+  selected <- case resolved of
+    VariableType unresolved -> do
+      setVariable unresolved integerType
+      pure integerType
+    other -> pure other
+  case selected of
+    NominalType identity []
+      | nominalModule identity == Nothing ->
+          case fitsIntegerType (finiteBitSize (0 :: Int)) (nominalName identity) value of
+            Just True -> pure ()
+            Just False -> do
+              report "E3018" spanValue
+                ( "integer literal " <> Text.pack (show value)
+                    <> " does not fit " <> nominalName identity
+                )
+                (Just "choose a wider integer type or change the literal")
+              setVariable variable ErrorType
+            Nothing -> nonInteger spanValue variable selected
+    ErrorType -> pure ()
+    _ -> nonInteger spanValue variable selected
+ where
+  nonInteger spanValue variable selected = do
+    report "E3001" spanValue
+      ("expected " <> renderType selected <> ", found Int")
+      (Just "change the value, or change the declared type it must match")
+    setVariable variable ErrorType
+
+takeIntegerConstraints :: Checker [IntegerConstraint]
+takeIntegerConstraints =
+  Checker $ \state ->
+    ( reverse (stateIntegerLiterals state)
+    , state{stateIntegerLiterals = []}
+    )
+
+takeIntegerConstraintsMatching
+  :: (IntegerConstraint -> Bool) -> Checker [IntegerConstraint]
+takeIntegerConstraintsMatching matches =
+  Checker $ \state ->
+    let constraints = stateIntegerLiterals state
+        (selected, retained) = partition matches constraints
+     in (reverse selected, state{stateIntegerLiterals = retained})
+
+takeResolvedIntegerConstraintsSince :: Int -> Checker [IntegerConstraint]
+takeResolvedIntegerConstraintsSince checkpoint =
+  Checker $ \state ->
+    let constraints = stateIntegerLiterals state
+        isResolved constraint =
+          createdSince checkpoint constraint
+            && case resolveFinal (stateSubstitution state)
+              (VariableType (integerConstraintVariable constraint)) of
+                VariableType _ -> False
+                _ -> True
+        (selected, retained) = partition isResolved constraints
+     in (reverse selected, state{stateIntegerLiterals = retained})
+
+createdSince :: Int -> IntegerConstraint -> Bool
+createdSince checkpoint constraint =
+  let TypeVar identity = integerConstraintVariable constraint
+   in identity >= checkpoint
+
+createdBetween :: Int -> Int -> IntegerConstraint -> Bool
+createdBetween start end constraint =
+  let TypeVar identity = integerConstraintVariable constraint
+   in identity >= start && identity < end
+
+resolveCurrent :: Type -> Checker Type
+resolveCurrent typeValue =
+  Checker $ \state -> (resolveFinal (stateSubstitution state) typeValue, state)
+
+negateMatching :: TypeVar -> [IntegerConstraint] -> (Bool, [IntegerConstraint])
+negateMatching variable constraints = case constraints of
+  [] -> (False, [])
+  constraint : rest ->
+    let (foundRest, updatedRest) = negateMatching variable rest
+     in if integerConstraintVariable constraint == variable
+          then
+            ( True
+            , constraint{integerConstraintValue = negate (integerConstraintValue constraint)} : updatedRest
+            )
+          else (foundRest, constraint : updatedRest)
+
+resolveFinal :: Map TypeVar Type -> Type -> Type
+resolveFinal substitutions typeValue = case typeValue of
+  VariableType variable -> case Map.lookup variable substitutions of
+    Nothing -> typeValue
+    Just found -> resolveFinal substitutions found
+  NominalType name arguments -> NominalType name (map (resolveFinal substitutions) arguments)
+  TupleTypeValue members -> TupleTypeValue (map (resolveFinal substitutions) members)
+  FunctionTypeValue asynchronous inputs result ->
+    FunctionTypeValue asynchronous
+      (map (resolveFinal substitutions) inputs)
+      (resolveFinal substitutions result)
+  ReferenceTypeValue mutable target ->
+    ReferenceTypeValue mutable (resolveFinal substitutions target)
+  other -> other
 
 {-| Read what an inference variable has been solved to, if anything. -}
 resolveVariable :: TypeVar -> Checker (Maybe Type)

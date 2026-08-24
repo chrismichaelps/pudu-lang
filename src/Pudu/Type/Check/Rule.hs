@@ -22,12 +22,16 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Source (Span)
+import Pudu.IntegerLiteral
+  ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
 import Pudu.Type.Env
   ( Checker
   , addObligation
+  , constrainIntegerLiteral
   , freshVariable
   , lookupField
   , lookupName
+  , negateIntegerLiteral
   , report
   , rigidBoundsOf
   )
@@ -46,14 +50,17 @@ import Pudu.Type.Value
   , stringType
   )
 
-literalType :: Tree.Literal -> Type
-literalType literal = case literal of
-  Tree.IntegerValue _ -> integerType
-  Tree.FloatValue _ -> floatType
-  Tree.StringValue _ -> stringType
-  Tree.CharValue _ -> charType
-  Tree.BoolValue _ -> boolType
-  Tree.NullValue -> ErrorType
+literalType :: Span -> Tree.Literal -> Checker Type
+literalType spanValue literal = case literal of
+  Tree.IntegerValue text -> case parseIntegerLiteral text of
+    Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
+      constrainIntegerLiteral spanValue parsedIntegerValue (integerSuffixType <$> parsedIntegerSuffix)
+    Nothing -> pure ErrorType
+  Tree.FloatValue _ -> pure floatType
+  Tree.StringValue _ -> pure stringType
+  Tree.CharValue _ -> pure charType
+  Tree.BoolValue _ -> pure boolType
+  Tree.NullValue -> pure ErrorType
 
 {-| A name's type comes from its declaration. A declared generic is
     instantiated with fresh variables at every use, which is what makes one
@@ -137,7 +144,9 @@ substitute replacements typeValue = case typeValue of
 unaryType :: Span -> Text -> Type -> Checker Type
 unaryType spanValue operator operand = case operator of
   "!" -> unify spanValue boolType operand
-  "-" -> pure operand
+  "-" -> do
+    _ <- negateIntegerLiteral operand
+    pure operand
   "&" -> pure (ReferenceTypeValue False operand)
   "&mut" -> pure (ReferenceTypeValue True operand)
   _ -> pure operand
