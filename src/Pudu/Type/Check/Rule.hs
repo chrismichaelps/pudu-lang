@@ -3,7 +3,9 @@ module Pudu.Type.Check.Rule
   ( callType
   , countText
   , binaryType
+  , awaitType
   , elementType
+  , enclosingFunctionType
   , enclosingReturnType
   , instantiate
   , literalType
@@ -73,11 +75,14 @@ qualifiedMemberType spanValue target member = case target of
   _ -> pure Nothing
 
 enclosingReturnType :: Text -> Checker Type
-enclosingReturnType binding = do
+enclosingReturnType binding = snd <$> enclosingFunctionType binding
+
+enclosingFunctionType :: Text -> Checker (Bool, Type)
+enclosingFunctionType binding = do
   found <- lookupName binding
   case found of
-    Just (Scheme _ _ (FunctionTypeValue _ _ result)) -> pure result
-    _ -> freshVariable
+    Just (Scheme _ _ (FunctionTypeValue asynchronous _ result)) -> pure (asynchronous, result)
+    _ -> (,) False <$> freshVariable
 
 tryType :: Span -> Type -> Type -> Checker Type
 tryType spanValue targetType declaredResult = do
@@ -164,20 +169,20 @@ binaryType spanValue operator left right
 callType :: Span -> Type -> [Type] -> Checker Type
 callType spanValue calleeType argumentTypes = case calleeType of
   ErrorType -> pure ErrorType
-  FunctionTypeValue _ inputs result
+  FunctionTypeValue asynchronous inputs result
     | length inputs == length argumentTypes -> do
         _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
-        pure result
+        callResult asynchronous result
     | length argumentTypes < length inputs -> do
         _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
-        pure result
+        callResult asynchronous result
     | otherwise -> do
         report "E3003" spanValue
           ( "expected " <> countText (length inputs)
               <> ", found " <> countText (length argumentTypes)
           )
           (Just "pass one argument per parameter, or give the parameter a default")
-        pure result
+        callResult asynchronous result
   VariableType _ -> do
     result <- freshVariable
     _ <- unify spanValue calleeType (FunctionTypeValue False argumentTypes result)
@@ -187,6 +192,55 @@ callType spanValue calleeType argumentTypes = case calleeType of
     report "E3004" spanValue ("this is not callable: " <> renderCallee rendered)
       (Just "call a function, a variant constructor, or a value of function type")
     pure ErrorType
+
+callResult :: Bool -> Type -> Checker Type
+callResult asynchronous result
+  | not asynchronous = pure result
+  | otherwise = do
+      resolved <- zonk result
+      pure $ case resolved of
+        NominalType "Result" [success, failure] -> NominalType "Task" [success, failure]
+        other -> NominalType "Task" [other, NeverType]
+
+awaitType :: Span -> Bool -> Type -> Type -> Checker Type
+awaitType spanValue asynchronous targetType declaredResult
+  | not asynchronous = do
+      report "E3016" spanValue ".await is only legal inside async fn"
+        (Just "move the await into an async function, or return the task")
+      pure ErrorType
+  | otherwise = do
+      resolved <- zonk targetType
+      case resolved of
+        NominalType "Task" [success, failure] -> do
+          propagateFailure ".await" spanValue failure declaredResult
+          pure success
+        ErrorType -> pure ErrorType
+        _ -> do
+          report "E3017" spanValue (".await needs a Task, found " <> renderType resolved)
+            (Just "await an async function call or another Task value")
+          pure ErrorType
+
+propagateFailure :: Text -> Span -> Type -> Type -> Checker ()
+propagateFailure syntax spanValue failure declaredResult = do
+  resolvedFailure <- zonk failure
+  case resolvedFailure of
+    NeverType -> pure ()
+    ErrorType -> pure ()
+    _ -> do
+      resolvedResult <- zonk declaredResult
+      case resolvedResult of
+        NominalType "Result" [_, declaredFailure] -> do
+          _ <- unify spanValue declaredFailure resolvedFailure
+          pure ()
+        VariableType _ -> do
+          resultSuccess <- freshVariable
+          _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, resolvedFailure])
+          pure ()
+        ErrorType -> pure ()
+        _ ->
+          report "E3011" spanValue
+            (syntax <> " needs a function returning Result, found " <> renderType resolvedResult)
+            (Just "declare the function's result as Result, or handle the failure explicitly")
 
 renderCallee :: Type -> Text
 renderCallee = renderType

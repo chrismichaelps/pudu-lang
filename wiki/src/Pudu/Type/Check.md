@@ -31,8 +31,9 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 ### Governance
 
 - Signatures are collected before any body is checked, so a function may call one declared later, exactly as resolution already promised for names.
-- Inference is local and bidirectional, matching [[architecture/SEMANTICS]]'s inference boundary: an absent annotation becomes a fresh variable the body solves, and no caller is ever inspected to type a callee.
+- Inference is local and bidirectional, matching [[architecture/SEMANTICS]]'s inference boundary: an absent annotation on a synchronous private function becomes a fresh variable the body solves, and no caller is ever inspected to type a callee.
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
+- Every async function also annotates its parameters and return type. `E3010` rejects an incomplete async signature because callers must form stable `Task[S, E]` channels before bodies are checked, including forward calls.
 - Exported trait members and every implementation method obey the same complete-signature rule because their bodies are stripped from module interfaces. `E3010` is emitted in the defining module before an incomplete member could become consumer-dependent inference.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
@@ -40,6 +41,7 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 - `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
 - Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
+- Async calls normalize their surface result into `Task[S, E]`. `.await` is admitted only inside an async function, accepts only a task, yields `S`, and requires the enclosing surface result to carry a compatible `Result` failure when `E` is not `Never`.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A member whose target is a module-name expression first probes the full qualified value key (for example `Alias.make`) before receiver dispatch. This preserves the parser's shared dot syntax without treating module exports as fields or methods.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
@@ -57,14 +59,15 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 ## Negative Logic (Prohibited Paths)
 
-- No specialization, `Task` normalization, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, caller-dependent inference, dependency traversal, or imported-body checking.
+- No specialization, task scheduling, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, caller-dependent inference, dependency traversal, or imported-body checking.
 
 ## Edge Cases
 
 - A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape.
 - A call with fewer arguments than parameters is accepted here because a parameter may declare a default; arity is only rejected when there are too many.
 - `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
-- `.await` currently passes its operand's type through, because task normalization belongs to the slice that introduces async execution.
+- `.await` reports `E3016` outside an async function and `E3017` for a non-task operand. A task failure uses `E3011` when the enclosing return cannot propagate it; a mismatched `Result` failure type remains ordinary `E3001`.
+- A private async function with an omitted parameter or return annotation reports `E3010` at the omitted contract component; synchronous private inference remains admitted.
 - A trait member body treats `Self` as a rigid parameter (added to the rigid list alongside the member's own type params), so `formType` produces `RigidType "Self"` rather than `NominalType "Self"`. This routes `self.method()` calls through `rigidMethod` and the trait bound installed by `selfBoundAsBound`, letting a default body call other trait methods on `self`. An impl member does not add `Self` to rigid: `Self` is aliased to the target nominal type through `implAliases`, so method calls resolve through the nominal path.
 
 ## Depth
@@ -74,15 +77,16 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 ## Grill Log
 
 - **Q:** Infer exported signatures too? **A:** No; require the annotation. _Rationale:_ an exported signature is what callers compile against, and inferring it would let an unrelated body edit break them silently. _Rejected:_ whole-program inference; inferring and then freezing the first inferred shape.
+- **Q:** Infer a private async signature from its body? **A:** No; require the same complete parameter and return annotations with `E3010`. _Rationale:_ a forward caller must split a surface `Result[S, E]` into task channels before the body is visited, so delayed inference would make task typing declaration-order dependent. _Rejected:_ guessing `Task[T, Never]`; caller-driven inference; a second body-checking pass.
 - **Q:** How are cascades avoided? **A:** A failed unification yields `ErrorType`, which unifies with everything afterwards. _Rationale:_ the diagnostic contract requires that later phases not repeat a defect an earlier one already explained, and the same logic applies within a phase. _Rejected:_ aborting at the first error; suppressing by counting.
 - **Q:** Should the checker reuse the resolver's symbols? **A:** Not yet. _Rationale:_ mapping references by span is fragile without a shared resolved tree, and the honest fix is that shared tree rather than a lookup that silently mismatches. _Rejected:_ span-keyed symbol lookup; merging the two phases.
-- **Q:** What happens to `?` and `.await` now? **A:** They type as fresh variables and are documented as awaiting the failure and task slice. _Rationale:_ guessing `Result[T, E]` normalization before it is implemented would produce confident, wrong diagnostics. _Rejected:_ partial `Result` support; rejecting the syntax the parser already admits.
+- **Q:** Should `.await` merely pass through the task type? **A:** No; it yields the success channel and propagates the failure channel through the enclosing async result. _Rationale:_ a task is a suspended computation, not its eventual value. _Rejected:_ pass-through typing; nested `Task[Result[S, E], Never]`.
 - **Q:** Should imported implementations be appended to the local declarations? **A:** No; install their interface schemes and relationships separately. _Rationale:_ concatenation would make the consumer appear to own dependency impls and re-run `E3014`/`E3015`. _Rejected:_ a synthetic combined module.
 - **Q:** Infer an omitted method annotation again in each consumer? **A:** No; require a complete interface signature with `E3010`. _Rationale:_ a body-free cycle has no stable evidence from which to reconstruct inference, so fresh consumer variables would change the public contract by context. _Rejected:_ contextual reconstruction; carrying dependency bodies into the consumer checker.
 
 ## Variants
 
-- Runtime linking, specialization, and `Task` normalization join later slices; each extends the rules rather than reshaping the walk.
+- Runtime linking, scheduling, cancellation, and specialization join later slices; each extends the rules rather than reshaping the walk.
 
 ## Referenced by
 

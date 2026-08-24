@@ -21,7 +21,7 @@ Own runtime values, builtin functions, and their rendering for [[Evaluator]].
 
 ## Interface
 
-The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit. `ArrayValue` wraps a `Data.Sequence.Seq Value` from `containers`, giving O(1) append and O(log n) index access with structural sharing for immutable updates.
+The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit. `ArrayValue` wraps a `Data.Sequence.Seq Value` from `containers`, giving O(1) append and O(log n) index access with structural sharing for immutable updates. `TaskValue` retains a closure plus its already-evaluated argument bindings so calling an async function does not run its body.
 
 ### Governance
 
@@ -46,6 +46,7 @@ Direct structural recursion over the value or syntax shape; no caching, no mutat
 
 - A shape this module cannot handle produces a diagnostic naming the shape, never a default value.
 - `BuiltinValue PanicBuiltin` is the prelude's `panic`: calling it stops evaluation with `E7007`, which represents a violated invariant rather than a recoverable domain failure.
+- `TaskValue` renders as an opaque task and is not callable as an ordinary function; only `.await` starts its retained closure body.
 
 ## Depth
 
@@ -54,6 +55,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Grill Log
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
+- **Q:** Store an already computed async result? **A:** No; store the prepared closure and bindings. _Rationale:_ an async call is cold and body evaluation begins at `.await`. _Rejected:_ eager execution wrapped in a task-shaped value; a placeholder unit task.
 
 ## Referenced by
 

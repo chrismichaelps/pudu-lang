@@ -14,6 +14,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Tree (Function)
+import Pudu.Source (Span)
 
 {-| @Eval.Value.Runtime — one evaluated result.
 
@@ -34,6 +35,7 @@ data Value
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
   | FunctionValue !Closure
+  | TaskValue !Closure ![(Text, Value)] !(Maybe Span)
   | BuiltinValue !Builtin
   | ArrayMethodValue !ArrayMethod !Value
   deriving stock (Eq, Show)
@@ -96,6 +98,7 @@ renderValue value = case value of
     | null payload -> name
     | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
   FunctionValue closure -> "<fn " <> closureName closure <> ">"
+  TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
  where
@@ -121,6 +124,7 @@ valueKind value = case value of
   RecordValue name _ -> name
   VariantValue name _ -> name
   FunctionValue _ -> "function"
+  TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"
   ArrayMethodValue _ _ -> "array method"
 

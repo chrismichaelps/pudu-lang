@@ -28,6 +28,7 @@ typeProperties =
   , ("an earlier phase's error suppresses type checking", testPhaseOrder)
   , ("wired-in Option and Result carry their constructors", testPreludeData)
   , ("? unwraps a Result inside a Result-returning function", testTry)
+  , ("async calls normalize task channels and await them", testAsync)
   , ("trait methods dispatch on the receiver type", testTraits)
   , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
@@ -315,6 +316,116 @@ testTry = do
     , counterexample "? needs a Result-returning function" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
     ]
+
+testAsync :: IO Property
+testAsync = do
+  task <- typeOfIn
+    [ "async fn fetch() -> Int { 42 }"
+    , "fn run() { fetch() }"
+    ] "fetch()"
+  failingTask <- typeOfIn
+    [ "async fn fetch() -> Result[Int, Str] { Ok(42) }"
+    , "fn run() { fetch() }"
+    ] "fetch()"
+  forwardTask <- typeOfIn
+    [ "fn run() { (fetch()) }"
+    , "async fn fetch() -> Result[Int, Str] { Ok(42) }"
+    ] "(fetch())"
+  awaited <- typeOfIn
+    [ "async fn fetch() -> Int { 42 }"
+    , "async fn run() -> Int { fetch().await }"
+    ] "fetch().await"
+  propagated <- codes
+    [ "module M"
+    , "async fn fetch() -> Result[Int, Str] { Ok(42) }"
+    , "async fn run() -> Result[Int, Str] {"
+    , "  let value = fetch().await"
+    , "  Ok(value)"
+    , "}"
+    ]
+  syncAwait <- codes
+    [ "module M"
+    , "async fn fetch() -> Int { 42 }"
+    , "fn run() -> Int { fetch().await }"
+    ]
+  nonTask <- codes
+    [ "module M"
+    , "async fn run() -> Int { (1).await }"
+    ]
+  missingCarrier <- codes
+    [ "module M"
+    , "async fn fetch() -> Result[Int, Str] { Ok(42) }"
+    , "async fn run() -> Int { fetch().await }"
+    ]
+  wrongFailure <- codes
+    [ "module M"
+    , "async fn fetch() -> Result[Int, Str] { Ok(42) }"
+    , "async fn run() -> Result[Int, Bool] {"
+    , "  let value = fetch().await"
+    , "  Ok(value)"
+    , "}"
+    ]
+  let missingReturnSource = Text.unlines
+        [ "module M"
+        , "async fn fetch() { 42 }"
+        ]
+      missingParameterSource = Text.unlines
+        [ "module M"
+        , "async fn fetch(value) -> Int { value }"
+        ]
+      syncAwaitSource = Text.unlines
+        [ "module M"
+        , "async fn fetch() -> Int { 42 }"
+        , "fn run() -> Int { fetch().await }"
+        ]
+      nonTaskSource = Text.unlines
+        [ "module M"
+        , "async fn run() -> Int { (1).await }"
+        ]
+  missingReturn <- compile missingReturnSource
+  missingParameter <- compile missingParameterSource
+  syncAwaitDiagnostic <- compile syncAwaitSource
+  nonTaskDiagnostic <- compile nonTaskSource
+  pure $ conjoin
+    [ counterexample "a non-failing async call is a Task" (task === "Task[Int, Never]")
+    , counterexample "Result supplies the task failure channel" (failingTask === "Task[Int, Str]")
+    , counterexample "forward calls use the declared task channels" (forwardTask === "Task[Int, Str]")
+    , counterexample "await yields the task success channel" (awaited === "Int")
+    , counterexample "a compatible async Result propagates failure" (propagated === [])
+    , counterexample "await is confined to async functions" (syncAwait === ["E3016"])
+    , counterexample "await accepts only Task" (nonTask === ["E3017"])
+    , counterexample "failing await needs a Result carrier" (missingCarrier === ["E3011"])
+    , counterexample "await failure types must agree" (wrongFailure === ["E3001"])
+    , diagnosticContract missingReturnSource "fetch" "E3010"
+        "async function fetch needs a return type"
+        (Just "annotate the return type so callers can form Task[S, E] without inspecting the body")
+        missingReturn
+    , diagnosticContract missingParameterSource "value)" "E3010"
+        "async parameter value needs a type"
+        (Just "annotate every parameter of an async function so calls do not determine its contract")
+        missingParameter
+    , diagnosticContract syncAwaitSource "fetch().await" "E3016"
+        ".await is only legal inside async fn"
+        (Just "move the await into an async function, or return the task")
+        syncAwaitDiagnostic
+    , diagnosticContract nonTaskSource "(1).await" "E3017"
+        ".await needs a Task, found Int"
+        (Just "await an async function call or another Task value")
+        nonTaskDiagnostic
+    ]
+
+diagnosticContract :: Text -> Text -> Text -> Text -> Maybe Text -> CompileResult -> Property
+diagnosticContract source needle expectedCode expectedMessage expectedHelp result =
+  case (compileDiagnostics result, region source needle) of
+    ([value], Just (expectedStart, _)) ->
+      conjoin
+        [ diagnosticCodeText (diagnosticCode value) === expectedCode
+        , diagnosticMessage value === expectedMessage
+        , diagnosticHelp value === expectedHelp
+        , unOffset (spanStart (diagnosticSpan value)) === expectedStart
+        ]
+    (values, location) ->
+      counterexample ("unexpected diagnostics or location: " <> show (length values, location)) False
 
 traitProgram :: [Text]
 traitProgram =

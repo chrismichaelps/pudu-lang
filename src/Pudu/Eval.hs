@@ -87,7 +87,11 @@ evaluateEntryPoint entryName moduleValue =
     loadDeclarations (moduleDeclarations moduleValue)
     found <- lookupName entryName
     case found of
-      Just (FunctionValue closure) -> callClosure closure [] Nothing
+      Just (FunctionValue closure) -> do
+        result <- callClosure closure [] Nothing
+        if functionAsync (closureFunction closure)
+          then awaitTask (locatedSpan (functionName (closureFunction closure))) result
+          else pure result
       _ -> pure UnitValue
 
 evaluateModule :: Module -> EvalOutcome
@@ -205,9 +209,18 @@ callClosure :: Closure -> [Value] -> Maybe Span -> Evaluator Value
 callClosure closure arguments callSpan = do
   let value = closureFunction closure
       parameters = functionParameters value
-  deeper <- descend callSpan
-  let supplied = maybe arguments (: arguments) (closureSelf closure)
+      supplied = maybe arguments (: arguments) (closureSelf closure)
   bindings <- bindArguments parameters supplied callSpan
+  if functionAsync value
+    then pure (TaskValue closure bindings callSpan)
+    else runClosure closure bindings callSpan
+
+{-| Start a prepared closure body. Async calls retain these bindings in a cold
+    task; ordinary calls enter here immediately. -}
+runClosure :: Closure -> [(Text, Value)] -> Maybe Span -> Evaluator Value
+runClosure closure bindings callSpan = do
+  let value = closureFunction closure
+  deeper <- descend callSpan
   outcome <- withFrame bindings $ catchUnwind $ case functionBody value of
     Nothing -> pure UnitValue
     Just (Located _ body) -> case body of
@@ -287,7 +300,7 @@ evaluate (Located spanValue expression) = case expression of
   TryExpression target -> do
     value <- evaluate target
     unwrapTry spanValue value
-  AwaitExpression target -> evaluate target
+  AwaitExpression target -> evaluate target >>= awaitTask spanValue
   TupleExpression members -> case members of
     [] -> pure UnitValue
     _ -> TupleValue <$> mapM evaluate members
@@ -417,6 +430,19 @@ applyFunction spanValue function arguments = case function of
   FunctionValue closure -> callClosure closure arguments (Just spanValue)
   ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
+
+{-| Await starts the retained async body. The tree evaluator has no scheduler,
+    but preserving this cold boundary keeps calls and awaits observably ordered. -}
+awaitTask :: Span -> Value -> Evaluator Value
+awaitTask spanValue task = case task of
+  TaskValue closure bindings callSpan -> do
+    result <- runClosure closure bindings callSpan
+    case result of
+      VariantValue "Ok" _ -> unwrapTry spanValue result
+      VariantValue "Err" _ -> unwrapTry spanValue result
+      _ -> pure result
+  _ -> abortAt (Just spanValue) "E7008" ("cannot await a " <> valueKind task)
+    (Just "await a task returned by an async function")
 
 {-| Apply a predicate function and interpret the result as a boolean. -}
 acceptByFunction :: Span -> Value -> Value -> Evaluator Bool

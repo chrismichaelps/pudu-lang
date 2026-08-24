@@ -115,6 +115,9 @@ tags: [handoff]
 - [Role: DNA Engineer → Shadow] Installed dependency interfaces as the checker's outer environment, including canonical functions, constants, constructors, aliases, selected trait implementations, body-free defaults, mixed imported/local ambiguity, qualified collision diagnostics, and exported-constant `E3010` enforcement.
 - [Role: DNA Engineer → Shadow] Added deterministic filesystem graph discovery, canonical module-path validation, structured `E2014`/`E2015`, memoized transitive loading, SCC signature-cycle ordering, retained source provenance, and contextual compilation against whole-program semantic/type interfaces.
 - [Role: DNA Engineer → Shadow] Routed batch checking and REPL loading through the same program compiler, rendered each graph diagnostic against its owning source snapshot, and retained the admitted compile context for post-load interactive declarations. Issue #29's static module boundary is now complete.
+- [Role: Architect → DNA Engineer] Selected issue #41 as the next maturity slice and resolved its boundary: async calls normalize to `Task[S, E]`, `.await` enforces async capability and failure propagation, and the evaluator represents a cold prepared task without claiming scheduling or cancellation.
+- [Role: DNA Engineer → Shadow] Implemented async task normalization, `E3016`/`E3017`, compatible failure propagation, cold prepared evaluator tasks, and async-only host entry driving. Focused type/runtime properties cover ordinary and failing channels, success/failure await, illegal capability/operand use, and cold-call behavior.
+- [Role: Shadow → DNA Engineer] Closed the forward-call inference edge by requiring complete async parameter/return annotations with `E3010`; added exact diagnostic contracts plus static/runtime forward-declaration cases. Clean development and optimized suites pass, `cabal check` is clean, and normalization, capability, cold-execution, and annotation-boundary mutants are killed.
 - [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
 - [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
@@ -139,7 +142,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Language Architect: select the next ready language-maturity issue; keep runtime dependency linking separate from issue #29's completed static boundary.
+DNA Engineer: run the real `puduci` task-normalization/await gate, then commit issue #41 without modifying the tested tree and promote it through CI.
 
 ## Links
 
