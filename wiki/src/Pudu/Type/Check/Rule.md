@@ -25,6 +25,8 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.
 - These rules never recurse into sub-expressions; the walk in [[Type Check]] owns that, which is what keeps the two modules free of a cycle.
+- Qualified value paths are looked up in full rather than by final segment. Trait and concrete-receiver method lookup use canonical `NominalId` keys, keeping same-basename declarations in different modules distinct.
+- `qualifiedMemberType` recognizes the parser's module-dot-value shape and instantiates the full qualified binding before ordinary field/method dispatch. `enclosingReturnType` reads the current function signature, and `tryType` owns the closed `Result` propagation rule.
 
 ### Linkage
 

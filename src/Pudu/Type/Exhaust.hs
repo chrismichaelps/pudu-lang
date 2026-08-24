@@ -13,7 +13,7 @@ import Pudu.Frontend.Syntax.Tree (MatchArm (..), Pattern (..))
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, lookupOwnerVariants, report, warn)
 import Pudu.Type.Unify (zonk)
-import Pudu.Type.Value (Type (..), renderType)
+import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 
 {-| Check that a match covers every value its scrutinee can take, and that no
     arm is unreachable.
@@ -40,13 +40,13 @@ checkExhaustive spanValue subjectType arms = do
 {-| A closed domain is covered when every constructor appears in an unguarded
     arm whose sub-patterns bind rather than test, or when an irrefutable arm
     covers what remains. -}
-checkClosed :: Span -> Text -> [Text] -> [Located MatchArm] -> Checker ()
+checkClosed :: Span -> NominalId -> [Text] -> [Located MatchArm] -> Checker ()
 checkClosed spanValue owner names arms
   | any irrefutableArm arms = pure ()
   | null missing = pure ()
   | otherwise =
       report "E5001" spanValue
-        ("match on " <> owner <> " does not cover " <> Text.intercalate ", " missing)
+        ("match on " <> nominalName owner <> " does not cover " <> Text.intercalate ", " missing)
         (Just "add a case for each remaining constructor, or a wildcard case")
  where
   covered = concatMap coveredNames arms

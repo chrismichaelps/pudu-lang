@@ -38,18 +38,19 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
-import Pudu.Type.Value (Scheme, Type (..), TypeVar (..))
+import Pudu.Type.Value (NominalId, Scheme, Type (..), TypeVar (..))
 
 {-| @Type.Env.Declared — what the module's declarations contribute.
 
     Record fields and sum variants are keyed by the names their declarations
     introduced, which is how a construction or a pattern finds its shape. -}
 data DeclaredTypes = DeclaredTypes
-  { declaredParams :: !(Map Text [Text])
-  , declaredFields :: !(Map Text [(Text, Type)])
-  , declaredVariants :: !(Map Text (Text, [Text], [Type]))
-  , declaredOwners :: !(Map Text [Text])
-  , declaredImpls :: !(Map Text [Text])
+  { declaredNames :: !(Map Text NominalId)
+  , declaredParams :: !(Map NominalId [Text])
+  , declaredFields :: !(Map NominalId [(Text, Type)])
+  , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
+  , declaredOwners :: !(Map NominalId [Text])
+  , declaredImpls :: !(Map NominalId [NominalId])
   , declaredAliases :: !(Map Text Type)
   }
   deriving stock (Eq, Show)
@@ -57,7 +58,8 @@ data DeclaredTypes = DeclaredTypes
 emptyDeclared :: DeclaredTypes
 emptyDeclared =
   DeclaredTypes
-    { declaredParams = Map.empty
+    { declaredNames = Map.empty
+    , declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredVariants = Map.empty
     , declaredOwners = Map.empty
@@ -76,8 +78,8 @@ data CheckerState = CheckerState
   , stateFrames :: ![Map Text Scheme]
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
-  , stateObligations :: ![(Span, Type, Text)]
-  , stateRigidBounds :: !(Map Text [Text])
+  , stateObligations :: ![(Span, Type, NominalId)]
+  , stateRigidBounds :: !(Map Text [NominalId])
   , stateDiagnosticsRev :: ![Diagnostic]
   }
 
@@ -177,17 +179,17 @@ inTypeScope action = do
 withDeclared :: DeclaredTypes -> Checker ()
 withDeclared declared = Checker $ \state -> ((), state{stateDeclared = declared})
 
-lookupField :: Text -> Checker (Maybe [(Text, Type)])
+lookupField :: NominalId -> Checker (Maybe [(Text, Type)])
 lookupField name =
   Checker $ \state -> (Map.lookup name (declaredFields (stateDeclared state)), state)
 
 {-| Every variant a sum declares, in declaration order. Exhaustiveness reads it
     to know what a match must still cover. -}
-lookupOwnerVariants :: Text -> Checker (Maybe [Text])
+lookupOwnerVariants :: NominalId -> Checker (Maybe [Text])
 lookupOwnerVariants owner =
   Checker $ \state -> (Map.lookup owner (declaredOwners (stateDeclared state)), state)
 
-lookupVariant :: Text -> Checker (Maybe (Text, [Text], [Type]))
+lookupVariant :: Text -> Checker (Maybe (NominalId, [Text], [Type]))
 lookupVariant name =
   Checker $ \state -> (Map.lookup name (declaredVariants (stateDeclared state)), state)
 
@@ -202,12 +204,12 @@ keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
 
 {-| Record that a type must implement a trait. Obligations are proved after the
     body is checked, when inference has solved what the argument types are. -}
-addObligation :: Span -> Type -> Text -> Checker ()
+addObligation :: Span -> Type -> NominalId -> Checker ()
 addObligation spanValue typeValue traitText =
   Checker $ \state ->
     ((), state{stateObligations = (spanValue, typeValue, traitText) : stateObligations state})
 
-takeObligations :: Checker [(Span, Type, Text)]
+takeObligations :: Checker [(Span, Type, NominalId)]
 takeObligations =
   Checker $ \state -> (reverse (stateObligations state), state{stateObligations = []})
 
@@ -216,31 +218,31 @@ takeObligations =
     from the parameter list and the `where` clause are merged with `(<>`) so a
     parameter that carries bounds in both places keeps all of them rather than
     the last entry overwriting the first. -}
-withRigidBounds :: [(Text, [Text])] -> Checker a -> Checker ()
+withRigidBounds :: [(Text, [NominalId])] -> Checker a -> Checker ()
 withRigidBounds bounds action = do
   previous <- currentRigidBounds
   setRigidBounds (Map.fromListWith (<>) bounds)
   _ <- action
   setRigidBounds previous
 
-currentRigidBounds :: Checker (Map Text [Text])
+currentRigidBounds :: Checker (Map Text [NominalId])
 currentRigidBounds = Checker $ \state -> (stateRigidBounds state, state)
 
-setRigidBounds :: Map Text [Text] -> Checker ()
+setRigidBounds :: Map Text [NominalId] -> Checker ()
 setRigidBounds bounds = Checker $ \state -> ((), state{stateRigidBounds = bounds})
 
 {-| The traits a rigid parameter was declared to satisfy. A method call on it
     is answered by those traits, which is what a bound is for. -}
-rigidBoundsOf :: Text -> Checker [Text]
+rigidBoundsOf :: Text -> Checker [NominalId]
 rigidBoundsOf name =
   Checker $ \state -> (maybe [] id (Map.lookup name (stateRigidBounds state)), state)
 
-rigidSatisfies :: Text -> Text -> Checker Bool
+rigidSatisfies :: Text -> NominalId -> Checker Bool
 rigidSatisfies name traitText =
   Checker $ \state ->
     (maybe False (elem traitText) (Map.lookup name (stateRigidBounds state)), state)
 
-implementsTrait :: Text -> Text -> Checker Bool
+implementsTrait :: NominalId -> NominalId -> Checker Bool
 implementsTrait owner traitText =
   Checker $ \state ->
     ( maybe False (elem traitText) (Map.lookup owner (declaredImpls (stateDeclared state)))

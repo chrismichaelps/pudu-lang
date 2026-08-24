@@ -24,15 +24,15 @@ Give an implementation's functions the types they have as methods of their targe
 ### Signatures
 
 ```haskell
-declareMethods :: DeclaredTypes -> Map Text [Located Function] -> Impl -> Checker ()
+declareMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Impl -> Checker ()
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
-declareBounds :: Function -> [(Text, [Text])]
+declareBounds :: DeclaredTypes -> Function -> [(Text, [NominalId])]
 declareBuiltinConstructors :: Checker ()
 dischargeObligations :: Checker ()
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 functionRigid :: Function -> [Text]
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
-traitTable :: [Located Declaration] -> Map Text [Located Function]
+traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located Function]
 ```
 
 ### Governance
@@ -59,7 +59,7 @@ Form the implementation's target, bind each of its functions under the target's 
 
 ## Negative Logic (Prohibited Paths)
 
-- No general unification-overlap checking, dynamic dispatch, associated types or constants, or method resolution across modules. Orphan ownership and exact duplicate-head rejection are delegated to [[Type Check Coherence]].
+- No general unification-overlap checking, dynamic dispatch, associated types or constants, or filesystem/module traversal. Orphan ownership and exact duplicate-head rejection are delegated to [[Type Check Coherence]].
 
 ## Edge Cases
 
@@ -77,6 +77,7 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 - **Q:** Should methods live at module scope? **A:** No; they are keyed by their target type. _Rationale:_ two types may implement the same trait, and a flat scope would make one shadow the other. _Rejected:_ flat method names; a global method table keyed by name alone.
 - **Q:** Field or method when both spell the same name? **A:** The method, in callee position only. _Rationale:_ `value.name()` reads as a call, and a field holding a function can still be called by parenthesizing it. _Rejected:_ field always wins, which makes a method unreachable; method always wins, which hides a field.
 - **Q:** What should `methodScheme` return when bounds are ambiguous? **A:** `Just (monotype ErrorType)`, not `Nothing`. _Rationale:_ `checkCallee` falls through to `checkExpression` on `Nothing`, which re-enters `rigidMethod` and reports `E3013` a second time. Returning an error scheme keeps the call site typed as an error and stops the duplicate. _Rejected:_ returning `Nothing`, which duplicated the diagnostic; suppressing `E3013` in `rigidMethod`, which would lose the diagnostic for non-call member access.
+- **Q:** Can imported methods reuse `Owner.Method` basename keys? **A:** No; keys carry canonical owner identity and member spelling. _Rationale:_ `A.User.show` and `B.User.show` must never collide. _Rejected:_ last-segment owner keys; import-local aliases in method keys.
 
 ## Referenced by
 

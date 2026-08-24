@@ -3,14 +3,14 @@ module Pudu.Type.Check
   ( checkModule
   ) where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
@@ -37,7 +37,6 @@ import Pudu.Type.Env
   , freshVariable
   , inTypeScope
   , lookupField
-  , lookupName
   , recordExpression
   , report
   , withRigidBounds
@@ -48,12 +47,15 @@ import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Coherence (checkCoherence)
 import Pudu.Type.Check.Rule
   ( binaryType
+  , enclosingReturnType
   , instantiate
   , callType
   , elementType
   , literalType
   , memberType
   , nameType
+  , qualifiedMemberType
+  , tryType
   , unaryType
   )
 import Pudu.Type.Check.Method
@@ -76,13 +78,12 @@ import Pudu.Type.Formation
   )
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
-  ( Scheme (..)
+  ( NominalId (..)
   , monotype
   , polytype
   , Type (..)
   , boolType
   , integerType
-  , renderType
   )
 
 {-| Check one module. Signatures are collected before any body is checked, so a
@@ -94,10 +95,12 @@ checkModule moduleValue =
 
 checkUnit :: Module -> Checker ()
 checkUnit moduleValue = do
-  declared <- collectDeclared (moduleDeclarations moduleValue)
+  declared <- collectDeclared
+    (locatedValue (moduleName moduleValue))
+    (moduleDeclarations moduleValue)
   withDeclared declared
   declareBuiltinConstructors
-  let traits = traitTable (moduleDeclarations moduleValue)
+  let traits = traitTable declared (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
   mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
@@ -105,7 +108,7 @@ checkUnit moduleValue = do
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature
-  :: DeclaredTypes -> Map.Map Text [Located Function] -> Located Declaration -> Checker ()
+  :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Located Declaration -> Checker ()
 declareSignature declared traits (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name annotation _ -> do
     formed <- formOptionalType declared [] annotation
@@ -115,15 +118,13 @@ declareSignature declared traits (Located _ declaration) = case declaration of
   ImplDeclaration value -> declareMethods declared traits value
   TraitDeclaration value -> declareTraitMembers declared value
   _ -> pure ()
-
-
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
   let rigid = functionRigid value
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
   bindName (locatedValue (functionName value))
-    ( polytype rigid (declareBounds value)
+    ( polytype rigid (declareBounds declared value)
         (FunctionTypeValue (functionAsync value) inputs result)
     )
 
@@ -134,7 +135,8 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
   Tree.SumDefinition variants -> mapM_ declareVariant variants
   _ -> pure ()
  where
-  owner = locatedValue (Tree.typeName value)
+  ownerName = locatedValue (Tree.typeName value)
+  owner = Map.findWithDefault (NominalId Nothing ownerName) ownerName (declaredNames declared)
   rigid = map (locatedValue . typeParamName . locatedValue) (Tree.typeTypeParams value)
   ownerType = NominalType owner (map RigidType rigid)
   declareVariant (Located _ variant) = do
@@ -161,17 +163,21 @@ checkDeclaration declared (Located _ declaration) = case declaration of
     bindName (locatedValue name) (monotype expected)
   FunctionDeclaration value -> checkFunction declared Nothing value
   TraitDeclaration value ->
-    mapM_ (checkMember (traitAliases declared) (Just (locatedValue (traitName value)))) (traitMembers value)
+    let name = locatedValue (traitName value)
+        identity = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
+     in do
+       when (traitVisibility value == Exported) $
+         mapM_ (requireInterfaceAnnotations "exported trait member" . locatedValue) (traitMembers value)
+       mapM_ (checkMember (traitAliases declared) (Just identity)) (traitMembers value)
   ImplDeclaration value ->
-    mapM_ (checkMember (implAliases declared value) Nothing) (implFunctions value)
+    do
+      mapM_ (requireInterfaceAnnotations "implementation method" . locatedValue) (implFunctions value)
+      mapM_ (checkMember (implAliases declared value) Nothing) (implFunctions value)
   _ -> pure ()
 
-{-| Check a trait or impl member body. A trait member receives the trait's own
-    name as `Self`'s bound, so a default body may call other trait methods on
-    `self` through the bindings `declareTraitMembers` already published. An impl
-    member needs no such bound: `Self` is aliased to the target nominal type, so
-    method calls resolve through `methodScheme`'s nominal path. -}
-checkMember :: DeclaredTypes -> Maybe Text -> Located Function -> Checker ()
+{-| Check a trait member with a rigid `Self` bound, or an implementation member
+    with `Self` aliased to its canonical target. -}
+checkMember :: DeclaredTypes -> Maybe NominalId -> Located Function -> Checker ()
 checkMember declared selfBound (Located _ value) = checkFunction declared selfBound value
 
 {-| `Self` inside a trait is the implementing type, which is unknown while the
@@ -179,18 +185,13 @@ checkMember declared selfBound (Located _ value) = checkFunction declared selfBo
 traitAliases :: DeclaredTypes -> DeclaredTypes
 traitAliases = id
 
-{-| Check a function body against its declared result. An exported function
-    must annotate what it promises, because [[grammar/pudu]] makes an exported
-    signature a compatibility boundary that callers read without the body.
-
-    A trait member receives its trait's name as `Self`'s bound, so a default
-    body may call other trait methods on `self`. The bound is threaded rather
-    than discovered from the environment because the trait name is a property
-    of the declaration being checked, not of the surrounding scope. -}
-checkFunction :: DeclaredTypes -> Maybe Text -> Function -> Checker ()
+{-| Check a function body against its declared result. Exported signatures are
+    annotated interfaces; a trait member receives its canonical trait as the
+    rigid `Self` bound used by default-body method calls. -}
+checkFunction :: DeclaredTypes -> Maybe NominalId -> Function -> Checker ()
 checkFunction declared selfBound value = do
   let rigid = functionRigid value <> foldMap selfRigid selfBound
-      bounds = declareBounds value <> foldMap selfBoundAsBound selfBound
+      bounds = declareBounds declared value <> foldMap selfBoundAsBound selfBound
   requireExportedAnnotations value
   withRigidBounds bounds $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
@@ -208,14 +209,14 @@ checkFunction declared selfBound value = do
 
 {-| The bound a trait member adds: `Self` satisfies the trait it belongs to,
     which lets a default body call other trait methods on `self`. -}
-selfBoundAsBound :: Text -> [(Text, [Text])]
+selfBoundAsBound :: NominalId -> [(Text, [NominalId])]
 selfBoundAsBound traitName = [("Self", [traitName])]
 
 {-| `Self` is rigid inside a trait member so that `formType` produces
     `RigidType "Self"` rather than `NominalType "Self"`, routing method
     calls through `rigidMethod` and the trait bound installed by
     `selfBoundAsBound`. -}
-selfRigid :: Text -> [Text]
+selfRigid :: NominalId -> [Text]
 selfRigid _ = ["Self"]
 
 selfName :: Text
@@ -239,6 +240,23 @@ requireExportedAnnotations value
       report "E3010" parameterSpan
         ("exported parameter " <> locatedValue (Tree.parameterName parameter) <> " needs a type")
         (Just "annotate every parameter of an exported function")
+
+requireInterfaceAnnotations :: Text -> Function -> Checker ()
+requireInterfaceAnnotations kind value = do
+  mapM_ requireParameter (functionParameters value)
+  case functionReturn value of
+    Just _ -> pure ()
+    Nothing ->
+      report "E3010" (locatedSpan (functionName value))
+        (kind <> " " <> locatedValue (functionName value) <> " needs a return type")
+        (Just "annotate the complete signature because importers read it without its body")
+ where
+  requireParameter (Located parameterSpan parameter) = case Tree.parameterType parameter of
+    Just _ -> pure ()
+    Nothing ->
+      report "E3010" parameterSpan
+        (kind <> " parameter " <> locatedValue (Tree.parameterName parameter) <> " needs a type")
+        (Just "annotate every interface-carried parameter")
 
 bindParameter :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
 bindParameter declared rigid (Located _ parameter) = do
@@ -275,7 +293,7 @@ checkStatement declared rigid (Located _ statement) = case statement of
     actual <- case value of
       Nothing -> pure UnitTypeValue
       Just expression -> checkExpression declared rigid expression
-    expected <- returnType
+    expected <- enclosingReturnType selfName
     case value of
       Nothing -> pure ()
       Just expression -> do
@@ -285,56 +303,31 @@ checkStatement declared rigid (Located _ statement) = case statement of
   ContinueStatement -> pure ()
   InvalidStatement -> pure ()
 
-{-| `?` unwraps a `Result` and propagates its failure, so it is admitted only
-    inside a function that returns a `Result` carrying the same failure type.
-    Conversion through `From` is the slice that introduces trait resolution. -}
-tryType :: Span -> Type -> Checker Type
-tryType spanValue targetType = do
-  success <- freshVariable
-  failure <- freshVariable
-  _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
-  declaredResult <- returnType >>= zonk
-  case declaredResult of
-    NominalType "Result" [_, declaredFailure] -> do
-      _ <- unify spanValue declaredFailure failure
-      pure success
-    VariableType _ -> do
-      resultSuccess <- freshVariable
-      _ <- unify spanValue declaredResult (NominalType "Result" [resultSuccess, failure])
-      pure success
-    ErrorType -> pure ErrorType
-    _ -> do
-      report "E3011" spanValue
-        ("? needs a function returning Result, found " <> renderType declaredResult)
-        (Just "declare the function's result as Result, or match the value instead")
-      pure success
-
-returnType :: Checker Type
-returnType = do
-  found <- lookupName selfName
-  case found of
-    Just (Scheme _ _ (FunctionTypeValue _ _ result)) -> pure result
-    _ -> freshVariable
-
 {-| A member in callee position prefers a method over a field of the same
     name, because `value.name()` reads as a call and a field would have to be
     parenthesized to be called anyway. -}
 checkCallee :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
 checkCallee declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
-    targetType <- checkExpression declared rigid target
-    resolved <- zonk targetType
-    method <- methodScheme calleeSpan resolved (locatedValue member)
-    case method of
-      Nothing -> checkExpression declared rigid located
-      Just scheme -> do
-        instantiated <- instantiate calleeSpan scheme
-        let applied = case instantiated of
-              FunctionTypeValue asynchronous (_ : rest) result ->
-                FunctionTypeValue asynchronous rest result
-              other -> other
-        recordExpression calleeSpan applied
-        pure applied
+    qualified <- qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
+    case qualified of
+      Just instantiated -> do
+        recordExpression calleeSpan instantiated
+        pure instantiated
+      Nothing -> do
+        targetType <- checkExpression declared rigid target
+        resolved <- zonk targetType
+        method <- methodScheme calleeSpan resolved (locatedValue member)
+        case method of
+          Nothing -> checkExpression declared rigid located
+          Just scheme -> do
+            instantiated <- instantiate calleeSpan scheme
+            let applied = case instantiated of
+                  FunctionTypeValue asynchronous (_ : rest) result ->
+                    FunctionTypeValue asynchronous rest result
+                  other -> other
+            recordExpression calleeSpan applied
+            pure applied
   _ -> checkExpression declared rigid located
 
 {-| Check one expression and record the type it was given, so tooling can
@@ -362,8 +355,12 @@ inferExpression declared rigid spanValue expression = case expression of
     argumentTypes <- mapM (checkExpression declared rigid) arguments
     callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
-    targetType <- checkExpression declared rigid target
-    memberType spanValue targetType (locatedValue member)
+    qualified <- qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
+    case qualified of
+      Just value -> pure value
+      Nothing -> do
+        targetType <- checkExpression declared rigid target
+        memberType spanValue targetType (locatedValue member)
   IndexExpression target index -> do
     targetType <- checkExpression declared rigid target
     indexType <- checkExpression declared rigid index
@@ -371,7 +368,8 @@ inferExpression declared rigid spanValue expression = case expression of
     elementType spanValue targetType
   TryExpression target -> do
     targetType <- checkExpression declared rigid target
-    tryType spanValue targetType
+    declaredResult <- enclosingReturnType selfName
+    tryType spanValue targetType declaredResult
   AwaitExpression target -> checkExpression declared rigid target
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
   ArrayExpression members -> do
@@ -419,7 +417,9 @@ recordType
   :: DeclaredTypes -> [Text] -> Span -> ModuleName -> [Located FieldInit] -> Checker Type
 recordType declared rigid spanValue path fields = do
   let name = NonEmpty.last (moduleNameSegments path)
-  declaredFieldTypes <- lookupField name
+      identity = Map.findWithDefault (NominalId Nothing (moduleNameText path))
+        (moduleNameText path) (declaredNames declared)
+  declaredFieldTypes <- lookupField identity
   case declaredFieldTypes of
     Nothing -> do
       report "E3007" spanValue (name <> " is not a record type")
@@ -436,7 +436,7 @@ recordType declared rigid spanValue path fields = do
           report "E3008" spanValue
             (name <> " construction is missing " <> Text.intercalate ", " missing)
             (Just "supply every declared field")
-      pure (NominalType name [])
+      pure (NominalType identity [])
 
 checkField
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()

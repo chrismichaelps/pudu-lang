@@ -11,12 +11,11 @@ module Pudu.Type.Check.Method
   , traitTable
   ) where
 
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameSegments)
+import Pudu.Frontend.Syntax.Name (moduleNameText)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Constraint (..)
@@ -41,16 +40,27 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
-import Pudu.Type.Value (Scheme, Type (..), monotype, polytype, renderType)
+import Pudu.Type.Value
+  ( NominalId (..)
+  , Scheme
+  , Type (..)
+  , monotype
+  , nominalKey
+  , nominalName
+  , polytype
+  , renderType
+  )
 
 {-| Trait members by trait name, so an implementation can inherit the defaults
     it does not override. -}
-traitTable :: [Located Declaration] -> Map.Map Text [Located Function]
-traitTable declarations =
+traitTable :: DeclaredTypes -> [Located Declaration] -> Map.Map NominalId [Located Function]
+traitTable declared declarations =
   Map.fromList
-    [ (locatedValue (traitName value), traitMembers value)
+    [ (identity (locatedValue (traitName value)), traitMembers value)
     | Located _ (TraitDeclaration value) <- declarations
     ]
+ where
+  identity name = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
 
 
 {-| A trait's members are bound under the trait's own name, so a call on a value
@@ -58,9 +68,12 @@ traitTable declarations =
     rigid: the implementing type is not known here. -}
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareTraitMembers declared value =
-  mapM_ (declareTraitMember declared (locatedValue (traitName value))) (traitMembers value)
+  mapM_ (declareTraitMember declared owner) (traitMembers value)
+ where
+  name = locatedValue (traitName value)
+  owner = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
 
-declareTraitMember :: DeclaredTypes -> Text -> Located Function -> Checker ()
+declareTraitMember :: DeclaredTypes -> NominalId -> Located Function -> Checker ()
 declareTraitMember declared owner (Located _ method) = do
   let rigid = "Self" : functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
@@ -71,19 +84,23 @@ declareTraitMember declared owner (Located _ method) = do
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
     type finds them, and so one method may call another. -}
-declareMethods :: DeclaredTypes -> Map.Map Text [Located Function] -> Impl -> Checker ()
+declareMethods :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Impl -> Checker ()
 declareMethods declared traits value = do
   target <- formType (implAliases declared value) [] (implTarget value)
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
       mapM_ (declareMethod declared value owner) (implFunctions value)
-      mapM_ (declareMethod declared value owner) (inheritedDefaults traits value)
+      mapM_ (declareMethod declared value owner) (inheritedDefaults declared traits value)
 
 {-| A trait member that carries a body is a default: an implementation that does
     not override it still has it. -}
-inheritedDefaults :: Map.Map Text [Located Function] -> Impl -> [Located Function]
-inheritedDefaults traits value = case implTraitName value of
+inheritedDefaults
+  :: DeclaredTypes
+  -> Map.Map NominalId [Located Function]
+  -> Impl
+  -> [Located Function]
+inheritedDefaults declared traits value = case implTraitName declared value of
   Nothing -> []
   Just traitText ->
     [ member
@@ -94,12 +111,12 @@ inheritedDefaults traits value = case implTraitName value of
  where
   provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
 
-implTraitName :: Impl -> Maybe Text
-implTraitName value = case locatedValue (implTrait value) of
-  Tree.NamedType path _ -> Just (NonEmpty.last (moduleNameSegments path))
+implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
+implTraitName declared value = case locatedValue (implTrait value) of
+  Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
   _ -> Nothing
 
-declareMethod :: DeclaredTypes -> Impl -> Text -> Located Function -> Checker ()
+declareMethod :: DeclaredTypes -> Impl -> NominalId -> Located Function -> Checker ()
 declareMethod declared value owner (Located _ method) = do
   let rigid = implRigid value <> functionRigid method
       aliases = implAliases declared value
@@ -111,7 +128,7 @@ declareMethod declared value owner (Located _ method) = do
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}
 implAliases :: DeclaredTypes -> Impl -> DeclaredTypes
-implAliases declared value = case implTargetName value of
+implAliases declared value = case implTargetName declared value of
   Nothing -> declared
   Just name ->
     declared
@@ -119,9 +136,9 @@ implAliases declared value = case implTargetName value of
           Map.insert "Self" (NominalType name []) (declaredAliases declared)
       }
 
-implTargetName :: Impl -> Maybe Text
-implTargetName value = case locatedValue (implTarget value) of
-  Tree.NamedType path _ -> Just (NonEmpty.last (moduleNameSegments path))
+implTargetName :: DeclaredTypes -> Impl -> Maybe NominalId
+implTargetName declared value = case locatedValue (implTarget value) of
+  Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
   _ -> Nothing
 
 functionRigid :: Function -> [Text]
@@ -130,13 +147,13 @@ functionRigid value = map (locatedValue . typeParamName . locatedValue) (functio
 implRigid :: Impl -> [Text]
 implRigid value = map (locatedValue . typeParamName . locatedValue) (implTypeParams value)
 
-targetName :: Type -> Maybe Text
+targetName :: Type -> Maybe NominalId
 targetName typeValue = case typeValue of
   NominalType name _ -> Just name
   _ -> Nothing
 
-methodKey :: Text -> Text -> Text
-methodKey owner method = owner <> "." <> method
+methodKey :: NominalId -> Text -> Text
+methodKey owner method = nominalKey owner <> "." <> method
 
 {-| Prove every trait obligation a call registered.
 
@@ -165,9 +182,9 @@ dischargeObligations = do
         satisfied <- implementsTrait owner traitText
         unless satisfied (unsatisfied spanValue resolved traitText)
       _ -> unsatisfied spanValue resolved traitText
-  unsatisfied spanValue resolved traitText =
+  unsatisfied spanValue resolved traitIdentity =
     report "E3012" spanValue
-      (renderType resolved <> " does not implement " <> traitText)
+      (renderType resolved <> " does not implement " <> nominalName traitIdentity)
       (Just "implement the trait for this type, or relax the bound")
 
 {-| The constructors of the wired-in sums exist without any declaration, so
@@ -189,19 +206,21 @@ declareBuiltinConstructors = do
 {-| The trait bounds a function's generic parameters carry, from the parameter
     list and from its `where` clause alike: both are obligations a call must
     satisfy, and [[grammar/pudu]] gives them the same meaning. -}
-declareBounds :: Function -> [(Text, [Text])]
-declareBounds value =
-  [ (locatedValue (typeParamName param), map boundName (typeParamBounds param))
+declareBounds :: DeclaredTypes -> Function -> [(Text, [NominalId])]
+declareBounds declared value =
+  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
   | Located _ param <- functionTypeParams value
   ]
-    <> [ (locatedValue (constraintSubject constraint), map boundName (constraintBounds constraint))
+    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
        | Located _ constraint <- functionConstraints value
        ]
 
-boundName :: Located Tree.TypeSyntax -> Text
-boundName (Located _ syntax) = case syntax of
-  Tree.NamedType path _ -> NonEmpty.last (moduleNameSegments path)
-  _ -> Text.empty
+boundName :: DeclaredTypes -> Located Tree.TypeSyntax -> NominalId
+boundName declared (Located _ syntax) = case syntax of
+  Tree.NamedType path _ ->
+    Map.findWithDefault (NominalId Nothing (moduleNameText path))
+      (moduleNameText path) (declaredNames declared)
+  _ -> NominalId Nothing Text.empty
 
 {-| Find a method for a receiver: on a nominal type through its
     implementations, on a rigid parameter through the traits its bounds
@@ -211,20 +230,20 @@ boundName (Located _ syntax) = case syntax of
     time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 methodScheme spanValue receiver member = case receiver of
-  NominalType owner _ -> lookupName (owner <> "." <> member)
+  NominalType owner _ -> lookupName (nominalKey owner <> "." <> member)
   RigidType name -> do
     bounds <- rigidBoundsOf name
     providers <- filterM provides bounds
     case providers of
       [] -> pure Nothing
-      [traitText] -> lookupName (traitText <> "." <> member)
+      [traitText] -> lookupName (nominalKey traitText <> "." <> member)
       _ -> do
         report "E3013" spanValue
-          (member <> " is ambiguous: provided by " <> Text.intercalate ", " providers)
+          (member <> " is ambiguous: provided by " <> Text.intercalate ", " (map nominalName providers))
           (Just "disambiguate with a qualified call or remove a trait bound")
         pure (Just (monotype ErrorType))
   _ -> pure Nothing
  where
   provides traitText = do
-    found <- lookupName (traitText <> "." <> member)
+    found <- lookupName (nominalKey traitText <> "." <> member)
     pure (case found of Nothing -> False; Just _ -> True)

@@ -35,6 +35,7 @@ checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
 - A missing case is `E5001` and names what is missing, because a list of remaining constructors is what the reader needs to act.
 - An arm after one that already matches everything is `W5001`, a warning rather than an error: unreachable code is a mistake worth reporting but not a reason to refuse the program.
 - Checking runs after the arms have been typed, so a scrutinee whose type failed produces no coverage complaint on top of the type error.
+- Closed sum domains are keyed by canonical `NominalId`, not the displayed basename, so imported sums with the same declaration name retain distinct constructor sets.
 
 ### Linkage
 
@@ -53,6 +54,7 @@ Resolve the scrutinee's type, report arms following an irrefutable one, then eit
 
 - A match on a value whose type is still an inference variable is not checked; the type is not yet known, and guessing would produce a diagnostic the reader cannot act on.
 - A nested pattern is judged only by whether it binds or tests, so a deeply structured arm never claims more coverage than it has.
+- Two modules may each declare `ResultLike`; exhaustiveness reads the constructor set owned by the scrutinee's canonical module-qualified identity rather than whichever basename was collected last.
 
 ## Depth
 

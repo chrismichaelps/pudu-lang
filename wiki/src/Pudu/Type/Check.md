@@ -32,11 +32,13 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - Signatures are collected before any body is checked, so a function may call one declared later, exactly as resolution already promised for names.
 - Inference is local and bidirectional, matching [[architecture/SEMANTICS]]'s inference boundary: an absent annotation becomes a fresh variable the body solves, and no caller is ever inspected to type a callee.
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
+- Exported trait members and every implementation method obey the same complete-signature rule because their bodies are stripped from module interfaces. `E3010` is emitted in the defining module before an incomplete member could become consumer-dependent inference.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
 - Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected. `E3014` rejects a module that owns neither the trait nor the target's expanded nominal declaration, while `E3015` rejects duplicate heads; body checking can continue to preserve useful independent diagnostics.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
+- A member whose target is a module-name expression first probes the full qualified value key (for example `Alias.make`) before receiver dispatch. This preserves the parser's shared dot syntax without treating module exports as fields or methods.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
 - `ErrorType` is poison: it unifies with everything, so one mistake produces one diagnostic instead of a cascade through every later use.
 - The checker keeps its own name frames rather than reusing the resolver's symbol table. The duplication is deliberate and bounded; a shared resolved representation is the slice that removes it.
@@ -52,7 +54,7 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 ## Negative Logic (Prohibited Paths)
 
-- No cross-module trait resolution, specialization, `Task` normalization, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, or caller-dependent inference.
+- No specialization, `Task` normalization, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, caller-dependent inference, dependency traversal, or imported-body checking.
 
 ## Edge Cases
 
@@ -75,7 +77,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Variants
 
-- Cross-module trait lookup, specialization, and `Task` normalization join later slices; each extends the rules rather than reshaping the walk.
+- Runtime linking, specialization, and `Task` normalization join later slices; each extends the rules rather than reshaping the walk.
 
 ## Referenced by
 
