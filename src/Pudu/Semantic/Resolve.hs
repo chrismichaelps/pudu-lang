@@ -2,11 +2,12 @@
 module Pudu.Semantic.Resolve
   ( Resolution (..)
   , resolveModule
+  , resolveModuleWith
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
-import Pudu.Diagnostic (Diagnostic)
+import Pudu.Diagnostic (Diagnostic, sortDiagnostics)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
@@ -42,6 +43,11 @@ import Pudu.Semantic.Prelude
   , preludeValueNames
   , wiredInTypeNames
   )
+import Pudu.Semantic.Interface
+  ( ExportIndex
+  , ImportBinding (..)
+  , importBindings
+  )
 import Pudu.Semantic.Resolve.Context
   ( Resolver
   , ResolverProducts (..)
@@ -70,15 +76,24 @@ data Resolution = Resolution
 {-| Resolve one parsed module. The walk is two-pass at module scope so a
     declaration may reference one that appears later in the file. -}
 resolveModule :: Module -> (Resolution, [Diagnostic])
-resolveModule moduleValue =
-  let products = runResolver (resolveUnit moduleValue)
+resolveModule = resolvePrepared Nothing []
+
+resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
+resolveModuleWith exports moduleValue =
+  let prepared = map (importBindings exports) (moduleImports moduleValue)
+   in resolvePrepared (Just (map fst prepared)) (concatMap snd prepared) moduleValue
+
+resolvePrepared
+  :: Maybe [[ImportBinding]] -> [Diagnostic] -> Module -> (Resolution, [Diagnostic])
+resolvePrepared prepared importDiagnostics moduleValue =
+  let products = runResolver (resolveUnit prepared moduleValue)
       symbols = producedSymbols products
    in ( Resolution
           { resolutionSymbols = symbols
           , resolutionReferences = producedReferences products
           , resolutionExports = filter isExported symbols
           }
-      , producedDiagnostics products
+      , sortDiagnostics (importDiagnostics <> producedDiagnostics products)
       )
 
 isExported :: Symbol -> Bool
@@ -87,13 +102,15 @@ isExported symbol = symbolVisibility symbol /= Private && symbolOrigin symbol ==
 {-| Scope layering follows the same shape Haskell uses: wired-in names first,
     then the implicit prelude module, then the module's own imports and
     declarations. An inner layer shadows an outer one silently. -}
-resolveUnit :: Module -> Resolver ()
-resolveUnit moduleValue = do
+resolveUnit :: Maybe [[ImportBinding]] -> Module -> Resolver ()
+resolveUnit prepared moduleValue = do
   declareWiredIn
   inScope $ do
     declarePrelude (moduleImports moduleValue)
     inScope $ do
-      mapM_ collectImport (moduleImports moduleValue)
+      case prepared of
+        Nothing -> mapM_ collectImport (moduleImports moduleValue)
+        Just bindings -> mapM_ collectPreparedImport bindings
       mapM_ collectDeclaration (moduleDeclarations moduleValue)
       mapM_ markAmbiguousVariant (repeatedVariants (moduleDeclarations moduleValue))
       mapM_ walkDeclaration (moduleDeclarations moduleValue)
@@ -142,6 +159,17 @@ collectImport (Located spanValue value) = case importAlias value of
   external name nameSpan = do
     declareNamed ValueSpace ImportOrigin Private False (Located nameSpan name)
     declareNamed TypeSpace ImportOrigin Private False (Located nameSpan name)
+
+collectPreparedImport :: [ImportBinding] -> Resolver ()
+collectPreparedImport = mapM_ declare
+ where
+  declare binding =
+    declareNamed
+      (bindingNamespace binding)
+      ImportOrigin
+      Private
+      False
+      (Located (bindingSpan binding) (bindingName binding))
 
 lastSegment :: ModuleName -> Text
 lastSegment (ModuleName segments) = case segments of
@@ -362,4 +390,3 @@ resolveConstructorPath spanValue (ModuleName (first :| _)) = resolveValueName sp
 
 resolveTypePath :: Span -> ModuleName -> Resolver ()
 resolveTypePath spanValue (ModuleName (first :| _)) = resolveTypeName spanValue first
-

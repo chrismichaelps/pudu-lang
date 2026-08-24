@@ -9,10 +9,15 @@ module Pudu.Semantic
   , boundSymbolNames
   , moduleSymbolNames
   , resolveModule
+  , resolveModuleWith
+  , ExportIndex
+  , emptyExportIndex
+  , exportIndex
   ) where
 
 import Data.Text (Text)
-import Pudu.Semantic.Resolve (Resolution (..), resolveModule)
+import Pudu.Semantic.Interface (ExportIndex, emptyExportIndex, exportIndex)
+import Pudu.Semantic.Resolve (Resolution (..), resolveModule, resolveModuleWith)
 import Pudu.Semantic.Symbol
   ( Namespace (..)
   , Reference (..)
