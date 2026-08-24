@@ -6,10 +6,11 @@ module Pudu.Repl
   , runRepl
   ) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.IO.Class (liftIO)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text (Text)
+import GHC.Clock (getMonotonicTime)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Diagnostic (Diagnostic, hasErrors)
@@ -20,7 +21,7 @@ import Pudu.Diagnostic.Render
   , renderDiagnosticsWith
   , renderSummary
   )
-import Pudu.Eval.Value (renderValue, valueKind)
+import Pudu.Eval.Value (Value, renderValue, valueKind)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
@@ -32,11 +33,19 @@ import Pudu.Repl.Complete
   , isNameCharacter
   , wantsFilename
   )
+import Pudu.Repl.Describe
+  ( declarationSummary
+  , describeInstances
+  , describeKindLines
+  , describeName
+  , importSummary
+  )
 import Pudu.Repl.Outline (outlineBlock)
 import Pudu.Repl.Session
   ( EntryResult (..)
   , LoadedModule (..)
   , Session (..)
+  , inspectContext
   , inspectSession
   , contextSummary
   , emptySession
@@ -73,6 +82,27 @@ data ReplOptions = ReplOptions
   }
   deriving stock (Eq, Show)
 
+{-| @Repl.Settings — what the reader turned on for this session.
+
+    Settings are session state, not options the entry point chose, so they live
+    beside the session rather than in the options record. -}
+data ReplSettings = ReplSettings
+  { settingShowTypes :: !Bool
+  , settingShowTiming :: !Bool
+  }
+  deriving stock (Eq, Show)
+
+defaultSettings' :: ReplSettings
+defaultSettings' = ReplSettings{settingShowTypes = False, settingShowTiming = False}
+
+{-| @Repl.Context — what every command needs: the entry point's choices, the
+    names completion offers, and the settings the reader turned on. -}
+data ReplContext = ReplContext
+  { contextOptions :: !ReplOptions
+  , contextVisible :: !(IORef CompletionSource)
+  , contextSettings :: !(IORef ReplSettings)
+  }
+
 defaultReplOptions :: ReplOptions
 defaultReplOptions = ReplOptions{replStyle = PlainStyle, replInitialLoad = Nothing}
 
@@ -102,8 +132,10 @@ runRepl options = do
     Nothing -> pure emptySession
     Just path -> performLoad options emptySession path
   visible <- newIORef =<< nameSourceFor session
+  chosen <- newIORef defaultSettings'
   settings <- sessionSettings visible
-  runInputT settings (withInterrupt (loop options visible session))
+  let context = ReplContext{contextOptions = options, contextVisible = visible, contextSettings = chosen}
+  runInputT settings (withInterrupt (loop context session))
 
 {-| History lives beside the reader's other tool history, and completion is
     session-aware. -}
@@ -152,35 +184,35 @@ nameSourceFor session = do
   (resolution, _) <- inspectSession session
   pure CompletionSource{sourceSessionNames = maybe [] sessionVisibleNames resolution}
 
-loop :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
-loop options visible session =
-  handleInterrupt (interrupted options visible session) $ do
+loop :: ReplContext -> Session -> InputT IO ()
+loop context session =
+  handleInterrupt (interrupted context session) $ do
     line <- readEntry prompt
     case line of
       Nothing -> say "Leaving puduci."
       Just raw -> case parseEntry raw of
-        BlankEntry -> loop options visible session
+        BlankEntry -> loop context session
         CommandEntry command -> do
-          outcome <- runCommand options session command
+          outcome <- runCommand context session command
           case outcome of
             Nothing -> say "Leaving puduci."
-            Just next -> continueWith options visible next
+            Just next -> continueWith context next
         SourceEntry text -> do
           whole <- readContinuation text
-          next <- runSource options session whole
-          continueWith options visible next
+          next <- runSource context session whole
+          continueWith context next
 
 {-| Ctrl-C abandons the line being typed and returns to the prompt with the
     session untouched, so an interrupt costs a line rather than a session. -}
-interrupted :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
-interrupted options visible session = do
+interrupted :: ReplContext -> Session -> InputT IO ()
+interrupted context session = do
   say "interrupted"
-  loop options visible session
+  loop context session
 
-continueWith :: ReplOptions -> IORef CompletionSource -> Session -> InputT IO ()
-continueWith options visible session = do
-  liftIO (writeIORef visible =<< nameSourceFor session)
-  loop options visible session
+continueWith :: ReplContext -> Session -> InputT IO ()
+continueWith context session = do
+  liftIO (writeIORef (contextVisible context) =<< nameSourceFor session)
+  loop context session
 
 say :: Text -> InputT IO ()
 say = outputStrLn . Text.unpack
@@ -253,8 +285,8 @@ openDepth = foldl step 0
       | symbolText symbol `elem` [")", "]", "}"] -> max 0 (total - 1)
     _ -> total
 
-runCommand :: ReplOptions -> Session -> Command -> InputT IO (Maybe Session)
-runCommand options session command = case command of
+runCommand :: ReplContext -> Session -> Command -> InputT IO (Maybe Session)
+runCommand context session command = case command of
   Quit -> pure Nothing
   Help -> liftIO showHelp >> pure (Just session)
   Reset -> say "session cleared" >> pure (Just emptySession)
@@ -277,14 +309,85 @@ runCommand options session command = case command of
   ShowType expression -> liftIO (showType options session expression) >> pure (Just session)
   ShowTokens text -> liftIO (showTokens text) >> pure (Just session)
   ShowAst text -> liftIO (showAst options text) >> pure (Just session)
-  BeginBlock -> Just <$> readBlock options session
+  BeginBlock -> Just <$> readBlock context session
   EndBlock -> do
     say "no multi-line block is open"
+    pure (Just session)
+  ShowInfo name -> describe describeName name
+  ShowKind name -> describe describeKindLines name
+  ShowInstances name -> describe (\moduleValue wanted -> emptyAs ("no instances for '" <> wanted <> "'") (describeInstances moduleValue wanted)) name
+  ShowSetting flag -> adjust flag True
+  ClearSetting flag -> adjust flag False
+  ShowState topic -> do
+    lines' <- liftIO (showState context session (Text.strip topic))
+    mapM_ say lines'
     pure (Just session)
   Unknown name -> do
     say ("unknown command ':" <> name <> "'")
     say "use :? for help."
     pure (Just session)
+ where
+  options = contextOptions context
+
+  describe render name
+    | Text.null (Text.strip name) = do
+        say "usage: :info <name>"
+        pure (Just session)
+    | otherwise = do
+        (_, parsed, _) <- liftIO (inspectContext session)
+        case parsed of
+          Nothing -> say "the session is empty"
+          Just moduleValue ->
+            mapM_ say $
+              emptyAs
+                ("not in scope: '" <> Text.strip name <> "'")
+                (render moduleValue (Text.strip name))
+        pure (Just session)
+
+  adjust flag wanted = do
+    let key = Text.strip flag
+    case settingFor key of
+      Nothing -> do
+        say ("unknown setting '" <> key <> "'")
+        say "known settings: +t (show types), +s (show timing)"
+        pure (Just session)
+      Just update -> do
+        liftIO (modifyIORef' (contextSettings context) (update wanted))
+        pure (Just session)
+
+{-| A prompt that says nothing has an answer too; say it rather than fall
+    silent, so the reader knows the command ran. -}
+emptyAs :: Text -> [Text] -> [Text]
+emptyAs message entries = if null entries then [message] else entries
+
+{-| @Repl.Settings — the switches a reader can flip mid-session. Named after the
+    flag they answer to so the help text and the parser cannot drift apart. -}
+settingFor :: Text -> Maybe (Bool -> ReplSettings -> ReplSettings)
+settingFor key = case Text.dropWhile (== '+') key of
+  "t" -> Just (\wanted settings -> settings{settingShowTypes = wanted})
+  "s" -> Just (\wanted settings -> settings{settingShowTiming = wanted})
+  _ -> Nothing
+
+{-| @Repl.State — what the session holds right now, grouped the way a reader
+    asks for it rather than the way the checker stores it. -}
+showState :: ReplContext -> Session -> Text -> IO [Text]
+showState context session topic = case topic of
+  "settings" -> do
+    settings <- readIORef (contextSettings context)
+    pure
+      [ "+t (show types)  " <> onOff (settingShowTypes settings)
+      , "+s (show timing) " <> onOff (settingShowTiming settings)
+      ]
+  "bindings" -> pure (emptyAs "no bindings" (contextSummary session))
+  "declarations" -> do
+    (_, parsed, _) <- inspectContext session
+    pure (emptyAs "no declarations" (foldMap declarationSummary parsed))
+  "imports" -> do
+    (_, parsed, _) <- inspectContext session
+    pure (emptyAs "no imports" (foldMap importSummary parsed))
+  _ -> pure ["usage: :show bindings|declarations|imports|settings"]
+ where
+  onOff wanted = if wanted then "on" else "off"
 
 showHelp :: IO ()
 showHelp = do
@@ -297,27 +400,43 @@ showHelp = do
     TextIO.putStrLn ("   " <> pad name <> description)
   pad name = name <> Text.replicate (max 1 (28 - Text.length name)) " "
 
-runSource :: ReplOptions -> Session -> Text -> InputT IO Session
-runSource options session text = do
+runSource :: ReplContext -> Session -> Text -> InputT IO Session
+runSource context session text = do
+  started <- liftIO getMonotonicTime
   result <- liftIO (submitEntry session text)
-  liftIO (reportEntry options result)
+  settings <- liftIO (readIORef (contextSettings context))
+  liftIO (reportEntry (contextOptions context) settings result)
+  finished <- liftIO getMonotonicTime
+  when (settingShowTiming settings) $
+    say ("(" <> Text.pack (show (finished - started)) <> " secs)")
   pure (resultSession result)
 
-reportEntry :: ReplOptions -> EntryResult -> IO ()
-reportEntry options result = do
+reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
+reportEntry options settings result = do
   let diagnostics = resultDiagnostics result
       config =
         interactiveRenderConfig (replStyle options) "<interactive>" (resultFirstLine result)
   unless (null diagnostics) $
     TextIO.putStrLn (renderDiagnosticsWith config (resultSource result) diagnostics)
   case resultValue result of
-    Just value | resultAccepted result -> TextIO.putStrLn (renderValue value)
+    Just value
+      | resultAccepted result ->
+          TextIO.putStrLn $
+            if settingShowTypes settings
+              then renderValue value <> " :: " <> entryTypeText result value
+              else renderValue value
     _ -> pure ()
+
+{-| With `:set +t` the prompt reports the checked type when the checker
+    produced one and the value's own kind when it did not, so the answer is
+    never less precise than what the session actually knows. -}
+entryTypeText :: EntryResult -> Value -> Text
+entryTypeText result value = maybe (valueKind value) renderType (resultType result)
 
 {-| `:{` reads until `:}`, so a declaration can be pasted or typed across lines
     even when its brackets balance on an early line. -}
-readBlock :: ReplOptions -> Session -> InputT IO Session
-readBlock options session = collect []
+readBlock :: ReplContext -> Session -> InputT IO Session
+readBlock context session = collect []
  where
   collect gathered = do
     line <- readEntry continuationPrompt
@@ -328,7 +447,7 @@ readBlock options session = collect []
         | otherwise -> collect (raw : gathered)
   finish gathered
     | null gathered = pure session
-    | otherwise = runSource options session (Text.intercalate "\n" (reverse gathered))
+    | otherwise = runSource context session (Text.intercalate "\n" (reverse gathered))
 
 {-| Loading replaces the session context with the file and clears entries typed
     against the previous context, so nothing survives that the new file cannot

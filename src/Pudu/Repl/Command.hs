@@ -22,6 +22,12 @@ data Command
   | ShowTokens !Text
   | ShowAst !Text
   | ShowContext
+  | ShowInfo !Text
+  | ShowKind !Text
+  | ShowInstances !Text
+  | ShowSetting !Text
+  | ClearSetting !Text
+  | ShowState !Text
   | BeginBlock
   | EndBlock
   | Unknown !Text
@@ -67,6 +73,12 @@ build canonical argument = case canonical of
   "tokens" -> ShowTokens argument
   "ast" -> ShowAst argument
   "context" -> ShowContext
+  "info" -> ShowInfo argument
+  "kind" -> ShowKind argument
+  "instances" -> ShowInstances argument
+  "set" -> ShowSetting argument
+  "unset" -> ClearSetting argument
+  "show" -> ShowState argument
   _ -> Unknown canonical
 
 {-| An abbreviation resolves to the first command that it prefixes, so the
@@ -84,7 +96,10 @@ resolveName typed
 {-| Order is priority: the first command an abbreviation prefixes wins. -}
 commandNames :: [Text]
 commandNames =
-  ["quit", "help", "load", "reload", "reset", "type", "tokens", "ast", "browse", "context"]
+  [ "quit", "help", "load", "reload", "reset"
+  , "type", "info", "kind", "instances"
+  , "tokens", "ast", "browse", "context", "show", "set", "unset"
+  ]
 
 commandHelp :: [(Text, Text)]
 commandHelp =
@@ -95,7 +110,13 @@ commandHelp =
   , (":reset", "forget every binding and declaration entered here")
   , (":browse", "list what the session context exports")
   , (":context", "show the declarations and bindings currently in scope")
-  , (":type <expr>", "report what is known about an expression")
+  , (":type <expr>", "report the type of an expression")
+  , (":info <name>", "show how a name is declared and what implements it")
+  , (":kind <type>", "show how many type arguments a type takes")
+  , (":instances <type>", "list the traits implemented for a type")
+  , (":set +t", "print the type after each result; :unset +t stops")
+  , (":set +s", "print how long each entry took; :unset +s stops")
+  , (":show <topic>", "bindings, imports, declarations, or settings")
   , (":tokens <text>", "show the token stream for one line")
   , (":ast <text>", "show the parsed structure of one line")
   , (":{ ... :}", "enter a multi-line block")

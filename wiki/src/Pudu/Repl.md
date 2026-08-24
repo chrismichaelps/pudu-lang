@@ -35,6 +35,12 @@ runRepl :: ReplOptions -> IO ()
 
 ### Governance
 
+- Session settings live in an `IORef` reached through `ReplContext` rather than being threaded as
+  a loop parameter: they are prompt state, like the completion snapshot beside them, and a command
+  that flips one must be visible to the entry evaluated after it.
+- `:set +t` reports the checker's type when there is one and falls back to the value's kind only
+  when the checker produced none, so the answer is never less precise than what the session knows.
+
 - The session is named `puduci` and prompts with `puduci> `, continuing with `puduci| `. The banner names the version and points at `:?`, so the first line tells a newcomer how to proceed.
 - Every command is a colon command; everything else is program text. Abbreviations resolve to the first command they prefix, so `:q`, `:l`, and `:t` stay stable as commands are added.
 - IO stays in this module. Compilation, evaluation, and session state live in [[Repl Session]], which is why the session's behaviour is testable without a terminal.

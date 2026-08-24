@@ -11,6 +11,12 @@ import Pudu.Diagnostic.Render
   )
 import Pudu.Eval.Value (renderValue)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
+import Pudu.Repl.Describe
+  ( declarationSummary
+  , describeInstances
+  , describeKindLines
+  , describeName
+  )
 import Pudu.Repl.Complete (CompletionSource (..), completionsFor, wantsFilename)
 import Pudu.Repl.Session
   ( EntryKind (..)
@@ -18,6 +24,7 @@ import Pudu.Repl.Session
   , Session
   , contextSummary
   , emptySession
+  , inspectContext
   , inspectSession
   , sessionDeclaredNames
   , sessionExports
@@ -33,6 +40,8 @@ replProperties =
   , ("a rejected entry leaves the session unchanged", testRejection)
   , ("diagnostics are reported against the typed line", testInteractiveLocation)
   , ("inspection reports the session context without changing it", testInspection)
+  , ("describing a name reports how the session declared it", testDescribe)
+  , ("kinds report declared arity", testKinds)
   , ("completion offers commands paths and session names", testCompletion)
   , ("loops and iteration evaluate in the interactive session", testIteration)
   , ("trait methods dispatch and inherit in the session", testTraits)
@@ -355,6 +364,67 @@ testMatch = do
     , counterexample "a tuple pattern destructures" (valueOf tuplePattern === "3")
     , counterexample "a range pattern matches inclusively" (valueOf rangePattern === "\"mid\"")
     ]
+
+{-| `:info`, `:instances`, and `:show declarations` all read the session's own
+    module, so one populated session answers for all three. -}
+testDescribe :: IO Property
+testDescribe = do
+  session <- feed emptySession
+    [ "type Point = { x: Int, y: Int }"
+    , "trait Show { fn show(self: &Self) -> Str }"
+    , "impl Show for Point { fn show(self: &Self) -> Str { \"p\" } }"
+    ]
+  (_, parsed, _) <- inspectContext session
+  pure $ case parsed of
+    Nothing -> counterexample "the session parsed" (property False)
+    Just moduleValue ->
+      conjoin
+        [ counterexample
+            "info reports the record declaration"
+            (any (Text.isInfixOf "type Point") (describeName moduleValue "Point"))
+        , counterexample
+            "info reports the trait member"
+            (any (Text.isInfixOf "fn show") (describeName moduleValue "Show"))
+        , counterexample
+            "instances report the implementation"
+            (describeInstances moduleValue "Point" === ["impl Show for Point"])
+        , counterexample
+            "an unknown name describes as nothing"
+            (describeName moduleValue "Missing" === [])
+        , counterexample
+            "the summary lists declarations without the session wrapper"
+            (filter (Text.isPrefixOf "fn __") (declarationSummary moduleValue) === [])
+        ]
+
+{-| Arity is reported for declared types and for the types the compiler wires
+    in, because a reader cannot tell the two apart from the prompt. -}
+testKinds :: IO Property
+testKinds = do
+  session <- feed emptySession ["type Pair[A, B] = { left: A, right: B }"]
+  (_, parsed, _) <- inspectContext session
+  pure $ case parsed of
+    Nothing -> counterexample "the session parsed" (property False)
+    Just moduleValue ->
+      conjoin
+        [ counterexample
+            "a declared constructor reports its parameters"
+            (describeKindLines moduleValue "Pair" === ["Pair :: type -> type -> type"])
+        , counterexample
+            "a wired-in constructor reports its parameters"
+            (describeKindLines moduleValue "Option" === ["Option :: type -> type"])
+        , counterexample
+            "a scalar is a plain type"
+            (describeKindLines moduleValue "Int" === ["Int :: type"])
+        , counterexample
+            "an unknown type says so"
+            (describeKindLines moduleValue "Nope" === ["not in scope: type 'Nope'"])
+        ]
+
+feed :: Session -> [Text] -> IO Session
+feed session [] = pure session
+feed session (entry : rest) = do
+  result <- submitEntry session entry
+  feed (resultSession result) rest
 
 submit :: Session -> Text -> IO EntryResult
 submit = submitEntry

@@ -71,6 +71,7 @@ library
     Pudu.IntegerLiteral
     Pudu.Repl
     Pudu.Repl.Command
+    Pudu.Repl.Describe
     Pudu.Repl.Complete
     Pudu.Repl.Outline
     Pudu.Repl.Session
