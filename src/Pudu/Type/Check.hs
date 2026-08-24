@@ -41,7 +41,9 @@ import Pudu.Type.Env
   , freshVariable
   , inTypeScope
   , integerLiteralCheckpoint
+  , ambiguousProviders
   , lookupField
+  , lookupName
   , recordExpression
   , report
   , withRigidBounds
@@ -87,6 +89,7 @@ import Pudu.Type.Formation
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( NominalId (..)
+  , nominalKey
   , monotype
   , polytype
   , Type (..)
@@ -341,7 +344,10 @@ checkStatement declared rigid (Located _ statement) = case statement of
 checkCallee :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
 checkCallee declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
-    qualified <- qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
+    named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
+    qualified <- case named of
+      Just found -> pure (Just found)
+      Nothing -> qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
     case qualified of
       Just instantiated -> do
         recordExpression calleeSpan instantiated
@@ -361,6 +367,36 @@ checkCallee declared rigid located@(Located calleeSpan expression) = case expres
             recordExpression calleeSpan applied
             pure applied
   _ -> checkExpression declared rigid located
+
+{-| A callee written as `Name.member` may select a method by the trait that
+    declares it or by the type that implements it. The written name is mapped to
+    the declaration it identifies before the method key is built, so a local
+    declaration and an imported one are reached the same way. -}
+qualifiedByName
+  :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
+qualifiedByName declared spanValue target member = case target of
+  NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
+    Nothing -> pure Nothing
+    Just identity -> do
+      let key = nominalKey identity <> "." <> member
+      providers <- ambiguousProviders key
+      case providers of
+        _ : _ -> do
+          report "E3013" spanValue
+            (member <> " is ambiguous for " <> nominalName identity)
+            ( Just
+                ( "name the trait instead: "
+                    <> Text.intercalate " or "
+                      [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
+                )
+            )
+          pure (Just ErrorType)
+        [] -> do
+          found <- lookupName key
+          case found of
+            Nothing -> pure Nothing
+            Just scheme -> Just <$> instantiate spanValue scheme
+  _ -> pure Nothing
 
 {-| Check one expression and record the type it was given, so tooling can
     report it later. -}

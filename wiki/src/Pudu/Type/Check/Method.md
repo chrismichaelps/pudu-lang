@@ -38,6 +38,8 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ### Governance
 
+- Two traits may declare the same member for one type. Declaring both is legal; only an unqualified call has to choose, so the ambiguity is recorded when the second implementation binds and reported at the call that cannot resolve it, naming both qualified forms.
+
 - A bound naming a compiler-controlled marker is proved by [[Type Marker]] from the type's structure when no implementation was written, which is what lets `Int` satisfy `Copy` without any module declaring it.
 
 - A method is bound under a key naming the type it implements for, not at module scope. A trait method is reached through a value, which is why `show(user)` does not resolve while `user.show()` does.

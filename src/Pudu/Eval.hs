@@ -156,9 +156,13 @@ installMethods traits value = case targetNameOf (implTarget value) of
     mapM_ (installMethod owner) (implFunctions value)
     mapM_ (installMethod owner) (inheritedDefaults traits value)
  where
-  installMethod owner (Located _ method) =
+  installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
-     in bind (owner <> "." <> name) (FunctionValue (Closure name method Nothing))
+        implementation = FunctionValue (Closure name method Nothing)
+    bind (owner <> "." <> name) implementation
+    case traitNameOf (implTrait value) of
+      Nothing -> pure ()
+      Just traitText -> bind (traitText <> "." <> owner <> "." <> name) implementation
 
 {-| A trait member with a body is a default the implementation inherits when it
     does not provide its own. -}
@@ -346,14 +350,51 @@ readPath spanValue (first :| rest) = do
     field holding a function must be parenthesized to be called. -}
 evaluateCall :: Span -> Located Expression -> [Located Expression] -> Evaluator Value
 evaluateCall spanValue callee arguments = do
-  target <- evaluateCallee callee
   values <- mapM evaluate arguments
+  qualified <- qualifiedCallee callee values
+  target <- case qualified of
+    Just found -> pure found
+    Nothing -> evaluateCallee callee
   case target of
     FunctionValue closure -> callClosure closure values (Just spanValue)
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
+
+{-| A two-segment path in callee position may select a method explicitly: by the
+    type that implements it, as in `Bot.label(bot)`, or by the trait that
+    declares it, as in `A.label(bot)`. The trait form dispatches on the first
+    argument's type, which is the receiver the method is being called on. -}
+qualifiedCallee :: Located Expression -> [Value] -> Evaluator (Maybe Value)
+qualifiedCallee (Located _ expression) values = case qualifiedParts expression of
+  Nothing -> pure Nothing
+  Just (first, method) -> do
+    direct <- lookupName (first <> "." <> method)
+    case direct of
+      Just found -> pure (Just found)
+      Nothing -> case values of
+        receiver : _ -> case receiverOwner receiver of
+          Nothing -> pure Nothing
+          Just owner -> lookupName (first <> "." <> owner <> "." <> method)
+        [] -> pure Nothing
+
+{-| A qualified callee reaches the parser as a member access on a bare name, so
+    `A.label` and a two-segment path are the same selection written twice. -}
+qualifiedParts :: Expression -> Maybe (Text, Text)
+qualifiedParts expression = case expression of
+  NameExpression (first :| [method]) -> Just (first, method)
+  MemberExpression (Located _ (NameExpression (first :| []))) member ->
+    Just (first, locatedValue member)
+  _ -> Nothing
+
+{-| The nominal name a runtime value carries, which is how a trait-qualified
+    call finds the implementation for the receiver it was given. -}
+receiverOwner :: Value -> Maybe Text
+receiverOwner value = case value of
+  RecordValue owner _ -> Just owner
+  VariantValue owner _ -> Just owner
+  _ -> Nothing
 
 {-| Apply a built-in array method. Each method has fixed arity and semantics
     defined in [[Eval Array]]. -}

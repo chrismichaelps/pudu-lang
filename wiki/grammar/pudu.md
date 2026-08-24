@@ -144,6 +144,9 @@ for_expr         = "for", pattern, "in", expression, block ;
 - A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
 - A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
+- A method may be called qualified by the type that implements it or by the trait that declares it: `Bot.label(&bot)` and `Speak.label(&bot)` both select `label`. The trait form is how a program picks one provider when several traits declare the same member for one type.
+- A qualified call passes the receiver as an ordinary first argument, so a method declared with `self: &Self` takes a borrow. Method-call syntax borrows the receiver for you; the qualified form does not, because it is an ordinary call.
+- Declaring the same member in two traits for one type is legal. Only an unqualified call has to choose, and that call is rejected until it is written qualified.
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.
 - A parenthesized expression groups; adding a comma makes it a tuple, and `(e,)` is the one-member tuple. This mirrors the type grammar, where `(T)` groups and `(T,)` is a tuple.

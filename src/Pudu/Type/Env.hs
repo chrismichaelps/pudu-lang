@@ -28,6 +28,10 @@ module Pudu.Type.Env
   , warn
   , withRigidBounds
   , implementsTrait
+  , ambiguousProviders
+  , markAmbiguousMethod
+  , methodProvider
+  , recordMethodProvider
   , addObligation
   , resolveVariable
   , runChecker
@@ -96,6 +100,8 @@ data CheckerState = CheckerState
   , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
+  , stateMethodProviders :: !(Map Text NominalId)
+  , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateRigidBounds :: !(Map Text [NominalId])
@@ -155,6 +161,8 @@ initialState =
     , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
     , stateTypes = []
+    , stateMethodProviders = Map.empty
+    , stateAmbiguousMethods = Map.empty
     , stateObligations = []
     , stateIntegerLiterals = []
     , stateRigidBounds = Map.empty
@@ -436,6 +444,37 @@ rigidSatisfies :: Text -> NominalId -> Checker Bool
 rigidSatisfies name traitText =
   Checker $ \state ->
     (maybe False (elem traitText) (Map.lookup name (stateRigidBounds state)), state)
+
+{-| Which trait supplied a method binding. Two traits providing the same member
+    for one type is an ambiguity the reader must resolve, and this is what lets
+    the second binding notice the first. -}
+recordMethodProvider :: Text -> NominalId -> Checker ()
+recordMethodProvider key traitIdentity =
+  Checker $ \state ->
+    ((), state{stateMethodProviders = Map.insert key traitIdentity (stateMethodProviders state)})
+
+methodProvider :: Text -> Checker (Maybe NominalId)
+methodProvider key =
+  Checker $ \state -> (Map.lookup key (stateMethodProviders state), state)
+
+{-| Record that two traits provide the same member for one type. Declaring both
+    is legal; only an unqualified call has to choose, so the ambiguity is stored
+    here and reported where it is used. -}
+markAmbiguousMethod :: Text -> [NominalId] -> Checker ()
+markAmbiguousMethod key providers =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateAmbiguousMethods =
+            Map.insertWith union' key providers (stateAmbiguousMethods state)
+        }
+    )
+ where
+  union' new existing = existing <> filter (`notElem` existing) new
+
+ambiguousProviders :: Text -> Checker [NominalId]
+ambiguousProviders key =
+  Checker $ \state -> (Map.findWithDefault [] key (stateAmbiguousMethods state), state)
 
 implementsTrait :: NominalId -> NominalId -> Checker Bool
 implementsTrait owner traitText =

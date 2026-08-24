@@ -40,6 +40,7 @@ typeProperties =
   , ("Float aliases to Float64 at the type level", testFloatAlias)
   , ("references are dereferenced explicitly in both directions", testDereference)
   , ("compiler-controlled markers are decided structurally", testMarkers)
+  , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -994,6 +995,60 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+sharedNameProgram :: [Text]
+sharedNameProgram =
+  [ "module M"
+  , "type Bot = { id: Int }"
+  , "trait Speak { fn label(self: &Self) -> Str }"
+  , "trait Print { fn label(self: &Self) -> Str }"
+  , "impl Speak for Bot { fn label(self: &Self) -> Str { \"speak\" } }"
+  , "impl Print for Bot { fn label(self: &Self) -> Str { \"print\" } }"
+  ]
+
+testQualifiedMethods :: IO Property
+testQualifiedMethods = do
+  declaring <- codes sharedNameProgram
+  traitQualified <- codes (sharedNameProgram <>
+    ["fn run(bot: Bot) -> Str { Speak.label(&bot) }"])
+  otherTrait <- codes (sharedNameProgram <>
+    ["fn run(bot: Bot) -> Str { Print.label(&bot) }"])
+  unqualified <- codes (sharedNameProgram <> ["fn run(bot: Bot) -> Str { bot.label() }"])
+  typeQualified <- codes
+    [ "module M"
+    , "type Bot = { id: Int }"
+    , "trait Speak { fn label(self: &Self) -> Str }"
+    , "impl Speak for Bot { fn label(self: &Self) -> Str { \"speak\" } }"
+    , "fn run(bot: Bot) -> Str { Bot.label(&bot) }"
+    ]
+  singleProviderStillPlain <- codes
+    [ "module M"
+    , "type Bot = { id: Int }"
+    , "trait Speak { fn label(self: &Self) -> Str }"
+    , "impl Speak for Bot { fn label(self: &Self) -> Str { \"speak\" } }"
+    , "fn run(bot: Bot) -> Str { bot.label() }"
+    ]
+  wrongReceiver <- codes (sharedNameProgram <>
+    ["fn run() -> Str { Speak.label(1) }"])
+  valueReceiver <- codes (sharedNameProgram <>
+    ["fn run(bot: Bot) -> Str { Speak.label(bot) }"])
+  typeQualifiedAmbiguous <- codes (sharedNameProgram <>
+    ["fn run(bot: Bot) -> Str { Bot.label(&bot) }"])
+  pure $ conjoin
+    [ counterexample "two traits may declare the same member" (declaring === [])
+    , counterexample "a trait-qualified call selects one" (traitQualified === [])
+    , counterexample "the other trait is equally selectable" (otherTrait === [])
+    , counterexample "an unqualified call must choose" (unqualified === ["E3013"])
+    , counterexample "a type-qualified call selects the implementation"
+        (typeQualified === [])
+    , counterexample "one provider needs no qualification" (singleProviderStillPlain === [])
+    , counterexample "a qualified call still checks its receiver"
+        (wrongReceiver === ["E3001"])
+    , counterexample "a qualified call does not borrow for you"
+        (valueReceiver === ["E3001"])
+    , counterexample "the type-qualified form cannot choose either"
+        (typeQualifiedAmbiguous === ["E3013"])
+    ]
 
 markerProgram :: [Text]
 markerProgram =
