@@ -313,6 +313,7 @@ walkExpression (Located spanValue expression) = case expression of
   ArrayExpression members -> mapM_ walkExpression members
   UnsafeExpression _ body -> walkBlock body
   MacroCall _ arguments -> mapM_ walkExpression arguments
+  ScopeExpression body -> walkBlock body
   RecordExpression path fields -> do
     resolveConstructorPath spanValue path
     mapM_ walkFieldInit fields

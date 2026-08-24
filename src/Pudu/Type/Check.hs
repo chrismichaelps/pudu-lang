@@ -591,6 +591,12 @@ inferExpression declared rigid spanValue expression = case expression of
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Array" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
+  ScopeExpression body -> do
+    (asynchronous, _) <- enclosingFunctionType selfName
+    unless asynchronous $
+      report "E3026" spanValue "a structured scope needs an async function"
+        (Just "declare the enclosing function async; a scope joins the tasks it starts")
+    checkBlock declared rigid body
   UnsafeExpression capabilities body -> do
     enterUnsafe (map locatedValue capabilities)
     bodyType <- checkBlock declared rigid body

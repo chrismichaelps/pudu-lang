@@ -310,6 +310,7 @@ data Expression
   | ArrayExpression ![Located Expression]
   | UnsafeExpression ![Located Capability] !(Located Block)
   | MacroCall !(Located Text) ![Located Expression]
+  | ScopeExpression !(Located Block)
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
