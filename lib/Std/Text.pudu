@@ -1,0 +1,103 @@
+module Std.Text
+
+/// Whether text contains only whitespace, or nothing at all.
+export fn isBlank(value: Str) -> Bool { value.trim().isEmpty() }
+
+/// The position of the first occurrence, or `None` when there is none.
+/// The built-in `indexOf` answers `-1`; this is the form a caller can match on
+/// without remembering which sentinel means absent.
+export fn find(haystack: Str, needle: Str) -> Option[Int] {
+  let at = haystack.indexOf(needle)
+  if at < 0 { None } else { Some(at) }
+}
+
+/// Text with a prefix removed, or unchanged when it is not there.
+export fn stripPrefix(value: Str, prefix: Str) -> Str {
+  if value.startsWith(prefix) { value.slice(prefix.length(), value.length()) } else { value }
+}
+
+/// Text with a suffix removed, or unchanged when it is not there.
+export fn stripSuffix(value: Str, suffix: Str) -> Str {
+  if value.endsWith(suffix) { value.slice(0, value.length() - suffix.length()) } else { value }
+}
+
+/// The first `wanted` characters, or the whole text when it is shorter.
+export fn take(value: Str, wanted: Int) -> Str {
+  if wanted <= 0 { "" } else {
+    if wanted >= value.length() { value } else { value.slice(0, wanted) }
+  }
+}
+
+/// Every character after the first `skipped`.
+export fn drop(value: Str, skipped: Int) -> Str {
+  if skipped <= 0 { value } else {
+    if skipped >= value.length() { "" } else { value.slice(skipped, value.length()) }
+  }
+}
+
+/// Text padded on the left to at least `width` characters.
+export fn padLeft(value: Str, width: Int, filler: Str) -> Str {
+  var out = value
+  while out.length() < width { out = filler + out }
+  out
+}
+
+/// Text padded on the right to at least `width` characters.
+export fn padRight(value: Str, width: Int, filler: Str) -> Str {
+  var out = value
+  while out.length() < width { out = out + filler }
+  out
+}
+
+/// Every piece joined with a separator between them.
+export fn join(pieces: &Array[Str], separator: Str) -> Str {
+  var out = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { out = out + separator } else { }
+    out = out + pieces[index]
+    index = index + 1
+  }
+  out
+}
+
+/// The pieces of text separated by a separator, with empty pieces removed.
+/// The built-in `split` keeps them, because "a,,b" has three fields; this is
+/// the form for splitting on whitespace runs and similar.
+export fn splitNonEmpty(value: Str, separator: Str) -> Array[Str] {
+  let pieces = value.split(separator)
+  var out = []
+  for piece in pieces {
+    if piece.isEmpty() { } else { out = out.push(piece) }
+  }
+  out
+}
+
+/// Every word, splitting on single spaces and discarding empty pieces.
+export fn words(value: Str) -> Array[Str] { splitNonEmpty(value.trim(), " ") }
+
+/// How many times a needle occurs, without overlapping.
+export fn countOccurrences(haystack: Str, needle: Str) -> Int {
+  if needle.isEmpty() { 0 } else {
+    var total = 0
+    var rest = haystack
+    while rest.contains(needle) {
+      let at = rest.indexOf(needle)
+      total = total + 1
+      rest = rest.slice(at + needle.length(), rest.length())
+    }
+    total
+  }
+}
+
+/// Text with its first character in upper case and the rest unchanged.
+export fn capitalize(value: Str) -> Str {
+  if value.isEmpty() { value } else {
+    value.slice(0, 1).toUpper() + value.slice(1, value.length())
+  }
+}
+
+/// Whether two texts are equal ignoring case.
+export fn equalsIgnoreCase(left: Str, right: Str) -> Bool {
+  left.toLower() == right.toLower()
+}

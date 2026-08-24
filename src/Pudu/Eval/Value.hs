@@ -2,6 +2,8 @@
 module Pudu.Eval.Value
   ( Builtin (..)
   , ArrayMethod (..)
+  , StringMethod (..)
+  , stringMethodName
   , Closure (..)
   , Value (..)
   , renderValue
@@ -37,6 +39,7 @@ data Value
   | TaskValue !Closure ![(Text, Value)] !(Maybe Span)
   | BuiltinValue !Builtin
   | ArrayMethodValue !ArrayMethod !Value
+  | StringMethodValue !StringMethod !Value
   deriving stock (Eq, Show)
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
@@ -49,6 +52,32 @@ data Builtin = PanicBuiltin
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
     arity and semantics. The receiver is carried so `arr.push(x)` evaluates as
     `push(arr, x)`. -}
+{-| @Eval.Value.StringMethod — one built-in text operation.
+
+    Text is a value, so every one of these answers with a new string rather than
+    changing the receiver. The set is closed for the same reason the array set
+    is: a method the compiler knows the semantics of can be typed exactly, and
+    an unknown one is reported rather than dispatched. -}
+data StringMethod
+  = StringLength
+  | StringIsEmpty
+  | StringCharAt
+  | StringIndexOf
+  | StringContains
+  | StringStartsWith
+  | StringEndsWith
+  | StringSlice
+  | StringTrim
+  | StringToUpper
+  | StringToLower
+  | StringReplace
+  | StringRepeat
+  | StringSplit
+  | StringChars
+  | StringLines
+  | StringReverse
+  deriving stock (Eq, Show)
+
 data ArrayMethod
   = ArrayLength
   | ArrayGet
@@ -100,6 +129,7 @@ renderValue value = case value of
   TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
+  StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
  where
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
@@ -126,6 +156,29 @@ valueKind value = case value of
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"
   ArrayMethodValue _ _ -> "array method"
+  StringMethodValue _ _ -> "text method"
+
+{-| The name a text method answers to, which is the same spelling the checker
+    matches and the diagnostic prints. -}
+stringMethodName :: StringMethod -> Text
+stringMethodName method = case method of
+  StringLength -> "length"
+  StringIsEmpty -> "isEmpty"
+  StringCharAt -> "charAt"
+  StringIndexOf -> "indexOf"
+  StringContains -> "contains"
+  StringStartsWith -> "startsWith"
+  StringEndsWith -> "endsWith"
+  StringSlice -> "slice"
+  StringTrim -> "trim"
+  StringToUpper -> "toUpper"
+  StringToLower -> "toLower"
+  StringReplace -> "replace"
+  StringRepeat -> "repeat"
+  StringSplit -> "split"
+  StringChars -> "chars"
+  StringLines -> "lines"
+  StringReverse -> "reverse"
 
 arrayMethodName :: ArrayMethod -> Text
 arrayMethodName method = case method of

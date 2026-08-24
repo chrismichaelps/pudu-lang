@@ -25,6 +25,10 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- Text methods are built into the evaluator rather than written in `Std`, because implementing them
+  in the language would need `unsafe` to reach the representation — and a standard library that
+  needs unsafe for `toUpper` has said something false about the language.
+
 - Borrowing and dereferencing are identities at run time: a reference is the value it refers to, and only typing distinguishes them. The distinction becomes observable when ownership checking and a store exist.
 
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.

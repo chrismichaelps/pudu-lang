@@ -21,6 +21,16 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- `Str` carries a closed set of built-in methods, typed exactly, for the same reason `Array` does:
+  a method whose semantics the compiler knows can be given a precise type, and an unknown one is
+  reported rather than dispatched.
+- Every text method answers with a **new** value rather than changing its receiver. That is why
+  `Str` needs no mutable form, and why the same `W3002` that catches a discarded array result
+  catches a discarded text one.
+- `indexOf` answers `-1` for absent rather than `Option[Int]`, matching the array method of the
+  same name. One vocabulary answering two ways would be worse than either answer; `Std.Text.find`
+  provides the `Option` form for callers who want to match on it.
+
 - Indexing follows a borrow rather than rejecting it. Every language with both reads through a
   reference, and requiring `(*items)[0]` would make every function taking `&Array[T]` — which is
   every function that does not want to copy one — read worse than the version that copies. The

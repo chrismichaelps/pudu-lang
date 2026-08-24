@@ -34,6 +34,13 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- Text indices count Unicode scalars, not bytes, so `charAt` and `slice` agree with what a reader
+  counting characters expects. It is the same choice indexing already makes.
+- An index outside the text is `E7004`. A silent clamp turns a logic error into wrong output that
+  looks correct.
+- A slice is clamped at the **end** and refused at the **start**: a `to` beyond the text is the
+  ordinary way to ask for "the rest", while a negative `from` is arithmetic that went wrong.
+
 - A program's dependencies are linked before its entry point runs. Each is loaded into a frame of
   its own and republished under its dotted path, so `Std.List.sum` is a name in the environment
   rather than a member access on a value that does not exist.

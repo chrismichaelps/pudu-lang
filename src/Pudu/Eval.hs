@@ -56,7 +56,16 @@ import Pudu.Eval.Array
   , arrayIndexOf
   , arrayContains
   )
-import Pudu.Eval.Value (Builtin (..), ArrayMethod (..), Closure (..), Value (..), renderValue, valueKind)
+import Pudu.Eval.Value
+  ( ArrayMethod (..)
+  , Builtin (..)
+  , Closure (..)
+  , StringMethod (..)
+  , Value (..)
+  , renderValue
+  , stringMethodName
+  , valueKind
+  )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
@@ -489,6 +498,7 @@ evaluateCall spanValue callee arguments = do
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
+    StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -524,6 +534,87 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| Apply a built-in text method.
+
+    Every one answers with a new value: text is a value, and a method that
+    changed its receiver would make two names for one string disagree. Indices
+    count Unicode scalars, not bytes, so `charAt` and `slice` agree with what a
+    reader counting characters expects — the same choice indexing already makes.
+
+    An index outside the text is `E7004` rather than a clamped or empty answer.
+    A silent clamp turns a logic error into wrong output that looks correct. -}
+callStringMethod :: Span -> StringMethod -> Value -> [Value] -> Evaluator Value
+callStringMethod spanValue method receiver arguments = case receiver of
+  StrValue text -> apply text
+  _ -> abortAt (Just spanValue) "E7001" "not text" Nothing
+ where
+  apply text = case (method, arguments) of
+    (StringLength, []) -> pure (IntValue (fromIntegral (Text.length text)))
+    (StringIsEmpty, []) -> pure (BoolValue (Text.null text))
+    (StringCharAt, [IntValue index]) -> charAt text index
+    (StringIndexOf, [StrValue needle]) -> pure (IntValue (indexOfText text needle))
+    (StringContains, [StrValue needle]) -> pure (BoolValue (Text.isInfixOf needle text))
+    (StringStartsWith, [StrValue needle]) -> pure (BoolValue (Text.isPrefixOf needle text))
+    (StringEndsWith, [StrValue needle]) -> pure (BoolValue (Text.isSuffixOf needle text))
+    (StringSlice, [IntValue from, IntValue to]) -> slice text from to
+    (StringTrim, []) -> pure (StrValue (Text.strip text))
+    (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
+    (StringToLower, []) -> pure (StrValue (Text.toLower text))
+    (StringReplace, [StrValue needle, StrValue replacement])
+      | Text.null needle -> pure (StrValue text)
+      | otherwise -> pure (StrValue (Text.replace needle replacement text))
+    (StringRepeat, [IntValue count])
+      | count < 0 -> outOfRange "a repeat count cannot be negative"
+      | otherwise -> pure (StrValue (Text.replicate (fromInteger count) text))
+    (StringSplit, [StrValue separator])
+      | Text.null separator -> pure (textArray (Text.chunksOf 1 text))
+      | otherwise -> pure (textArray (Text.splitOn separator text))
+    (StringChars, []) -> pure (ArrayValue (Seq.fromList (map CharValue (Text.unpack text))))
+    (StringLines, []) -> pure (textArray (Text.lines text))
+    (StringReverse, []) -> pure (StrValue (Text.reverse text))
+    _ -> wrongStringArity (stringMethodName method)
+
+  textArray = ArrayValue . Seq.fromList . map StrValue
+
+  charAt text index
+    | index < 0 || index >= fromIntegral (Text.length text) =
+        outOfRange "index out of range"
+    | otherwise = pure (CharValue (Text.index text (fromInteger index)))
+
+  {-| A slice is clamped at the end and refused at the start.
+
+      A `to` beyond the text is the ordinary way to ask for "the rest", so
+      clamping it answers the question. A negative `from`, or a `from` after
+      `to`, is arithmetic that went wrong, and answering it would hide that. -}
+  slice text from to
+    | from < 0 = outOfRange "a slice cannot start before the text"
+    | to < from = outOfRange "a slice cannot end before it starts"
+    | otherwise =
+        pure
+          ( StrValue
+              ( Text.take
+                  (fromInteger (to - from))
+                  (Text.drop (fromInteger from) text)
+              )
+          )
+
+  outOfRange message = abortAt (Just spanValue) "E7004" message Nothing
+
+  wrongStringArity name =
+    abortAt (Just spanValue) "E7002"
+      ("wrong arguments for " <> name) Nothing
+
+{-| Where one text first occurs inside another, or -1 when it does not.
+
+    -1 rather than `Option[Int]` because the array method of the same name
+    already answers that way, and one vocabulary answering two ways would be
+    worse than either answer. -}
+indexOfText :: Text -> Text -> Integer
+indexOfText text needle = case Text.breakOn needle text of
+  (before, rest)
+    | Text.null rest, not (Text.null needle) -> -1
+    | otherwise -> fromIntegral (Text.length before)
 
 {-| Apply a built-in array method. Each method has fixed arity and semantics
     defined in [[Eval Array]]. -}
@@ -599,6 +690,7 @@ applyFunction :: Span -> Value -> [Value] -> Evaluator Value
 applyFunction spanValue function arguments = case function of
   FunctionValue closure -> callClosure closure arguments (Just spanValue)
   ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver arguments
+  StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.

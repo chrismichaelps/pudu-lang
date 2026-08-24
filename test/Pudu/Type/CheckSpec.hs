@@ -16,7 +16,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a discarded collection result is reported", testDiscardedResult)
+  [ ("built-in text methods are typed exactly", testTextMethods)
+  , ("a discarded collection result is reported", testDiscardedResult)
   , ("literals and operators take their declared types", testOperators)
   , ("integer literals select every width and enforce exact bounds", testIntegerLiterals)
   , ("floating suffixes select honest precision and reject overflow", testFloatLiterals)
@@ -1323,6 +1324,30 @@ region source needle = case Text.breakOnEnd needle source of
     as a statement does nothing at all — silently. The warning fires there and
     nowhere else: assigning the result back is correct, and discarding the
     answer to a question is merely pointless. -}
+{-| Text carries a closed set of methods the compiler knows the semantics of,
+    so each is typed exactly and an unknown one is reported rather than
+    dispatched. -}
+testTextMethods :: IO Property
+testTextMethods = do
+  lengthType <- typeOf "\"abc\".length()"
+  charType <- typeOf "\"abc\".charAt(0)"
+  sliceType <- typeOf "\"abc\".slice(0, 2)"
+  splitType <- typeOf "\"a,b\".split(\",\")"
+  charsType <- typeOf "\"ab\".chars()"
+  emptyType <- typeOf "\"\".isEmpty()"
+  unknown <- codesOfExpression "\"abc\".shout()"
+  badArgument <- codesOfExpression "\"abc\".charAt(\"x\")"
+  pure $ conjoin
+    [ counterexample "length answers an integer" (lengthType === "Int")
+    , counterexample "charAt answers a character" (charType === "Char")
+    , counterexample "slice answers text" (sliceType === "Str")
+    , counterexample "split answers an array of text" (splitType === "Array[Str]")
+    , counterexample "chars answers an array of characters" (charsType === "Array[Char]")
+    , counterexample "isEmpty answers a boolean" (emptyType === "Bool")
+    , counterexample "an unknown text method is E3005" (unknown === ["E3005"])
+    , counterexample "an argument is checked" (badArgument === ["E3001"])
+    ]
+
 testDiscardedResult :: IO Property
 testDiscardedResult = do
   discarded <- codes
