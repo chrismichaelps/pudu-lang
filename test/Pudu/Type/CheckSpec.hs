@@ -18,6 +18,7 @@ typeProperties :: [(String, IO Property)]
 typeProperties =
   [ ("literals and operators take their declared types", testOperators)
   , ("integer literals select every width and enforce exact bounds", testIntegerLiterals)
+  , ("floating suffixes select honest precision and reject overflow", testFloatLiterals)
   , ("annotations are checked against their value", testAnnotations)
   , ("calls check argument types and count", testCalls)
   , ("generic functions instantiate per use", testGenerics)
@@ -138,6 +139,56 @@ integerSuffixTypes =
   [ "Int8", "Int16", "Int32", "Int64", "Int128"
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
   ]
+
+testFloatLiterals :: IO Property
+testFloatLiterals = do
+  defaulted <- typeOf "1.0"
+  selected32 <- typeOf "1.0f32"
+  selected64 <- typeOf "1.0f64"
+  exponent32 <- typeOf "1e3f32"
+  annotated32 <- codes ["module M", "fn run() -> Float32 { 1.0f32 }"]
+  implicitNarrowing <- codes ["module M", "fn run() -> Float32 { 1.0 }"]
+  arithmetic32 <- codes ["module M", "fn run() -> Float32 { 1.0f32 + 2.0f32 }"]
+  mixedWidths <- codes ["module M", "fn run() -> Float64 { 1.0f32 + 2.0f64 }"]
+  finiteMaximum <- codes ["module M", "fn run() -> Float32 { 3.4028235e38f32 }"]
+  overflow32 <- codes ["module M", "fn run() -> Float32 { 3.4028236e38f32 }"]
+  overflow64 <- codes ["module M", "fn run() -> Float64 { 1e309f64 }"]
+  underflow <- codes ["module M", "fn run() -> Float32 { 1e-100f32 }"]
+  patternOverflow <- codes
+    [ "module M"
+    , "fn run(value: Float32) -> Bool {"
+    , "  match value {"
+    , "    case 3.4028236e38f32 => true"
+    , "    case _ => false"
+    , "  }"
+    , "}"
+    ]
+  let overflowSource = Text.unlines
+        [ "module M"
+        , "fn run() -> Float32 { 3.4028236e38f32 }"
+        ]
+  overflowResult <- compile overflowSource
+  pure $ conjoin
+    [ counterexample "an unsuffixed float stays Float64" (defaulted === "Float64")
+    , counterexample "f32 selects Float32" (selected32 === "Float32")
+    , counterexample "f64 selects Float64" (selected64 === "Float64")
+    , counterexample "suffixes follow exponent text" (exponent32 === "Float32")
+    , annotated32 === []
+    , counterexample "context cannot narrow an unsuffixed float"
+        (implicitNarrowing === ["E3001"])
+    , counterexample "same-width Float32 arithmetic is admitted" (arithmetic32 === [])
+    , counterexample "mixed float widths require explicit conversion" (mixedWidths === ["E3001"])
+    , counterexample "the binary32 maximum is admitted" (finiteMaximum === [])
+    , counterexample "binary32 overflow is rejected" (overflow32 === ["E3019"])
+    , counterexample "binary64 overflow is rejected" (overflow64 === ["E3019"])
+    , counterexample "underflow rounds rather than overflowing" (underflow === [])
+    , counterexample "pattern literals receive the same overflow check"
+        (patternOverflow === ["E3019"])
+    , diagnosticContract overflowSource "3.4028236e38f32" "E3019"
+        "floating literal 3.4028236e38f32 does not fit Float32"
+        (Just "choose Float64 or reduce the literal magnitude")
+        overflowResult
+    ]
 
 testAnnotations :: IO Property
 testAnnotations = do

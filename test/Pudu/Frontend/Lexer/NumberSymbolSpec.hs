@@ -43,7 +43,10 @@ testValidIntegers = do
 
 testValidFloats :: IO Property
 testValidFloats = do
-  let literals = ["1.0", "1_2.3_4", "1e9", "1E+9", "1.0E-9"]
+  let literals =
+        [ "1.0", "1_2.3_4", "1e9", "1E+9", "1.0E-9"
+        , "1.0f32", "1_2.3_4f64", "1e9f32", "1.0E-9f64"
+        ]
   outcomes <- traverse scanNumberOutput literals
   pure $ case sequence outcomes of
     Just outputs -> conjoin (zipWith (validNumber FloatLiteral) literals outputs)
@@ -54,6 +57,7 @@ testMalformedNumbers = do
   let literals =
         [ "0x", "0XFF", "0b2", "0o8", "0xG", "1_", "1__2"
         , "1e", "1e+", "1e_2", "1foo", "1I8", "1u7", "0x1u7"
+        , "1.0F32", "1.0f16", "1e3foo", "1f32"
         ]
   outcomes <- traverse scanNumberOutput literals
   pure $ case sequence outcomes of

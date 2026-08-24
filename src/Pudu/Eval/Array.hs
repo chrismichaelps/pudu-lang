@@ -15,7 +15,6 @@ module Pudu.Eval.Array
   ) where
 
 import Data.Foldable (toList)
-import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Value (Value (..))
 

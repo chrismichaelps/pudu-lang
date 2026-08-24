@@ -29,10 +29,11 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 - `qualifiedMemberType` recognizes the parser's module-dot-value shape and instantiates the full qualified binding before ordinary field/method dispatch. `enclosingReturnType` reads the current function signature, and `tryType` owns the closed `Result` propagation rule.
 - `callType` normalizes an asynchronous function's already formed surface result into `Task[success, failure]`: `Result[S, E]` supplies both channels and every other `T` becomes `Task[T, Never]`. [[Type Check]] requires complete async signatures before this closed rule is reached. `awaitType` accepts only a `Task`, yields its success channel, and routes a non-`Never` failure through the enclosing async function's `Result` declaration.
 - `literalType` decodes integer text through [[Integer Literal]] and registers a deferred checker constraint instead of returning hard-coded `Int`. Unary negation updates that constraint's mathematical value before fit checking, so `-128i8` is admitted while `-129i8` and `-1u8` are rejected.
+- Floating text decodes through [[Float Literal]]. Unsuffixed/`f64` values are `Float64`, `f32` is `Float32`, and overflow reports `E3019` before an infinity can enter evaluation; no contextual narrowing is invented.
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
+- **Requires:** [[Float Literal]], [[Integer Literal]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -49,6 +50,7 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 - When two or more trait bounds provide the same member on a rigid receiver, the call is ambiguous and reports `E3013` rather than silently picking the first trait.
 - An array method on a `NominalType "Array" [element]` receiver returns the method's built-in function type without consulting the trait or declaration table, because array methods are wired into the evaluator, not declared in user code. An unrecognized method name reports `E3005`.
 - `.await` outside an async function reports `E3016`; `.await` applied to a non-task reports `E3017`. A failing task awaited in a function without a compatible `Result` carrier uses the existing failure-propagation `E3011` contract.
+- A finite float spelling that converts to infinity at its selected width reports `E3019` at the literal with help to choose a wider type or smaller value.
 
 ## Depth
 
@@ -60,6 +62,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - **Q:** Nest an async `Result[S, E]` as `Task[Result[S, E], Never]`? **A:** No; normalize it to `Task[S, E]`. _Rationale:_ the failure channel is part of the task contract and `.await` propagates it exactly once. _Rejected:_ nested carriers; erasing the failure as `Never`.
 - **Q:** Should `callType` guess channels for an unresolved async result variable? **A:** No; async declarations are complete contracts before calls are typed. _Rationale:_ a later `Result[S, E]` solution cannot retroactively split a previously guessed `Task[result, Never]`. _Rejected:_ declaration-order-dependent normalization; deferred ad-hoc rewriting.
 - **Q:** Give every integer literal `Int` here? **A:** No; register a fresh literal variable and let context solve it. _Rationale:_ the checker must admit every declared width without inventing conversions, and only the constraint finalizer has both the selected type and mathematical value. _Rejected:_ eager `Int`; numeric widening hidden in unification.
+- **Q:** Defer floats like integers? **A:** No; unsuffixed float syntax is explicitly `Float64` and `f32` is the visible narrowing operation. _Rationale:_ unlike exact integers, a decimal-to-binary conversion already chooses precision and can lose information. _Rejected:_ contextual `Float32`; silently narrowing an unsuffixed literal.
 
 ## Referenced by
 

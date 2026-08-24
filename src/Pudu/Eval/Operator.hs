@@ -13,12 +13,13 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
 import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), valueKind)
+import Pudu.FloatLiteral (FloatWidth, normalizeFloat)
 import Pudu.Source (Span)
 
 applyUnary :: Span -> Text -> Value -> Evaluator Value
 applyUnary spanValue operator value = case (operator, value) of
   ("-", IntValue number) -> pure (IntValue (negate number))
-  ("-", FloatValue number) -> pure (FloatValue (negate number))
+  ("-", FloatValue width number) -> pure (FloatValue width (negate number))
   ("!", BoolValue flag) -> pure (BoolValue (not flag))
   ("~", IntValue number) -> pure (IntValue (complement number))
   ("&", _) -> pure value
@@ -30,7 +31,8 @@ applyUnary spanValue operator value = case (operator, value) of
 combine :: Span -> Text -> Value -> Value -> Evaluator Value
 combine spanValue operator left right = case (left, right) of
   (IntValue a, IntValue b) -> integerOperation spanValue operator a b
-  (FloatValue a, FloatValue b) -> floatOperation spanValue operator a b
+  (FloatValue leftWidth a, FloatValue rightWidth b)
+    | leftWidth == rightWidth -> floatOperation spanValue leftWidth operator a b
   (StrValue a, StrValue b) -> textOperation spanValue operator a b
   (CharValue a, CharValue b) -> comparisonOnly spanValue operator a b
   (BoolValue a, BoolValue b) -> comparisonOnly spanValue operator a b
@@ -69,13 +71,15 @@ integerOperation spanValue operator left right = case operator of
   "|" -> pure (IntValue (left .|. right))
   _ -> comparisonOnly spanValue operator left right
 
-floatOperation :: Span -> Text -> Double -> Double -> Evaluator Value
-floatOperation spanValue operator left right = case operator of
-  "+" -> pure (FloatValue (left + right))
-  "-" -> pure (FloatValue (left - right))
-  "*" -> pure (FloatValue (left * right))
-  "/" -> pure (FloatValue (left / right))
+floatOperation :: Span -> FloatWidth -> Text -> Double -> Double -> Evaluator Value
+floatOperation spanValue width operator left right = case operator of
+  "+" -> result (left + right)
+  "-" -> result (left - right)
+  "*" -> result (left * right)
+  "/" -> result (left / right)
   _ -> comparisonOnly spanValue operator left right
+ where
+  result value = pure (FloatValue width (normalizeFloat width value))
 
 textOperation :: Span -> Text -> Text -> Text -> Evaluator Value
 textOperation spanValue operator left right = case operator of

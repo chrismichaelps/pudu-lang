@@ -6,8 +6,9 @@ module Pudu.Eval.Match
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Eval.Value (Value (..))
+import Pudu.FloatLiteral
+  ( FloatWidth (Float64Width), ParsedFloat (..), parseFloatLiteral )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import qualified Pudu.Frontend.Syntax.Tree as Tree
@@ -58,7 +59,9 @@ matchRange lower inclusive upper value =
   case (lower, upper, value) of
     (IntValue low, IntValue high, IntValue actual) -> check inclusive low high actual
     (CharValue low, CharValue high, CharValue actual) -> check inclusive low high actual
-    (FloatValue low, FloatValue high, FloatValue actual) -> check inclusive low high actual
+    (FloatValue lowWidth low, FloatValue highWidth high, FloatValue actualWidth actual)
+      | lowWidth == highWidth && highWidth == actualWidth ->
+          check inclusive low high actual
     _ -> Nothing
 
 check :: Ord a => Bool -> a -> a -> a -> Maybe [(Text, Value)]
@@ -71,13 +74,11 @@ literalValue literal = case literal of
   Tree.IntegerValue text -> case parseIntegerLiteral text of
     Just ParsedInteger{parsedIntegerValue} -> IntValue parsedIntegerValue
     Nothing -> IntValue 0
-  Tree.FloatValue text -> FloatValue (readDouble text)
+  Tree.FloatValue text -> case parseFloatLiteral text of
+    Just ParsedFloat{parsedFloatValue, parsedFloatWidth} ->
+      FloatValue parsedFloatWidth parsedFloatValue
+    Nothing -> FloatValue Float64Width 0
   Tree.StringValue text -> StrValue text
   Tree.CharValue character -> CharValue character
   Tree.BoolValue flag -> BoolValue flag
   Tree.NullValue -> NullValue
-
-readDouble :: Text -> Double
-readDouble text = case reads (Text.unpack (Text.filter (/= '_') text)) of
-  (value, _) : _ -> value
-  [] -> 0

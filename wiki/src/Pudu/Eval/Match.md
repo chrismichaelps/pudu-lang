@@ -29,10 +29,11 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 - Integer expressions and pattern endpoints decode through [[Integer Literal]], so a suffix affects static selection but never contaminates the arbitrary-precision interpreter value.
+- Floating expressions and pattern endpoints decode through [[Float Literal]], retaining `Float32`/`Float64` width and the normalized selected-precision value.
 
 ### Linkage
 
-- **Requires:** [[Eval Value]], [[Syntax Tree]], [[Integer Literal]], [[Diagnostic Model]].
+- **Requires:** [[Eval Value]], [[Syntax Tree]], [[Integer Literal]], [[Float Literal]], [[Diagnostic Model]].
 - **Consumed by:** [[Evaluator]].
 
 ## Algorithm
@@ -55,6 +56,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Reparse suffixed integers with host `read`? **A:** No; use [[Integer Literal]]'s total arbitrary-precision decoder. _Rationale:_ type checking and evaluation must agree on bases, separators, suffix removal, and sign. _Rejected:_ permissive partial `reads`; silently keeping the suffix in host input.
+- **Q:** Let pattern floats parse separately from expression floats? **A:** No; use [[Float Literal]] for both. _Rationale:_ width, rounding, overflow admission, and suffix stripping must agree before runtime matching. _Rejected:_ raw `reads Double`; erasing an `f32` pattern to binary64.
 
 ## Referenced by
 
