@@ -25,6 +25,7 @@ Check every declaration, statement, and expression in a module against the types
 
 ```haskell
 checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 ```
 
 ### Governance
@@ -36,6 +37,8 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
 - Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected. `E3014` rejects a module that owns neither the trait nor the target's expanded nominal declaration, while `E3015` rejects duplicate heads; body checking can continue to preserve useful independent diagnostics.
+- `checkModuleWith` installs [[Type Interface]] imports as outer declared/name/method state, then collects and checks only the current module. Imported bodies and coherence are never re-run. `checkModule` delegates with empty imports.
+- Imported concrete method keys remain marked while local signatures are installed, so an imported-plus-local provider collision reports `E3013` instead of silently granting precedence to the local declaration.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A member whose target is a module-name expression first probes the full qualified value key (for example `Alias.make`) before receiver dispatch. This preserves the parser's shared dot syntax without treating module exports as fields or methods.
@@ -45,7 +48,7 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Type Check Coherence]], [[Type Exhaust]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Interface]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Type Check Coherence]], [[Type Exhaust]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Boundary]].
 
 ## Algorithm
@@ -74,6 +77,8 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 - **Q:** How are cascades avoided? **A:** A failed unification yields `ErrorType`, which unifies with everything afterwards. _Rationale:_ the diagnostic contract requires that later phases not repeat a defect an earlier one already explained, and the same logic applies within a phase. _Rejected:_ aborting at the first error; suppressing by counting.
 - **Q:** Should the checker reuse the resolver's symbols? **A:** Not yet. _Rationale:_ mapping references by span is fragile without a shared resolved tree, and the honest fix is that shared tree rather than a lookup that silently mismatches. _Rejected:_ span-keyed symbol lookup; merging the two phases.
 - **Q:** What happens to `?` and `.await` now? **A:** They type as fresh variables and are documented as awaiting the failure and task slice. _Rationale:_ guessing `Result[T, E]` normalization before it is implemented would produce confident, wrong diagnostics. _Rejected:_ partial `Result` support; rejecting the syntax the parser already admits.
+- **Q:** Should imported implementations be appended to the local declarations? **A:** No; install their interface schemes and relationships separately. _Rationale:_ concatenation would make the consumer appear to own dependency impls and re-run `E3014`/`E3015`. _Rejected:_ a synthetic combined module.
+- **Q:** Infer an omitted method annotation again in each consumer? **A:** No; require a complete interface signature with `E3010`. _Rationale:_ a body-free cycle has no stable evidence from which to reconstruct inference, so fresh consumer variables would change the public contract by context. _Rejected:_ contextual reconstruction; carrying dependency bodies into the consumer checker.
 
 ## Variants
 

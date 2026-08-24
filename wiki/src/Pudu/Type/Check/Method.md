@@ -25,6 +25,7 @@ Give an implementation's functions the types they have as methods of their targe
 
 ```haskell
 declareMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Impl -> Checker ()
+declareInterfaceMethods :: DeclaredTypes -> Map NominalId [Located Function] -> Set (NominalId, Text) -> Impl -> Checker ()
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareBounds :: DeclaredTypes -> Function -> [(Text, [NominalId])]
 declareBuiltinConstructors :: Checker ()
@@ -47,10 +48,11 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 - `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
 - `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for. When two or more bounds provide the same member, the lookup is ambiguous and reports `E3013` rather than silently picking the first.
 - [[Type Check Coherence]] rejects orphan implementations and duplicate implementation heads after method signatures are collected; general unification overlap remains a separate resolved-type slice. Nothing here silently picks between candidates.
+- [[Type Interface]] supplies complete body-free imported method schemes keyed by canonical target and trait identity. They are installed only for traits the consumer placed in scope, before local method signatures are added. A second imported scheme or a later local implementation at the same canonical target/member key reports `E3013` rather than overwriting the visible provider; exact duplicate local heads remain [[Type Check Coherence]]'s `E3015` responsibility.
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Formation]], [[Type Value]], [[Syntax Tree]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Interface]], [[Type Formation]], [[Type Value]], [[Syntax Tree]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -59,12 +61,14 @@ Form the implementation's target, bind each of its functions under the target's 
 
 ## Negative Logic (Prohibited Paths)
 
-- No general unification-overlap checking, dynamic dispatch, associated types or constants, or filesystem/module traversal. Orphan ownership and exact duplicate-head rejection are delegated to [[Type Check Coherence]].
+- No general unification-overlap checking, dynamic dispatch, associated types or constants, or filesystem/module traversal. Cross-module schemes arrive through [[Type Interface]]; orphan ownership and exact duplicate-head rejection are delegated to [[Type Check Coherence]].
 
 ## Edge Cases
 
 - An implementation whose target is not a named type contributes no methods rather than inventing a key.
 - A default and an override with the same name bind once, with the override winning, because the override is bound first and the default is filtered out.
+- Imported default lookup uses the combined canonical trait table, so the trait declaration and implementation may be owned by different modules.
+- A local implementation colliding with an imported visible provider is ambiguous even though local signatures are installed later; binding order is never a dispatch preference.
 - An unsolved variable at discharge time proves nothing and is left alone rather than guessed at.
 - An `ErrorType` at discharge time is skipped, because the argument's own error already explains the failure.
 

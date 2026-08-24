@@ -30,6 +30,7 @@ The exported signatures are the module header's export list.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
+- When two unequal nominal identities render with the same short name, the mismatch qualifies both with their declaring modules so the diagnostic never says only `expected Hidden, found Hidden`.
 
 ### Linkage
 
@@ -47,6 +48,7 @@ Direct structural recursion over the type or syntax shape, with the checker's su
 ## Edge Cases
 
 - An occurs-check failure reports `E3002` rather than building a type that contains itself.
+- Same-basename private types from different modules report their canonical qualified keys in `E3001` while ordinary diagnostics retain concise type spelling.
 
 ## Depth
 

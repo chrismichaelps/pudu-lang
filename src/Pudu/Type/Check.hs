@@ -1,6 +1,7 @@
 {-| @Type.Check.Module — checks declarations, statements, and expressions -}
 module Pudu.Type.Check
   ( checkModule
+  , checkModuleWith
   ) where
 
 import Control.Monad (foldM, when)
@@ -71,7 +72,7 @@ import Pudu.Type.Check.Method
   )
 import Pudu.Type.Exhaust (checkExhaustive)
 import Pudu.Type.Formation
-  ( collectDeclared
+  ( collectDeclaredFrom
   , declaredParameterType
   , formOptionalType
   , formType
@@ -85,21 +86,28 @@ import Pudu.Type.Value
   , boolType
   , integerType
   )
+import Pudu.Type.Interface (ImportTypes)
+import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
 checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
-checkModule moduleValue =
-  let products = runChecker (checkUnit moduleValue)
+checkModule = checkModuleWith mempty
+
+checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModuleWith imported moduleValue =
+  let products = runChecker (checkUnit imported moduleValue)
    in (producedTypes products, producedDiagnostics products)
 
-checkUnit :: Module -> Checker ()
-checkUnit moduleValue = do
-  declared <- collectDeclared
+checkUnit :: ImportTypes -> Module -> Checker ()
+checkUnit imported moduleValue = do
+  dependencyDeclared <- collectImportedDeclared imported
+  declared <- collectDeclaredFrom dependencyDeclared
     (locatedValue (moduleName moduleValue))
     (moduleDeclarations moduleValue)
   withDeclared declared
   declareBuiltinConstructors
+  declareImportedTypes declared imported
   let traits = traitTable declared (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
@@ -156,7 +164,11 @@ variantPayload declared rigid variant = case Tree.variantPayload variant of
 
 checkDeclaration :: DeclaredTypes -> Located Declaration -> Checker ()
 checkDeclaration declared (Located _ declaration) = case declaration of
-  BindingDeclaration _ _ name annotation value -> do
+  BindingDeclaration visibility _ name annotation value -> do
+    when (visibility == Exported && annotation == Nothing) $
+      report "E3010" (locatedSpan name)
+        ("exported binding " <> locatedValue name <> " needs a type annotation")
+        (Just "annotate the exported binding so importers can check it without its body")
     expected <- formOptionalType declared [] annotation
     actual <- checkExpression declared [] value
     _ <- unify (locatedSpan value) expected actual

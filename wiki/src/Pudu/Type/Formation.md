@@ -31,12 +31,12 @@ The exported signatures are the module header's export list.
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it. The compiler wires in `Float` as an alias for `Float64`, because [[grammar/pudu]] makes the alias transparent at the type level and a reader who writes `Float` expects the same type as `Float64`.
-- `DeclaredTypes` carries a path-to-canonical-identity map assembled by the declaration collector or its caller. `formType` resolves the complete syntax path through that map before constructing `NominalType`; it never drops qualifiers to their last segment.
+- `DeclaredTypes` carries a path-to-canonical-identity map assembled by [[Type Interface]]. `formType` resolves the complete syntax path through that map before constructing `NominalType`; it never drops qualifiers to their last segment.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
 ### Linkage
 
-- **Requires:** [[Type Value]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -59,7 +59,7 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 ## Grill Log
 
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
-- **Q:** Where are import aliases interpreted? **A:** Outside formation; this module only consumes canonical path bindings supplied in `DeclaredTypes`. _Rationale:_ import policy stays out of recursive type construction. _Rejected:_ inspecting `Import` syntax inside every `formType` call.
+- **Q:** Where are import aliases interpreted? **A:** [[Type Interface]] produces canonical path bindings; formation only consumes them. _Rationale:_ import policy stays out of recursive type construction. _Rejected:_ inspecting `Import` syntax inside every `formType` call.
 
 ## Referenced by
 

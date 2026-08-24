@@ -8,7 +8,7 @@ module Pudu.Type.Unify
 import Data.Text (Text)
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, report, resolveVariable, setVariable)
-import Pudu.Type.Value (Type (..), TypeVar, renderType)
+import Pudu.Type.Value (Type (..), TypeVar, nominalKey, nominalName, renderType)
 
 {-| Unify two types, reporting `E3001` when they cannot be made equal.
 
@@ -98,11 +98,19 @@ occursIn variable candidate = do
 
 mismatch :: Span -> Type -> Type -> Checker Type
 mismatch spanValue expected actual = do
-  expectedText <- renderResolved expected
-  actualText <- renderResolved actual
+  resolvedExpected <- zonk expected
+  resolvedActual <- zonk actual
+  let (expectedText, actualText) = collisionAware resolvedExpected resolvedActual
   report "E3001" spanValue ("expected " <> expectedText <> ", found " <> actualText)
     (Just "change the value, or change the declared type it must match")
   pure ErrorType
+
+collisionAware :: Type -> Type -> (Text, Text)
+collisionAware expected actual = case (expected, actual) of
+  (NominalType left _, NominalType right _)
+    | left /= right && nominalName left == nominalName right ->
+        (nominalKey left, nominalKey right)
+  _ -> (renderType expected, renderType actual)
 
 renderResolved :: Type -> Checker Text
 renderResolved typeValue = renderType <$> zonk typeValue

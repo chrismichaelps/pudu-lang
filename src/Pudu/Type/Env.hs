@@ -4,12 +4,14 @@ module Pudu.Type.Env
   , CheckerProducts (..)
   , DeclaredTypes (..)
   , bindName
+  , bindImportedMethod
   , emptyDeclared
   , freshVariable
   , inTypeScope
   , lookupField
   , lookupOwnerVariants
   , lookupName
+  , isImportedMethod
   , lookupVariant
   , recordExpression
   , report
@@ -28,6 +30,8 @@ module Pudu.Type.Env
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -76,6 +80,7 @@ data CheckerState = CheckerState
   { stateNext :: !Int
   , stateSubstitution :: !(Map TypeVar Type)
   , stateFrames :: ![Map Text Scheme]
+  , stateImportedMethods :: !(Set Text)
   , stateDeclared :: !DeclaredTypes
   , stateTypes :: ![(SpanKey, Type)]
   , stateObligations :: ![(Span, Type, NominalId)]
@@ -126,6 +131,7 @@ initialState =
     { stateNext = 0
     , stateSubstitution = Map.empty
     , stateFrames = [Map.empty]
+    , stateImportedMethods = Set.empty
     , stateDeclared = emptyDeclared
     , stateTypes = []
     , stateObligations = []
@@ -153,6 +159,16 @@ bindName name scheme =
   Checker $ \state -> case stateFrames state of
     [] -> ((), state{stateFrames = [Map.singleton name scheme]})
     current : rest -> ((), state{stateFrames = Map.insert name scheme current : rest})
+
+bindImportedMethod :: Text -> Scheme -> Checker ()
+bindImportedMethod name scheme = do
+  bindName name scheme
+  Checker $ \state ->
+    ((), state{stateImportedMethods = Set.insert name (stateImportedMethods state)})
+
+isImportedMethod :: Text -> Checker Bool
+isImportedMethod name =
+  Checker $ \state -> (Set.member name (stateImportedMethods state), state)
 
 lookupName :: Text -> Checker (Maybe Scheme)
 lookupName name = Checker $ \state -> (search (stateFrames state), state)

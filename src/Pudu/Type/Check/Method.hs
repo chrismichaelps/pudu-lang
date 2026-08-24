@@ -2,6 +2,7 @@
 module Pudu.Type.Check.Method
   ( declareBounds
   , declareMethods
+  , declareInterfaceMethods
   , declareBuiltinConstructors
   , dischargeObligations
   , methodScheme
@@ -12,6 +13,8 @@ module Pudu.Type.Check.Method
   ) where
 
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -30,9 +33,11 @@ import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
+  , bindImportedMethod
   , bindName
   , implementsTrait
   , lookupName
+  , isImportedMethod
   , report
   , rigidBoundsOf
   , rigidSatisfies
@@ -85,45 +90,76 @@ declareTraitMember declared owner (Located _ method) = do
     They are bound under a qualified key so a member access on a value of that
     type finds them, and so one method may call another. -}
 declareMethods :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Impl -> Checker ()
-declareMethods declared traits value = do
+declareMethods = declareMethodsWith Nothing
+
+declareInterfaceMethods
+  :: DeclaredTypes
+  -> Map.Map NominalId [Located Function]
+  -> Set (NominalId, Text)
+  -> Impl
+  -> Checker ()
+declareInterfaceMethods declared traits defaults =
+  declareMethodsWith (Just defaults) declared traits
+
+declareMethodsWith
+  :: Maybe (Set (NominalId, Text))
+  -> DeclaredTypes
+  -> Map.Map NominalId [Located Function]
+  -> Impl
+  -> Checker ()
+declareMethodsWith defaults declared traits value = do
   target <- formType (implAliases declared value) [] (implTarget value)
   case targetName target of
     Nothing -> pure ()
     Just owner -> do
-      mapM_ (declareMethod declared value owner) (implFunctions value)
-      mapM_ (declareMethod declared value owner) (inheritedDefaults declared traits value)
+      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (implFunctions value)
+      mapM_ (declareMethod (defaults /= Nothing) declared value owner) (inheritedDefaults defaults declared traits value)
 
 {-| A trait member that carries a body is a default: an implementation that does
     not override it still has it. -}
 inheritedDefaults
-  :: DeclaredTypes
+  :: Maybe (Set (NominalId, Text))
+  -> DeclaredTypes
   -> Map.Map NominalId [Located Function]
   -> Impl
   -> [Located Function]
-inheritedDefaults declared traits value = case implTraitName declared value of
+inheritedDefaults defaults declared traits value = case implTraitName declared value of
   Nothing -> []
   Just traitText ->
     [ member
     | member@(Located _ method) <- maybe [] id (Map.lookup traitText traits)
-    , functionBody method /= Nothing
+    , isDefault traitText method
     , locatedValue (functionName method) `notElem` provided
     ]
  where
   provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
+  isDefault traitIdentity method = case defaults of
+    Nothing -> functionBody method /= Nothing
+    Just known -> Set.member (traitIdentity, locatedValue (functionName method)) known
 
 implTraitName :: DeclaredTypes -> Impl -> Maybe NominalId
 implTraitName declared value = case locatedValue (implTrait value) of
   Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
   _ -> Nothing
 
-declareMethod :: DeclaredTypes -> Impl -> NominalId -> Located Function -> Checker ()
-declareMethod declared value owner (Located _ method) = do
+declareMethod :: Bool -> DeclaredTypes -> Impl -> NominalId -> Located Function -> Checker ()
+declareMethod rejectCollision declared value owner (Located methodSpan method) = do
   let rigid = implRigid value <> functionRigid method
       aliases = implAliases declared value
+      key = methodKey owner (locatedValue (functionName method))
   inputs <- mapM (declaredParameterType aliases rigid) (functionParameters method)
   result <- formOptionalType aliases rigid (functionReturn method)
-  bindName (methodKey owner (locatedValue (functionName method)))
-    (polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result))
+  existing <- lookupName key
+  importedCollision <- if rejectCollision then pure (existing /= Nothing) else isImportedMethod key
+  if importedCollision
+    then do
+      report "E3013" methodSpan
+        (locatedValue (functionName method) <> " is ambiguous for " <> nominalName owner)
+        (Just "import only one providing trait or use a qualified call")
+      bindName key (monotype ErrorType)
+    else do
+      let scheme = polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result)
+      if rejectCollision then bindImportedMethod key scheme else bindName key scheme
 
 {-| `Self` inside an implementation is its target type, which is what lets a
     method read the fields of the value it was called on. -}

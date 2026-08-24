@@ -33,11 +33,12 @@ The exported signatures are the module header's export list.
 - `withRigidBounds` installs the enclosing declaration's parameter bounds so a generic body can call another generic that demands the same trait; a rigid parameter satisfies a bound its own declaration declared. Bounds from the parameter list and the `where` clause are merged with `(<>)` so a parameter carrying bounds in both places keeps all of them rather than the last entry overwriting the first.
 - `implementsTrait` answers whether a nominal type has an implementation for a trait, read from `declaredImpls` which [[Type Formation]] collects from `impl` declarations.
 - Declared shapes, implementation relationships, and method keys use canonical nominal/trait identity rather than basenames. Imported interface state is merged once before local signatures; local bindings remain in an inner frame.
+- Imported concrete method keys are marked separately from ordinary name bindings. Local implementation installation can therefore diagnose an imported-plus-local provider collision without treating two local declarations as an import-order ambiguity or replacing coherence's duplicate-head diagnostic.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared. Coverage diagnostics use `E5xxx`, and a warning is available for rules that are advisory rather than prohibitive.
 
 ### Linkage
 
-- **Requires:** [[Type Value]], [[Syntax Tree]], [[Diagnostic Model]].
+- **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
 - **Consumed by:** [[Type Check]], [[Type Check Rule]], [[Type Check Method]].
 
 ## Algorithm
@@ -48,6 +49,7 @@ Direct structural recursion over the type or syntax shape, with the checker's su
 
 - No subtyping beyond `Never`, no implicit numeric conversion, no defaulting of unsolved variables, and no evaluation.
 - No global mutable interface table and no dependency body in checker state.
+- No method precedence by binding order: an imported provider marker survives until local signature installation decides whether the key is ambiguous.
 
 ## Edge Cases
 
