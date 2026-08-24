@@ -614,8 +614,10 @@ skipToLineBoundary = do
 invalidAtCurrent :: Parser (Located Expression)
 invalidAtCurrent = currentSpan >>= \spanValue -> pure (Located spanValue InvalidExpression)
 
+{-| Prefix position decides these: `&` and `*` are also binary operators, and
+    the parser only consults this list where an operand is expected. -}
 unaryOperators :: [SymbolKind]
-unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde]
+unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
 
 isRecoveryBoundary :: TokenKind -> Bool
 isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}"]

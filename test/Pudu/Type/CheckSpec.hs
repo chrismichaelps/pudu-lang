@@ -38,6 +38,7 @@ typeProperties =
   , ("ambiguous trait method dispatch reports E3013", testAmbiguousMethod)
   , ("duplicate trait implementation heads are rejected", testCoherence)
   , ("Float aliases to Float64 at the type level", testFloatAlias)
+  , ("references are dereferenced explicitly in both directions", testDereference)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -992,6 +993,60 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+userProgram :: [Text]
+userProgram = ["module M", "type User = { name: Str }"]
+
+testDereference :: IO Property
+testDereference = do
+  readThrough <- codes (userProgram <>
+    [ "fn run(user: User) -> User {"
+    , "  let borrowed = &user"
+    , "  *borrowed"
+    , "}"
+    ])
+  fieldThroughBorrow <- codes (userProgram <>
+    [ "fn run(user: User) -> Str {"
+    , "  let borrowed = &user"
+    , "  (*borrowed).name"
+    , "}"
+    ])
+  selfDeref <- codes (userProgram <>
+    [ "trait Clone {"
+    , "  fn duplicate(self: &Self) -> Self"
+    , "}"
+    , "impl Clone for User {"
+    , "  fn duplicate(self: &Self) -> Self { *self }"
+    , "}"
+    ])
+  borrowWhereValue <- codes (userProgram <>
+    [ "fn takes(user: User) -> User { user }"
+    , "fn run(user: User) -> User { takes(&user) }"
+    ])
+  nonReference <- codes (userProgram <> ["fn run(user: User) -> User { *user }"])
+  mutableBorrow <- codes (userProgram <>
+    [ "fn run(user: User) -> User {"
+    , "  let borrowed = &mut user"
+    , "  *borrowed"
+    , "}"
+    ])
+  derefType <- typeOfIn
+    (drop 1 userProgram <>
+      [ "fn run(user: User) -> User {"
+      , "  let borrowed = &user"
+      , "  *borrowed"
+      , "}"
+      ])
+    "*borrowed"
+  pure $ conjoin
+    [ counterexample "a borrow is read with *" (readThrough === [])
+    , counterexample "a field is reached through a dereference" (fieldThroughBorrow === [])
+    , counterexample "&Self dereferences to Self" (selfDeref === [])
+    , counterexample "no implicit conversion from a borrow" (borrowWhereValue === ["E3001"])
+    , counterexample "a non-reference cannot be dereferenced" (nonReference === ["E3020"])
+    , counterexample "an exclusive borrow dereferences too" (mutableBorrow === [])
+    , counterexample "the dereference has the referent's type" (derefType === "User")
+    ]
 
 typeOf :: Text -> IO Text
 typeOf expression = typeOfIn ["fn run() {", "  " <> expression, "}"] expression

@@ -33,7 +33,7 @@ outlinePattern :: Located Pattern -> Text
 
 - The rendering is structural, not a formatter: it parenthesizes every binary and unary grouping so precedence is visible, which is the question `:ast` is asked.
 - Spans and trivia are omitted; a reader debugging grouping does not want offsets, and the source line is already in front of them.
-- Every syntax node has a rendering, so a new construct cannot silently render as nothing.
+- Every syntax node has a rendering, so a new construct cannot silently render as nothing. A missing case is not cosmetic here: an unrendered node ends the session with an incomplete-pattern failure rather than an answer.
 
 ### Linkage
 

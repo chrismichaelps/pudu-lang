@@ -155,7 +155,7 @@ for_expr         = "for", pattern, "in", expression, block ;
 
 ## Expression Grammar and Precedence
 
-From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut ~`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; shift and bitwise AND `<< >> &`; range and bitwise XOR `.. ..= ^`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||` and bitwise OR `|`; assignment; control expressions.
+From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut ~ *`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; shift and bitwise AND `<< >> &`; range and bitwise XOR `.. ..= ^`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||` and bitwise OR `|`; assignment; control expressions.
 
 - Assignment is right-associative. Every other admitted binary band is left-associative; semantic typing rejects operator chains whose intermediate result cannot serve as the next operand.
 - Assignment is a statement-like expression of type `()` and requires a mutable place.
@@ -188,6 +188,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 - Values are owned by default. Non-`Copy` assignment and by-value argument passing move.
 - `&T` is a shared borrow; `&mut T` is an exclusive borrow.
+- Prefix `*` dereferences a reference: `*r` has type `T` when `r` has type `&T` or `&mut T`. There is no implicit conversion in either direction, so a value where a reference is wanted must be borrowed and a reference where a value is wanted must be dereferenced. A field or method reached through a reference needs no `*`; `r.field` reads through the borrow.
 - Borrows are inferred to the last use within a function and cannot outlive the owner.
 - Mutation requires `var`, a mutable record field reached through owned mutable authority, or `&mut`.
 - Destruction is deterministic at the end of ownership. Types with resource cleanup implement `Drop`; user code cannot call `drop` twice.

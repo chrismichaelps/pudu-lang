@@ -25,6 +25,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- Borrowing and dereferencing are identities at run time: a reference is the value it refers to, and only typing distinguishes them. The distinction becomes observable when ownership checking and a store exist.
+
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
