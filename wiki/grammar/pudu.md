@@ -259,7 +259,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 - Stable syntax for unsafe foreign declarations and C ABI layouts will be finalized before the FFI slice.
 - Declarative macro matcher/repetition syntax will be finalized before macro implementation.
-- `Decimal` precision/rounding context will be finalized with the numeric standard-library slice.
+- `Decimal` precision/rounding context will be finalized with the numeric standard-library slice. Until that decision is accepted, writing the type is rejected with `E3022` rather than admitted with invented rounding.
 
 ## Referenced by
 

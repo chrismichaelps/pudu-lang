@@ -27,6 +27,8 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- `Decimal` is reserved: [[architecture/SEMANTICS]] gives it no semantics until its precision and rounding decision is accepted, so writing the type is refused with `E3022` rather than admitted with invented rounding. A module that declares its own `Decimal` keeps it, and each written occurrence reports once even though a signature is formed in two passes.
+
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.

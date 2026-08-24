@@ -41,6 +41,7 @@ typeProperties =
   , ("references are dereferenced explicitly in both directions", testDereference)
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
+  , ("reserved types are refused until their decision is made", testReservedTypes)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
 
@@ -995,6 +996,29 @@ testRecordedTypes :: IO Property
 testRecordedTypes = do
   recorded <- typeOfIn ["fn run() -> Bool {", "  1 < 2", "}"] "1 < 2"
   pure (recorded === "Bool")
+
+testReservedTypes :: IO Property
+testReservedTypes = do
+  annotated <- codes ["module M", "const VALUE: Decimal = 1.0"]
+  parameter <- codes ["module M", "fn run(amount: Decimal) -> Int { 1 }"]
+  result <- codes ["module M", "fn run() -> Decimal { 1.0 }"]
+  field <- codes ["module M", "type Money = { amount: Decimal }"]
+  bothPositions <- codes ["module M", "fn run(amount: Decimal) -> Decimal { amount }"]
+  ownDeclaration <- codes
+    [ "module M"
+    , "type Decimal = { units: Int }"
+    , "fn run(amount: Decimal) -> Int { amount.units }"
+    ]
+  supported <- codes ["module M", "fn run(amount: Float64) -> Float64 { amount }"]
+  pure $ conjoin
+    [ counterexample "an annotation is refused" (annotated === ["E3022"])
+    , counterexample "a parameter is refused" (parameter === ["E3022"])
+    , counterexample "a result is refused" (result === ["E3022"])
+    , counterexample "a field is refused" (field === ["E3022"])
+    , counterexample "each occurrence reports once" (bothPositions === ["E3022", "E3022"])
+    , counterexample "a module may declare its own" (ownDeclaration === [])
+    , counterexample "the supported types are unaffected" (supported === [])
+    ]
 
 sharedNameProgram :: [Text]
 sharedNameProgram =

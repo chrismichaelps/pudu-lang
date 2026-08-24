@@ -89,7 +89,7 @@ isScalar name =
     `elem` [ "Int8", "Int16", "Int32", "Int64", "Int128", "Int"
            , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "UInt"
            , "Float32", "Float64", "Float"
-           , "Bool", "Char", "BigInt", "Decimal", "Never"
+           , "Bool", "Char", "BigInt", "Never"
            ]
 
 {-| A declared aggregate satisfies a marker exactly when every component it
