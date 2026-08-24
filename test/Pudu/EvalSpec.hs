@@ -25,6 +25,7 @@ evalProperties =
   , ("built-in text methods answer with new values", testTextMethods)
   , ("function literals capture the environment they were written in", testClosures)
   , ("array concatenation joins two arrays", testArrayConcat)
+  , ("maps and sets keep their contents in key order", testKeyed)
   ]
 
 testScopes :: IO Property
@@ -404,6 +405,37 @@ testArrayConcat = do
     , counterexample "an empty left side is the right side" (leftEmpty === "[1]")
     , counterexample "an empty right side is the left side" (rightEmpty === "[1]")
     , counterexample "joining chains" (chained === "[1, 2, 3]")
+    ]
+
+{-| A map and a set keep their contents in key order, which is what makes two
+    of them equal when their contents are, however they were built. -}
+testKeyed :: IO Property
+testKeyed = do
+  ordered <- evaluate "mapOf([(\"b\", 2), (\"a\", 1)])"
+  replaced <- evaluate "mapOf([(\"a\", 1), (\"a\", 2)])"
+  built <- evaluate "mapOf([(\"a\", 1)]).insert(\"b\", 2)"
+  sameEitherWay <- evaluate "mapOf([(\"a\", 1), (\"b\", 2)]) == mapOf([(\"b\", 2), (\"a\", 1)])"
+  found <- evaluate "mapOf([(\"a\", 1)]).get(\"a\")"
+  absent <- evaluate "mapOf([(\"a\", 1)]).get(\"z\")"
+  merged <- evaluate "mapOf([(\"a\", 1)]).merge(mapOf([(\"a\", 9)]))"
+  deduplicated <- evaluate "setOf([3, 1, 2, 1])"
+  joined <- evaluate "setOf([1, 2]).union(setOf([2, 3]))"
+  shared <- evaluate "setOf([1, 2, 3]).intersect(setOf([2, 3, 4]))"
+  removed <- evaluate "setOf([1, 2, 3]).difference(setOf([2]))"
+  unorderable <- codesOf "setOf([fn(x) => x])"
+  pure $ conjoin
+    [ counterexample "entries are kept in key order" (ordered === "{\"a\": 1, \"b\": 2}")
+    , counterexample "a later pair replaces an earlier one" (replaced === "{\"a\": 2}")
+    , counterexample "insertion keeps the order" (built === "{\"a\": 1, \"b\": 2}")
+    , counterexample "two maps with the same entries are equal" (sameEitherWay === "true")
+    , counterexample "a present key answers with its value" (found === "Some(1)")
+    , counterexample "an absent key answers with nothing" (absent === "None")
+    , counterexample "merging lets the second map win" (merged === "{\"a\": 9}")
+    , counterexample "a set drops duplicates and orders" (deduplicated === "#{1, 2, 3}")
+    , counterexample "union joins" (joined === "#{1, 2, 3}")
+    , counterexample "intersection keeps what both have" (shared === "#{2, 3}")
+    , counterexample "difference removes what the other has" (removed === "#{1, 3}")
+    , counterexample "a value with no order cannot be a member" (unorderable === ["E7008"])
     ]
 
 testTextMethods :: IO Property

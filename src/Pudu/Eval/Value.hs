@@ -3,6 +3,10 @@ module Pudu.Eval.Value
   ( Builtin (..)
   , ArrayMethod (..)
   , CharMethod (..)
+  , MapMethod (..)
+  , SetMethod (..)
+  , mapMethodName
+  , setMethodName
   , StringMethod (..)
   , charMethodName
   , stringMethodName
@@ -36,6 +40,8 @@ data Value
   | UnitValue
   | TupleValue ![Value]
   | ArrayValue !(Seq Value)
+  | MapValue ![(Value, Value)]
+  | SetValue ![Value]
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
   | FunctionValue !Closure
@@ -44,6 +50,8 @@ data Value
   | ArrayMethodValue !ArrayMethod !Value
   | StringMethodValue !StringMethod !Value
   | CharMethodValue !CharMethod !Value
+  | MapMethodValue !MapMethod !Value
+  | SetMethodValue !SetMethod !Value
   deriving stock (Eq, Show)
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
@@ -53,6 +61,8 @@ data Value
 data Builtin
   = PanicBuiltin
   | CharFromCodeBuiltin
+  | MapOfBuiltin
+  | SetOfBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
@@ -64,6 +74,62 @@ data Builtin
     changing the receiver. The set is closed for the same reason the array set
     is: a method the compiler knows the semantics of can be typed exactly, and
     an unknown one is reported rather than dispatched. -}
+{-| @Eval.Value.MapMethod — one built-in operation on a keyed collection.
+
+    A map answers with a new map rather than changing the one it was given, like
+    every other collection here. The set is closed so each method can be typed
+    exactly. -}
+data MapMethod
+  = MapSize
+  | MapIsEmpty
+  | MapGet
+  | MapContainsKey
+  | MapInsert
+  | MapRemove
+  | MapKeys
+  | MapValues
+  | MapEntries
+  | MapMerge
+  deriving stock (Eq, Show)
+
+{-| @Eval.Value.SetMethod — one built-in operation on a set. -}
+data SetMethod
+  = SetSize
+  | SetIsEmpty
+  | SetContains
+  | SetInsert
+  | SetRemove
+  | SetToArray
+  | SetUnion
+  | SetIntersect
+  | SetDifference
+  deriving stock (Eq, Show)
+
+mapMethodName :: MapMethod -> Text
+mapMethodName method = case method of
+  MapSize -> "size"
+  MapIsEmpty -> "isEmpty"
+  MapGet -> "get"
+  MapContainsKey -> "containsKey"
+  MapInsert -> "insert"
+  MapRemove -> "remove"
+  MapKeys -> "keys"
+  MapValues -> "values"
+  MapEntries -> "entries"
+  MapMerge -> "merge"
+
+setMethodName :: SetMethod -> Text
+setMethodName method = case method of
+  SetSize -> "size"
+  SetIsEmpty -> "isEmpty"
+  SetContains -> "contains"
+  SetInsert -> "insert"
+  SetRemove -> "remove"
+  SetToArray -> "toArray"
+  SetUnion -> "union"
+  SetIntersect -> "intersect"
+  SetDifference -> "difference"
+
 {-| @Eval.Value.CharMethod — one built-in character operation.
 
     Only `code` is built in. Classification — digit, letter, whitespace — is
@@ -155,6 +221,13 @@ renderValue value = case value of
   TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
   BuiltinValue PanicBuiltin -> "<builtin panic>"
   BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
+  BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
+  BuiltinValue SetOfBuiltin -> "<builtin setOf>"
+  MapValue entries ->
+    "{" <> Text.intercalate ", " [renderValue key <> ": " <> renderValue held | (key, held) <- entries] <> "}"
+  SetValue members -> "#{" <> Text.intercalate ", " (map renderValue members) <> "}"
+  MapMethodValue method _ -> "<map method " <> mapMethodName method <> ">"
+  SetMethodValue method _ -> "<set method " <> setMethodName method <> ">"
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
   StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
@@ -183,6 +256,10 @@ valueKind value = case value of
   FunctionValue _ -> "function"
   TaskValue _ _ _ -> "task"
   BuiltinValue _ -> "builtin"
+  MapValue _ -> "map"
+  SetValue _ -> "set"
+  MapMethodValue _ _ -> "map method"
+  SetMethodValue _ _ -> "set method"
   ArrayMethodValue _ _ -> "array method"
   StringMethodValue _ _ -> "text method"
   CharMethodValue _ _ -> "character method"

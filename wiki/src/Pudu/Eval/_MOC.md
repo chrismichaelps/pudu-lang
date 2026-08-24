@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order.
+- [[Eval Order]] — the total order keyed collections need, and the values that lack one.
 - [[Evaluator]] — declaration installation, statement and expression walking, and bounded execution.
 - [[Eval Dispatch]] — array method dispatch (currently inline in Eval.hs, extraction planned).
 - [[Eval Value]] — runtime values and how a session renders them.

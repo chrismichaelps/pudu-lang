@@ -330,3 +330,200 @@ fn prefixLength(value: Str, holds: fn(Char) -> Bool) -> Int {
 fn clampIndex(index: Int, limit: Int) -> Int {
   if index < 0 { 0 } else { if index > limit { limit } else { index } }
 }
+
+/// Every character folded into one value, left to right.
+export fn foldChars[A](value: Str, combine: fn(A, Char) -> A, start: A) -> A {
+  var accumulated = start
+  for character in value.chars() { accumulated = combine(accumulated, character) }
+  accumulated
+}
+
+/// Every character folded into one value, right to left.
+export fn foldCharsRight[A](value: Str, combine: fn(Char, A) -> A, start: A) -> A {
+  var accumulated = start
+  var index = value.length()
+  while index > 0 {
+    index = index - 1
+    accumulated = combine(value.charAt(index), accumulated)
+  }
+  accumulated
+}
+
+/// Every character transformed into text, and that text joined.
+export fn flatMapChars(value: Str, transform: fn(Char) -> Str) -> Str {
+  var out = ""
+  for character in value.chars() { out = out + transform(character) }
+  out
+}
+
+/// Every running result of folding the characters.
+export fn scanChars[A](value: Str, combine: fn(A, Char) -> A, start: A) -> Array[A] {
+  var out = [start]
+  var accumulated = start
+  for character in value.chars() {
+    accumulated = combine(accumulated, character)
+    out = out.push(accumulated)
+  }
+  out
+}
+
+/// Runs of adjacent equal characters, as text.
+export fn groupChars(value: Str) -> Array[Str] {
+  var out = []
+  var current = ""
+  for character in value.chars() {
+    if current.isEmpty() || current.charAt(0) == character {
+      current = current + textOf(character)
+    } else {
+      out = out.push(current)
+      current = textOf(character)
+    }
+  }
+  if !current.isEmpty() { out = out.push(current) }
+  out
+}
+
+/// Every prefix, shortest first.
+export fn prefixes(value: Str) -> Array[Str] {
+  var out = []
+  var index = 0
+  let size = value.length()
+  while index <= size {
+    out = out.push(value.slice(0, index))
+    index = index + 1
+  }
+  out
+}
+
+/// Every suffix, longest first.
+export fn suffixes(value: Str) -> Array[Str] {
+  var out = []
+  var index = 0
+  let size = value.length()
+  while index <= size {
+    out = out.push(value.slice(index, size))
+    index = index + 1
+  }
+  out
+}
+
+/// The text after the last occurrence of a needle, and everything before it.
+/// Empty text and the whole text when the needle is absent, so a caller that
+/// joins the two halves always gets back what it started with.
+export fn breakOnEnd(value: Str, needle: Str) -> (Str, Str) {
+  var found = 0 - 1
+  var index = 0
+  let size = value.length()
+  let width = needle.length()
+  if width == 0 { (value, "") } else {
+    while index + width <= size {
+      if value.slice(index, index + width) == needle { found = index }
+      index = index + 1
+    }
+    if found < 0 { ("", value) } else {
+      (value.slice(0, found + width), value.slice(found + width, size))
+    }
+  }
+}
+
+/// The last `wanted` characters, or the whole text when it is shorter.
+export fn takeEnd(value: Str, wanted: Int) -> Str {
+  let size = value.length()
+  value.slice(clampIndex(size - wanted, size), size)
+}
+
+/// Every character but the last `skipped`.
+export fn dropEnd(value: Str, skipped: Int) -> Str {
+  let size = value.length()
+  value.slice(0, clampIndex(size - skipped, size))
+}
+
+/// Trailing characters the predicate accepts removed.
+export fn dropWhileEnd(value: Str, holds: fn(Char) -> Bool) -> Str {
+  var size = value.length()
+  while size > 0 && holds(value.charAt(size - 1)) { size = size - 1 }
+  value.slice(0, size)
+}
+
+/// Leading and trailing characters the predicate accepts removed.
+export fn dropAround(value: Str, holds: fn(Char) -> Bool) -> Str {
+  dropWhileEnd(dropWhile(value, holds), holds)
+}
+
+/// The characters of two texts paired, stopping at the shorter.
+export fn zipChars(left: Str, right: Str) -> Array[(Char, Char)] {
+  var out = []
+  var index = 0
+  let size = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < size {
+    out = out.push((left.charAt(index), right.charAt(index)))
+    index = index + 1
+  }
+  out
+}
+
+/// Text grown from a seed until the step answers `None`.
+/// The step count is bounded because a strict language cannot recover from a
+/// step that never stops.
+export fn unfold[S](limit: Int, seed: S, step: fn(S) -> Option[(Char, S)]) -> Str {
+  var out = ""
+  var current = seed
+  var remaining = limit
+  while remaining > 0 {
+    match step(current) {
+      case Some(pair) => {
+        out = out + textOf(pair[0])
+        current = pair[1]
+      }
+      case None => { return out }
+    }
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// Two texts compared without materialising the comparison as a number.
+/// Answers -1, 0, or 1, which is what a sort needs.
+export fn compare(left: Str, right: Str) -> Int {
+  var index = 0
+  let shorter = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < shorter {
+    let a = left.charAt(index).code()
+    let b = right.charAt(index).code()
+    if a < b { return 0 - 1 }
+    if a > b { return 1 }
+    index = index + 1
+  }
+  if left.length() < right.length() { 0 - 1 } else {
+    if left.length() > right.length() { 1 } else { 0 }
+  }
+}
+
+/// Whether one text sorts before another.
+export fn before(left: Str, right: Str) -> Bool { compare(left, right) < 0 }
+
+/// The title-case form: the first character of each word in upper case.
+export fn toTitle(value: Str) -> Str {
+  var out = ""
+  var atWordStart = true
+  for character in value.chars() {
+    if isSpace(character) {
+      out = out + textOf(character)
+      atWordStart = true
+    } else {
+      if atWordStart { out = out + textOf(character).toUpper() }
+      else { out = out + textOf(character).toLower() }
+      atWordStart = false
+    }
+  }
+  out
+}
+
+/// Every line, with a trailing newline producing no final empty line.
+export fn toLines(value: Str) -> Array[Str] { value.lines() }
+
+/// Lines joined with newlines between them.
+export fn fromLines(lines: &Array[Str]) -> Str { join(lines, "\n") }
+
+/// Words joined with single spaces between them.
+export fn fromWords(pieces: &Array[Str]) -> Str { join(pieces, " ") }

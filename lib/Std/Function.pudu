@@ -52,3 +52,45 @@ export fn until[T](limit: Int, holds: fn(T) -> Bool, f: fn(T) -> T, value: T) ->
   }
   out
 }
+
+/// Two values compared after the same transformation is applied to each.
+/// `on(compare, key, left, right)` compares by key, which is how a comparison on
+/// one field is built from a comparison on its type.
+export fn on[A, B, C](combine: fn(B, B) -> C, key: fn(A) -> B, left: A, right: A) -> C {
+  combine(key(left), key(right))
+}
+
+/// A value passed to a function, reading left to right.
+/// The counterpart to `apply`, for when the value is what the reader has in
+/// hand and the function is what they are choosing.
+export fn applyTo[A, B](value: A, f: fn(A) -> B) -> B { f(value) }
+
+/// A function applied to itself's result until it stops changing.
+/// The step count is bounded: a strict language cannot recover from a function
+/// with no fixed point, and exhausting the bound answers with what it had.
+export fn fixpoint[T](limit: Int, f: fn(T) -> T, seed: T) -> T {
+  var current = seed
+  var remaining = limit
+  while remaining > 0 {
+    let next = f(current)
+    if next == current { return current }
+    current = next
+    remaining = remaining - 1
+  }
+  current
+}
+
+/// Three functions in a row, reading left to right.
+export fn pipe3[A, B, C, D](
+  first: fn(A) -> B,
+  second: fn(B) -> C,
+  third: fn(C) -> D,
+  value: A
+) -> D {
+  third(second(first(value)))
+}
+
+/// A two-argument function with its first argument fixed.
+export fn partial[A, B, C](f: fn(A, B) -> C, fixed: A, remaining: B) -> C {
+  f(fixed, remaining)
+}

@@ -273,6 +273,23 @@ declareBuiltinConstructors = do
       integer is a scalar value. -}
   bindName "charFromCode"
     (monotype (FunctionTypeValue False [integerType] (NominalType "Option" [charType])))
+  {-| A map and a set are built from an array of what they hold, because a
+      literal syntax for either would need a decision about how it reads beside
+      the block and record forms that already use braces. -}
+  bindName "mapOf"
+    ( polytype ["K", "V"] []
+        ( FunctionTypeValue False
+            [NominalType "Array" [TupleTypeValue [RigidType "K", RigidType "V"]]]
+            (NominalType "Map" [RigidType "K", RigidType "V"])
+        )
+    )
+  bindName "setOf"
+    ( polytype ["T"] []
+        ( FunctionTypeValue False
+            [NominalType "Array" [RigidType "T"]]
+            (NominalType "Set" [RigidType "T"])
+        )
+    )
  where
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]

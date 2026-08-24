@@ -148,19 +148,28 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Nine modules, 214 documented exports, every one written in Pudu.
+Thirteen modules, 422 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
-| `Std.List` | 65 | the collection surface: folds, scans, slicing, searching, set operations, zipping, sorting |
-| `Std.Text` | 44 | slicing, splitting, padding, per-character transformation, prefix and suffix work |
-| `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked forms of the partial operators |
-| `Std.Char` | 18 | ASCII classification, case folding, digit conversion in both directions |
-| `Std.Result` | 16 | transforming either side, collecting many results into one |
-| `Std.Option` | 15 | transforming, filtering, and collecting values that may be absent |
-| `Std.Bool` | 10 | the operators as functions, plus `select` and the array folds |
+| `Std.List` | 95 | folds, scans, slicing, searching, set operations, zipping, sorting, subsequences, permutations, windows |
+| `Std.Text` | 64 | slicing, splitting, padding, per-character work, prefixes, comparison, case |
+| `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
+| `Std.Set` | 33 | membership, the three set operations, subset tests, splitting, products |
+| `Std.Bits` | 29 | the bit operators as functions, positions, rotation, base conversion |
+| `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
+| `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked partial operators |
+| `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
+| `Std.Result` | 24 | transforming either side, collecting many results into one |
+| `Std.Order` | 16 | the `Ordering` type and comparisons built from it |
+| `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
+| `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
-| `Std.Function` | 9 | identity, composition in both directions, repeated application |
+
+`Map[K, V]` and `Set[T]` are wired-in types with closed method vocabularies, like `Array` and `Str`.
+They keep their contents in key order, which is what makes two of them equal when their contents are
+however they were built — see [[Eval Keyed]]. A value with no meaningful order, such as a function,
+is refused as a key with `E7008` rather than silently ordered by something arbitrary.
 
 Everything else in the tables above is designed and unwritten. One thing blocks the rest, and it is
 runtime work rather than library work: `Std.Io`, `Std.Http`, `Std.Net`, `Std.Process`, and `Std.Db`
@@ -184,6 +193,8 @@ one became a language change rather than a workaround:
 | a character as text | `Char.toText` |
 | documentation on an exported name | doc comments attach past modifiers |
 | `out.push(x)` doing nothing | `W3002` for a discarded collection result |
+| any keyed collection | `Map` and `Set` as wired-in types |
+| `Ok(())` against `Result[(), E]` | an empty tuple types as unit |
 
 One of them was a soundness bug rather than a gap: `(Int, Str)[1]` reported `Int` while the value
 was text, because a tuple's members were all typed as the first member's type. A tuple is now

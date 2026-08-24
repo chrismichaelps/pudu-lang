@@ -1,0 +1,114 @@
+module Std.Order
+
+/// How one value stands to another.
+export type Ordering = Less | Equal | Greater
+
+/// Two whole numbers compared.
+export fn compareInt(left: Int, right: Int) -> Ordering {
+  if left < right { Less } else { if left > right { Greater } else { Equal } }
+}
+
+/// Two texts compared by their characters, in scalar order.
+export fn compareText(left: Str, right: Str) -> Ordering {
+  var index = 0
+  let shorter = if left.length() < right.length() { left.length() } else { right.length() }
+  while index < shorter {
+    let ordering = compareChar(left.charAt(index), right.charAt(index))
+    match ordering {
+      case Equal => { }
+      case _ => { return ordering }
+    }
+    index = index + 1
+  }
+  compareInt(left.length(), right.length())
+}
+
+/// Two characters compared by scalar value.
+export fn compareChar(left: Char, right: Char) -> Ordering {
+  compareInt(left.code(), right.code())
+}
+
+/// Two truth values compared, with false before true.
+export fn compareBool(left: Bool, right: Bool) -> Ordering {
+  compareInt(toRank(left), toRank(right))
+}
+
+/// The opposite ordering, which is how a descending sort is written from an
+/// ascending comparison.
+export fn reverse(value: Ordering) -> Ordering {
+  match value {
+    case Less => Greater
+    case Equal => Equal
+    case Greater => Less
+  }
+}
+
+/// The first ordering unless it is `Equal`, in which case the second.
+/// This is how a comparison on one field falls through to the next.
+export fn thenBy(first: Ordering, second: Ordering) -> Ordering {
+  match first {
+    case Equal => second
+    case _ => first
+  }
+}
+
+/// Whether an ordering says the first value comes first.
+export fn isLess(value: &Ordering) -> Bool {
+  match value {
+    case Less => true
+    case _ => false
+  }
+}
+
+/// Whether an ordering says the two values are equivalent.
+export fn isEqual(value: &Ordering) -> Bool {
+  match value {
+    case Equal => true
+    case _ => false
+  }
+}
+
+/// Whether an ordering says the second value comes first.
+export fn isGreater(value: &Ordering) -> Bool {
+  match value {
+    case Greater => true
+    case _ => false
+  }
+}
+
+/// An ordering as the "sorts before" predicate the sorting functions take.
+/// A sort needs one answer, not three, and this is the honest conversion:
+/// equivalent values do not sort before one another.
+export fn before(value: Ordering) -> Bool { isLess(&value) }
+
+/// An ordering as a whole number: -1, 0, or 1.
+export fn toInt(value: Ordering) -> Int {
+  match value {
+    case Less => 0 - 1
+    case Equal => 0
+    case Greater => 1
+  }
+}
+
+/// The smaller of two values under a comparison.
+export fn min[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
+  if isGreater(&compare(left, right)) { right } else { left }
+}
+
+/// The larger of two values under a comparison.
+export fn max[T](left: T, right: T, compare: fn(T, T) -> Ordering) -> T {
+  if isLess(&compare(left, right)) { right } else { left }
+}
+
+/// A comparison turned into the predicate the sorting functions take.
+export fn ascending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
+  isLess(&compare(left, right))
+}
+
+/// A comparison turned into a descending predicate.
+export fn descending[T](compare: fn(T, T) -> Ordering, left: T, right: T) -> Bool {
+  isGreater(&compare(left, right))
+}
+
+/// A truth value's rank, so booleans can be compared as numbers.
+fn toRank(value: Bool) -> Int { if value { 1 } else { 0 } }

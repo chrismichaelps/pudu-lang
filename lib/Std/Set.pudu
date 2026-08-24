@@ -1,0 +1,187 @@
+module Std.Set
+
+/// A set with no members.
+export fn empty[T]() -> Set[T] { setOf([]) }
+
+/// A set with one member.
+export fn singleton[T](value: T) -> Set[T] { setOf([value]) }
+
+/// A set built from an array, with duplicates dropped.
+export fn fromArray[T](items: &Array[T]) -> Set[T] { setOf(*items) }
+
+/// The number of members.
+export fn size[T](value: &Set[T]) -> Int { value.size() }
+
+/// Whether the set has no members.
+export fn isEmpty[T](value: &Set[T]) -> Bool { value.isEmpty() }
+
+/// Whether a value is a member.
+export fn contains[T](value: &Set[T], wanted: T) -> Bool { value.contains(wanted) }
+
+/// The set with a member added, or unchanged when it is already there.
+export fn insert[T](value: &Set[T], wanted: T) -> Set[T] { value.insert(wanted) }
+
+/// The set with a member removed, or unchanged when it is not there.
+export fn remove[T](value: &Set[T], wanted: T) -> Set[T] { value.remove(wanted) }
+
+/// Every member, in order.
+export fn toArray[T](value: &Set[T]) -> Array[T] { value.toArray() }
+
+/// Every member of either set.
+export fn union[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.union(*right) }
+
+/// Every member of both sets.
+export fn intersection[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.intersect(*right) }
+
+/// Every member of the first set that is not in the second.
+export fn difference[T](left: &Set[T], right: &Set[T]) -> Set[T] { left.difference(*right) }
+
+/// Every member of exactly one of the two sets.
+export fn symmetricDifference[T](left: &Set[T], right: &Set[T]) -> Set[T] {
+  left.difference(*right).union(right.difference(*left))
+}
+
+/// Whether every member of the first set is in the second.
+export fn isSubsetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
+  left.difference(*right).isEmpty()
+}
+
+/// Whether every member of the second set is in the first.
+export fn isSupersetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
+  right.difference(*left).isEmpty()
+}
+
+/// Whether the two sets share no members.
+export fn isDisjointFrom[T](left: &Set[T], right: &Set[T]) -> Bool {
+  left.intersect(*right).isEmpty()
+}
+
+/// Only the members the predicate accepts.
+export fn filter[T](value: &Set[T], keep: fn(T) -> Bool) -> Set[T] {
+  setOf(value.toArray().filter(keep))
+}
+
+/// Every member transformed. The result may be smaller when the
+/// transformation sends two members to the same value.
+export fn map[A, B](value: &Set[A], transform: fn(A) -> B) -> Set[B] {
+  setOf(value.toArray().map(transform))
+}
+
+/// Every member combined into one value, in order.
+export fn fold[T, A](value: &Set[T], combine: fn(A, T) -> A, start: A) -> A {
+  value.toArray().reduce(combine, start)
+}
+
+/// Whether every member satisfies the predicate. True for an empty set.
+export fn all[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
+  value.toArray().filter(holds).length() == value.size()
+}
+
+/// Whether any member satisfies the predicate. False for an empty set.
+export fn any[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
+  value.toArray().filter(holds).length() > 0
+}
+
+/// Every set combined.
+export fn unionAll[T](sets: &Array[Set[T]]) -> Set[T] {
+  var out = setOf([])
+  for value in sets { out = out.union(value) }
+  out
+}
+
+/// Every member of every set that is in all of them.
+/// An empty array of sets answers with an empty set, since there is nothing for
+/// a member to be in.
+export fn intersectAll[T](sets: &Array[Set[T]]) -> Set[T] {
+  if sets.length() == 0 { setOf([]) } else {
+    var out = sets[0]
+    for value in sets { out = out.intersect(value) }
+    out
+  }
+}
+
+/// The members the predicate accepts, and the members it rejects.
+export fn partition[T](value: &Set[T], keep: fn(T) -> Bool) -> (Set[T], Set[T]) {
+  var kept = []
+  var rejected = []
+  for member in value.toArray() {
+    if keep(member) { kept = kept.push(member) } else { rejected = rejected.push(member) }
+  }
+  (setOf(kept), setOf(rejected))
+}
+
+/// The smallest member, or `None` for an empty set.
+export fn least[T](value: &Set[T]) -> Option[T] {
+  let members = value.toArray()
+  if members.length() == 0 { None } else { Some(members[0]) }
+}
+
+/// The largest member, or `None` for an empty set.
+export fn greatest[T](value: &Set[T]) -> Option[T] {
+  let members = value.toArray()
+  let total = members.length()
+  if total == 0 { None } else { Some(members[total - 1]) }
+}
+
+/// The set without its smallest member.
+export fn removeLeast[T](value: &Set[T]) -> Set[T] {
+  match least(value) {
+    case Some(found) => value.remove(found)
+    case None => *value
+  }
+}
+
+/// The set without its largest member.
+export fn removeGreatest[T](value: &Set[T]) -> Set[T] {
+  match greatest(value) {
+    case Some(found) => value.remove(found)
+    case None => *value
+  }
+}
+
+/// The member at a position in order, or `None` when there is none.
+export fn at[T](value: &Set[T], position: Int) -> Option[T] {
+  let members = value.toArray()
+  if position < 0 || position >= members.length() { None } else { Some(members[position]) }
+}
+
+/// The members a comparison places before a value, and those it places after.
+/// The value itself is in neither, which is what makes this a split rather than
+/// a partition. The comparison is supplied because a set is generic and the
+/// language has no ordering bound to write yet.
+export fn split[T](value: &Set[T], pivot: T, before: fn(T, T) -> Bool) -> (Set[T], Set[T]) {
+  var below = []
+  var above = []
+  for member in value.toArray() {
+    if member == pivot { } else {
+      if before(member, pivot) { below = below.push(member) } else { above = above.push(member) }
+    }
+  }
+  (setOf(below), setOf(above))
+}
+
+/// Every pairing of one set's members with the other's.
+export fn cartesian[A, B](left: &Set[A], right: &Set[B]) -> Set[(A, B)] {
+  var out = []
+  for first in left.toArray() {
+    for second in right.toArray() { out = out.push((first, second)) }
+  }
+  setOf(out)
+}
+
+/// The first member the predicate accepts, or `None`.
+export fn find[T](value: &Set[T], holds: fn(T) -> Bool) -> Option[T] {
+  for member in value.toArray() {
+    if holds(member) { return Some(member) }
+  }
+  None
+}
+
+/// How many members the predicate accepts.
+export fn count[T](value: &Set[T], holds: fn(T) -> Bool) -> Int {
+  var total = 0
+  for member in value.toArray() {
+    if holds(member) { total = total + 1 }
+  }
+  total
+}

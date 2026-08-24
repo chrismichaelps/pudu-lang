@@ -1,0 +1,25 @@
+module UsesKeyed
+
+import Std.Bits as Bits
+import Std.List as List
+import Std.Map as Map
+import Std.Order as Order
+import Std.Set as Set
+
+export fn main() -> Int {
+  let counts = Map.tally(&[1, 2, 2, 3, 3, 3])
+  let groups = Map.groupBy(&[1, 2, 3, 4, 5, 6], fn(n: Int) -> Int => n % 3)
+  let left = Set.fromArray(&[1, 2, 3])
+  let right = Set.fromArray(&[3, 4])
+  var total = 0
+  total = total + Map.getOr(&counts, 3, 0)
+  total = total + Map.size(&groups)
+  total = total + Set.size(&Set.union(&left, &right))
+  total = total + Set.size(&Set.symmetricDifference(&left, &right))
+  total = total + List.length(&List.permutations(&[1, 2, 3]))
+  total = total + List.length(&List.subsequences(&[1, 2]))
+  total = total + Bits.popCount(255)
+  total = total + Bits.nextPowerOfTwo(100)
+  total = total + Order.toInt(Order.compareText("abc", "abd"))
+  total
+}

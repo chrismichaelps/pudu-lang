@@ -147,3 +147,83 @@ export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
   }
   Ok(out)
 }
+
+/// The success, or `None` when there was a failure, keeping neither.
+export fn toOption[T, E](value: Result[T, E]) -> Option[T] {
+  match value {
+    case Ok(found) => Some(found)
+    case Err(_) => None
+  }
+}
+
+/// The failure, or a fallback when the operation succeeded.
+export fn errOr[T, E](value: Result[T, E], fallback: E) -> E {
+  match value {
+    case Ok(_) => fallback
+    case Err(problem) => problem
+  }
+}
+
+/// The two sides separated: every success, and every failure.
+export fn partition[T, E](values: &Array[Result[T, E]]) -> (Array[T], Array[E]) {
+  var good = []
+  var bad = []
+  for value in values {
+    match value {
+      case Ok(found) => { good = good.push(found) }
+      case Err(problem) => { bad = bad.push(problem) }
+    }
+  }
+  (good, bad)
+}
+
+/// The sides exchanged, so a failure becomes a success and back.
+export fn swap[T, E](value: Result[T, E]) -> Result[E, T] {
+  match value {
+    case Ok(found) => Err(found)
+    case Err(problem) => Ok(problem)
+  }
+}
+
+/// Both successes combined, or the first failure.
+export fn map2[T, U, E, V](
+  left: Result[T, E],
+  right: Result[U, E],
+  combine: fn(T, U) -> V
+) -> Result[V, E] {
+  match left {
+    case Ok(first) => match right {
+      case Ok(second) => Ok(combine(first, second))
+      case Err(problem) => Err(problem)
+    }
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Whether the operation succeeded and the predicate accepts the value.
+export fn holds[T, E](value: &Result[T, E], predicate: fn(T) -> Bool) -> Bool {
+  match value {
+    case Ok(found) => predicate(found)
+    case Err(_) => false
+  }
+}
+
+/// A success when a condition holds, and a named failure otherwise.
+export fn require[E](condition: Bool, failure: E) -> Result[(), E] {
+  if condition { Ok(()) } else { Err(failure) }
+}
+
+/// Every result transformed and collected, stopping at the first failure.
+export fn traverse[A, B, E](
+  items: &Array[A],
+  transform: fn(A) -> Result[B, E]
+) -> Result[Array[B], E] {
+  var out = []
+  for item in items {
+    match transform(item) {
+      case Ok(found) => { out = out.push(found) }
+      case Err(problem) => { return Err(problem) }
+    }
+  }
+  Ok(out)
+}

@@ -97,3 +97,44 @@ fn shift(value: Char, offset: Int) -> Char {
     case None => value
   }
 }
+
+/// Whether a character is a space or a separator.
+export fn isSeparator(value: Char) -> Bool { value == ' ' }
+
+/// Whether a character is an upper-case ASCII letter.
+export fn isAsciiUpper(value: Char) -> Bool { isUpper(value) }
+
+/// Whether a character is a lower-case ASCII letter.
+export fn isAsciiLower(value: Char) -> Bool { isLower(value) }
+
+/// Whether a character is in the Latin-1 range.
+export fn isLatin1(value: Char) -> Bool { value.code() < 256 }
+
+/// Whether a character is one of the ASCII symbols used in arithmetic and
+/// comparison: the set a reader means by "an operator character".
+export fn isSymbol(value: Char) -> Bool {
+  value == '+' || value == '<' || value == '=' || value == '>' ||
+    value == '|' || value == '~' || value == '^' || value == '$'
+}
+
+/// Whether a character is a decimal digit, which is the only kind of number
+/// this module recognises.
+export fn isNumber(value: Char) -> Bool { isDigit(value) }
+
+/// The title-case form of a character, which for ASCII is its upper case.
+export fn toTitle(value: Char) -> Char { toUpper(value) }
+
+/// A character's scalar value, named for what it is.
+export fn ord(value: Char) -> Int { value.code() }
+
+/// A character as text, named for what it is.
+export fn toText(value: Char) -> Str { value.toText() }
+
+/// Whether two characters are the same ignoring ASCII case.
+export fn equalsIgnoreCase(left: Char, right: Char) -> Bool {
+  toLower(left) == toLower(right)
+}
+
+/// Whether a character is one a program may use in an identifier: a letter, a
+/// digit, or an underscore.
+export fn isIdentifier(value: Char) -> Bool { isAlphanumeric(value) || value == '_' }
