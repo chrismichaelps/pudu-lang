@@ -50,12 +50,12 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 
 ### Linkage
 
-- **Requires:** [[Semantic Interface]], [[Symbol Model]], [[Scope Model]], [[Semantic Prelude]], [[Syntax Tree]], [[Diagnostic Model]], [[architecture/SEMANTICS]].
+- **Requires:** [[Semantic Interface]], [[Resolve Context]], [[Symbol Model]], [[Scope Model]], [[Semantic Prelude]], [[Syntax Tree]], [[Diagnostic Model]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Semantic]] and future typing, ownership, and lowering phases.
 
 ## Algorithm
 
-Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic. An `ArrayExpression` walks each element expression so names inside array literals resolve like any other expression context.
+Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic. An `ArrayExpression` walks each element expression so names inside array literals resolve like any other expression context. State threading, scope management, and conflict classification are delegated to [[Resolve Context]]; the facade owns walk order and the policy for what each declaration form binds.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -87,4 +87,4 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 
 ## Referenced by
 
-[[src/Pudu/Semantic/_MOC]] · [[Semantic]] · [[Symbol Model]] · [[Scope Model]] · [[Semantic Prelude]] · [[Syntax Tree]] · [[Semantics]]
+[[src/Pudu/Semantic/_MOC]] · [[Semantic]] · [[Resolve Context]] · [[Symbol Model]] · [[Scope Model]] · [[Semantic Prelude]] · [[Syntax Tree]] · [[Semantics]]
