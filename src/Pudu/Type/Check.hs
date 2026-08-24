@@ -45,6 +45,7 @@ import Pudu.Type.Env
   , withDeclared
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Coherence (checkCoherence)
 import Pudu.Type.Check.Rule
   ( binaryType
   , instantiate
@@ -98,6 +99,7 @@ checkUnit moduleValue = do
   declareBuiltinConstructors
   let traits = traitTable (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
+  checkCoherence (moduleDeclarations moduleValue)
   mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
   dischargeObligations
 

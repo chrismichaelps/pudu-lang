@@ -34,6 +34,7 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 - An exported function must annotate its parameters and its return type. An exported signature is a compatibility boundary that callers read without the body, so `E3010` asks for the annotation rather than inferring one.
 - A declared generic parameter is rigid inside its declaration and is instantiated with fresh variables at every use, which is what lets one generic function serve several types.
 - A match is checked for coverage by [[Type Exhaust]] after its arms are typed, so a scrutinee whose type failed earns no second complaint.
+- Trait implementations are checked once by [[Type Check Coherence]] after signatures and method bindings are collected, so duplicate implementation heads are rejected before bodies finish checking without suppressing useful body diagnostics.
 - Every construct's rule is the one [[grammar/pudu]] states: an `if` condition is `Bool`, its reachable branches unify, `match` arms unify with each other and their patterns with the scrutinee, a loop is unit, and `return` is checked against the enclosing function's declared result.
 - A member in callee position prefers a method over a field of the same name, so `value.name()` is a call and a field holding a function is reached by parenthesizing it.
 - A record construction checks each field against its declaration and requires every declared field; an unknown field and a missing field are distinct diagnostics because they are distinct mistakes.
@@ -42,16 +43,16 @@ checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
+- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Type Check Coherence]], [[Type Exhaust]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].
 - **Consumed by:** [[Type Boundary]].
 
 ## Algorithm
 
-Collect declared shapes and signatures, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
+Collect declared shapes and signatures, check trait implementation coherence over the complete declaration list, then walk each declaration: a function binds its parameters and checks its body against its result, a block checks statements and yields its trailing expression, and an expression is inferred and recorded against the span it occupies.
 
 ## Negative Logic (Prohibited Paths)
 
-- No trait resolution or method dispatch, no `Result` or `Task` normalization, no exhaustiveness checking, no ownership or borrow analysis, no numeric-literal fitting, no defaulting of unsolved variables, and no caller-dependent inference.
+- No cross-module trait resolution, specialization, `Task` normalization, ownership or borrow analysis, numeric-literal fitting, defaulting of unsolved variables, or caller-dependent inference.
 
 ## Edge Cases
 
@@ -74,8 +75,8 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 
 ## Variants
 
-- Trait bounds, `Result` and `Task` normalization, and exhaustiveness join later slices; each extends the rules rather than reshaping the walk.
+- Cross-module trait lookup, specialization, and `Task` normalization join later slices; each extends the rules rather than reshaping the walk.
 
 ## Referenced by
 
-[[src/Pudu/Type/_MOC]] · [[Type Boundary]] · [[Type Env]] · [[Type Unify]] · [[architecture/SEMANTICS]]
+[[src/Pudu/Type/_MOC]] · [[Type Boundary]] · [[Type Env]] · [[Type Unify]] · [[Type Check Coherence]] · [[architecture/SEMANTICS]]

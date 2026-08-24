@@ -46,7 +46,7 @@ traitTable :: [Located Declaration] -> Map Text [Located Function]
 - `dischargeObligations` proves every obligation a call registered, after the enclosing function's body is checked and while the declaration's own parameter bounds are still in scope. A rigid parameter satisfies a bound its own declaration declared; a nominal type satisfies one through its implementations; an unsolved variable proves nothing and is left alone; `E3012` reports an unsatisfied bound.
 - `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
 - `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for. When two or more bounds provide the same member, the lookup is ambiguous and reports `E3013` rather than silently picking the first.
-- Coherence — that the trait or the target is declared in this module — and overlapping-implementation rejection belong to a later slice; nothing here silently picks between candidates.
+- [[Type Check Coherence]] rejects duplicate implementation heads after method signatures are collected; orphan ownership and general unification overlap remain separate slices. Nothing here silently picks between candidates.
 
 ### Linkage
 
@@ -59,7 +59,7 @@ Form the implementation's target, bind each of its functions under the target's 
 
 ## Negative Logic (Prohibited Paths)
 
-- No coherence or overlap checking, no dynamic dispatch, no associated types or constants, and no method resolution across modules.
+- No orphan checking or general unification-overlap checking, no dynamic dispatch, no associated types or constants, and no method resolution across modules. Exact duplicate-head rejection is delegated to [[Type Check Coherence]].
 
 ## Edge Cases
 
@@ -80,4 +80,4 @@ DEPTH 0.55 (MEDIUM). It hides method keying, `Self` aliasing, and default inheri
 
 ## Referenced by
 
-[[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Evaluator]]
+[[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Coherence]] · [[Evaluator]]
