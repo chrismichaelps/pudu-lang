@@ -5,8 +5,8 @@ import Control.Monad (unless)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileResult (..), runCompile)
-import Pudu.Diagnostic (hasErrors)
+import Pudu.Compiler.Program (ProgramResult (..), compileProgram)
+import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
   , defaultRenderConfig
@@ -14,8 +14,7 @@ import Pudu.Diagnostic.Render
   , renderSummary
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
-import Pudu.Source (SourceName (SourceName), newSource)
-import System.Directory (doesFileExist)
+import Pudu.Source (Source, sourceName, spanSource)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (exitFailure, exitSuccess)
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
@@ -59,20 +58,29 @@ checkPaths style paths
 
 checkOne :: RenderStyle -> FilePath -> IO Bool
 checkOne style path = do
-  present <- doesFileExist path
-  if not present
-    then do
-      hPutStrLn stderr ("pudu: cannot read " <> path)
-      pure True
-    else do
-      text <- TextIO.readFile path
-      source <- newSource (SourceName (Text.pack path)) text
-      let result = runCompile source
-          diagnostics = compileDiagnostics result
-      unless (null diagnostics) $
-        TextIO.putStrLn (renderDiagnosticsWith (defaultRenderConfig style) source diagnostics)
-      TextIO.putStrLn (Text.pack path <> ": " <> renderSummary diagnostics)
-      pure (hasErrors diagnostics)
+  program <- compileProgram path
+  let diagnostics = programDiagnostics program
+  unless (null diagnostics) $
+    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+  TextIO.putStrLn (Text.pack path <> ": " <> renderSummary diagnostics)
+  pure (hasErrors diagnostics)
+
+renderProgramDiagnostics :: RenderStyle -> ProgramResult -> [Diagnostic] -> Text
+renderProgramDiagnostics style program =
+  Text.intercalate "\n" . map renderOne
+ where
+  sources = programSources program
+  renderOne value = case sourceFor value sources of
+    Nothing -> "error: diagnostic source is unavailable"
+    Just source -> renderDiagnosticsWith (defaultRenderConfig style) source [value]
+
+sourceFor :: Diagnostic -> [Source] -> Maybe Source
+sourceFor value = firstMatching
+ where
+  expected = spanSource (diagnosticSpan value)
+  firstMatching sources = case filter ((== expected) . sourceName) sources of
+    found : _ -> Just found
+    [] -> Nothing
 
 {-| Colour is used only for an interactive terminal, and never when NO_COLOR is
     set, so piped and redirected output stays plain. -}

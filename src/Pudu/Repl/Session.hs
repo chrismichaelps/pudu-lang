@@ -17,7 +17,12 @@ module Pudu.Repl.Session
 
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Compiler (CompileResult (..), runCompile)
+import Pudu.Compiler (CompileContext, CompileResult (..), emptyCompileContext, runCompileWith)
+import Pudu.Compiler.Program
+  ( ProgramResult (..)
+  , compileProgram
+  , rootCompileResult
+  )
 import Pudu.Diagnostic (Diagnostic, hasErrors)
 import Pudu.Eval (EvalOutcome (..), evaluateEntryPoint)
 import Pudu.Eval.Value (Value)
@@ -46,6 +51,7 @@ data Session = Session
   , sessionDeclarations :: ![Text]
   , sessionStatements :: ![Text]
   , sessionLoaded :: !(Maybe LoadedModule)
+  , sessionContext :: !CompileContext
   }
   deriving stock (Eq, Show)
 
@@ -77,6 +83,7 @@ emptySession =
     , sessionDeclarations = []
     , sessionStatements = []
     , sessionLoaded = Nothing
+    , sessionContext = emptyCompileContext
     }
 
 {-| Classify a submission by its leading token. `import` and the declaration
@@ -113,7 +120,7 @@ submitEntry session entry = do
       (buffer, firstLine) = renderBuffer session kind entry
       entryStart = bufferOffsetOf session kind
   source <- newSource interactiveName buffer
-  let result = runCompile source
+  let result = runCompileWith (sessionContext session) source
       compiled = compileDiagnostics result
       staticallyValid = not (hasErrors compiled)
       evaluation = if staticallyValid then evaluateFor result kind else Nothing
@@ -163,7 +170,7 @@ inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 inspectSession session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
-  let result = runCompile source
+  let result = runCompileWith (sessionContext session) source
   pure (compileResolution result, compileDiagnostics result)
 
 interactiveName :: SourceName
@@ -227,10 +234,12 @@ sessionFunction = "__session"
     where the grammar requires them, ahead of every declaration. -}
 loadModule :: FilePath -> Text -> IO (Session -> Session, [Diagnostic], Maybe Resolution)
 loadModule path text = do
-  source <- newSource (SourceName (Text.pack path)) text
-  let result = runCompile source
-  case compileModule result of
-    Nothing -> pure (id, compileDiagnostics result, compileResolution result)
+  program <- compileProgram path
+  let result = rootCompileResult program
+      diagnostics = programDiagnostics program
+      resolution = result >>= compileResolution
+  case result >>= compileModule of
+    Nothing -> pure (id, diagnostics, resolution)
     Just parsed -> do
       let cut = importCut parsed
           prefix = Text.take cut text
@@ -243,9 +252,9 @@ loadModule path text = do
               , loadedRest = rest
               }
       pure
-        ( \session -> session{sessionLoaded = Just loaded}
-        , compileDiagnostics result
-        , compileResolution result
+        ( \session -> session{sessionLoaded = Just loaded, sessionContext = programContext program}
+        , diagnostics
+        , resolution
         )
 
 importCut :: Module -> Int
