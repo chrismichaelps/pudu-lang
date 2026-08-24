@@ -111,6 +111,7 @@ tags: [handoff]
 - [Role: Architect → DNA Engineer] Resolved issue #29 around a filesystem-owning program compiler, authoritative semantic/type interfaces, canonical module-qualified identities, body-free signatures, in-scope trait implementation visibility, SCC signature cycles, and one shared CLI/REPL load boundary; runtime dependency execution remains explicitly separate.
 - [Role: DNA Engineer → Shadow] Partitioned the oversized vertical slice at its pure semantic seam and completed [[Semantic Interface]] plus facade/resolver mirrors before implementation admission.
 - [Role: Shadow → Forensic Guardian] Implemented namespace-aware export indexing, authoritative selected-import `E2013`, module qualifier bindings, opaque fallback only for unavailable interfaces, and `resolveModuleWith`. The full development and optimized suites pass; filesystem and type-interface work remains local for the next issue #29 partitions.
+- [Role: DNA Engineer → Shadow] Projected parsed modules into body-free type interfaces with canonical nominal/value import maps, private formation shells, complete-signature filtering, and trait-default availability. Focused projection tests cover success, privacy, incomplete signatures, body removal, selected imports, and default metadata.
 - [Role: Architect → DNA Engineer] Resolved canonical type identity as the second buildable partition: equality keys carry declaring module plus name while diagnostics retain concise display spelling.
 - [Role: DNA Engineer → Shadow] Reconciled the canonical identity mirrors before staging changes across formation, bounds, implementation tables, fields, variants, patterns, exhaustiveness, and method dispatch.
 
@@ -135,7 +136,7 @@ tags: [handoff]
 
 ## Exact next action
 
-Forensic Guardian: validate the canonical identity partition and real REPL evidence, then admit body-free type interfaces as the next issue #29 partition.
+Forensic Guardian: validate the body-free interface projection and real REPL evidence, then install imported interfaces into type checking as the next issue #29 partition.
 
 ## Links
 

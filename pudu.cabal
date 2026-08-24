@@ -79,6 +79,7 @@ library
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation
+    Pudu.Type.Interface
     Pudu.Type.Unify
     Pudu.Type.Value
     Pudu.Semantic.Prelude
@@ -135,8 +136,10 @@ test-suite pudu-test
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec
+    Pudu.Type.InterfaceSpec
   build-depends:
     base >=4.20 && <4.23,
+    containers >=0.7 && <0.8,
     pudu,
     QuickCheck >=2.15 && <2.17,
     text >=2.1 && <2.2
