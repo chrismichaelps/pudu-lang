@@ -1,0 +1,11 @@
+module X
+
+export type User = { id: Int }
+
+export trait Show {
+  fn show(self: &Self) -> Int
+}
+
+impl Show for User {
+  fn show(self: &Self) -> Int { self.id }
+}

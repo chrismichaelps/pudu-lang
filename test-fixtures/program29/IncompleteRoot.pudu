@@ -1,0 +1,5 @@
+module IncompleteRoot
+
+import Incomplete {User, Read}
+
+fn read(user: User) -> Int { user.read() }

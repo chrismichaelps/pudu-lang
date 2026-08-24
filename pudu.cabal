@@ -7,6 +7,7 @@ category:           Language
 maintainer:         chrismichaelps
 license:            BSD-3-Clause
 build-type:         Simple
+extra-source-files: test-fixtures/program29/*.pudu
 
 source-repository head
   type:             git
@@ -29,6 +30,7 @@ library
   hs-source-dirs:   src
   exposed-modules:
     Pudu.Compiler
+    Pudu.Compiler.Program
     Pudu.Diagnostic
     Pudu.Diagnostic.Render
     Pudu.Eval
@@ -116,6 +118,7 @@ test-suite pudu-test
   other-modules:
     Pudu.DiagnosticSpec
     Pudu.Diagnostic.RenderSpec
+    Pudu.Compiler.ProgramSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.LexerSpec
     Pudu.Frontend.Lexer.NumberSymbolSpec
