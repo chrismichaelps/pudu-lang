@@ -48,12 +48,12 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - The graph compiles through [[Semantic Interface]] and [[Type Interface]]. It never concatenates ASTs or pretends dependency declarations belong to the root module.
 - Diagnostics retain their original source identities and are stable-sorted once across the program.
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
-- `compileProgram` is the filesystem boundary for checked module graphs. CLI and [[Repl Session]] adoption remain the next issue #29 partition; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
+- `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
 
 ### Linkage
 
 - **Requires:** [[Compiler Pipeline]], [[Semantic Interface]], [[Type Interface]], [[Parser]], [[Source]], [[Diagnostic Model]], [[Syntax Tree]], [[grammar/pudu]].
-- **Consumed by:** focused graph tests now; [[Pudu CLI]], [[Repl Session]], and later build/package tooling next.
+- **Consumed by:** [[Pudu CLI]], [[Repl Session]], focused graph tests, and later build/package tooling.
 
 ## Algorithm
 

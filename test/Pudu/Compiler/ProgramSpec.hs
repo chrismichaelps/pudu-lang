@@ -1,9 +1,19 @@
 module Pudu.Compiler.ProgramSpec (programProperties) where
 
 import Data.Text (Text)
+import qualified Data.Map.Strict as Map
+import qualified Data.Text.IO as TextIO
+import Pudu.Compiler (CompileContext (..))
 import Pudu.Compiler.Program (ProgramResult (..), compileProgram)
-import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Repl.Session
+  ( EntryResult (..)
+  , Session (..)
+  , emptySession
+  , loadModule
+  , submitEntry
+  )
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 programProperties :: [(String, IO Property)]
@@ -13,6 +23,7 @@ programProperties =
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
+  , ("REPL loads retain the program interface context", testReplLoadContext)
   ]
 
 testImportedMethods :: IO Property
@@ -87,3 +98,21 @@ codes :: FilePath -> IO [Text]
 codes path = do
   result <- compileProgram path
   pure (map (diagnosticCodeText . diagnosticCode) (programDiagnostics result))
+
+testReplLoadContext :: IO Property
+testReplLoadContext = do
+  let path = "test-fixtures/program29/B.pudu"
+  contents <- TextIO.readFile path
+  (apply, loadedDiagnostics, _) <- loadModule path contents
+  let loaded = apply emptySession
+  entry <- submitEntry loaded
+    "fn again(user: User) -> Str { user.show() }"
+  pure $ conjoin
+    [ map (diagnosticCodeText . diagnosticCode) loadedDiagnostics === []
+    , counterexample "the loaded context retains both graph interfaces"
+        (Map.size (contextTypes (sessionContext loaded)) === 2)
+    , counterexample
+        ("post-load diagnostics: " <> show
+          [(diagnosticCodeText (diagnosticCode value), diagnosticMessage value) | value <- resultDiagnostics entry])
+        (resultAccepted entry === True)
+    ]

@@ -29,6 +29,7 @@ data Session = Session
   , sessionDeclarations :: ![Text]
   , sessionStatements :: ![Text]
   , sessionLoaded :: !(Maybe LoadedModule)
+  , sessionContext :: !CompileContext
   }
 data EntryKind = ImportEntry | DeclarationEntry | StatementEntry | ExpressionEntry
 data EntryResult
@@ -49,13 +50,13 @@ sessionExports :: Resolution -> [Text]
 - The session advances only when an entry is accepted, so a failed entry can never corrupt a context that already worked.
 - An expression is compiled and evaluated but never remembered: it produces no binding, and replaying it would repeat work without adding context.
 - Only an expression yields a value to show. A declaration or binding is still evaluated as part of the buffer so its runtime failure surfaces, but it prints nothing when it succeeds.
-- Loading splits a file after its last import so session imports land where the grammar requires them, and replaces the context entirely: nothing typed against the previous context survives a load it cannot explain.
+- Loading delegates dependency discovery and checking to [[Compiler Program]], retains its pure `CompileContext`, then splits the admitted root text after its last import so session entries remain grammatically placed. Every later submission and inspection uses that context. Loading replaces the prior session entirely: nothing typed against the previous context survives a load it cannot explain.
 - An expression entry also reports its static type, taken as the widest expression the checker typed inside the entry's own region of the buffer.
 - `inspectSession` compiles the session exactly as it stands, so inspecting a session cannot alter it.
 
 ### Linkage
 
-- **Requires:** [[Compiler Pipeline]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]].
+- **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]].
 - **Consumed by:** [[Pudu REPL]].
 
 ## Algorithm
@@ -64,7 +65,7 @@ Lex the submission to classify it, assemble the buffer with the submission in it
 
 ## Negative Logic (Prohibited Paths)
 
-- No IO beyond reading the source it is given and creating snapshots; no terminal, no printing, no persistence to disk, and no grammar of its own.
+- No terminal, printing, persistence, independent dependency search, or grammar of its own. File/dependency IO is delegated to [[Compiler Program]].
 
 ## Edge Cases
 
@@ -82,6 +83,7 @@ DEPTH 0.70 (MEDIUM). It hides classification, buffer assembly, line mapping, acc
 - **Q:** Replay the whole buffer or keep incremental state? **A:** Replay. _Rationale:_ a session then behaves exactly like the file it is equivalent to, and no separate incremental semantics can drift from the compiler's. _Rejected:_ caching resolved declarations; mutating an environment in place.
 - **Q:** Should an expression be remembered? **A:** No. _Rationale:_ it binds nothing, and replaying it would re-run work with no effect on later entries. _Rejected:_ an `it` binding before there is a type to give it.
 - **Q:** What happens to entries when a file is loaded? **A:** They are cleared. _Rationale:_ they were checked against a context that no longer exists, and silently reinterpreting them against a new file would be a different program. _Rejected:_ keeping bindings across a load.
+- **Q:** Should `:load` compile only the named text and leave imports opaque? **A:** No; it uses the same program compiler as file checking. _Rationale:_ interactive and batch typing must agree, and the REPL is the feature gate. _Rejected:_ a REPL-only module lookup heuristic.
 
 ## Referenced by
 
