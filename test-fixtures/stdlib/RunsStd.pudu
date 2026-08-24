@@ -1,0 +1,10 @@
+module RunsStd
+
+import Std.Math as Math
+import Std.List {sum, sorted}
+
+export fn main() -> Int {
+  let items = [3, 1, 4, 1, 5]
+  let ordered = sorted(&items)
+  Math.gcd(sum(&items), 12) + ordered[0] + Math.pow(2, 5)
+}

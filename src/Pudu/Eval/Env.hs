@@ -14,6 +14,7 @@ module Pudu.Eval.Env
   , ascend
   , bind
   , callLimit
+  , currentFrame
   , descend
   , emptyEnv
   , expectBool
@@ -179,6 +180,17 @@ withNewFrame = withFrame []
 
 pushFrame :: Map Text Value -> Evaluator ()
 pushFrame frame = Evaluator $ \env -> Done () env{envFrames = frame : envFrames env}
+
+{-| What the innermost frame currently holds.
+
+    Linking an imported module needs it: the module's declarations are loaded
+    into a frame of their own, and republishing them under a qualified path
+    means reading back exactly what that load produced. -}
+currentFrame :: Evaluator (Map Text Value)
+currentFrame =
+  Evaluator $ \env -> case envFrames env of
+    current : _ -> Done current env
+    [] -> Done Map.empty env
 
 popFrame :: Evaluator ()
 popFrame =

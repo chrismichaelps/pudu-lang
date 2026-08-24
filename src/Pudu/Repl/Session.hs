@@ -23,11 +23,12 @@ import Pudu.Compiler (CompileContext, CompileResult (..), emptyCompileContext, r
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , programDependencies
   , rootCompileResult
   )
 import Pudu.Diagnostic (Diagnostic, hasErrors)
 import Pudu.Doc (DocIndex)
-import Pudu.Eval (EvalOutcome (..), evaluateEntryPoint)
+import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -56,6 +57,7 @@ data Session = Session
   , sessionStatements :: ![Text]
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
+  , sessionDependencies :: ![(Text, Module)]
   }
   deriving stock (Eq, Show)
 
@@ -88,6 +90,7 @@ emptySession =
     , sessionStatements = []
     , sessionLoaded = Nothing
     , sessionContext = emptyCompileContext
+    , sessionDependencies = []
     }
 
 {-| Classify a submission by its leading token. `import` and the declaration
@@ -148,7 +151,7 @@ submitEntry session entry = do
   let result = runCompileWith (sessionContext session) source
       compiled = compileDiagnostics result
       staticallyValid = not (hasErrors compiled)
-      evaluation = if staticallyValid then evaluateFor result kind else Nothing
+      evaluation = if staticallyValid then evaluateFor session result kind else Nothing
       runtime = maybe [] outcomeDiagnostics evaluation
       diagnostics = compiled <> runtime
       accepted = staticallyValid && not (hasErrors runtime)
@@ -184,10 +187,14 @@ bufferOffsetOf session kind =
 {-| Only an expression produces a value to show. Declarations and bindings are
     evaluated as part of the buffer so their runtime failures surface, but they
     print nothing when they succeed. -}
-evaluateFor :: CompileResult -> EntryKind -> Maybe EvalOutcome
-evaluateFor result _ = case compileModule result of
+{-| Evaluate the session's buffer with the loaded program's dependencies
+    linked, so a call into an imported module works at the prompt exactly as it
+    would in the program that was loaded. -}
+evaluateFor :: Session -> CompileResult -> EntryKind -> Maybe EvalOutcome
+evaluateFor session result _ = case compileModule result of
   Nothing -> Nothing
-  Just parsed -> Just (evaluateEntryPoint sessionFunction parsed)
+  Just parsed ->
+    Just (evaluateProgramEntry (sessionDependencies session) sessionFunction parsed)
 
 {-| Compile the session exactly as it stands, with no new entry. `:browse` and
     `:context` use this so inspection cannot alter what the session holds. -}
@@ -298,7 +305,12 @@ loadModule path text = do
               , loadedRest = rest
               }
       pure
-        ( \session -> session{sessionLoaded = Just loaded, sessionContext = programContext program}
+        ( \session ->
+            session
+              { sessionLoaded = Just loaded
+              , sessionContext = programContext program
+              , sessionDependencies = programDependencies program
+              }
         , diagnostics
         , resolution
         )

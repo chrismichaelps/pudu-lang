@@ -34,6 +34,21 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- A program's dependencies are linked before its entry point runs. Each is loaded into a frame of
+  its own and republished under its dotted path, so `Std.List.sum` is a name in the environment
+  rather than a member access on a value that does not exist.
+- A dependency's frame **stays on the stack** rather than being popped. A function is a closure over
+  the environment it is called in, not one captured when it was defined, so `gcd` calling its
+  sibling `abs` needs `abs` to still be a plain name. Leaving it is safe: a dependency's frame is
+  outside the importing module's, so the importer's declarations shadow it, and name resolution has
+  already rejected any unqualified use of a name the importer did not import.
+- A dependency's private declarations are published under the qualified path too. Visibility is
+  resolution's decision and it has already been made; re-deciding it here would put one rule in two
+  places and break a public function whose body calls a private helper.
+- A dotted path resolves to the longest bound prefix. `Std.List.sum` is one binding while
+  `point.x.y` is three reads, and preferring the longer match cannot shadow a local because a
+  value's own name never contains a dot.
+
 - A structured scope adopts every task started inside it. Awaiting a task joins it there; a child never awaited is joined when the scope exits, in the order the children started, so no task outlives the region that began it and a failure among them is selected by position rather than by a race. A control transfer out of a scope joins its children before continuing.
 
 - Evaluation runs only on a module the earlier phases admitted. It re-checks nothing they proved, and it invents no value for syntax they rejected.

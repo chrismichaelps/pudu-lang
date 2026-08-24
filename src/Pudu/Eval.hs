@@ -2,11 +2,13 @@
 module Pudu.Eval
   ( EvalOutcome (..)
   , evaluateEntryPoint
+  , evaluateProgramEntry
   , evaluateModule
   ) where
 
 import Control.Monad (filterM, foldM)
 import Data.Foldable (toList)
+import Data.List (inits)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -15,7 +17,10 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Env
-  ( Eval (..)
+  ( Env (..)
+  , currentFrame
+  , pushFrame
+  , Eval (..)
   , adoptChild
   , closeScope
   , openScope
@@ -53,9 +58,10 @@ import Pudu.Eval.Array
   )
 import Pudu.Eval.Value (Builtin (..), ArrayMethod (..), Closure (..), Value (..), renderValue, valueKind)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
+  ( Import (..)
+  , Block (..)
   , FieldInit (..)
   , Declaration (..)
   , Expression (..)
@@ -86,8 +92,27 @@ data EvalOutcome = EvalOutcome
     are evaluated in declaration order, so a constant that reads one declared
     later is a runtime diagnostic rather than a silent default. -}
 evaluateEntryPoint :: Text -> Module -> EvalOutcome
-evaluateEntryPoint entryName moduleValue =
+evaluateEntryPoint = evaluateProgramEntry []
+
+{-| Evaluate a module that imports others, with its dependencies linked in.
+
+    Each dependency is loaded in its own frame and its bindings are then
+    installed under the module's dotted path, so `Std.List.sum` is a name in the
+    environment rather than a member access on a value that does not exist. The
+    importing module's own `as` and `{ ... }` forms add aliases to the same
+    values; nothing is copied, and no dependency's plain names leak into the
+    importer's scope.
+
+    Dependencies arrive in dependency order, so a module's own imports are
+    already linked when it loads. -}
+evaluateProgramEntry :: [(Text, Module)] -> Text -> Module -> EvalOutcome
+evaluateProgramEntry dependencies entryName moduleValue =
   run $ do
+    linkDependencies dependencies
+    {-| The root gets a frame of its own so its declarations shadow every
+        dependency's rather than sharing a frame with the last one linked. -}
+    pushFrame Map.empty
+    installImportAliases (moduleImports moduleValue)
     loadDeclarations (moduleDeclarations moduleValue)
     found <- lookupName entryName
     case found of
@@ -101,6 +126,69 @@ evaluateEntryPoint entryName moduleValue =
 evaluateModule :: Module -> EvalOutcome
 evaluateModule moduleValue =
   run (loadDeclarations (moduleDeclarations moduleValue) >> pure UnitValue)
+
+{-| Load each dependency in a frame of its own and republish it under its dotted
+    path.
+
+    The frame stays on the stack rather than being popped, because a function is
+    a closure over the environment it is called in, not over one captured when
+    it was defined: `gcd` calling its sibling `abs` needs `abs` to still be a
+    plain name. Leaving it is safe — a dependency's frame is *outside* the
+    importing module's, so the importer's own declarations shadow it, and name
+    resolution has already rejected any unqualified use of a name the importer
+    did not import.
+
+    A dependency's private declarations are published under the qualified path
+    too. Visibility is resolution's decision and it has already been made: a
+    private name is unreachable because no importer can write it, and
+    re-deciding it here would put one rule in two places. -}
+linkDependencies :: [(Text, Module)] -> Evaluator ()
+linkDependencies = mapM_ linkOne
+ where
+  linkOne (path, dependency) = do
+    pushFrame Map.empty
+    installImportAliases (moduleImports dependency)
+    loadDeclarations (moduleDeclarations dependency)
+    frame <- currentFrame
+    mapM_ (publish path) (Map.toList frame)
+
+  publish path (name, value) = bind (path <> "." <> name) value
+
+{-| Bind the names an import makes available without qualification.
+
+    `import M as N` republishes every name of `M` under `N`, and
+    `import M { a, b }` republishes just those under their plain names. The
+    values are the ones already linked, so an alias and its origin are the same
+    binding rather than two copies that could drift. -}
+installImportAliases :: [Located Import] -> Evaluator ()
+installImportAliases = mapM_ (installOne . locatedValue)
+ where
+  installOne value = do
+    let path = moduleNameText (locatedValue (importModule value))
+    case importAlias value of
+      Just alias -> republish path (locatedValue alias <> ".")
+      Nothing -> pure ()
+    mapM_ (selectOne path . locatedValue) (importItems value)
+
+  selectOne path item = do
+    found <- lookupName (path <> "." <> item)
+    case found of
+      Just value -> bind item value
+      Nothing -> pure ()
+
+  {-| Rebinding by prefix needs the whole environment, because an alias covers
+      every name the module published and the importer never enumerates them. -}
+  republish path prefix = Evaluator $ \env ->
+    let published =
+          [ (prefix <> Text.drop (Text.length path + 1) name, value)
+          | frame <- envFrames env
+          , (name, value) <- Map.toList frame
+          , Text.isPrefixOf (path <> ".") name
+          ]
+     in case envFrames env of
+          current : rest ->
+            Done () env{envFrames = Map.union (Map.fromList published) current : rest}
+          [] -> Done () env{envFrames = [Map.fromList published]}
 
 {-| A control transfer that reaches the top has left every construct that could
     own it, which the entry point reports as a value of unit rather than losing
@@ -342,19 +430,49 @@ evaluate (Located spanValue expression) = case expression of
     evaluateFor spanValue binder sequence' body
   InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
 
+{-| Read a dotted path.
+
+    A path may name a value and then reach into it, or it may name a linked
+    module's member: `Std.List.sum` is one binding, while `point.x.y` is three
+    reads. The longest resolving prefix decides which, because a module path is
+    always fully written and a value's own name never contains a dot — so the
+    longer match is the one the reader meant, and preferring it cannot shadow a
+    local. -}
 readPath :: Span -> NonEmpty Text -> Evaluator Value
-readPath spanValue (first :| rest) = do
-  found <- lookupName first
-  base <- case found of
-    Just value -> pure value
-    Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
-  foldMember base rest
+readPath spanValue path@(first :| rest) = do
+  linked <- longestBinding path
+  case linked of
+    Just (value, remaining) -> foldMember value remaining
+    Nothing -> do
+      found <- lookupName first
+      base <- case found of
+        Just value -> pure value
+        Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
+      foldMember base rest
  where
   foldMember value segments = case segments of
     [] -> pure value
     segment : remaining -> do
       next <- readMember spanValue value segment
       foldMember next remaining
+
+{-| The longest dotted prefix of a path that is bound, with the segments it did
+    not consume. A single segment is not reported here: it is the ordinary case
+    and the caller handles it without this search. -}
+longestBinding :: NonEmpty Text -> Evaluator (Maybe (Value, [Text]))
+longestBinding (first :| rest) = search (reverse (prefixes rest))
+ where
+  prefixes segments =
+    [ (Text.intercalate "." (first : taken), drop (length taken) segments)
+    | taken <- drop 1 (inits segments)
+    ]
+
+  search [] = pure Nothing
+  search ((name, remaining) : shorter) = do
+    found <- lookupName name
+    case found of
+      Just value -> pure (Just (value, remaining))
+      Nothing -> search shorter
 
 {-| A member in callee position prefers a method over a field of the same name,
     matching how the same call is typed: `value.name()` reads as a call, and a

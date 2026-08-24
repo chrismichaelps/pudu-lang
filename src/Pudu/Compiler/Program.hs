@@ -2,6 +2,7 @@
 module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , programDependencies
   , programDocs
   , rootCompileResult
   ) where
@@ -68,6 +69,21 @@ programDocs result =
   forModule name = case Map.lookup name (programModules result) of
     Nothing -> mempty
     Just compiled -> fromMaybe mempty (compileDocs compiled)
+
+{-| The program's dependencies, in the order they must be linked.
+
+    The root is excluded: it is the module being evaluated, not one of its
+    dependencies, and linking it twice would run its constants twice. A module
+    that failed to compile is excluded too — there is nothing to link — and the
+    diagnostics already say why. -}
+programDependencies :: ProgramResult -> [(Text.Text, Module)]
+programDependencies result =
+  [ (moduleNameText name, parsed)
+  | name <- programOrder result
+  , Just name /= programRoot result
+  , Just compiled <- [Map.lookup name (programModules result)]
+  , Just parsed <- [compileModule compiled]
+  ]
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)

@@ -22,7 +22,7 @@ export fn reversed(items: &Array[Int]) -> Array[Int] {
   var index = items.length()
   while index > 0 {
     index = index - 1
-    out.push(items[index])
+    out = out.push(items[index])
   }
   out
 }
@@ -88,7 +88,7 @@ export fn take(items: &Array[Int], wanted: Int) -> Array[Int] {
   var index = 0
   while index < items.length() {
     if index >= wanted { return out } else { }
-    out.push(items[index])
+    out = out.push(items[index])
     index = index + 1
   }
   out
@@ -100,7 +100,7 @@ export fn drop(items: &Array[Int], skipped: Int) -> Array[Int] {
   var out = []
   var index = skipped
   while index < items.length() {
-    out.push(items[index])
+    out = out.push(items[index])
     index = index + 1
   }
   out
@@ -109,8 +109,8 @@ export fn drop(items: &Array[Int], skipped: Int) -> Array[Int] {
 /// One array followed by another, as a new array.
 export fn concat(left: &Array[Int], right: &Array[Int]) -> Array[Int] {
   var out = []
-  for item in left { out.push(item) }
-  for item in right { out.push(item) }
+  for item in left { out = out.push(item) }
+  for item in right { out = out.push(item) }
   out
 }
 
@@ -126,7 +126,7 @@ export fn sorted(items: &Array[Int]) -> Array[Int] {
       if out[index] > item { break } else { }
       index = index + 1
     }
-    out.insert(index, item)
+    out = out.insert(index, item)
   }
   out
 }

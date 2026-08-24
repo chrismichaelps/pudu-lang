@@ -27,6 +27,7 @@ Provide the `pudu` executable: start `puduci`, check files, and report version a
 pudu                 start the puduci interactive session
 pudu repl [file]     start puduci, optionally loading a file
 pudu check <file>... compile files and report diagnostics
+pudu run <file>      compile a program and run its main function
 pudu doc <file>...   describe every name a program declares
 pudu doc --json ...  the same index, for an editor or a search server
 pudu search <query> <file>...  find a name, or a type shape
@@ -35,6 +36,12 @@ pudu help            print usage
 ```
 
 ### Governance
+
+- `pudu run` links the program's dependencies and calls `main` in the root module. A program with
+  errors is not run: evaluating a module whose meaning was never established produces a second, less
+  useful account of the same defect.
+- A run prints its result only when there is one, so a `main` returning unit prints nothing and a
+  shell pipeline stays usable.
 
 - `pudu doc` and `pudu search` write the index to stdout and every diagnostic to stderr, so a
   program with errors still yields a machine-readable index rather than a corrupted one.
