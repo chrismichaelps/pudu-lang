@@ -9,6 +9,7 @@ tags: [moc, module]
 - [[Type Value]] — formed types, schemes, and how a type is rendered.
 - [[Type Env]] — checker state, name frames, declared shapes, and diagnostics.
 - [[Type Formation]] — type syntax to formed type, and what declarations contribute.
+- [[Type Interface]] — exported signatures, canonical declaration identity, and import-scoped implementation visibility.
 - [[Type Unify]] — making two types equal, or explaining why they are not.
 - [[Type Check]] — checking declarations, statements, and expressions.
 - [[Type Check Rule]] — the closed operator, call, member, and index rules.
