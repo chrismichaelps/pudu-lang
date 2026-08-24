@@ -47,7 +47,9 @@ import Pudu.Type.Env
 import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Coherence (checkCoherence)
 import Pudu.Type.Check.Rule
-  ( binaryType
+  ( awaitType
+  , binaryType
+  , enclosingFunctionType
   , enclosingReturnType
   , instantiate
   , callType
@@ -204,7 +206,7 @@ checkFunction :: DeclaredTypes -> Maybe NominalId -> Function -> Checker ()
 checkFunction declared selfBound value = do
   let rigid = functionRigid value <> foldMap selfRigid selfBound
       bounds = declareBounds declared value <> foldMap selfBoundAsBound selfBound
-  requireExportedAnnotations value
+  requireFunctionAnnotations value
   withRigidBounds bounds $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
     result <- formOptionalType declared rigid (functionReturn value)
@@ -234,24 +236,35 @@ selfRigid _ = ["Self"]
 selfName :: Text
 selfName = "__return"
 
-requireExportedAnnotations :: Function -> Checker ()
-requireExportedAnnotations value
-  | functionVisibility value /= Exported = pure ()
+requireFunctionAnnotations :: Function -> Checker ()
+requireFunctionAnnotations value
+  | functionVisibility value /= Exported && not (functionAsync value) = pure ()
   | otherwise = do
       mapM_ requireParameter (functionParameters value)
       case functionReturn value of
         Just _ -> pure ()
         Nothing ->
           report "E3010" (locatedSpan (functionName value))
-            ("exported function " <> locatedValue (functionName value) <> " needs a return type")
-            (Just "annotate the return type; an exported signature is read without its body")
+            (functionKind <> " function " <> locatedValue (functionName value) <> " needs a return type")
+            (Just returnHelp)
  where
+  functionKind
+    | functionVisibility value == Exported = "exported"
+    | otherwise = "async"
+  returnHelp
+    | functionVisibility value == Exported =
+        "annotate the return type; an exported signature is read without its body"
+    | otherwise =
+        "annotate the return type so callers can form Task[S, E] without inspecting the body"
   requireParameter (Located parameterSpan parameter) = case Tree.parameterType parameter of
     Just _ -> pure ()
     Nothing ->
       report "E3010" parameterSpan
-        ("exported parameter " <> locatedValue (Tree.parameterName parameter) <> " needs a type")
-        (Just "annotate every parameter of an exported function")
+        (functionKind <> " parameter " <> locatedValue (Tree.parameterName parameter) <> " needs a type")
+        (Just parameterHelp)
+  parameterHelp
+    | functionVisibility value == Exported = "annotate every parameter of an exported function"
+    | otherwise = "annotate every parameter of an async function so calls do not determine its contract"
 
 requireInterfaceAnnotations :: Text -> Function -> Checker ()
 requireInterfaceAnnotations kind value = do
@@ -382,7 +395,10 @@ inferExpression declared rigid spanValue expression = case expression of
     targetType <- checkExpression declared rigid target
     declaredResult <- enclosingReturnType selfName
     tryType spanValue targetType declaredResult
-  AwaitExpression target -> checkExpression declared rigid target
+  AwaitExpression target -> do
+    targetType <- checkExpression declared rigid target
+    (asynchronous, declaredResult) <- enclosingFunctionType selfName
+    awaitType spanValue asynchronous targetType declaredResult
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
   ArrayExpression members -> do
     elementTypes <- mapM (checkExpression declared rigid) members

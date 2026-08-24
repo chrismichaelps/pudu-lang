@@ -85,8 +85,8 @@ Supporting judgements:
 
 ## Inference Boundary
 
-- Literals, local bindings, private return types, and private unannotated parameters may participate in bidirectional local inference.
-- Exported signatures are fully annotated and checked without inspecting callers.
+- Literals, local bindings, synchronous private return types, and synchronous private unannotated parameters may participate in bidirectional local inference.
+- Exported and asynchronous signatures are fully annotated and checked without inspecting callers. Async annotations form the success/failure channels of every cold `Task` independently of declaration order.
 - Inference never chooses an implicit lossy numeric conversion, trait implementation among overlapping candidates, or failure conversion lacking a unique `From` implementation.
 - Generalization occurs only for syntactic values at immutable `let` bindings; mutable bindings remain monomorphic to avoid unsound value restriction interactions.
 - Unresolved type variables at a public or statement boundary produce a diagnostic rather than defaulting, except integer literals may default to `Int` when the value fits.

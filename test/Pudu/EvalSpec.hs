@@ -18,6 +18,7 @@ evalProperties =
   , ("loops iterate and jumps leave them", testLoops)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
+  , ("async calls stay cold until an async entry awaits them", testAsync)
   ]
 
 testArithmetic :: IO Property
@@ -239,6 +240,29 @@ testFailures = do
         (panic === ["E7007"])
     ]
 
+testAsync :: IO Property
+testAsync = do
+  cold <- evaluateWith ["async fn fetch() -> Int { 42 }"] "fetch()"
+  awaited <- evaluateAsyncWith ["async fn fetch() -> Int { 42 }"] "Ok(fetch().await)"
+  success <- evaluateAsyncWith
+    ["async fn fetch() -> Result[Int, Str] { Ok(42) }"]
+    "Ok(fetch().await)"
+  failure <- evaluateAsyncWith
+    ["async fn fetch() -> Result[Int, Str] { Err(\"stop\") }"]
+    "Ok(fetch().await)"
+  forward <- evaluateAsyncWith
+    [ "async fn run() -> Int { fetch().await }"
+    , "async fn fetch() -> Int { 42 }"
+    ]
+    "Ok(run().await)"
+  pure $ conjoin
+    [ counterexample "calling async does not run its body" (cold === "<task fetch>")
+    , counterexample "await starts a non-failing task" (awaited === "42")
+    , counterexample "await unwraps task success" (success === "42")
+    , counterexample "await propagates task failure" (failure === "Err(\"stop\")")
+    , counterexample "forward async calls run from collected declarations" (forward === "42")
+    ]
+
 evaluate :: Text -> IO Text
 evaluate expression = evaluateWith [] expression
 
@@ -249,6 +273,11 @@ evaluateStatements statements = case reverse statements of
 
 evaluateWith :: [Text] -> Text -> IO Text
 evaluateWith declarations expression = runProgram declarations [] expression
+
+evaluateAsyncWith :: [Text] -> Text -> IO Text
+evaluateAsyncWith declarations expression = do
+  outcome <- outcomeOfWithEntry "async fn __entry() -> Result[Int, Str] {" declarations [] expression
+  pure (maybe (renderCodes outcome) renderValue (outcomeValue outcome))
 
 runProgram :: [Text] -> [Text] -> Text -> IO Text
 runProgram declarations statements expression = do
@@ -262,11 +291,15 @@ codesOf expression = do
 
 outcomeOf :: [Text] -> [Text] -> Text -> IO EvalOutcome
 outcomeOf declarations statements expression = do
+  outcomeOfWithEntry "fn __entry() {" declarations statements expression
+
+outcomeOfWithEntry :: Text -> [Text] -> [Text] -> Text -> IO EvalOutcome
+outcomeOfWithEntry opening declarations statements expression = do
   let buffer =
         Text.unlines
           ( ["module Eval.Spec"]
               <> declarations
-              <> ["fn __entry() {"]
+              <> [opening]
               <> statements
               <> [expression, "}"]
           )
