@@ -10,6 +10,8 @@ import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.Name (expectValueIdentifier)
 import Pudu.Frontend.Parser.State
   ( Parser
+  , advanceToken
+  , emitParseError
   , budgetExhausted
   , currentSpan
   , emitParseError
@@ -25,7 +27,8 @@ import Pudu.Frontend.Parser.State
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( Capability (..)
+  , Declaration (..)
   , Expression (..)
   , Function (..)
   , FunctionBody (..)
@@ -33,7 +36,11 @@ import Pudu.Frontend.Syntax.Tree
   , TypeSyntax
   , Visibility
   )
-import Pudu.Frontend.Token (Keyword (KwAsync, KwFn), Token (..), TokenKind (..))
+import Pudu.Frontend.Token
+  ( Keyword (KwAsync, KwFn, KwNull, KwUnsafe)
+  , Token (..)
+  , TokenKind (..)
+  )
 import Pudu.Source (Span, mergeSpans)
 
 {-| Parse a module-scope or impl-scope function, whose body is mandatory. -}
@@ -48,6 +55,7 @@ parseFunction visibility = do
 parseFunctionValue :: Visibility -> Bool -> Parser (Located Function)
 parseFunctionValue visibility bodyRequired = do
   start <- peekToken
+  unsafety <- parseUnsafety
   asyncKeyword <- matchKeyword KwAsync
   _ <- expectKeyword KwFn "to start a function"
   name <- expectValueIdentifier "after fn"
@@ -64,6 +72,7 @@ parseFunctionValue visibility bodyRequired = do
         Function
           { functionVisibility = visibility
           , functionAsync = maybe False (const True) asyncKeyword
+          , functionUnsafe = unsafety
           , functionName = name
           , functionTypeParams = typeParams
           , functionParameters = parameters
@@ -72,6 +81,65 @@ parseFunctionValue visibility bodyRequired = do
           , functionBody = body
           }
     )
+
+{-| An `unsafe` function may name the capabilities its body needs, as in
+    `unsafe(raw, foreign) fn`. Naming none grants every capability, which is the
+    blanket form; naming some is the precise one, and a caller must grant at
+    least what the declaration asked for. -}
+parseUnsafety :: Parser (Maybe [Located Capability])
+parseUnsafety = do
+  keyword <- matchKeyword KwUnsafe
+  case keyword of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> parseCapabilities
+
+parseCapabilities :: Parser [Located Capability]
+parseCapabilities = do
+  opening <- matchSymbol "("
+  case opening of
+    Nothing -> pure []
+    Just _ -> do
+      capabilities <- parseCapabilityList []
+      _ <- expectSymbol ")" "to close the capability list"
+      pure capabilities
+
+parseCapabilityList :: [Located Capability] -> Parser [Located Capability]
+parseCapabilityList reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      capability <- parseCapability
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          comma <- matchSymbol ","
+          case comma of
+            Nothing -> pure (reverse (maybe reversed (: reversed) capability))
+            Just _ -> parseCapabilityList (maybe reversed (: reversed) capability)
+
+{-| The capability vocabulary is closed, so a misspelling is caught here rather
+    than silently granting nothing. -}
+parseCapability :: Parser (Maybe (Located Capability))
+parseCapability = do
+  token <- advanceToken
+  case capabilityOf (tokenKind token) of
+    Just capability -> pure (Just (Located (tokenSpan token) capability))
+    Nothing -> do
+      emitParseError "E1044" (tokenSpan token) "unknown unsafe capability"
+        (Just "name one of raw, foreign, unchecked, or null")
+      pure Nothing
+
+capabilityOf :: TokenKind -> Maybe Capability
+capabilityOf kind = case kind of
+  Identifier "raw" -> Just RawCapability
+  Identifier "foreign" -> Just ForeignCapability
+  Identifier "unchecked" -> Just UncheckedCapability
+  Keyword KwNull -> Just NullCapability
+  _ -> Nothing
 
 parseParameters :: [Located Parameter] -> Parser [Located Parameter]
 parseParameters reversed = do

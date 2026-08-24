@@ -231,9 +231,21 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 ## Unsafe Boundary
 
+```ebnf
+unsafe_block     = "unsafe", capabilities?, block ;
+capabilities     = "(", capability, (",", capability)*, ","?, ")" ;
+capability       = "raw" | "foreign" | "unchecked" | "null" ;
+function_decl    = "unsafe", capabilities?, ... ;
+```
+
 - `unsafe { ... }` is the only construct enabling raw pointers, foreign calls marked unsafe, unchecked indexing, or `null`.
+- A region names the capabilities it grants. `unsafe(raw) { ... }` grants raw pointer work and nothing else; `unsafe { ... }` with no list is the blanket form and grants all four. Naming them is what makes an unsafe region auditable: a reader sees which invariant is in play without reading the body, and tooling can find every region that does raw pointer work without a whole-program analysis.
+- A function may be declared `unsafe`, optionally naming capabilities. Calling it requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them. A call from safe code is rejected.
+- A function's unsafety is a contract its callers uphold, not a claim about its body. A body that needs nothing unchecked is still a legitimate unsafe function, because the invariant may live in its parameters.
+- A region that grants a capability nothing in it used is reported. Unsafe is an audited surface, so a grant that buys nothing is removed rather than kept.
 - Unsafe does not disable type checking, ownership of safe values, or lexical initialization checks.
 - Public safe APIs wrapping unsafe code must state and enforce their invariants; unsafe requirements cannot be hidden in ordinary parameters.
+- `null` requires the `null` capability. It has no type until raw pointers exist, so writing it reports which slice will give it one rather than admitting an untyped value.
 
 ## Copy Eligibility
 

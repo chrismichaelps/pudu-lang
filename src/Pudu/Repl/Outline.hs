@@ -12,6 +12,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
+  , Capability (..)
   , Declaration (..)
   , Expression (..)
   , FieldPattern (..)
@@ -69,6 +70,9 @@ outlineExpression (Located _ expression) = case expression of
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
+  UnsafeExpression capabilities body ->
+    "unsafe" <> capabilityAnnotation capabilities
+      <> " { " <> Text.intercalate "; " (outlineBlock body) <> " }"
   RecordExpression path fields ->
     moduleNameText path <> "{" <> Text.intercalate ", " (map outlineFieldInit fields) <> "}"
   BlockExpression block -> "{ " <> Text.intercalate "; " (outlineBlock block) <> " }"
@@ -88,6 +92,18 @@ outlineFieldInit :: Located FieldInit -> Text
 outlineFieldInit (Located _ field) =
   locatedValue (fieldInitName field)
     <> maybe Text.empty (\value -> ": " <> outlineExpression value) (fieldInitValue field)
+
+capabilityAnnotation :: [Located Capability] -> Text
+capabilityAnnotation capabilities
+  | null capabilities = Text.empty
+  | otherwise = "(" <> Text.intercalate ", " (map (outlineCapability . locatedValue) capabilities) <> ")"
+
+outlineCapability :: Capability -> Text
+outlineCapability capability = case capability of
+  RawCapability -> "raw"
+  ForeignCapability -> "foreign"
+  UncheckedCapability -> "unchecked"
+  NullCapability -> "null"
 
 outlineArm :: Located MatchArm -> Text
 outlineArm (Located _ arm) =

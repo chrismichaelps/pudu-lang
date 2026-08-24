@@ -309,6 +309,7 @@ evaluate (Located spanValue expression) = case expression of
     [] -> pure UnitValue
     _ -> TupleValue <$> mapM evaluate members
   ArrayExpression members -> ArrayValue . Seq.fromList <$> mapM evaluate members
+  UnsafeExpression _ body -> evaluateBlock body
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
     pure (RecordValue (lastPathSegment path) values)
