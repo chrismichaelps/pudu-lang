@@ -590,6 +590,7 @@ inferExpression declared rigid spanValue expression = case expression of
       [] -> freshVariable
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Array" [inferredElementType])
+  MacroCall _ _ -> pure ErrorType
   UnsafeExpression capabilities body -> do
     enterUnsafe (map locatedValue capabilities)
     bodyType <- checkBlock declared rigid body

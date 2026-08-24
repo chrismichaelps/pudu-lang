@@ -189,6 +189,7 @@ collectDeclaration (Located _ declaration) = case declaration of
   TraitDeclaration value ->
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
+  MacroDeclaration _ -> pure ()
   InvalidDeclaration -> pure ()
 
 {-| Variants live in their type's namespace, so they are recorded as symbols but
@@ -221,6 +222,7 @@ walkDeclaration (Located _ declaration) = case declaration of
     walkType (implTarget value)
     mapM_ walkConstraint (implConstraints value)
     mapM_ (\member -> walkFunction (locatedValue member)) (implFunctions value)
+  MacroDeclaration _ -> pure ()
   InvalidDeclaration -> pure ()
 
 {-| A parameter is visible to the defaults of later parameters and to the body,
@@ -310,6 +312,7 @@ walkExpression (Located spanValue expression) = case expression of
   TupleExpression members -> mapM_ walkExpression members
   ArrayExpression members -> mapM_ walkExpression members
   UnsafeExpression _ body -> walkBlock body
+  MacroCall _ arguments -> mapM_ walkExpression arguments
   RecordExpression path fields -> do
     resolveConstructorPath spanValue path
     mapM_ walkFieldInit fields

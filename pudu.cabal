@@ -39,6 +39,7 @@ library
     Pudu.Eval.Match
     Pudu.Eval.Operator
     Pudu.Eval.Value
+    Pudu.Frontend.Expand
     Pudu.Frontend.Lexer
     Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Lexer.Identifier
@@ -57,6 +58,7 @@ library
     Pudu.Frontend.Parser.Declaration.Trait
     Pudu.Frontend.Parser.Declaration.Type
     Pudu.Frontend.Parser.Declaration.Import
+    Pudu.Frontend.Parser.Declaration.Macro
     Pudu.Frontend.Parser.Expression
     Pudu.Frontend.Parser.State
     Pudu.Frontend.Parser.Type
@@ -123,6 +125,7 @@ test-suite pudu-test
     Pudu.Diagnostic.RenderSpec
     Pudu.Compiler.ProgramSpec
     Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.ExpandSpec
     Pudu.Frontend.LexerSpec
     Pudu.Frontend.Lexer.NumberSymbolSpec
     Pudu.Frontend.Lexer.QuotedSpec

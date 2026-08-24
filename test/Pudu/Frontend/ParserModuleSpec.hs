@@ -238,4 +238,5 @@ declarationShape (Located _ declaration) = case declaration of
   TypeDeclaration value -> "type " <> locatedValue (typeName value)
   TraitDeclaration value -> "trait " <> locatedValue (traitName value)
   ImplDeclaration _ -> "impl"
+  MacroDeclaration _ -> "macro"
   InvalidDeclaration -> "invalid"

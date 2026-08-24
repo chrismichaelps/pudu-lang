@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as Map
 import Pudu.Frontend.Syntax (Module, ModuleName)
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..), evaluateModule)
+import Pudu.Frontend.Expand (expandModule)
 import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, resolveModuleWith)
 import Pudu.Type (TypeInfo, checkTypesWith)
 import Pudu.Type.Interface (TypeInterface, importsFor)
@@ -75,12 +76,15 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileTypes = Nothing
             , compileDiagnostics = frontendDiagnostics
             }
-        Just parsed ->
-          let (resolution, resolutionDiagnostics) =
+        Just original ->
+          let (parsed, expansionDiagnostics) = expandModule original
+              (resolution, resolutionDiagnostics) =
                 if contextStrictImports context
                   then resolveModuleWith (contextExports context) parsed
                   else resolveModule parsed
-              resolved = sortDiagnostics (frontendDiagnostics <> resolutionDiagnostics)
+              resolved =
+                sortDiagnostics
+                  (frontendDiagnostics <> expansionDiagnostics <> resolutionDiagnostics)
               (types, typeDiagnostics) =
                 if hasErrors resolved then (Nothing, []) else typedResult context parsed
               typed = sortDiagnostics (resolved <> typeDiagnostics)

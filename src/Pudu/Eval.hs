@@ -310,6 +310,8 @@ evaluate (Located spanValue expression) = case expression of
     _ -> TupleValue <$> mapM evaluate members
   ArrayExpression members -> ArrayValue . Seq.fromList <$> mapM evaluate members
   UnsafeExpression _ body -> evaluateBlock body
+  MacroCall _ _ ->
+    abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
     pure (RecordValue (lastPathSegment path) values)
