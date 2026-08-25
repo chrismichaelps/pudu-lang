@@ -18,6 +18,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
+import Pudu.Eval.Clock
 import Pudu.Eval.Io
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
@@ -649,6 +650,11 @@ effectBuiltins =
   , EnvironmentBuiltin
   , ExitBuiltin
   , ClockBuiltin
+  , NowBuiltin
+  , FormatTimeBuiltin
+  , ParseTimeBuiltin
+  , ZoneOffsetBuiltin
+  , RunBuiltin
   ]
 
 {-| Perform one effect.
@@ -694,6 +700,16 @@ callEffect spanValue builtin arguments = do
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (ClockBuiltin, []) -> IntValue <$> lift refusal monotonicMilliseconds
+      (NowBuiltin, []) -> IntValue <$> lift refusal currentInstant
+      (ZoneOffsetBuiltin, []) -> IntValue <$> lift refusal timeZoneOffset
+      (FormatTimeBuiltin, [StrValue pattern, IntValue milliseconds, StrValue zone]) -> do
+        rendered <- lift refusal (formatInstant pattern milliseconds zone)
+        pure (eitherOf (StrValue <$> rendered))
+      (ParseTimeBuiltin, [StrValue pattern, StrValue text]) ->
+        pure (eitherOf (IntValue <$> parseInstant pattern text))
+      (RunBuiltin, [StrValue program, ArrayValue given, StrValue standardInput]) -> do
+        outcome <- lift refusal (runProcess (Text.unpack program) (textsOf given) standardInput)
+        pure (eitherOf (processValue <$> outcome))
       (ExitBuiltin, [IntValue code]) -> do
         _ <- lift refusal (exitWith code)
         pure UnitValue
@@ -722,6 +738,29 @@ callEffect spanValue builtin arguments = do
     the effect produces; every effect here produces something different. -}
 lift :: Diagnostic -> IO a -> Evaluator a
 lift refusal action = performEffect refusal action
+
+{-| An either as the language's own failure carrier. -}
+eitherOf :: Either Text Value -> Value
+eitherOf outcome = case outcome of
+  Right value -> VariantValue "Ok" [value]
+  Left message -> VariantValue "Err" [StrValue message]
+
+{-| A finished program's status and its two streams.
+
+    A tuple rather than a record, because a record would have to be a wired-in
+    nominal type with wired-in fields — a second way for the compiler to know
+    about a shape, for one built-in. `Std.Process` gives it names, in the
+    language, where a reader can see them. -}
+processValue :: ProcessOutcome -> Value
+processValue outcome =
+  TupleValue
+    [ IntValue (processStatus outcome)
+    , StrValue (processOutput outcome)
+    , StrValue (processErrors outcome)
+    ]
+
+textsOf :: Seq.Seq Value -> [Text]
+textsOf values = [text | StrValue text <- toList values]
 
 {-| An outcome as the language's own failure carrier. -}
 resultOf :: IoOutcome Value -> Value

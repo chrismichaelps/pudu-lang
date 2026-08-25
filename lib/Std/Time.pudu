@@ -1,0 +1,262 @@
+module Std.Time
+
+/// A point on the system clock, as milliseconds since the start of 1970.
+/// A distinct type from a plain number so a duration and an instant cannot be
+/// confused for one another, which is the mistake date handling is made of.
+export type Instant = { millis: Int }
+
+/// A length of time, as milliseconds.
+export type Duration = { millis: Int }
+
+/// A civil date with no instant until a zone is applied.
+/// The distinction from an instant is the one date handling gets wrong most
+/// often: a birthday is a date everywhere, while a meeting is an instant.
+export type Date = { year: Int, month: Int, day: Int }
+
+/// A time of day with no date and no zone.
+export type TimeOfDay = { hour: Int, minute: Int, second: Int }
+
+/// The instant this is called at, on the system clock.
+/// The system clock can move backwards when it is adjusted, which is why
+/// measuring a duration uses `elapsed` rather than two of these.
+export fn currentInstant() -> Instant { Instant { millis: now() } }
+
+/// An instant built from milliseconds since the start of 1970.
+export fn instantOf(count: Int) -> Instant { Instant { millis: count } }
+
+/// The milliseconds an instant stands at.
+export fn toMillis(value: &Instant) -> Int { value.millis }
+
+/// The whole seconds an instant stands at.
+export fn toSeconds(value: &Instant) -> Int { value.millis / 1000 }
+
+/// A duration of milliseconds.
+export fn millis(count: Int) -> Duration { Duration { millis: count } }
+
+/// A duration of seconds.
+export fn seconds(count: Int) -> Duration { Duration { millis: count * 1000 } }
+
+/// A duration of minutes.
+export fn minutes(count: Int) -> Duration { Duration { millis: count * 60000 } }
+
+/// A duration of hours.
+export fn hours(count: Int) -> Duration { Duration { millis: count * 3600000 } }
+
+/// A duration of days, taken as exactly twenty-four hours.
+/// Calendar days are not all that long; a day that crosses a clock change is a
+/// question for `Date`, not for a duration.
+export fn days(count: Int) -> Duration { Duration { millis: count * 86400000 } }
+
+/// The milliseconds a duration lasts.
+export fn durationMillis(value: &Duration) -> Int { value.millis }
+
+/// The whole seconds a duration lasts.
+export fn durationSeconds(value: &Duration) -> Int { value.millis / 1000 }
+
+/// A duration added to an instant.
+export fn add(value: &Instant, amount: &Duration) -> Instant {
+  Instant { millis: value.millis + amount.millis }
+}
+
+/// A duration taken from an instant.
+export fn subtract(value: &Instant, amount: &Duration) -> Instant {
+  Instant { millis: value.millis - amount.millis }
+}
+
+/// The time from the first instant to the second, negative when it is behind.
+export fn between(from: &Instant, to: &Instant) -> Duration {
+  Duration { millis: to.millis - from.millis }
+}
+
+/// Whether the first instant is before the second.
+export fn isBefore(left: &Instant, right: &Instant) -> Bool { left.millis < right.millis }
+
+/// Whether the first instant is after the second.
+export fn isAfter(left: &Instant, right: &Instant) -> Bool { left.millis > right.millis }
+
+/// The earlier of two instants.
+export fn earliest(left: &Instant, right: &Instant) -> Instant {
+  if left.millis < right.millis { *left } else { *right }
+}
+
+/// The later of two instants.
+export fn latest(left: &Instant, right: &Instant) -> Instant {
+  if left.millis > right.millis { *left } else { *right }
+}
+
+/// Two durations added.
+export fn plus(left: &Duration, right: &Duration) -> Duration {
+  Duration { millis: left.millis + right.millis }
+}
+
+/// One duration taken from another.
+export fn minus(left: &Duration, right: &Duration) -> Duration {
+  Duration { millis: left.millis - right.millis }
+}
+
+/// A duration multiplied by a whole number.
+export fn scale(value: &Duration, factor: Int) -> Duration {
+  Duration { millis: value.millis * factor }
+}
+
+/// A duration with its sign removed.
+export fn absolute(value: &Duration) -> Duration {
+  if value.millis < 0 { Duration { millis: 0 - value.millis } } else { *value }
+}
+
+/// An instant rendered in UTC with a pattern.
+/// The pattern vocabulary is the platform's: `%Y-%m-%d %H:%M:%S` and the rest.
+export fn format(value: &Instant, pattern: Str) -> Result[Str, Str] {
+  formatTime(pattern, value.millis, "utc")
+}
+
+/// An instant rendered in the machine's own zone with a pattern.
+export fn formatLocal(value: &Instant, pattern: Str) -> Result[Str, Str] {
+  formatTime(pattern, value.millis, "local")
+}
+
+/// An instant rendered as RFC 3339, in UTC.
+/// The form to write when a machine will read it back, because it sorts as text
+/// in the same order it sorts as time.
+export fn toRfc3339(value: &Instant) -> Result[Str, Str] {
+  formatTime("%Y-%m-%dT%H:%M:%SZ", value.millis, "utc")
+}
+
+/// An instant read from RFC 3339.
+export fn fromRfc3339(text: Str) -> Result[Instant, Str] {
+  match parseTime("%Y-%m-%dT%H:%M:%SZ", text) {
+    case Ok(count) => Ok(Instant { millis: count })
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// An instant read with a pattern.
+export fn parse(pattern: Str, text: Str) -> Result[Instant, Str] {
+  match parseTime(pattern, text) {
+    case Ok(count) => Ok(Instant { millis: count })
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// An instant rendered as a date in UTC.
+export fn toDate(value: &Instant) -> Result[Date, Str] {
+  match formatTime("%Y", value.millis, "utc") {
+    case Err(problem) => Err(problem)
+    case Ok(year) => {
+      match formatTime("%m", value.millis, "utc") {
+        case Err(problem) => Err(problem)
+        case Ok(month) => {
+          match formatTime("%d", value.millis, "utc") {
+            case Err(problem) => Err(problem)
+            case Ok(day) => {
+              Ok(Date {
+                year: wholeOr(year, 0),
+                month: wholeOr(month, 0),
+                day: wholeOr(day, 0)
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// An instant rendered as a time of day in UTC.
+export fn toTimeOfDay(value: &Instant) -> Result[TimeOfDay, Str] {
+  match formatTime("%H", value.millis, "utc") {
+    case Err(problem) => Err(problem)
+    case Ok(hour) => {
+      match formatTime("%M", value.millis, "utc") {
+        case Err(problem) => Err(problem)
+        case Ok(minute) => {
+          match formatTime("%S", value.millis, "utc") {
+            case Err(problem) => Err(problem)
+            case Ok(second) => {
+              Ok(TimeOfDay {
+                hour: wholeOr(hour, 0),
+                minute: wholeOr(minute, 0),
+                second: wholeOr(second, 0)
+              })
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A date and a time of day read as an instant in UTC.
+export fn atUtc(date: &Date, time: &TimeOfDay) -> Result[Instant, Str] {
+  parse("%Y-%m-%d %H:%M:%S", renderDate(date) + " " + renderTime(time))
+}
+
+/// A date written as `YYYY-MM-DD`.
+export fn renderDate(value: &Date) -> Str {
+  pad(value.year, 4) + "-" + pad(value.month, 2) + "-" + pad(value.day, 2)
+}
+
+/// A time of day written as `HH:MM:SS`.
+export fn renderTime(value: &TimeOfDay) -> Str {
+  pad(value.hour, 2) + ":" + pad(value.minute, 2) + ":" + pad(value.second, 2)
+}
+
+/// A date read from `YYYY-MM-DD`.
+export fn parseDate(text: Str) -> Result[Date, Str] {
+  match parse("%Y-%m-%d", text) {
+    case Ok(instant) => toDate(&instant)
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// The machine's own offset from UTC, in minutes east of it.
+export fn localOffsetMinutes() -> Int { zoneOffset() }
+
+/// A duration written the way a person reads one, such as `1h 5m 3s`.
+/// Milliseconds appear only when they are the whole of it, because a duration
+/// long enough to have hours does not need them.
+export fn describe(value: &Duration) -> Str {
+  let total = absolute(value).millis
+  if total == 0 { "0s" } else {
+    if total < 1000 { show(total) + "ms" } else {
+      var out = ""
+      let allSeconds = total / 1000
+      let hourPart = allSeconds / 3600
+      let minutePart = (allSeconds % 3600) / 60
+      let secondPart = allSeconds % 60
+      if hourPart > 0 { out = out + show(hourPart) + "h" }
+      if minutePart > 0 {
+        if !out.isEmpty() { out = out + " " }
+        out = out + show(minutePart) + "m"
+      }
+      if secondPart > 0 {
+        if !out.isEmpty() { out = out + " " }
+        out = out + show(secondPart) + "s"
+      }
+      if value.millis < 0 { "-" + out } else { out }
+    }
+  }
+}
+
+/// Milliseconds on a clock that only moves forward, for measuring a duration.
+/// Two readings may be subtracted; one alone means nothing.
+export fn elapsed() -> Int { clock() }
+
+/// A whole number read from text, or a fallback.
+fn wholeOr(text: Str, fallback: Int) -> Int {
+  if text.isEmpty() { fallback } else {
+    var total = 0
+    for character in text.chars() {
+      if character < '0' || character > '9' { return fallback }
+      total = total * 10 + (character.code() - 48)
+    }
+    total
+  }
+}
+
+/// A whole number written with at least a given number of digits.
+fn pad(value: Int, width: Int) -> Str {
+  var out = show(value)
+  while out.length() < width { out = "0" + out }
+  out
+}

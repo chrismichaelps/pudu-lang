@@ -148,7 +148,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty modules, 621 documented exports, every one written in Pudu.
+Twenty-two modules, 672 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -170,6 +170,8 @@ Twenty modules, 621 documented exports, every one written in Pudu.
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
 | `Std.Io` | 26 | files, directories, standard input and output, path handling |
 | `Std.Env` | 16 | arguments and flags, environment variables, stopping with a status |
+| `Std.Time` | 40 | instants, durations, dates, times of day, formatting and parsing |
+| `Std.Process` | 11 | running a program, its status and streams, availability |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
 
@@ -184,10 +186,15 @@ is an outcome a caller handles.
 denied and reports `E7009`. Compilation that depended on the world the compiler happened to be in
 would not be compilation.
 
+`Std.Time` separates an **`Instant`** from a **`Duration`** from a **`Date`**, each its own type.
+That distinction is the one date handling gets wrong most often — a birthday is a date everywhere,
+while a meeting is an instant — and a library that let them be added together would be inviting the
+mistake rather than preventing it.
+
 What is still blocked is the *foreign* interface — calling into a library this runtime does not
-already contain. That is what `Std.Net`, `Std.Process`, `Std.Db`, and an HTTP client need, and it
-needs the `foreign` capability from [[Unsafe Capabilities]] plus a decision about how a foreign
-type's ownership is described.
+already contain. That is what `Std.Net`, `Std.Db`, and an HTTP client need, and it needs the
+`foreign` capability from [[Unsafe Capabilities]] plus a decision about how a foreign type's
+ownership is described.
 
 ### On HTTP
 

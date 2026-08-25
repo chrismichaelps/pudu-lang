@@ -78,6 +78,11 @@ builtinName value = case value of
   EnvironmentBuiltin -> "environment"
   ExitBuiltin -> "exit"
   ClockBuiltin -> "clock"
+  NowBuiltin -> "now"
+  FormatTimeBuiltin -> "formatTime"
+  ParseTimeBuiltin -> "parseTime"
+  ZoneOffsetBuiltin -> "zoneOffset"
+  RunBuiltin -> "runProgram"
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
     `panic` is the prelude's unrecoverable abort: it takes a message and stops
@@ -104,6 +109,11 @@ data Builtin
   | EnvironmentBuiltin
   | ExitBuiltin
   | ClockBuiltin
+  | NowBuiltin
+  | FormatTimeBuiltin
+  | ParseTimeBuiltin
+  | ZoneOffsetBuiltin
+  | RunBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right

@@ -28,6 +28,7 @@ evalProperties =
   , ("maps and sets keep their contents in key order", testKeyed)
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("interpolated strings render their holes", testInterpolation)
+  , ("calendar time and subprocesses answer with results", testClock)
   ]
 
 testScopes :: IO Property
@@ -468,6 +469,33 @@ testInterpolation = do
     , counterexample "a hole may call a method" (nestedCall === "\"len 3\"")
     , counterexample "a hole may contain a string" (nestedString === "\"in q\"")
     , counterexample "an escaped brace is not a hole" (escaped === "\"a{b}c\"")
+    ]
+
+{-| Calendar time and subprocesses are effects like any other: they answer with
+    a result and a compile-time constant may not reach them. A program's non-zero
+    status is not a failure of running it — the program ran. -}
+testClock :: IO Property
+testClock = do
+  rendered <- evaluate "formatTime(\"%Y-%m-%d\", 1700000000000, \"utc\")"
+  parsed <- evaluate "parseTime(\"%Y-%m-%d\", \"2023-11-14\")"
+  malformed <- evaluate "parseTime(\"%Y-%m-%d\", \"not a date\")"
+  ticking <- evaluate "now() > 1600000000000"
+  ran <- evaluate "runProgram(\"echo\", [\"hi\"], \"\")"
+  failed <- evaluate "runProgram(\"sh\", [\"-c\", \"exit 7\"], \"\")"
+  missing <- evaluate "runProgram(\"pudu-no-such-program-4c3b\", [], \"\")"
+  atCompileTime <- codesOfConstant "now() > 0"
+  pure $ conjoin
+    [ counterexample "an instant renders with a pattern" (rendered === "Ok(\"2023-11-14\")")
+    , counterexample "text reads back as an instant" (parsed === "Ok(1699920000000)")
+    , counterexample "text that does not fit reports the pattern"
+        (property (Text.isPrefixOf "Err(" malformed))
+    , counterexample "the system clock is past 2020" (ticking === "true")
+    , counterexample "a program's output is collected" (ran === "Ok((0, \"hi\\n\", \"\"))")
+    , counterexample "a non-zero status is an answer, not a failure"
+        (property (Text.isPrefixOf "Ok((7," failed))
+    , counterexample "a program that cannot be run is a failure"
+        (property (Text.isPrefixOf "Err(" missing))
+    , counterexample "a constant may not read the clock" (atCompileTime === ["E7009"])
     ]
 
 testEffects :: IO Property
