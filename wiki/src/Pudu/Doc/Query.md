@@ -46,27 +46,34 @@ renderQuery :: Query -> Text
   question than the one asked.
 - Parsing is total and never reports a diagnostic. A query that does not parse is not an error in
   a program; it is a reader who has not finished typing.
+- Query text is capped at 512 Unicode scalars and 64 nested bracket/parenthesis levels before
+  recursive parsing. Exceeding either budget is an unfinished query, not a compiler failure.
 
 ### Linkage
 
 - **Requires:** [[Doc Signature]].
-- **Consumed by:** [[Doc Search]].
+- **Consumed by:** [[Doc Search]], [[Doc Site]].
 
 ## Algorithm
 
-Split on arrows outside brackets and parentheses, parse each piece as a type atom, and take the
-last piece as the result.
+Split on arrows outside brackets and parentheses, discard one empty leading piece when the query
+starts with an arrow, parse every remaining piece as a type atom, and take the last piece as the
+result.
 
 ## Negative Logic (Prohibited Paths)
 
 - No use of the language's own lexer or parser: a query is not source, and admitting source syntax
   would promise support for constructs the search cannot compare.
 - No diagnostics, no partial results, and no invented result for a trailing arrow.
+- No unbounded recursive descent over pasted interactive input.
 
 ## Edge Cases
 
 - `Int ->` does not parse: the reader was still typing, and inventing a result answers a question
   they did not ask.
+- `-> Config` has no arguments and `Config` as its result. Only the first empty piece has that
+  meaning; `Int -> -> Config` remains malformed.
+- A query beyond the scalar or nesting budget yields no query and therefore no matches.
 - A parenthesised group with top-level commas is a tuple; without them it is a grouping, matching
   how the language reads parentheses.
 
@@ -85,4 +92,4 @@ DEPTH 0.40 (SHALLOW by intent). One disambiguation rule and a small recursive de
 
 ## Referenced by
 
-[[src/Pudu/Doc/_MOC]] · [[Doc Search]]
+[[src/Pudu/Doc/_MOC]] · [[Doc Search]] · [[Doc Site]]

@@ -46,7 +46,7 @@ escapeJson :: Text -> Text
 ### Linkage
 
 - **Requires:** [[Doc Index]], [[Doc Signature]].
-- **Consumed by:** [[Program Cli]].
+- **Consumed by:** [[Pudu CLI]], [[Doc Site]].
 
 ## Algorithm
 
@@ -76,4 +76,4 @@ DEPTH 0.30 (SHALLOW by intent). It is a serializer.
 
 ## Referenced by
 
-[[src/Pudu/Doc/_MOC]] · [[Doc Index]]
+[[src/Pudu/Doc/_MOC]] · [[Doc Index]] · [[Doc Site]]

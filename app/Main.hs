@@ -18,6 +18,7 @@ import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Doc.Json (encodeIndex)
 import Pudu.Doc.Search (Match (..), searchText)
+import Pudu.Doc.Site (renderSite)
 import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
 import Pudu.Diagnostic.Render
   ( RenderStyle (..)
@@ -44,6 +45,7 @@ main = do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
     ("doc" : "--json" : paths) -> documentPaths JsonOutput paths
+    ("doc" : "--html" : paths) -> documentPaths HtmlOutput paths
     ("doc" : paths) -> documentPaths TextOutput paths
     ("search" : query : paths) -> searchPaths (Text.pack query) paths
     ("search" : []) -> do
@@ -140,10 +142,11 @@ renderRuntime style program value = renderProgramDiagnostics style program [valu
 
 {-| @Program.Cli.DocOutput — who the index is being written for.
 
-    Text is for a reader at a terminal; JSON is for an editor or a search
-    server. They are the same index, and nothing is included in one that the
-    other cannot express, so a tool never has to scrape the human form. -}
-data DocOutput = TextOutput | JsonOutput
+    Text is for a reader at a terminal, JSON for an editor or search server,
+    and HTML for a browser. They are the same index, and nothing is included in
+    one that the others cannot express, so a tool never has to scrape the human
+    form. -}
+data DocOutput = TextOutput | JsonOutput | HtmlOutput
   deriving stock (Eq, Show)
 
 {-| Index every named file and its imports.
@@ -158,10 +161,12 @@ documentPaths output paths
       hPutStrLn stderr "pudu doc: no files given"
       exitFailure
   | otherwise = do
-      index <- indexPaths paths
+      (index, failed) <- indexPaths paths
       case output of
         JsonOutput -> TextIO.putStrLn (encodeIndex index)
+        HtmlOutput -> TextIO.putStr (renderSite index)
         TextOutput -> mapM_ describe (indexEntries index)
+      if failed then exitFailure else exitSuccess
  where
   describe entry = do
     mapM_ TextIO.putStrLn (renderEntryLines entry)
@@ -174,24 +179,27 @@ searchPaths query paths
       hPutStrLn stderr "pudu search: no files given"
       exitFailure
   | otherwise = do
-      index <- indexPaths paths
+      (index, failed) <- indexPaths paths
       case searchText query index of
         [] -> do
           TextIO.putStrLn ("no results for " <> query)
           exitFailure
         matches -> mapM_ (mapM_ TextIO.putStrLn . renderEntryLines . matchEntry) matches
+      if failed then exitFailure else exitSuccess
 
 {-| Build one index over every named program, reporting each program's
     diagnostics to stderr so they cannot corrupt the index on stdout. -}
-indexPaths :: [FilePath] -> IO DocIndex
-indexPaths paths = mconcat <$> mapM one paths
+indexPaths :: [FilePath] -> IO (DocIndex, Bool)
+indexPaths paths = do
+  indexed <- mapM one paths
+  pure (mconcat (map fst indexed), or (map snd indexed))
  where
   one path = do
     program <- compileProgram path
     let diagnostics = programDiagnostics program
     unless (null diagnostics) $
       hPutStrLn stderr (Text.unpack (Text.pack path <> ": " <> renderSummary diagnostics))
-    pure (programDocs program)
+    pure (programDocs program, hasErrors diagnostics)
 
 renderProgramDiagnostics :: RenderStyle -> ProgramResult -> [Diagnostic] -> Text
 renderProgramDiagnostics style program =
@@ -231,6 +239,7 @@ usage =
     , "  pudu run <file>      compile a program and run its main function"
     , "  pudu doc <file>...   describe every name a program declares"
     , "  pudu doc --json ...  the same index, for an editor or a search server"
+    , "  pudu doc --html ...  emit a self-contained searchable documentation page"
     , "  pudu search <query> <file>...  find a name, or a type shape such as"
     , "                       'Array[a] -> a'"
     , "  pudu version         print the version"

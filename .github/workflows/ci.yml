@@ -18,6 +18,14 @@ jobs:
         with:
           ghc-version: 9.14.1
           cabal-version: 3.16.1.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: cabal update
       - run: cabal build all --enable-optimization=2
       - run: cabal test all --enable-optimization=2 --test-show-details=direct
+      - name: Verify documentation site browser and CLI contracts
+        run: |
+          cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
+          ! cabal run -v0 pudu -- doc --html > /dev/null
+          ! cabal run -v0 pudu -- doc --html test-fixtures/stdlib/does-not-exist.pudu > /dev/null

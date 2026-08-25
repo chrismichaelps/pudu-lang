@@ -51,7 +51,7 @@ searchText :: Text -> DocIndex -> [Match]
 ### Linkage
 
 - **Requires:** [[Doc Index]], [[Doc Query]], [[Doc Signature]].
-- **Consumed by:** [[Pudu REPL]], [[Program Cli]].
+- **Consumed by:** [[Pudu REPL]], [[Pudu CLI]], [[Doc Site]].
 
 ## Algorithm
 
@@ -89,4 +89,4 @@ DEPTH 0.60 (MEDIUM). Two ranking ladders, each rung justified.
 
 ## Referenced by
 
-[[src/Pudu/Doc/_MOC]] · [[Doc Index]]
+[[src/Pudu/Doc/_MOC]] · [[Doc Index]] · [[Doc Site]]
