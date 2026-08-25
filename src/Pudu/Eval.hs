@@ -430,8 +430,10 @@ evaluateStatement (Located _ statement) = case statement of
   ReturnStatement (Just expression) -> do
     value <- evaluate expression
     unwind (ReturnUnwind value)
-  BreakStatement -> unwind BreakUnwind
-  ContinueStatement -> unwind ContinueUnwind
+  BreakStatement label value -> do
+    carried <- maybe (pure UnitValue) evaluate value
+    unwind (BreakUnwind (fmap locatedValue label) carried)
+  ContinueStatement label -> unwind (ContinueUnwind (fmap locatedValue label))
   InvalidStatement -> pure ()
 
 evaluate :: Located Expression -> Evaluator Value
@@ -494,11 +496,12 @@ evaluate (Located spanValue expression) = case expression of
   MatchExpression scrutinee arms -> do
     subject <- evaluate scrutinee
     evaluateArms spanValue subject arms
-  WhileExpression condition body -> evaluateWhile spanValue condition body
-  LoopExpression body -> evaluateLoop spanValue body
-  ForExpression binder iterated body -> do
+  WhileExpression label condition body ->
+    evaluateWhile spanValue (fmap locatedValue label) condition body
+  LoopExpression label body -> evaluateLoop spanValue (fmap locatedValue label) body
+  ForExpression label binder iterated body -> do
     sequence' <- evaluate iterated
-    evaluateFor spanValue binder sequence' body
+    evaluateFor spanValue (fmap locatedValue label) binder sequence' body
   InvalidExpression -> abortAt (Just spanValue) "E7001" "cannot evaluate invalid syntax" Nothing
 
 {-| Read a dotted path.
@@ -1260,8 +1263,8 @@ evaluateGuard guard = case guard of
       BoolValue flag -> pure flag
       _ -> pure False
 
-evaluateWhile :: Span -> Located Expression -> Located Block -> Evaluator Value
-evaluateWhile spanValue condition body = loop (0 :: Int)
+evaluateWhile :: Span -> Maybe Text -> Located Expression -> Located Block -> Evaluator Value
+evaluateWhile spanValue label condition body = loop (0 :: Int)
  where
   loop iterations
     | iterations > iterationLimit =
@@ -1274,14 +1277,14 @@ evaluateWhile spanValue condition body = loop (0 :: Int)
           then pure UnitValue
           else do
             outcome <- catchUnwind (evaluateBlock body)
-            case outcome of
-              Left BreakUnwind -> pure UnitValue
-              Left ContinueUnwind -> loop (iterations + 1)
-              Left transfer -> unwind transfer
-              Right _ -> loop (iterations + 1)
+            case transferFor label outcome of
+              Stop _ -> pure UnitValue
+              Again -> loop (iterations + 1)
+              Escape transfer -> unwind transfer
+              Finished -> loop (iterations + 1)
 
-evaluateLoop :: Span -> Located Block -> Evaluator Value
-evaluateLoop spanValue body = loop (0 :: Int)
+evaluateLoop :: Span -> Maybe Text -> Located Block -> Evaluator Value
+evaluateLoop spanValue label body = loop (0 :: Int)
  where
   loop iterations
     | iterations > iterationLimit =
@@ -1289,17 +1292,17 @@ evaluateLoop spanValue body = loop (0 :: Int)
           (Just "the interactive evaluator bounds iteration; add a break")
     | otherwise = do
         outcome <- catchUnwind (evaluateBlock body)
-        case outcome of
-          Left BreakUnwind -> pure UnitValue
-          Left ContinueUnwind -> loop (iterations + 1)
-          Left transfer -> unwind transfer
-          Right _ -> loop (iterations + 1)
+        case transferFor label outcome of
+          Stop carried -> pure carried
+          Again -> loop (iterations + 1)
+          Escape transfer -> unwind transfer
+          Finished -> loop (iterations + 1)
 
 {-| Iteration is defined over the values the evaluator can enumerate without a
     trait system: tuples and strings. Anything else reports that iteration is
     not yet available for it. -}
-evaluateFor :: Span -> Located Pattern -> Value -> Located Block -> Evaluator Value
-evaluateFor spanValue binder iterated body = case elements of
+evaluateFor :: Span -> Maybe Text -> Located Pattern -> Value -> Located Block -> Evaluator Value
+evaluateFor spanValue label binder iterated body = case elements of
   Nothing ->
     abortAt (Just spanValue) "E7001"
       ("cannot iterate a " <> valueKind iterated)
@@ -1318,11 +1321,39 @@ evaluateFor spanValue binder iterated body = case elements of
       Nothing -> step rest
       Just bindings -> do
         outcome <- withFrame bindings (catchUnwind (evaluateBlock body))
-        case outcome of
-          Left BreakUnwind -> pure UnitValue
-          Left ContinueUnwind -> step rest
-          Left transfer -> unwind transfer
-          Right _ -> step rest
+        case transferFor label outcome of
+          Stop _ -> pure UnitValue
+          Again -> step rest
+          Escape transfer -> unwind transfer
+          Finished -> step rest
+
+{-| @Eval.LoopTransfer — what a loop body's outcome means to the loop. -}
+data LoopTransfer
+  = Stop !Value
+  | Again
+  | Escape !Unwind
+  | Finished
+
+{-| Read a loop body's outcome as this loop's own business or someone else's.
+
+    A break or a continue belongs to this loop when it named this loop's label,
+    or when it named nothing at all and so meant the innermost — which, from
+    inside the body, is this one. Anything else is addressed to a loop further
+    out and travels on untouched, which is what makes `break @outer` from a
+    nested loop leave the outer one rather than the nearest. -}
+transferFor :: Maybe Text -> Either Unwind a -> LoopTransfer
+transferFor label outcome = case outcome of
+  Right _ -> Finished
+  Left transfer -> case transfer of
+    BreakUnwind target carried
+      | addressed target -> Stop carried
+    ContinueUnwind target
+      | addressed target -> Again
+    other -> Escape other
+ where
+  addressed target = case target of
+    Nothing -> True
+    Just name -> label == Just name
 
 iterationLimit :: Int
 iterationLimit = 100000

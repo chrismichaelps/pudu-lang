@@ -42,8 +42,9 @@ outlineStatement (Located _ statement) = case statement of
   ExpressionStatement expression -> outlineExpression expression
   ReturnStatement Nothing -> "return"
   ReturnStatement (Just expression) -> "return " <> outlineExpression expression
-  BreakStatement -> "break"
-  ContinueStatement -> "continue"
+  BreakStatement label value ->
+    "break" <> foldMap outlineLabel label <> foldMap ((" " <>) . outlineExpression) value
+  ContinueStatement label -> "continue" <> foldMap outlineLabel label
   InvalidStatement -> "invalid"
 
 outlineDeclaration :: Located Declaration -> Text
@@ -95,11 +96,18 @@ outlineExpression (Located _ expression) = case expression of
   MatchExpression scrutinee arms ->
     "match " <> outlineExpression scrutinee
       <> " { " <> Text.intercalate "; " (map outlineArm arms) <> " }"
-  WhileExpression condition _ -> "while " <> outlineExpression condition
-  LoopExpression _ -> "loop"
-  ForExpression binder iterated _ ->
-    "for " <> outlinePattern binder <> " in " <> outlineExpression iterated
+  WhileExpression label condition _ ->
+    labelPrefix label <> "while " <> outlineExpression condition
+  LoopExpression label _ -> labelPrefix label <> "loop"
+  ForExpression label binder iterated _ ->
+    labelPrefix label <> "for " <> outlinePattern binder <> " in " <> outlineExpression iterated
   InvalidExpression -> "invalid"
+
+outlineLabel :: Located Text -> Text
+outlineLabel label = " @" <> locatedValue label
+
+labelPrefix :: Maybe (Located Text) -> Text
+labelPrefix = foldMap (\label -> "@" <> locatedValue label <> " ")
 
 outlineFieldInit :: Located FieldInit -> Text
 outlineFieldInit (Located _ field) =

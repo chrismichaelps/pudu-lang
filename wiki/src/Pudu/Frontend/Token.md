@@ -47,7 +47,7 @@ data SymbolKind
   | SymWrapMultiply | SymSaturatingMultiply
   | SymWrapAdd | SymWrapSubtract | SymSaturatingAdd | SymSaturatingSubtract
   | SymRangeExclusive | SymRangeInclusive
-  | SymLeftShift | SymRightShift | SymCaret | SymTilde
+  | SymLeftShift | SymRightShift | SymCaret | SymTilde | SymAt
   | SymLess | SymLessEqual | SymGreater | SymGreaterEqual
   | SymEqual | SymNotEqual | SymLogicalAnd | SymLogicalOr
   deriving stock (Eq, Ord, Show, Enum, Bounded)

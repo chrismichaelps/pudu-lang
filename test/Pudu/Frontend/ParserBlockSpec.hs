@@ -117,13 +117,23 @@ testLoopStatements = do
   breakBlock <- parse "{\n  loop {\n    break\n  }\n}"
   continueBlock <- parse "{\n  for item in items {\n    continue\n  }\n}"
   jumps <- parse "{\n  break\n  continue\n}"
+  labelledJumps <- parse "{\n  break @outer\n  continue @outer\n}"
+  carried <- parse "{\n  break 1\n  break @outer 2\n}"
+  bareOnItsLine <- parse "{\n  break\n  1\n}"
   pure $ conjoin
     [ shape whileBlock === "[]=>while"
     , shape breakBlock === "[]=>loop"
     , shape continueBlock === "[]=>for"
     , counterexample "jumps are statements" (shape jumps === "[break;continue]")
+    , counterexample "a jump carries the label it names"
+        (shape labelledJumps === "[break@outer;continue@outer]")
+    , counterexample "a break carries a value with or without a label"
+        (shape carried === "[break 1;break@outer 2]")
+    , counterexample "a break alone on its line does not swallow the next statement"
+        (shape bareOnItsLine === "[break]=>1")
     , codes whileBlock === []
     , codes continueBlock === []
+    , codes carried === []
     ]
 
 testHostileBlocks :: IO Property
@@ -170,8 +180,10 @@ statementShape (Located _ statement) = case statement of
   ExpressionStatement expression -> expressionShape expression
   ReturnStatement Nothing -> "return"
   ReturnStatement (Just expression) -> "return " <> expressionShape expression
-  BreakStatement -> "break"
-  ContinueStatement -> "continue"
+  BreakStatement label value ->
+    "break" <> foldMap (\name -> "@" <> locatedValue name) label
+      <> foldMap ((" " <>) . expressionShape) value
+  ContinueStatement label -> "continue" <> foldMap (\name -> "@" <> locatedValue name) label
   InvalidStatement -> "invalid"
 
 declarationShape :: Located Declaration -> Text
@@ -205,7 +217,7 @@ expressionShape (Located _ expression) = case expression of
   IfExpression{} -> "if"
   MatchExpression{} -> "match"
   WhileExpression{} -> "while"
-  LoopExpression _ -> "loop"
+  LoopExpression{} -> "loop"
   ForExpression{} -> "for"
   InvalidExpression -> "invalid"
   _ -> "other"

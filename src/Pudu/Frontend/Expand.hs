@@ -215,16 +215,16 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth scrutinee
           <*> mapM (expandArm macros depth) arms
       )
-  WhileExpression condition body ->
+  WhileExpression label condition body ->
     rebuild
-      ( WhileExpression
+      ( WhileExpression label
           <$> expandExpression macros depth condition
           <*> expandBlock macros depth body
       )
-  LoopExpression body -> rebuild (LoopExpression <$> expandBlock macros depth body)
-  ForExpression binder iterated body ->
+  LoopExpression label body -> rebuild (LoopExpression label <$> expandBlock macros depth body)
+  ForExpression label binder iterated body ->
     rebuild
-      ( ForExpression binder
+      ( ForExpression label binder
           <$> expandExpression macros depth iterated
           <*> expandBlock macros depth body
       )
@@ -348,9 +348,9 @@ introducedNames (Located _ expression) = case expression of
   ScopeExpression block -> blockNames block
   IfExpression _ thenBlock elseBranch ->
     blockNames thenBlock <> foldMap introducedNames elseBranch
-  WhileExpression _ body -> blockNames body
-  LoopExpression body -> blockNames body
-  ForExpression _ _ body -> blockNames body
+  WhileExpression _ _ body -> blockNames body
+  LoopExpression _ body -> blockNames body
+  ForExpression _ _ _ body -> blockNames body
   MatchExpression _ arms -> concatMap (introducedNames . armBody . locatedValue) arms
   _ -> []
 
@@ -401,11 +401,11 @@ substituteExpression bindings renames callSpan (Located _ expression) = case exp
     at (IfExpression (recurse condition) (recurseBlock thenBlock) (fmap recurse elseBranch))
   MatchExpression scrutinee arms ->
     at (MatchExpression (recurse scrutinee) (map recurseArm arms))
-  WhileExpression condition body ->
-    at (WhileExpression (recurse condition) (recurseBlock body))
-  LoopExpression body -> at (LoopExpression (recurseBlock body))
-  ForExpression binder iterated body ->
-    at (ForExpression binder (recurse iterated) (recurseBlock body))
+  WhileExpression label condition body ->
+    at (WhileExpression label (recurse condition) (recurseBlock body))
+  LoopExpression label body -> at (LoopExpression label (recurseBlock body))
+  ForExpression label binder iterated body ->
+    at (ForExpression label binder (recurse iterated) (recurseBlock body))
   MacroCall name arguments -> at (MacroCall name (map recurse arguments))
   other -> at other
  where

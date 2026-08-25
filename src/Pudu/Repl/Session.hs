@@ -95,9 +95,13 @@ emptySession =
 
 {-| Classify a submission by its leading token. `import` and the declaration
     keywords place text at module scope; `let`, `var`, and the jump and loop
-    keywords are statements; everything else is an expression. -}
+    keywords are statements; everything else is an expression.
+
+    A loop's label is not part of that decision. `@outer for ...` is the same
+    statement as `for ...`, and classifying it as an expression would evaluate
+    it somewhere its assignments could not reach the session's bindings. -}
 classifyEntry :: [Token] -> EntryKind
-classifyEntry tokens = case dropWhile isEndOfFile tokens of
+classifyEntry tokens = case afterLabel (dropWhile isEndOfFile tokens) of
   token : rest -> case tokenKind token of
     Keyword KwImport -> ImportEntry
     Keyword KwUnsafe -> if declaresFunction rest then DeclarationEntry else ExpressionEntry
@@ -107,6 +111,12 @@ classifyEntry tokens = case dropWhile isEndOfFile tokens of
   [] -> ExpressionEntry
  where
   isEndOfFile token = tokenKind token == EndOfFile
+
+{-| Skip a leading `@name` so what follows is classified on its own terms. -}
+afterLabel :: [Token] -> [Token]
+afterLabel tokens = case map tokenKind (take 2 tokens) of
+  [labelSigil, Identifier _] | isSymbolKind "@" labelSigil -> drop 2 tokens
+  _ -> tokens
 
 {-| `unsafe` opens a region in expression position and modifies a declaration in
     declaration position, so the entry is classified by what follows its

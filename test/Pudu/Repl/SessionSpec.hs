@@ -277,13 +277,37 @@ testControlTransfer = do
   continueResult <- submit (resultSession continueLoop) "collected"
 
   breakOutside <- submit emptySession "fn bad() -> Int {\n  break\n  1\n}"
-  breakOutsideCall <- submit (resultSession breakOutside) "bad()"
+
+  labelledSetup <- submit emptySession "var seen = 0"
+  labelledLoop <- submit (resultSession labelledSetup) "@outer for row in ((1, 2), (3, 4)) {\n  for cell in row {\n    if cell == 3 { break @outer }\n    seen = seen + 1\n  }\n}"
+  labelledResult <- submit (resultSession labelledLoop) "seen"
+
+  carriedSetup <- submit emptySession "let carried = loop { break 7 }"
+  carried <- submit (resultSession carriedSetup) "carried"
+  carriedLabelSetup <- submit emptySession "let found = @search loop {\n  loop { break @search 9 }\n}"
+  carriedLabel <- submit (resultSession carriedLabelSetup) "found"
+
+  closureBreak <- submit emptySession "fn outerLoop() -> Int {\n  loop {\n    let f = fn() -> Int { break\n 1 }\n    break 0\n  }\n}"
+  unknownLabel <- submit emptySession "loop { break @missing }"
+  carriedFromFor <- submit emptySession "for x in (1, 2) { break x }"
   pure $ conjoin
     [ counterexample "break exits only the inner loop" (valueOf nestedOuter === "4")
     , counterexample "the inner loop accumulates across outer iterations" (valueOf nestedInner === "4")
     , counterexample "break in for stops iteration" (valueOf breakResult === "2")
     , counterexample "continue in for skips one element" (valueOf continueResult === "4")
-    , counterexample "break outside a loop is a runtime E7006" (codesOf breakOutsideCall === ["E7006"])
+    , counterexample "break outside a loop is caught before it runs"
+        (codesOf breakOutside === ["E2016"])
+    , counterexample "a labelled break leaves the loop it names"
+        (valueOf labelledResult === "2")
+    , counterexample "a loop produces what its break carries" (valueOf carried === "7")
+    , counterexample "a labelled break carries a value out of nested loops"
+        (valueOf carriedLabel === "9")
+    , counterexample "a closure is not inside the loop that defines it"
+        (codesOf closureBreak === ["E2016"])
+    , counterexample "a label naming no enclosing loop is rejected"
+        (codesOf unknownLabel === ["E2017"])
+    , counterexample "a for loop cannot carry a value out"
+        (codesOf carriedFromFor === ["E3029"])
     ]
 
 testIterationEdges :: IO Property

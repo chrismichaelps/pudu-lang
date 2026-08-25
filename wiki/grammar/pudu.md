@@ -53,8 +53,9 @@ local_binding    = ("let" | "var"), lower_ident, (":", type_ref)?, "=", expressi
 block            = "{", statement*, "}" ;
 statement        = local_binding | return_stmt | break_stmt | continue_stmt | expression ;
 return_stmt      = "return", expression? ;
-break_stmt       = "break" ;
-continue_stmt    = "continue" ;
+break_stmt       = "break", loop_label?, expression? ;
+continue_stmt    = "continue", loop_label? ;
+loop_label       = "@", lower_ident ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 params           = param, (",", param)*, ","? ;
@@ -150,9 +151,9 @@ record_expr      = module_path_or_type, "{", field_init, (",", field_init)*, ","
 field_init       = lower_ident, (":", expression)? ;
 match_expr       = "match", expression, "{", match_arm+, "}" ;
 match_arm        = "case", pattern, ("if", expression)?, "=>", (expression | block) ;
-while_expr       = "while", expression, block ;
-loop_expr        = "loop", block ;
-for_expr         = "for", pattern, "in", expression, block ;
+while_expr       = loop_label?, "while", expression, block ;
+loop_expr        = loop_label?, "loop", block ;
+for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 ```
 
 - An array literal `[a, b, c]` builds an `Array[T]` value. `[]` is the empty array. Arrays are immutable persistent sequences backed by a fingertree: `push`, `insert`, and `remove` return new arrays with structural sharing, so no update copies the entire collection. Built-in methods: `length()`, `get(i)`, `indexOf(x)`, `contains(x)`, `push(x)`, `pop()`, `insert(i, x)`, `remove(i)`, `slice(i, j)`, `reverse()`, `map(f)`, `filter(f)`, `reduce(f, init)`. Indexing an array with `arr[i]` reads the element; out-of-bounds is `E7004`. `for x in arr` iterates elements.
@@ -166,7 +167,10 @@ for_expr         = "for", pattern, "in", expression, block ;
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.
 - A parenthesized expression groups; adding a comma makes it a tuple, and `(e,)` is the one-member tuple. This mirrors the type grammar, where `(T)` groups and `(T,)` is a tuple.
-- `while`, `loop`, and `for` are expressions of type `()` in v1; their bodies are blocks, and `break`/`continue` are statements valid only inside them.
+- `while` and `for` are expressions of type `()`; `loop` has the type its `break` statements carry, and `Never` when it has none. Their bodies are blocks, and `break`/`continue` are statements valid only inside them.
+- A loop may be labelled by writing `@name` directly before it. `break @name` and `continue @name` act on the loop that label names rather than the nearest enclosing one, which is how a search leaves an outer loop from inside an inner one. The `@` is required: without it, `break outer` could not be told apart from breaking with the value of a binding called `outer`.
+- A label may name only a loop (`E1053`). A `break` or `continue` outside every loop is `E2016`, and one naming a label no enclosing loop carries is `E2017`; both are reported before the program runs. A label repeating one already enclosing it is `W2002` — the inner one wins, but the outer loop can no longer be named.
+- A function body is never inside a loop that encloses its definition: a closure may outlive the loop entirely, so a `break` written in one is `E2016`.
 - Sum variants are namespaced by their type; qualification is required when ambiguous.
 - Matches are exhaustive for closed types. A guarded arm does not contribute exhaustiveness because its guard may be false.
 - Pattern alternatives must bind identical names with identical inferred types.
@@ -182,6 +186,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - Blocks evaluate statements left-to-right and yield the final unterminated expression or `()`.
 - `if` and `match` are expressions; all reachable branches must unify.
 - `return`, `break`, and `continue` have type `Never` at their valid control boundary.
+- Every `break` leaving the same `loop` must carry the same type, which is that loop's type. A `break` carrying a value may leave only a `loop`: `while` and `for` finish when their own condition does, so a value carried out of one would exist on some runs and not others, and that is `E3029`.
 - A range endpoint is evaluated exactly once.
 
 ## Numeric Semantics
@@ -220,7 +225,8 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - `for pattern in expression` desugars through the `IntoIterator`/`Iterator` traits exactly once.
 - Iterator adapters are lazy; terminal collection/consumption drives them.
 - `while` reevaluates its condition before each iteration.
-- `loop` is potentially divergent and may type as a value when every exit supplies a compatible break value in the later grammar; v1 statement `break` yields `()`.
+- `loop` takes the type of what its `break` statements carry, so a search with no natural end is still an expression: `let found = loop { ... break value }`. A `loop` no `break` leaves does not finish, and its type is `Never`, which stands wherever any type is wanted. A `break` carrying nothing carries `()`.
+- `break` and `continue` act on the nearest enclosing loop unless a label names another. A labelled `continue` restarts the loop it names, which skips the remainder of every loop body between it and that one.
 
 ## Async and Structured Concurrency
 

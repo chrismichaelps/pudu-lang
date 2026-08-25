@@ -91,11 +91,18 @@ insideScope = Evaluator $ \env -> pure (Done (not (null (envScopes env))) env)
     `return`, `break`, and `continue` are not values, so they travel as an
     unwind that the construct owning them catches: a call catches a return, a
     loop catches a break or a continue. This is what makes a `return` inside a
-    nested block leave its function instead of becoming that block's value. -}
+    nested block leave its function instead of becoming that block's value.
+
+    A break and a continue carry the label they were written with, if any. A
+    loop catches one addressed to it — by name, or by being the innermost when
+    no name was given — and lets every other one keep travelling outward, which
+    is exactly how leaving a loop from inside a nested one works. A break also
+    carries the value the loop it leaves will produce; a break that named none
+    carries unit. -}
 data Unwind
   = ReturnUnwind !Value
-  | BreakUnwind
-  | ContinueUnwind
+  | BreakUnwind !(Maybe Text) !Value
+  | ContinueUnwind !(Maybe Text)
   deriving stock (Eq, Show)
 
 {-| Evaluation produces a value, transfers control, or aborts with one runtime

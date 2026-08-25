@@ -1,0 +1,57 @@
+module UsesLabels
+
+/// Search a grid of rows for the first cell satisfying a predicate.
+///
+/// The label is what makes this readable: the match is found in the inner
+/// loop, and without one the `break` there would only end that row and leave
+/// the outer loop to start the next one.
+fn findCell(grid: Array[Array[Int]], wanted: Int) -> Int {
+  var found = -1
+  @rows for row in grid {
+    for cell in row {
+      if cell == wanted {
+        found = cell
+        break @rows
+      }
+    }
+  }
+  found
+}
+
+/// A `loop` produces what its `break` carries, which is what lets a search
+/// that has no natural end still be written as an expression.
+fn firstPowerOverTwo(base: Int) -> Int {
+  var value = 1
+  loop {
+    value = value * base
+    if value > 2 {
+      break value
+    }
+  }
+}
+
+/// A labelled `continue` restarts the loop it names rather than the nearest,
+/// so the rest of the outer iteration is skipped too.
+fn countUntilNegative(grid: Array[Array[Int]]) -> Int {
+  var seen = 0
+  @rows for row in grid {
+    for cell in row {
+      if cell < 0 {
+        continue @rows
+      }
+      seen = seen + 1
+    }
+    seen = seen + 100
+  }
+  seen
+}
+
+export fn main() -> Int {
+  let grid = [[1, 2], [3, 4]]
+  var total = 0
+  if findCell(grid, 3) == 3 { total = total + 1 }
+  if findCell(grid, 9) == -1 { total = total + 1 }
+  if firstPowerOverTwo(2) == 4 { total = total + 1 }
+  if countUntilNegative([[1, -1, 2], [3, 4]]) == 103 { total = total + 1 }
+  total
+}

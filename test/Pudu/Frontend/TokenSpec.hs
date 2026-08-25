@@ -19,6 +19,7 @@ import Pudu.Frontend.Token
       , SymRightShift
       , SymThinArrow
       , SymTilde
+      , SymAt
       )
   , Token (Token)
   , TokenKind
@@ -76,8 +77,8 @@ testSymbolVocabulary =
         , property (all (\symbol -> symbolFromText (symbolText symbol) == Just symbol) allSymbols)
         , map symbolFromText [".", "..", "..=", "-", "->", "=", "==", "=>"]
             === map Just [SymDot, SymRangeExclusive, SymRangeInclusive, SymMinus, SymThinArrow, SymAssign, SymEqual, SymFatArrow]
-        , map symbolFromText ["<<", ">>", "^", "~"]
-            === map Just [SymLeftShift, SymRightShift, SymCaret, SymTilde]
+        , map symbolFromText ["<<", ">>", "^", "~", "@"]
+            === map Just [SymLeftShift, SymRightShift, SymCaret, SymTilde, SymAt]
         ]
     )
 
@@ -182,7 +183,7 @@ expectedSymbolTexts :: [Text]
 expectedSymbolTexts =
   [ "(", ")", "[", "]", "{", "}", ",", ".", ":", "|", "=", "=>", "->", "?", "!", "-"
   , "&", "*", "/", "%", "+", "&*", "*|", "&+", "&-", "+|", "-|", "..", "..=", "<<", ">>"
-  , "^", "~", "<", "<=", ">", ">=", "==", "!=", "&&", "||"
+  , "^", "~", "@", "<", "<=", ">", ">=", "==", "!=", "&&", "||"
   ]
 
 reconstruct :: Token -> Text

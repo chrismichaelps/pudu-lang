@@ -56,7 +56,10 @@ import Pudu.Semantic.Resolve.Context
   , markAmbiguousVariant
   , declareNamed
   , inScope
+  , insideLoop
+  , outsideLoops
   , recordVariantSymbol
+  , resolveLoopTarget
   , resolveTypeName
   , resolveValueName
   , runResolver
@@ -228,7 +231,7 @@ walkDeclaration (Located _ declaration) = case declaration of
 {-| A parameter is visible to the defaults of later parameters and to the body,
     which is exactly the left-to-right rule for default arguments. -}
 walkFunction :: Function -> Resolver ()
-walkFunction value = inScope $ do
+walkFunction value = outsideLoops $ inScope $ do
   mapM_ bindTypeParam (functionTypeParams value)
   mapM_ bindParameter (functionParameters value)
   mapM_ walkType (functionReturn value)
@@ -286,7 +289,7 @@ walkBlock (Located _ block) = inScope $ do
   mapM_ walkExpression (blockResult block)
 
 walkStatement :: Located Statement -> Resolver ()
-walkStatement (Located _ statement) = case statement of
+walkStatement (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ kind name annotation value)) -> do
     mapM_ walkType annotation
     walkExpression value
@@ -294,8 +297,10 @@ walkStatement (Located _ statement) = case statement of
   DeclarationStatement other -> walkDeclaration other
   ExpressionStatement value -> walkExpression value
   ReturnStatement value -> mapM_ walkExpression value
-  BreakStatement -> pure ()
-  ContinueStatement -> pure ()
+  BreakStatement label value -> do
+    resolveLoopTarget "break" spanValue label
+    mapM_ walkExpression value
+  ContinueStatement label -> resolveLoopTarget "continue" spanValue label
   InvalidStatement -> pure ()
 
 walkExpression :: Located Expression -> Resolver ()
@@ -329,11 +334,13 @@ walkExpression (Located spanValue expression) = case expression of
   MatchExpression scrutinee arms -> do
     walkExpression scrutinee
     mapM_ walkArm arms
-  WhileExpression condition body -> walkExpression condition >> walkBlock body
-  LoopExpression body -> walkBlock body
-  ForExpression binder iterated body -> do
+  WhileExpression label condition body -> do
+    walkExpression condition
+    insideLoop label (walkBlock body)
+  LoopExpression label body -> insideLoop label (walkBlock body)
+  ForExpression label binder iterated body -> do
     walkExpression iterated
-    inScope $ do
+    insideLoop label $ inScope $ do
       bindPattern binder
       walkBlock body
   InvalidExpression -> pure ()

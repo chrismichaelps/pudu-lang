@@ -189,12 +189,25 @@ testControlExpressions = do
   loopValue <- parse "loop {}"
   whileValue <- parse "while ready {}"
   forValue <- parse "for item in items {}"
+  labelledLoop <- parse "@retry loop {}"
+  labelledWhile <- parse "@outer while ready {}"
+  labelledFor <- parse "@rows for item in items {}"
+  strayLabel <- parse "@rows item"
   pure $ conjoin
     [ validShape matched === "match(value){Ok(v) if (v>0)=>v;_=>0}"
     , validShape loopValue === "loop"
     , validShape whileValue === "while(ready)"
     , validShape forValue === "for item in items"
+    , counterexample "a label attaches to the loop that follows it"
+        (validShape labelledLoop === "@retry loop")
+    , validShape labelledWhile === "@outer while(ready)"
+    , validShape labelledFor === "@rows for item in items"
+    , counterexample "a label naming no loop is rejected where it was written"
+        (codes strayLabel === ["E1053"])
     ]
+
+labelShape :: Maybe (Located Text) -> Text
+labelShape = foldMap (\label -> "@" <> locatedValue label <> " ")
 
 testAggregates :: IO Property
 testAggregates = do
@@ -286,10 +299,10 @@ shape (Located _ expression) = case expression of
   MatchExpression scrutinee arms ->
     "match(" <> shape scrutinee <> "){"
       <> Text.intercalate ";" (map armShape arms) <> "}"
-  WhileExpression condition _ -> "while(" <> shape condition <> ")"
-  LoopExpression _ -> "loop"
-  ForExpression binder iterated _ ->
-    "for " <> patternShape binder <> " in " <> shape iterated
+  WhileExpression label condition _ -> labelShape label <> "while(" <> shape condition <> ")"
+  LoopExpression label _ -> labelShape label <> "loop"
+  ForExpression label binder iterated _ ->
+    labelShape label <> "for " <> patternShape binder <> " in " <> shape iterated
   TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate "," (map shape members) <> "]"
   UnsafeExpression _ _ -> "unsafe"

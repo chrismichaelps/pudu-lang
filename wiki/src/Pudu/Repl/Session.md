@@ -50,6 +50,8 @@ sessionExports :: Resolution -> [Text]
 
 - Entries are kept as source text and recompiled together. That is what lets a later declaration change how an earlier one resolves, and it keeps the session's meaning identical to the meaning of the equivalent file.
 - A submission is classified by its leading token: `import` and the declaration keywords go to module scope, `let`, `var`, and the jump and loop keywords are statements, and everything else is an expression.
+- A loop's `@label` is skipped before that decision is made. `@outer for ...` is the same statement as `for ...`, and classifying it as an expression would evaluate it where its assignments could not reach the session's own bindings.
+- `loop` stays a statement keyword even though it now has a value, so an ordinary loop at the prompt does not print `()`. Bind it — `let found = loop { ... break value }` — to see what it produced.
 - The compiled buffer is a complete module: the session's imports, then its declarations, then one synthetic function holding every statement entered so far. Statements and expressions are placed inside that function.
 - The session advances only when an entry is accepted, so a failed entry can never corrupt a context that already worked.
 - An expression is compiled and evaluated but never remembered: it produces no binding, and replaying it would repeat work without adding context.
