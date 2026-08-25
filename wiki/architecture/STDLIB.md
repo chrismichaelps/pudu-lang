@@ -148,7 +148,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-three modules, 699 documented exports, every one written in Pudu.
+Twenty-five modules, 721 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -157,7 +157,9 @@ Twenty-three modules, 699 documented exports, every one written in Pudu.
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
-| `Std.Num` | 21 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div` and the aggregates over them |
+| `Std.Num` | 24 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
+| `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
 | `Std.Math` | 27 | arithmetic, divisibility, roots, primality, checked partial operators — all bounded, none `Int`-only |
 | `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
@@ -191,6 +193,26 @@ needs one. That is the bound doing its job: the type that cannot answer is the t
 
 See [[decisions/ADR-0006-integer-widths-and-std-numerics]] for what had to be fixed underneath —
 integers had no width at run time at all — and for what `Std` promises about numbers.
+
+### On hashing, and why it is written in Pudu
+
+`Std.Crypto`'s SHA-256 is written in the language, not wrapped from the runtime. It produces
+byte-exact digests for the algorithm's published vectors, which is only possible if rotations,
+wrapping addition, and thirty-two bit masking are all exactly right — so it is the strongest
+available evidence that [[decisions/ADR-0006-integer-widths-and-std-numerics]]'s work is correct
+rather than merely present.
+
+Its UTF-8 encoder is in the language for the same reason: it is bit work Pudu can express, and a
+standard library that reached past the language for it would be saying the language could not.
+
+Two comparisons are constant-time — `digestsMatch` and `secretsMatch` — because a comparison that
+stopped at the first difference would report, in how long it took, exactly where two secrets
+diverged. That is how a token is guessed one character at a time.
+
+**What is not here:** a password hash, a cipher, a signature, or a random source fit for a secret.
+`Std.Random` is reproducible on purpose and seeded from a readable clock, which makes it right for a
+simulation and wrong for a key. Those need review this project has not had, and shipping them
+unreviewed would be worse than not shipping them.
 
 ### On effects
 

@@ -1,0 +1,236 @@
+module Std.Crypto
+
+/// A SHA-256 digest: eight words, which is the form the algorithm produces.
+/// Kept as words rather than as text so a caller comparing two digests compares
+/// numbers, and only rendering turns them into hexadecimal.
+export type Digest = { words: Array[UInt32] }
+
+/// The SHA-256 digest of text, taken over its UTF-8 bytes.
+export fn sha256(message: Str) -> Digest { sha256Bytes(&utf8(message)) }
+
+/// The SHA-256 digest of bytes.
+export fn sha256Bytes(message: &Array[UInt32]) -> Digest {
+  let padded = pad(message)
+  var state = initialState()
+  var block = 0
+  let blocks = padded.length() / 64
+  while block < blocks {
+    state = compress(&state, &padded.slice(block * 64, block * 64 + 64))
+    block = block + 1
+  }
+  Digest { words: state }
+}
+
+/// A digest written as lower-case hexadecimal, which is how one is quoted.
+export fn toHex(value: &Digest) -> Str {
+  var out = ""
+  for word in value.words { out = out + hexWord(word) }
+  out
+}
+
+/// The SHA-256 of text, rendered as hexadecimal in one step.
+export fn sha256Hex(message: Str) -> Str { toHex(&sha256(message)) }
+
+/// Whether two digests are the same, compared in constant time.
+/// Every word is examined whichever way the answer goes, so how long the
+/// comparison took says nothing about where the two differed. A plain
+/// comparison that stopped at the first difference would say exactly that, and
+/// that is how a secret is guessed one byte at a time.
+export fn digestsMatch(left: &Digest, right: &Digest) -> Bool {
+  if left.words.length() != right.words.length() { false } else {
+    var differences = 0u32
+    var index = 0
+    while index < left.words.length() {
+      differences = differences | (left.words[index] ^ right.words[index])
+      index = index + 1
+    }
+    differences == 0u32
+  }
+}
+
+/// Whether two texts are the same, compared in constant time.
+/// For comparing a token a caller was given against one it holds, where the
+/// time an ordinary comparison takes would leak how much of it was right.
+export fn secretsMatch(left: Str, right: Str) -> Bool {
+  if left.length() != right.length() { false } else {
+    var differences = 0
+    var index = 0
+    while index < left.length() {
+      differences = differences | (left.charAt(index).code() ^ right.charAt(index).code())
+      index = index + 1
+    }
+    differences == 0
+  }
+}
+
+/// Text as UTF-8 bytes.
+/// Written here rather than taken from the runtime because it is bit work the
+/// language can express, and a standard library that reached past the language
+/// for it would be saying the language could not do it.
+export fn utf8(value: Str) -> Array[UInt32] {
+  var out = []
+  for character in value.chars() {
+    let code = character.code()
+    if code < 128 { out = out.push(byte(code)) }
+    else {
+      if code < 2048 {
+        out = out.push(byte(192 + code / 64))
+        out = out.push(byte(128 + code % 64))
+      } else {
+        if code < 65536 {
+          out = out.push(byte(224 + code / 4096))
+          out = out.push(byte(128 + (code / 64) % 64))
+          out = out.push(byte(128 + code % 64))
+        } else {
+          out = out.push(byte(240 + code / 262144))
+          out = out.push(byte(128 + (code / 4096) % 64))
+          out = out.push(byte(128 + (code / 64) % 64))
+          out = out.push(byte(128 + code % 64))
+        }
+      }
+    }
+  }
+  out
+}
+
+/// One byte as the word the algorithm works in.
+fn byte(value: Int) -> UInt32 {
+  match convertInteger[UInt32](value) {
+    case Some(found) => found
+    case None => 0u32
+  }
+}
+
+/// The message with the padding the algorithm defines: a one bit, then noughts,
+/// then the original length in bits as a sixty-four bit number.
+fn pad(message: &Array[UInt32]) -> Array[UInt32] {
+  var out = message.slice(0, message.length())
+  let bits = message.length() * 8
+  out = out.push(128u32)
+  while out.length() % 64 != 56 { out = out.push(0u32) }
+  var shift = 56
+  while shift >= 0 {
+    out = out.push(byte((bits / twoTo(shift)) % 256))
+    shift = shift - 8
+  }
+  out
+}
+
+/// Two raised to a power, for the shifts the padding needs.
+fn twoTo(power: Int) -> Int {
+  var out = 1
+  var remaining = power
+  while remaining > 0 {
+    out = out * 2
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// The eight words the algorithm starts from: the fractional parts of the
+/// square roots of the first eight primes.
+fn initialState() -> Array[UInt32] {
+  [ 1779033703u32, 3144134277u32, 1013904242u32, 2773480762u32
+  , 1359893119u32, 2600822924u32, 528734635u32, 1541459225u32
+  ]
+}
+
+/// The sixty-four round constants: the fractional parts of the cube roots of
+/// the first sixty-four primes.
+fn roundConstants() -> Array[UInt32] {
+  [
+    1116352408u32, 1899447441u32, 3049323471u32, 3921009573u32,
+    961987163u32, 1508970993u32, 2453635748u32, 2870763221u32,
+    3624381080u32, 310598401u32, 607225278u32, 1426881987u32,
+    1925078388u32, 2162078206u32, 2614888103u32, 3248222580u32,
+    3835390401u32, 4022224774u32, 264347078u32, 604807628u32,
+    770255983u32, 1249150122u32, 1555081692u32, 1996064986u32,
+    2554220882u32, 2821834349u32, 2952996808u32, 3210313671u32,
+    3336571891u32, 3584528711u32, 113926993u32, 338241895u32,
+    666307205u32, 773529912u32, 1294757372u32, 1396182291u32,
+    1695183700u32, 1986661051u32, 2177026350u32, 2456956037u32,
+    2730485921u32, 2820302411u32, 3259730800u32, 3345764771u32,
+    3516065817u32, 3600352804u32, 4094571909u32, 275423344u32,
+    430227734u32, 506948616u32, 659060556u32, 883997877u32,
+    958139571u32, 1322822218u32, 1537002063u32, 1747873779u32,
+    1955562222u32, 2024104815u32, 2227730452u32, 2361852424u32,
+    2428436474u32, 2756734187u32, 3204031479u32, 3329325298u32
+  ]
+}
+
+/// One block folded into the state.
+fn compress(state: &Array[UInt32], block: &Array[UInt32]) -> Array[UInt32] {
+  let schedule = expand(block)
+  let constants = roundConstants()
+  var a = state[0]
+  var b = state[1]
+  var c = state[2]
+  var d = state[3]
+  var e = state[4]
+  var f = state[5]
+  var g = state[6]
+  var h = state[7]
+  var round = 0
+  while round < 64 {
+    let s1 = rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25)
+    let choose = (e & f) ^ ((~e) & g)
+    let temp1 = h &+ s1 &+ choose &+ constants[round] &+ schedule[round]
+    let s0 = rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22)
+    let majority = (a & b) ^ (a & c) ^ (b & c)
+    let temp2 = s0 &+ majority
+    h = g
+    g = f
+    f = e
+    e = d &+ temp1
+    d = c
+    c = b
+    b = a
+    a = temp1 &+ temp2
+    round = round + 1
+  }
+  [ state[0] &+ a, state[1] &+ b, state[2] &+ c, state[3] &+ d
+  , state[4] &+ e, state[5] &+ f, state[6] &+ g, state[7] &+ h
+  ]
+}
+
+/// A block's sixteen words grown into the sixty-four the rounds consume.
+fn expand(block: &Array[UInt32]) -> Array[UInt32] {
+  var out = []
+  var index = 0
+  while index < 16 {
+    let at = index * 4
+    out = out.push(
+      (block[at] << 24) | (block[at + 1] << 16) | (block[at + 2] << 8) | block[at + 3]
+    )
+    index = index + 1
+  }
+  while index < 64 {
+    let previous = out[index - 15]
+    let recent = out[index - 2]
+    let s0 = rotate(previous, 7) ^ rotate(previous, 18) ^ (previous >> 3)
+    let s1 = rotate(recent, 17) ^ rotate(recent, 19) ^ (recent >> 10)
+    out = out.push(out[index - 16] &+ s0 &+ out[index - 7] &+ s1)
+    index = index + 1
+  }
+  out
+}
+
+/// A word's bits moved right, with the ones that leave reappearing at the top.
+fn rotate(value: UInt32, places: Int) -> UInt32 {
+  (value >> places) | (value << (32 - places))
+}
+
+/// One word as eight hexadecimal digits.
+fn hexWord(value: UInt32) -> Str {
+  let digits = "0123456789abcdef"
+  var out = ""
+  var shift = 28
+  while shift >= 0 {
+    match convertInteger[Int]((value >> shift) & 15u32) {
+      case Some(nibble) => { out = out + digits.slice(nibble, nibble + 1) }
+      case None => { }
+    }
+    shift = shift - 4
+  }
+  out
+}
