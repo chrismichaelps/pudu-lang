@@ -33,6 +33,15 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 
 ### Governance
 
+- A type-argument list and an index both open with `[`, and two things tell them apart: the closing
+  bracket is followed by `(`, and the first token inside could begin a **type** — which for an
+  identifier means it is capitalised, as [[grammar/pudu]] requires of every type name and forbids of
+  every value name. So `handlers[index](value)` reads an element and calls it while
+  `convert[UInt8](value)` names a type, and neither reader has to think about it.
+- What remains ambiguous is an index by a *capitalised constant* that is immediately called —
+  `handlers[DEFAULT](value)` — which parentheses settle. Deciding by content alone was rejected: the
+  naming rule separates `Int` from `index` but not a single-letter parameter `T` from a constant `N`.
+
 - A prefix operator binds tighter than **every** binary one. Its operand was parsed at the
   multiplying level, which is *inside* that level, so `*a * *b` parsed as `*(a * (*b))` — a
   dereference of a product rather than a product of two dereferences. The threshold is named rather

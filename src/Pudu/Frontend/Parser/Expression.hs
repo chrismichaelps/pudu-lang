@@ -29,6 +29,7 @@ import Pudu.Frontend.Parser.State
   , recordsAdmitted
   , withRecordAdmission
   , lookaheadKind
+  , matchingBracketDistance
   , peekToken
   , withRecursionBudget
   , withTokens
@@ -771,12 +772,14 @@ parsePostfixStep blockParser expression kind await
             (TryExpression expression)
       parsePostfix blockParser tried
   | isSymbol "[" kind = do
-      _ <- advanceToken
-      index <- withRecords (parseExpression blockParser)
-      closing <- expectSymbol "]" "to close the index expression"
-      let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
-            (IndexExpression expression index)
-      parsePostfix blockParser indexed
+      typed <- bracketOpensTypeArguments
+      if typed then parseTypeArguments blockParser expression else do
+        _ <- advanceToken
+        index <- withRecords (parseExpression blockParser)
+        closing <- expectSymbol "]" "to close the index expression"
+        let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
+              (IndexExpression expression index)
+        parsePostfix blockParser indexed
   | isSymbol "(" kind = do
       _ <- advanceToken
       (arguments, closing) <- parseArguments blockParser
@@ -792,6 +795,70 @@ parsePostfixStep blockParser expression kind await
       let selection = Located (mergedOrLeft (locatedSpan expression) (locatedSpan member))
             (MemberExpression expression member)
       parsePostfix blockParser selection
+
+{-| Whether the `[` here opens a type-argument list rather than an index.
+
+    A type-argument list is always applied, so a closing `]` followed by `(`
+    decides it: `convertInteger[UInt8](300)` names a type, `handlers[index](x)`
+    reads one out of an array and calls it. The second form is the one that
+    loses, and a reader who means it writes `(handlers[index])(x)`.
+
+    What the brackets contain narrows it further: only a token that could begin
+    a type is admitted, and an identifier counts only when it is capitalised.
+    An index by a variable or a literal is therefore never mistaken. What
+    remains is an index by a capitalised constant that is immediately called —
+    `handlers[DEFAULT](value)` — which is rare and which parentheses settle. -}
+bracketOpensTypeArguments :: Parser Bool
+bracketOpensTypeArguments = do
+  opens <- opensWithType <$> lookaheadKind 1
+  if not opens then pure False else do
+    closing <- matchingBracketDistance
+    case closing of
+      Nothing -> pure False
+      Just distance -> isSymbol "(" <$> lookaheadKind (distance + 1)
+
+{-| Whether a token could begin a written type.
+
+    An identifier counts only when it is capitalised, which [[grammar/pudu]]
+    already requires of every type name and forbids of every value name. So
+    `handlers[index](value)` reads an element and calls it, while
+    `convert[UInt8](value)` names a type — and neither reader has to think about
+    it. -}
+opensWithType :: TokenKind -> Bool
+opensWithType kind = case kind of
+  Identifier name -> maybe False (isUpper . fst) (Text.uncons name)
+  Symbol symbol -> symbol == SymAmpersand || symbol == SymLeftParen
+  Keyword KwFn -> True
+  Keyword KwAsync -> True
+  _ -> False
+
+{-| Parse `name[Type, Type]`, the explicit type arguments of a call.
+
+    Inference settles a type parameter from the arguments wherever it can. This
+    is for where it cannot: a function whose parameter appears only in its
+    result has nothing to infer from, and before this the only way to pin one
+    was to pass a value of the type purely as an example. -}
+parseTypeArguments :: BlockParser -> Located Expression -> Parser (Located Expression)
+parseTypeArguments blockParser expression = do
+  _ <- advanceToken
+  arguments <- parseTypeArgumentList []
+  closing <- expectSymbol "]" "to close the type arguments"
+  let applied = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
+        (TypeApplication expression arguments)
+  parsePostfix blockParser applied
+
+parseTypeArgumentList :: [Located TypeSyntax] -> Parser [Located TypeSyntax]
+parseTypeArgumentList reversed = do
+  closing <- isSymbol "]" <$> peekKind
+  if closing
+    then pure (reverse reversed)
+    else do
+      argument <- parseTypeSyntax
+      let extended = argument : reversed
+      separator <- matchSymbol ","
+      case separator of
+        Just _ -> parseTypeArgumentList extended
+        Nothing -> pure (reverse extended)
 
 isPostfixStart :: TokenKind -> Bool
 isPostfixStart kind =

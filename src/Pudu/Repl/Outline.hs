@@ -76,6 +76,9 @@ outlineExpression (Located _ expression) = case expression of
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
   MacroCall name arguments ->
     locatedValue name <> "!(" <> Text.intercalate ", " (map outlineExpression arguments) <> ")"
+  TypeApplication target arguments ->
+    outlineExpression target
+      <> "[" <> Text.intercalate ", " (map (const "type") arguments) <> "]"
   LambdaExpression value ->
     "fn(" <> Text.intercalate ", " (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ") => ..."
   ScopeExpression body ->

@@ -76,6 +76,7 @@ import Pudu.Type.Check.Rule
   , enclosingFunctionType
   , enclosingReturnType
   , instantiate
+  , instantiateWith
   , callType
   , elementType
   , literalType
@@ -325,6 +326,15 @@ literalIndex :: Located Expression -> Maybe Integer
 literalIndex (Located _ expression) = case expression of
   LiteralExpression (Tree.IntegerValue text) ->
     parsedIntegerValue <$> parseIntegerLiteral text
+  _ -> Nothing
+
+{-| A chain of names written as a path or as member accesses, joined back into
+    the dotted name it stands for. Anything else is not a name. -}
+dottedName :: Expression -> Maybe Text
+dottedName expression = case expression of
+  NameExpression names -> Just (Text.intercalate "." (NonEmpty.toList names))
+  MemberExpression target member ->
+    (\prefix -> prefix <> "." <> locatedValue member) <$> dottedName (locatedValue target)
   _ -> Nothing
 
 {-| Type a function literal.
@@ -819,6 +829,40 @@ inferExpression declared rigid spanValue expression = case expression of
       bindPattern declared rigid binder element
       checkBlock declared rigid body
     pure UnitTypeValue
+  {-| A type application pins what inference could not settle.
+
+      Only a name can carry one: a scheme belongs to a declaration, and an
+      arbitrary expression has already been instantiated by the time it is an
+      expression. That is a real restriction and it is reported rather than
+      worked around. -}
+  TypeApplication target arguments -> do
+    formed <- mapM (formType declared rigid) arguments
+    {-| A qualified name carries type arguments as readily as a bare one:
+        `Num.small[UInt16](...)` is the same call as `small[UInt16](...)` from
+        inside the module, and a caller should not have to import a name
+        unqualified to pin its type. A qualifier is written as a member access,
+        so the chain is flattened back into the dotted name it stands for. -}
+    case dottedName (locatedValue target) of
+      Just name -> do
+        found <- lookupName name
+        case found of
+          Just scheme -> do
+            applied <- instantiateWith spanValue scheme formed
+            recordExpression (locatedSpan target) applied
+            pure applied
+          Nothing -> do
+            report "E2010" spanValue ("unresolved value name " <> name)
+              (Just "declare the name, import it, or check the spelling")
+            pure ErrorType
+      Nothing -> do
+        report "E3028" spanValue "only a name may carry type arguments"
+          ( Just
+              ( "write the type arguments on the function's own name; an "
+                  <> "expression has already been given its types"
+              )
+          )
+        _ <- checkExpression declared rigid target
+        pure ErrorType
   InvalidExpression -> pure ErrorType
 
 {-| A record construction is checked field by field against its declaration,

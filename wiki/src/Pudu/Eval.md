@@ -34,6 +34,11 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- A type argument is **not erased before the call that carries it**. Types have no run-time form,
+  but the syntax the reader wrote is still in the tree, and `convertInteger` needs to know which type
+  it was asked for. Reading it is not the evaluator knowing about types; it is the evaluator reading
+  the call it was given.
+
 - Evaluation runs over `IO`. A program reads a file, writes to its output, and asks its environment
   questions; running over `IO` is what lets it, rather than a second interpreter existing beside
   this one for the effectful half of the language.

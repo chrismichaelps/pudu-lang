@@ -36,6 +36,7 @@ parserExpressionProperties =
   , ("closed binary vocabulary parses exhaustively", testBinaryVocabulary)
   , ("literal vocabulary maps into expression nodes", testLiterals)
   , ("function literals parse in both body forms", testLambdas)
+  , ("type arguments are told from an index", testTypeArguments)
   , ("postfix calls and members bind before binary operators", testPostfix)
   , ("unary borrow and conditional blocks preserve structure", testUnaryIf)
   , ("expression recovery emits exact diagnostics", testRecovery)
@@ -87,6 +88,36 @@ testLambdas = do
     , counterexample "an async literal parses" (validShape asynchronous === "fn(x)")
     , counterexample "a literal is an ordinary argument" (validShape applied === "items.map(fn(x))")
     , counterexample "a missing body names both forms" (missingBody === ["E1032"])
+    ]
+
+{-| A type-argument list and an index both open with `[`. Two things decide it:
+    the closing bracket is followed by `(`, and the first token inside could
+    begin a type — which for an identifier means it is capitalised, as every
+    type name is and no value name is. -}
+testTypeArguments :: IO Property
+testTypeArguments = do
+  applied <- parse "convert[UInt8](value)"
+  several <- parse "convert[UInt8, Int](value)"
+  byLiteral <- parse "handlers[0](value)"
+  byName <- parse "handlers[index](value)"
+  plainIndex <- parse "handlers[0]"
+  qualified <- parse "Num.small[UInt16](value)"
+  notCalled <- parse "handlers[Thing]"
+  pure $ conjoin
+    [ counterexample "a capitalised name before a call is a type argument"
+        (validShape applied === "convert[T](value)")
+    , counterexample "several type arguments parse"
+        (validShape several === "convert[T,T](value)")
+    , counterexample "an index by a literal stays an index"
+        (validShape byLiteral === "handlers[0](value)")
+    , counterexample "an index by a variable stays an index"
+        (validShape byName === "handlers[index](value)")
+    , counterexample "an index with no call stays an index"
+        (validShape plainIndex === "handlers[0]")
+    , counterexample "a qualified name carries type arguments"
+        (validShape qualified === "Num.small[T](value)")
+    , counterexample "a capitalised index with no call stays an index"
+        (validShape notCalled === "handlers[Thing]")
     ]
 
 testPostfix :: IO Property
@@ -242,6 +273,8 @@ shape (Located _ expression) = case expression of
   UnaryExpression operator operand -> "(" <> operator <> shape operand <> ")"
   BinaryExpression left operator right -> "(" <> shape left <> operator <> shape right <> ")"
   CallExpression callee arguments -> shape callee <> "(" <> Text.intercalate "," (map shape arguments) <> ")"
+  TypeApplication target arguments ->
+    shape target <> "[" <> Text.intercalate "," (map (const "T") arguments) <> "]"
   LambdaExpression value ->
     "fn(" <> Text.intercalate "," (map (locatedValue . parameterName . locatedValue) (functionParameters value)) <> ")"
   MemberExpression target member -> shape target <> "." <> locatedValue member
