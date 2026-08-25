@@ -72,6 +72,7 @@ library
     Pudu.Frontend.Syntax.Name
     Pudu.Frontend.Syntax.Tree
     Pudu.Frontend.Token
+    Pudu.DecimalLiteral
     Pudu.FloatLiteral
     Pudu.IntegerLiteral
     Pudu.Doc
@@ -135,6 +136,7 @@ test-suite pudu-test
   hs-source-dirs:   test
   main-is:          Main.hs
   other-modules:
+    Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Compiler.ProgramSpec

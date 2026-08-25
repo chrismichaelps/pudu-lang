@@ -49,6 +49,8 @@ sessionExports :: Resolution -> [Text]
   program that was loaded.
 
 - Entries are kept as source text and recompiled together. That is what lets a later declaration change how an earlier one resolves, and it keeps the session's meaning identical to the meaning of the equivalent file.
+- A session that has imported anything is compiled as a **program**, not as a lone module: its imports are ordinary imports and must reach the same files on disk a compiled program's would. Before that, the session resolved an import loosely enough to type-check and then had nothing to link, so `Std.Math.factorial` was a name the checker knew and the evaluator did not, and a misspelt module produced no diagnostic at all.
+- A session with no imports keeps compiling against its own context, which is what `:load` establishes and what every plain expression needs. The program path costs a filesystem walk, so it is taken only when there is something to walk for.
 - A submission is classified by its leading token: `import` and the declaration keywords go to module scope, `let`, `var`, and the jump and loop keywords are statements, and everything else is an expression.
 - A loop's `@label` is skipped before that decision is made. `@outer for ...` is the same statement as `for ...`, and classifying it as an expression would evaluate it where its assignments could not reach the session's own bindings.
 - `loop` stays a statement keyword even though it now has a value, so an ordinary loop at the prompt does not print `()`. Bind it — `let found = loop { ... break value }` — to see what it produced.

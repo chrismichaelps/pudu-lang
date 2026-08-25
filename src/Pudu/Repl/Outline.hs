@@ -162,6 +162,7 @@ outlineLiteral :: Literal -> Text
 outlineLiteral literal = case literal of
   IntegerValue value -> value
   FloatValue value -> value
+  DecimalValue value -> value
   StringValue value -> "\"" <> value <> "\""
   CharValue value -> "'" <> Text.singleton value <> "'"
   BoolValue value -> if value then "true" else "false"

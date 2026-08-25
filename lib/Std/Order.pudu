@@ -187,6 +187,10 @@ impl Eq for UInt128 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == 
 impl Eq for BigInt { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Float32 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Float64 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
+/// Two decimals are equal as the numbers they are, not as the digits they
+/// store, so `1.50d` equals `1.5d` even though only one renders with a
+/// trailing zero.
+impl Eq for Decimal { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Str { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Char { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Bool { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
@@ -205,6 +209,7 @@ impl Ord for UInt128 { fn before(self: &Self, other: &Self) -> Bool { (*self) < 
 impl Ord for BigInt { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Float32 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Float64 { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
+impl Ord for Decimal { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Str { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Char { fn before(self: &Self, other: &Self) -> Bool { (*self) < (*other) } }
 impl Ord for Bool {

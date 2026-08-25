@@ -8,6 +8,7 @@ tags: [moc, module]
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
 - [[Integer Literal]] — shared arbitrary-precision integer decoding, suffix vocabulary, and concrete-type fit laws.
+- [[Decimal Literal]] — the exact base-ten number: coefficient and scale, exact arithmetic, exact-or-error division, and the seven rounding modes.
 - [[Float Literal]] — shared floating suffixes, total conversion, overflow detection, and runtime precision normalization.
 - [[Compiler Pipeline]] — the fixed lex, parse, resolve, type phase boundary and error gate.
 - [[src/Pudu/Compiler/_MOC|Program compiler modules]] — dependency discovery, module graph ordering, and cross-module interface orchestration.

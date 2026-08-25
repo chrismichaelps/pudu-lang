@@ -99,7 +99,8 @@ data MatchArm = MatchArm
   { armPattern :: !(Located Pattern), armGuard :: !(Maybe (Located Expression))
   , armBody :: !(Located Expression) }
 data Literal
-  = IntegerValue !Text | FloatValue !Text | StringValue !Text | CharValue !Char
+  = IntegerValue !Text | FloatValue !Text | DecimalValue !Text
+  | StringValue !Text | CharValue !Char
   | BoolValue !Bool | NullValue
 data Expression
   = LiteralExpression !Literal | NameExpression !(NonEmpty Text)

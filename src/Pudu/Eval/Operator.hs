@@ -12,6 +12,15 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
+import Pudu.DecimalLiteral
+  ( Decimal
+  , DivisionFailure (DivideByZero, NonTerminating)
+  , decimalAdd
+  , decimalCompare
+  , decimalDivideExact
+  , decimalMultiply
+  , decimalSubtract
+  )
 import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..), valueKind)
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
@@ -49,6 +58,7 @@ combine spanValue operator left right = case (left, right) of
     integerOperation spanValue (integerKindMeet leftKind rightKind) operator a b
   (FloatValue leftWidth a, FloatValue rightWidth b)
     | leftWidth == rightWidth -> floatOperation spanValue leftWidth operator a b
+  (DecimalValue a, DecimalValue b) -> decimalOperation spanValue operator a b
   (StrValue a, StrValue b) -> textOperation spanValue operator a b
   (CharValue a, CharValue b) -> comparisonOnly spanValue operator a b
   (BoolValue a, BoolValue b) -> comparisonOnly spanValue operator a b
@@ -180,6 +190,44 @@ floatOperation spanValue width operator left right = case operator of
   _ -> comparisonOnly spanValue operator left right
  where
   result value = pure (FloatValue width (normalizeFloat width value))
+
+{-| Apply an operator to two decimals.
+
+    Addition, subtraction, and multiplication are exact and cannot round: each
+    result scale is decided entirely by the operand scales, so nothing has to be
+    thrown away.
+
+    Division is exact or it is a failure. `1d / 3d` has no base-ten expansion
+    that terminates, and rounding it to some digit count nobody asked for is the
+    decimal analogue of letting an integer overflow wrap silently — which this
+    language already refuses. A program that wants a rounded quotient says so
+    through `Decimal.divide`, which takes the precision and the mode. -}
+decimalOperation :: Span -> Text -> Decimal -> Decimal -> Evaluator Value
+decimalOperation spanValue operator left right = case operator of
+  "+" -> pure (DecimalValue (decimalAdd left right))
+  "-" -> pure (DecimalValue (decimalSubtract left right))
+  "*" -> pure (DecimalValue (decimalMultiply left right))
+  "/" -> case decimalDivideExact left right of
+    Right value -> pure (DecimalValue value)
+    Left DivideByZero ->
+      abortAt (Just spanValue) "E7004" "decimal division by zero" Nothing
+    Left NonTerminating ->
+      abortAt (Just spanValue) "E7010"
+        "this decimal quotient has no exact base-ten expansion"
+        ( Just
+            ( "use Decimal.divide(left, right, digits, mode) to say how many "
+                <> "fractional digits to keep and how to round the last one"
+            )
+        )
+  "==" -> comparison (== EQ)
+  "!=" -> comparison (/= EQ)
+  "<" -> comparison (== LT)
+  "<=" -> comparison (/= GT)
+  ">" -> comparison (== GT)
+  ">=" -> comparison (/= LT)
+  _ -> abortAt (Just spanValue) "E7001" ("unsupported operator " <> operator) Nothing
+ where
+  comparison accept = pure (BoolValue (accept (decimalCompare left right)))
 
 textOperation :: Span -> Text -> Text -> Text -> Evaluator Value
 textOperation spanValue operator left right = case operator of

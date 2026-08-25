@@ -7,6 +7,7 @@ module Pudu.Eval.Order
 
 import Data.Foldable (toList)
 import Data.Text (Text)
+import Pudu.DecimalLiteral (decimalCompare)
 import Pudu.Eval.Value (Value (..))
 
 {-| @Eval.Order.OrdValue — a value used as a key.
@@ -61,6 +62,11 @@ compareValues left right = case (left, right) of
   (FloatValue _ a, FloatValue _ b) -> compare a b
   (IntValue _ a, FloatValue _ b) -> compare (fromIntegral a) b
   (FloatValue _ a, IntValue _ b) -> compare a (fromIntegral b)
+  {-| Two decimals compare as the numbers they are, not as the digits they
+      store, so `1.50d` and `1.5d` are equal even though only one of them
+      renders with a trailing zero. A number whose `==` depended on how it was
+      written would fail the one property every reader assumes of one. -}
+  (DecimalValue a, DecimalValue b) -> decimalCompare a b
   (StrValue a, StrValue b) -> compare a b
   (CharValue a, CharValue b) -> compare a b
   (BoolValue a, BoolValue b) -> compare a b
@@ -110,6 +116,7 @@ shapeRank value = case value of
   BoolValue _ -> 2
   IntValue _ _ -> 3
   FloatValue _ _ -> 3
+  DecimalValue _ -> 18
   CharValue _ -> 4
   StrValue _ -> 5
   TupleValue _ -> 6

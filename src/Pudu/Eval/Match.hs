@@ -7,6 +7,7 @@ module Pudu.Eval.Match
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Eval.Value (Value (..), intOf)
+import Pudu.DecimalLiteral (decimalFromInteger, parseDecimalLiteral)
 import Pudu.FloatLiteral
   ( FloatWidth (Float64Width), ParsedFloat (..), parseFloatLiteral )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -94,6 +95,9 @@ literalValue literal = case literal of
     Just ParsedFloat{parsedFloatValue, parsedFloatWidth} ->
       FloatValue parsedFloatWidth parsedFloatValue
     Nothing -> FloatValue Float64Width 0
+  Tree.DecimalValue text -> case parseDecimalLiteral text of
+    Just number -> DecimalValue number
+    Nothing -> DecimalValue (decimalFromInteger 0)
   Tree.StringValue text -> StrValue text
   Tree.CharValue character -> CharValue character
   Tree.BoolValue flag -> BoolValue flag

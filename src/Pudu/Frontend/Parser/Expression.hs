@@ -99,6 +99,7 @@ parsePrefix blockParser = do
   case tokenKind token of
     IntegerLiteral value -> literal token (IntegerValue value)
     FloatLiteral value -> literal token (FloatValue value)
+    DecimalLiteral value -> literal token (DecimalValue value)
     StringLiteral value -> literal token (StringValue value)
     TemplateLiteral parts -> parseTemplate blockParser token parts
     CharLiteral value -> literal token (CharValue value)

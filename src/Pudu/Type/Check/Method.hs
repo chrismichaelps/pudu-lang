@@ -57,6 +57,8 @@ import Pudu.Type.Value
   , Scheme
   , boolType
   , charType
+  , decimalType
+  , floatType
   , integerType
   , stringType
   , Type (..)
@@ -320,6 +322,44 @@ declareBuiltinConstructors = do
         ( FunctionTypeValue False
             [RigidType "S"]
             (NominalType "Option" [RigidType "T"])
+        )
+    )
+  {-| The decimal primitives nothing in the language can express.
+
+      Each is deliberately low level, and the two that round take the mode as a
+      plain code rather than a named one, because a wired-in signature cannot
+      mention a type a library module declares. `Std.Decimal` wraps them in the
+      typed surface a program writes against, which is where the `Rounding` sum
+      lives. -}
+  bindName "decimalOf"
+    (monotype (FunctionTypeValue False [stringType] (NominalType "Option" [decimalType])))
+  bindName "decimalFromInt"
+    (monotype (FunctionTypeValue False [integerType] decimalType))
+  bindName "decimalScale"
+    (monotype (FunctionTypeValue False [decimalType] integerType))
+  bindName "decimalToInt"
+    (monotype (FunctionTypeValue False [decimalType] (NominalType "Option" [integerType])))
+  {-| Lossy in both the ways it can be, and documented as such in
+      `Std.Decimal`: a coefficient may carry more significant digits than
+      binary64 holds, and a terminating base-ten fraction is usually not one in
+      base two. -}
+  bindName "decimalToFloat"
+    (monotype (FunctionTypeValue False [decimalType] floatType))
+  {-| Answers `None` only for a zero divisor. A non-terminating quotient is not
+      a failure here, because the caller already said how many digits to keep
+      and how to round the last one. -}
+  bindName "decimalDivide"
+    ( monotype
+        ( FunctionTypeValue False
+            [decimalType, decimalType, integerType, integerType]
+            (NominalType "Option" [decimalType])
+        )
+    )
+  bindName "decimalRound"
+    ( monotype
+        ( FunctionTypeValue False
+            [decimalType, integerType, integerType]
+            decimalType
         )
     )
   {-| The effects a program may perform.

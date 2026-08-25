@@ -23,9 +23,11 @@ import Pudu.Compiler (CompileContext, CompileResult (..), emptyCompileContext, r
 import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileProgramSource
   , programDependencies
   , rootCompileResult
   )
+import System.Directory (getCurrentDirectory)
 import Pudu.Diagnostic (Diagnostic, hasErrors)
 import Pudu.Doc (DocIndex)
 import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
@@ -158,11 +160,11 @@ submitEntry session entry = do
       (buffer, firstLine) = renderBuffer session kind entry
       entryStart = bufferOffsetOf session kind
   source <- newSource interactiveName buffer
-  result <- runCompileWith (sessionContext session) source
+  (result, dependencies) <- compileBuffer session candidate source
   let compiled = compileDiagnostics result
       staticallyValid = not (hasErrors compiled)
   evaluation <-
-    if staticallyValid then evaluateFor session result kind else pure Nothing
+    if staticallyValid then evaluateFor dependencies result else pure Nothing
   let runtime = maybe [] outcomeDiagnostics evaluation
       diagnostics = compiled <> runtime
       accepted = staticallyValid && not (hasErrors runtime)
@@ -201,11 +203,39 @@ bufferOffsetOf session kind =
 {-| Evaluate the session's buffer with the loaded program's dependencies
     linked, so a call into an imported module works at the prompt exactly as it
     would in the program that was loaded. -}
-evaluateFor :: Session -> CompileResult -> EntryKind -> IO (Maybe EvalOutcome)
-evaluateFor session result _ = case compileModule result of
+evaluateFor :: [(Text, Module)] -> CompileResult -> IO (Maybe EvalOutcome)
+evaluateFor dependencies result = case compileModule result of
   Nothing -> pure Nothing
   Just parsed ->
-    Just <$> evaluateProgramEntry (sessionDependencies session) sessionFunction parsed
+    Just <$> evaluateProgramEntry dependencies sessionFunction parsed
+
+{-| Compile the assembled buffer, and say what it must be linked against.
+
+    A session with no imports compiles against its own context, which is what
+    `:load` established and what every plain expression needs. A session that
+    has imported something is compiled as a *program*: its imports are ordinary
+    imports and have to reach the same files on disk a compiled program's would.
+
+    Without that second path the session resolved an import loosely enough to
+    type-check and then had nothing to link, so `Std.Math.factorial` was a name
+    the checker knew and the evaluator did not. -}
+compileBuffer :: Session -> Session -> Source -> IO (CompileResult, [(Text, Module)])
+compileBuffer session candidate source
+  | null (sessionImports candidate) = do
+      result <- runCompileWith (sessionContext session) source
+      pure (result, sessionDependencies session)
+  | otherwise = do
+      root <- getCurrentDirectory
+      program <- compileProgramSource root source
+      case rootCompileResult program of
+        Nothing -> do
+          result <- runCompileWith (sessionContext session) source
+          pure (result, sessionDependencies session)
+        Just result ->
+          pure
+            ( result{compileDiagnostics = programDiagnostics program}
+            , programDependencies program
+            )
 
 {-| Compile the session exactly as it stands, with no new entry. `:browse` and
     `:context` use this so inspection cannot alter what the session holds. -}
