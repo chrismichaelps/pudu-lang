@@ -100,10 +100,23 @@ unreportable.
 | `Std.Csv` | row and record decoding |
 | `Std.Toml` | configuration |
 
-`Std.Text.Parse` is a combinator library rather than a regular-expression engine. A regex is a second
-language embedded in a string, invisible to the type checker and to `pudu doc`; a combinator parser
-is ordinary Pudu, so a malformed grammar is a compile error and a parser's type says what it
-produces. A regex module remains open — see the deferred list.
+`Std.Text.Parse` is a combinator library rather than a regular-expression engine, and it now exists.
+A regex is a second language embedded in a string, invisible to the type checker and to `pudu doc`;
+a combinator parser is ordinary Pudu, so a malformed grammar is a compile error and a parser's type
+says what it produces.
+
+A `Parser[T]` is a plain function — `fn(Input) -> Step[T]` — not a type of its own, so every
+combinator is an ordinary function and a caller can write their own without asking the module's
+permission. Writing it needed generic type aliases, which did not work: an alias with parameters was
+left nominal and unified with nothing.
+
+Two decisions are worth naming. `orElse` does **not** fall through when its first branch failed
+after consuming input: the input it read told it which branch was meant, and trying another would
+report a problem from the wrong one — `attempt` is how a caller asks for backtracking anyway. And
+`lazy` exists because a recursive grammar cannot be written without it: a rule mentioning itself
+would build itself forever at the moment it was defined.
+
+A regex module remains open — see the deferred list.
 
 ### System
 
@@ -148,7 +161,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-five modules, 721 documented exports, every one written in Pudu.
+Twenty-six modules, 762 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -160,6 +173,7 @@ Twenty-five modules, 721 documented exports, every one written in Pudu.
 | `Std.Num` | 24 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
+| `Std.Text.Parse` | 41 | parser combinators with positions in their errors |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
 | `Std.Math` | 27 | arithmetic, divisibility, roots, primality, checked partial operators — all bounded, none `Int`-only |
 | `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |

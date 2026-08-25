@@ -16,7 +16,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
+  [ ("a generic alias stands for what it names", testGenericAliases)
+  , ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
   , ("maps and sets are typed by what they hold", testKeyedTypes)
   , ("a tuple is indexed by a literal position", testTupleIndex)
   , ("function literals are typed and inferred", testLambdaTypes)
@@ -1348,6 +1349,34 @@ region source needle = case Text.breakOnEnd needle source of
 {-| An implementation is a fact about a type and a trait, true everywhere in a
     program once it exists anywhere in it. Scoping obligations to directly
     imported modules made a bounded generic unusable across modules. -}
+{-| An alias is a synonym, so writing it is writing what it stands for. A
+    generic one was left nominal and unified with nothing, which made a type
+    like `Parser[T] = fn(Input) -> Step[T]` impossible to use. -}
+testGenericAliases :: IO Property
+testGenericAliases = do
+  plain <- codes
+    [ "module M", "type Count = Int"
+    , "fn take(n: Count) -> Int { n }", "fn run() -> Int { take(3) }"
+    ]
+  generic <- codes
+    [ "module M", "type Boxed[T] = Option[T]"
+    , "fn make() -> Boxed[Int] { Some(2) }"
+    , "fn run() -> Bool { match make() { case Some(_) => true \n case None => false } }"
+    ]
+  functionAlias <- codes
+    [ "module M", "type Step[T] = Result[T, Str]", "type Rule[T] = fn(Int) -> Step[T]"
+    , "fn digits() -> Rule[Int] { fn(n: Int) -> Step[Int] => Ok(n) }"
+    ]
+  wrongArity <- codes
+    [ "module M", "type Boxed[T] = Option[T]", "fn make() -> Boxed { Some(2) }" ]
+  pure $ conjoin
+    [ counterexample "a plain alias stands for its type" (plain === [])
+    , counterexample "a generic alias substitutes its argument" (generic === [])
+    , counterexample "an alias may name a function type" (functionAlias === [])
+    , counterexample "an alias written with the wrong count stays nominal"
+        (wrongArity === ["E3001"])
+    ]
+
 testGlobalImpls :: IO Property
 testGlobalImpls = do
   converting <- typeOf "convertInteger[UInt8](300)"

@@ -188,7 +188,7 @@ implAliases declared value = case implTargetName declared value of
   Just name ->
     declared
       { declaredAliases =
-          Map.insert "Self" (NominalType name []) (declaredAliases declared)
+          Map.insert "Self" ([], NominalType name []) (declaredAliases declared)
       }
 
 {-| The nominal type an implementation is for.
