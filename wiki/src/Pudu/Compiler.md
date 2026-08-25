@@ -58,6 +58,10 @@ runCompileWith :: CompileContext -> Source -> CompileResult
 
 ### Governance
 
+- Compiling runs the evaluator to fold constants, and the evaluator lives in `IO` so that a program
+  can reach the world. Folding itself never does: it runs with effects denied. The `IO` in
+  `runCompile`'s type is a type, not a permission.
+
 - A successful type check also produces a [[Doc Index]]. Documentation is a compiler product, not a
   separate pass over the same files: building it anywhere else would mean re-deriving types that
   the checker already computed, and letting the two disagree.

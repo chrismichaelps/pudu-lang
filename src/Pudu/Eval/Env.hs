@@ -18,7 +18,10 @@ module Pudu.Eval.Env
   , currentFrame
   , withCaptured
   , descend
+  , effectsAdmitted
   , emptyEnv
+  , performEffect
+  , withoutEffects
   , expectBool
   , lookupName
   , popFrame
@@ -47,19 +50,20 @@ data Env = Env
   { envFrames :: ![Map Text Value]
   , envDepth :: !Int
   , envScopes :: ![[Value]]
+  , envEffects :: !Bool
   }
 
 {-| Open a structured task scope. Every child started inside it is recorded so
     the scope can join them before it yields. -}
 openScope :: Evaluator ()
-openScope = Evaluator $ \env -> Done () env{envScopes = [] : envScopes env}
+openScope = Evaluator $ \env -> pure (Done () env{envScopes = [] : envScopes env})
 
 {-| Close the innermost scope, returning the children it started in the order
     they were started. Deterministic order is what makes failure selection
     predictable rather than a race. -}
 closeScope :: Evaluator [Value]
 closeScope =
-  Evaluator $ \env -> case envScopes env of
+  Evaluator $ \env -> pure $ case envScopes env of
     [] -> Done [] env
     children : rest -> Done (reverse children) env{envScopes = rest}
 
@@ -67,7 +71,7 @@ closeScope =
     every scope stays cold, which is what keeps a detached task impossible. -}
 adoptChild :: Value -> Evaluator ()
 adoptChild child =
-  Evaluator $ \env -> case envScopes env of
+  Evaluator $ \env -> pure $ case envScopes env of
     [] -> Done () env
     children : rest -> Done () env{envScopes = (child : children) : rest}
 
@@ -75,12 +79,12 @@ adoptChild child =
     the scope does not run it a second time at exit. -}
 releaseChild :: Value -> Evaluator ()
 releaseChild child =
-  Evaluator $ \env -> case envScopes env of
+  Evaluator $ \env -> pure $ case envScopes env of
     [] -> Done () env
     children : rest -> Done () env{envScopes = filter (/= child) children : rest}
 
 insideScope :: Evaluator Bool
-insideScope = Evaluator $ \env -> Done (not (null (envScopes env))) env
+insideScope = Evaluator $ \env -> pure (Done (not (null (envScopes env))) env)
 
 {-| @Eval.Unwind — a control transfer in flight.
 
@@ -101,59 +105,109 @@ data Eval a
   | Unwound !Unwind !Env
   | Aborted !Diagnostic
 
-newtype Evaluator a = Evaluator (Env -> Eval a)
+{-| @Eval.Evaluator — evaluation threaded through the environment, over `IO`.
+
+    Evaluation performs effects: a program reads a file, writes to its output,
+    and asks its environment questions. Running over `IO` is what lets it,
+    rather than a second interpreter existing beside this one for the effectful
+    half of the language.
+
+    Compile-time evaluation runs the same interpreter with `envEffects` off, so
+    a constant that tried to read a file is refused at the boundary rather than
+    quietly performing the read while the compiler runs. -}
+newtype Evaluator a = Evaluator (Env -> IO (Eval a))
 
 instance Functor Evaluator where
   fmap transform (Evaluator action) =
-    Evaluator $ \env -> case action env of
-      Done value next -> Done (transform value) next
-      Unwound transfer next -> Unwound transfer next
-      Aborted stop -> Aborted stop
+    Evaluator $ \env -> do
+      outcome <- action env
+      pure $ case outcome of
+        Done value next -> Done (transform value) next
+        Unwound transfer next -> Unwound transfer next
+        Aborted stop -> Aborted stop
 
 instance Applicative Evaluator where
-  pure value = Evaluator $ \env -> Done value env
+  pure value = Evaluator $ \env -> pure (Done value env)
   Evaluator leftAction <*> Evaluator rightAction =
-    Evaluator $ \env -> case leftAction env of
-      Aborted stop -> Aborted stop
-      Unwound transfer next -> Unwound transfer next
-      Done transform afterLeft -> case rightAction afterLeft of
-        Aborted stop -> Aborted stop
-        Unwound transfer next -> Unwound transfer next
-        Done value afterRight -> Done (transform value) afterRight
+    Evaluator $ \env -> do
+      left <- leftAction env
+      case left of
+        Aborted stop -> pure (Aborted stop)
+        Unwound transfer next -> pure (Unwound transfer next)
+        Done transform afterLeft -> do
+          right <- rightAction afterLeft
+          pure $ case right of
+            Aborted stop -> Aborted stop
+            Unwound transfer next -> Unwound transfer next
+            Done value afterRight -> Done (transform value) afterRight
 
 instance Monad Evaluator where
   Evaluator action >>= continue =
-    Evaluator $ \env -> case action env of
+    Evaluator $ \env -> do
+      outcome <- action env
+      case outcome of
+        Aborted stop -> pure (Aborted stop)
+        Unwound transfer next -> pure (Unwound transfer next)
+        Done value next -> let Evaluator continued = continue value in continued next
+
+{-| Run an effect, when the environment admits effects at all.
+
+    Compile-time evaluation does not: a constant is folded while the compiler
+    runs, and letting it read a file would make compilation depend on the world
+    the compiler happened to be in. The refusal names the boundary rather than
+    the operation, because every operation behind it is refused for one
+    reason. -}
+performEffect :: Diagnostic -> IO a -> Evaluator a
+performEffect refusal action =
+  Evaluator $ \env ->
+    if envEffects env
+      then do
+        value <- action
+        pure (Done value env)
+      else pure (Aborted refusal)
+
+{-| Whether the environment admits effects. -}
+effectsAdmitted :: Evaluator Bool
+effectsAdmitted = Evaluator $ \env -> pure (Done (envEffects env) env)
+
+{-| Run an action with effects denied, whatever the caller admitted. -}
+withoutEffects :: Evaluator a -> Evaluator a
+withoutEffects (Evaluator action) =
+  Evaluator $ \env -> do
+    outcome <- action env{envEffects = False}
+    pure $ case outcome of
+      Done value next -> Done value next{envEffects = envEffects env}
+      Unwound transfer next -> Unwound transfer next{envEffects = envEffects env}
       Aborted stop -> Aborted stop
-      Unwound transfer next -> Unwound transfer next
-      Done value next -> let Evaluator continued = continue value in continued next
 
 {-| Start a control transfer. It travels outward until a construct catches it. -}
 unwind :: Unwind -> Evaluator a
-unwind transfer = Evaluator $ \env -> Unwound transfer env
+unwind transfer = Evaluator $ \env -> pure (Unwound transfer env)
 
 {-| Catch a control transfer at the construct that owns it. A transfer this
     construct does not own is returned so the caller can pass it along. -}
 catchUnwind :: Evaluator a -> Evaluator (Either Unwind a)
 catchUnwind (Evaluator action) =
-  Evaluator $ \env -> case action env of
-    Done value next -> Done (Right value) next
-    Unwound transfer next -> Done (Left transfer) next
-    Aborted stop -> Aborted stop
+  Evaluator $ \env -> do
+    outcome <- action env
+    pure $ case outcome of
+      Done value next -> Done (Right value) next
+      Unwound transfer next -> Done (Left transfer) next
+      Aborted stop -> Aborted stop
 
 emptyEnv :: Env
-emptyEnv = Env{envFrames = [Map.empty], envDepth = 0, envScopes = []}
+emptyEnv = Env{envFrames = [Map.empty], envDepth = 0, envScopes = [], envEffects = True}
 
 bind :: Text -> Value -> Evaluator ()
 bind name value =
-  Evaluator $ \env -> case envFrames env of
+  Evaluator $ \env -> pure $ case envFrames env of
     [] -> Done () env{envFrames = [Map.singleton name value]}
     current : rest -> Done () env{envFrames = Map.insert name value current : rest}
 
 {-| Assignment writes the binding where it was declared rather than creating a
     new one in the innermost frame. -}
 update :: Text -> Value -> Evaluator ()
-update name value = Evaluator $ \env -> Done () env{envFrames = go (envFrames env)}
+update name value = Evaluator $ \env -> pure (Done () env{envFrames = go (envFrames env)})
  where
   go frames = case frames of
     [] -> []
@@ -162,7 +216,7 @@ update name value = Evaluator $ \env -> Done () env{envFrames = go (envFrames en
       | otherwise -> current : go rest
 
 lookupName :: Text -> Evaluator (Maybe Value)
-lookupName name = Evaluator $ \env -> Done (search (envFrames env)) env
+lookupName name = Evaluator $ \env -> pure (Done (search (envFrames env)) env)
  where
   search frames = case frames of
     [] -> Nothing
@@ -184,7 +238,7 @@ withFrame bindings action = do
     names, and the two would have to agree forever; capturing the environment
     means they cannot disagree. -}
 captureEnvironment :: Evaluator [Map Text Value]
-captureEnvironment = Evaluator $ \env -> Done (envFrames env) env
+captureEnvironment = Evaluator $ \env -> pure (Done (envFrames env) env)
 
 {-| Run an action in a captured environment, restoring the caller's afterwards.
 
@@ -195,16 +249,16 @@ captureEnvironment = Evaluator $ \env -> Done (envFrames env) env
 withCaptured :: Maybe [Map Text Value] -> Evaluator a -> Evaluator a
 withCaptured Nothing action = action
 withCaptured (Just frames) action = do
-  restored <- Evaluator $ \env -> Done (envFrames env) env{envFrames = frames}
+  restored <- Evaluator $ \env -> pure (Done (envFrames env) env{envFrames = frames})
   value <- action
-  Evaluator $ \env -> Done () env{envFrames = restored}
+  Evaluator $ \env -> pure (Done () env{envFrames = restored})
   pure value
 
 withNewFrame :: Evaluator a -> Evaluator a
 withNewFrame = withFrame []
 
 pushFrame :: Map Text Value -> Evaluator ()
-pushFrame frame = Evaluator $ \env -> Done () env{envFrames = frame : envFrames env}
+pushFrame frame = Evaluator $ \env -> pure (Done () env{envFrames = frame : envFrames env})
 
 {-| What the innermost frame currently holds.
 
@@ -213,13 +267,13 @@ pushFrame frame = Evaluator $ \env -> Done () env{envFrames = frame : envFrames 
     means reading back exactly what that load produced. -}
 currentFrame :: Evaluator (Map Text Value)
 currentFrame =
-  Evaluator $ \env -> case envFrames env of
+  Evaluator $ \env -> pure $ case envFrames env of
     current : _ -> Done current env
     [] -> Done Map.empty env
 
 popFrame :: Evaluator ()
 popFrame =
-  Evaluator $ \env -> case envFrames env of
+  Evaluator $ \env -> pure $ case envFrames env of
     _ : rest@(_ : _) -> Done () env{envFrames = rest}
     _ -> Done () env
 
@@ -235,17 +289,17 @@ ascend :: Int -> Evaluator ()
 ascend = setDepth
 
 currentDepth :: Evaluator Int
-currentDepth = Evaluator $ \env -> Done (envDepth env) env
+currentDepth = Evaluator $ \env -> pure (Done (envDepth env) env)
 
 setDepth :: Int -> Evaluator ()
-setDepth depth = Evaluator $ \env -> Done () env{envDepth = depth}
+setDepth depth = Evaluator $ \env -> pure (Done () env{envDepth = depth})
 
 callLimit :: Int
 callLimit = 4096
 
 abortAt :: Maybe Span -> Text -> Text -> Maybe Text -> Evaluator a
 abortAt spanValue code message help =
-  Evaluator $ \_ -> case buildDiagnostic spanValue code message help of
+  Evaluator $ \_ -> pure $ case buildDiagnostic spanValue code message help of
     Just value -> Aborted value
     Nothing -> Aborted (fallbackDiagnostic spanValue)
 

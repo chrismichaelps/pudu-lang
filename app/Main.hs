@@ -28,7 +28,7 @@ import Pudu.Diagnostic.Render
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, sourceName, spanSource)
 import System.Environment (getArgs, lookupEnv)
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 
 main :: IO ()
@@ -109,8 +109,8 @@ runProgram style path = do
         hPutStrLn stderr "pudu run: the program produced no module"
         exitFailure
       Just parsed -> do
-        let outcome =
-              evaluateProgramEntry (programDependencies program) entryPointName parsed
+        outcome <-
+          evaluateProgramEntry (programDependencies program) entryPointName parsed
         mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
         case outcomeValue outcome of
           Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure
@@ -121,12 +121,18 @@ runProgram style path = do
 entryPointName :: Text
 entryPointName = "main"
 
-{-| A run reports its result only when there is one to report, so a program
-    whose `main` returns unit prints nothing and a shell pipeline stays
-    usable. -}
+{-| What a run does with `main`'s answer.
+
+    A whole number becomes the exit status, because that is what a shell reads
+    and a program returning one meant it as a status rather than as output.
+    Unit prints nothing. Anything else is printed, so a program that answers
+    with a value can be run and read without writing its own output call. -}
 reportResult :: Value -> IO ()
 reportResult value = case value of
   UnitValue -> exitSuccess
+  IntValue status
+    | status == 0 -> exitSuccess
+    | otherwise -> exitWith (ExitFailure (fromInteger (max 1 (min 255 status))))
   _ -> TextIO.putStrLn (renderValue value) >> exitSuccess
 
 renderRuntime :: RenderStyle -> ProgramResult -> Diagnostic -> Text

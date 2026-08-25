@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Io]] — the effects a program may perform, each answering with an outcome.
 - [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order.
 - [[Eval Order]] — the total order keyed collections need, and the values that lack one.
 - [[Evaluator]] — declaration installation, statement and expression walking, and bounded execution.

@@ -59,8 +59,8 @@ testInteractive = do
     , "missing"
     , "}"
     ])
-  let result = runCompile source
-      config = interactiveRenderConfig PlainStyle "<interactive>" 3
+  result <- runCompile source
+  let config = interactiveRenderConfig PlainStyle "<interactive>" 3
       rendered = renderDiagnosticsWith config source (compileDiagnostics result)
   pure $ conjoin
     [ counterexample (Text.unpack rendered)
@@ -80,14 +80,14 @@ testSummary = do
     , "  }"
     , "}"
     ])
-  let result = runCompile source
+  result <- runCompile source
   pure (renderSummary (compileDiagnostics result) === "1 error, 1 warning")
 
 testTabs :: IO Property
 testTabs = do
   source <- newSource (SourceName "tabs.pudu") "module M\nfn run() -> Int {\n\tmissing\n}\n"
-  let result = runCompile source
-      rendered = renderDiagnostics PlainStyle source (compileDiagnostics result)
+  result <- runCompile source
+  let rendered = renderDiagnostics PlainStyle source (compileDiagnostics result)
       caretLine = quotedLineWith "^" rendered
       sourceLine = quotedLineWith "missing" rendered
   pure $ conjoin
@@ -117,5 +117,5 @@ countOf needle = length . filter (Text.isInfixOf needle) . Text.lines
 render :: [Text] -> IO Text
 render inputLines = do
   source <- newSource (SourceName "render.pudu") (Text.unlines inputLines)
-  let result = runCompile source
+  result <- runCompile source
   pure (renderDiagnosticsWith (defaultRenderConfig PlainStyle) source (compileDiagnostics result))

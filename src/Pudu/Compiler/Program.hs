@@ -109,7 +109,7 @@ compileProgram rootPath = do
             then do
               let mismatch = rootPathMismatch rootPath (moduleName rootModule)
                   emptyContext = CompileContext (exportIndex Map.empty) Map.empty True
-                  compiled = compileFrontendWith emptyContext rootFrontend
+              compiled <- compileFrontendWith emptyContext rootFrontend
               pure
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
                   [rootSource] [rootName]
@@ -120,7 +120,7 @@ compileProgram rootPath = do
                 (Map.singleton rootName rootSource)
                 []
                 (importsOf rootModule)
-              pure (finish rootName discovered)
+              finish rootName discovered
 
 data Discovery = Discovery
   { discoveredFrontends :: !(Map ModuleName FrontendResult)
@@ -166,21 +166,28 @@ discover sourceRoot frontends sources diagnostics pending = case pending of
                         (Map.insert requested source sources)
                         diagnostics (importsOf parsed <> rest)
 
-finish :: ModuleName -> Discovery -> ProgramResult
-finish rootName discovered =
+finish :: ModuleName -> Discovery -> IO ProgramResult
+finish rootName discovered = do
   let validModules = Map.mapMaybe frontendModule (discoveredFrontends discovered)
       interfaces = Map.map interfaceSkeleton validModules
       context = CompileContext (exportIndex validModules) interfaces True
       order = dependencyOrder validModules
-      compileOne name = compileFrontendWith context <$> Map.lookup name (discoveredFrontends discovered)
-      compiled = Map.fromList [(name, result) | name <- order, Just result <- [compileOne name]]
+      pending =
+        [ (name, frontend)
+        | name <- order
+        , Just frontend <- [Map.lookup name (discoveredFrontends discovered)]
+        ]
+  {-| Modules compile in dependency order, one at a time, because compiling a
+      module folds its constants and folding runs the evaluator. -}
+  results <- mapM (\(name, frontend) -> (,) name <$> compileFrontendWith context frontend) pending
+  let compiled = Map.fromList results
       uncompiled = Map.difference (discoveredFrontends discovered) compiled
       diagnostics = sortDiagnostics
         ( discoveredDiagnostics discovered
             <> concatMap frontendDiagnostics (Map.elems uncompiled)
             <> concatMap compileDiagnostics (Map.elems compiled)
         )
-   in ProgramResult (Just rootName) compiled (Map.elems (discoveredSources discovered)) order diagnostics context
+  pure (ProgramResult (Just rootName) compiled (Map.elems (discoveredSources discovered)) order diagnostics context)
 
 dependencyOrder :: Map ModuleName Module -> [ModuleName]
 dependencyOrder modules =

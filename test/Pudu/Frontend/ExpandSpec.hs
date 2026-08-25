@@ -140,17 +140,19 @@ runProgram declarations statements expression = do
               <> [expression, "}"]
           )
   source <- newSource (SourceName "expand.pudu") buffer
-  let result = runCompile source
+  result <- runCompile source
   case compileModule result of
     Nothing -> pure ("failed: " <> Text.intercalate "," (codesOf result))
-    Just parsed -> case outcomeValue (evaluateEntryPoint "__entry" parsed) of
-      Nothing -> pure "no value"
-      Just value -> pure (renderValue value)
+    Just parsed -> do
+      outcome <- evaluateEntryPoint "__entry" parsed
+      case outcomeValue outcome of
+        Nothing -> pure "no value"
+        Just value -> pure (renderValue value)
 
 codes :: [Text] -> IO [Text]
 codes inputLines = do
   source <- newSource (SourceName "expand.pudu") (Text.unlines inputLines)
-  pure (codesOf (runCompile source))
+  codesOf <$> runCompile source
 
 codesOf :: CompileResult -> [Text]
 codesOf result = map (diagnosticCodeText . diagnosticCode) (compileDiagnostics result)

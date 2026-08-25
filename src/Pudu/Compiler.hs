@@ -61,17 +61,22 @@ emptyCompileContext = CompileContext emptyExportIndex Map.empty False
     explained by the earliest phase that can explain it and never a second time
     by a later one. The module is withheld when any error-severity diagnostic
     exists. -}
-runCompile :: Source -> CompileResult
+{-| Compiling runs the evaluator to fold constants, and the evaluator lives in
+    `IO` so that a program can reach the world. Folding itself never does: it is
+    run with effects denied, so a constant that tried to read a file is refused
+    rather than performed while the compiler runs. The `IO` here is a type, not
+    a permission. -}
+runCompile :: Source -> IO CompileResult
 runCompile = runCompileWith emptyCompileContext
 
-runCompileWith :: CompileContext -> Source -> CompileResult
+runCompileWith :: CompileContext -> Source -> IO CompileResult
 runCompileWith context source = compileFrontendWith context (runFrontend source)
 
-compileFrontendWith :: CompileContext -> FrontendResult -> CompileResult
+compileFrontendWith :: CompileContext -> FrontendResult -> IO CompileResult
 compileFrontendWith context FrontendResult{frontendTokens, frontendModule, frontendDiagnostics} =
   case frontendModule of
         Nothing ->
-          CompileResult
+          pure CompileResult
             { compileTokens = frontendTokens
             , compileModule = Nothing
             , compileResolution = Nothing
@@ -92,18 +97,20 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 if hasErrors resolved then (Nothing, []) else typedResult context parsed
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
-              constantDiagnostics =
-                if hasErrors typed then [] else foldConstants parsed
-              diagnostics = sortDiagnostics (typed <> constantDiagnostics)
-           in CompileResult
-                { compileTokens = frontendTokens
-                , compileModule = if hasErrors diagnostics then Nothing else Just parsed
-                , compileResolution = Just resolution
-                , compileTypes = types
-                , compileDocs =
-                    (\checked -> buildIndex frontendTokens checked parsed) <$> typing
-                , compileDiagnostics = diagnostics
-                }
+           in do
+                constantDiagnostics <-
+                  if hasErrors typed then pure [] else foldConstants parsed
+                let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
+                pure
+                  CompileResult
+                    { compileTokens = frontendTokens
+                    , compileModule = if hasErrors diagnostics then Nothing else Just parsed
+                    , compileResolution = Just resolution
+                    , compileTypes = types
+                    , compileDocs =
+                        (\checked -> buildIndex frontendTokens checked parsed) <$> typing
+                    , compileDiagnostics = diagnostics
+                    }
 
 {-| Evaluate the module's constants at compile time.
 
@@ -115,8 +122,8 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Module -> [Diagnostic]
-foldConstants parsed = outcomeDiagnostics (evaluateModule parsed)
+foldConstants :: Module -> IO [Diagnostic]
+foldConstants parsed = outcomeDiagnostics <$> evaluateModule parsed
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}

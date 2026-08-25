@@ -159,7 +159,7 @@ testEncoding = do
 indexOf :: [Text] -> IO DocIndex
 indexOf lines' = do
   source <- newSource (SourceName "Doc.pudu") (Text.unlines lines')
-  pure (maybe (DocIndex []) id (compileDocs (runCompile source)))
+  maybe (DocIndex []) id . compileDocs <$> runCompile source
 
 signatureOf :: Text -> DocIndex -> Text
 signatureOf name index = case entriesFor name index of
