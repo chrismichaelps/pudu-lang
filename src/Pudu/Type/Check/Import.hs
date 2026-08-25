@@ -174,7 +174,7 @@ interfaceTraits value = Map.fromList
   | Located _ (TraitDeclaration trait) <- interfaceDeclarations value
   ]
 
-interfaceAliases :: DeclaredTypes -> TypeInterface -> Map.Map Text Type
+interfaceAliases :: DeclaredTypes -> TypeInterface -> Map.Map Text ([Text], Type)
 interfaceAliases declared value = Map.fromList
   [ (name, target)
   | Located _ (TypeDeclaration typeValue) <- declarations

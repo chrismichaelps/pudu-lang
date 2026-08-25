@@ -87,7 +87,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map NominalId [NominalId])
-  , declaredAliases :: !(Map Text Type)
+  , declaredAliases :: !(Map Text ([Text], Type))
   }
   deriving stock (Eq, Show)
 

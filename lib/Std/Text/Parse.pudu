@@ -1,0 +1,407 @@
+module Std.Text.Parse
+
+/// What a parser is reading and how far it has read.
+export type Input = { text: Str, position: Int }
+
+/// What a parser wanted where it stopped.
+/// The position is kept so a caller can point at the input rather than repeat
+/// it, and the description says what was wanted rather than what was found —
+/// a reader can see what was found.
+export type Problem = { position: Int, expected: Str }
+
+/// What one step of parsing produced: a value and what remains, or a problem.
+export type Step[T] = Result[(T, Input), Problem]
+
+/// A parser: a function from input to a step.
+/// A function rather than a type of its own, so every combinator below is an
+/// ordinary function and a caller can write their own without asking this
+/// module's permission.
+export type Parser[T] = fn(Input) -> Step[T]
+
+/// Run a parser over text, requiring it to consume all of it.
+/// Text left over is a problem: a caller that wanted a prefix says so with
+/// `partial`, and one that did not would otherwise accept a truncated parse.
+export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
+  match parser(Input { text: text, position: 0 }) {
+    case Err(problem) => Err(problem)
+    case Ok(pair) => {
+      if pair[1].position < text.length() {
+        Err(Problem { position: pair[1].position, expected: "the end of the input" })
+      } else {
+        Ok(pair[0])
+      }
+    }
+  }
+}
+
+/// Run a parser over text, allowing input to remain.
+export fn partial[T](parser: Parser[T], text: Str) -> Result[(T, Int), Problem] {
+  match parser(Input { text: text, position: 0 }) {
+    case Err(problem) => Err(problem)
+    case Ok(pair) => Ok((pair[0], pair[1].position))
+  }
+}
+
+/// A problem written for a person to read.
+export fn explain(problem: &Problem) -> Str {
+  "expected " + problem.expected + " at position " + show(problem.position)
+}
+
+/// A parser that consumes nothing and answers with a value.
+export fn pure[T](value: T) -> Parser[T] {
+  fn(input: Input) -> Step[T] => Ok((value, input))
+}
+
+/// A parser that consumes nothing and always fails.
+export fn fail[T](expected: Str) -> Parser[T] {
+  fn(input: Input) -> Step[T] => Err(Problem { position: input.position, expected: expected })
+}
+
+/// One character the predicate accepts.
+export fn satisfy(expected: Str, holds: fn(Char) -> Bool) -> Parser[Char] {
+  fn(input: Input) -> Step[Char] => {
+    if input.position >= input.text.length() {
+      Err(Problem { position: input.position, expected: expected })
+    } else {
+      let found = input.text.charAt(input.position)
+      if holds(found) {
+        Ok((found, Input { text: input.text, position: input.position + 1 }))
+      } else {
+        Err(Problem { position: input.position, expected: expected })
+      }
+    }
+  }
+}
+
+/// One particular character.
+export fn character(wanted: Char) -> Parser[Char] {
+  satisfy(wanted.toText(), fn(found: Char) -> Bool => found == wanted)
+}
+
+/// A particular piece of text.
+export fn literal(wanted: Str) -> Parser[Str] {
+  fn(input: Input) -> Step[Str] => {
+    let end = input.position + wanted.length()
+    if end > input.text.length() {
+      Err(Problem { position: input.position, expected: wanted })
+    } else {
+      if input.text.slice(input.position, end) == wanted {
+        Ok((wanted, Input { text: input.text, position: end }))
+      } else {
+        Err(Problem { position: input.position, expected: wanted })
+      }
+    }
+  }
+}
+
+/// One ASCII decimal digit.
+export fn digit() -> Parser[Char] {
+  satisfy("a digit", fn(found: Char) -> Bool => found >= '0' && found <= '9')
+}
+
+/// One ASCII letter.
+export fn letter() -> Parser[Char] {
+  satisfy(
+    "a letter",
+    fn(found: Char) -> Bool =>
+      (found >= 'a' && found <= 'z') || (found >= 'A' && found <= 'Z')
+  )
+}
+
+/// One space, tab, carriage return, or newline.
+export fn space() -> Parser[Char] {
+  satisfy(
+    "whitespace",
+    fn(found: Char) -> Bool => found == ' ' || found == '\t' || found == '\r' || found == '\n'
+  )
+}
+
+/// One character from a set.
+export fn oneOf(alphabet: Str) -> Parser[Char] {
+  satisfy(
+    "one of " + alphabet,
+    fn(found: Char) -> Bool => alphabet.contains(found.toText())
+  )
+}
+
+/// One character not in a set.
+export fn noneOf(alphabet: Str) -> Parser[Char] {
+  satisfy(
+    "none of " + alphabet,
+    fn(found: Char) -> Bool => !alphabet.contains(found.toText())
+  )
+}
+
+/// Any one character at all.
+export fn anyCharacter() -> Parser[Char] {
+  satisfy("any character", fn(_found: Char) -> Bool => true)
+}
+
+/// The end of the input, consuming nothing.
+export fn endOfInput() -> Parser[()] {
+  fn(input: Input) -> Step[()] => {
+    if input.position >= input.text.length() { Ok(((), input)) }
+    else { Err(Problem { position: input.position, expected: "the end of the input" }) }
+  }
+}
+
+/// A parser's value transformed.
+export fn map[A, B](parser: Parser[A], transform: fn(A) -> B) -> Parser[B] {
+  fn(input: Input) -> Step[B] => {
+    match parser(input) {
+      case Ok(pair) => Ok((transform(pair[0]), pair[1]))
+      case Err(problem) => Err(problem)
+    }
+  }
+}
+
+/// One parser after another, the second chosen by the first's value.
+export fn andThen[A, B](parser: Parser[A], next: fn(A) -> Parser[B]) -> Parser[B] {
+  fn(input: Input) -> Step[B] => {
+    match parser(input) {
+      case Ok(pair) => next(pair[0])(pair[1])
+      case Err(problem) => Err(problem)
+    }
+  }
+}
+
+/// Two parsers in order, keeping both values.
+export fn both[A, B](first: Parser[A], second: Parser[B]) -> Parser[(A, B)] {
+  fn(input: Input) -> Step[(A, B)] => {
+    match first(input) {
+      case Err(problem) => Err(problem)
+      case Ok(one) => {
+        match second(one[1]) {
+          case Err(problem) => Err(problem)
+          case Ok(two) => Ok(((one[0], two[0]), two[1]))
+        }
+      }
+    }
+  }
+}
+
+/// Two parsers in order, keeping the first's value.
+export fn keepFirst[A, B](first: Parser[A], second: Parser[B]) -> Parser[A] {
+  map(both(first, second), fn(pair: (A, B)) -> A => pair[0])
+}
+
+/// Two parsers in order, keeping the second's value.
+export fn keepSecond[A, B](first: Parser[A], second: Parser[B]) -> Parser[B] {
+  map(both(first, second), fn(pair: (A, B)) -> B => pair[1])
+}
+
+/// The first parser, or the second when the first consumed nothing.
+/// A parser that failed *after* consuming input does not fall through: the
+/// input it read told it which branch was meant, and trying another would
+/// report a problem from the wrong one. A caller who wants the fallback anyway
+/// wraps the first in `attempt`.
+export fn orElse[T](first: Parser[T], second: Parser[T]) -> Parser[T] {
+  fn(input: Input) -> Step[T] => {
+    match first(input) {
+      case Ok(pair) => Ok(pair)
+      case Err(problem) => {
+        if problem.position == input.position { second(input) } else { Err(problem) }
+      }
+    }
+  }
+}
+
+/// A parser that consumes nothing when it fails, so `orElse` may try another.
+export fn attempt[T](parser: Parser[T]) -> Parser[T] {
+  fn(input: Input) -> Step[T] => {
+    match parser(input) {
+      case Ok(pair) => Ok(pair)
+      case Err(problem) => Err(Problem { position: input.position, expected: problem.expected })
+    }
+  }
+}
+
+/// The first parser that succeeds.
+export fn choice[T](parsers: &Array[Parser[T]], expected: Str) -> Parser[T] {
+  let options = *parsers
+  fn(input: Input) -> Step[T] => {
+    var index = 0
+    while index < options.length() {
+      match options[index](input) {
+        case Ok(pair) => { return Ok(pair) }
+        case Err(problem) => {
+          if problem.position != input.position { return Err(problem) }
+        }
+      }
+      index = index + 1
+    }
+    Err(Problem { position: input.position, expected: expected })
+  }
+}
+
+/// A parser's value if it succeeds, and nothing if it fails without consuming.
+export fn optional[T](parser: Parser[T]) -> Parser[Option[T]] {
+  fn(input: Input) -> Step[Option[T]] => {
+    match parser(input) {
+      case Ok(pair) => Ok((Some(pair[0]), pair[1]))
+      case Err(problem) => {
+        if problem.position == input.position { Ok((None, input)) } else { Err(problem) }
+      }
+    }
+  }
+}
+
+/// Nought or more, until the parser stops.
+/// A parser that succeeds without consuming would loop forever, so the loop
+/// stops when the position does not move. That is a defect in the parser it was
+/// given, and stopping is the only thing this can do about it that terminates.
+export fn many[T](parser: Parser[T]) -> Parser[Array[T]] {
+  fn(input: Input) -> Step[Array[T]] => {
+    var out = []
+    var rest = input
+    var reading = true
+    while reading {
+      match parser(rest) {
+        case Ok(pair) => {
+          if pair[1].position == rest.position { reading = false } else {
+            out = out.push(pair[0])
+            rest = pair[1]
+          }
+        }
+        case Err(problem) => {
+          if problem.position == rest.position { reading = false }
+          else { return Err(problem) }
+        }
+      }
+    }
+    Ok((out, rest))
+  }
+}
+
+/// One or more.
+export fn some[T](parser: Parser[T]) -> Parser[Array[T]] {
+  fn(input: Input) -> Step[Array[T]] => {
+    match many(parser)(input) {
+      case Err(problem) => Err(problem)
+      case Ok(pair) => {
+        if pair[0].length() == 0 {
+          Err(Problem { position: input.position, expected: "at least one" })
+        } else { Ok(pair) }
+      }
+    }
+  }
+}
+
+/// Nought or more, separated by another parser.
+export fn separatedBy[T, S](parser: Parser[T], separator: Parser[S]) -> Parser[Array[T]] {
+  orElse(separatedSome(parser, separator), pure([]))
+}
+
+/// One or more, separated by another parser.
+export fn separatedSome[T, S](parser: Parser[T], separator: Parser[S]) -> Parser[Array[T]] {
+  andThen(
+    parser,
+    fn(first: T) -> Parser[Array[T]] =>
+      map(
+        many(keepSecond(separator, parser)),
+        fn(rest: Array[T]) -> Array[T] => [first].concat(rest)
+      )
+  )
+}
+
+/// A parser built only when it is run.
+///
+/// A recursive grammar needs this and cannot be written without it: a rule that
+/// mentions itself would build itself forever at the moment it was defined.
+/// Wrapping the mention defers it to the moment it is used, which is when the
+/// input decides whether the recursion happens at all.
+export fn lazy[T](make: fn() -> Parser[T]) -> Parser[T] {
+  fn(input: Input) -> Step[T] => make()(input)
+}
+
+/// A parser between two others, keeping only the middle value.
+export fn between[A, B, T](open: Parser[A], parser: Parser[T], close: Parser[B]) -> Parser[T] {
+  keepFirst(keepSecond(open, parser), close)
+}
+
+/// Nought or more whitespace, discarded.
+export fn spaces() -> Parser[()] {
+  map(many(space()), fn(_found: Array[Char]) -> () => ())
+}
+
+/// A parser with any whitespace after it discarded, which is what a token is.
+export fn token[T](parser: Parser[T]) -> Parser[T] { keepFirst(parser, spaces()) }
+
+/// A particular piece of text, with trailing whitespace discarded.
+export fn symbol(wanted: Str) -> Parser[Str] { token(literal(wanted)) }
+
+/// The text a parser's characters spell.
+export fn asText(parser: Parser[Array[Char]]) -> Parser[Str] {
+  map(
+    parser,
+    fn(characters: Array[Char]) -> Str => {
+      var out = ""
+      for piece in characters { out = out + piece.toText() }
+      out
+    }
+  )
+}
+
+/// One or more digits as a whole number.
+/// A leading minus is admitted, so a negative number reads as one value rather
+/// than as an operator a caller has to reassemble.
+export fn integer() -> Parser[Int] {
+  andThen(
+    optional(character('-')),
+    fn(sign: Option[Char]) -> Parser[Int] =>
+      map(
+        asText(some(digit())),
+        fn(digits: Str) -> Int => {
+          var total = 0
+          for digitChar in digits.chars() { total = total * 10 + (digitChar.code() - 48) }
+          match sign {
+            case Some(_) => 0 - total
+            case None => total
+          }
+        }
+      )
+  )
+}
+
+/// A run of letters, digits, and underscores beginning with a letter.
+export fn identifier() -> Parser[Str] {
+  andThen(
+    letter(),
+    fn(first: Char) -> Parser[Str] =>
+      map(
+        asText(many(satisfy(
+          "a letter, digit, or underscore",
+          fn(found: Char) -> Bool =>
+            (found >= 'a' && found <= 'z') || (found >= 'A' && found <= 'Z') ||
+              (found >= '0' && found <= '9') || found == '_'
+        ))),
+        fn(rest: Str) -> Str => first.toText() + rest
+      )
+  )
+}
+
+/// Text between double quotes, with the usual escapes read.
+export fn quoted() -> Parser[Str] {
+  between(
+    character('"'),
+    asText(many(orElse(escaped(), noneOf("\"\\")))),
+    character('"')
+  )
+}
+
+/// One escape inside quoted text.
+fn escaped() -> Parser[Char] {
+  keepSecond(
+    character('\\'),
+    map(
+      anyCharacter(),
+      fn(found: Char) -> Char => {
+        if found == 'n' { '\n' } else {
+          if found == 't' { '\t' } else {
+            if found == 'r' { '\r' } else { found }
+          }
+        }
+      }
+    )
+  )
+}

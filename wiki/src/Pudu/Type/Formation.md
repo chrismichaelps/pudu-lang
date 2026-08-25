@@ -27,6 +27,15 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- An alias is a **synonym**: writing it is writing what it stands for. A generic one substitutes its
+  arguments, so `type Boxed[T] = Option[T]` used as `Boxed[Int]` *is* `Option[Int]`. Before this it
+  was a nominal type of its own that unified with nothing, which made a type like
+  `Parser[T] = fn(Input) -> Step[T]` impossible to use at all.
+- An argument count that does not match the alias's parameters leaves the name nominal, so the
+  mismatch is reported where the name was written rather than silently half-applied.
+- The alias body is formed with its own parameters rigid, so they can be found and replaced; a rigid
+  name from the surrounding declaration keeps its own meaning.
+
 - `Decimal` is reserved: [[architecture/SEMANTICS]] gives it no semantics until its precision and rounding decision is accepted, so writing the type is refused with `E3022` rather than admitted with invented rounding. A module that declares its own `Decimal` keeps it, and each written occurrence reports once even though a signature is formed in two passes.
 
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].
