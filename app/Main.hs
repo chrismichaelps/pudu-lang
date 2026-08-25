@@ -130,7 +130,7 @@ entryPointName = "main"
 reportResult :: Value -> IO ()
 reportResult value = case value of
   UnitValue -> exitSuccess
-  IntValue status
+  IntValue _ status
     | status == 0 -> exitSuccess
     | otherwise -> exitWith (ExitFailure (fromInteger (max 1 (min 255 status))))
   _ -> TextIO.putStrLn (renderValue value) >> exitSuccess

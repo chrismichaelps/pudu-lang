@@ -1,6 +1,7 @@
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
   ( Builtin (..)
+  , intOf
   , builtinName
   , ArrayMethod (..)
   , CharMethod (..)
@@ -21,6 +22,7 @@ import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindName)
 import qualified Data.Text as Text
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Frontend.Syntax.Tree (Function)
@@ -31,8 +33,14 @@ import Pudu.Source (Span)
     Integers are arbitrary precision. Floats retain their source-selected width
     beside normalized `Double` storage so binary32 operations cannot silently
     use binary64 intermediates. -}
+{-| @Eval.Value — a value at run time.
+
+    An integer carries its kind for the same reason a float carries its width:
+    the type says `UInt8` and the value has to agree, or the type said nothing.
+    Without it `~0u8` answers `-1` and `255u8 + 1u8` answers `256`, which are
+    values those types do not have. -}
 data Value
-  = IntValue !Integer
+  = IntValue !IntegerKind !Integer
   | FloatValue !FloatWidth !Double
   | StrValue !Text
   | CharValue !Char
@@ -83,6 +91,12 @@ builtinName value = case value of
   ParseTimeBuiltin -> "parseTime"
   ZoneOffsetBuiltin -> "zoneOffset"
   RunBuiltin -> "runProgram"
+
+{-| A plain `Int`, for the counts the runtime itself produces: a length, an
+    index, a scalar value. That is the type the language gives an unsuffixed
+    literal, so a caller comparing the two never has to convert. -}
+intOf :: Integer -> Value
+intOf = IntValue defaultIntegerKind
 
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
     `panic` is the prelude's unrecoverable abort: it takes a message and stops
@@ -254,7 +268,7 @@ data Closure = Closure
     never mistaken for the integer and a newline never breaks the line. -}
 renderValue :: Value -> Text
 renderValue value = case value of
-  IntValue number -> Text.pack (show number)
+  IntValue _ number -> Text.pack (show number)
   FloatValue _ number -> Text.pack (show number)
   StrValue text -> "\"" <> escape text <> "\""
   CharValue character -> "'" <> escape (Text.singleton character) <> "'"
@@ -295,7 +309,7 @@ escape =
     static type. -}
 valueKind :: Value -> Text
 valueKind value = case value of
-  IntValue _ -> "integer"
+  IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   StrValue _ -> "string"
   CharValue _ -> "char"

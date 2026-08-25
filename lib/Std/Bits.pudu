@@ -1,5 +1,13 @@
 module Std.Bits
 
+/// Provisional: this module speaks `Int` only.
+/// The bitwise surface is meant to be generic over the integer family, bounded
+/// by a `Bits` trait whose implementations carry each type's own width. The
+/// runtime now gives every integer its width, so that trait can be written; it
+/// is the next slice. Until then this surface does not grow, and nothing here
+/// converts to `Int` to make a signature fit — that would hide the narrowness
+/// rather than record it. See ADR-0006.
+
 /// Both values' bits, kept where both are set.
 export fn and(left: Int, right: Int) -> Int { left & right }
 
@@ -38,8 +46,7 @@ export fn flipBit(value: Int, position: Int) -> Int {
   if position < 0 { value } else { value ^ (1 << position) }
 }
 
-/// How many bits are set. Counted over the low sixty-four positions, which is
-/// the width the language's own integer arithmetic works in.
+/// How many bits are set, counted over this module's provisional width.
 export fn popCount(value: Int) -> Int {
   var total = 0
   var position = 0
@@ -124,7 +131,7 @@ export fn zero() -> Int { 0 }
 export fn ones() -> Int { ~0 }
 
 /// The bits moved toward the high end, with the ones that leave reappearing at
-/// the low end. Rotation is over the low sixty-four positions.
+/// the low end. Rotation is over this module's provisional width.
 export fn rotateLeft(value: Int, places: Int) -> Int {
   let shift = ((places % 64) + 64) % 64
   if shift == 0 { value } else {
@@ -138,8 +145,8 @@ export fn rotateRight(value: Int, places: Int) -> Int {
   rotateLeft(value, 64 - (((places % 64) + 64) % 64))
 }
 
-/// How many high positions are clear before the first set bit, over sixty-four
-/// positions. A value with no bits set has sixty-four.
+/// How many high positions are clear before the first set bit. A value with no
+/// bits set has the whole width.
 export fn countLeadingZeros(value: Int) -> Int {
   match highestSetBit(value) {
     case Some(position) => 63 - position

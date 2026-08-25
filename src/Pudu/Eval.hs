@@ -71,6 +71,7 @@ import Pudu.Eval.Value
   ( ArrayMethod (..)
   , Builtin (..)
   , builtinName
+  , intOf
   , CharMethod (..)
   , MapMethod (..)
   , SetMethod (..)
@@ -699,18 +700,18 @@ callEffect spanValue builtin arguments = do
         effectUnit (createDirectoryAt (Text.unpack path))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
-      (ClockBuiltin, []) -> IntValue <$> lift refusal monotonicMilliseconds
-      (NowBuiltin, []) -> IntValue <$> lift refusal currentInstant
-      (ZoneOffsetBuiltin, []) -> IntValue <$> lift refusal timeZoneOffset
-      (FormatTimeBuiltin, [StrValue pattern, IntValue milliseconds, StrValue zone]) -> do
+      (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
+      (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
+      (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset
+      (FormatTimeBuiltin, [StrValue pattern, IntValue _ milliseconds, StrValue zone]) -> do
         rendered <- lift refusal (formatInstant pattern milliseconds zone)
         pure (eitherOf (StrValue <$> rendered))
       (ParseTimeBuiltin, [StrValue pattern, StrValue text]) ->
-        pure (eitherOf (IntValue <$> parseInstant pattern text))
+        pure (eitherOf (intOf <$> parseInstant pattern text))
       (RunBuiltin, [StrValue program, ArrayValue given, StrValue standardInput]) -> do
         outcome <- lift refusal (runProcess (Text.unpack program) (textsOf given) standardInput)
         pure (eitherOf (processValue <$> outcome))
-      (ExitBuiltin, [IntValue code]) -> do
+      (ExitBuiltin, [IntValue _ code]) -> do
         _ <- lift refusal (exitWith code)
         pure UnitValue
       _ ->
@@ -754,7 +755,7 @@ eitherOf outcome = case outcome of
 processValue :: ProcessOutcome -> Value
 processValue outcome =
   TupleValue
-    [ IntValue (processStatus outcome)
+    [ intOf (processStatus outcome)
     , StrValue (processOutput outcome)
     , StrValue (processErrors outcome)
     ]
@@ -845,7 +846,7 @@ callSetOf spanValue arguments = case arguments of
 {-| Apply a built-in map method. Every one answers with a new value. -}
 callMapMethod :: Span -> MapMethod -> Value -> [Value] -> Evaluator Value
 callMapMethod spanValue method receiver arguments = case (method, arguments) of
-  (MapSize, []) -> pure (IntValue (fromIntegral (mapSize receiver)))
+  (MapSize, []) -> pure (intOf (fromIntegral (mapSize receiver)))
   (MapIsEmpty, []) -> pure (BoolValue (mapSize receiver == 0))
   (MapGet, [key]) -> pure (optionOf (mapGet receiver key))
   (MapContainsKey, [key]) -> pure (BoolValue (mapContainsKey receiver key))
@@ -865,7 +866,7 @@ callMapMethod spanValue method receiver arguments = case (method, arguments) of
 {-| Apply a built-in set method. -}
 callSetMethod :: Span -> SetMethod -> Value -> [Value] -> Evaluator Value
 callSetMethod spanValue method receiver arguments = case (method, arguments) of
-  (SetSize, []) -> pure (IntValue (fromIntegral (setSize receiver)))
+  (SetSize, []) -> pure (intOf (fromIntegral (setSize receiver)))
   (SetIsEmpty, []) -> pure (BoolValue (setSize receiver == 0))
   (SetContains, [value]) -> pure (BoolValue (setContains receiver value))
   (SetInsert, [value])
@@ -899,7 +900,7 @@ optionOf found = case found of
     character the program would then carry around as a lie. -}
 callCharFromCode :: Span -> [Value] -> Evaluator Value
 callCharFromCode spanValue arguments = case arguments of
-  [IntValue code]
+  [IntValue _ code]
     | code >= 0
     , code <= 0x10FFFF
     , not (code >= 0xD800 && code <= 0xDFFF) ->
@@ -911,7 +912,7 @@ callCharFromCode spanValue arguments = case arguments of
 {-| Apply a built-in character method. -}
 callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 callCharMethod spanValue method receiver arguments = case (method, receiver, arguments) of
-  (CharCode, CharValue character, []) -> pure (IntValue (fromIntegral (fromEnum character)))
+  (CharCode, CharValue character, []) -> pure (intOf (fromIntegral (fromEnum character)))
   (CharToText, CharValue character, []) -> pure (StrValue (Text.singleton character))
   _ -> abortAt (Just spanValue) "E7002" "wrong arguments for a character method" Nothing
 
@@ -930,21 +931,21 @@ callStringMethod spanValue method receiver arguments = case receiver of
   _ -> abortAt (Just spanValue) "E7001" "not text" Nothing
  where
   apply text = case (method, arguments) of
-    (StringLength, []) -> pure (IntValue (fromIntegral (Text.length text)))
+    (StringLength, []) -> pure (intOf (fromIntegral (Text.length text)))
     (StringIsEmpty, []) -> pure (BoolValue (Text.null text))
-    (StringCharAt, [IntValue index]) -> charAt text index
-    (StringIndexOf, [StrValue needle]) -> pure (IntValue (indexOfText text needle))
+    (StringCharAt, [IntValue _ index]) -> charAt text index
+    (StringIndexOf, [StrValue needle]) -> pure (intOf (indexOfText text needle))
     (StringContains, [StrValue needle]) -> pure (BoolValue (Text.isInfixOf needle text))
     (StringStartsWith, [StrValue needle]) -> pure (BoolValue (Text.isPrefixOf needle text))
     (StringEndsWith, [StrValue needle]) -> pure (BoolValue (Text.isSuffixOf needle text))
-    (StringSlice, [IntValue from, IntValue to]) -> slice text from to
+    (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
     (StringToLower, []) -> pure (StrValue (Text.toLower text))
     (StringReplace, [StrValue needle, StrValue replacement])
       | Text.null needle -> pure (StrValue text)
       | otherwise -> pure (StrValue (Text.replace needle replacement text))
-    (StringRepeat, [IntValue count])
+    (StringRepeat, [IntValue _ count])
       | count < 0 -> outOfRange "a repeat count cannot be negative"
       | otherwise -> pure (StrValue (Text.replicate (fromInteger count) text))
     (StringSplit, [StrValue separator])
@@ -1002,16 +1003,16 @@ callArrayMethod :: Span -> ArrayMethod -> Value -> [Value] -> Evaluator Value
 callArrayMethod spanValue method receiver arguments = case method of
   ArrayLength -> case arguments of
     [] -> case arrayLength receiver of
-      Just len -> pure (IntValue (fromIntegral len))
+      Just len -> pure (intOf (fromIntegral len))
       Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "length" 0
   ArrayGet -> case arguments of
-    [IntValue index] -> case arrayIndex receiver (fromInteger index) of
+    [IntValue _ index] -> case arrayIndex receiver (fromInteger index) of
       Just value -> pure value
       Nothing -> abortAt (Just spanValue) "E7004" "index out of range" Nothing
     _ -> wrongArity "get" 1
   ArrayIndexOf -> case arguments of
-    [target] -> pure (IntValue (fromIntegral (arrayIndexOf receiver target)))
+    [target] -> pure (intOf (fromIntegral (arrayIndexOf receiver target)))
     _ -> wrongArity "indexOf" 1
   ArrayContains -> case arguments of
     [target] -> pure (BoolValue (arrayContains receiver target))
@@ -1023,13 +1024,13 @@ callArrayMethod spanValue method receiver arguments = case method of
     [] -> pure (arrayPop receiver)
     _ -> wrongArity "pop" 0
   ArrayInsert -> case arguments of
-    [IntValue index, value] -> pure (arrayInsert receiver (fromInteger index) value)
+    [IntValue _ index, value] -> pure (arrayInsert receiver (fromInteger index) value)
     _ -> wrongArity "insert" 2
   ArrayRemove -> case arguments of
-    [IntValue index] -> pure (arrayRemove receiver (fromInteger index))
+    [IntValue _ index] -> pure (arrayRemove receiver (fromInteger index))
     _ -> wrongArity "remove" 1
   ArraySlice -> case arguments of
-    [IntValue start, IntValue end'] -> pure (arraySlice receiver (fromInteger start) (fromInteger end'))
+    [IntValue _ start, IntValue _ end'] -> pure (arraySlice receiver (fromInteger start) (fromInteger end'))
     _ -> wrongArity "slice" 2
   ArrayConcat -> case arguments of
     [other@(ArrayValue _)] -> pure (arrayConcat receiver other)

@@ -69,6 +69,8 @@ export fn count[T](items: &Array[T], wanted: T) -> Int {
 }
 
 /// The sum of every element. An empty array sums to zero.
+/// Provisional: `Int` only, pending the `Zero` and `Add` bounds ADR-0006
+/// describes. Nothing here converts to `Int` to widen its reach.
 export fn sum(items: &Array[Int]) -> Int {
   items.reduce(fn(total: Int, item: Int) -> Int => total + item, 0)
 }
@@ -120,6 +122,8 @@ export fn any[T](items: &Array[T], holds: fn(T) -> Bool) -> Bool {
 }
 
 /// The elements in ascending order.
+/// Provisional: `Int` only, pending the `Ord` bound ADR-0006 describes;
+/// `sortBy` is already generic and takes the comparison instead.
 /// Merge sort: the input is halved with `slice` and rejoined with `concat`,
 /// both of which the runtime does on the structure rather than by rebuilding.
 export fn sorted(items: &Array[Int]) -> Array[Int] {

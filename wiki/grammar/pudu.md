@@ -188,7 +188,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 - Unsuffixed integer literals are arbitrary precision during inference, then must fit the context-selected integer type; when no context selects one, they default to `Int` and must fit it. A width suffix selects its exact signed or unsigned type and must fit that type. An out-of-range literal is `E3018`; suffixes do not introduce implicit numeric conversion.
 - Unsuffixed floating literals and `f64` literals are `Float64`. The `f32` suffix explicitly selects `Float32`; context never narrows an unsuffixed literal. A finite spelling outside the selected IEEE range is `E3019`. Runtime `Float32` operations round every result to binary32 rather than calculating with hidden binary64 precision.
-- Fixed-width `+ - *` are checked and produce typed `Overflow` failure in recoverable contexts; compile-time overflow is a diagnostic.
+- Fixed-width `+ - *` are checked and report `E7005` at run time naming the type that could not hold the result; compile-time overflow is `E3018`. Wrapping `&+ &- &*` reduce into the type's interval and saturating `+| -| *|` clamp to its ends: the three are different operations. Bitwise operations are taken over the type's own width, a right shift keeps the sign only on a signed type, and a shift count that is negative or not below the width is `E7004`.
 - `&+`, `&-`, and `&*` wrap modulo 2^N. `+|`, `-|`, and `*|` saturate.
 - Division by zero produces typed `DivisionByZero`; signed minimum divided by `-1` follows checked overflow rules.
 - Integer division truncates toward zero. Remainder has the dividend's sign.

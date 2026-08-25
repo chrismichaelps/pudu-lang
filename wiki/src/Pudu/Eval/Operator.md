@@ -25,6 +25,25 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- An integer carries its kind, as a float carries its width. The type says `UInt8` and the value has
+  to agree, or the type said nothing: without a width, `~0u8` answers `-1` and `255u8 + 1u8` answers
+  `256`, neither of which is a value those types have. See
+  [[decisions/ADR-0006-integer-widths-and-std-numerics]].
+- Checked, wrapping, and saturating arithmetic are **three different operations**. They were all
+  plain addition, so a program asking for one of the three got whichever the machine's integers
+  happened to do. Checked reports `E7005` naming the type; wrapping reduces into its interval;
+  saturating clamps to its ends.
+- Bitwise operations are taken over the type's own width, and a right shift keeps the sign only on a
+  signed type. A shift count that is negative or not below the width is `E7004`, which is the
+  checked form the vault requires.
+- When two operands carry different kinds, the specific one wins over the platform default. The
+  language admits no implicit numeric conversion, so both operands of a well-typed operator have the
+  same type; two kinds means one came from a literal the checker resolved to the other. It is exact,
+  not a guess.
+- A built-in method vocabulary that does not hold a name **falls through to the type's own
+  implementations**, so `impl Ord for Int` is reachable. Without it, every trait-bounded generic was
+  unusable for the types a program actually holds.
+
 - Text methods are built into the evaluator rather than written in `Std`, because implementing them
   in the language would need `unsafe` to reach the representation — and a standard library that
   needs unsafe for `toUpper` has said something false about the language.

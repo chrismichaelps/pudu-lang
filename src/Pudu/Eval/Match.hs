@@ -6,14 +6,20 @@ module Pudu.Eval.Match
 
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
-import Pudu.Eval.Value (Value (..))
+import Pudu.Eval.Value (Value (..), intOf)
 import Pudu.FloatLiteral
   ( FloatWidth (Float64Width), ParsedFloat (..), parseFloatLiteral )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
-import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
+import Pudu.IntegerLiteral
+  ( IntegerKind (..)
+  , IntegerSuffix (..)
+  , ParsedInteger (..)
+  , defaultIntegerKind
+  , parseIntegerLiteral
+  )
 
 {-| Pattern matching is total: it either produces the bindings the pattern
     introduces or reports that the pattern did not apply. -}
@@ -57,7 +63,7 @@ lastSegment (first :| rest) = last (first : rest)
 matchRange :: Value -> Bool -> Value -> Value -> Maybe [(Text, Value)]
 matchRange lower inclusive upper value =
   case (lower, upper, value) of
-    (IntValue low, IntValue high, IntValue actual) -> check inclusive low high actual
+    (IntValue _ low, IntValue _ high, IntValue _ actual) -> check inclusive low high actual
     (CharValue low, CharValue high, CharValue actual) -> check inclusive low high actual
     (FloatValue lowWidth low, FloatValue highWidth high, FloatValue actualWidth actual)
       | lowWidth == highWidth && highWidth == actualWidth ->
@@ -69,11 +75,21 @@ check inclusive low high actual
   | actual >= low && (if inclusive then actual <= high else actual < high) = Just []
   | otherwise = Nothing
 
+{-| The kind a literal's suffix names. -}
+kindOfSuffix :: Maybe IntegerSuffix -> IntegerKind
+kindOfSuffix suffix = case suffix of
+  Just (SignedSuffix width) -> SignedKind width
+  Just (UnsignedSuffix width) -> UnsignedKind width
+  Nothing -> defaultIntegerKind
+
 literalValue :: Tree.Literal -> Value
 literalValue literal = case literal of
+  {-| A literal's suffix selects its kind. Without one it is a platform `Int`,
+      which is what the checker defaults an unconstrained literal to. -}
   Tree.IntegerValue text -> case parseIntegerLiteral text of
-    Just ParsedInteger{parsedIntegerValue} -> IntValue parsedIntegerValue
-    Nothing -> IntValue 0
+    Just ParsedInteger{parsedIntegerValue, parsedIntegerSuffix} ->
+      IntValue (kindOfSuffix parsedIntegerSuffix) parsedIntegerValue
+    Nothing -> intOf 0
   Tree.FloatValue text -> case parseFloatLiteral text of
     Just ParsedFloat{parsedFloatValue, parsedFloatWidth} ->
       FloatValue parsedFloatWidth parsedFloatValue
