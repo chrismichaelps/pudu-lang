@@ -1,7 +1,7 @@
 module UsesStd
 
-import Std.Math as Math
 import Std.List {sumOr}
+import Std.Math as Math
 
 export fn total(items: Array[Int]) -> Int {
   Math.clamp(sumOr(&items, 0), 0, 100)

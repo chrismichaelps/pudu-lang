@@ -14,31 +14,31 @@ export fn main() -> Int {
   var total = 0
   match Parse.run(numberList(), "[1, 2, -3]") {
     case Ok(values) => { total = total + values.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Parse.run(numberList(), "[]") {
     case Ok(values) => { if values.length() == 0 { total = total + 1 } }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Parse.run(Parse.identifier(), "value_1") {
     case Ok(name) => { total = total + name.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Parse.run(Parse.quoted(), "\"a\\nb\"") {
     case Ok(text) => { total = total + text.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Parse.run(Parse.integer(), "12x") {
-    case Ok(_) => { }
+    case Ok(_) => {}
     case Err(problem) => { total = total + problem.position }
   }
   match Parse.run(numberList(), "[1, ,2]") {
-    case Ok(_) => { }
+    case Ok(_) => {}
     case Err(problem) => { total = total + problem.position }
   }
   match Parse.run(Parse.choice(&[Parse.symbol("yes"), Parse.symbol("no")], "yes or no"), "no") {
     case Ok(word) => { total = total + word.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   total
 }

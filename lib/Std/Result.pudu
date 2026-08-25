@@ -116,7 +116,7 @@ export fn successes[T, E](values: &Array[Result[T, E]]) -> Array[T] {
   for value in values {
     match value {
       case Ok(found) => { out = out.push(found) }
-      case Err(_) => { }
+      case Err(_) => {}
     }
   }
   out
@@ -127,7 +127,7 @@ export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
   var out = []
   for value in values {
     match value {
-      case Ok(_) => { }
+      case Ok(_) => {}
       case Err(problem) => { out = out.push(problem) }
     }
   }

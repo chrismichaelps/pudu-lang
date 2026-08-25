@@ -74,6 +74,7 @@ library
     Pudu.Frontend.Token
     Pudu.DecimalLiteral
     Pudu.FloatLiteral
+    Pudu.Format
     Pudu.IntegerLiteral
     Pudu.Doc
     Pudu.Doc.Json
@@ -138,6 +139,7 @@ test-suite pudu-test
   other-modules:
     Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec
+    Pudu.FormatSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Compiler.ProgramSpec
     Pudu.Frontend.Lexer.CursorSpec

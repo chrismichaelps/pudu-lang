@@ -26,7 +26,7 @@ export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
     case Err(problem) => Err(problem)
     case Ok(pair) => {
       if pair[1].position < text.length() {
-        Err(Problem { position: pair[1].position, expected: "the end of the input" })
+        Err(Problem{position: pair[1].position, expected: "the end of the input"})
       } else {
         Ok(pair[0])
       }
@@ -54,20 +54,20 @@ export fn pure[T](value: T) -> Parser[T] {
 
 /// A parser that consumes nothing and always fails.
 export fn fail[T](expected: Str) -> Parser[T] {
-  fn(input: Input) -> Step[T] => Err(Problem { position: input.position, expected: expected })
+  fn(input: Input) -> Step[T] => Err(Problem{position: input.position, expected: expected})
 }
 
 /// One character the predicate accepts.
 export fn satisfy(expected: Str, holds: fn(Char) -> Bool) -> Parser[Char] {
   fn(input: Input) -> Step[Char] => {
     if input.position >= input.text.length() {
-      Err(Problem { position: input.position, expected: expected })
+      Err(Problem{position: input.position, expected: expected})
     } else {
       let found = input.text.charAt(input.position)
       if holds(found) {
-        Ok((found, Input { text: input.text, position: input.position + 1 }))
+        Ok((found, Input{text: input.text, position: input.position + 1}))
       } else {
-        Err(Problem { position: input.position, expected: expected })
+        Err(Problem{position: input.position, expected: expected})
       }
     }
   }
@@ -83,12 +83,12 @@ export fn literal(wanted: Str) -> Parser[Str] {
   fn(input: Input) -> Step[Str] => {
     let end = input.position + wanted.length()
     if end > input.text.length() {
-      Err(Problem { position: input.position, expected: wanted })
+      Err(Problem{position: input.position, expected: wanted})
     } else {
       if input.text.slice(input.position, end) == wanted {
-        Ok((wanted, Input { text: input.text, position: end }))
+        Ok((wanted, Input{text: input.text, position: end}))
       } else {
-        Err(Problem { position: input.position, expected: wanted })
+        Err(Problem{position: input.position, expected: wanted})
       }
     }
   }
@@ -104,7 +104,7 @@ export fn letter() -> Parser[Char] {
   satisfy(
     "a letter",
     fn(found: Char) -> Bool =>
-      (found >= 'a' && found <= 'z') || (found >= 'A' && found <= 'Z')
+    (found >= 'a' && found <= 'z') || (found >= 'A' && found <= 'Z')
   )
 }
 
@@ -141,7 +141,7 @@ export fn anyCharacter() -> Parser[Char] {
 export fn endOfInput() -> Parser[()] {
   fn(input: Input) -> Step[()] => {
     if input.position >= input.text.length() { Ok(((), input)) }
-    else { Err(Problem { position: input.position, expected: "the end of the input" }) }
+      else { Err(Problem{position: input.position, expected: "the end of the input"}) }
   }
 }
 
@@ -211,7 +211,7 @@ export fn attempt[T](parser: Parser[T]) -> Parser[T] {
   fn(input: Input) -> Step[T] => {
     match parser(input) {
       case Ok(pair) => Ok(pair)
-      case Err(problem) => Err(Problem { position: input.position, expected: problem.expected })
+      case Err(problem) => Err(Problem{position: input.position, expected: problem.expected})
     }
   }
 }
@@ -230,7 +230,7 @@ export fn choice[T](parsers: &Array[Parser[T]], expected: Str) -> Parser[T] {
       }
       index = index + 1
     }
-    Err(Problem { position: input.position, expected: expected })
+    Err(Problem{position: input.position, expected: expected})
   }
 }
 
@@ -265,7 +265,7 @@ export fn many[T](parser: Parser[T]) -> Parser[Array[T]] {
         }
         case Err(problem) => {
           if problem.position == rest.position { reading = false }
-          else { return Err(problem) }
+            else { return Err(problem) }
         }
       }
     }
@@ -280,7 +280,7 @@ export fn some[T](parser: Parser[T]) -> Parser[Array[T]] {
       case Err(problem) => Err(problem)
       case Ok(pair) => {
         if pair[0].length() == 0 {
-          Err(Problem { position: input.position, expected: "at least one" })
+          Err(Problem{position: input.position, expected: "at least one"})
         } else { Ok(pair) }
       }
     }
@@ -297,10 +297,10 @@ export fn separatedSome[T, S](parser: Parser[T], separator: Parser[S]) -> Parser
   andThen(
     parser,
     fn(first: T) -> Parser[Array[T]] =>
-      map(
-        many(keepSecond(separator, parser)),
-        fn(rest: Array[T]) -> Array[T] => [first].concat(rest)
-      )
+    map(
+      many(keepSecond(separator, parser)),
+      fn(rest: Array[T]) -> Array[T] => [first].concat(rest)
+    )
   )
 }
 
@@ -349,17 +349,17 @@ export fn integer() -> Parser[Int] {
   andThen(
     optional(character('-')),
     fn(sign: Option[Char]) -> Parser[Int] =>
-      map(
-        asText(some(digit())),
-        fn(digits: Str) -> Int => {
-          var total = 0
-          for digitChar in digits.chars() { total = total * 10 + (digitChar.code() - 48) }
-          match sign {
-            case Some(_) => 0 - total
-            case None => total
-          }
+    map(
+      asText(some(digit())),
+      fn(digits: Str) -> Int => {
+        var total = 0
+        for digitChar in digits.chars() { total = total * 10 + (digitChar.code() - 48) }
+        match sign {
+          case Some(_) => 0 - total
+          case None => total
         }
-      )
+      }
+    )
   )
 }
 
@@ -368,15 +368,15 @@ export fn identifier() -> Parser[Str] {
   andThen(
     letter(),
     fn(first: Char) -> Parser[Str] =>
-      map(
-        asText(many(satisfy(
-          "a letter, digit, or underscore",
-          fn(found: Char) -> Bool =>
+    map(
+      asText(many(satisfy(
+            "a letter, digit, or underscore",
+            fn(found: Char) -> Bool =>
             (found >= 'a' && found <= 'z') || (found >= 'A' && found <= 'Z') ||
-              (found >= '0' && found <= '9') || found == '_'
-        ))),
-        fn(rest: Str) -> Str => first.toText() + rest
-      )
+            (found >= '0' && found <= '9') || found == '_'
+          ))),
+      fn(rest: Str) -> Str => first.toText() + rest
+    )
   )
 }
 

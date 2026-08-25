@@ -25,11 +25,11 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
           case Err(problem) => Err(problem)
           case Ok(headers) => {
             Ok(Http.Request {
-              method: Http.methodFrom(parts[0]),
-              target: parts[1],
-              headers: headers,
-              body: split[1]
-            })
+                method: Http.methodFrom(parts[0]),
+                target: parts[1],
+                headers: headers,
+                body: split[1]
+              })
           }
         }
       }
@@ -48,7 +48,7 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
         match parseHeaders(&lines.slice(1, lines.length())) {
           case Err(problem) => Err(problem)
           case Ok(headers) => {
-            Ok(Http.Response { status: status, headers: headers, body: split[1] })
+            Ok(Http.Response{status: status, headers: headers, body: split[1]})
           }
         }
       }
@@ -79,7 +79,7 @@ export fn respond(code: Int, mediaType: Str, body: Str) -> Http.Response {
 
 /// A response with no body, for the statuses that carry none.
 export fn respondEmpty(code: Int) -> Http.Response {
-  Http.Response { status: Http.status(code), headers: [], body: "" }
+  Http.Response{status: Http.status(code), headers: [], body: ""}
 }
 
 /// A redirect to a target, with the status a caller chooses.
@@ -139,7 +139,7 @@ export fn explain(problem: &MessageError) -> Str {
     case BadStatusLine(line) => "the status line is not a version, code, and reason: " + line
     case BadHeader(line) => "a header has no colon: " + line
     case ShortBody(declared, actual) =>
-      "the body is " + show(actual) + " where " + show(declared) + " was declared"
+    "the body is " + show(actual) + " where " + show(declared) + " was declared"
   }
 }
 
@@ -188,9 +188,9 @@ fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
           index = index + 1
         }
         Ok(Http.Status {
-          code: code,
-          reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
-        })
+            code: code,
+            reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
+          })
       }
       case None => Err(BadStatusLine(line))
     }
@@ -204,9 +204,9 @@ fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
     let colon = line.indexOf(":")
     if colon < 0 { return Err(BadHeader(line)) }
     out = out.push((
-      line.slice(0, colon).trim(),
-      line.slice(colon + 1, line.length()).trim()
-    ))
+        line.slice(0, colon).trim(),
+        line.slice(colon + 1, line.length()).trim()
+      ))
   }
   Ok(out)
 }

@@ -15,7 +15,7 @@ export fn writeValue[T](value: T) -> Result[(), Str] { print(show(value)) }
 export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
   for line in lines {
     match print(line) {
-      case Ok(_) => { }
+      case Ok(_) => {}
       case Err(problem) => { return Err(problem) }
     }
   }

@@ -301,7 +301,7 @@ function_decl    = "unsafe", capabilities?, ... ;
 - Official formatting uses two-space indentation, braces on declaration/control lines, trailing commas for multiline lists, and one declaration per logical block.
 - Semicolons are not part of canonical syntax; newlines and braces delimit statements.
 - Imports sort lexically and group standard-library before project modules.
-- Formatter output is idempotent and is the only supported style for committed Pudu code.
+- Formatter output is idempotent and is the only supported style for committed Pudu code. `pudu fmt` implements it, and `pudu fmt --check` is a repository gate. It works from the token stream, so it can only move whitespace: the tokens it emits are the tokens it read, and it never joins or splits a line, because a newline here delimits a statement.
 
 ## Prohibited Patterns
 

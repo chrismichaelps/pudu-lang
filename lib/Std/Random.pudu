@@ -10,7 +10,7 @@ export type Generator = { state: UInt64 }
 /// A seed of nought is replaced, because the algorithm below has nought as a
 /// fixed point and would answer with it forever.
 export fn fromSeed(seed: UInt64) -> Generator {
-  if seed == 0u64 { Generator { state: 88172645463325252u64 } } else { Generator { state: seed } }
+  if seed == 0u64 { Generator{state: 88172645463325252u64} } else { Generator{state: seed} }
 }
 
 /// A generator started from the clock.
@@ -32,7 +32,7 @@ export fn next(source: &Generator) -> (Generator, UInt64) {
   value = value ^ (value >> 12)
   value = value ^ (value << 25)
   value = value ^ (value >> 27)
-  (Generator { state: value }, value &* 2685821657736338717u64)
+  (Generator{state: value}, value &* 2685821657736338717u64)
 }
 
 /// A number below a bound, and the generator that follows.

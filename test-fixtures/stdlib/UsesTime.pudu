@@ -8,15 +8,15 @@ export fn main() -> Int {
   let anchor = Time.instantOf(1700000000000)
   match Time.toRfc3339(&anchor) {
     case Ok(text) => { total = total + text.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Time.fromRfc3339("2023-11-14T22:13:20Z") {
     case Ok(back) => { if Time.toMillis(&back) == 1700000000000 { total = total + 1 } }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Time.toDate(&anchor) {
     case Ok(date) => { total = total + date.year - 2000 + date.month + date.day }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   let later = Time.add(&anchor, &Time.hours(2))
   total = total + Time.durationSeconds(&Time.between(&anchor, &later)) / 3600
@@ -24,11 +24,11 @@ export fn main() -> Int {
   if Time.isBefore(&anchor, &later) { total = total + 1 }
   match Process.output("echo", &["ok"]) {
     case Ok(text) => { total = total + text.trim().length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Process.status("sh", &["-c", "exit 4"]) {
     case Ok(code) => { total = total + code }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   total
 }

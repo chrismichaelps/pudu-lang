@@ -38,6 +38,8 @@ pudu help            print usage
 
 ### Governance
 
+- `pudu fmt` rewrites files in place, `--check` reports which would change and exits non-zero without touching any, and `--stdout` writes the result for a caller that wants to diff it. The check form is the shape a continuous-integration step needs.
+
 - `main`'s answer decides what the run does. A whole number becomes the exit status, because that is
   what a shell reads and a program returning one meant it as a status. Unit prints nothing. Anything
   else is printed, so a program that answers with a value can be run and read without writing its

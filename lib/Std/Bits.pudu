@@ -46,13 +46,13 @@ export fn width[T: Bits](value: &T) -> Int { value.width() }
 /// outside the type.
 export fn bit[T: Bits](example: &T, position: Int) -> T {
   if position < 0 || position >= example.width() { example.noBits() }
-  else { example.lowBit().shiftedLeft(position) }
+    else { example.lowBit().shiftedLeft(position) }
 }
 
 /// Whether the bit at a position is set. A position outside the type is not.
 export fn testBit[T: Bits](value: &T, position: Int) -> Bool {
   if position < 0 || position >= value.width() { false }
-  else { value.shiftedRight(position).bitAnd(&value.lowBit()) == value.lowBit() }
+    else { value.shiftedRight(position).bitAnd(&value.lowBit()) == value.lowBit() }
 }
 
 /// The value with one bit set.
@@ -63,7 +63,7 @@ export fn setBit[T: Bits](value: &T, position: Int) -> T {
 /// The value with one bit cleared.
 export fn clearBit[T: Bits](value: &T, position: Int) -> T {
   if position < 0 || position >= value.width() { *value }
-  else { value.bitAnd(&bit(value, position).bitNot()) }
+    else { value.bitAnd(&bit(value, position).bitNot()) }
 }
 
 /// The value with one bit inverted.
@@ -173,7 +173,6 @@ export fn toHex[T: Bits](value: &T) -> Str {
     }
   }
 }
-
 
 /// One implementation per integer width, each reporting its own. `Int` and
 /// `UInt` report the target's pointer width, which is the one place the target
@@ -372,7 +371,7 @@ export fn nextPowerOfTwo[T: Bits](value: &T) -> T {
     case Some(top) => {
       if isSingleBit(value) { *value } else {
         if top + 1 >= value.width() { value.lowBit().shiftedLeft(value.width() - 1) }
-        else { value.lowBit().shiftedLeft(top + 1) }
+          else { value.lowBit().shiftedLeft(top + 1) }
       }
     }
   }

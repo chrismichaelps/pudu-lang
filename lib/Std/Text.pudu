@@ -54,7 +54,7 @@ export fn join(pieces: &Array[Str], separator: Str) -> Str {
   var out = ""
   var index = 0
   while index < pieces.length() {
-    if index > 0 { out = out + separator } else { }
+    if index > 0 { out = out + separator } else {}
     out = out + pieces[index]
     index = index + 1
   }
@@ -68,7 +68,7 @@ export fn splitNonEmpty(value: Str, separator: Str) -> Array[Str] {
   let pieces = value.split(separator)
   var out = []
   for piece in pieces {
-    if piece.isEmpty() { } else { out = out.push(piece) }
+    if piece.isEmpty() {} else { out = out.push(piece) }
   }
   out
 }
@@ -202,7 +202,7 @@ export fn partition(value: Str, keep: fn(Char) -> Bool) -> (Str, Str) {
   var rejected = ""
   for character in value.chars() {
     if keep(character) { kept = kept + textOf(character) }
-    else { rejected = rejected + textOf(character) }
+      else { rejected = rejected + textOf(character) }
   }
   (kept, rejected)
 }
@@ -258,9 +258,9 @@ export fn commonPrefix(left: Str, right: Str) -> (Str, Str, Str) {
   var shared = 0
   let limit = if left.length() < right.length() { left.length() } else { right.length() }
   while shared < limit && left.charAt(shared) == right.charAt(shared) { shared = shared + 1 }
-  ( left.slice(0, shared)
-  , left.slice(shared, left.length())
-  , right.slice(shared, right.length())
+  (left.slice(0, shared)
+      , left.slice(shared, left.length())
+      , right.slice(shared, right.length())
   )
 }
 
@@ -512,7 +512,7 @@ export fn toTitle(value: Str) -> Str {
       atWordStart = true
     } else {
       if atWordStart { out = out + textOf(character).toUpper() }
-      else { out = out + textOf(character).toLower() }
+        else { out = out + textOf(character).toLower() }
       atWordStart = false
     }
   }

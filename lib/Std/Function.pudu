@@ -2,10 +2,10 @@ module Std.Function
 
 /// The value itself. Useful wherever a transformation is required and none is
 /// wanted, such as `flatten` written as `flatMap(items, identity)`.
-export fn identity[T](value: T) -> T { value }
+export fn identity[T](value: T) -> T{value}
 
 /// A function that ignores its argument and answers with a fixed value.
-export fn constant[A, B](value: A, _ignored: B) -> A { value }
+export fn constant[A, B](value: A, _ignored: B) -> A{value}
 
 /// A function with its two arguments exchanged.
 export fn flip[A, B, C](f: fn(A, B) -> C, left: B, right: A) -> C { f(right, left) }
