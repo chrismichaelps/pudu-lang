@@ -146,6 +146,7 @@ testProgramEvaluation = do
   parsing <- runEntry "test-fixtures/stdlib/UsesParse.pudu"
   labelled <- runEntry "test-fixtures/stdlib/UsesLabels.pudu"
   exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
+  generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -176,6 +177,8 @@ testProgramEvaluation = do
         (labelled === Just "4")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
+    , counterexample "a generic trait's parameters follow its implementation"
+        (generic === Just "5")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

@@ -49,12 +49,55 @@ typeProperties =
   , ("references are dereferenced explicitly in both directions", testDereference)
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
+  , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
   , ("Decimal is an ordinary type with exact literals", testDecimalType)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("compile-time functions keep their evaluator pure", testComptime)
   , ("a structured scope requires an async function", testScopes)
   , ("expression types are recorded for tooling", testRecordedTypes)
   ]
+
+{-| A trait's own type parameters used to be formed as nominal types named
+    after the parameter, so `trait Holds[T]` gave `get` a result of some type
+    literally called `T`, and a trait-qualified call typed itself from the
+    declaration rather than from the implementation it would actually run. -}
+testGenericTraits :: IO Property
+testGenericTraits = do
+  methodCall <- codes (genericTrait <> ["fn run(b: Box) -> Int { b.get() }"])
+  qualifiedCall <- codes (genericTrait <> ["fn run(b: Box) -> Int { Holds.get(&b) }"])
+  wrongResult <- codes (genericTrait <> ["fn run(b: Box) -> Str { Holds.get(&b) }"])
+  twoParameters <- codes
+    [ "module M"
+    , "type Pair = { a: Int }"
+    , "trait Maps[K, V] { fn lookup(self: &Self, key: K) -> Option[V] }"
+    , "impl Maps[Int, Str] for Pair {"
+    , "  fn lookup(self: &Self, key: Int) -> Option[Str] { None }"
+    , "}"
+    , "fn run(p: Pair) -> Option[Str] { Maps.lookup(&p, 1) }"
+    ]
+  nonGenericStillWorks <- codes
+    [ "module M"
+    , "type Bot = { id: Int }"
+    , "trait Speak { fn label(self: &Self) -> Int }"
+    , "impl Speak for Bot { fn label(self: &Self) -> Int { 1 } }"
+    , "fn run(b: Bot) -> Int { Speak.label(&b) }"
+    ]
+  pure $ conjoin
+    [ counterexample "method syntax resolves the concrete method" (methodCall === [])
+    , counterexample "so does the trait-qualified form" (qualifiedCall === [])
+    , counterexample "and it is still checked against the implementation"
+        (wrongResult === ["E3001"])
+    , counterexample "a trait may carry more than one parameter" (twoParameters === [])
+    , counterexample "a trait with no parameters is unaffected"
+        (nonGenericStillWorks === [])
+    ]
+ where
+  genericTrait =
+    [ "module M"
+    , "type Box = { v: Int }"
+    , "trait Holds[T] { fn get(self: &Self) -> T }"
+    , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
 
 testOperators :: IO Property
 testOperators = do

@@ -101,6 +101,7 @@ import Pudu.Type.Check.Method
   , functionRigid
   , implAliases
   , methodScheme
+  , targetName
   , traitTable
   )
 import Pudu.Type.Exhaust (checkExhaustive)
@@ -750,6 +751,50 @@ qualifiedByName declared spanValue target member = case target of
             Just scheme -> Just <$> instantiate spanValue scheme
   _ -> pure Nothing
 
+{-| Resolve a trait-qualified call against the type its receiver actually has.
+
+    `Speak.label(&bot)` names the trait, but the method it runs is the one `Bot`
+    implements, and only that one knows the concrete types. The trait's own
+    declaration cannot: a generic trait leaves its parameters open there by
+    design, so typing the call from the declaration gave back the parameter
+    itself and every use was a mismatch against it.
+
+    This is the rule [[Evaluator]] already followed for the same call, so the
+    two phases now agree about what a trait-qualified call means rather than
+    only appearing to.
+
+    The receiver is checked once, here, and its type handed back so the call is
+    not walked twice. -}
+traitQualifiedCall
+  :: DeclaredTypes
+  -> [Text]
+  -> Located Expression
+  -> [Located Expression]
+  -> Checker (Maybe (Type, [Type]))
+traitQualifiedCall declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
+  (MemberExpression target member, receiver : rest)
+    | Just traitIdentity <- namedType (locatedValue target) -> do
+        receiverType <- checkExpression declared rigid receiver
+        resolved <- throughBorrow =<< zonk receiverType
+        case targetName resolved of
+          Nothing -> pure Nothing
+          Just owner -> do
+            found <- lookupName (nominalKey owner <> "." <> locatedValue member)
+            case found of
+              Nothing -> pure Nothing
+              Just scheme
+                | nominalKey owner == nominalKey traitIdentity -> pure Nothing
+                | otherwise -> do
+                    instantiated <- instantiate calleeSpan scheme
+                    recordExpression calleeSpan instantiated
+                    restTypes <- mapM (checkExpression declared rigid) rest
+                    pure (Just (instantiated, receiverType : restTypes))
+  _ -> pure Nothing
+ where
+  namedType expression = case expression of
+    NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
+    _ -> Nothing
+
 {-| Check one expression and record the type it was given, so tooling can
     report it later. -}
 checkExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
@@ -773,9 +818,13 @@ inferExpression declared rigid spanValue expression = case expression of
   CallExpression callee arguments -> do
     checkUnsafeCall spanValue callee
     checkComptimeCall spanValue callee
-    calleeType <- checkCallee declared rigid callee
-    argumentTypes <- mapM (checkExpression declared rigid) arguments
-    callType spanValue calleeType argumentTypes
+    dispatched <- traitQualifiedCall declared rigid callee arguments
+    case dispatched of
+      Just (calleeType, argumentTypes) -> callType spanValue calleeType argumentTypes
+      Nothing -> do
+        calleeType <- checkCallee declared rigid callee
+        argumentTypes <- mapM (checkExpression declared rigid) arguments
+        callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
     qualified <- qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
     case qualified of
