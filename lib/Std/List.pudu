@@ -755,11 +755,8 @@ export fn windows[T](items: &Array[T], size: Int) -> Array[Array[T]] {
 
 /// A value placed into an array that is already in ascending order, keeping it
 /// in order. Placed after equal elements, so repeated insertion is stable.
-export fn insertOrdered(items: &Array[Int], value: Int) -> Array[Int] {
-  var position = 0
-  let size = items.length()
-  while position < size && items[position] <= value { position = position + 1 }
-  items.insert(position, value)
+export fn insertOrdered[T: Ord](items: &Array[T], value: T) -> Array[T] {
+  insertBy(items, value, fn(left: T, right: T) -> Bool => left.before(&right))
 }
 
 /// A value placed into an array ordered by a comparison, keeping it in order.
@@ -800,18 +797,20 @@ export fn distinctBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[T] {
 }
 
 /// The elements ordered by a key drawn from each one.
-export fn sortOn[T](items: &Array[T], key: fn(T) -> Int) -> Array[T] {
-  sortBy(items, fn(left: T, right: T) -> Bool => key(left) < key(right))
+/// The key may be of any ordered type, not only a number: sorting people by
+/// name is the same operation as sorting them by age.
+export fn sortOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Array[T] {
+  sortBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// The element whose key is smallest, or `None` for an empty array.
-export fn minimumOn[T](items: &Array[T], key: fn(T) -> Int) -> Option[T] {
-  minimumBy(items, fn(left: T, right: T) -> Bool => key(left) < key(right))
+export fn minimumOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Option[T] {
+  minimumBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// The element whose key is largest, or `None` for an empty array.
-export fn maximumOn[T](items: &Array[T], key: fn(T) -> Int) -> Option[T] {
-  maximumBy(items, fn(left: T, right: T) -> Bool => key(left) < key(right))
+export fn maximumOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Option[T] {
+  maximumBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// Every running total, from the right.

@@ -91,6 +91,7 @@ builtinName value = case value of
   ParseTimeBuiltin -> "parseTime"
   ZoneOffsetBuiltin -> "zoneOffset"
   RunBuiltin -> "runProgram"
+  ConvertIntegerBuiltin -> "convertInteger"
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
     index, a scalar value. That is the type the language gives an unsuffixed
@@ -128,6 +129,7 @@ data Builtin
   | ParseTimeBuiltin
   | ZoneOffsetBuiltin
   | RunBuiltin
+  | ConvertIntegerBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right

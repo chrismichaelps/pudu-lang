@@ -1350,6 +1350,7 @@ region source needle = case Text.breakOnEnd needle source of
     imported modules made a bounded generic unusable across modules. -}
 testGlobalImpls :: IO Property
 testGlobalImpls = do
+  converting <- typeOf "convertInteger(300, 0u8)"
   shifting <- codesOfExpression "1u8 << 3"
   sameType <- codesOfExpression "1u8 << 3u8"
   prefixProduct <- codes
@@ -1368,6 +1369,8 @@ testGlobalImpls = do
         (prefixProduct === [])
     , counterexample "an unparenthesised one checks the same way"
         (prefixBare === [])
+    , counterexample "a conversion answers with the example's type, optionally"
+        (converting === "Option[UInt8]")
     ]
 
 testKeyedTypes :: IO Property

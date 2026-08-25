@@ -148,7 +148,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-three modules, 696 documented exports, every one written in Pudu.
+Twenty-three modules, 699 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -159,7 +159,7 @@ Twenty-three modules, 696 documented exports, every one written in Pudu.
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
 | `Std.Num` | 21 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div` and the aggregates over them |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
-| `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked partial operators |
+| `Std.Math` | 27 | arithmetic, divisibility, roots, primality, checked partial operators — all bounded, none `Int`-only |
 | `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
 | `Std.Http.Message` | 12 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |

@@ -516,6 +516,10 @@ testIntegerWidths = do
   negativeShift <- codesOf "1u8 << (0 - 1)"
   annotated <- runProgram [] ["let value: UInt8 = 200"] "value &+ 100u8"
   plainStaysPlain <- evaluate "2000000 + 1"
+  fits <- evaluate "convertInteger(65, 0u8)"
+  doesNot <- evaluate "convertInteger(300, 0u8)"
+  negative <- evaluate "convertInteger(0 - 1, 0u8)"
+  widened <- evaluate "convertInteger(200u8, 0)"
   pure $ conjoin
     [ counterexample "complement is taken over the type's width" (complemented === "255")
     , counterexample "checked addition reports overflow" (overflowed === ["E7005"])
@@ -529,6 +533,10 @@ testIntegerWidths = do
     , counterexample "an annotated literal takes its annotated width"
         (annotated === "44")
     , counterexample "a plain integer is unaffected" (plainStaysPlain === "2000001")
+    , counterexample "a conversion that fits answers with the value" (fits === "Some(65)")
+    , counterexample "a conversion that does not fit answers with nothing" (doesNot === "None")
+    , counterexample "a negative value does not fit an unsigned type" (negative === "None")
+    , counterexample "widening always fits" (widened === "Some(200)")
     ]
 
 {-| An implementation for a built-in type is reachable at run time. It type

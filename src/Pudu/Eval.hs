@@ -18,6 +18,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
+import Pudu.IntegerLiteral (integerKindFits)
 import Pudu.Eval.Clock
 import Pudu.Eval.Io
 import Pudu.Eval.Keyed
@@ -277,6 +278,7 @@ installBuiltinConstructors = do
   bind "setOf" (BuiltinValue SetOfBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)
   bind "display" (BuiltinValue DisplayBuiltin)
+  bind "convertInteger" (BuiltinValue ConvertIntegerBuiltin)
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
@@ -575,6 +577,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
+    BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue values
     BuiltinValue effect -> callEffect spanValue effect values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
@@ -630,6 +633,32 @@ callDisplay spanValue arguments = case arguments of
   [CharValue character] -> pure (StrValue (Text.singleton character))
   [value] -> pure (StrValue (renderValue value))
   _ -> abortAt (Just spanValue) "E7002" "display expects one value" Nothing
+
+{-| Move an integer to another integer type, refusing what will not fit.
+
+    The target type comes from an example value rather than being written,
+    because the language has no way to name a type in an expression. It is the
+    one integer operation that cannot be written in Pudu at all: every other one
+    is arithmetic on values of a single type, and this one is the boundary
+    between two.
+
+    Answering `None` rather than truncating is the same rule checked arithmetic
+    follows. A caller that wants the low bits of a value says so with a mask
+    before converting. -}
+callConvertInteger :: Span -> [Value] -> Evaluator Value
+callConvertInteger spanValue arguments = case arguments of
+  [IntValue _ value, IntValue target _]
+    | integerKindFits target value -> pure (VariantValue "Some" [IntValue target value])
+    | otherwise -> pure (VariantValue "None" [])
+  [left, right] ->
+    abortAt (Just spanValue) "E7002"
+      ( "convertInteger moves between integers, not between a "
+          <> valueKind left
+          <> " and a "
+          <> valueKind right
+      )
+      Nothing
+  _ -> abortAt (Just spanValue) "E7002" "convertInteger expects a value and an example" Nothing
 
 {-| The built-ins that reach the world.
 

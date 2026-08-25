@@ -17,6 +17,12 @@ export trait Sub { fn minus(self: &Self, other: &Self) -> Self }
 /// A type whose values multiply.
 export trait Mul { fn times(self: &Self, other: &Self) -> Self }
 
+/// A type whose values have a remainder, answering `None` for a divisor of
+/// nought. Separate from `Div` because a type can divide exactly without having
+/// one, and because asking for both when only one is used is a bound a caller
+/// has to satisfy for nothing.
+export trait Rem { fn remainderOf(self: &Self, other: &Self) -> Option[Self] }
+
 /// A type whose values divide, answering `None` for a divisor of nought.
 /// Total, like everything else here: division is the one arithmetic operation
 /// with an input it has no answer for.
@@ -222,5 +228,89 @@ impl Mul for Float64 { fn times(self: &Self, other: &Self) -> Self { *self * *ot
 impl Div for Float64 {
   fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
     if *other == 0.0f64 { None } else { Some(*self / *other) }
+  }
+}
+
+
+/// Two, built from the identity rather than written, so it has whatever type
+/// the caller is working in.
+export fn two[T: One + Add](example: &T) -> T { example.one().plus(&example.one()) }
+
+/// A whole number of the caller's type, built by repeated addition.
+/// Only for the small constants an algorithm needs — ten for digits, two for
+/// halving. Building a large one this way would be a loop a caller can see.
+export fn small[T: Zero + One + Add](example: &T, count: Int) -> T {
+  var out = example.zero()
+  var remaining = count
+  while remaining > 0 {
+    out = out.plus(&example.one())
+    remaining = remaining - 1
+  }
+  out
+}
+
+impl Rem for Int {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int8 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i8 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int16 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i16 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int32 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i32 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int64 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i64 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int128 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i128 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt8 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u8 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt16 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u16 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt32 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u32 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt64 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u64 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt128 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u128 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for BigInt {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
   }
 }

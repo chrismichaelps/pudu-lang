@@ -310,6 +310,17 @@ declareBuiltinConstructors = do
       its quotes. -}
   bindName "display"
     (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+  {-| The conversion between integer types, which nothing in the language can
+      express: every other integer operation works within one type, and this one
+      crosses. The target type comes from an example value because an expression
+      has no way to name a type. -}
+  bindName "convertInteger"
+    ( polytype ["S", "T"] []
+        ( FunctionTypeValue False
+            [RigidType "S", RigidType "T"]
+            (NominalType "Option" [RigidType "T"])
+        )
+    )
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has

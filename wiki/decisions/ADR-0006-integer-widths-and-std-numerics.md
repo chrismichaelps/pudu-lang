@@ -108,12 +108,40 @@ Two rules that shaped the work and still hold:
 - **A bound belongs to the library, not the caller.** `Std.Bits` carries `noBits` and `lowBit` on its
   own trait rather than borrowing `Zero` and `One`, so calling `popCount` needs one import.
 
+## The audit
+
+Every `Int` in a public `Std` signature, classified. An `Int` is **correct** where it names a
+position, a count, or a quantity the language itself defines; it is **wrong** where it names a value
+the caller chose the type of.
+
+| Module | `Int` in public signatures | Verdict |
+|---|---|---|
+| `Std.Math` | all 25 were arithmetic on a caller's value | **generalised** — every one is now bounded |
+| `Std.List` | `insertOrdered`, `sortOn`, `minimumOn`, `maximumOn` | **generalised** — a key may be any ordered type |
+| `Std.List` | `length`, `take`, `drop`, `slice`, `indexOf`, `count`, positions, limits | correct — a length is a count, not a value |
+| `Std.Bits` | `places`, `position`, `keep`, `from`/`to`, and the results of `width`, `popCount`, `countLeadingZeros` | correct — every one is a bit *position*, which is a count whatever the value's width is |
+| `Std.Text` | lengths, indices, widths, counts | correct |
+| `Std.Char` | scalar values and digit values | correct — a scalar value is defined by Unicode, not by the caller |
+| `Std.Time` | milliseconds, calendar fields, zone offsets | correct — the units are the library's own |
+| `Std.Http` | status codes, content lengths, ports | correct — the protocol defines them |
+| `Std.Json`, `Std.Url`, `Std.Map`, `Std.Set`, `Std.Env`, `Std.Process`, `Std.Show`, `Std.Bool`, `Std.Function`, `Std.Order` | positions, sizes, statuses | correct |
+
+`Std.List.range(from, to) -> Array[Int]` stays `Int`: it produces a range of *positions*, and a
+caller wanting values of another type maps over it.
+
 ## Still missing
 
-**There is no conversion between integer types.** A `UInt8` cannot become an `Int` at all, which
-means a program mixing widths has to keep each width in its own arithmetic. The conversion cannot be
-written in Pudu — the language has no cast — so it needs a runtime primitive with a decision about
-what a narrowing one does. That is the next numeric slice, and this ADR does not settle it.
+**Conversion between integer types** is `convertInteger(value, example)`, a prelude value answering
+`Option` of the example's type. It is the one integer operation that cannot be written in Pudu at
+all: every other one is arithmetic within a single type, and this one is the boundary between two.
+
+The target type comes from an example value because an expression has no way to name a type. That is
+a real limitation of the language rather than a choice, and it is why the shape reads oddly —
+`convertInteger(300, 0u8)` rather than `convertInteger[UInt8](300)`. A way to name a type in an
+expression would fix it, and is not in this ADR's scope.
+
+`None` rather than truncation, for the same reason checked arithmetic reports rather than wraps. A
+caller who wants the low bits masks before converting.
 
 ## Consequences
 
