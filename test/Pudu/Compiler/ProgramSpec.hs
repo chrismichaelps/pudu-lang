@@ -142,6 +142,7 @@ testProgramEvaluation = do
   effects <- runEntry "test-fixtures/stdlib/UsesIo.pudu"
   scheduling <- runEntry "test-fixtures/stdlib/UsesTime.pudu"
   numeric <- runEntry "test-fixtures/stdlib/UsesNumeric.pudu"
+  hashing <- runEntry "test-fixtures/stdlib/UsesCrypto.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -164,6 +165,8 @@ testProgramEvaluation = do
         (scheduling === Just "84")
     , counterexample "the numeric surface is generic over the integer family"
         (numeric === Just "96")
+    , counterexample "SHA-256 written in Pudu matches its published vectors"
+        (hashing === Just "10")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
