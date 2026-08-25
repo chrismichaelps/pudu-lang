@@ -9,9 +9,12 @@ module Pudu.Frontend.Lexer.Cursor
   , consumeWhile
   , cursorAtEnd
   , cursorOffset
+  , commitHere
   , cursorStartsWith
   , emitToken
   , emitTrivia
+  , emittedTokens
+  , withoutEmitted
   , markCursor
   , newCursor
   , outputDiagnostics
@@ -177,6 +180,40 @@ recordDiagnostic value cursor
 
 pendingTriviaCount :: LexerCursor -> Int
 pendingTriviaCount = cursorPendingCount
+
+{-| The tokens a cursor has emitted, oldest first.
+
+    An interpolation's expression is lexed by the same scanner as everything
+    else, from the same source, so its tokens carry real spans. Reading them
+    back out is how they reach the part that keeps them. -}
+emittedTokens :: LexerCursor -> [Token]
+emittedTokens = reverse . cursorTokenValues
+
+{-| A cursor whose commit point is where it stands.
+
+    Emitting a token captures the text since the last commit, so a scanner
+    entering the middle of a literal — which is where an interpolation's
+    expression begins — has to say that the text before it is already
+    accounted for. -}
+commitHere :: LexerCursor -> LexerCursor
+commitHere cursor = cursor{cursorCommittedPoint = cursorPoint cursor}
+
+{-| A cursor advanced to a new position, but with the token bookkeeping of an
+    earlier one.
+
+    An interpolation's tokens belong to the part, not to the stream: leaving
+    them in it would make the string's own token be followed by the tokens of
+    its inside. The commit point has to come back too, or the string literal
+    that encloses them can no longer capture its own lexeme. Diagnostics stay,
+    because a mistake inside an interpolation is a mistake in the program. -}
+withoutEmitted :: LexerCursor -> LexerCursor -> LexerCursor
+withoutEmitted before after =
+  after
+    { cursorTokenValues = cursorTokenValues before
+    , cursorCommittedPoint = cursorCommittedPoint before
+    , cursorPendingTrivia = cursorPendingTrivia before
+    , cursorPendingCount = cursorPendingCount before
+    }
 
 completeCursor :: LexerCursor -> Maybe LexerOutput
 completeCursor cursor

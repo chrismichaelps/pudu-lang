@@ -4,6 +4,7 @@ module Pudu.Frontend.Token
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
+  , TemplatePart (..)
   , Trivia (..)
   , TriviaKind (..)
   , keywordFromText
@@ -108,12 +109,24 @@ data TokenKind
   | IntegerLiteral !Text
   | FloatLiteral !Text
   | StringLiteral !Text
+  | TemplateLiteral ![TemplatePart]
   | CharLiteral !Char
   | Keyword !Keyword
   | Symbol !SymbolKind
   | EndOfFile
   | Invalid !Text
-  deriving stock (Eq, Ord, Show)
+  deriving stock (Eq, Show)
+
+{-| @Source.Token.TemplatePart — one piece of an interpolated string.
+
+    Text is already decoded, as an ordinary string literal's is. A hole carries
+    the tokens between its braces, lexed by the same scanner as everything else
+    and from the same source, so the expression the parser reads has real spans
+    and a diagnostic inside an interpolation points at the interpolation. -}
+data TemplatePart
+  = TemplateText !Text
+  | TemplateHole !Span ![Token]
+  deriving stock (Eq, Show)
 
 {-| @Source.Token.TriviaKind — classifies preserved non-semantic text.
 

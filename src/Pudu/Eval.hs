@@ -274,6 +274,7 @@ installBuiltinConstructors = do
   bind "mapOf" (BuiltinValue MapOfBuiltin)
   bind "setOf" (BuiltinValue SetOfBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)
+  bind "display" (BuiltinValue DisplayBuiltin)
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
@@ -571,6 +572,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     BuiltinValue ShowBuiltin -> callShow spanValue values
+    BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue effect -> callEffect spanValue effect values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
@@ -612,6 +614,20 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| Render any value as the text a message should carry.
+
+    The difference from `show` is text itself: `show` quotes a string so a
+    printed `"1"` is never mistaken for the number, which is what a reader
+    inspecting a value needs. A message being built wants the string's own
+    content, and interpolation is a message being built. Everything that is not
+    text or a character renders identically either way. -}
+callDisplay :: Span -> [Value] -> Evaluator Value
+callDisplay spanValue arguments = case arguments of
+  [StrValue text] -> pure (StrValue text)
+  [CharValue character] -> pure (StrValue (Text.singleton character))
+  [value] -> pure (StrValue (renderValue value))
+  _ -> abortAt (Just spanValue) "E7002" "display expects one value" Nothing
 
 {-| The built-ins that reach the world.
 

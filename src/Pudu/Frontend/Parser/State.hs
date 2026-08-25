@@ -25,6 +25,7 @@ module Pudu.Frontend.Parser.State
   , synchronizeDeclaration
   , withRecordAdmission
   , withRecursionBudget
+  , withTokens
   ) where
 
 import Data.Maybe (fromMaybe)
@@ -100,6 +101,24 @@ runParser :: Source -> Parser a -> [Token] -> (a, [Diagnostic])
 runParser source (Parser action) tokens =
   let (value, finalState) = action (initialParserState source tokens)
    in (value, sortDiagnostics (reverse (parserDiagnosticsRev finalState)))
+
+{-| Parse a separate token stream, then resume where the caller was.
+
+    An interpolation's expression was lexed by the same scanner into tokens of
+    its own; reading it needs the ordinary expression parser pointed at those
+    tokens rather than at the stream the caller is in. Diagnostics recorded
+    inside are kept, because a mistake inside an interpolation is a mistake in
+    the program. -}
+withTokens :: [Token] -> Parser a -> Parser a
+withTokens tokens (Parser action) =
+  Parser $ \state ->
+    let nested =
+          state
+            { parserRemaining = normalizeTokens (parserFallbackEof state) tokens
+            , parserBudgetExhausted = False
+            }
+        (value, after) = action nested
+     in (value, state{parserDiagnosticsRev = parserDiagnosticsRev after})
 
 peekToken :: Parser Token
 peekToken = Parser $ \state -> (tokenAt 0 state, state)

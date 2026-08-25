@@ -31,6 +31,7 @@ import Pudu.Frontend.Parser.State
   , lookaheadKind
   , peekToken
   , withRecursionBudget
+  , withTokens
   )
 import Pudu.Frontend.Parser.Name (expectValueIdentifier)
 import Pudu.Frontend.Parser.Pattern (parsePattern)
@@ -53,6 +54,7 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Frontend.Token
   ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
     , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwScope, KwTask, KwTrue, KwUnsafe, KwWhile, KwWith)
+  , TemplatePart (..)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
@@ -97,6 +99,7 @@ parsePrefix blockParser = do
     IntegerLiteral value -> literal token (IntegerValue value)
     FloatLiteral value -> literal token (FloatValue value)
     StringLiteral value -> literal token (StringValue value)
+    TemplateLiteral parts -> parseTemplate blockParser token parts
     CharLiteral value -> literal token (CharValue value)
     Keyword KwTrue -> literal token (BoolValue True)
     Keyword KwFalse -> literal token (BoolValue False)
@@ -120,6 +123,66 @@ parsePrefix blockParser = do
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
     _ -> invalidPrefix token
+
+{-| Build the expression an interpolated string stands for.
+
+    `"a{x}b"` is `"a" + show(x) + "b"`. It is sugar rather than a node of its
+    own because there is nothing a template means that concatenation does not,
+    and every later phase — resolution, typing, evaluation — would otherwise
+    need a case for a construct with no new meaning.
+
+    Each hole is wrapped in `show`, so a value of any type may be interpolated
+    and text keeps its own content rather than gaining the quotes rendering
+    would add. -}
+parseTemplate :: BlockParser -> Token -> [TemplatePart] -> Parser (Located Expression)
+parseTemplate blockParser token parts = do
+  _ <- advanceToken
+  pieces <- mapM (templatePiece blockParser (tokenSpan token)) parts
+  pure (Located (tokenSpan token) (concatenate (tokenSpan token) pieces))
+
+{-| One part as an expression: text as itself, a hole as `show` of what it
+    holds. -}
+templatePiece :: BlockParser -> Span -> TemplatePart -> Parser (Located Expression)
+templatePiece blockParser wholeSpan part = case part of
+  TemplateText text -> pure (Located wholeSpan (LiteralExpression (StringValue text)))
+  TemplateHole holeSpan source -> do
+    inner <- parseHole blockParser holeSpan source
+    pure
+      ( Located holeSpan
+          ( CallExpression
+              (Located holeSpan (NameExpression (renderName :| [])))
+              [inner]
+          )
+      )
+
+{-| Read an interpolation's expression from the tokens the lexer made for it.
+
+    An empty interpolation cannot reach here — the lexer refuses one — so the
+    only way this produces nothing is a malformed expression, which reports
+    itself the way any malformed expression does. -}
+parseHole :: BlockParser -> Span -> [Token] -> Parser (Located Expression)
+parseHole blockParser holeSpan tokens =
+  withTokens tokens (parseExpression blockParser)
+    >>= \parsed -> pure (Located holeSpan (locatedValue parsed))
+
+{-| The name a hole's value is rendered through.
+
+    `display` rather than `show`: a message being built wants a string's own
+    content, not the quotes an inspection would add. -}
+renderName :: Text
+renderName = "display"
+
+{-| Text pieces joined with `+`, which is what a template means.
+
+    An empty template is empty text rather than nothing, so `""` and a template
+    with no parts agree. -}
+concatenate :: Span -> [Located Expression] -> Expression
+concatenate wholeSpan pieces = case pieces of
+  [] -> LiteralExpression (StringValue Text.empty)
+  first : rest -> locatedValue (foldl joinWith first rest)
+ where
+  joinWith left right =
+    Located wholeSpan (BinaryExpression left "+" right)
 
 {-| Parse a function literal: `fn(x) => x + 1` or `fn(x: Int) -> Int { ... }`.
 

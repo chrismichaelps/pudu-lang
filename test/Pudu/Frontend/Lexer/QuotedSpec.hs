@@ -6,6 +6,7 @@ import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
 import Pudu.Frontend.Lexer.Cursor
   ( completeCursor, newCursor, outputDiagnostics, outputTokens )
 import Pudu.Frontend.Lexer.Identifier (scanIdentifier)
+import Pudu.Frontend.Lexer (scanOne)
 import Pudu.Frontend.Lexer.Quoted (scanQuoted)
 import Pudu.Frontend.Lexer.Trivia (scanTrivia)
 import Pudu.Frontend.Token
@@ -44,15 +45,15 @@ invalidFixtures =
   , ("\"\\q\"", "E0005", "invalid escape sequence"), ("'\\q'", "E0005", "invalid escape sequence")
   , ("''", "E0007", "character literal must contain exactly one Unicode scalar value")
   , ("'ab'", "E0007", "character literal must contain exactly one Unicode scalar value")
-  , ("\"a{b\"", "E0008", "string interpolation is reserved")
-  , ("\"a}b\"", "E0008", "string interpolation is reserved")
+  , ("\"a{b\"", "E0010", "an interpolation is not closed")
+  , ("\"a}b\"", "E0008", "a closing brace has no interpolation to close")
   , ("'x", "E0002", "unterminated character literal")
   ]
 
 validCase :: (Text, TokenKind) -> IO Property
 validCase (input, expected) = do
   source <- newSource (SourceName "valid-quoted.pudu") input
-  pure $ case scanQuoted (newCursor source) >>= completeCursor of
+  pure $ case scanQuoted scanOne (newCursor source) >>= completeCursor of
     Just output -> case outputTokens output of
       [token, eof] -> conjoin [tokenKind token === expected, tokenKind eof === EndOfFile,
         tokenLexeme token === input, outputDiagnostics output === [], reconstruct [token, eof] === input]
@@ -62,7 +63,7 @@ validCase (input, expected) = do
 invalidCase :: (Text, Text, Text) -> IO Property
 invalidCase (input, code, message) = do
   source <- newSource (SourceName "invalid-quoted.pudu") input
-  pure $ case scanQuoted (newCursor source) >>= completeCursor of
+  pure $ case scanQuoted scanOne (newCursor source) >>= completeCursor of
     Just output -> case (outputTokens output, outputDiagnostics output) of
       ([token, eof], [finding]) -> conjoin
         [ tokenKind token === Invalid input, tokenLexeme token === input, tokenKind eof === EndOfFile
@@ -75,7 +76,7 @@ invalidCase (input, code, message) = do
 testNewlineBoundary :: IO Property
 testNewlineBoundary = do
   source <- newSource (SourceName "unterminated.pudu") "\"abc\nnext"
-  pure $ case scanQuoted (newCursor source) >>= scanTrivia >>= scanIdentifier >>= completeCursor of
+  pure $ case scanQuoted scanOne (newCursor source) >>= scanTrivia >>= scanIdentifier >>= completeCursor of
     Just output -> case (outputTokens output, outputDiagnostics output) of
       ([invalid, name, eof], [finding]) -> conjoin
         [ tokenKind invalid === Invalid "\"abc", tokenKind name === Identifier "next"
@@ -91,10 +92,10 @@ testStructuralBoundaries = do
   let payload = Text.replicate 10000 "a"; input = "\"" <> payload <> "\""
   longSource <- newSource (SourceName "long.pudu") input
   plainSource <- newSource (SourceName "plain.pudu") "name"
-  pure $ case scanQuoted (newCursor longSource) >>= completeCursor of
+  pure $ case scanQuoted scanOne (newCursor longSource) >>= completeCursor of
     Just output -> case outputTokens output of
       [token, eof] -> conjoin [tokenKind token === StringLiteral payload,
-        reconstruct [token, eof] === input, property (rejects (scanQuoted (newCursor plainSource)))]
+        reconstruct [token, eof] === input, property (rejects (scanQuoted scanOne (newCursor plainSource)))]
       _ -> counterexample "long input returned unexpected tokens" False
     Nothing -> counterexample "long input did not complete" False
 

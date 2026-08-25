@@ -591,7 +591,7 @@ checkComptimeCall spanValue callee = do
 
 {-| Names a compile-time body may reach that are not user declarations. -}
 comptimeBuiltins :: [Text]
-comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic", "charFromCode", "show"]
+comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic", "charFromCode", "show", "display"]
 
 {-| A granted capability that the region never reached for is noise: it widens
     the audited surface without buying anything, so leaving the region reports

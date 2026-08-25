@@ -7,49 +7,171 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Frontend.Lexer.Cursor
   ( CursorMark, LexerCursor, captureSince, consumeScalars, consumeWhile
-  , cursorAtEnd, emitToken, markCursor, peekScalar, recordDiagnostic
+  , commitHere, cursorAtEnd, cursorOffset, emitToken, emittedTokens, markCursor, peekScalar
+  , recordDiagnostic, withoutEmitted
   )
+import Pudu.Source (Offset)
 import Pudu.Frontend.Token
-  ( TokenKind (CharLiteral, Invalid, StringLiteral) )
+  ( TemplatePart (..)
+  , Token
+  , TokenKind (CharLiteral, Invalid, StringLiteral, TemplateLiteral)
+  )
 
 data QuoteKind = StringQuote | CharacterQuote
   deriving stock (Eq)
 
 data QuoteState = QuoteState
-  { quoteCursor :: !LexerCursor, decodedChunks :: ![Text], quoteInvalid :: !Bool }
+  { quoteCursor :: !LexerCursor
+  , decodedChunks :: ![Text]
+  , quoteInvalid :: !Bool
+  , quoteParts :: ![TemplatePart]
+  }
 
-scanQuoted :: LexerCursor -> Maybe LexerCursor
-scanQuoted cursor =
+{-| Scan a quoted literal.
+
+    The scanner for one token is injected rather than imported, because an
+    interpolation's expression is lexed by the same scanner as everything else
+    and importing it here would tie the whole lexer to one of its own pieces.
+    It is the same shape the parser uses for blocks, and for the same reason. -}
+scanQuoted :: TokenScanner -> LexerCursor -> Maybe LexerCursor
+scanQuoted scanner cursor =
   case peekScalar cursor of
-    Just '"' -> beginQuote StringQuote cursor
-    Just '\'' -> beginQuote CharacterQuote cursor
+    Just '"' -> beginQuote scanner StringQuote cursor
+    Just '\'' -> beginQuote scanner CharacterQuote cursor
     _ -> Nothing
 
-beginQuote :: QuoteKind -> LexerCursor -> Maybe LexerCursor
-beginQuote kind cursor =
-  scanBody kind (markCursor cursor) initialState
-  where
-    initialState = QuoteState (consumeScalars 1 cursor) [] False
+{-| A scanner for one token, which is what an interpolation needs to read its
+    expression. -}
+type TokenScanner = LexerCursor -> Maybe LexerCursor
 
-scanBody :: QuoteKind -> CursorMark -> QuoteState -> Maybe LexerCursor
-scanBody kind opening state@QuoteState{quoteCursor}
-  | cursorAtEnd quoteCursor = finishUnterminated kind opening quoteCursor
-  | maybe False isLineBreak (peekScalar quoteCursor) = finishUnterminated kind opening quoteCursor
+beginQuote :: TokenScanner -> QuoteKind -> LexerCursor -> Maybe LexerCursor
+beginQuote scanner kind cursor =
+  scanBody scanner kind (markCursor cursor) initialState
+  where
+    initialState = QuoteState (consumeScalars 1 cursor) [] False []
+
+scanBody :: TokenScanner -> QuoteKind -> CursorMark -> QuoteState -> Maybe LexerCursor
+scanBody scanner kind opening state@QuoteState{quoteCursor}
+  {-| A literal already reported as invalid ends without a second complaint: an
+      unterminated interpolation is why the string never closed, and saying so
+      twice explains one mistake as two. -}
+  | cursorAtEnd quoteCursor || maybe False isLineBreak (peekScalar quoteCursor) =
+      if quoteInvalid state
+        then emitInvalid opening quoteCursor
+        else finishUnterminated kind opening quoteCursor
   | peekScalar quoteCursor == Just (closingDelimiter kind) = finishClosed kind opening state
   | peekScalar quoteCursor == Just '\\' = do
       nextState <- scanEscape kind state
-      scanBody kind opening nextState
+      scanBody scanner kind opening nextState
   | kind == StringQuote
-  , maybe False isBrace (peekScalar quoteCursor) = do
+  , peekScalar quoteCursor == Just '{' = do
+      nextState <- scanHole scanner state
+      scanBody scanner kind opening nextState
+  | kind == StringQuote
+  , peekScalar quoteCursor == Just '}' = do
       nextState <- rejectBrace state
-      scanBody kind opening nextState
+      scanBody scanner kind opening nextState
   | otherwise =
       let chunkMark = markCursor quoteCursor
           advanced = consumeWhile (isOrdinary kind) quoteCursor
        in do
             (chunk, _) <- captureSince chunkMark advanced
-            scanBody kind opening state
+            scanBody scanner kind opening state
               { quoteCursor = advanced, decodedChunks = chunk : decodedChunks state }
+
+{-| Fold the text gathered since the last hole into the parts, so a template
+    ends with its trailing text rather than losing it. -}
+settle :: QuoteState -> [TemplatePart]
+settle state =
+  let pending = Text.concat (reverse (decodedChunks state))
+   in if Text.null pending then quoteParts state else TemplateText pending : quoteParts state
+
+{-| Scan `{ expression }` inside a string.
+
+    The expression's source is captured rather than lexed here: lexing it needs
+    the whole scanner, and calling back into it from a piece of it would tie the
+    two together for one construct. The parser reads it instead, which is where
+    an expression is read everywhere else.
+
+    Braces nest and a nested string is respected, so `"{ f("}") }"` scans the
+    way a reader expects rather than ending at the first `}` it meets. -}
+scanHole :: TokenScanner -> QuoteState -> Maybe QuoteState
+scanHole scanner state@QuoteState{quoteCursor} = do
+  let afterBrace = consumeScalars 1 quoteCursor
+      bodyMark = markCursor afterBrace
+      alreadyEmitted = emittedTokens afterBrace
+  case scanHoleBody 0 False afterBrace of
+    Nothing -> unterminatedHole state bodyMark afterBrace
+    Just ended -> closeHole scanner state bodyMark afterBrace alreadyEmitted ended
+
+{-| An interpolation that never closes.
+
+    Reported where it opened and consumed to the end of the line, so the string
+    it was in is one invalid literal rather than a cascade of tokens made from
+    its own text. -}
+unterminatedHole :: QuoteState -> CursorMark -> LexerCursor -> Maybe QuoteState
+unterminatedHole state bodyMark afterBrace = do
+  let ended = consumeWhile (not . isLineBreak) afterBrace
+  diagnosed <-
+    recordAtWithHelp bodyMark ended "E0010" "an interpolation is not closed"
+      (Just "close it with }, or write \\{ for a literal brace")
+  pure state{quoteCursor = diagnosed, quoteInvalid = True}
+
+closeHole
+  :: TokenScanner
+  -> QuoteState
+  -> CursorMark
+  -> LexerCursor
+  -> [Token]
+  -> LexerCursor
+  -> Maybe QuoteState
+closeHole scanner state bodyMark bodyStart alreadyEmitted ended = do
+  (body, bodySpan) <- captureSince bodyMark ended
+  if Text.null (Text.strip body)
+    then do
+      diagnosed <-
+        recordAtWithHelp bodyMark ended "E0010" "an interpolation has no expression"
+          (Just "write an expression between the braces, or \\{ for a literal brace")
+      pure state{quoteCursor = consumeScalars 1 diagnosed, quoteInvalid = True}
+    else do
+      lexed <- scanHoleTokens scanner (cursorOffset ended) (commitHere bodyStart)
+      let held = drop (length alreadyEmitted) (emittedTokens lexed)
+          resumed = withoutEmitted (quoteCursor state) lexed
+      pure
+        state
+          { quoteCursor = consumeScalars 1 resumed
+          , decodedChunks = []
+          , quoteParts = TemplateHole bodySpan held : settle state
+          }
+
+
+{-| Lex an interpolation's expression with the ordinary scanner, stopping at the
+    brace that closes it.
+
+    The tokens come from the real source at their real positions, so a
+    diagnostic about the expression points at the expression rather than at a
+    copy of it. -}
+scanHoleTokens :: TokenScanner -> Offset -> LexerCursor -> Maybe LexerCursor
+scanHoleTokens scanner limit cursor
+  | cursorOffset cursor >= limit = Just cursor
+  | otherwise = scanner cursor >>= scanHoleTokens scanner limit
+
+{-| Advance to the `}` that closes an interpolation, counting nested braces and
+    stepping over a nested string so a brace inside one does not close it. -}
+scanHoleBody :: Int -> Bool -> LexerCursor -> Maybe LexerCursor
+scanHoleBody depth inString cursor
+  | cursorAtEnd cursor = Nothing
+  | otherwise = case peekScalar cursor of
+      Nothing -> Nothing
+      Just scalar
+        | inString, scalar == '\\' -> scanHoleBody depth inString (consumeScalars 2 cursor)
+        | scalar == '"' -> scanHoleBody depth (not inString) (consumeScalars 1 cursor)
+        | inString -> scanHoleBody depth inString (consumeScalars 1 cursor)
+        | scalar == '{' -> scanHoleBody (depth + 1) inString (consumeScalars 1 cursor)
+        | scalar == '}' ->
+            if depth == 0 then Just cursor else scanHoleBody (depth - 1) inString (consumeScalars 1 cursor)
+        | isLineBreak scalar -> Nothing
+        | otherwise -> scanHoleBody depth inString (consumeScalars 1 cursor)
 
 scanEscape :: QuoteKind -> QuoteState -> Maybe QuoteState
 scanEscape kind state@QuoteState{quoteCursor} =
@@ -96,18 +218,21 @@ rejectBrace state@QuoteState{quoteCursor} = do
   let braceMark = markCursor quoteCursor
       advanced = consumeScalars 1 quoteCursor
   diagnosed <-
-    recordAtWithHelp braceMark advanced "E0008" "string interpolation is reserved"
-      (Just "write \\{ for a literal brace")
+    recordAtWithHelp braceMark advanced "E0008" "a closing brace has no interpolation to close"
+      (Just "write \\} for a literal brace")
   pure state{quoteCursor = diagnosed, quoteInvalid = True}
 
 finishClosed :: QuoteKind -> CursorMark -> QuoteState -> Maybe LexerCursor
 finishClosed kind opening state =
   let closed = consumeScalars 1 (quoteCursor state)
       decoded = Text.concat (reverse (decodedChunks state))
+      parts = reverse (settle state)
    in if quoteInvalid state
         then emitInvalid opening closed
         else case kind of
-          StringQuote -> emitToken opening (StringLiteral decoded) closed
+          StringQuote
+            | null (quoteParts state) -> emitToken opening (StringLiteral decoded) closed
+            | otherwise -> emitToken opening (TemplateLiteral parts) closed
           CharacterQuote ->
             case Text.uncons decoded of
               Just (scalar, remaining)
