@@ -251,6 +251,7 @@ installBuiltinConstructors = do
   bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
   bind "mapOf" (BuiltinValue MapOfBuiltin)
   bind "setOf" (BuiltinValue SetOfBuiltin)
+  bind "show" (BuiltinValue ShowBuiltin)
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
 installDeclaration traits (Located _ declaration) = case declaration of
@@ -546,6 +547,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
+    BuiltinValue ShowBuiltin -> callShow spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
@@ -586,6 +588,22 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| Render any value as text.
+
+    Every program that prints anything needs this, and nothing in the language
+    can express it: rendering depends on the runtime representation, and a
+    library written in the language cannot see one. It is the same rendering the
+    prompt uses, so what a reader sees at the prompt and what their program
+    prints agree.
+
+    A function renders as a description rather than as its source. Its source is
+    not a value, and printing something that looked like source would invite a
+    reader to expect it back. -}
+callShow :: Span -> [Value] -> Evaluator Value
+callShow spanValue arguments = case arguments of
+  [value] -> pure (StrValue (renderValue value))
+  _ -> abortAt (Just spanValue) "E7002" "show expects one value" Nothing
 
 {-| Build a map from an array of key and value pairs.
 

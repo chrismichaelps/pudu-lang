@@ -37,7 +37,7 @@ preludeTypeNames =
     constructors of the wired-in `Option` and `Result` sums: their types exist
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
-preludeValueNames = ["panic", "charFromCode", "mapOf", "setOf", "Some", "None", "Ok", "Err"]
+preludeValueNames = ["panic", "charFromCode", "mapOf", "setOf", "show", "Some", "None", "Ok", "Err"]
 
 {-| The implicit import is suppressed by an explicit import of the same module,
     matching how an explicit `import Prelude` overrides the implicit one in

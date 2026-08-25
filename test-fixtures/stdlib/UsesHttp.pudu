@@ -1,0 +1,37 @@
+module UsesHttp
+
+import Std.Http as Http
+import Std.Http.Message as Message
+
+export fn main() -> Int {
+  let raw = "POST /items HTTP/1.1\r\nHost: example.com\r\nContent-Length: 5\r\nAccept: text/html;q=0.8, application/json\r\n\r\n[1,2]"
+  var total = 0
+  match Message.parseRequest(raw) {
+    case Ok(request) => {
+      total = total + request.headers.length()
+      match Http.contentLength(&request.headers) {
+        case Some(declared) => { total = total + declared }
+        case None => { }
+      }
+      match Http.header(&request.headers, "accept") {
+        case Some(accept) => {
+          match Http.negotiate(accept, &["application/json", "text/html"]) {
+            case Some(chosen) => { total = total + chosen.length() }
+            case None => { }
+          }
+        }
+        case None => { }
+      }
+    }
+    case Err(_) => { }
+  }
+  let response = Message.respond(200, "text/plain", "ok")
+  match Message.parseResponse(Message.renderResponse(&response)) {
+    case Ok(back) => { total = total + back.status.code + back.body.length() }
+    case Err(_) => { }
+  }
+  total = total + Message.decodeChunked("5\r\nhello\r\n0\r\n\r\n").length()
+  total = total + Http.basicAuth("ada", "pw").length()
+  total = total + Http.parseCookies("a=1; b=2").length()
+  total
+}

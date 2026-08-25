@@ -1,0 +1,128 @@
+module Std.Show
+
+/// Any value rendered the way the prompt renders it.
+/// Text renders with its quotes, so a rendered `"1"` is never mistaken for the
+/// number. Use `text` when the quotes are not wanted.
+export fn render[T](value: T) -> Str { show(value) }
+
+/// Text as itself, and anything else rendered.
+/// This is what a program wants when it is building a message: the quotes on a
+/// rendered string are for a reader inspecting a value, not for a reader of the
+/// message it ends up in.
+export fn text(value: Str) -> Str { value }
+
+/// A whole number as text, with a leading minus when it is negative.
+export fn int(value: Int) -> Str { show(value) }
+
+/// A truth value as `true` or `false`.
+export fn bool(value: Bool) -> Str { if value { "true" } else { "false" } }
+
+/// A character as itself, without the quotes rendering would add.
+export fn char(value: Char) -> Str { value.toText() }
+
+/// Every element rendered and joined, wrapped in brackets.
+export fn array[T](items: &Array[T]) -> Str {
+  var out = "["
+  var index = 0
+  let size = items.length()
+  while index < size {
+    if index > 0 { out = out + ", " }
+    out = out + show(items[index])
+    index = index + 1
+  }
+  out + "]"
+}
+
+/// Every element rendered and joined with a separator, with no brackets.
+export fn joined[T](items: &Array[T], separator: Str) -> Str {
+  var out = ""
+  var index = 0
+  let size = items.length()
+  while index < size {
+    if index > 0 { out = out + separator }
+    out = out + show(items[index])
+    index = index + 1
+  }
+  out
+}
+
+/// A value that may be absent, rendered as its content or as a placeholder.
+export fn option[T](value: &Option[T], absent: Str) -> Str {
+  match value {
+    case Some(found) => show(found)
+    case None => absent
+  }
+}
+
+/// A result rendered as its success or its failure, with a marker for which.
+export fn result[T, E](value: &Result[T, E]) -> Str {
+  match value {
+    case Ok(found) => "ok " + show(found)
+    case Err(problem) => "error " + show(problem)
+  }
+}
+
+/// A pair rendered as its two sides, separated.
+export fn pair[A, B](value: (A, B), separator: Str) -> Str {
+  show(value[0]) + separator + show(value[1])
+}
+
+/// Every entry of a map rendered on its own line as `key: value`.
+export fn mapLines[K, V](value: &Map[K, V]) -> Str {
+  var out = ""
+  var index = 0
+  let entries = value.entries()
+  let size = entries.length()
+  while index < size {
+    if index > 0 { out = out + "\n" }
+    out = out + show(entries[index][0]) + ": " + show(entries[index][1])
+    index = index + 1
+  }
+  out
+}
+
+/// A table of rows rendered with each column padded to its widest cell.
+/// The common reason a program renders anything at all, so it is here rather
+/// than written again by every caller.
+export fn table(rows: &Array[Array[Str]]) -> Str {
+  var widths = []
+  for row in rows {
+    var column = 0
+    while column < row.length() {
+      let width = row[column].length()
+      if column >= widths.length() { widths = widths.push(width) }
+      else {
+        if width > widths[column] { widths = widths.remove(column).insert(column, width) }
+      }
+      column = column + 1
+    }
+  }
+  var out = ""
+  var index = 0
+  let total = rows.length()
+  while index < total {
+    if index > 0 { out = out + "\n" }
+    out = out + renderRow(&rows[index], &widths)
+    index = index + 1
+  }
+  out
+}
+
+/// One table row padded to the given column widths.
+fn renderRow(row: &Array[Str], widths: &Array[Int]) -> Str {
+  var out = ""
+  var column = 0
+  while column < row.length() {
+    if column > 0 { out = out + "  " }
+    out = out + padTo(row[column], widths[column])
+    column = column + 1
+  }
+  out
+}
+
+/// Text padded on the right to a width, or unchanged when already wider.
+fn padTo(value: Str, width: Int) -> Str {
+  var out = value
+  while out.length() < width { out = out + " " }
+  out
+}

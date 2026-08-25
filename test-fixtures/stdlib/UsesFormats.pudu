@@ -1,0 +1,42 @@
+module UsesFormats
+
+import Std.Http as Http
+import Std.Json as Json
+import Std.Url as Url
+
+export fn main() -> Int {
+  var total = 0
+  match Json.decode("[1, 2, \{\"a\": 3\}]") {
+    case Ok(value) => {
+      total = total + Json.encode(&value).length()
+      match Json.at(&value, 2) {
+        case Some(third) => {
+          match Json.field(&third, "a") {
+            case Some(inner) => {
+              match Json.asInt(&inner) {
+                case Some(number) => { total = total + number }
+                case None => { }
+              }
+            }
+            case None => { }
+          }
+        }
+        case None => { }
+      }
+    }
+    case Err(_) => { }
+  }
+  match Url.parse("https://example.com:8443/a?x=1") {
+    case Ok(url) => {
+      total = total + Url.segments(&url).length()
+      match Url.effectivePort(&url) {
+        case Some(port) => { total = total + port }
+        case None => { }
+      }
+    }
+    case Err(_) => { }
+  }
+  total = total + Http.status(404).code
+  total = total + Http.reasonFor(500).length()
+  total
+}

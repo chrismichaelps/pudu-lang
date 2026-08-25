@@ -4,7 +4,7 @@ module Pudu.Frontend.Lexer.Quoted (scanQuoted) where
 import Data.Char (chr)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Severity (Error), diagnostic, mkDiagnosticCode)
+import Pudu.Diagnostic (Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Frontend.Lexer.Cursor
   ( CursorMark, LexerCursor, captureSince, consumeScalars, consumeWhile
   , cursorAtEnd, emitToken, markCursor, peekScalar, recordDiagnostic
@@ -95,7 +95,9 @@ rejectBrace :: QuoteState -> Maybe QuoteState
 rejectBrace state@QuoteState{quoteCursor} = do
   let braceMark = markCursor quoteCursor
       advanced = consumeScalars 1 quoteCursor
-  diagnosed <- recordAt braceMark advanced "E0008" "string interpolation is reserved"
+  diagnosed <-
+    recordAtWithHelp braceMark advanced "E0008" "string interpolation is reserved"
+      (Just "write \\{ for a literal brace")
   pure state{quoteCursor = diagnosed, quoteInvalid = True}
 
 finishClosed :: QuoteKind -> CursorMark -> QuoteState -> Maybe LexerCursor
@@ -126,11 +128,16 @@ emitInvalid opening cursor = do
   emitToken opening (Invalid lexeme) cursor
 
 recordAt :: CursorMark -> LexerCursor -> Text -> Text -> Maybe LexerCursor
-recordAt diagnosticMark cursor codeText message = do
+recordAt diagnosticMark cursor codeText message =
+  recordAtWithHelp diagnosticMark cursor codeText message Nothing
+
+recordAtWithHelp
+  :: CursorMark -> LexerCursor -> Text -> Text -> Maybe Text -> Maybe LexerCursor
+recordAtWithHelp diagnosticMark cursor codeText message help = do
   (_, spanValue) <- captureSince diagnosticMark cursor
   code <- mkDiagnosticCode codeText
   value <- diagnostic code Error spanValue message
-  recordDiagnostic value cursor
+  recordDiagnostic (maybe value (`withHelp` value) help) cursor
 
 decodeUnicode :: Text -> Maybe Char
 decodeUnicode digits
@@ -167,6 +174,13 @@ simpleEscape kind scalar =
     '"' -> Just '"'
     '\'' | kind == CharacterQuote -> Just '\''
     '0' -> Just '\0'
+    {-| A brace is reserved inside a string so interpolation can be added
+        without changing what existing programs mean. Escaping it is how a
+        program writes one today: JSON, a shell snippet, and a code template
+        all contain braces, and until the escape existed none of them could be
+        written as a literal at all. -}
+    '{' -> Just '{'
+    '}' -> Just '}'
     _ -> Nothing
 
 closingDelimiter :: QuoteKind -> Char

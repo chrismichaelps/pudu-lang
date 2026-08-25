@@ -1,0 +1,303 @@
+module Std.Url
+
+/// The parts of a URL, each already decoded.
+export type Url = {
+  scheme: Str,
+  host: Str,
+  port: Option[Int],
+  path: Str,
+  query: Array[(Str, Str)],
+  fragment: Option[Str]
+}
+
+/// What stopped a URL from being read.
+export type UrlError = NoScheme | NoHost | BadPort(Str)
+
+/// A URL read from text, or what stopped the reader.
+export fn parse(source: Str) -> Result[Url, UrlError] {
+  let schemeEnd = source.indexOf("://")
+  if schemeEnd < 0 { Err(NoScheme) } else {
+    let scheme = source.slice(0, schemeEnd).toLower()
+    let rest = source.slice(schemeEnd + 3, source.length())
+    let authorityEnd = firstOf(rest, "/?#")
+    let authority = rest.slice(0, authorityEnd)
+    let remainder = rest.slice(authorityEnd, rest.length())
+    if authority.isEmpty() { Err(NoHost) } else {
+      match splitPort(authority) {
+        case Err(problem) => Err(problem)
+        case Ok(hostAndPort) => {
+          let afterPath = firstOf(remainder, "?#")
+          let path = remainder.slice(0, afterPath)
+          let tail = remainder.slice(afterPath, remainder.length())
+          let fragmentAt = tail.indexOf("#")
+          let queryText = if fragmentAt < 0 { tail } else { tail.slice(0, fragmentAt) }
+          let fragment =
+            if fragmentAt < 0 { None } else {
+              Some(decodeComponent(tail.slice(fragmentAt + 1, tail.length())))
+            }
+          Ok(Url {
+            scheme: scheme,
+            host: hostAndPort[0],
+            port: hostAndPort[1],
+            path: if path.isEmpty() { "/" } else { decodeComponent(path) },
+            query: parseQuery(queryText),
+            fragment: fragment
+          })
+        }
+      }
+    }
+  }
+}
+
+/// A URL written back as text, with every part encoded again.
+export fn render(value: &Url) -> Str {
+  var out = value.scheme + "://" + value.host
+  match value.port {
+    case Some(number) => { out = out + ":" + show(number) }
+    case None => { }
+  }
+  out = out + encodePath(value.path)
+  if value.query.length() > 0 { out = out + "?" + renderQuery(&value.query) }
+  match value.fragment {
+    case Some(found) => { out = out + "#" + encodeComponent(found) }
+    case None => { }
+  }
+  out
+}
+
+/// The first value given for a query key, or `None`.
+export fn queryValue(value: &Url, key: Str) -> Option[Str] {
+  for pair in value.query {
+    if pair[0] == key { return Some(pair[1]) }
+  }
+  None
+}
+
+/// Every value given for a query key, in order.
+export fn queryValues(value: &Url, key: Str) -> Array[Str] {
+  var out = []
+  for pair in value.query {
+    if pair[0] == key { out = out.push(pair[1]) }
+  }
+  out
+}
+
+/// The URL with a query key added, keeping any values it already had.
+export fn addQuery(value: &Url, key: Str, held: Str) -> Url {
+  Url {
+    scheme: value.scheme,
+    host: value.host,
+    port: value.port,
+    path: value.path,
+    query: value.query.push((key, held)),
+    fragment: value.fragment
+  }
+}
+
+/// The URL with every value for a key removed.
+export fn removeQuery(value: &Url, key: Str) -> Url {
+  var kept = []
+  for pair in value.query {
+    if pair[0] != key { kept = kept.push(pair) }
+  }
+  Url {
+    scheme: value.scheme,
+    host: value.host,
+    port: value.port,
+    path: value.path,
+    query: kept,
+    fragment: value.fragment
+  }
+}
+
+/// The URL with a different path.
+export fn withPath(value: &Url, path: Str) -> Url {
+  Url {
+    scheme: value.scheme,
+    host: value.host,
+    port: value.port,
+    path: path,
+    query: value.query,
+    fragment: value.fragment
+  }
+}
+
+/// The path in pieces, with empty pieces dropped.
+export fn segments(value: &Url) -> Array[Str] {
+  var out = []
+  for piece in value.path.split("/") {
+    if !piece.isEmpty() { out = out.push(piece) }
+  }
+  out
+}
+
+/// The port a URL uses, falling back to the one its scheme implies.
+export fn effectivePort(value: &Url) -> Option[Int] {
+  match value.port {
+    case Some(number) => Some(number)
+    case None => defaultPort(value.scheme)
+  }
+}
+
+/// The port a scheme implies, for the schemes that imply one.
+export fn defaultPort(scheme: Str) -> Option[Int] {
+  if scheme == "http" { Some(80) } else {
+    if scheme == "https" { Some(443) } else {
+      if scheme == "ws" { Some(80) } else {
+        if scheme == "wss" { Some(443) } else {
+          if scheme == "ftp" { Some(21) } else { None }
+        }
+      }
+    }
+  }
+}
+
+/// Text with the characters a URL cannot carry replaced by percent escapes.
+/// Unreserved characters are left alone, which keeps a readable URL readable.
+export fn encodeComponent(value: Str) -> Str {
+  var out = ""
+  for character in value.chars() {
+    if isUnreserved(character) { out = out + character.toText() }
+    else { out = out + percent(character) }
+  }
+  out
+}
+
+/// Text with its percent escapes read back.
+/// An escape that is not two hex digits is left as written, because a caller
+/// showing the result is better served by the original than by a guess.
+export fn decodeComponent(value: Str) -> Str {
+  var out = ""
+  var index = 0
+  let size = value.length()
+  while index < size {
+    let character = value.charAt(index)
+    if character == '%' && index + 2 < size {
+      match hexPair(value.slice(index + 1, index + 3)) {
+        case Some(code) => {
+          match charFromCode(code) {
+            case Some(found) => {
+              out = out + found.toText()
+              index = index + 2
+            }
+            case None => { out = out + character.toText() }
+          }
+        }
+        case None => { out = out + character.toText() }
+      }
+    } else {
+      if character == '+' { out = out + " " } else { out = out + character.toText() }
+    }
+    index = index + 1
+  }
+  out
+}
+
+/// Query pairs written back as text.
+export fn renderQuery(pairs: &Array[(Str, Str)]) -> Str {
+  var out = ""
+  var index = 0
+  while index < pairs.length() {
+    if index > 0 { out = out + "&" }
+    out = out + encodeComponent(pairs[index][0]) + "=" + encodeComponent(pairs[index][1])
+    index = index + 1
+  }
+  out
+}
+
+/// A query string read into pairs. A key with no `=` carries empty text.
+export fn parseQuery(source: Str) -> Array[(Str, Str)] {
+  var out = []
+  let body = if source.startsWith("?") { source.slice(1, source.length()) } else { source }
+  if body.isEmpty() { out } else {
+    for piece in body.split("&") {
+      if !piece.isEmpty() {
+        let equals = piece.indexOf("=")
+        if equals < 0 { out = out.push((decodeComponent(piece), "")) }
+        else {
+          out = out.push((
+            decodeComponent(piece.slice(0, equals)),
+            decodeComponent(piece.slice(equals + 1, piece.length()))
+          ))
+        }
+      }
+    }
+    out
+  }
+}
+
+/// The host and its port, or a report that the port is not a number.
+fn splitPort(authority: Str) -> Result[(Str, Option[Int]), UrlError] {
+  let colon = authority.indexOf(":")
+  if colon < 0 { Ok((authority.toLower(), None)) } else {
+    let written = authority.slice(colon + 1, authority.length())
+    match wholeOf(written) {
+      case Some(number) => Ok((authority.slice(0, colon).toLower(), Some(number)))
+      case None => Err(BadPort(written))
+    }
+  }
+}
+
+/// The position of the first character from a set, or the whole length.
+fn firstOf(value: Str, characters: Str) -> Int {
+  var index = 0
+  let size = value.length()
+  while index < size {
+    if characters.contains(value.charAt(index).toText()) { return index }
+    index = index + 1
+  }
+  size
+}
+
+/// A path with each segment encoded, keeping the separators.
+fn encodePath(path: Str) -> Str {
+  var out = ""
+  var first = true
+  for piece in path.split("/") {
+    if !first { out = out + "/" }
+    out = out + encodeComponent(piece)
+    first = false
+  }
+  out
+}
+
+/// Whether a character may appear in a URL without an escape.
+fn isUnreserved(value: Char) -> Bool {
+  (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
+    (value >= '0' && value <= '9') ||
+    value == '-' || value == '_' || value == '.' || value == '~'
+}
+
+/// One character written as a percent escape of its bytes.
+/// Only the ASCII range is escaped byte for byte; anything above it is escaped
+/// from its scalar value, which is what a reader of the result will decode.
+fn percent(value: Char) -> Str {
+  let code = value.code()
+  if code < 256 { "%" + hexByte(code) } else { "%" + hexByte(code / 256) + "%" + hexByte(code % 256) }
+}
+
+fn hexByte(value: Int) -> Str {
+  let digits = "0123456789ABCDEF"
+  digits.slice(value / 16, value / 16 + 1) + digits.slice(value % 16, value % 16 + 1)
+}
+
+fn hexPair(text: Str) -> Option[Int] {
+  var total = 0
+  for character in text.toLower().chars() {
+    let found = "0123456789abcdef".indexOf(character.toText())
+    if found < 0 { return None }
+    total = total * 16 + found
+  }
+  Some(total)
+}
+
+fn wholeOf(text: Str) -> Option[Int] {
+  if text.isEmpty() { None } else {
+    var total = 0
+    for character in text.chars() {
+      if character < '0' || character > '9' { return None }
+      total = total * 10 + (character.code() - 48)
+    }
+    Some(total)
+  }
+}

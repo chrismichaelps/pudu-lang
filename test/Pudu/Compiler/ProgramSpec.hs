@@ -137,6 +137,8 @@ testProgramEvaluation = do
   collections <- runEntry "test-fixtures/stdlib/UsesList.pudu"
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
+  formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
+  protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -149,6 +151,10 @@ testProgramEvaluation = do
         (wide === Just "64")
     , counterexample "maps, sets, and bit work link together"
         (keyed === Just "158")
+    , counterexample "the format modules parse and render"
+        (formats === Just "8885")
+    , counterexample "the protocol modules parse and render messages"
+        (protocol === Just "247")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

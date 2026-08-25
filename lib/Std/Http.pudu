@@ -1,0 +1,769 @@
+module Std.Http
+
+/// A request method.
+/// The closed set the protocol defines, plus `Other` for a method a server
+/// accepts that this list does not name: refusing to represent one would make
+/// the type useless for the servers that have them.
+export type Method
+  = Get
+  | Head
+  | Post
+  | Put
+  | Patch
+  | Delete
+  | Options
+  | Trace
+  | Connect
+  | Other(Str)
+
+/// A response status: its number and the reason given with it.
+export type Status = { code: Int, reason: Str }
+
+/// A request, with nothing about how it will be sent.
+/// Transport is not here because it needs the foreign interface; everything a
+/// caller decides before sending is, so a request can be built, inspected, and
+/// tested without one.
+export type Request = {
+  method: Method,
+  target: Str,
+  headers: Array[(Str, Str)],
+  body: Str
+}
+
+/// A response, with nothing about how it arrived.
+export type Response = {
+  status: Status,
+  headers: Array[(Str, Str)],
+  body: Str
+}
+
+/// A method written the way the protocol writes it.
+export fn methodName(value: &Method) -> Str {
+  match value {
+    case Get => "GET"
+    case Head => "HEAD"
+    case Post => "POST"
+    case Put => "PUT"
+    case Patch => "PATCH"
+    case Delete => "DELETE"
+    case Options => "OPTIONS"
+    case Trace => "TRACE"
+    case Connect => "CONNECT"
+    case Other(name) => name
+  }
+}
+
+/// A method read from its name, which is matched without regard to case.
+export fn methodFrom(name: Str) -> Method {
+  let upper = name.toUpper()
+  if upper == "GET" { Get } else {
+  if upper == "HEAD" { Head } else {
+  if upper == "POST" { Post } else {
+  if upper == "PUT" { Put } else {
+  if upper == "PATCH" { Patch } else {
+  if upper == "DELETE" { Delete } else {
+  if upper == "OPTIONS" { Options } else {
+  if upper == "TRACE" { Trace } else {
+  if upper == "CONNECT" { Connect } else { Other(upper) } } } } } } } } }
+}
+
+/// Whether a method is defined to have no effect on the server.
+/// A caller retrying a failed request needs this and nothing else.
+export fn isSafe(value: &Method) -> Bool {
+  match value {
+    case Get => true
+    case Head => true
+    case Options => true
+    case Trace => true
+    case _ => false
+  }
+}
+
+/// Whether repeating a method has the same effect as sending it once.
+export fn isIdempotent(value: &Method) -> Bool {
+  match value {
+    case Put => true
+    case Delete => true
+    case _ => isSafe(value)
+  }
+}
+
+/// A status built from its number, with the reason the protocol gives.
+export fn status(code: Int) -> Status { Status { code: code, reason: reasonFor(code) } }
+
+/// Whether a status reports a provisional response.
+export fn isInformational(value: &Status) -> Bool { value.code >= 100 && value.code < 200 }
+
+/// Whether a status reports success.
+export fn isSuccess(value: &Status) -> Bool { value.code >= 200 && value.code < 300 }
+
+/// Whether a status asks the caller to look elsewhere.
+export fn isRedirect(value: &Status) -> Bool { value.code >= 300 && value.code < 400 }
+
+/// Whether a status blames the caller.
+export fn isClientError(value: &Status) -> Bool { value.code >= 400 && value.code < 500 }
+
+/// Whether a status blames the server.
+export fn isServerError(value: &Status) -> Bool { value.code >= 500 && value.code < 600 }
+
+/// Whether a status reports any kind of failure.
+export fn isError(value: &Status) -> Bool { value.code >= 400 }
+
+/// The reason the protocol gives for a status number, or an empty reason for
+/// one it does not name.
+export fn reasonFor(code: Int) -> Str {
+  if code == 100 { "Continue" } else {
+  if code == 101 { "Switching Protocols" } else {
+  if code == 200 { "OK" } else {
+  if code == 201 { "Created" } else {
+  if code == 202 { "Accepted" } else {
+  if code == 204 { "No Content" } else {
+  if code == 206 { "Partial Content" } else {
+  if code == 301 { "Moved Permanently" } else {
+  if code == 302 { "Found" } else {
+  if code == 303 { "See Other" } else {
+  if code == 304 { "Not Modified" } else {
+  if code == 307 { "Temporary Redirect" } else {
+  if code == 308 { "Permanent Redirect" } else {
+  if code == 400 { "Bad Request" } else {
+  if code == 401 { "Unauthorized" } else {
+  if code == 403 { "Forbidden" } else {
+  if code == 404 { "Not Found" } else {
+  if code == 405 { "Method Not Allowed" } else {
+  if code == 408 { "Request Timeout" } else {
+  if code == 409 { "Conflict" } else {
+  if code == 410 { "Gone" } else {
+  if code == 413 { "Content Too Large" } else {
+  if code == 415 { "Unsupported Media Type" } else {
+  if code == 422 { "Unprocessable Content" } else {
+  if code == 429 { "Too Many Requests" } else {
+  if code == 500 { "Internal Server Error" } else {
+  if code == 501 { "Not Implemented" } else {
+  if code == 502 { "Bad Gateway" } else {
+  if code == 503 { "Service Unavailable" } else {
+  if code == 504 { "Gateway Timeout" } else { "" }
+  } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
+}
+
+/// A request with a method and a target and nothing else.
+export fn request(method: Method, target: Str) -> Request {
+  Request { method: method, target: target, headers: [], body: "" }
+}
+
+/// A request with one header added, keeping any it already had.
+export fn withHeader(value: &Request, name: Str, held: Str) -> Request {
+  Request {
+    method: value.method,
+    target: value.target,
+    headers: value.headers.push((name, held)),
+    body: value.body
+  }
+}
+
+/// A request with a body, and the length header that goes with it.
+export fn withBody(value: &Request, body: Str) -> Request {
+  let sized = withHeader(value, "content-length", show(body.length()))
+  Request {
+    method: sized.method,
+    target: sized.target,
+    headers: sized.headers,
+    body: body
+  }
+}
+
+/// The first value given for a header, matched without regard to case.
+export fn header(headers: &Array[(Str, Str)], name: Str) -> Option[Str] {
+  let wanted = name.toLower()
+  for pair in headers {
+    if pair[0].toLower() == wanted { return Some(pair[1]) }
+  }
+  None
+}
+
+/// Every value given for a header.
+export fn headerValues(headers: &Array[(Str, Str)], name: Str) -> Array[Str] {
+  let wanted = name.toLower()
+  var out = []
+  for pair in headers {
+    if pair[0].toLower() == wanted { out = out.push(pair[1]) }
+  }
+  out
+}
+
+/// Whether a header is present.
+export fn hasHeader(headers: &Array[(Str, Str)], name: Str) -> Bool {
+  match header(headers, name) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Headers with every value for a name removed, then one added.
+export fn setHeader(headers: &Array[(Str, Str)], name: Str, held: Str) -> Array[(Str, Str)] {
+  let wanted = name.toLower()
+  var out = []
+  for pair in headers {
+    if pair[0].toLower() != wanted { out = out.push(pair) }
+  }
+  out.push((name, held))
+}
+
+/// The media type a `content-type` header names, without its parameters.
+export fn mediaType(headers: &Array[(Str, Str)]) -> Option[Str] {
+  match header(headers, "content-type") {
+    case Some(found) => {
+      let semicolon = found.indexOf(";")
+      if semicolon < 0 { Some(found.trim().toLower()) }
+      else { Some(found.slice(0, semicolon).trim().toLower()) }
+    }
+    case None => None
+  }
+}
+
+/// A request written as the protocol writes it, without a body.
+/// Enough to inspect, log, or compare a request without sending one.
+export fn renderHead(value: &Request) -> Str {
+  var out = methodName(&value.method) + " " + value.target + " HTTP/1.1\r\n"
+  for pair in value.headers { out = out + pair[0] + ": " + pair[1] + "\r\n" }
+  out + "\r\n"
+}
+
+/// A response's first line, as the protocol writes it.
+export fn renderStatusLine(value: &Status) -> Str {
+  "HTTP/1.1 " + show(value.code) + " " + value.reason
+}
+
+/// The protocol version a message was written in.
+export type Version = Http10 | Http11 | Http2 | Http3
+
+/// A version written the way the protocol writes it.
+export fn versionName(value: &Version) -> Str {
+  match value {
+    case Http10 => "HTTP/1.0"
+    case Http11 => "HTTP/1.1"
+    case Http2 => "HTTP/2"
+    case Http3 => "HTTP/3"
+  }
+}
+
+/// A version read from its name, defaulting to 1.1 for anything unrecognised.
+export fn versionFrom(name: Str) -> Version {
+  if name == "HTTP/1.0" { Http10 } else {
+  if name == "HTTP/2" { Http2 } else {
+  if name == "HTTP/3" { Http3 } else { Http11 } } }
+}
+
+/// Whether a version keeps the connection open unless told otherwise.
+export fn keepsAlive(value: &Version) -> Bool {
+  match value {
+    case Http10 => false
+    case _ => true
+  }
+}
+
+/// The header names the protocol defines, so a caller never spells one wrong.
+/// Lower case throughout, because header names are compared without regard to
+/// case and one spelling is easier to compare than two.
+export fn headerAccept() -> Str { "accept" }
+export fn headerAcceptCharset() -> Str { "accept-charset" }
+export fn headerAcceptEncoding() -> Str { "accept-encoding" }
+export fn headerAcceptLanguage() -> Str { "accept-language" }
+export fn headerAcceptRanges() -> Str { "accept-ranges" }
+export fn headerAge() -> Str { "age" }
+export fn headerAllow() -> Str { "allow" }
+export fn headerAuthorization() -> Str { "authorization" }
+export fn headerCacheControl() -> Str { "cache-control" }
+export fn headerConnection() -> Str { "connection" }
+export fn headerContentEncoding() -> Str { "content-encoding" }
+export fn headerContentLanguage() -> Str { "content-language" }
+export fn headerContentLength() -> Str { "content-length" }
+export fn headerContentLocation() -> Str { "content-location" }
+export fn headerContentRange() -> Str { "content-range" }
+export fn headerContentType() -> Str { "content-type" }
+export fn headerCookie() -> Str { "cookie" }
+export fn headerDate() -> Str { "date" }
+export fn headerETag() -> Str { "etag" }
+export fn headerExpect() -> Str { "expect" }
+export fn headerExpires() -> Str { "expires" }
+export fn headerHost() -> Str { "host" }
+export fn headerIfMatch() -> Str { "if-match" }
+export fn headerIfModifiedSince() -> Str { "if-modified-since" }
+export fn headerIfNoneMatch() -> Str { "if-none-match" }
+export fn headerIfRange() -> Str { "if-range" }
+export fn headerIfUnmodifiedSince() -> Str { "if-unmodified-since" }
+export fn headerLastModified() -> Str { "last-modified" }
+export fn headerLocation() -> Str { "location" }
+export fn headerOrigin() -> Str { "origin" }
+export fn headerPragma() -> Str { "pragma" }
+export fn headerRange() -> Str { "range" }
+export fn headerReferer() -> Str { "referer" }
+export fn headerRetryAfter() -> Str { "retry-after" }
+export fn headerServer() -> Str { "server" }
+export fn headerSetCookie() -> Str { "set-cookie" }
+export fn headerTransferEncoding() -> Str { "transfer-encoding" }
+export fn headerUpgrade() -> Str { "upgrade" }
+export fn headerUserAgent() -> Str { "user-agent" }
+export fn headerVary() -> Str { "vary" }
+export fn headerWwwAuthenticate() -> Str { "www-authenticate" }
+
+/// Whether a header may not be forwarded by a proxy, because it describes the
+/// connection rather than the message.
+export fn isHopByHop(name: Str) -> Bool {
+  let lower = name.toLower()
+  lower == "connection" || lower == "keep-alive" || lower == "proxy-authenticate" ||
+    lower == "proxy-authorization" || lower == "te" || lower == "trailer" ||
+    lower == "transfer-encoding" || lower == "upgrade"
+}
+
+/// The headers a proxy may forward, with the connection's own removed.
+export fn endToEnd(headers: &Array[(Str, Str)]) -> Array[(Str, Str)] {
+  var out = []
+  for pair in headers {
+    if !isHopByHop(pair[0]) { out = out.push(pair) }
+  }
+  out
+}
+
+/// Whether a status is defined to carry no body, whatever the headers say.
+export fn allowsBody(value: &Status) -> Bool {
+  value.code != 204 && value.code != 304 && !isInformational(value)
+}
+
+/// The status a redirect answers with, and whether the method must be kept.
+/// A 301, 302, or 303 historically became a `GET`; 307 and 308 do not, which is
+/// the whole reason those two exist.
+export fn keepsMethodOnRedirect(value: &Status) -> Bool {
+  value.code == 307 || value.code == 308
+}
+
+/// The target a redirect names, or `None` when the response is not one.
+export fn redirectTarget(value: &Response) -> Option[Str] {
+  if isRedirect(&value.status) { header(&value.headers, "location") } else { None }
+}
+
+/// A cookie as a request carries it: a name and a value.
+export type Cookie = { name: Str, value: Str }
+
+/// The attributes a response attaches when it sets a cookie.
+export type SetCookie = {
+  name: Str,
+  value: Str,
+  path: Option[Str],
+  domain: Option[Str],
+  maxAge: Option[Int],
+  secure: Bool,
+  httpOnly: Bool,
+  sameSite: Option[Str]
+}
+
+/// Every cookie a `cookie` header carries.
+export fn parseCookies(headerValue: Str) -> Array[Cookie] {
+  var out = []
+  for piece in headerValue.split(";") {
+    let trimmed = piece.trim()
+    if !trimmed.isEmpty() {
+      let equals = trimmed.indexOf("=")
+      if equals > 0 {
+        out = out.push(Cookie {
+          name: trimmed.slice(0, equals).trim(),
+          value: trimmed.slice(equals + 1, trimmed.length()).trim()
+        })
+      }
+    }
+  }
+  out
+}
+
+/// Cookies written as a `cookie` header value.
+export fn renderCookies(cookies: &Array[Cookie]) -> Str {
+  var out = ""
+  var index = 0
+  while index < cookies.length() {
+    if index > 0 { out = out + "; " }
+    out = out + cookies[index].name + "=" + cookies[index].value
+    index = index + 1
+  }
+  out
+}
+
+/// A cookie with only a name and a value, and the safe attributes set.
+/// Secure and http-only default to on: a cookie that does not need them can
+/// turn them off deliberately, and one that does need them will otherwise
+/// forget.
+export fn setCookie(name: Str, value: Str) -> SetCookie {
+  SetCookie {
+    name: name,
+    value: value,
+    path: Some("/"),
+    domain: None,
+    maxAge: None,
+    secure: true,
+    httpOnly: true,
+    sameSite: Some("Lax")
+  }
+}
+
+/// A cookie written as a `set-cookie` header value.
+export fn renderSetCookie(value: &SetCookie) -> Str {
+  var out = value.name + "=" + value.value
+  match value.path {
+    case Some(found) => { out = out + "; Path=" + found }
+    case None => { }
+  }
+  match value.domain {
+    case Some(found) => { out = out + "; Domain=" + found }
+    case None => { }
+  }
+  match value.maxAge {
+    case Some(seconds) => { out = out + "; Max-Age=" + show(seconds) }
+    case None => { }
+  }
+  if value.secure { out = out + "; Secure" }
+  if value.httpOnly { out = out + "; HttpOnly" }
+  match value.sameSite {
+    case Some(found) => { out = out + "; SameSite=" + found }
+    case None => { }
+  }
+  out
+}
+
+/// A user name and password written as a basic authorization value.
+/// The credentials are encoded, not protected: basic authorization is only safe
+/// over a secured connection, and this function cannot check that it is on one.
+export fn basicAuth(user: Str, password: Str) -> Str {
+  "Basic " + base64(user + ":" + password)
+}
+
+/// A bearer token written as an authorization value.
+export fn bearerAuth(token: Str) -> Str { "Bearer " + token }
+
+/// The scheme and the credentials an authorization header carries.
+export fn parseAuth(headerValue: Str) -> Option[(Str, Str)] {
+  let space = headerValue.indexOf(" ")
+  if space < 0 { None } else {
+    Some((
+      headerValue.slice(0, space).toLower(),
+      headerValue.slice(space + 1, headerValue.length()).trim()
+    ))
+  }
+}
+
+/// One offered choice and the weight the caller gave it.
+export type Preference = { value: Str, weight: Int }
+
+/// An `accept`-style header read into choices, best first.
+/// Weights are read in thousandths so they can be compared as whole numbers; a
+/// choice with no weight is worth one, as the protocol says.
+export fn parsePreferences(headerValue: Str) -> Array[Preference] {
+  var out = []
+  for piece in headerValue.split(",") {
+    let trimmed = piece.trim()
+    if !trimmed.isEmpty() {
+      let semicolon = trimmed.indexOf(";")
+      if semicolon < 0 { out = out.push(Preference { value: trimmed.toLower(), weight: 1000 }) }
+      else {
+        let name = trimmed.slice(0, semicolon).trim().toLower()
+        let parameters = trimmed.slice(semicolon + 1, trimmed.length())
+        out = out.push(Preference { value: name, weight: weightOf(parameters) })
+      }
+    }
+  }
+  sortPreferences(&out)
+}
+
+/// The first offered choice the caller will accept, or `None`.
+/// A weight of nought is a refusal, not a low preference, so it never matches.
+export fn negotiate(headerValue: Str, offered: &Array[Str]) -> Option[Str] {
+  for preference in parsePreferences(headerValue) {
+    if preference.weight > 0 {
+      for candidate in offered {
+        if matchesMedia(preference.value, candidate.toLower()) { return Some(candidate) }
+      }
+    }
+  }
+  None
+}
+
+/// A form body written as `application/x-www-form-urlencoded`.
+export fn renderForm(fields: &Array[(Str, Str)]) -> Str {
+  var out = ""
+  var index = 0
+  while index < fields.length() {
+    if index > 0 { out = out + "&" }
+    out = out + formEncode(fields[index][0]) + "=" + formEncode(fields[index][1])
+    index = index + 1
+  }
+  out
+}
+
+/// A form body read back into fields.
+export fn parseForm(body: Str) -> Array[(Str, Str)] {
+  var out = []
+  for piece in body.split("&") {
+    if !piece.isEmpty() {
+      let equals = piece.indexOf("=")
+      if equals < 0 { out = out.push((formDecode(piece), "")) }
+      else {
+        out = out.push((
+          formDecode(piece.slice(0, equals)),
+          formDecode(piece.slice(equals + 1, piece.length()))
+        ))
+      }
+    }
+  }
+  out
+}
+
+/// A request with a form body and the headers that describe it.
+export fn withForm(value: &Request, fields: &Array[(Str, Str)]) -> Request {
+  let typed = withHeader(value, "content-type", "application/x-www-form-urlencoded")
+  withBody(&typed, renderForm(fields))
+}
+
+/// A request with a JSON body and the headers that describe it.
+/// The body is taken as written: encoding a value is `Std.Json`'s work, and
+/// doing it here would make this module depend on that one for no gain.
+export fn withJson(value: &Request, body: Str) -> Request {
+  let typed = withHeader(value, "content-type", "application/json")
+  withBody(&typed, body)
+}
+
+/// A byte range a request asked for: a first position and an optional last.
+export type Range = { from: Int, to: Option[Int] }
+
+/// The ranges a `range` header asks for, or nothing when it asks for none.
+export fn parseRanges(headerValue: Str) -> Array[Range] {
+  var out = []
+  if !headerValue.toLower().startsWith("bytes=") { out } else {
+    let body = headerValue.slice(6, headerValue.length())
+    for piece in body.split(",") {
+      let trimmed = piece.trim()
+      let dash = trimmed.indexOf("-")
+      if dash >= 0 {
+        let start = trimmed.slice(0, dash).trim()
+        let end = trimmed.slice(dash + 1, trimmed.length()).trim()
+        match wholeOf(start) {
+          case Some(from) => {
+            out = out.push(Range { from: from, to: wholeOf(end) })
+          }
+          case None => { }
+        }
+      }
+    }
+    out
+  }
+}
+
+/// A `content-range` header value for a range of a known total length.
+export fn renderContentRange(from: Int, to: Int, total: Int) -> Str {
+  "bytes " + show(from) + "-" + show(to) + "/" + show(total)
+}
+
+/// The length a `content-length` header reports, or `None`.
+export fn contentLength(headers: &Array[(Str, Str)]) -> Option[Int] {
+  match header(headers, "content-length") {
+    case Some(found) => wholeOf(found.trim())
+    case None => None
+  }
+}
+
+/// Whether a message says its body is sent in chunks.
+export fn isChunked(headers: &Array[(Str, Str)]) -> Bool {
+  match header(headers, "transfer-encoding") {
+    case Some(found) => found.toLower().contains("chunked")
+    case None => false
+  }
+}
+
+/// A body written as one chunk followed by the terminator.
+export fn renderChunked(body: Str) -> Str {
+  hexOf(body.length()) + "\r\n" + body + "\r\n0\r\n\r\n"
+}
+
+/// Text encoded as base64, without line breaks.
+export fn base64(value: Str) -> Str {
+  let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  var out = ""
+  let codes = scalarBytes(value)
+  var index = 0
+  let size = codes.length()
+  while index < size {
+    let first = codes[index]
+    let second = if index + 1 < size { codes[index + 1] } else { 0 }
+    let third = if index + 2 < size { codes[index + 2] } else { 0 }
+    out = out + charAtIn(alphabet, first >> 2)
+    out = out + charAtIn(alphabet, ((first & 3) << 4) | (second >> 4))
+    if index + 1 < size { out = out + charAtIn(alphabet, ((second & 15) << 2) | (third >> 6)) }
+    else { out = out + "=" }
+    if index + 2 < size { out = out + charAtIn(alphabet, third & 63) } else { out = out + "=" }
+    index = index + 3
+  }
+  out
+}
+
+/// The bytes of text, taking each scalar below 256 as one byte and anything
+/// above it as its two low bytes. Enough for the ASCII credentials basic
+/// authorization carries, which is what this is for.
+fn scalarBytes(value: Str) -> Array[Int] {
+  var out = []
+  for character in value.chars() {
+    let code = character.code()
+    if code < 256 { out = out.push(code) }
+    else {
+      out = out.push(code / 256)
+      out = out.push(code % 256)
+    }
+  }
+  out
+}
+
+fn charAtIn(alphabet: Str, index: Int) -> Str {
+  if index < 0 || index >= alphabet.length() { "" } else { alphabet.slice(index, index + 1) }
+}
+
+fn hexOf(value: Int) -> Str {
+  if value == 0 { "0" } else {
+    var out = ""
+    var remaining = value
+    while remaining > 0 {
+      let digit = remaining % 16
+      out = "0123456789abcdef".slice(digit, digit + 1) + out
+      remaining = remaining / 16
+    }
+    out
+  }
+}
+
+/// Whether an offered media type satisfies a requested one, with `*` matching.
+fn matchesMedia(wanted: Str, offered: Str) -> Bool {
+  if wanted == "*/*" || wanted == "*" { true } else {
+    if wanted == offered { true } else {
+      let slash = wanted.indexOf("/")
+      if slash < 0 { false } else {
+        if wanted.slice(slash + 1, wanted.length()) == "*" {
+          offered.startsWith(wanted.slice(0, slash + 1))
+        } else { false }
+      }
+    }
+  }
+}
+
+/// The `q` parameter of an accept entry, in thousandths.
+fn weightOf(parameters: Str) -> Int {
+  for piece in parameters.split(";") {
+    let trimmed = piece.trim()
+    if trimmed.toLower().startsWith("q=") {
+      return thousandthsOf(trimmed.slice(2, trimmed.length()))
+    }
+  }
+  1000
+}
+
+/// A decimal weight read as thousandths, so weights compare as whole numbers.
+fn thousandthsOf(written: Str) -> Int {
+  let dot = written.indexOf(".")
+  if dot < 0 {
+    match wholeOf(written) {
+      case Some(number) => number * 1000
+      case None => 1000
+    }
+  } else {
+    let whole = wholeOf(written.slice(0, dot))
+    var fraction = written.slice(dot + 1, written.length())
+    while fraction.length() < 3 { fraction = fraction + "0" }
+    match wholeOf(fraction.slice(0, 3)) {
+      case Some(parts) => {
+        match whole {
+          case Some(units) => units * 1000 + parts
+          case None => parts
+        }
+      }
+      case None => 1000
+    }
+  }
+}
+
+/// Preferences ordered by weight, heaviest first, keeping the written order
+/// among equals so a header's own priority survives.
+fn sortPreferences(items: &Array[Preference]) -> Array[Preference] {
+  var out = []
+  for item in items {
+    var position = 0
+    while position < out.length() && out[position].weight >= item.weight {
+      position = position + 1
+    }
+    out = out.insert(position, item)
+  }
+  out
+}
+
+fn formEncode(value: Str) -> Str {
+  var out = ""
+  for character in value.chars() {
+    if isFormSafe(character) { out = out + character.toText() }
+    else {
+      if character == ' ' { out = out + "+" } else { out = out + "%" + hexTwo(character.code()) }
+    }
+  }
+  out
+}
+
+fn formDecode(value: Str) -> Str {
+  var out = ""
+  var index = 0
+  let size = value.length()
+  while index < size {
+    let character = value.charAt(index)
+    if character == '+' { out = out + " " }
+    else {
+      if character == '%' && index + 2 < size {
+        match hexPairOf(value.slice(index + 1, index + 3)) {
+          case Some(code) => {
+            match charFromCode(code) {
+              case Some(found) => {
+                out = out + found.toText()
+                index = index + 2
+              }
+              case None => { out = out + character.toText() }
+            }
+          }
+          case None => { out = out + character.toText() }
+        }
+      } else { out = out + character.toText() }
+    }
+    index = index + 1
+  }
+  out
+}
+
+fn isFormSafe(value: Char) -> Bool {
+  (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
+    (value >= '0' && value <= '9') ||
+    value == '-' || value == '_' || value == '.' || value == '~'
+}
+
+fn hexTwo(value: Int) -> Str {
+  let digits = "0123456789ABCDEF"
+  digits.slice(value / 16, value / 16 + 1) + digits.slice(value % 16, value % 16 + 1)
+}
+
+fn hexPairOf(text: Str) -> Option[Int] {
+  var total = 0
+  for character in text.toLower().chars() {
+    let found = "0123456789abcdef".indexOf(character.toText())
+    if found < 0 { return None }
+    total = total * 16 + found
+  }
+  Some(total)
+}
+
+fn wholeOf(text: Str) -> Option[Int] {
+  if text.isEmpty() { None } else {
+    var total = 0
+    for character in text.chars() {
+      if character < '0' || character > '9' { return None }
+      total = total * 10 + (character.code() - 48)
+    }
+    Some(total)
+  }
+}

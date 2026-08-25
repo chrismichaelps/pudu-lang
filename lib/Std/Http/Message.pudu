@@ -1,0 +1,245 @@
+module Std.Http.Message
+
+import Std.Http as Http
+
+/// What stopped a message from being read.
+export type MessageError
+  = NoRequestLine
+  | BadRequestLine(Str)
+  | NoStatusLine
+  | BadStatusLine(Str)
+  | BadHeader(Str)
+  | ShortBody(Int, Int)
+
+/// A request read from the text a connection carried.
+/// Line endings are accepted as `\r\n` or `\n`, because a message written by
+/// hand for a test is worth reading and refusing it teaches nothing.
+export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
+  let split = splitHead(source)
+  let lines = headLines(split[0])
+  if lines.length() == 0 { Err(NoRequestLine) } else {
+    match parseRequestLine(lines[0]) {
+      case Err(problem) => Err(problem)
+      case Ok(parts) => {
+        match parseHeaders(&lines.slice(1, lines.length())) {
+          case Err(problem) => Err(problem)
+          case Ok(headers) => {
+            Ok(Http.Request {
+              method: Http.methodFrom(parts[0]),
+              target: parts[1],
+              headers: headers,
+              body: split[1]
+            })
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A response read from the text a connection carried.
+export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
+  let split = splitHead(source)
+  let lines = headLines(split[0])
+  if lines.length() == 0 { Err(NoStatusLine) } else {
+    match parseStatusLine(lines[0]) {
+      case Err(problem) => Err(problem)
+      case Ok(status) => {
+        match parseHeaders(&lines.slice(1, lines.length())) {
+          case Err(problem) => Err(problem)
+          case Ok(headers) => {
+            Ok(Http.Response { status: status, headers: headers, body: split[1] })
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A request written as the protocol writes it, head and body together.
+export fn renderRequest(value: &Http.Request) -> Str {
+  Http.renderHead(value) + value.body
+}
+
+/// A response written as the protocol writes it.
+export fn renderResponse(value: &Http.Response) -> Str {
+  var out = Http.renderStatusLine(&value.status) + "\r\n"
+  for pair in value.headers { out = out + pair[0] + ": " + pair[1] + "\r\n" }
+  out + "\r\n" + value.body
+}
+
+/// A response built from a status and a body, with the headers that describe it.
+export fn respond(code: Int, mediaType: Str, body: Str) -> Http.Response {
+  Http.Response {
+    status: Http.status(code),
+    headers: [("content-type", mediaType), ("content-length", show(body.length()))],
+    body: body
+  }
+}
+
+/// A response with no body, for the statuses that carry none.
+export fn respondEmpty(code: Int) -> Http.Response {
+  Http.Response { status: Http.status(code), headers: [], body: "" }
+}
+
+/// A redirect to a target, with the status a caller chooses.
+export fn redirect(code: Int, target: Str) -> Http.Response {
+  Http.Response {
+    status: Http.status(code),
+    headers: [("location", target)],
+    body: ""
+  }
+}
+
+/// Whether a message's declared length matches the body it carried.
+/// A short body is how a truncated read shows itself, and a caller reading from
+/// a connection needs to tell that from a complete message.
+export fn checkLength(headers: &Array[(Str, Str)], body: Str) -> Result[(), MessageError] {
+  match Http.contentLength(headers) {
+    case Some(declared) => {
+      if body.length() < declared { Err(ShortBody(declared, body.length())) } else { Ok(()) }
+    }
+    case None => Ok(())
+  }
+}
+
+/// A chunked body read back into the bytes it framed.
+/// Stops at the terminating chunk, ignoring any trailer, which is what a reader
+/// that only wants the body should do.
+export fn decodeChunked(source: Str) -> Str {
+  var out = ""
+  var rest = source
+  while !rest.isEmpty() {
+    let lineEnd = rest.indexOf("\r\n")
+    if lineEnd < 0 { return out }
+    let sizeText = rest.slice(0, lineEnd).trim()
+    let semicolon = sizeText.indexOf(";")
+    let digits = if semicolon < 0 { sizeText } else { sizeText.slice(0, semicolon) }
+    match hexOf(digits) {
+      case Some(size) => {
+        if size == 0 { return out }
+        let from = lineEnd + 2
+        let to = from + size
+        if to > rest.length() { return out + rest.slice(from, rest.length()) }
+        out = out + rest.slice(from, to)
+        rest = rest.slice(min(to + 2, rest.length()), rest.length())
+      }
+      case None => { return out }
+    }
+  }
+  out
+}
+
+/// A reader's failure explained in the terms a caller can report.
+export fn explain(problem: &MessageError) -> Str {
+  match problem {
+    case NoRequestLine => "the message has no request line"
+    case BadRequestLine(line) => "the request line is not a method, target, and version: " + line
+    case NoStatusLine => "the message has no status line"
+    case BadStatusLine(line) => "the status line is not a version, code, and reason: " + line
+    case BadHeader(line) => "a header has no colon: " + line
+    case ShortBody(declared, actual) =>
+      "the body is " + show(actual) + " where " + show(declared) + " was declared"
+  }
+}
+
+/// The head and the body, separated at the first blank line.
+fn splitHead(source: Str) -> (Str, Str) {
+  let doubled = source.indexOf("\r\n\r\n")
+  if doubled >= 0 {
+    (source.slice(0, doubled), source.slice(doubled + 4, source.length()))
+  } else {
+    let single = source.indexOf("\n\n")
+    if single >= 0 {
+      (source.slice(0, single), source.slice(single + 2, source.length()))
+    } else { (source, "") }
+  }
+}
+
+/// The head in lines, with carriage returns removed and blanks dropped.
+fn headLines(head: Str) -> Array[Str] {
+  var out = []
+  for line in head.split("\n") {
+    let trimmed = line.replace("\r", "")
+    if !trimmed.isEmpty() { out = out.push(trimmed) }
+  }
+  out
+}
+
+/// A request line read into its method, target, and version.
+fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
+  let parts = splitSpaces(line)
+  if parts.length() < 2 { Err(BadRequestLine(line)) } else {
+    Ok((parts[0], parts[1], if parts.length() > 2 { parts[2] } else { "HTTP/1.1" }))
+  }
+}
+
+/// A status line read into the status it names.
+fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
+  let parts = splitSpaces(line)
+  if parts.length() < 2 { Err(BadStatusLine(line)) } else {
+    match wholeOf(parts[1]) {
+      case Some(code) => {
+        var reason = ""
+        var index = 2
+        while index < parts.length() {
+          if index > 2 { reason = reason + " " }
+          reason = reason + parts[index]
+          index = index + 1
+        }
+        Ok(Http.Status {
+          code: code,
+          reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
+        })
+      }
+      case None => Err(BadStatusLine(line))
+    }
+  }
+}
+
+/// Header lines read into pairs, with names kept as written.
+fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
+  var out = []
+  for line in lines {
+    let colon = line.indexOf(":")
+    if colon < 0 { return Err(BadHeader(line)) }
+    out = out.push((
+      line.slice(0, colon).trim(),
+      line.slice(colon + 1, line.length()).trim()
+    ))
+  }
+  Ok(out)
+}
+
+fn splitSpaces(line: Str) -> Array[Str] {
+  var out = []
+  for piece in line.split(" ") {
+    if !piece.isEmpty() { out = out.push(piece) }
+  }
+  out
+}
+
+fn min(left: Int, right: Int) -> Int { if left < right { left } else { right } }
+
+fn hexOf(text: Str) -> Option[Int] {
+  if text.isEmpty() { None } else {
+    var total = 0
+    for character in text.toLower().chars() {
+      let found = "0123456789abcdef".indexOf(character.toText())
+      if found < 0 { return None }
+      total = total * 16 + found
+    }
+    Some(total)
+  }
+}
+
+fn wholeOf(text: Str) -> Option[Int] {
+  if text.isEmpty() { None } else {
+    var total = 0
+    for character in text.chars() {
+      if character < '0' || character > '9' { return None }
+      total = total * 10 + (character.code() - 48)
+    }
+    Some(total)
+  }
+}
