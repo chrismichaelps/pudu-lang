@@ -143,6 +143,7 @@ testProgramEvaluation = do
   scheduling <- runEntry "test-fixtures/stdlib/UsesTime.pudu"
   numeric <- runEntry "test-fixtures/stdlib/UsesNumeric.pudu"
   hashing <- runEntry "test-fixtures/stdlib/UsesCrypto.pudu"
+  parsing <- runEntry "test-fixtures/stdlib/UsesParse.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -167,6 +168,8 @@ testProgramEvaluation = do
         (numeric === Just "96")
     , counterexample "SHA-256 written in Pudu matches its published vectors"
         (hashing === Just "10")
+    , counterexample "the parser combinators build a grammar and report positions"
+        (parsing === Just "22")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
