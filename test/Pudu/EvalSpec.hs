@@ -29,6 +29,8 @@ evalProperties =
   , ("effects answer with a result and are refused at compile time", testEffects)
   , ("interpolated strings render their holes", testInterpolation)
   , ("calendar time and subprocesses answer with results", testClock)
+  , ("fixed-width integers keep their width at run time", testIntegerWidths)
+  , ("implementations reach built-in types", testBuiltinImpls)
   ]
 
 testScopes :: IO Property
@@ -496,6 +498,87 @@ testClock = do
     , counterexample "a program that cannot be run is a failure"
         (property (Text.isPrefixOf "Err(" missing))
     , counterexample "a constant may not read the clock" (atCompileTime === ["E7009"])
+    ]
+
+{-| A value's type says how wide it is, so the value has to agree. Without a
+    width at run time `~0u8` answers -1 and `255u8 + 1u8` answers 256, neither
+    of which is a value those types have. -}
+testIntegerWidths :: IO Property
+testIntegerWidths = do
+  complemented <- evaluate "~0u8"
+  overflowed <- codesOf "255u8 + 1u8"
+  wrapped <- evaluate "255u8 &+ 1u8"
+  saturatedHigh <- evaluate "250u8 +| 10u8"
+  saturatedLow <- evaluate "0u8 -| 5u8"
+  logicalShift <- evaluate "200u8 >> 1"
+  arithmeticShift <- evaluate "(0 - 100i8) >> 1"
+  wideShift <- codesOf "1u8 << 9"
+  negativeShift <- codesOf "1u8 << (0 - 1)"
+  annotated <- runProgram [] ["let value: UInt8 = 200"] "value &+ 100u8"
+  plainStaysPlain <- evaluate "2000000 + 1"
+  fits <- evaluate "convertInteger(65, 0u8)"
+  doesNot <- evaluate "convertInteger(300, 0u8)"
+  negative <- evaluate "convertInteger(0 - 1, 0u8)"
+  widened <- evaluate "convertInteger(200u8, 0)"
+  pure $ conjoin
+    [ counterexample "complement is taken over the type's width" (complemented === "255")
+    , counterexample "checked addition reports overflow" (overflowed === ["E7005"])
+    , counterexample "wrapping addition wraps" (wrapped === "0")
+    , counterexample "saturating addition stops at the top" (saturatedHigh === "255")
+    , counterexample "saturating subtraction stops at nought" (saturatedLow === "0")
+    , counterexample "an unsigned shift right brings in noughts" (logicalShift === "100")
+    , counterexample "a signed shift right keeps the sign" (arithmeticShift === "-50")
+    , counterexample "a shift by the width has no answer" (wideShift === ["E7004"])
+    , counterexample "a negative shift count has no answer" (negativeShift === ["E7004"])
+    , counterexample "an annotated literal takes its annotated width"
+        (annotated === "44")
+    , counterexample "a plain integer is unaffected" (plainStaysPlain === "2000001")
+    , counterexample "a conversion that fits answers with the value" (fits === "Some(65)")
+    , counterexample "a conversion that does not fit answers with nothing" (doesNot === "None")
+    , counterexample "a negative value does not fit an unsigned type" (negative === "None")
+    , counterexample "widening always fits" (widened === "Some(200)")
+    ]
+
+{-| An implementation for a built-in type is reachable at run time. It type
+    checked before and then failed, which made every generic helper bounded by a
+    trait unusable for the types a program actually holds. -}
+testBuiltinImpls :: IO Property
+testBuiltinImpls = do
+  onInteger <- evaluateWith
+    [ "trait Doubling { fn twice(self: &Self) -> Self }"
+    , "impl Doubling for Int { fn twice(self: &Self) -> Self { *self + *self } }"
+    ]
+    "21.twice()"
+  onText <- evaluateWith
+    [ "trait Shouting { fn shout(self: &Self) -> Str }"
+    , "impl Shouting for Str { fn shout(self: &Self) -> Str { *self + \"!\" } }"
+    ]
+    "\"hi\".shout()"
+  onArray <- evaluateWith
+    [ "trait Counting { fn twice(self: &Self) -> Int }"
+    , "impl Counting for Array { fn twice(self: &Self) -> Int { 2 } }"
+    ]
+    "[1, 2].twice()"
+  builtinStillWins <- evaluate "[1, 2, 3].length()"
+  generic <- evaluateWith
+    [ "trait Ranking { fn before(self: &Self, other: &Self) -> Bool }"
+    , "impl Ranking for Int { fn before(self: &Self, other: &Self) -> Bool { *self < *other } }"
+    , "fn smallest[T: Ranking](items: &Array[T]) -> Option[T] {"
+    , "  if items.length() == 0 { None } else {"
+    , "    var best = items[0]"
+    , "    for item in items { if item.before(&best) { best = item } }"
+    , "    Some(best)"
+    , "  }"
+    , "}"
+    ]
+    "smallest(&[3, 1, 2])"
+  pure $ conjoin
+    [ counterexample "an implementation for Int is reachable" (onInteger === "42")
+    , counterexample "an implementation for Str is reachable" (onText === "\"hi!\"")
+    , counterexample "an implementation for Array is reachable" (onArray === "2")
+    , counterexample "a built-in method still wins its own name" (builtinStillWins === "3")
+    , counterexample "a bounded generic works over a built-in type"
+        (generic === "Some(1)")
     ]
 
 testEffects :: IO Property

@@ -48,6 +48,7 @@ import Pudu.Type.Env
   , rigidSatisfies
   , takeObligations
   )
+import Pudu.Semantic.Prelude (wiredInTypeNames)
 import Pudu.Type.Marker (isMarkerTrait, satisfiesMarker)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
@@ -190,9 +191,21 @@ implAliases declared value = case implTargetName declared value of
           Map.insert "Self" (NominalType name []) (declaredAliases declared)
       }
 
+{-| The nominal type an implementation is for.
+
+    A wired-in type is not in `declaredNames` — no module declared it — so a
+    name that is not there but is one the compiler wires in becomes its own
+    nominal identity. Without this, `impl Ord for Str` leaves `Self` unaliased
+    and its own body fails to check against the type it was written for. -}
 implTargetName :: DeclaredTypes -> Impl -> Maybe NominalId
 implTargetName declared value = case locatedValue (implTarget value) of
-  Tree.NamedType path _ -> Map.lookup (moduleNameText path) (declaredNames declared)
+  Tree.NamedType path _ ->
+    let name = moduleNameText path
+     in case Map.lookup name (declaredNames declared) of
+          Just found -> Just found
+          Nothing
+            | name `elem` wiredInTypeNames -> Just (NominalId Nothing name)
+            | otherwise -> Nothing
   _ -> Nothing
 
 functionRigid :: Function -> [Text]
@@ -297,6 +310,17 @@ declareBuiltinConstructors = do
       its quotes. -}
   bindName "display"
     (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+  {-| The conversion between integer types, which nothing in the language can
+      express: every other integer operation works within one type, and this one
+      crosses. The target type comes from an example value because an expression
+      has no way to name a type. -}
+  bindName "convertInteger"
+    ( polytype ["S", "T"] []
+        ( FunctionTypeValue False
+            [RigidType "S", RigidType "T"]
+            (NominalType "Option" [RigidType "T"])
+        )
+    )
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has

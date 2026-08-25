@@ -1,7 +1,17 @@
 {-| @Pudu.IntegerLiteral.Module — decodes and bounds integer literals -}
 module Pudu.IntegerLiteral
-  ( IntegerSuffix (..)
+  ( IntegerKind (..)
+  , IntegerSuffix (..)
   , ParsedInteger (..)
+  , integerKindFits
+  , integerKindMeet
+  , integerKindName
+  , integerKindOf
+  , integerKindSigned
+  , integerKindWidth
+  , integerKindWrap
+  , targetPointerWidth
+  , defaultIntegerKind
   , fitsIntegerType
   , integerSuffix
   , integerSuffixType
@@ -53,6 +63,142 @@ parseIntegerLiteral source = do
       { parsedIntegerValue = sign * magnitude
       , parsedIntegerSuffix = suffix
       }
+
+{-| @IntegerLiteral.Kind — the width and signedness a value carries at run time.
+
+    Two's-complement, as [[architecture/SEMANTICS]] requires. `BigIntKind` is the
+    one that has no width: it is exact and unbounded, which is what makes it
+    different from every other integer rather than merely wider. -}
+data IntegerKind
+  = SignedKind !Int
+  | UnsignedKind !Int
+  | PlatformSigned
+  | PlatformUnsigned
+  | BigIntKind
+  deriving stock (Eq, Ord, Show)
+
+{-| The pointer width this build targets.
+
+    [[architecture/SEMANTICS]] makes `Int` and `UInt` the target's pointer width
+    and records it in artifact metadata. Until a target is selectable it is
+    sixty-four, in one place, so the day it becomes selectable there is one
+    place to change. -}
+targetPointerWidth :: Int
+targetPointerWidth = 64
+
+{-| The kind a named integer type has, given the target's pointer width.
+
+    `Int` and `UInt` keep their own constructors rather than being written as
+    the target's width, because they are distinct types: an implementation for
+    `Int` is not an implementation for `Int64`, however wide the target is. -}
+integerKindOf :: Text -> Maybe IntegerKind
+integerKindOf typeName = case typeName of
+  "Int8" -> Just (SignedKind 8)
+  "Int16" -> Just (SignedKind 16)
+  "Int32" -> Just (SignedKind 32)
+  "Int64" -> Just (SignedKind 64)
+  "Int128" -> Just (SignedKind 128)
+  "Int" -> Just PlatformSigned
+  "UInt8" -> Just (UnsignedKind 8)
+  "UInt16" -> Just (UnsignedKind 16)
+  "UInt32" -> Just (UnsignedKind 32)
+  "UInt64" -> Just (UnsignedKind 64)
+  "UInt128" -> Just (UnsignedKind 128)
+  "UInt" -> Just PlatformUnsigned
+  "BigInt" -> Just BigIntKind
+  _ -> Nothing
+
+{-| The name a kind answers to, for a diagnostic that has to say which type
+    overflowed. -}
+integerKindName :: IntegerKind -> Text
+integerKindName kind = case kind of
+  SignedKind width -> "Int" <> decimalText width
+  UnsignedKind width -> "UInt" <> decimalText width
+  PlatformSigned -> "Int"
+  PlatformUnsigned -> "UInt"
+  BigIntKind -> "BigInt"
+
+{-| How many bits a kind has, or nothing for the one that has no bound.
+
+    Every bitwise operation needs this, and `Std.Bits` asking a value for its
+    own width is what lets it stop claiming sixty-four. -}
+integerKindWidth :: IntegerKind -> Maybe Int
+integerKindWidth kind = case kind of
+  SignedKind width -> Just width
+  UnsignedKind width -> Just width
+  PlatformSigned -> Just targetPointerWidth
+  PlatformUnsigned -> Just targetPointerWidth
+  BigIntKind -> Nothing
+
+{-| Whether a kind admits negative values. -}
+integerKindSigned :: IntegerKind -> Bool
+integerKindSigned kind = case kind of
+  SignedKind _ -> True
+  UnsignedKind _ -> False
+  PlatformSigned -> True
+  PlatformUnsigned -> False
+  BigIntKind -> True
+
+{-| Whether a value lies inside a kind's interval.
+
+    This is the check [[architecture/SEMANTICS]] requires of every fixed-width
+    arithmetic result: the exact mathematical answer or a typed overflow
+    failure, never a silently truncated one. -}
+integerKindFits :: IntegerKind -> Integer -> Bool
+integerKindFits kind value = case kind of
+  SignedKind width -> fitsSigned width value
+  UnsignedKind width -> fitsUnsigned width value
+  PlatformSigned -> fitsSigned targetPointerWidth value
+  PlatformUnsigned -> fitsUnsigned targetPointerWidth value
+  BigIntKind -> True
+
+{-| A value reduced into a kind's interval by two's-complement wrapping.
+
+    Used only where wrapping is the defined answer — the bitwise operations,
+    where a mask is what the operation means — never to rescue an arithmetic
+    result that overflowed. -}
+integerKindWrap :: IntegerKind -> Integer -> Integer
+integerKindWrap kind value = case kind of
+  BigIntKind -> value
+  _
+    | integerKindSigned kind -> wrapSigned (widthOf kind) value
+    | otherwise -> value `mod` (2 ^ widthOf kind)
+ where
+  widthOf other = maybe targetPointerWidth id (integerKindWidth other)
+  wrapSigned width raw =
+    let modulus = 2 ^ width :: Integer
+        reduced = raw `mod` modulus
+     in if reduced >= modulus `div` 2 then reduced - modulus else reduced
+
+{-| The kind two operands share.
+
+    The language admits no implicit numeric conversion, so in a program that
+    type-checks both operands of an arithmetic operator have the *same* type.
+    When the runtime sees two different kinds, one of them therefore came from a
+    literal the checker resolved to the other — an unsuffixed `200` written
+    where a `UInt8` was wanted carries the default kind because nothing in the
+    literal said otherwise.
+
+    So the specific kind wins over the default one, and any width wins over
+    `BigInt`. This is exact rather than a guess: it is only reached for a
+    program the checker already agreed about. -}
+integerKindMeet :: IntegerKind -> IntegerKind -> IntegerKind
+integerKindMeet left right
+  | left == right = left
+  | otherwise = case (left, right) of
+      (BigIntKind, other) -> other
+      (other, BigIntKind) -> other
+      (candidate, other)
+        | candidate == defaultIntegerKind -> other
+        | other == defaultIntegerKind -> candidate
+        | otherwise -> candidate
+
+{-| The kind an integer has when nothing said otherwise: platform `Int`.
+
+    Kept here beside the meet that consults it, so the one place that decides
+    what "nothing said otherwise" means is the one place that acts on it. -}
+defaultIntegerKind :: IntegerKind
+defaultIntegerKind = PlatformSigned
 
 fitsIntegerType :: Int -> Text -> Integer -> Maybe Bool
 fitsIntegerType targetWidth typeName value = case typeName of

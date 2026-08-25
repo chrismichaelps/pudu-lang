@@ -1,134 +1,179 @@
 module Std.Math
 
+import Std.Num {Add, Div, Mul, One, Rem, Sub, Zero, small, two}
+import Std.Order {Ord}
+
 /// The smaller of two values.
-export fn min(left: Int, right: Int) -> Int {
-  if left < right { left } else { right }
+export fn min[T: Ord](left: T, right: T) -> T {
+  if right.before(&left) { right } else { left }
 }
 
 /// The larger of two values.
-export fn max(left: Int, right: Int) -> Int {
-  if left > right { left } else { right }
+export fn max[T: Ord](left: T, right: T) -> T {
+  if left.before(&right) { right } else { left }
 }
 
 /// The distance of a value from zero.
-export fn abs(value: Int) -> Int {
-  if value < 0 { 0 - value } else { value }
+/// An unsigned type is its own distance, which is what makes this correct
+/// rather than merely defined for one.
+export fn abs[T: Ord + Zero + Sub](value: T) -> T {
+  if value.before(&value.zero()) { value.zero().minus(&value) } else { value }
 }
 
 /// Confine a value to a range, inclusive at both ends.
-/// A range whose lower bound exceeds its upper bound yields the lower bound,
-/// which is the only answer that satisfies neither caller silently.
-export fn clamp(value: Int, lower: Int, upper: Int) -> Int {
-  if value < lower { lower } else { min(value, upper) }
+/// A range whose lower bound exceeds its upper yields the lower bound, which is
+/// the only answer that satisfies neither caller silently.
+export fn clamp[T: Ord](value: T, lower: T, upper: T) -> T {
+  if value.before(&lower) { lower } else { min(value, upper) }
 }
 
-/// The sign of a value: -1, 0, or 1.
-export fn signum(value: Int) -> Int {
-  if value > 0 { 1 } else { if value < 0 { 0 - 1 } else { 0 } }
+/// Whether a value lies between two bounds, inclusive at both ends.
+export fn between[T: Ord](value: T, lower: T, upper: T) -> Bool {
+  !value.before(&lower) && !upper.before(&value)
 }
 
-/// The greatest common divisor, by Euclid's algorithm.
-/// The result is never negative, so it can be used as a divisor without a
-/// caller having to check its sign.
-export fn gcd(left: Int, right: Int) -> Int {
-  var remaining = abs(right)
-  var current = abs(left)
-  while remaining != 0 {
-    let next = current % remaining
-    current = remaining
-    remaining = next
+/// The sign of a value: -1, 0, or 1, in the value's own type.
+/// An unsigned type never answers -1, because it has no such value.
+export fn signum[T: Ord + Zero + One + Sub](value: T) -> T {
+  if value.zero().before(&value) { value.one() } else {
+    if value.before(&value.zero()) { value.zero().minus(&value.one()) } else { value.zero() }
   }
-  current
 }
 
-/// The least common multiple. Zero with either argument zero, since no positive
-/// multiple of zero exists.
-export fn lcm(left: Int, right: Int) -> Int {
-  if left == 0 { 0 } else { if right == 0 { 0 } else { abs(left / gcd(left, right) * right) } }
+/// The next value.
+export fn succ[T: One + Add](value: T) -> T { value.plus(&value.one()) }
+
+/// The previous value.
+export fn pred[T: One + Sub](value: T) -> T { value.minus(&value.one()) }
+
+/// One value taken from another, with the arguments in the order a reader meets
+/// them: `subtract(3, 10)` is seven.
+export fn subtract[T: Sub](amount: T, value: T) -> T { value.minus(&amount) }
+
+/// Truncating division, or `None` when the divisor is nought.
+/// Nothing in `Std` is partial: the operator reports at run time, and this is
+/// the form that reports as a value instead.
+export fn divide[T: Div](value: T, divisor: T) -> Option[T] { value.dividedBy(&divisor) }
+
+/// The remainder of a truncating division, or `None` for a nought divisor.
+export fn remainder[T: Rem](value: T, divisor: T) -> Option[T] {
+  value.remainderOf(&divisor)
 }
+
+/// The quotient and the remainder together, or `None` for a nought divisor.
+export fn divMod[T: Div + Rem](value: T, divisor: T) -> Option[(T, T)] {
+  match value.dividedBy(&divisor) {
+    case None => None
+    case Some(quotient) => {
+      match value.remainderOf(&divisor) {
+        case Some(rest) => Some((quotient, rest))
+        case None => None
+      }
+    }
+  }
+}
+
+/// Whether a value divides another with no remainder. Nought divides nothing.
+export fn divides[T: Rem + Zero + Ord](divisor: T, value: T) -> Bool {
+  match value.remainderOf(&divisor) {
+    case Some(rest) => !rest.before(&rest.zero()) && !rest.zero().before(&rest)
+    case None => false
+  }
+}
+
+/// Whether a value is even.
+export fn isEven[T: Rem + Zero + One + Add + Ord](value: T) -> Bool {
+  divides(two(&value), value)
+}
+
+/// Whether a value is odd.
+export fn isOdd[T: Rem + Zero + One + Add + Ord](value: T) -> Bool { !isEven(value) }
+
+/// A value squared.
+export fn square[T: Mul](value: T) -> T { value.times(&value) }
+
+/// A value cubed.
+export fn cube[T: Mul](value: T) -> T { value.times(&value).times(&value) }
 
 /// A value raised to a non-negative power, by repeated squaring.
-/// A negative exponent yields 1, matching integer exponentiation everywhere
-/// else: the true answer is not an Int, and this signature promises one.
-export fn pow(base: Int, exponent: Int) -> Int {
-  var result = 1
+/// A negative exponent yields one, matching integer exponentiation everywhere
+/// else: the true answer is not a whole number, and this signature promises one.
+/// The exponent is a plain count, because it says how many times rather than
+/// naming a value of the base's type.
+export fn pow[T: One + Mul](base: T, exponent: Int) -> T {
+  var result = base.one()
   var remaining = exponent
   var factor = base
   while remaining > 0 {
-    if remaining % 2 == 1 { result = result * factor } else { }
-    factor = factor * factor
+    if remaining % 2 == 1 { result = result.times(&factor) }
+    factor = factor.times(&factor)
     remaining = remaining / 2
   }
   result
 }
 
-/// Whether a value divides another with no remainder.
-export fn divides(divisor: Int, value: Int) -> Bool {
-  if divisor == 0 { false } else { value % divisor == 0 }
+/// A value raised to a power, or `None` when the exponent is negative.
+/// The total companion to `pow`, which answers one for a negative exponent
+/// because its signature promises a value of the base's type.
+export fn checkedPow[T: One + Mul](base: T, exponent: Int) -> Option[T] {
+  if exponent < 0 { None } else { Some(pow(base, exponent)) }
 }
 
-/// Whether a value is even.
-export fn isEven(value: Int) -> Bool { value % 2 == 0 }
-
-/// Whether a value is odd.
-export fn isOdd(value: Int) -> Bool { value % 2 != 0 }
-
-/// The next whole number.
-export fn succ(value: Int) -> Int { value + 1 }
-
-/// The previous whole number.
-export fn pred(value: Int) -> Int { value - 1 }
-
-/// One value taken from another, with the arguments in the order a reader
-/// meets them: `subtract(3, 10)` is seven.
-export fn subtract(amount: Int, value: Int) -> Int { value - amount }
-
-/// Truncating division, or `None` when the divisor is nought.
-/// Nothing in `Std` is partial: the operator fails at run time, and this is the
-/// form that reports the failure instead.
-export fn divide(value: Int, divisor: Int) -> Option[Int] {
-  if divisor == 0 { None } else { Some(value / divisor) }
+/// The greatest common divisor, by Euclid's algorithm.
+/// The result is never negative, so it can be used as a divisor without a
+/// caller having to check its sign.
+export fn gcd[T: Ord + Zero + One + Add + Sub + Rem](left: T, right: T) -> T {
+  var remaining = abs(right)
+  var current = abs(left)
+  while !isZero(&remaining) {
+    match current.remainderOf(&remaining) {
+      case Some(next) => {
+        current = remaining
+        remaining = next
+      }
+      case None => { return current }
+    }
+  }
+  current
 }
 
-/// The remainder of a truncating division, or `None` for a nought divisor.
-export fn remainder(value: Int, divisor: Int) -> Option[Int] {
-  if divisor == 0 { None } else { Some(value % divisor) }
+/// The least common multiple. Nought with either argument nought, since no
+/// positive multiple of nought exists.
+export fn lcm[T: Ord + Zero + One + Add + Sub + Mul + Div + Rem](left: T, right: T) -> T {
+  if isZero(&left) || isZero(&right) { left.zero() } else {
+    match left.dividedBy(&gcd(left, right)) {
+      case Some(reduced) => abs(reduced.times(&right))
+      case None => left.zero()
+    }
+  }
 }
-
-/// The quotient and the remainder together, or `None` for a nought divisor.
-export fn divMod(value: Int, divisor: Int) -> Option[(Int, Int)] {
-  if divisor == 0 { None } else { Some((value / divisor, value % divisor)) }
-}
-
-/// A value squared.
-export fn square(value: Int) -> Int { value * value }
-
-/// A value cubed.
-export fn cube(value: Int) -> Int { value * value * value }
 
 /// The product of every whole number from one up to the value.
 /// A value below one has an empty product, which is one.
-export fn factorial(value: Int) -> Int {
-  var total = 1
-  var current = 2
-  while current <= value {
-    total = total * current
-    current = current + 1
+export fn factorial[T: Ord + Zero + One + Add + Mul](value: T) -> T {
+  var total = value.one()
+  var current = two(&value)
+  while !value.before(&current) {
+    total = total.times(&current)
+    current = current.plus(&current.one())
   }
   total
 }
 
-/// The greatest whole number whose square does not exceed the value.
+/// The greatest value whose square does not exceed the given one.
 /// Newton's method on whole numbers; a negative value has no square root and
-/// answers with `None` rather than a number that is not one.
-export fn isqrt(value: Int) -> Option[Int] {
-  if value < 0 { None } else {
-    if value < 2 { Some(value) } else {
+/// answers `None` rather than a number that is not one.
+export fn isqrt[T: Ord + Zero + One + Add + Div](value: T) -> Option[T] {
+  if value.before(&value.zero()) { None } else {
+    if value.before(&two(&value)) { Some(value) } else {
       var guess = value
-      var next = (value + 1) / 2
-      while next < guess {
+      var next = halve(value.plus(&value.one()))
+      while next.before(&guess) {
         guess = next
-        next = (guess + value / guess) / 2
+        match value.dividedBy(&guess) {
+          case Some(quotient) => { next = halve(guess.plus(&quotient)) }
+          case None => { return Some(guess) }
+        }
       }
       Some(guess)
     }
@@ -136,14 +181,16 @@ export fn isqrt(value: Int) -> Option[Int] {
 }
 
 /// Whether a value is prime. Values below two are not.
-export fn isPrime(value: Int) -> Bool {
-  if value < 2 { false } else {
-    if value < 4 { true } else {
-      if value % 2 == 0 { false } else {
-        var divisor = 3
-        while divisor * divisor <= value {
-          if value % divisor == 0 { return false }
-          divisor = divisor + 2
+export fn isPrime[T: Ord + Zero + One + Add + Mul + Rem](value: T) -> Bool {
+  let one = value.one()
+  let twoOf = two(&value)
+  if value.before(&twoOf) { false } else {
+    if value.before(&small(&value, 4)) { true } else {
+      if divides(twoOf, value) { false } else {
+        var divisor = small(&value, 3)
+        while !value.before(&divisor.times(&divisor)) {
+          if divides(divisor, value) { return false }
+          divisor = divisor.plus(&twoOf)
         }
         true
       }
@@ -151,9 +198,20 @@ export fn isPrime(value: Int) -> Bool {
   }
 }
 
-/// Whether a value lies between two bounds, inclusive at both ends.
-export fn between(value: Int, lower: Int, upper: Int) -> Bool {
-  value >= lower && value <= upper
+/// The number of decimal digits, counting a lone nought as one and ignoring a
+/// sign.
+export fn digitCount[T: Ord + Zero + One + Add + Sub + Div](value: T) -> Int {
+  let ten = small(&value, 10)
+  var remaining = abs(value)
+  var total = 1
+  while !remaining.before(&ten) {
+    match remaining.dividedBy(&ten) {
+      case Some(next) => { remaining = next }
+      case None => { return total }
+    }
+    total = total + 1
+  }
+  total
 }
 
 /// The smaller of two values, chosen by a comparison the caller supplies.
@@ -166,21 +224,15 @@ export fn maxBy[T](left: T, right: T, before: fn(T, T) -> Bool) -> T {
   if before(left, right) { right } else { left }
 }
 
-/// A value raised to a power, or `None` when the exponent is negative.
-/// The total companion to `pow`, which answers one for a negative exponent
-/// because its signature promises an `Int`.
-export fn checkedPow(base: Int, exponent: Int) -> Option[Int] {
-  if exponent < 0 { None } else { Some(pow(base, exponent)) }
+/// Whether a value is nought, under its own ordering.
+fn isZero[T: Ord + Zero](value: &T) -> Bool {
+  !value.before(&value.zero()) && !value.zero().before(value)
 }
 
-/// The number of decimal digits, counting a lone nought as one and ignoring a
-/// minus sign.
-export fn digitCount(value: Int) -> Int {
-  var remaining = abs(value)
-  var total = 1
-  while remaining >= 10 {
-    remaining = remaining / 10
-    total = total + 1
+/// A value halved, which every algorithm here needs and none of them names.
+fn halve[T: Zero + One + Add + Div](value: T) -> T {
+  match value.dividedBy(&two(&value)) {
+    case Some(found) => found
+    case None => value
   }
-  total
 }

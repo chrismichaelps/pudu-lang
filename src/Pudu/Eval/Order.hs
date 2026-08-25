@@ -57,10 +57,10 @@ comparableValue value = case value of
     ever gets here. -}
 compareValues :: Value -> Value -> Ordering
 compareValues left right = case (left, right) of
-  (IntValue a, IntValue b) -> compare a b
+  (IntValue _ a, IntValue _ b) -> compare a b
   (FloatValue _ a, FloatValue _ b) -> compare a b
-  (IntValue a, FloatValue _ b) -> compare (fromIntegral a) b
-  (FloatValue _ a, IntValue b) -> compare a (fromIntegral b)
+  (IntValue _ a, FloatValue _ b) -> compare (fromIntegral a) b
+  (FloatValue _ a, IntValue _ b) -> compare a (fromIntegral b)
   (StrValue a, StrValue b) -> compare a b
   (CharValue a, CharValue b) -> compare a b
   (BoolValue a, BoolValue b) -> compare a b
@@ -108,7 +108,7 @@ shapeRank value = case value of
   UnitValue -> 0
   NullValue -> 1
   BoolValue _ -> 2
-  IntValue _ -> 3
+  IntValue _ _ -> 3
   FloatValue _ _ -> 3
   CharValue _ -> 4
   StrValue _ -> 5

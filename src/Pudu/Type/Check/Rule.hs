@@ -206,6 +206,13 @@ binaryType spanValue operator left right
   | operator `elem` ["..", "..="] = do
       unified <- unify spanValue left right
       pure (NominalType "Range" [unified])
+  {-| A shift's count is a position, not a second operand of the same type. It
+      answers "how far", which is a plain count whatever the value's width is,
+      and requiring the two to match would mean writing `1u8 << 3u8` and make a
+      generic shift over the integer family impossible to write at all. -}
+  | operator `elem` ["<<", ">>"] = do
+      _ <- unify spanValue integerType right
+      pure left
   | otherwise = unify spanValue left right
 
 callType :: Span -> Type -> [Type] -> Checker Type

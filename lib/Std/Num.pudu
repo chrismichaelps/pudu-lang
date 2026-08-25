@@ -1,0 +1,316 @@
+module Std.Num
+
+/// A type with an additive identity.
+/// Separate from `Add` because summing an empty collection needs the identity
+/// and nothing else, and a type can have one without the other.
+export trait Zero { fn zero(self: &Self) -> Self }
+
+/// A type with a multiplicative identity.
+export trait One { fn one(self: &Self) -> Self }
+
+/// A type whose values add.
+export trait Add { fn plus(self: &Self, other: &Self) -> Self }
+
+/// A type whose values subtract.
+export trait Sub { fn minus(self: &Self, other: &Self) -> Self }
+
+/// A type whose values multiply.
+export trait Mul { fn times(self: &Self, other: &Self) -> Self }
+
+/// A type whose values have a remainder, answering `None` for a divisor of
+/// nought. Separate from `Div` because a type can divide exactly without having
+/// one, and because asking for both when only one is used is a bound a caller
+/// has to satisfy for nothing.
+export trait Rem { fn remainderOf(self: &Self, other: &Self) -> Option[Self] }
+
+/// A type whose values divide, answering `None` for a divisor of nought.
+/// Total, like everything else here: division is the one arithmetic operation
+/// with an input it has no answer for.
+export trait Div { fn dividedBy(self: &Self, other: &Self) -> Option[Self] }
+
+/// Every element added together, or `None` for an empty collection.
+/// `None` rather than the identity because a caller that wants nought for an
+/// empty collection can say so, while one that needs to know it was empty
+/// cannot get that back from a nought.
+export fn sum[T: Zero + Add](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var running = items[0].zero()
+    for item in items { running = running.plus(&item) }
+    Some(running)
+  }
+}
+
+/// Every element added together, with a caller-supplied value for empty.
+export fn sumOr[T: Zero + Add](items: &Array[T], empty: T) -> T {
+  match sum(items) {
+    case Some(found) => found
+    case None => empty
+  }
+}
+
+/// Every element multiplied together, or `None` for an empty collection.
+export fn product[T: One + Mul](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var running = items[0].one()
+    for item in items { running = running.times(&item) }
+    Some(running)
+  }
+}
+
+/// Every running total, one longer than the input.
+export fn runningSum[T: Zero + Add](items: &Array[T]) -> Array[T] {
+  if items.length() == 0 { [] } else {
+    var running = items[0].zero()
+    var out = [running]
+    for item in items {
+      running = running.plus(&item)
+      out = out.push(running)
+    }
+    out
+  }
+}
+
+/// The difference between the largest and the smallest, or `None` when empty.
+export fn spread[T: Sub](items: &Array[T], largest: T, smallest: T) -> T {
+  largest.minus(&smallest)
+}
+
+/// Implementations follow for every integer width and both floating widths.
+/// They are written out rather than derived because the language has no
+/// deriving, and written here rather than in each caller because the point of a
+/// bound is that a caller does not repeat it.
+
+impl Zero for Int { fn zero(self: &Self) -> Self { 0 } }
+impl Zero for Int8 { fn zero(self: &Self) -> Self { 0i8 } }
+impl Zero for Int16 { fn zero(self: &Self) -> Self { 0i16 } }
+impl Zero for Int32 { fn zero(self: &Self) -> Self { 0i32 } }
+impl Zero for Int64 { fn zero(self: &Self) -> Self { 0i64 } }
+impl Zero for Int128 { fn zero(self: &Self) -> Self { 0i128 } }
+impl Zero for UInt { fn zero(self: &Self) -> Self { 0 } }
+impl Zero for UInt8 { fn zero(self: &Self) -> Self { 0u8 } }
+impl Zero for UInt16 { fn zero(self: &Self) -> Self { 0u16 } }
+impl Zero for UInt32 { fn zero(self: &Self) -> Self { 0u32 } }
+impl Zero for UInt64 { fn zero(self: &Self) -> Self { 0u64 } }
+impl Zero for UInt128 { fn zero(self: &Self) -> Self { 0u128 } }
+impl Zero for BigInt { fn zero(self: &Self) -> Self { 0 } }
+impl One for Int { fn one(self: &Self) -> Self { 1 } }
+impl One for Int8 { fn one(self: &Self) -> Self { 1i8 } }
+impl One for Int16 { fn one(self: &Self) -> Self { 1i16 } }
+impl One for Int32 { fn one(self: &Self) -> Self { 1i32 } }
+impl One for Int64 { fn one(self: &Self) -> Self { 1i64 } }
+impl One for Int128 { fn one(self: &Self) -> Self { 1i128 } }
+impl One for UInt { fn one(self: &Self) -> Self { 1 } }
+impl One for UInt8 { fn one(self: &Self) -> Self { 1u8 } }
+impl One for UInt16 { fn one(self: &Self) -> Self { 1u16 } }
+impl One for UInt32 { fn one(self: &Self) -> Self { 1u32 } }
+impl One for UInt64 { fn one(self: &Self) -> Self { 1u64 } }
+impl One for UInt128 { fn one(self: &Self) -> Self { 1u128 } }
+impl One for BigInt { fn one(self: &Self) -> Self { 1 } }
+impl Add for Int { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for Int8 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for Int16 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for Int32 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for Int64 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for Int128 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt8 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt16 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt32 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt64 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for UInt128 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Add for BigInt { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Sub for Int { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for Int8 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for Int16 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for Int32 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for Int64 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for Int128 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt8 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt16 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt32 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt64 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for UInt128 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Sub for BigInt { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Mul for Int { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for Int8 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for Int16 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for Int32 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for Int64 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for Int128 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt8 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt16 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt32 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt64 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for UInt128 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Mul for BigInt { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Div for Int {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for Int8 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0i8 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for Int16 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0i16 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for Int32 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0i32 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for Int64 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0i64 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for Int128 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0i128 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt8 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0u8 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt16 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0u16 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt32 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0u32 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt64 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0u64 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for UInt128 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0u128 { None } else { Some(*self / *other) }
+  }
+}
+impl Div for BigInt {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0 { None } else { Some(*self / *other) }
+  }
+}
+impl Zero for Float32 { fn zero(self: &Self) -> Self { 0.0f32 } }
+impl One for Float32 { fn one(self: &Self) -> Self { 1.0f32 } }
+impl Add for Float32 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Sub for Float32 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Mul for Float32 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Div for Float32 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0.0f32 { None } else { Some(*self / *other) }
+  }
+}
+impl Zero for Float64 { fn zero(self: &Self) -> Self { 0.0f64 } }
+impl One for Float64 { fn one(self: &Self) -> Self { 1.0f64 } }
+impl Add for Float64 { fn plus(self: &Self, other: &Self) -> Self { *self + *other } }
+impl Sub for Float64 { fn minus(self: &Self, other: &Self) -> Self { *self - *other } }
+impl Mul for Float64 { fn times(self: &Self, other: &Self) -> Self { *self * *other } }
+impl Div for Float64 {
+  fn dividedBy(self: &Self, other: &Self) -> Option[Self] {
+    if *other == 0.0f64 { None } else { Some(*self / *other) }
+  }
+}
+
+
+/// Two, built from the identity rather than written, so it has whatever type
+/// the caller is working in.
+export fn two[T: One + Add](example: &T) -> T { example.one().plus(&example.one()) }
+
+/// A whole number of the caller's type, built by repeated addition.
+/// Only for the small constants an algorithm needs — ten for digits, two for
+/// halving. Building a large one this way would be a loop a caller can see.
+export fn small[T: Zero + One + Add](example: &T, count: Int) -> T {
+  var out = example.zero()
+  var remaining = count
+  while remaining > 0 {
+    out = out.plus(&example.one())
+    remaining = remaining - 1
+  }
+  out
+}
+
+impl Rem for Int {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int8 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i8 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int16 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i16 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int32 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i32 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int64 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i64 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for Int128 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0i128 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt8 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u8 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt16 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u16 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt32 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u32 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt64 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u64 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for UInt128 {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0u128 { None } else { Some((*self) % (*other)) }
+  }
+}
+impl Rem for BigInt {
+  fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
+    if (*other) == 0 { None } else { Some((*self) % (*other)) }
+  }
+}

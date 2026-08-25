@@ -38,7 +38,7 @@ preludeTypeNames =
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
 preludeValueNames =
-  [ "panic", "charFromCode", "mapOf", "setOf", "show", "display"
+  [ "panic", "charFromCode", "mapOf", "setOf", "show", "display", "convertInteger"
   , "Some", "None", "Ok", "Err"
   ]
     <> effectValueNames

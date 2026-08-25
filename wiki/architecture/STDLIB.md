@@ -148,7 +148,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-two modules, 672 documented exports, every one written in Pudu.
+Twenty-three modules, 699 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -156,9 +156,10 @@ Twenty-two modules, 672 documented exports, every one written in Pudu.
 | `Std.Text` | 64 | slicing, splitting, padding, per-character work, prefixes, comparison, case |
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
-| `Std.Bits` | 29 | the bit operators as functions, positions, rotation, base conversion |
+| `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
+| `Std.Num` | 21 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div` and the aggregates over them |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
-| `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked partial operators |
+| `Std.Math` | 27 | arithmetic, divisibility, roots, primality, checked partial operators — all bounded, none `Int`-only |
 | `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
 | `Std.Http.Message` | 12 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
@@ -174,6 +175,22 @@ Twenty-two modules, 672 documented exports, every one written in Pudu.
 | `Std.Process` | 11 | running a program, its status and streams, availability |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
+
+### On numbers
+
+The numeric surface is **generic, bounded by traits**, not `Int`-only. `Std.Order` carries `Eq` and
+`Ord`, `Std.Num` carries `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
+`Bits` — each implemented across the integer family and, where it makes sense, both floating widths
+and `Str`, `Char`, and `Bool`.
+
+`Bits` has no implementation for `BigInt`, because `BigInt` has no width and every operation there
+needs one. That is the bound doing its job: the type that cannot answer is the type that is refused.
+
+`width` is a method, so a value answers for its own rather than a module assuming sixty-four:
+`countLeadingZeros(1u8)` is 7 and `countLeadingZeros(1u32)` is 31.
+
+See [[decisions/ADR-0006-integer-widths-and-std-numerics]] for what had to be fixed underneath —
+integers had no width at run time at all — and for what `Std` promises about numbers.
 
 ### On effects
 

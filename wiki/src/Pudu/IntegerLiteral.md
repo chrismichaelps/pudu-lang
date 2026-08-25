@@ -34,6 +34,14 @@ fitsIntegerType :: Int -> Text -> Integer -> Maybe Bool
 
 ## Governance
 
+- `IntegerKind` is the width and signedness a value carries at run time. `Int` and `UInt` keep their
+  own constructors rather than being written as the target's width, because they are distinct types:
+  an implementation for `Int` is not an implementation for `Int64`, however wide the target is.
+- `targetPointerWidth` is the one place the target's width is written down, so the day a target
+  becomes selectable there is one place to change.
+- `integerKindWrap` is used only where wrapping is the *defined* answer — the bitwise operations,
+  where a mask is what the operation means — never to rescue an arithmetic result that overflowed.
+
 - Exact token text stays owned by the frontend. This module decodes only after scanning, using host `Integer` so source magnitude is never truncated.
 - Suffixes are the closed lowercase set `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, and `u128`. Unsuffixed literals remain context-selectable and default to `Int` only after inference.
 - Decimal, binary, octal, and hexadecimal bodies share one strict digit fold. `_` is ignored only after the lexer has proved separator placement.

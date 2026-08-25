@@ -1,49 +1,82 @@
 module Std.Bits
 
+/// A type whose values are bit patterns.
+///
+/// `width` comes from the type rather than being assumed. This module used to
+/// say "the low sixty-four positions" while taking an `Int`, whose width is the
+/// target's; a value now answers for its own. `BigInt` has no implementation,
+/// because it has no width and every operation here needs one.
+export trait Bits {
+  fn width(self: &Self) -> Int
+  fn noBits(self: &Self) -> Self
+  fn lowBit(self: &Self) -> Self
+  fn bitAnd(self: &Self, other: &Self) -> Self
+  fn bitOr(self: &Self, other: &Self) -> Self
+  fn bitXor(self: &Self, other: &Self) -> Self
+  fn bitNot(self: &Self) -> Self
+  fn shiftedLeft(self: &Self, places: Int) -> Self
+  fn shiftedRight(self: &Self, places: Int) -> Self
+}
+
 /// Both values' bits, kept where both are set.
-export fn and(left: Int, right: Int) -> Int { left & right }
+export fn and[T: Bits](left: &T, right: &T) -> T { left.bitAnd(right) }
 
 /// Both values' bits, kept where either is set.
-export fn or(left: Int, right: Int) -> Int { left | right }
+export fn or[T: Bits](left: &T, right: &T) -> T { left.bitOr(right) }
 
 /// Both values' bits, kept where exactly one is set.
-export fn xor(left: Int, right: Int) -> Int { left ^ right }
+export fn xor[T: Bits](left: &T, right: &T) -> T { left.bitXor(right) }
 
-/// Every bit inverted.
-export fn complement(value: Int) -> Int { ~value }
+/// Every bit inverted, over the type's own width.
+export fn complement[T: Bits](value: &T) -> T { value.bitNot() }
 
 /// The bits moved toward the high end, filling with noughts.
-export fn shiftLeft(value: Int, places: Int) -> Int { value << places }
+/// A count that is negative or not below the width has no defined answer and is
+/// refused by the operator itself.
+export fn shiftLeft[T: Bits](value: &T, places: Int) -> T { value.shiftedLeft(places) }
 
-/// The bits moved toward the low end.
-export fn shiftRight(value: Int, places: Int) -> Int { value >> places }
+/// The bits moved toward the low end. A signed type keeps its sign; an unsigned
+/// one brings in noughts.
+export fn shiftRight[T: Bits](value: &T, places: Int) -> T { value.shiftedRight(places) }
 
-/// Whether the bit at a position is set. Positions count from nought.
-export fn testBit(value: Int, position: Int) -> Bool {
-  if position < 0 { false } else { (value >> position) & 1 == 1 }
+/// How many bits a value's type has.
+export fn width[T: Bits](value: &T) -> Int { value.width() }
+
+/// A value with only the bit at a position set, or nought when the position is
+/// outside the type.
+export fn bit[T: Bits](example: &T, position: Int) -> T {
+  if position < 0 || position >= example.width() { example.noBits() }
+  else { example.lowBit().shiftedLeft(position) }
+}
+
+/// Whether the bit at a position is set. A position outside the type is not.
+export fn testBit[T: Bits](value: &T, position: Int) -> Bool {
+  if position < 0 || position >= value.width() { false }
+  else { value.shiftedRight(position).bitAnd(&value.lowBit()) == value.lowBit() }
 }
 
 /// The value with one bit set.
-export fn setBit(value: Int, position: Int) -> Int {
-  if position < 0 { value } else { value | (1 << position) }
+export fn setBit[T: Bits](value: &T, position: Int) -> T {
+  value.bitOr(&bit(value, position))
 }
 
 /// The value with one bit cleared.
-export fn clearBit(value: Int, position: Int) -> Int {
-  if position < 0 { value } else { value & ~(1 << position) }
+export fn clearBit[T: Bits](value: &T, position: Int) -> T {
+  if position < 0 || position >= value.width() { *value }
+  else { value.bitAnd(&bit(value, position).bitNot()) }
 }
 
 /// The value with one bit inverted.
-export fn flipBit(value: Int, position: Int) -> Int {
-  if position < 0 { value } else { value ^ (1 << position) }
+export fn flipBit[T: Bits](value: &T, position: Int) -> T {
+  value.bitXor(&bit(value, position))
 }
 
-/// How many bits are set. Counted over the low sixty-four positions, which is
-/// the width the language's own integer arithmetic works in.
-export fn popCount(value: Int) -> Int {
+/// How many bits are set, counted over the type's own width.
+export fn popCount[T: Bits](value: &T) -> Int {
   var total = 0
   var position = 0
-  while position < 64 {
+  let size = value.width()
+  while position < size {
     if testBit(value, position) { total = total + 1 }
     position = position + 1
   }
@@ -51,9 +84,10 @@ export fn popCount(value: Int) -> Int {
 }
 
 /// The position of the lowest set bit, or `None` when no bit is set.
-export fn lowestSetBit(value: Int) -> Option[Int] {
+export fn lowestSetBit[T: Bits](value: &T) -> Option[Int] {
   var position = 0
-  while position < 64 {
+  let size = value.width()
+  while position < size {
     if testBit(value, position) { return Some(position) }
     position = position + 1
   }
@@ -61,8 +95,8 @@ export fn lowestSetBit(value: Int) -> Option[Int] {
 }
 
 /// The position of the highest set bit, or `None` when no bit is set.
-export fn highestSetBit(value: Int) -> Option[Int] {
-  var position = 63
+export fn highestSetBit[T: Bits](value: &T) -> Option[Int] {
+  var position = value.width() - 1
   while position >= 0 {
     if testBit(value, position) { return Some(position) }
     position = position - 1
@@ -70,131 +104,287 @@ export fn highestSetBit(value: Int) -> Option[Int] {
   None
 }
 
-/// Whether a value is a power of two. Nought and negative values are not.
-export fn isPowerOfTwo(value: Int) -> Bool {
-  value > 0 && (value & (value - 1)) == 0
-}
-
-/// The value written in binary, without a sign or a prefix.
-/// Nought is a single nought rather than empty text.
-export fn toBinary(value: Int) -> Str {
-  if value == 0 { "0" } else {
-    var out = ""
-    var remaining = value
-    while remaining > 0 {
-      out = "01".slice(remaining & 1, (remaining & 1) + 1) + out
-      remaining = remaining >> 1
-    }
-    out
+/// How many high positions are clear before the first set bit. A value with no
+/// bits set has the whole width.
+export fn countLeadingZeros[T: Bits](value: &T) -> Int {
+  match highestSetBit(value) {
+    case Some(position) => value.width() - 1 - position
+    case None => value.width()
   }
 }
 
-/// The value written in lower-case hexadecimal, without a prefix.
-export fn toHex(value: Int) -> Str {
-  if value == 0 { "0" } else {
-    var out = ""
-    var remaining = value
-    while remaining > 0 {
-      let digit = remaining & 15
-      out = "0123456789abcdef".slice(digit, digit + 1) + out
-      remaining = remaining >> 4
-    }
-    out
+/// How many low positions are clear before the first set bit.
+export fn countTrailingZeros[T: Bits](value: &T) -> Int {
+  match lowestSetBit(value) {
+    case Some(position) => position
+    case None => value.width()
   }
 }
 
-/// The bits of a value, lowest position first, over a width the caller names.
-export fn bits(value: Int, width: Int) -> Array[Bool] {
+/// The bits of a value, lowest position first, over the type's own width.
+export fn bits[T: Bits](value: &T) -> Array[Bool] {
   var out = []
   var position = 0
-  while position < width {
+  let size = value.width()
+  while position < size {
     out = out.push(testBit(value, position))
     position = position + 1
   }
   out
 }
 
-/// A value with only one bit set.
-export fn bit(position: Int) -> Int { if position < 0 { 0 } else { 1 << position } }
+/// The value written in binary, without a sign or a prefix, over the type's own
+/// width. Nought is a single nought rather than empty text.
+export fn toBinary[T: Bits](value: &T) -> Str {
+  match highestSetBit(value) {
+    case None => "0"
+    case Some(top) => {
+      var out = ""
+      var position = top
+      while position >= 0 {
+        if testBit(value, position) { out = out + "1" } else { out = out + "0" }
+        position = position - 1
+      }
+      out
+    }
+  }
+}
 
-/// A value with no bits set.
-export fn zero() -> Int { 0 }
+/// The value written in lower-case hexadecimal, without a prefix.
+export fn toHex[T: Bits](value: &T) -> Str {
+  let digits = "0123456789abcdef"
+  match highestSetBit(value) {
+    case None => "0"
+    case Some(top) => {
+      var out = ""
+      var position = (top / 4) * 4
+      while position >= 0 {
+        var nibble = 0
+        var offset = 3
+        while offset >= 0 {
+          nibble = nibble * 2
+          if testBit(value, position + offset) { nibble = nibble + 1 }
+          offset = offset - 1
+        }
+        out = out + digits.slice(nibble, nibble + 1)
+        position = position - 4
+      }
+      out
+    }
+  }
+}
 
-/// A value with every bit set.
-export fn ones() -> Int { ~0 }
+
+/// One implementation per integer width, each reporting its own. `Int` and
+/// `UInt` report the target's pointer width, which is the one place the target
+/// shows through into the library.
+
+impl Bits for Int {
+  fn width(self: &Self) -> Int { 64 }
+  fn noBits(self: &Self) -> Self { 0 }
+  fn lowBit(self: &Self) -> Self { 1 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for Int8 {
+  fn width(self: &Self) -> Int { 8 }
+  fn noBits(self: &Self) -> Self { 0i8 }
+  fn lowBit(self: &Self) -> Self { 1i8 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for Int16 {
+  fn width(self: &Self) -> Int { 16 }
+  fn noBits(self: &Self) -> Self { 0i16 }
+  fn lowBit(self: &Self) -> Self { 1i16 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for Int32 {
+  fn width(self: &Self) -> Int { 32 }
+  fn noBits(self: &Self) -> Self { 0i32 }
+  fn lowBit(self: &Self) -> Self { 1i32 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for Int64 {
+  fn width(self: &Self) -> Int { 64 }
+  fn noBits(self: &Self) -> Self { 0i64 }
+  fn lowBit(self: &Self) -> Self { 1i64 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for Int128 {
+  fn width(self: &Self) -> Int { 128 }
+  fn noBits(self: &Self) -> Self { 0i128 }
+  fn lowBit(self: &Self) -> Self { 1i128 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt {
+  fn width(self: &Self) -> Int { 64 }
+  fn noBits(self: &Self) -> Self { 0 }
+  fn lowBit(self: &Self) -> Self { 1 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt8 {
+  fn width(self: &Self) -> Int { 8 }
+  fn noBits(self: &Self) -> Self { 0u8 }
+  fn lowBit(self: &Self) -> Self { 1u8 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt16 {
+  fn width(self: &Self) -> Int { 16 }
+  fn noBits(self: &Self) -> Self { 0u16 }
+  fn lowBit(self: &Self) -> Self { 1u16 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt32 {
+  fn width(self: &Self) -> Int { 32 }
+  fn noBits(self: &Self) -> Self { 0u32 }
+  fn lowBit(self: &Self) -> Self { 1u32 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt64 {
+  fn width(self: &Self) -> Int { 64 }
+  fn noBits(self: &Self) -> Self { 0u64 }
+  fn lowBit(self: &Self) -> Self { 1u64 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+impl Bits for UInt128 {
+  fn width(self: &Self) -> Int { 128 }
+  fn noBits(self: &Self) -> Self { 0u128 }
+  fn lowBit(self: &Self) -> Self { 1u128 }
+  fn bitAnd(self: &Self, other: &Self) -> Self { (*self) & (*other) }
+  fn bitOr(self: &Self, other: &Self) -> Self { (*self) | (*other) }
+  fn bitXor(self: &Self, other: &Self) -> Self { (*self) ^ (*other) }
+  fn bitNot(self: &Self) -> Self { ~(*self) }
+  fn shiftedLeft(self: &Self, places: Int) -> Self { (*self) << places }
+  fn shiftedRight(self: &Self, places: Int) -> Self { (*self) >> places }
+}
+
+/// A value with no bits set, of the same type as the example given.
+export fn zero[T: Bits](example: &T) -> T { example.noBits() }
+
+/// A value with every bit set, of the same type as the example given.
+export fn ones[T: Bits](example: &T) -> T { example.noBits().bitNot() }
 
 /// The bits moved toward the high end, with the ones that leave reappearing at
-/// the low end. Rotation is over the low sixty-four positions.
-export fn rotateLeft(value: Int, places: Int) -> Int {
-  let shift = ((places % 64) + 64) % 64
-  if shift == 0 { value } else {
-    (value << shift) | ((value >> (64 - shift)) & ((1 << shift) - 1))
+/// the low end. Rotation is over the type's own width.
+export fn rotateLeft[T: Bits](value: &T, places: Int) -> T {
+  let size = value.width()
+  let shift = ((places % size) + size) % size
+  if shift == 0 { *value } else {
+    value.shiftedLeft(shift).bitOr(&value.shiftedRight(size - shift).bitAnd(&lowMask(value, shift)))
   }
 }
 
 /// The bits moved toward the low end, with the ones that leave reappearing at
 /// the high end.
-export fn rotateRight(value: Int, places: Int) -> Int {
-  rotateLeft(value, 64 - (((places % 64) + 64) % 64))
-}
-
-/// How many high positions are clear before the first set bit, over sixty-four
-/// positions. A value with no bits set has sixty-four.
-export fn countLeadingZeros(value: Int) -> Int {
-  match highestSetBit(value) {
-    case Some(position) => 63 - position
-    case None => 64
-  }
-}
-
-/// How many low positions are clear before the first set bit. A value with no
-/// bits set has sixty-four.
-export fn countTrailingZeros(value: Int) -> Int {
-  match lowestSetBit(value) {
-    case Some(position) => position
-    case None => 64
-  }
+export fn rotateRight[T: Bits](value: &T, places: Int) -> T {
+  let size = value.width()
+  rotateLeft(value, size - (((places % size) + size) % size))
 }
 
 /// The value with its low `width` bits kept and the rest cleared.
-export fn mask(value: Int, width: Int) -> Int {
-  if width <= 0 { 0 } else {
-    if width >= 64 { value } else { value & ((1 << width) - 1) }
+export fn mask[T: Bits](value: &T, keep: Int) -> T {
+  if keep <= 0 { value.noBits() } else {
+    if keep >= value.width() { *value } else { value.bitAnd(&lowMask(value, keep)) }
   }
 }
 
 /// The bits at positions `from` up to but not including `to`, moved down.
-export fn extract(value: Int, from: Int, to: Int) -> Int {
-  if to <= from { 0 } else { mask(value >> from, to - from) }
+export fn extract[T: Bits](value: &T, from: Int, to: Int) -> T {
+  if to <= from { value.noBits() } else { mask(&value.shiftedRight(from), to - from) }
 }
+
+/// Whether a value has exactly one bit set, which is what a power of two is.
+/// Nought has none; a negative value has its sign bit, so it never has one.
+export fn isSingleBit[T: Bits](value: &T) -> Bool { popCount(value) == 1 }
 
 /// The smallest power of two that is not below the value.
-/// Nought and negative values answer with one, which is the smallest power of
-/// two there is.
-export fn nextPowerOfTwo(value: Int) -> Int {
-  if value <= 1 { 1 } else {
-    match highestSetBit(value - 1) {
-      case Some(position) => 1 << (position + 1)
-      case None => 1
+/// A value at or below one answers with one, the smallest power of two there
+/// is. A value whose next power does not fit the type answers with the largest
+/// power that does, because there is no other value it could name.
+export fn nextPowerOfTwo[T: Bits](value: &T) -> T {
+  match highestSetBit(value) {
+    case None => value.lowBit()
+    case Some(top) => {
+      if isSingleBit(value) { *value } else {
+        if top + 1 >= value.width() { value.lowBit().shiftedLeft(value.width() - 1) }
+        else { value.lowBit().shiftedLeft(top + 1) }
+      }
     }
   }
 }
 
-/// The value read from binary text, or `None` when it is not binary.
-export fn fromBinary(text: Str) -> Option[Int] { fromBase(text, 2, "01") }
-
-/// The value read from hexadecimal text, or `None` when it is not hexadecimal.
-export fn fromHex(text: Str) -> Option[Int] { fromBase(text, 16, "0123456789abcdef") }
-
-/// Text read as a number in a base, using the given digits.
-fn fromBase(text: Str, base: Int, digits: Str) -> Option[Int] {
-  if text.isEmpty() { None } else {
-    var total = 0
-    for character in text.toLower().chars() {
-      let digit = digits.indexOf(character.toText())
-      if digit < 0 { return None }
-      total = total * base + digit
-    }
-    Some(total)
+/// A value with its low `count` bits set, of the same type as the example.
+fn lowMask[T: Bits](example: &T, count: Int) -> T {
+  var out = example.noBits()
+  var position = 0
+  while position < count && position < example.width() {
+    out = out.bitOr(&example.lowBit().shiftedLeft(position))
+    position = position + 1
   }
+  out
 }

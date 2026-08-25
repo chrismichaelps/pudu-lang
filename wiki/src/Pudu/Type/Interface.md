@@ -41,6 +41,12 @@ importsFor
 
 ### Governance
 
+- Names and values come from what a module imported; **implementations do not**. An implementation is
+  a fact about a type and a trait, true everywhere in a program once it exists anywhere in it — which
+  is what an orphan rule is for. Scoping them to direct imports made a bounded generic unusable
+  across modules: a caller importing only `Std.List` was told `Int does not implement Add` about a
+  program in which it plainly does.
+
 - Every exported nominal type and trait has a canonical identity formed from its declaring `ModuleName` plus declaration name. Display spelling is separate from equality.
 - The interface exposes annotated exported function/constant signatures, exported record/sum/alias shapes required to check their use, exported trait member signatures/default availability, and coherent implementation signatures defined by the module. Exported constants must be annotated with `E3010` otherwise because their bodies are not interface data.
 - Function and method bodies, private top-level names, local scopes, inference substitutions, and checker diagnostics are not interface data.
