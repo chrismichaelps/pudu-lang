@@ -217,7 +217,7 @@ export fn intersectWith[K, V](
   for pair in left.entries() {
     match right.get(pair[0]) {
       case Some(other) => { out = out.insert(pair[0], combine(pair[1], other)) }
-      case None => { }
+      case None => {}
     }
   }
   out
@@ -238,7 +238,7 @@ export fn restrictTo[K, V](value: &Map[K, V], wanted: &Array[K]) -> Map[K, V] {
   for key in wanted {
     match value.get(key) {
       case Some(held) => { out = out.insert(key, held) }
-      case None => { }
+      case None => {}
     }
   }
   out
@@ -260,7 +260,7 @@ export fn partition[K, V](
   var rejected = mapOf([])
   for pair in value.entries() {
     if keep(pair[0], pair[1]) { kept = kept.insert(pair[0], pair[1]) }
-    else { rejected = rejected.insert(pair[0], pair[1]) }
+      else { rejected = rejected.insert(pair[0], pair[1]) }
   }
   (kept, rejected)
 }

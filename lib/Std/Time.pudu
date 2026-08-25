@@ -19,10 +19,10 @@ export type TimeOfDay = { hour: Int, minute: Int, second: Int }
 /// The instant this is called at, on the system clock.
 /// The system clock can move backwards when it is adjusted, which is why
 /// measuring a duration uses `elapsed` rather than two of these.
-export fn currentInstant() -> Instant { Instant { millis: now() } }
+export fn currentInstant() -> Instant { Instant{millis: now()} }
 
 /// An instant built from milliseconds since the start of 1970.
-export fn instantOf(count: Int) -> Instant { Instant { millis: count } }
+export fn instantOf(count: Int) -> Instant { Instant{millis: count} }
 
 /// The milliseconds an instant stands at.
 export fn toMillis(value: &Instant) -> Int { value.millis }
@@ -31,21 +31,21 @@ export fn toMillis(value: &Instant) -> Int { value.millis }
 export fn toSeconds(value: &Instant) -> Int { value.millis / 1000 }
 
 /// A duration of milliseconds.
-export fn millis(count: Int) -> Duration { Duration { millis: count } }
+export fn millis(count: Int) -> Duration { Duration{millis: count} }
 
 /// A duration of seconds.
-export fn seconds(count: Int) -> Duration { Duration { millis: count * 1000 } }
+export fn seconds(count: Int) -> Duration { Duration{millis: count * 1000} }
 
 /// A duration of minutes.
-export fn minutes(count: Int) -> Duration { Duration { millis: count * 60000 } }
+export fn minutes(count: Int) -> Duration { Duration{millis: count * 60000} }
 
 /// A duration of hours.
-export fn hours(count: Int) -> Duration { Duration { millis: count * 3600000 } }
+export fn hours(count: Int) -> Duration { Duration{millis: count * 3600000} }
 
 /// A duration of days, taken as exactly twenty-four hours.
 /// Calendar days are not all that long; a day that crosses a clock change is a
 /// question for `Date`, not for a duration.
-export fn days(count: Int) -> Duration { Duration { millis: count * 86400000 } }
+export fn days(count: Int) -> Duration { Duration{millis: count * 86400000} }
 
 /// The milliseconds a duration lasts.
 export fn durationMillis(value: &Duration) -> Int { value.millis }
@@ -55,17 +55,17 @@ export fn durationSeconds(value: &Duration) -> Int { value.millis / 1000 }
 
 /// A duration added to an instant.
 export fn add(value: &Instant, amount: &Duration) -> Instant {
-  Instant { millis: value.millis + amount.millis }
+  Instant{millis: value.millis + amount.millis}
 }
 
 /// A duration taken from an instant.
 export fn subtract(value: &Instant, amount: &Duration) -> Instant {
-  Instant { millis: value.millis - amount.millis }
+  Instant{millis: value.millis - amount.millis}
 }
 
 /// The time from the first instant to the second, negative when it is behind.
 export fn between(from: &Instant, to: &Instant) -> Duration {
-  Duration { millis: to.millis - from.millis }
+  Duration{millis: to.millis - from.millis}
 }
 
 /// Whether the first instant is before the second.
@@ -86,22 +86,22 @@ export fn latest(left: &Instant, right: &Instant) -> Instant {
 
 /// Two durations added.
 export fn plus(left: &Duration, right: &Duration) -> Duration {
-  Duration { millis: left.millis + right.millis }
+  Duration{millis: left.millis + right.millis}
 }
 
 /// One duration taken from another.
 export fn minus(left: &Duration, right: &Duration) -> Duration {
-  Duration { millis: left.millis - right.millis }
+  Duration{millis: left.millis - right.millis}
 }
 
 /// A duration multiplied by a whole number.
 export fn scale(value: &Duration, factor: Int) -> Duration {
-  Duration { millis: value.millis * factor }
+  Duration{millis: value.millis * factor}
 }
 
 /// A duration with its sign removed.
 export fn absolute(value: &Duration) -> Duration {
-  if value.millis < 0 { Duration { millis: 0 - value.millis } } else { *value }
+  if value.millis < 0 { Duration{millis: 0 - value.millis} } else { *value }
 }
 
 /// An instant rendered in UTC with a pattern.
@@ -125,7 +125,7 @@ export fn toRfc3339(value: &Instant) -> Result[Str, Str] {
 /// An instant read from RFC 3339.
 export fn fromRfc3339(text: Str) -> Result[Instant, Str] {
   match parseTime("%Y-%m-%dT%H:%M:%SZ", text) {
-    case Ok(count) => Ok(Instant { millis: count })
+    case Ok(count) => Ok(Instant{millis: count})
     case Err(problem) => Err(problem)
   }
 }
@@ -133,7 +133,7 @@ export fn fromRfc3339(text: Str) -> Result[Instant, Str] {
 /// An instant read with a pattern.
 export fn parse(pattern: Str, text: Str) -> Result[Instant, Str] {
   match parseTime(pattern, text) {
-    case Ok(count) => Ok(Instant { millis: count })
+    case Ok(count) => Ok(Instant{millis: count})
     case Err(problem) => Err(problem)
   }
 }
@@ -150,10 +150,10 @@ export fn toDate(value: &Instant) -> Result[Date, Str] {
             case Err(problem) => Err(problem)
             case Ok(day) => {
               Ok(Date {
-                year: wholeOr(year, 0),
-                month: wholeOr(month, 0),
-                day: wholeOr(day, 0)
-              })
+                  year: wholeOr(year, 0),
+                  month: wholeOr(month, 0),
+                  day: wholeOr(day, 0)
+                })
             }
           }
         }
@@ -174,10 +174,10 @@ export fn toTimeOfDay(value: &Instant) -> Result[TimeOfDay, Str] {
             case Err(problem) => Err(problem)
             case Ok(second) => {
               Ok(TimeOfDay {
-                hour: wholeOr(hour, 0),
-                minute: wholeOr(minute, 0),
-                second: wholeOr(second, 0)
-              })
+                  hour: wholeOr(hour, 0),
+                  minute: wholeOr(minute, 0),
+                  second: wholeOr(second, 0)
+                })
             }
           }
         }

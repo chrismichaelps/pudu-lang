@@ -71,9 +71,9 @@ export fn isAscii(value: Char) -> Bool { value.code() < 128 }
 /// The value of a hexadecimal digit, or `None` for anything else.
 export fn toHexDigit(value: Char) -> Option[Int] {
   if isDigit(value) { Some(value.code() - '0'.code()) }
-  else {
-    if value >= 'a' && value <= 'f' { Some(value.code() - 'a'.code() + 10) }
     else {
+    if value >= 'a' && value <= 'f' { Some(value.code() - 'a'.code() + 10) }
+      else {
       if value >= 'A' && value <= 'F' { Some(value.code() - 'A'.code() + 10) } else { None }
     }
   }
@@ -114,7 +114,7 @@ export fn isLatin1(value: Char) -> Bool { value.code() < 256 }
 /// comparison: the set a reader means by "an operator character".
 export fn isSymbol(value: Char) -> Bool {
   value == '+' || value == '<' || value == '=' || value == '>' ||
-    value == '|' || value == '~' || value == '^' || value == '$'
+  value == '|' || value == '~' || value == '^' || value == '$'
 }
 
 /// Whether a character is a decimal digit, which is the only kind of number

@@ -15,26 +15,26 @@ export fn main() -> Int {
             case Some(inner) => {
               match Json.asInt(&inner) {
                 case Some(number) => { total = total + number }
-                case None => { }
+                case None => {}
               }
             }
-            case None => { }
+            case None => {}
           }
         }
-        case None => { }
+        case None => {}
       }
     }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   match Url.parse("https://example.com:8443/a?x=1") {
     case Ok(url) => {
       total = total + Url.segments(&url).length()
       match Url.effectivePort(&url) {
         case Some(port) => { total = total + port }
-        case None => { }
+        case None => {}
       }
     }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   total = total + Http.status(404).code
   total = total + Http.reasonFor(500).length()

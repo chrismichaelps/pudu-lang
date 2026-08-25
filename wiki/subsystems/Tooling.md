@@ -6,6 +6,8 @@ aliases: [Tooling]
 
 # Tooling
 
+- [[Format]] — `pudu fmt`, the one committed style, applied from the token stream so it can only move whitespace.
+
 ## Purpose
 
 Expose one consistent compiler pipeline through CLI, REPL, formatter, linter, project/package workflows, documentation generation, tests, and eventually LSP.

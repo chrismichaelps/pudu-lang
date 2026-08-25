@@ -11,24 +11,24 @@ export fn main() -> Int {
       total = total + request.headers.length()
       match Http.contentLength(&request.headers) {
         case Some(declared) => { total = total + declared }
-        case None => { }
+        case None => {}
       }
       match Http.header(&request.headers, "accept") {
         case Some(accept) => {
           match Http.negotiate(accept, &["application/json", "text/html"]) {
             case Some(chosen) => { total = total + chosen.length() }
-            case None => { }
+            case None => {}
           }
         }
-        case None => { }
+        case None => {}
       }
     }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   let response = Message.respond(200, "text/plain", "ok")
   match Message.parseResponse(Message.renderResponse(&response)) {
     case Ok(back) => { total = total + back.status.code + back.body.length() }
-    case Err(_) => { }
+    case Err(_) => {}
   }
   total = total + Message.decodeChunked("5\r\nhello\r\n0\r\n\r\n").length()
   total = total + Http.basicAuth("ada", "pw").length()

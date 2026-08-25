@@ -57,14 +57,14 @@ export fn methodName(value: &Method) -> Str {
 export fn methodFrom(name: Str) -> Method {
   let upper = name.toUpper()
   if upper == "GET" { Get } else {
-  if upper == "HEAD" { Head } else {
-  if upper == "POST" { Post } else {
-  if upper == "PUT" { Put } else {
-  if upper == "PATCH" { Patch } else {
-  if upper == "DELETE" { Delete } else {
-  if upper == "OPTIONS" { Options } else {
-  if upper == "TRACE" { Trace } else {
-  if upper == "CONNECT" { Connect } else { Other(upper) } } } } } } } } }
+    if upper == "HEAD" { Head } else {
+      if upper == "POST" { Post } else {
+        if upper == "PUT" { Put } else {
+          if upper == "PATCH" { Patch } else {
+            if upper == "DELETE" { Delete } else {
+              if upper == "OPTIONS" { Options } else {
+                if upper == "TRACE" { Trace } else {
+                  if upper == "CONNECT" { Connect } else { Other(upper) } } } } } } } } }
 }
 
 /// Whether a method is defined to have no effect on the server.
@@ -89,7 +89,7 @@ export fn isIdempotent(value: &Method) -> Bool {
 }
 
 /// A status built from its number, with the reason the protocol gives.
-export fn status(code: Int) -> Status { Status { code: code, reason: reasonFor(code) } }
+export fn status(code: Int) -> Status { Status{code: code, reason: reasonFor(code)} }
 
 /// Whether a status reports a provisional response.
 export fn isInformational(value: &Status) -> Bool { value.code >= 100 && value.code < 200 }
@@ -113,41 +113,41 @@ export fn isError(value: &Status) -> Bool { value.code >= 400 }
 /// one it does not name.
 export fn reasonFor(code: Int) -> Str {
   if code == 100 { "Continue" } else {
-  if code == 101 { "Switching Protocols" } else {
-  if code == 200 { "OK" } else {
-  if code == 201 { "Created" } else {
-  if code == 202 { "Accepted" } else {
-  if code == 204 { "No Content" } else {
-  if code == 206 { "Partial Content" } else {
-  if code == 301 { "Moved Permanently" } else {
-  if code == 302 { "Found" } else {
-  if code == 303 { "See Other" } else {
-  if code == 304 { "Not Modified" } else {
-  if code == 307 { "Temporary Redirect" } else {
-  if code == 308 { "Permanent Redirect" } else {
-  if code == 400 { "Bad Request" } else {
-  if code == 401 { "Unauthorized" } else {
-  if code == 403 { "Forbidden" } else {
-  if code == 404 { "Not Found" } else {
-  if code == 405 { "Method Not Allowed" } else {
-  if code == 408 { "Request Timeout" } else {
-  if code == 409 { "Conflict" } else {
-  if code == 410 { "Gone" } else {
-  if code == 413 { "Content Too Large" } else {
-  if code == 415 { "Unsupported Media Type" } else {
-  if code == 422 { "Unprocessable Content" } else {
-  if code == 429 { "Too Many Requests" } else {
-  if code == 500 { "Internal Server Error" } else {
-  if code == 501 { "Not Implemented" } else {
-  if code == 502 { "Bad Gateway" } else {
-  if code == 503 { "Service Unavailable" } else {
-  if code == 504 { "Gateway Timeout" } else { "" }
-  } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
+    if code == 101 { "Switching Protocols" } else {
+      if code == 200 { "OK" } else {
+        if code == 201 { "Created" } else {
+          if code == 202 { "Accepted" } else {
+            if code == 204 { "No Content" } else {
+              if code == 206 { "Partial Content" } else {
+                if code == 301 { "Moved Permanently" } else {
+                  if code == 302 { "Found" } else {
+                    if code == 303 { "See Other" } else {
+                      if code == 304 { "Not Modified" } else {
+                        if code == 307 { "Temporary Redirect" } else {
+                          if code == 308 { "Permanent Redirect" } else {
+                            if code == 400 { "Bad Request" } else {
+                              if code == 401 { "Unauthorized" } else {
+                                if code == 403 { "Forbidden" } else {
+                                  if code == 404 { "Not Found" } else {
+                                    if code == 405 { "Method Not Allowed" } else {
+                                      if code == 408 { "Request Timeout" } else {
+                                        if code == 409 { "Conflict" } else {
+                                          if code == 410 { "Gone" } else {
+                                            if code == 413 { "Content Too Large" } else {
+                                              if code == 415 { "Unsupported Media Type" } else {
+                                                if code == 422 { "Unprocessable Content" } else {
+                                                  if code == 429 { "Too Many Requests" } else {
+                                                    if code == 500 { "Internal Server Error" } else {
+                                                      if code == 501 { "Not Implemented" } else {
+                                                        if code == 502 { "Bad Gateway" } else {
+                                                          if code == 503 { "Service Unavailable" } else {
+                                                            if code == 504 { "Gateway Timeout" } else { "" }
+                                                          } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
 }
 
 /// A request with a method and a target and nothing else.
 export fn request(method: Method, target: Str) -> Request {
-  Request { method: method, target: target, headers: [], body: "" }
+  Request{method: method, target: target, headers: [], body: ""}
 }
 
 /// A request with one header added, keeping any it already had.
@@ -214,7 +214,7 @@ export fn mediaType(headers: &Array[(Str, Str)]) -> Option[Str] {
     case Some(found) => {
       let semicolon = found.indexOf(";")
       if semicolon < 0 { Some(found.trim().toLower()) }
-      else { Some(found.slice(0, semicolon).trim().toLower()) }
+        else { Some(found.slice(0, semicolon).trim().toLower()) }
     }
     case None => None
   }
@@ -249,8 +249,8 @@ export fn versionName(value: &Version) -> Str {
 /// A version read from its name, defaulting to 1.1 for anything unrecognised.
 export fn versionFrom(name: Str) -> Version {
   if name == "HTTP/1.0" { Http10 } else {
-  if name == "HTTP/2" { Http2 } else {
-  if name == "HTTP/3" { Http3 } else { Http11 } } }
+    if name == "HTTP/2" { Http2 } else {
+      if name == "HTTP/3" { Http3 } else { Http11 } } }
 }
 
 /// Whether a version keeps the connection open unless told otherwise.
@@ -311,8 +311,8 @@ export fn headerWwwAuthenticate() -> Str { "www-authenticate" }
 export fn isHopByHop(name: Str) -> Bool {
   let lower = name.toLower()
   lower == "connection" || lower == "keep-alive" || lower == "proxy-authenticate" ||
-    lower == "proxy-authorization" || lower == "te" || lower == "trailer" ||
-    lower == "transfer-encoding" || lower == "upgrade"
+  lower == "proxy-authorization" || lower == "te" || lower == "trailer" ||
+  lower == "transfer-encoding" || lower == "upgrade"
 }
 
 /// The headers a proxy may forward, with the connection's own removed.
@@ -365,9 +365,9 @@ export fn parseCookies(headerValue: Str) -> Array[Cookie] {
       let equals = trimmed.indexOf("=")
       if equals > 0 {
         out = out.push(Cookie {
-          name: trimmed.slice(0, equals).trim(),
-          value: trimmed.slice(equals + 1, trimmed.length()).trim()
-        })
+            name: trimmed.slice(0, equals).trim(),
+            value: trimmed.slice(equals + 1, trimmed.length()).trim()
+          })
       }
     }
   }
@@ -408,21 +408,21 @@ export fn renderSetCookie(value: &SetCookie) -> Str {
   var out = value.name + "=" + value.value
   match value.path {
     case Some(found) => { out = out + "; Path=" + found }
-    case None => { }
+    case None => {}
   }
   match value.domain {
     case Some(found) => { out = out + "; Domain=" + found }
-    case None => { }
+    case None => {}
   }
   match value.maxAge {
     case Some(seconds) => { out = out + "; Max-Age=" + show(seconds) }
-    case None => { }
+    case None => {}
   }
   if value.secure { out = out + "; Secure" }
   if value.httpOnly { out = out + "; HttpOnly" }
   match value.sameSite {
     case Some(found) => { out = out + "; SameSite=" + found }
-    case None => { }
+    case None => {}
   }
   out
 }
@@ -442,9 +442,9 @@ export fn parseAuth(headerValue: Str) -> Option[(Str, Str)] {
   let space = headerValue.indexOf(" ")
   if space < 0 { None } else {
     Some((
-      headerValue.slice(0, space).toLower(),
-      headerValue.slice(space + 1, headerValue.length()).trim()
-    ))
+        headerValue.slice(0, space).toLower(),
+        headerValue.slice(space + 1, headerValue.length()).trim()
+      ))
   }
 }
 
@@ -460,11 +460,11 @@ export fn parsePreferences(headerValue: Str) -> Array[Preference] {
     let trimmed = piece.trim()
     if !trimmed.isEmpty() {
       let semicolon = trimmed.indexOf(";")
-      if semicolon < 0 { out = out.push(Preference { value: trimmed.toLower(), weight: 1000 }) }
-      else {
+      if semicolon < 0 { out = out.push(Preference{value: trimmed.toLower(), weight: 1000}) }
+        else {
         let name = trimmed.slice(0, semicolon).trim().toLower()
         let parameters = trimmed.slice(semicolon + 1, trimmed.length())
-        out = out.push(Preference { value: name, weight: weightOf(parameters) })
+        out = out.push(Preference{value: name, weight: weightOf(parameters)})
       }
     }
   }
@@ -503,11 +503,11 @@ export fn parseForm(body: Str) -> Array[(Str, Str)] {
     if !piece.isEmpty() {
       let equals = piece.indexOf("=")
       if equals < 0 { out = out.push((formDecode(piece), "")) }
-      else {
+        else {
         out = out.push((
-          formDecode(piece.slice(0, equals)),
-          formDecode(piece.slice(equals + 1, piece.length()))
-        ))
+            formDecode(piece.slice(0, equals)),
+            formDecode(piece.slice(equals + 1, piece.length()))
+          ))
       }
     }
   }
@@ -544,9 +544,9 @@ export fn parseRanges(headerValue: Str) -> Array[Range] {
         let end = trimmed.slice(dash + 1, trimmed.length()).trim()
         match wholeOf(start) {
           case Some(from) => {
-            out = out.push(Range { from: from, to: wholeOf(end) })
+            out = out.push(Range{from: from, to: wholeOf(end)})
           }
-          case None => { }
+          case None => {}
         }
       }
     }
@@ -594,7 +594,7 @@ export fn base64(value: Str) -> Str {
     out = out + charAtIn(alphabet, first >> 2)
     out = out + charAtIn(alphabet, ((first & 3) << 4) | (second >> 4))
     if index + 1 < size { out = out + charAtIn(alphabet, ((second & 15) << 2) | (third >> 6)) }
-    else { out = out + "=" }
+      else { out = out + "=" }
     if index + 2 < size { out = out + charAtIn(alphabet, third & 63) } else { out = out + "=" }
     index = index + 3
   }
@@ -609,7 +609,7 @@ fn scalarBytes(value: Str) -> Array[Int] {
   for character in value.chars() {
     let code = character.code()
     if code < 256 { out = out.push(code) }
-    else {
+      else {
       out = out.push(code / 256)
       out = out.push(code % 256)
     }
@@ -701,7 +701,7 @@ fn formEncode(value: Str) -> Str {
   var out = ""
   for character in value.chars() {
     if isFormSafe(character) { out = out + character.toText() }
-    else {
+      else {
       if character == ' ' { out = out + "+" } else { out = out + "%" + hexTwo(character.code()) }
     }
   }
@@ -715,7 +715,7 @@ fn formDecode(value: Str) -> Str {
   while index < size {
     let character = value.charAt(index)
     if character == '+' { out = out + " " }
-    else {
+      else {
       if character == '%' && index + 2 < size {
         match hexPairOf(value.slice(index + 1, index + 3)) {
           case Some(code) => {
@@ -738,8 +738,8 @@ fn formDecode(value: Str) -> Str {
 
 fn isFormSafe(value: Char) -> Bool {
   (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') ||
-    (value >= '0' && value <= '9') ||
-    value == '-' || value == '_' || value == '.' || value == '~'
+  (value >= '0' && value <= '9') ||
+  value == '-' || value == '_' || value == '.' || value == '~'
 }
 
 fn hexTwo(value: Int) -> Str {

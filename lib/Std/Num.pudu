@@ -231,7 +231,6 @@ impl Div for Float64 {
   }
 }
 
-
 /// Two, built from the identity rather than written, so it has whatever type
 /// the caller is working in.
 export fn two[T: One + Add](example: &T) -> T { example.one().plus(&example.one()) }

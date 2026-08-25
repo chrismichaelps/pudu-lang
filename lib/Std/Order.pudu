@@ -15,7 +15,7 @@ export fn compareText(left: Str, right: Str) -> Ordering {
   while index < shorter {
     let step = compareChar(left.charAt(index), right.charAt(index))
     match step {
-      case Equal => { }
+      case Equal => {}
       case _ => { return step }
     }
     index = index + 1

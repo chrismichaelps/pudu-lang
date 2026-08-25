@@ -24,6 +24,8 @@ jobs:
       - run: cabal update
       - run: cabal build all --enable-optimization=2
       - run: cabal test all --enable-optimization=2 --test-show-details=direct
+      - name: Verify every committed Pudu file is formatted
+        run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures -name '*.pudu')
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

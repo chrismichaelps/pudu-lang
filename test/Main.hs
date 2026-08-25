@@ -5,6 +5,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DecimalLiteralSpec (decimalProperties)
 import Pudu.DiagnosticSpec (diagnosticProperties)
+import Pudu.FormatSpec (formatProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
 import Pudu.Frontend.Lexer.CursorSpec (cursorProperties)
@@ -56,6 +57,7 @@ main = do
       ]
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
+  formatOutcomes <- traverse (uncurry check) formatProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) programProperties
   tokenOutcomes <- traverse (uncurry check) tokenProperties
@@ -83,7 +85,7 @@ main = do
   docOutcomes <- traverse (uncurry check) docProperties
   parserTypeOutcomes <- traverse (uncurry check) parserTypeProperties
   parserExpressionOutcomes <- traverse (uncurry check) parserExpressionProperties
-  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> renderOutcomes <> programOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> renderOutcomes <> programOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

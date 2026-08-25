@@ -1,7 +1,7 @@
 {-| @Program.Cli.Module — the pudu command line entry point -}
 module Main (main) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -16,6 +16,7 @@ import Pudu.Compiler.Program
 import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
 import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
+import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Doc.Json (encodeIndex)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
@@ -27,7 +28,7 @@ import Pudu.Diagnostic.Render
   , renderSummary
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
-import Pudu.Source (Source, sourceName, spanSource)
+import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
 import System.Environment (getArgs, lookupEnv)
 import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
@@ -44,6 +45,9 @@ main = do
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
+    ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
+    ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
+    ("fmt" : paths) -> formatPaths InPlace paths
     ("doc" : "--json" : paths) -> documentPaths JsonOutput paths
     ("doc" : "--html" : paths) -> documentPaths HtmlOutput paths
     ("doc" : paths) -> documentPaths TextOutput paths
@@ -139,6 +143,43 @@ reportResult value = case value of
 
 renderRuntime :: RenderStyle -> ProgramResult -> Diagnostic -> Text
 renderRuntime style program value = renderProgramDiagnostics style program [value]
+
+{-| @Program.Cli.FormatMode — what `pudu fmt` does with what it produced. -}
+data FormatMode = InPlace | CheckOnly | ToStdout
+  deriving stock (Eq, Show)
+
+{-| Format every named file.
+
+    A file that does not lex is left exactly as it was and reported, because a
+    formatter that rewrites text it could not read is a formatter that loses
+    work. `--check` changes nothing and exits non-zero when any file would
+    change, which is the shape a continuous-integration step needs. -}
+formatPaths :: FormatMode -> [FilePath] -> IO ()
+formatPaths mode paths
+  | null paths = do
+      hPutStrLn stderr "pudu fmt: no files given"
+      exitFailure
+  | otherwise = do
+      outcomes <- mapM formatOne paths
+      case mode of
+        CheckOnly | or outcomes -> exitFailure
+        _ -> pure ()
+ where
+  formatOne path = do
+    contents <- TextIO.readFile path
+    source <- newSource (SourceName (Text.pack path)) contents
+    let result = formatSource source
+        changed = formatChanged result
+    unless (null (formatDiagnostics result)) $
+      hPutStrLn stderr (Text.unpack (Text.pack path <> ": " <> renderSummary (formatDiagnostics result)))
+    case mode of
+      ToStdout -> TextIO.putStr (formatText' result)
+      CheckOnly ->
+        when changed (hPutStrLn stderr (path <> ": not formatted"))
+      InPlace -> do
+        when changed (TextIO.writeFile path (formatText' result))
+        when changed (putStrLn path)
+    pure changed
 
 {-| @Program.Cli.DocOutput — who the index is being written for.
 
@@ -237,6 +278,9 @@ usage =
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu fmt <file>...   rewrite files in the one committed style"
+    , "  pudu fmt --check ... report which files are not formatted, changing none"
+    , "  pudu fmt --stdout .. write the formatted text to stdout"
     , "  pudu doc <file>...   describe every name a program declares"
     , "  pudu doc --json ...  the same index, for an editor or a search server"
     , "  pudu doc --html ...  emit a self-contained searchable documentation page"

@@ -17,7 +17,7 @@ export fn withInput(
   standardInput: Str
 ) -> Result[Finished, Str] {
   match runProgram(program, *arguments, standardInput) {
-    case Ok(triple) => Ok(Finished { status: triple[0], output: triple[1], errors: triple[2] })
+    case Ok(triple) => Ok(Finished{status: triple[0], output: triple[1], errors: triple[2]})
     case Err(problem) => Err(problem)
   }
 }

@@ -18,7 +18,7 @@ export fn sha256Bytes(message: &Array[UInt32]) -> Digest {
     state = compress(&state, &padded.slice(block * 64, block * 64 + 64))
     block = block + 1
   }
-  Digest { words: state }
+  Digest{words: state}
 }
 
 /// A digest written as lower-case hexadecimal, which is how one is quoted.
@@ -72,7 +72,7 @@ export fn utf8(value: Str) -> Array[UInt32] {
   for character in value.chars() {
     let code = character.code()
     if code < 128 { out = out.push(byte(code)) }
-    else {
+      else {
       if code < 2048 {
         out = out.push(byte(192 + code / 64))
         out = out.push(byte(128 + code % 64))
@@ -130,8 +130,8 @@ fn twoTo(power: Int) -> Int {
 /// The eight words the algorithm starts from: the fractional parts of the
 /// square roots of the first eight primes.
 fn initialState() -> Array[UInt32] {
-  [ 1779033703u32, 3144134277u32, 1013904242u32, 2773480762u32
-  , 1359893119u32, 2600822924u32, 528734635u32, 1541459225u32
+  [1779033703u32, 3144134277u32, 1013904242u32, 2773480762u32
+      , 1359893119u32, 2600822924u32, 528734635u32, 1541459225u32
   ]
 }
 
@@ -188,8 +188,8 @@ fn compress(state: &Array[UInt32], block: &Array[UInt32]) -> Array[UInt32] {
     a = temp1 &+ temp2
     round = round + 1
   }
-  [ state[0] &+ a, state[1] &+ b, state[2] &+ c, state[3] &+ d
-  , state[4] &+ e, state[5] &+ f, state[6] &+ g, state[7] &+ h
+  [state[0] &+ a, state[1] &+ b, state[2] &+ c, state[3] &+ d
+      , state[4] &+ e, state[5] &+ f, state[6] &+ g, state[7] &+ h
   ]
 }
 
@@ -228,7 +228,7 @@ fn hexWord(value: UInt32) -> Str {
   while shift >= 0 {
     match convertInteger[Int]((value >> shift) & 15u32) {
       case Some(nibble) => { out = out + digits.slice(nibble, nibble + 1) }
-      case None => { }
+      case None => {}
     }
     shift = shift - 4
   }

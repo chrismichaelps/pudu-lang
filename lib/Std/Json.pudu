@@ -249,15 +249,15 @@ fn quote(content: Str) -> Str {
   var out = "\""
   for character in content.chars() {
     if character == '"' { out = out + "\\\"" }
-    else {
-      if character == '\\' { out = out + "\\\\" }
       else {
-        if character == '\n' { out = out + "\\n" }
+      if character == '\\' { out = out + "\\\\" }
         else {
-          if character == '\r' { out = out + "\\r" }
+        if character == '\n' { out = out + "\\n" }
           else {
+          if character == '\r' { out = out + "\\r" }
+            else {
             if character == '\t' { out = out + "\\t" }
-            else { out = out + character.toText() }
+              else { out = out + character.toText() }
           }
         }
       }
@@ -301,13 +301,13 @@ fn readValue(source: Str, from: Int) -> Result[(Json, Int), JsonError] {
   if start >= source.length() { Err(Unexpected(start, "a value")) } else {
     let character = source.charAt(start)
     if character == '"' { readText(source, start) }
-    else {
-      if character == '[' { readList(source, start) }
       else {
-        if character.code() == 123 { readObject(source, start) }
+      if character == '[' { readList(source, start) }
         else {
+        if character.code() == 123 { readObject(source, start) }
+          else {
           if character == '-' || isDigitChar(character) { readNumber(source, start) }
-          else { readKeyword(source, start) }
+            else { readKeyword(source, start) }
         }
       }
     }
@@ -319,11 +319,11 @@ fn isDigitChar(value: Char) -> Bool { value >= '0' && value <= '9' }
 /// `true`, `false`, or `null`, whichever begins at the position.
 fn readKeyword(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   if startsAt(source, start, "true") { Ok((Boolean(true), start + 4)) }
-  else {
-    if startsAt(source, start, "false") { Ok((Boolean(false), start + 5)) }
     else {
+    if startsAt(source, start, "false") { Ok((Boolean(false), start + 5)) }
+      else {
       if startsAt(source, start, "null") { Ok((Null, start + 4)) }
-      else { Err(Unexpected(start, "a value")) }
+        else { Err(Unexpected(start, "a value")) }
     }
   }
 }
@@ -396,11 +396,11 @@ fn readText(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
       if index >= size { return Err(Unterminated("string")) }
       let escaped = source.charAt(index)
       if escaped == 'n' { out = out + "\n" }
-      else {
-        if escaped == 't' { out = out + "\t" }
         else {
-          if escaped == 'r' { out = out + "\r" }
+        if escaped == 't' { out = out + "\t" }
           else {
+          if escaped == 'r' { out = out + "\r" }
+            else {
             if escaped == 'u' {
               if index + 4 >= size { return Err(Unterminated("escape")) }
               match hexOf(source.slice(index + 1, index + 5)) {

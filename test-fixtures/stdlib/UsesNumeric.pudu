@@ -9,20 +9,20 @@ export fn main() -> Int {
   var total = 0
   match List.sum(&[1u8, 2u8, 3u8]) {
     case Some(found) => { if found == 6u8 { total = total + 1 } }
-    case None => { }
+    case None => {}
   }
   if List.sumOr(&[100u32, 200u32], 0u32) == 300u32 { total = total + 1 }
   match Num.product(&[2i16, 3i16, 4i16]) {
     case Some(found) => { if found == 24i16 { total = total + 1 } }
-    case None => { }
+    case None => {}
   }
   match List.minimum(&[9u8, 4u8, 7u8]) {
     case Some(found) => { if found == 4u8 { total = total + 1 } }
-    case None => { }
+    case None => {}
   }
   match List.maximum(&["pear", "apple", "zed"]) {
     case Some(found) => { if found == "zed" { total = total + 1 } }
-    case None => { }
+    case None => {}
   }
   total = total + Bits.width(&0u8) + Bits.width(&0u32)
   total = total + Bits.countLeadingZeros(&1u8) + Bits.countLeadingZeros(&1u32)

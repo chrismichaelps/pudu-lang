@@ -119,7 +119,7 @@ export fn present[T](values: &Array[Option[T]]) -> Array[T] {
   for value in values {
     match value {
       case Some(found) => { out = out.push(found) }
-      case None => { }
+      case None => {}
     }
   }
   out
@@ -158,7 +158,7 @@ export fn mapPresent[A, B](items: &Array[A], transform: fn(A) -> Option[B]) -> A
   for item in items {
     match transform(item) {
       case Some(found) => { out = out.push(found) }
-      case None => { }
+      case None => {}
     }
   }
   out
@@ -200,7 +200,7 @@ export fn firstPresent[T](values: &Array[Option[T]]) -> Option[T] {
   for value in values {
     match value {
       case Some(found) => { return Some(found) }
-      case None => { }
+      case None => {}
     }
   }
   None

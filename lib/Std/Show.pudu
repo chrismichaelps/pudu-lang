@@ -9,7 +9,7 @@ export fn render[T](value: T) -> Str { show(value) }
 /// This is what a program wants when it is building a message: the quotes on a
 /// rendered string are for a reader inspecting a value, not for a reader of the
 /// message it ends up in.
-export fn text(value: Str) -> Str { value }
+export fn text(value: Str) -> Str{value}
 
 /// A whole number as text, with a leading minus when it is negative.
 export fn int(value: Int) -> Str { show(value) }
@@ -91,7 +91,7 @@ export fn table(rows: &Array[Array[Str]]) -> Str {
     while column < row.length() {
       let width = row[column].length()
       if column >= widths.length() { widths = widths.push(width) }
-      else {
+        else {
         if width > widths[column] { widths = widths.remove(column).insert(column, width) }
       }
       column = column + 1
