@@ -51,7 +51,34 @@ replProperties =
   , ("iteration edge cases are handled correctly", testIterationEdges)
   , ("operators short-circuit and index correctly", testOperators)
   , ("match expressions bind and guard correctly", testMatch)
+  , ("an imported module is reachable at the prompt", testInteractiveImports)
   ]
+
+{-| An import typed at the prompt must reach the same files on disk that a
+    compiled program's import would.
+
+    It used to resolve loosely enough to type-check and then have nothing to
+    link, so a standard-library name was one the checker knew and the evaluator
+    did not, and a misspelt module produced no diagnostic at all. -}
+testInteractiveImports :: IO Property
+testInteractiveImports = do
+  imported <- submit emptySession "import Std.Math as M"
+  used <- submit (resultSession imported) "M.factorial(4)"
+
+  decimalImport <- submit emptySession "import Std.Decimal as D"
+  decimalUse <- submit (resultSession decimalImport) "D.rescale(1.239d, 2)"
+
+  missing <- submit emptySession "import Std.NotAModule as X"
+  pure $ conjoin
+    [ counterexample "the import itself is accepted"
+        (property (resultAccepted imported))
+    , counterexample "an imported function is reachable and linked"
+        (valueOf used === "24")
+    , counterexample "the decimal module works the same way"
+        (valueOf decimalUse === "1.24")
+    , counterexample "a module that is nowhere is reported"
+        (codesOf missing === ["E2014"])
+    ]
 
 testCommandParsing :: IO Property
 testCommandParsing =

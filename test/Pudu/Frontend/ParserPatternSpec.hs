@@ -177,6 +177,7 @@ literalShape :: Literal -> Text
 literalShape value = case value of
   IntegerValue text -> text
   FloatValue text -> text
+  DecimalValue text -> text
   StringValue text -> text
   CharValue character -> Text.singleton character
   BoolValue flag -> if flag then "true" else "false"

@@ -109,6 +109,7 @@ data TokenKind
   = Identifier !Text
   | IntegerLiteral !Text
   | FloatLiteral !Text
+  | DecimalLiteral !Text
   | StringLiteral !Text
   | TemplateLiteral ![TemplatePart]
   | CharLiteral !Char

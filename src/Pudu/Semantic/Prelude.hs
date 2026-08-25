@@ -39,6 +39,8 @@ preludeTypeNames =
 preludeValueNames :: [Text]
 preludeValueNames =
   [ "panic", "charFromCode", "mapOf", "setOf", "show", "display", "convertInteger"
+  , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
+  , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"
   ]
     <> effectValueNames

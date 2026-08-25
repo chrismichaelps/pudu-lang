@@ -49,7 +49,7 @@ typeProperties =
   , ("references are dereferenced explicitly in both directions", testDereference)
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
-  , ("reserved types are refused until their decision is made", testReservedTypes)
+  , ("Decimal is an ordinary type with exact literals", testDecimalType)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("compile-time functions keep their evaluator pure", testComptime)
   , ("a structured scope requires an async function", testScopes)
@@ -1114,11 +1114,11 @@ testUnsafe = do
         (unknownCapability === ["E1044"])
     ]
 
-testReservedTypes :: IO Property
-testReservedTypes = do
-  annotated <- codes ["module M", "const VALUE: Decimal = 1.0"]
+testDecimalType :: IO Property
+testDecimalType = do
+  annotated <- codes ["module M", "const VALUE: Decimal = 1.0d"]
   parameter <- codes ["module M", "fn run(amount: Decimal) -> Int { 1 }"]
-  result <- codes ["module M", "fn run() -> Decimal { 1.0 }"]
+  result <- codes ["module M", "fn run() -> Decimal { 1.0d }"]
   field <- codes ["module M", "type Money = { amount: Decimal }"]
   bothPositions <- codes ["module M", "fn run(amount: Decimal) -> Decimal { amount }"]
   ownDeclaration <- codes
@@ -1126,15 +1126,27 @@ testReservedTypes = do
     , "type Decimal = { units: Int }"
     , "fn run(amount: Decimal) -> Int { amount.units }"
     ]
+  literalType <- typeOf "1.50d"
+  wholeLiteral <- typeOf "3d"
+  exponentLiteral <- typeOf "1e6d"
+  noImplicitFloat <- codesOfExpression "1.5d + 1.5"
+  noImplicitInt <- codesOfExpression "1.5d + 1"
   supported <- codes ["module M", "fn run(amount: Float64) -> Float64 { amount }"]
   pure $ conjoin
-    [ counterexample "an annotation is refused" (annotated === ["E3022"])
-    , counterexample "a parameter is refused" (parameter === ["E3022"])
-    , counterexample "a result is refused" (result === ["E3022"])
-    , counterexample "a field is refused" (field === ["E3022"])
-    , counterexample "each occurrence reports once" (bothPositions === ["E3022", "E3022"])
-    , counterexample "a module may declare its own" (ownDeclaration === [])
-    , counterexample "the supported types are unaffected" (supported === [])
+    [ counterexample "an annotation is ordinary" (annotated === [])
+    , counterexample "a parameter is ordinary" (parameter === [])
+    , counterexample "a result is ordinary" (result === [])
+    , counterexample "a field is ordinary" (field === [])
+    , counterexample "both positions are ordinary" (bothPositions === [])
+    , counterexample "a module may still declare its own" (ownDeclaration === [])
+    , counterexample "a suffixed literal is a Decimal" (literalType === "Decimal")
+    , counterexample "a whole literal may be a Decimal" (wholeLiteral === "Decimal")
+    , counterexample "an exponent stays exact" (exponentLiteral === "Decimal")
+    , counterexample "there is no implicit conversion from a float"
+        (noImplicitFloat === ["E3001"])
+    , counterexample "there is no implicit conversion from an integer"
+        (noImplicitInt === ["E3001"])
+    , counterexample "the other numeric types are unaffected" (supported === [])
     ]
 
 sharedNameProgram :: [Text]

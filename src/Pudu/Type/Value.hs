@@ -10,6 +10,7 @@ module Pudu.Type.Value
   , TypeVar (..)
   , boolType
   , charType
+  , decimalType
   , floatType
   , integerType
   , isErrorType
@@ -85,6 +86,9 @@ integerType = NominalType "Int" []
 
 floatType :: Type
 floatType = NominalType "Float64" []
+
+decimalType :: Type
+decimalType = NominalType "Decimal" []
 
 boolType :: Type
 boolType = NominalType "Bool" []

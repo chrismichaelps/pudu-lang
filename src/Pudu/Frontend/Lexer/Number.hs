@@ -10,15 +10,25 @@ import Pudu.Frontend.Lexer.Cursor
   , cursorStartsWith, emitToken, markCursor, peekScalar, recordDiagnostic
   )
 import Pudu.Frontend.Token
-  ( TokenKind (FloatLiteral, IntegerLiteral, Invalid) )
+  ( TokenKind (DecimalLiteral, FloatLiteral, IntegerLiteral, Invalid) )
+import Pudu.DecimalLiteral (decimalSuffix)
 import Pudu.FloatLiteral (floatSuffix)
 import Pudu.IntegerLiteral (integerSuffix, splitIntegerSuffix)
 
 data NumberScan = NumberScan
   { scannedCursor :: !LexerCursor
   , scannedValid :: !Bool
-  , scannedFloat :: !Bool
+  , scannedForm :: !NumberForm
   }
+
+{-| What a numeric literal turned out to be.
+
+    The shape of the digits decides between an integer and a float, and a
+    suffix can override the result: `d` selects `Decimal` whether or not the
+    digits carry a fraction, because `1d` and `1.5d` are the same type and only
+    one of them has a point in it. -}
+data NumberForm = IntegerForm | FloatForm | DecimalForm
+  deriving stock (Eq)
 
 scanNumber :: LexerCursor -> Maybe LexerCursor
 scanNumber cursor =
@@ -36,7 +46,7 @@ scanBase cursor (prefixValid, isBaseDigit) =
       digitsMark = markCursor afterPrefix
       advanced = consumeWhile isBaseCandidate afterPrefix
       digitsValid = maybe False (validBaseRun isBaseDigit . fst) (captureSince digitsMark advanced)
-   in NumberScan advanced (prefixValid && digitsValid) False
+   in NumberScan advanced (prefixValid && digitsValid) IntegerForm
 
 scanDecimal :: LexerCursor -> NumberScan
 scanDecimal cursor =
@@ -50,12 +60,23 @@ scanDecimal cursor =
       afterExponent = maybe afterFraction scannedCursor exponentScan
       exponentValid = maybe True scannedValid exponentScan
       isFloat = maybe False (const True) fraction || maybe False (const True) exponentScan
-      suffixScan = if isFloat
-        then scanNumericSuffix (hasSuffix floatSuffix) afterExponent
-        else scanNumericSuffix (hasSuffix integerSuffix) afterExponent
+      plainForm = if isFloat then FloatForm else IntegerForm
+      suffixScan = scanNumericSuffix (classifySuffix plainForm) afterExponent
       finalCursor = maybe afterExponent fst suffixScan
-      suffixValid = maybe True snd suffixScan
-   in NumberScan finalCursor (integerValid && fractionValid && exponentValid && suffixValid) isFloat
+      suffixValid = maybe True (maybe False (const True) . snd) suffixScan
+      form = maybe plainForm (maybe plainForm id . snd) suffixScan
+   in NumberScan finalCursor (integerValid && fractionValid && exponentValid && suffixValid) form
+
+{-| Classify a suffix against the digits it followed.
+
+    `d` is admitted after either shape. Every other suffix has to match the
+    shape it was written on, so `1f32` and `1.5u8` stay malformed. -}
+classifySuffix :: NumberForm -> Text -> Maybe NumberForm
+classifySuffix plainForm text
+  | text == decimalSuffix = Just DecimalForm
+  | plainForm == FloatForm, hasSuffix floatSuffix text = Just FloatForm
+  | plainForm == IntegerForm, hasSuffix integerSuffix text = Just IntegerForm
+  | otherwise = Nothing
 
 scanFraction :: LexerCursor -> Maybe NumberScan
 scanFraction cursor
@@ -65,7 +86,7 @@ scanFraction cursor
       let digitsMark = markCursor afterDot
           advanced = consumeWhile isDecimalCandidate afterDot
           valid = maybe False (validDigitRun isAsciiDigit . fst) (captureSince digitsMark advanced)
-       in Just (NumberScan advanced valid True)
+       in Just (NumberScan advanced valid FloatForm)
   | otherwise = Nothing
 
 scanExponent :: LexerCursor -> Maybe NumberScan
@@ -80,32 +101,38 @@ scanExponent cursor =
               digitsMark = markCursor afterSign
               advanced = consumeWhile isDecimalCandidate afterSign
               valid = maybe False (validDigitRun isAsciiDigit . fst) (captureSince digitsMark advanced)
-           in Just (NumberScan advanced valid True)
+           in Just (NumberScan advanced valid FloatForm)
     _ -> Nothing
 
-scanNumericSuffix :: (Text -> Bool) -> LexerCursor -> Maybe (LexerCursor, Bool)
+scanNumericSuffix :: (Text -> Maybe NumberForm) -> LexerCursor -> Maybe (LexerCursor, Maybe NumberForm)
 scanNumericSuffix classify cursor = case peekScalar cursor of
   Just scalar
     | isAsciiLetter scalar ->
         let mark = markCursor cursor
             advanced = consumeWhile isAsciiAlphaNumeric cursor
-            valid = maybe False (classify . fst) (captureSince mark advanced)
-         in Just (advanced, valid)
+            form = captureSince mark advanced >>= classify . fst
+         in Just (advanced, form)
   _ -> Nothing
 
 hasSuffix :: (Text -> Maybe value) -> Text -> Bool
 hasSuffix classify = maybe False (const True) . classify
 
 finishNumber :: CursorMark -> NumberScan -> Maybe LexerCursor
-finishNumber mark NumberScan{scannedCursor, scannedValid, scannedFloat} = do
+finishNumber mark NumberScan{scannedCursor, scannedValid, scannedForm} = do
   (lexeme, spanValue) <- captureSince mark scannedCursor
   if scannedValid
-    then emitToken mark (if scannedFloat then FloatLiteral lexeme else IntegerLiteral lexeme) scannedCursor
+    then emitToken mark (literalKind scannedForm lexeme) scannedCursor
     else do
       emitted <- emitToken mark (Invalid lexeme) scannedCursor
       case mkDiagnosticCode "E0004" >>= \code -> diagnostic code Error spanValue "malformed numeric literal" of
         Just value -> recordDiagnostic value emitted
         Nothing -> Just emitted
+
+literalKind :: NumberForm -> Text -> TokenKind
+literalKind form lexeme = case form of
+  IntegerForm -> IntegerLiteral lexeme
+  FloatForm -> FloatLiteral lexeme
+  DecimalForm -> DecimalLiteral lexeme
 
 basePrefix :: LexerCursor -> Maybe (Bool, Char -> Bool)
 basePrefix cursor

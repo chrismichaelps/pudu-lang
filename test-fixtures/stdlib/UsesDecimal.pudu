@@ -1,0 +1,122 @@
+module UsesDecimal
+
+import Std.Decimal as D
+
+/// The property a binary float cannot give: adding tenths gives the number
+/// written, not one near it.
+fn exactTenths() -> Bool {
+  0.1d + 0.2d == 0.3d
+}
+
+/// Scale is preserved but not compared. The two values are the same number and
+/// render differently, which is what lets a price stay in cents through a
+/// round trip.
+fn scaleIsSeparateFromValue() -> Bool {
+  1.50d == 1.5d && D.scale(1.50d) == 2 && D.scale(1.5d) == 1 &&
+    D.toText(1.50d) == "1.50"
+}
+
+/// Multiplication is exact and its scale is the sum of the operand scales.
+fn productIsExact() -> Bool {
+  1.50d * 1.50d == 2.25d && D.scale(1.50d * 1.50d) == 4
+}
+
+/// A quotient that terminates in base ten is produced exactly.
+fn exactQuotient() -> Bool {
+  1d / 4d == 0.25d && 1d / 8d == 0.125d
+}
+
+/// Every rounding mode decides the same halfway case differently, which is the
+/// whole reason a program gets to name one.
+fn modesDisagreeOnHalves() -> Bool {
+  D.round(0.5d, 0, D.HalfUp) == 1d &&
+    D.round(0.5d, 0, D.HalfDown) == 0d &&
+    D.round(0.5d, 0, D.HalfEven) == 0d &&
+    D.round(1.5d, 0, D.HalfEven) == 2d &&
+    D.round(0.4d, 0, D.Up) == 1d &&
+    D.round(0.6d, 0, D.Down) == 0d
+}
+
+/// Ceiling and floor follow the number line, not the magnitude, which is what
+/// tells them apart from up and down for a negative value.
+fn signedModesFollowTheNumberLine() -> Bool {
+  D.round(0d - 0.5d, 0, D.Ceiling) == 0d &&
+    D.round(0d - 0.5d, 0, D.Floor) == (0d - 1d) &&
+    D.round(0d - 0.5d, 0, D.Up) == (0d - 1d) &&
+    D.round(0d - 0.5d, 0, D.Down) == 0d
+}
+
+/// Division with a stated precision never reports a non-terminating quotient,
+/// because the caller already said what to do about one.
+fn statedPrecisionAlwaysAnswers() -> Bool {
+  match D.divide(1d, 3d, 5, D.HalfEven) {
+    case Some(value) => value == 0.33333d
+    case None => false
+  }
+}
+
+/// A zero divisor is still a failure, because no precision makes it an answer.
+fn zeroDivisorFails() -> Bool {
+  match D.divide(1d, 0d, 5, D.HalfEven) {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+/// The conversion path in each direction it is defined for.
+fn conversionsRoundTrip() -> Bool {
+  D.fromInt(7) == 7d &&
+    D.toInt(3d) == Some(3) &&
+    D.toInt(3.5d) == None &&
+    D.parse("12.75") == Some(12.75d) &&
+    D.parse("not a number") == None &&
+    D.parseOr("bad", 1d) == 1d
+}
+
+/// A total over many amounts stays exact, which is the reason the type exists.
+fn manyAmountsStayExact() -> Bool {
+  var total = 0d
+  var count = 0
+  while count < 100 {
+    total = total + 0.01d
+    count = count + 1
+  }
+  total == 1.00d && D.toText(D.rescale(total, 2)) == "1.00"
+}
+
+fn aggregatesAgree() -> Bool {
+  let values = [1.5d, 2.5d, 3.5d]
+  D.sum(values) == 7.5d &&
+    D.product([2d, 3d, 4d]) == 24d &&
+    D.mean(values, 2) == Some(2.50d) &&
+    D.mean([], 2) == None
+}
+
+fn comparisonsAndSigns() -> Bool {
+  D.max(1d, 2d) == 2d &&
+    D.min(1d, 2d) == 1d &&
+    D.abs(0d - 3d) == 3d &&
+    D.signum(0d - 3d) == (0 - 1) &&
+    D.signum(0d) == 0 &&
+    D.isZero(0.000d) &&
+    D.floor(1.9d) == 1d &&
+    D.ceiling(1.1d) == 2d &&
+    D.truncate(0d - 1.9d) == (0d - 1d)
+}
+
+export fn main() -> Int {
+  var passed = 0
+  if exactTenths() { passed = passed + 1 }
+  if scaleIsSeparateFromValue() { passed = passed + 1 }
+  if productIsExact() { passed = passed + 1 }
+  if exactQuotient() { passed = passed + 1 }
+  if modesDisagreeOnHalves() { passed = passed + 1 }
+  if signedModesFollowTheNumberLine() { passed = passed + 1 }
+  if statedPrecisionAlwaysAnswers() { passed = passed + 1 }
+  if zeroDivisorFails() { passed = passed + 1 }
+  if conversionsRoundTrip() { passed = passed + 1 }
+  if manyAmountsStayExact() { passed = passed + 1 }
+  if aggregatesAgree() { passed = passed + 1 }
+  if comparisonsAndSigns() { passed = passed + 1 }
+  passed
+}

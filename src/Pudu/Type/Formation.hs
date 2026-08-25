@@ -26,15 +26,11 @@ import Pudu.Frontend.Syntax.Tree
   , Variant (..)
   , VariantPayload (..)
   )
-import Pudu.Source (Span)
-import Control.Monad (unless)
 import Pudu.Type.Env
   ( Checker
   , DeclaredTypes (..)
   , emptyDeclared
   , freshVariable
-  , report
-  , reportedReserved
   )
 import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal)
 
@@ -42,11 +38,10 @@ import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal)
     become rigid; every other name is nominal, and an alias expands
     transparently as [[architecture/SEMANTICS]] requires. -}
 formType :: DeclaredTypes -> [Text] -> Located TypeSyntax -> Checker Type
-formType declared rigid (Located typeSpan syntax) = case syntax of
+formType declared rigid (Located _ syntax) = case syntax of
   NamedType path arguments -> do
     formed <- mapM (formType declared rigid) arguments
-    reserved <- rejectReserved declared typeSpan path
-    if reserved then pure ErrorType else pure (formNamed declared rigid path formed)
+    pure (formNamed declared rigid path formed)
   ReferenceType mutable target -> ReferenceTypeValue mutable <$> formType declared rigid target
   TupleType members -> TupleTypeValue <$> mapM (formType declared rigid) members
   FunctionType asynchronous inputs result ->
@@ -55,26 +50,6 @@ formType declared rigid (Located typeSpan syntax) = case syntax of
       <*> formType declared rigid result
   UnitType -> pure UnitTypeValue
   InvalidType -> pure ErrorType
-
-{-| `Decimal` is reserved. [[architecture/SEMANTICS]] gives it no semantics
-    until its precision and rounding ADR is accepted, and rejects it in the
-    meantime — admitting it would mean inventing the rounding rule that ADR
-    exists to decide. A module that declares its own `Decimal` keeps it. -}
-rejectReserved :: DeclaredTypes -> Span -> ModuleName -> Checker Bool
-rejectReserved declared typeSpan path
-  | pathText /= reservedDecimal = pure False
-  | Map.member pathText (declaredNames declared) = pure False
-  | otherwise = do
-      seen <- reportedReserved typeSpan
-      unless seen $
-        report "E3022" typeSpan "Decimal is reserved and has no semantics yet"
-          (Just "use Float64 or BigInt; Decimal waits on its precision and rounding decision")
-      pure True
- where
-  pathText = moduleNameText path
-
-reservedDecimal :: Text
-reservedDecimal = "Decimal"
 
 formNamed :: DeclaredTypes -> [Text] -> ModuleName -> [Type] -> Type
 formNamed declared rigid path arguments

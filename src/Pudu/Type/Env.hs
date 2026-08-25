@@ -51,7 +51,6 @@ module Pudu.Type.Env
   , markAmbiguousMethod
   , methodProvider
   , recordMethodProvider
-  , reportedReserved
   , addObligation
   , resolveVariable
   , runChecker
@@ -123,7 +122,6 @@ data CheckerState = CheckerState
   , stateTypes :: ![(SpanKey, Type)]
   , stateMethodProviders :: !(Map Text NominalId)
   , stateAmbiguousMethods :: !(Map Text [NominalId])
-  , stateReservedSpans :: ![(Int, Int)]
   , stateUnsafeFrames :: ![UnsafeFrame]
   , stateLoopFrames :: ![LoopFrame]
   , stateUnsafeFunctions :: !(Map Text [Capability])
@@ -206,7 +204,6 @@ initialState =
     , stateTypes = []
     , stateMethodProviders = Map.empty
     , stateAmbiguousMethods = Map.empty
-    , stateReservedSpans = []
     , stateUnsafeFrames = []
     , stateLoopFrames = []
     , stateUnsafeFunctions = Map.empty
@@ -683,16 +680,6 @@ recordUnsafeFunction name capabilities =
 unsafeFunctionCapabilities :: Text -> Checker (Maybe [Capability])
 unsafeFunctionCapabilities name =
   Checker $ \state -> (Map.lookup name (stateUnsafeFunctions state), state)
-
-{-| Report a reserved type at most once per occurrence. A signature is formed
-    both when it is declared and when its body is checked, and one written
-    `Decimal` is one mistake however many times the checker walks it. -}
-reportedReserved :: Span -> Checker Bool
-reportedReserved spanValue =
-  Checker $ \state ->
-    let key = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
-        seen = key `elem` stateReservedSpans state
-     in (seen, state{stateReservedSpans = key : stateReservedSpans state})
 
 {-| Record that two traits provide the same member for one type. Declaring both
     is legal; only an unqualified call has to choose, so the ambiguity is stored

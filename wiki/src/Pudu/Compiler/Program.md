@@ -39,6 +39,8 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 
 ### Governance
 
+- `compileProgramSource` compiles a root that is already in memory, taking its source root rather than deriving one. The interactive session's buffer is not a file, but its imports still have to reach the modules a compiled program's would, and there is no path to derive the root from.
+
 - A module is looked for in the roots [[Compiler Library]] names, in order: the program's own
   source root, then — for a `Std` module only — the standard library's. The first root that has the
   file wins, so a program can shadow a standard module by declaring it in its own tree.

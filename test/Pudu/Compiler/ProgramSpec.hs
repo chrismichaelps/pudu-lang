@@ -145,6 +145,7 @@ testProgramEvaluation = do
   hashing <- runEntry "test-fixtures/stdlib/UsesCrypto.pudu"
   parsing <- runEntry "test-fixtures/stdlib/UsesParse.pudu"
   labelled <- runEntry "test-fixtures/stdlib/UsesLabels.pudu"
+  exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -173,6 +174,8 @@ testProgramEvaluation = do
         (parsing === Just "22")
     , counterexample "labelled loops break and continue across nesting"
         (labelled === Just "4")
+    , counterexample "decimal arithmetic is exact and rounds only when told"
+        (exact === Just "12")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

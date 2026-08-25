@@ -161,7 +161,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-six modules, 762 documented exports, every one written in Pudu.
+Twenty-seven modules, 792 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -171,6 +171,7 @@ Twenty-six modules, 762 documented exports, every one written in Pudu.
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
 | `Std.Num` | 24 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
 | `Std.Text.Parse` | 41 | parser combinators with positions in their errors |
@@ -198,6 +199,29 @@ The numeric surface is **generic, bounded by traits**, not `Int`-only. `Std.Orde
 `Ord`, `Std.Num` carries `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
 `Bits` — each implemented across the integer family and, where it makes sense, both floating widths
 and `Str`, `Char`, and `Bool`.
+
+### `Std.Decimal`
+
+`Decimal` is the type money is written in, and the reason it stayed unusable so long is that a
+decimal type is not a representation choice but a rounding policy. [[ADR-0007]] settles it: a value
+is a coefficient and a base-ten scale, addition, subtraction, and multiplication are always exact,
+and division is exact or an error. `1d / 3d` reports `E7010` instead of quietly producing a number
+that is not the quotient.
+
+That makes the module's shape unusual in a useful way. Most of its thirty exports are ordinary —
+`sum`, `mean`, `abs`, `floor` — but every operation that could lose a digit takes the precision and
+the mode as arguments, because there is no context to inherit them from:
+
+```pudu
+D.divide(total, count, 2, D.HalfEven)   // Option[Decimal]; None only for a zero divisor
+D.rescale(total, 2)                     // says the answer is in cents and means it
+```
+
+The `Rounding` sum lives here rather than in the compiler, and the primitives underneath take a
+plain integer code, because a wired-in signature cannot mention a type a library module declares.
+That split is deliberate: the compiler owns exactness, and the library owns the vocabulary a program
+reads.
+
 
 `Bits` has no implementation for `BigInt`, because `BigInt` has no width and every operation there
 needs one. That is the bound doing its job: the type that cannot answer is the type that is refused.

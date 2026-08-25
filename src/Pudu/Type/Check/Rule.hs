@@ -52,8 +52,10 @@ import Pudu.Type.Value
   , nominalKey
   , nominalName
   , renderType
+  , decimalType
   , stringType
   )
+import Pudu.DecimalLiteral (parseDecimalLiteral)
 
 literalType :: Span -> Tree.Literal -> Checker Type
 literalType spanValue literal = case literal of
@@ -71,6 +73,12 @@ literalType spanValue literal = case literal of
         )
         (Just "choose Float64 or reduce the literal magnitude")
       pure ErrorType
+    Nothing -> pure ErrorType
+  {-| A decimal literal is exact, so unlike a floating one it has nothing to
+      not fit: any number of digits is representable, and malformed text was
+      already rejected by the lexer. -}
+  Tree.DecimalValue text -> case parseDecimalLiteral text of
+    Just _ -> pure decimalType
     Nothing -> pure ErrorType
   Tree.StringValue _ -> pure stringType
   Tree.CharValue _ -> pure charType

@@ -56,6 +56,7 @@ data TokenKind
   = Identifier !Text
   | IntegerLiteral !Text
   | FloatLiteral !Text
+  | DecimalLiteral !Text
   | StringLiteral !Text
   | CharLiteral !Char
   | Keyword !Keyword

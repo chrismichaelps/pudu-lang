@@ -2,6 +2,7 @@
 module Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
+  , compileProgramSource
   , programDependencies
   , programDocs
   , rootCompileResult
@@ -114,13 +115,40 @@ compileProgram rootPath = do
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
                   [rootSource] [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
-            else do
-              discovered <- discover sourceRoot
-                (Map.singleton rootName rootFrontend)
-                (Map.singleton rootName rootSource)
-                []
-                (importsOf rootModule)
-              finish rootName discovered
+            else discoverFrom sourceRoot rootSource rootFrontend rootModule
+
+{-| Compile a program whose root is already in memory.
+
+    The interactive session's buffer is not a file, but its imports are still
+    ordinary imports and must reach the same modules on disk that a compiled
+    program's would. Without this the session resolved an import loosely enough
+    to type-check and then had nothing to link, so `Std.Math.factorial` was a
+    name the checker knew and the evaluator did not.
+
+    The source root is given rather than derived, because there is no path to
+    derive it from. -}
+compileProgramSource :: FilePath -> Source -> IO ProgramResult
+compileProgramSource sourceRoot rootSource = do
+  let rootFrontend = runFrontend rootSource
+  case frontendModule rootFrontend of
+    Nothing ->
+      pure
+        ( ProgramResult Nothing Map.empty [rootSource] []
+            (frontendDiagnostics rootFrontend)
+            (CompileContext (exportIndex Map.empty) Map.empty True)
+        )
+    Just rootModule -> discoverFrom sourceRoot rootSource rootFrontend rootModule
+
+{-| Walk a root module's imports and compile everything the walk reaches. -}
+discoverFrom :: FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
+discoverFrom sourceRoot rootSource rootFrontend rootModule = do
+  let rootName = locatedValue (moduleName rootModule)
+  discovered <- discover sourceRoot
+    (Map.singleton rootName rootFrontend)
+    (Map.singleton rootName rootSource)
+    []
+    (importsOf rootModule)
+  finish rootName discovered
 
 data Discovery = Discovery
   { discoveredFrontends :: !(Map ModuleName FrontendResult)

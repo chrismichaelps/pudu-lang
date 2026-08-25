@@ -24,6 +24,7 @@ import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindName)
 import qualified Data.Text as Text
+import Pudu.DecimalLiteral (Decimal, renderDecimal)
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
@@ -42,6 +43,7 @@ import Pudu.Source (Span)
 data Value
   = IntValue !IntegerKind !Integer
   | FloatValue !FloatWidth !Double
+  | DecimalValue !Decimal
   | StrValue !Text
   | CharValue !Char
   | BoolValue !Bool
@@ -92,6 +94,13 @@ builtinName value = case value of
   ZoneOffsetBuiltin -> "zoneOffset"
   RunBuiltin -> "runProgram"
   ConvertIntegerBuiltin -> "convertInteger"
+  DecimalOfBuiltin -> "decimalOf"
+  DecimalFromIntBuiltin -> "decimalFromInt"
+  DecimalScaleBuiltin -> "decimalScale"
+  DecimalToIntBuiltin -> "decimalToInt"
+  DecimalToFloatBuiltin -> "decimalToFloat"
+  DecimalDivideBuiltin -> "decimalDivide"
+  DecimalRoundBuiltin -> "decimalRound"
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
     index, a scalar value. That is the type the language gives an unsuffixed
@@ -130,6 +139,13 @@ data Builtin
   | ZoneOffsetBuiltin
   | RunBuiltin
   | ConvertIntegerBuiltin
+  | DecimalOfBuiltin
+  | DecimalFromIntBuiltin
+  | DecimalScaleBuiltin
+  | DecimalToIntBuiltin
+  | DecimalToFloatBuiltin
+  | DecimalDivideBuiltin
+  | DecimalRoundBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
@@ -272,6 +288,7 @@ renderValue :: Value -> Text
 renderValue value = case value of
   IntValue _ number -> Text.pack (show number)
   FloatValue _ number -> Text.pack (show number)
+  DecimalValue number -> renderDecimal number
   StrValue text -> "\"" <> escape text <> "\""
   CharValue character -> "'" <> escape (Text.singleton character) <> "'"
   BoolValue flag -> if flag then "true" else "false"
@@ -313,6 +330,7 @@ valueKind :: Value -> Text
 valueKind value = case value of
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
+  DecimalValue _ -> "decimal"
   StrValue _ -> "string"
   CharValue _ -> "char"
   BoolValue _ -> "bool"

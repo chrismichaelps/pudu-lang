@@ -261,6 +261,7 @@ data Statement
 data Literal
   = IntegerValue !Text
   | FloatValue !Text
+  | DecimalValue !Text
   | StringValue !Text
   | CharValue !Char
   | BoolValue !Bool
