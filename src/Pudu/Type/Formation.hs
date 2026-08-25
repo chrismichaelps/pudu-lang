@@ -80,14 +80,38 @@ formNamed :: DeclaredTypes -> [Text] -> ModuleName -> [Type] -> Type
 formNamed declared rigid path arguments
   | unqualified && name `elem` rigid = RigidType name
   | unqualified && name == "Never" = NeverType
+  {-| An alias is a synonym, so writing it is writing what it stands for. A
+      generic one substitutes its arguments: `type Boxed[T] = Option[T]` used as
+      `Boxed[Int]` is `Option[Int]`, and before this it was a nominal type of
+      its own that unified with nothing. An argument count that does not match
+      is left nominal, so the mismatch is reported where the name is used
+      rather than silently half-applied. -}
   | otherwise = case Map.lookup pathText (declaredAliases declared) of
-      Just aliased | null arguments -> aliased
+      Just (parameters, aliased)
+        | length parameters == length arguments ->
+            expandAlias (zip parameters arguments) aliased
       _ -> NominalType (Map.findWithDefault fallback pathText (declaredNames declared)) arguments
  where
   pathText = moduleNameText path
   name = lastSegment path
   unqualified = pathText == name
   fallback = NominalId Nothing pathText
+
+{-| Replace an alias's parameters with the arguments it was written with.
+
+    Only the parameter names the alias declared are replaced, so a rigid name
+    from the surrounding declaration keeps its own meaning. -}
+expandAlias :: [(Text, Type)] -> Type -> Type
+expandAlias replacements typeValue = case typeValue of
+  RigidType name -> maybe typeValue id (lookup name replacements)
+  NominalType identity arguments -> NominalType identity (map expand arguments)
+  TupleTypeValue members -> TupleTypeValue (map expand members)
+  FunctionTypeValue asynchronous inputs result ->
+    FunctionTypeValue asynchronous (map expand inputs) (expand result)
+  ReferenceTypeValue mutable target -> ReferenceTypeValue mutable (expand target)
+  other -> other
+ where
+  expand = expandAlias replacements
 
 {-| An absent annotation becomes a fresh inference variable, which is how a
     private binding or parameter participates in local inference. -}
@@ -122,8 +146,8 @@ builtinOwners = Map.fromList [("Option", ["Some", "None"]), ("Result", ["Ok", "E
 {-| Type aliases the compiler wires in. `Float` aliases `Float64` because
     [[grammar/pudu]] makes the alias transparent at the type level, and a
     reader who writes `Float` expects the same type as `Float64`. -}
-builtinAliases :: Map Text Type
-builtinAliases = Map.fromList [("Float", NominalType "Float64" [])]
+builtinAliases :: Map Text ([Text], Type)
+builtinAliases = Map.fromList [("Float", ([], NominalType "Float64" []))]
 
 {-| Collect what every type declaration contributes before any body is checked,
     so a declaration may refer to one that appears later in the file. -}
@@ -211,12 +235,16 @@ collectOne owner declared (Located _ declaration) = case declaration of
             , declaredOwners = Map.insert identity (map fst entries) (declaredOwners declared)
             }
       AliasDefinition aliased -> do
-        formed <- formType declared rigid aliased
+        {-| The alias body is formed with its own parameters rigid, so they can
+            be found and replaced when the alias is written with arguments. -}
+        let parameters = map (locatedValue . typeParamName . locatedValue) (typeTypeParams value)
+        formed <- formType declared (parameters <> rigid) aliased
+        let entry = (parameters, formed)
         pure
           declared
             { declaredAliases =
-                Map.insert (moduleNameText owner <> "." <> name) formed
-                  (Map.insert name formed (declaredAliases declared))
+                Map.insert (moduleNameText owner <> "." <> name) entry
+                  (Map.insert name entry (declaredAliases declared))
             }
       InvalidDefinition -> pure declared
   _ -> pure declared
