@@ -38,6 +38,8 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ### Governance
 
+- A trait's own type parameters are rigid inside its members, exactly as a function's are inside its body. Without that they were formed as nominal types named after the parameter, so `trait Holds[T]` gave `get` a result of some type literally called `T` that nothing could be, and every use reported `expected Int, found T`.
+
 - Two traits may declare the same member for one type. Declaring both is legal; only an unqualified call has to choose, so the ambiguity is recorded when the second implementation binds and reported at the call that cannot resolve it, naming both qualified forms.
 
 - A bound naming a compiler-controlled marker is proved by [[Type Marker]] from the type's structure when no implementation was written, which is what lets `Int` satisfy `Copy` without any module declaring it.

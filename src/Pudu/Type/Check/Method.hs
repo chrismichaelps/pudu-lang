@@ -7,6 +7,7 @@ module Pudu.Type.Check.Method
   , effectNames
   , dischargeObligations
   , methodScheme
+  , targetName
   , functionRigid
   , declareTraitMembers
   , implAliases
@@ -86,14 +87,24 @@ traitTable declared declarations =
     rigid: the implementing type is not known here. -}
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareTraitMembers declared value =
-  mapM_ (declareTraitMember declared owner) (traitMembers value)
+  mapM_ (declareTraitMember declared owner (traitRigid value)) (traitMembers value)
  where
   name = locatedValue (traitName value)
   owner = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
 
-declareTraitMember :: DeclaredTypes -> NominalId -> Located Function -> Checker ()
-declareTraitMember declared owner (Located _ method) = do
-  let rigid = "Self" : functionRigid method
+{-| A trait's own type parameters are rigid inside its members, exactly as a
+    function's are inside its body.
+
+    Without this they were formed as nominal types named after the parameter,
+    so `trait Holds[T] { fn get(self: &Self) -> T }` gave `get` a result of some
+    type literally called `T` that nothing could ever be, and every use reported
+    `expected Int, found T`. -}
+traitRigid :: Trait -> [Text]
+traitRigid value = map (locatedValue . typeParamName . locatedValue) (traitTypeParams value)
+
+declareTraitMember :: DeclaredTypes -> NominalId -> [Text] -> Located Function -> Checker ()
+declareTraitMember declared owner traitParams (Located _ method) = do
+  let rigid = "Self" : traitParams <> functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
   bindName (methodKey owner (locatedValue (functionName method)))
