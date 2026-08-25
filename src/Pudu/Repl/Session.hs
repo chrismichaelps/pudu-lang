@@ -148,11 +148,12 @@ submitEntry session entry = do
       (buffer, firstLine) = renderBuffer session kind entry
       entryStart = bufferOffsetOf session kind
   source <- newSource interactiveName buffer
-  let result = runCompileWith (sessionContext session) source
-      compiled = compileDiagnostics result
+  result <- runCompileWith (sessionContext session) source
+  let compiled = compileDiagnostics result
       staticallyValid = not (hasErrors compiled)
-      evaluation = if staticallyValid then evaluateFor session result kind else Nothing
-      runtime = maybe [] outcomeDiagnostics evaluation
+  evaluation <-
+    if staticallyValid then evaluateFor session result kind else pure Nothing
+  let runtime = maybe [] outcomeDiagnostics evaluation
       diagnostics = compiled <> runtime
       accepted = staticallyValid && not (hasErrors runtime)
   pure
@@ -190,11 +191,11 @@ bufferOffsetOf session kind =
 {-| Evaluate the session's buffer with the loaded program's dependencies
     linked, so a call into an imported module works at the prompt exactly as it
     would in the program that was loaded. -}
-evaluateFor :: Session -> CompileResult -> EntryKind -> Maybe EvalOutcome
+evaluateFor :: Session -> CompileResult -> EntryKind -> IO (Maybe EvalOutcome)
 evaluateFor session result _ = case compileModule result of
-  Nothing -> Nothing
+  Nothing -> pure Nothing
   Just parsed ->
-    Just (evaluateProgramEntry (sessionDependencies session) sessionFunction parsed)
+    Just <$> evaluateProgramEntry (sessionDependencies session) sessionFunction parsed
 
 {-| Compile the session exactly as it stands, with no new entry. `:browse` and
     `:context` use this so inspection cannot alter what the session holds. -}
@@ -208,7 +209,7 @@ inspectDocs :: Session -> IO (Maybe DocIndex)
 inspectDocs session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
-  pure (compileDocs (runCompileWith (sessionContext session) source))
+  compileDocs <$> runCompileWith (sessionContext session) source
 
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 inspectSession session = do
@@ -223,7 +224,7 @@ inspectContext :: Session -> IO (Maybe Resolution, Maybe Module, [Diagnostic])
 inspectContext session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
-  let result = runCompileWith (sessionContext session) source
+  result <- runCompileWith (sessionContext session) source
   pure (compileResolution result, compileModule result, compileDiagnostics result)
 
 interactiveName :: SourceName

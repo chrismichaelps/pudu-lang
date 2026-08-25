@@ -37,6 +37,11 @@ pudu help            print usage
 
 ### Governance
 
+- `main`'s answer decides what the run does. A whole number becomes the exit status, because that is
+  what a shell reads and a program returning one meant it as a status. Unit prints nothing. Anything
+  else is printed, so a program that answers with a value can be run and read without writing its
+  own output call.
+
 - `pudu run` links the program's dependencies and calls `main` in the root module. A program with
   errors is not run: evaluating a module whose meaning was never established produces a second, less
   useful account of the same defect.

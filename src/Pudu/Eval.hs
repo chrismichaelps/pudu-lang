@@ -4,24 +4,29 @@ module Pudu.Eval
   , evaluateEntryPoint
   , evaluateProgramEntry
   , evaluateModule
+  , runWithEffects
   ) where
 
 import Control.Monad (filterM, foldM)
 import Data.Foldable (toList)
 import Data.List (inits)
+import Data.Maybe (fromMaybe)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic)
+import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
+import Pudu.Eval.Io
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
 import Pudu.Eval.Env
   ( Env (..)
   , captureEnvironment
   , currentFrame
+  , effectsAdmitted
+  , performEffect
   , withCaptured
   , pushFrame
   , Eval (..)
@@ -64,6 +69,7 @@ import Pudu.Eval.Array
 import Pudu.Eval.Value
   ( ArrayMethod (..)
   , Builtin (..)
+  , builtinName
   , CharMethod (..)
   , MapMethod (..)
   , SetMethod (..)
@@ -111,7 +117,7 @@ data EvalOutcome = EvalOutcome
 {-| Evaluate a module and return the value of its entry point. Module constants
     are evaluated in declaration order, so a constant that reads one declared
     later is a runtime diagnostic rather than a silent default. -}
-evaluateEntryPoint :: Text -> Module -> EvalOutcome
+evaluateEntryPoint :: Text -> Module -> IO EvalOutcome
 evaluateEntryPoint = evaluateProgramEntry []
 
 {-| Evaluate a module that imports others, with its dependencies linked in.
@@ -125,7 +131,7 @@ evaluateEntryPoint = evaluateProgramEntry []
 
     Dependencies arrive in dependency order, so a module's own imports are
     already linked when it loads. -}
-evaluateProgramEntry :: [(Text, Module)] -> Text -> Module -> EvalOutcome
+evaluateProgramEntry :: [(Text, Module)] -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry dependencies entryName moduleValue =
   run $ do
     linkDependencies dependencies
@@ -143,9 +149,14 @@ evaluateProgramEntry dependencies entryName moduleValue =
           else pure result
       _ -> pure UnitValue
 
-evaluateModule :: Module -> EvalOutcome
+{-| Evaluate a module for its constants alone, with no access to the world.
+
+    This is the compile-time path: [[architecture/SEMANTICS]] makes a
+    module-scope `const` a compile-time value, and folding it must not perform
+    the effects a run of the program would. -}
+evaluateModule :: Module -> IO EvalOutcome
 evaluateModule moduleValue =
-  run (loadDeclarations (moduleDeclarations moduleValue) >> pure UnitValue)
+  runWithEffects False (loadDeclarations (moduleDeclarations moduleValue) >> pure UnitValue)
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -198,7 +209,7 @@ installImportAliases = mapM_ (installOne . locatedValue)
 
   {-| Rebinding by prefix needs the whole environment, because an alias covers
       every name the module published and the importer never enumerates them. -}
-  republish path prefix = Evaluator $ \env ->
+  republish path prefix = Evaluator $ \env -> pure $
     let published =
           [ (prefix <> Text.drop (Text.length path + 1) name, value)
           | frame <- envFrames env
@@ -213,13 +224,24 @@ installImportAliases = mapM_ (installOne . locatedValue)
 {-| A control transfer that reaches the top has left every construct that could
     own it, which the entry point reports as a value of unit rather than losing
     the run. -}
-run :: Evaluator Value -> EvalOutcome
-run (Evaluator action) = case action emptyEnv of
-  Done value _ -> EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
-  Unwound (ReturnUnwind value) _ ->
-    EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
-  Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
-  Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
+run :: Evaluator Value -> IO EvalOutcome
+run = runWithEffects True
+
+{-| Run an evaluation, choosing whether the program may reach the world.
+
+    Compile-time folding passes `False`: a constant is evaluated while the
+    compiler runs, and letting it read a file or print would make compilation
+    depend on the world the compiler happened to be in, and would produce output
+    nobody asked for. -}
+runWithEffects :: Bool -> Evaluator Value -> IO EvalOutcome
+runWithEffects effects (Evaluator action) = do
+  outcome <- action emptyEnv{envEffects = effects}
+  pure $ case outcome of
+    Done value _ -> EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+    Unwound (ReturnUnwind value) _ ->
+      EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+    Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
+    Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
 
 {-| Functions and variant constructors are installed before any constant runs,
     so mutual recursion and forward references work exactly as resolution
@@ -252,6 +274,7 @@ installBuiltinConstructors = do
   bind "mapOf" (BuiltinValue MapOfBuiltin)
   bind "setOf" (BuiltinValue SetOfBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)
+  mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
 installDeclaration traits (Located _ declaration) = case declaration of
@@ -548,6 +571,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     BuiltinValue ShowBuiltin -> callShow spanValue values
+    BuiltinValue effect -> callEffect spanValue effect values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
@@ -588,6 +612,127 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| The built-ins that reach the world.
+
+    They are listed once so the evaluator and the checker cannot disagree about
+    which names exist, and so adding one is a single edit rather than three. -}
+effectBuiltins :: [Builtin]
+effectBuiltins =
+  [ PrintBuiltin
+  , PrintErrorBuiltin
+  , ReadLineBuiltin
+  , ReadFileBuiltin
+  , WriteFileBuiltin
+  , AppendFileBuiltin
+  , FileExistsBuiltin
+  , RemoveFileBuiltin
+  , ListDirectoryBuiltin
+  , CreateDirectoryBuiltin
+  , ArgumentsBuiltin
+  , EnvironmentBuiltin
+  , ExitBuiltin
+  , ClockBuiltin
+  ]
+
+{-| Perform one effect.
+
+    Every one answers with a `Result` rather than failing the program: the
+    language has no exceptions, and a runtime that unwound past a boundary the
+    program cannot see would take away the only decision worth having. A missing
+    file is an outcome a caller handles, not a crash.
+
+    `exit` is the exception to that, and is the only one: a program that asked
+    to stop has nothing left to decide. -}
+callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
+callEffect spanValue builtin arguments = do
+  admitted <- effectsAdmitted
+  if not admitted
+    then
+      abortAt (Just spanValue) "E7009"
+        (builtinName builtin <> " reaches outside the program")
+        ( Just
+            ( "a compile-time constant is folded while the compiler runs, so it "
+                <> "cannot read, write, or ask the environment anything"
+            )
+        )
+    else case (builtin, arguments) of
+      (PrintBuiltin, [value]) -> effectUnit (writeStandardOutput (textOf value))
+      (PrintErrorBuiltin, [value]) -> effectUnit (writeStandardError (textOf value))
+      (ReadLineBuiltin, []) -> do
+        outcome <- lift refusal readStandardLine
+        pure (resultOf (fmap optionalText outcome))
+      (ReadFileBuiltin, [StrValue path]) ->
+        resultOf . fmap StrValue <$> lift refusal (readTextFile (Text.unpack path))
+      (WriteFileBuiltin, [StrValue path, value]) ->
+        effectUnit (writeTextFile (Text.unpack path) (textOf value))
+      (AppendFileBuiltin, [StrValue path, value]) ->
+        effectUnit (appendTextFile (Text.unpack path) (textOf value))
+      (FileExistsBuiltin, [StrValue path]) ->
+        BoolValue <$> lift refusal (testFileExists (Text.unpack path))
+      (RemoveFileBuiltin, [StrValue path]) -> effectUnit (removeFileAt (Text.unpack path))
+      (ListDirectoryBuiltin, [StrValue path]) ->
+        resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
+      (CreateDirectoryBuiltin, [StrValue path]) ->
+        effectUnit (createDirectoryAt (Text.unpack path))
+      (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
+      (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
+      (ClockBuiltin, []) -> IntValue <$> lift refusal monotonicMilliseconds
+      (ExitBuiltin, [IntValue code]) -> do
+        _ <- lift refusal (exitWith code)
+        pure UnitValue
+      _ ->
+        abortAt (Just spanValue) "E7002"
+          ("wrong arguments for " <> builtinName builtin) Nothing
+ where
+  refusal = effectRefusal spanValue builtin
+
+  effectUnit action = resultOf . fmap (const UnitValue) <$> lift refusal action
+
+  textOf value = case value of
+    StrValue text -> text
+    other -> renderValue other
+
+  textArray = ArrayValue . Seq.fromList . map StrValue
+  pairArray pairs =
+    ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
+  optionalText found = case found of
+    Just text -> VariantValue "Some" [StrValue text]
+    Nothing -> VariantValue "None" []
+
+{-| Run one effect behind the refusal that applies to it.
+
+    A top-level binding rather than a local one so it stays polymorphic in what
+    the effect produces; every effect here produces something different. -}
+lift :: Diagnostic -> IO a -> Evaluator a
+lift refusal action = performEffect refusal action
+
+{-| An outcome as the language's own failure carrier. -}
+resultOf :: IoOutcome Value -> Value
+resultOf outcome = case outcome of
+  IoDone value -> VariantValue "Ok" [value]
+  IoFailed message -> VariantValue "Err" [StrValue message]
+
+{-| The diagnostic a refused effect reports, built once so the message a reader
+    sees does not depend on which effect they reached for. -}
+effectRefusal :: Span -> Builtin -> Diagnostic
+effectRefusal spanValue builtin =
+  fromMaybe (fallbackRefusal spanValue) $ do
+    code <- mkDiagnosticCode "E7009"
+    value <-
+      diagnostic code Error spanValue
+        (builtinName builtin <> " reaches outside the program")
+    pure
+      ( withHelp
+          "a compile-time constant is folded while the compiler runs, so it cannot reach the world"
+          value
+      )
+
+fallbackRefusal :: Span -> Diagnostic
+fallbackRefusal spanValue =
+  fromMaybe
+    (error "the refusal diagnostic must exist")
+    (mkDiagnosticCode "E7009" >>= \code -> diagnostic code Error spanValue "effect refused")
 
 {-| Render any value as text.
 

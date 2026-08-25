@@ -148,7 +148,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Eighteen modules, 579 documented exports, every one written in Pudu.
+Twenty modules, 621 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -168,8 +168,26 @@ Eighteen modules, 579 documented exports, every one written in Pudu.
 | `Std.Order` | 16 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
+| `Std.Io` | 26 | files, directories, standard input and output, path handling |
+| `Std.Env` | 16 | arguments and flags, environment variables, stopping with a status |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
+
+### On effects
+
+`Std.Io` and `Std.Env` are real: a program reads and writes files, lists directories, reads its
+arguments and environment, and stops with a status. Every effect answers with `Result[T, Str]`
+carrying what the operating system said, because the language has no exceptions and a missing file
+is an outcome a caller handles.
+
+**A constant may not reach the world.** Compile-time folding runs the same evaluator with effects
+denied and reports `E7009`. Compilation that depended on the world the compiler happened to be in
+would not be compilation.
+
+What is still blocked is the *foreign* interface — calling into a library this runtime does not
+already contain. That is what `Std.Net`, `Std.Process`, `Std.Db`, and an HTTP client need, and it
+needs the `foreign` capability from [[Unsafe Capabilities]] plus a decision about how a foreign
+type's ownership is described.
 
 ### On HTTP
 
@@ -183,9 +201,8 @@ could not send would be worse than none: it would make a program compile and fai
 reason the type system could have carried. Everything up to the moment of sending is here and
 testable without a network, which is the part a program spends most of its code on anyway.
 
-Everything else in the tables above is designed and unwritten, blocked on the same thing:
-`Std.Io`, `Std.Net`, `Std.Process`, and `Std.Db` need the `foreign` capability from
-[[Unsafe Capabilities]] and a decision about how a foreign type's ownership is described.
+Everything else in the tables above is designed and unwritten. `Std.Net`, `Std.Process`, `Std.Db`,
+and an HTTP client are blocked on the foreign interface; the rest is library work waiting its turn.
 
 ## What writing it found
 

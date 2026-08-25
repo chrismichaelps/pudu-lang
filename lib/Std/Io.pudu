@@ -1,0 +1,180 @@
+module Std.Io
+
+/// A line written to the program's output.
+/// The output is flushed, so a program that prints and then waits for input has
+/// already shown what it printed.
+export fn writeLine(message: Str) -> Result[(), Str] { print(message) }
+
+/// A line written to the program's error output.
+export fn writeErrorLine(message: Str) -> Result[(), Str] { printError(message) }
+
+/// Any value rendered and written as a line.
+export fn writeValue[T](value: T) -> Result[(), Str] { print(show(value)) }
+
+/// Every line written in order, stopping at the first that fails.
+export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
+  for line in lines {
+    match print(line) {
+      case Ok(_) => { }
+      case Err(problem) => { return Err(problem) }
+    }
+  }
+  Ok(())
+}
+
+/// One line of input, or `None` at the end of it.
+/// The end of input is not a failure: a program reading until there is no more
+/// is doing the ordinary thing.
+export fn readLineOrEnd() -> Result[Option[Str], Str] { readLine() }
+
+/// Every remaining line of input.
+export fn readAllLines() -> Result[Array[Str], Str] {
+  var out = []
+  var reading = true
+  while reading {
+    match readLine() {
+      case Ok(line) => {
+        match line {
+          case Some(found) => { out = out.push(found) }
+          case None => { reading = false }
+        }
+      }
+      case Err(problem) => { return Err(problem) }
+    }
+  }
+  Ok(out)
+}
+
+/// A file's whole contents.
+export fn read(path: Str) -> Result[Str, Str] { readFile(path) }
+
+/// A file's contents in lines.
+export fn readLines(path: Str) -> Result[Array[Str], Str] {
+  match readFile(path) {
+    case Ok(contents) => Ok(contents.lines())
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// A file replaced with the given contents.
+export fn write(path: Str, contents: Str) -> Result[(), Str] { writeFile(path, contents) }
+
+/// Lines written to a file, each followed by a newline.
+export fn writeFileLines(path: Str, lines: &Array[Str]) -> Result[(), Str] {
+  var out = ""
+  for line in lines { out = out + line + "\n" }
+  writeFile(path, out)
+}
+
+/// Contents added to the end of a file, creating it when it is absent.
+export fn append(path: Str, contents: Str) -> Result[(), Str] { appendFile(path, contents) }
+
+/// A line added to the end of a file.
+export fn appendLine(path: Str, line: Str) -> Result[(), Str] {
+  appendFile(path, line + "\n")
+}
+
+/// Whether a path names something that exists.
+export fn exists(path: Str) -> Bool { fileExists(path) }
+
+/// A file removed, or a report of why it could not be.
+export fn remove(path: Str) -> Result[(), Str] { removeFile(path) }
+
+/// A file removed if it is there, and nothing done if it is not.
+/// Removing something that is already gone is what the caller wanted.
+export fn removeIfPresent(path: Str) -> Result[(), Str] {
+  if fileExists(path) { removeFile(path) } else { Ok(()) }
+}
+
+/// The names a directory holds, without their paths.
+export fn list(path: Str) -> Result[Array[Str], Str] { listDirectory(path) }
+
+/// The paths a directory holds, each joined to the directory.
+export fn listPaths(path: Str) -> Result[Array[Str], Str] {
+  match listDirectory(path) {
+    case Ok(names) => {
+      var out = []
+      for name in names { out = out.push(join(path, name)) }
+      Ok(out)
+    }
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// A directory created along with every parent it needs.
+export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
+
+/// A file copied, or a report of what stopped it.
+export fn copy(from: Str, to: Str) -> Result[(), Str] {
+  match readFile(from) {
+    case Ok(contents) => writeFile(to, contents)
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// A file moved, which is a copy followed by removing the original.
+export fn move(from: Str, to: Str) -> Result[(), Str] {
+  match copy(from, to) {
+    case Ok(_) => removeFile(from)
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Two path pieces joined with a separator, without doubling one.
+export fn join(left: Str, right: Str) -> Str {
+  if left.isEmpty() { right } else {
+    if right.isEmpty() { left } else {
+      if left.endsWith("/") { left + right } else { left + "/" + right }
+    }
+  }
+}
+
+/// A path without its last piece, or `.` when it has only one.
+export fn directoryOf(path: Str) -> Str {
+  let trimmed = if path.endsWith("/") { path.slice(0, path.length() - 1) } else { path }
+  let at = lastIndexOf(trimmed, "/")
+  if at < 0 { "." } else {
+    if at == 0 { "/" } else { trimmed.slice(0, at) }
+  }
+}
+
+/// The last piece of a path.
+export fn nameOf(path: Str) -> Str {
+  let trimmed = if path.endsWith("/") { path.slice(0, path.length() - 1) } else { path }
+  let at = lastIndexOf(trimmed, "/")
+  if at < 0 { trimmed } else { trimmed.slice(at + 1, trimmed.length()) }
+}
+
+/// A file name's extension, without the dot, or `None` when it has none.
+export fn extensionOf(path: Str) -> Option[Str] {
+  let name = nameOf(path)
+  let at = lastIndexOf(name, ".")
+  if at <= 0 { None } else { Some(name.slice(at + 1, name.length())) }
+}
+
+/// A file name with its extension removed.
+export fn withoutExtension(path: Str) -> Str {
+  let name = nameOf(path)
+  let at = lastIndexOf(name, ".")
+  if at <= 0 { name } else { name.slice(0, at) }
+}
+
+/// A file name with a different extension.
+export fn withExtension(path: Str, extension: Str) -> Str {
+  join(directoryOf(path), withoutExtension(path) + "." + extension)
+}
+
+/// The position of the last occurrence of a needle, or -1.
+fn lastIndexOf(value: Str, needle: Str) -> Int {
+  var found = 0 - 1
+  var index = 0
+  let size = value.length()
+  let width = needle.length()
+  if width == 0 { found } else {
+    while index + width <= size {
+      if value.slice(index, index + width) == needle { found = index }
+      index = index + 1
+    }
+    found
+  }
+}

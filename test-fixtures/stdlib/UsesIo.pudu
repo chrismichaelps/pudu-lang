@@ -1,0 +1,38 @@
+module UsesIo
+
+import Std.Env as Env
+import Std.Io as Io
+
+export fn main() -> Int {
+  let target = "/tmp/pudu-fixture-io"
+  var total = 0
+  match Io.makeDirectory(target) {
+    case Ok(_) => { total = total + 1 }
+    case Err(_) => { }
+  }
+  let file = Io.join(target, "note.txt")
+  match Io.write(file, "one\ntwo\n") {
+    case Ok(_) => { total = total + 1 }
+    case Err(_) => { }
+  }
+  match Io.readLines(file) {
+    case Ok(lines) => { total = total + lines.length() }
+    case Err(_) => { }
+  }
+  match Io.list(target) {
+    case Ok(names) => { total = total + names.length() }
+    case Err(_) => { }
+  }
+  if Io.exists(file) { total = total + 1 }
+  match Io.extensionOf(file) {
+    case Some(extension) => { total = total + extension.length() }
+    case None => { }
+  }
+  total = total + Io.nameOf(file).length()
+  if Env.isSet("PATH") { total = total + 1 }
+  match Io.removeIfPresent(file) {
+    case Ok(_) => { total = total + 1 }
+    case Err(_) => { }
+  }
+  total
+}

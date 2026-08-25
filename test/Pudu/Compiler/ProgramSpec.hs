@@ -139,6 +139,7 @@ testProgramEvaluation = do
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
+  effects <- runEntry "test-fixtures/stdlib/UsesIo.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -155,6 +156,8 @@ testProgramEvaluation = do
         (formats === Just "8885")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "247")
+    , counterexample "the effect modules reach the world and report failures"
+        (effects === Just "19")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
@@ -164,13 +167,9 @@ runEntry path = do
   program <- compileProgram path
   case rootCompileResult program >>= compileModule of
     Nothing -> pure Nothing
-    Just parsed ->
-      pure
-        ( fmap renderValue
-            ( outcomeValue
-                (evaluateProgramEntry (programDependencies program) "main" parsed)
-            )
-        )
+    Just parsed -> do
+      outcome <- evaluateProgramEntry (programDependencies program) "main" parsed
+      pure (fmap renderValue (outcomeValue outcome))
 
 moduleNames :: FilePath -> IO [Text]
 moduleNames path = do

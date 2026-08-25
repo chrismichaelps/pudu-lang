@@ -37,6 +37,7 @@ library
     Pudu.Eval
     Pudu.Eval.Array
     Pudu.Eval.Env
+    Pudu.Eval.Io
     Pudu.Eval.Keyed
     Pudu.Eval.Match
     Pudu.Eval.Operator

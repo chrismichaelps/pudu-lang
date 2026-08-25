@@ -7,7 +7,7 @@ import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..), evaluateEntryPoint)
 import Pudu.Eval.Value (renderValue)
 import Pudu.Source (SourceName (SourceName), newSource)
-import Test.QuickCheck (Property, conjoin, counterexample, (===))
+import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 evalProperties :: [(String, IO Property)]
 evalProperties =
@@ -26,6 +26,7 @@ evalProperties =
   , ("function literals capture the environment they were written in", testClosures)
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
+  , ("effects answer with a result and are refused at compile time", testEffects)
   ]
 
 testScopes :: IO Property
@@ -438,6 +439,42 @@ testKeyed = do
     , counterexample "a value with no order cannot be a member" (unorderable === ["E7008"])
     ]
 
+{-| An effect answers with a `Result` rather than failing the program: the
+    language has no exceptions, so a missing file is an outcome a caller
+    handles. Compile-time folding is refused every effect, because a constant is
+    evaluated while the compiler runs. -}
+testEffects :: IO Property
+testEffects = do
+  written <- evaluate "writeFile(\"/tmp/pudu-effect-test.txt\", \"x\")"
+  readBack <- evaluate "readFile(\"/tmp/pudu-effect-test.txt\")"
+  missing <- evaluate "readFile(\"/tmp/pudu-no-such-file-4c3b2a\")"
+  present <- evaluate "fileExists(\"/tmp/pudu-effect-test.txt\")"
+  absent <- evaluate "fileExists(\"/tmp/pudu-no-such-file-4c3b2a\")"
+  removed <- evaluate "removeFile(\"/tmp/pudu-effect-test.txt\")"
+  ticking <- evaluate "clock() >= 0"
+  atCompileTime <- codesOfConstant "fileExists(\"/etc/hosts\")"
+  pure $ conjoin
+    [ counterexample "writing answers with success" (written === "Ok(())")
+    , counterexample "reading answers with the contents" (readBack === "Ok(\"x\")")
+    , counterexample "a missing file is a failure, not a crash"
+        (property (Text.isPrefixOf "Err(" missing))
+    , counterexample "a present path is reported" (present === "true")
+    , counterexample "an absent path is reported" (absent === "false")
+    , counterexample "removing answers with success" (removed === "Ok(())")
+    , counterexample "the clock moves forward" (ticking === "true")
+    , counterexample "a constant may not reach the world" (atCompileTime === ["E7009"])
+    ]
+
+{-| The diagnostics a module-scope constant produces, which is the compile-time
+    evaluation path. -}
+codesOfConstant :: Text -> IO [Text]
+codesOfConstant expression = do
+  source <-
+    newSource (SourceName "constant.pudu")
+      (Text.unlines ["module M", "const VALUE: Bool = " <> expression])
+  result <- runCompile source
+  pure (map (diagnosticCodeText . diagnosticCode) (compileDiagnostics result))
+
 testTextMethods :: IO Property
 testTextMethods = do
   upper <- evaluate "\"aB\".toUpper()"
@@ -504,7 +541,7 @@ outcomeOfWithEntry opening declarations statements expression = do
               <> [expression, "}"]
           )
   source <- newSource (SourceName "eval.pudu") buffer
-  let result = runCompile source
+  result <- runCompile source
   case compileModule result of
     Nothing ->
       pure
@@ -512,7 +549,7 @@ outcomeOfWithEntry opening declarations statements expression = do
           { outcomeValue = Nothing
           , outcomeDiagnostics = compileDiagnostics result
           }
-    Just parsed -> pure (evaluateEntryPoint "__entry" parsed)
+    Just parsed -> evaluateEntryPoint "__entry" parsed
 
 renderCodes :: EvalOutcome -> Text
 renderCodes outcome =

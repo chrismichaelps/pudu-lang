@@ -37,7 +37,21 @@ preludeTypeNames =
     constructors of the wired-in `Option` and `Result` sums: their types exist
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
-preludeValueNames = ["panic", "charFromCode", "mapOf", "setOf", "show", "Some", "None", "Ok", "Err"]
+preludeValueNames =
+  [ "panic", "charFromCode", "mapOf", "setOf", "show"
+  , "Some", "None", "Ok", "Err"
+  ]
+    <> effectValueNames
+
+{-| The effects the runtime provides, which are prelude values like any other:
+    a module may shadow one, and an explicit prelude import replaces them all. -}
+effectValueNames :: [Text]
+effectValueNames =
+  [ "print", "printError", "readLine"
+  , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
+  , "listDirectory", "createDirectory"
+  , "arguments", "environment", "exit", "clock"
+  ]
 
 {-| The implicit import is suppressed by an explicit import of the same module,
     matching how an explicit `import Prelude` overrides the implicit one in

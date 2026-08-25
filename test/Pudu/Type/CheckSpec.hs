@@ -1520,4 +1520,4 @@ codesOf result = map (diagnosticCodeText . diagnosticCode) (compileDiagnostics r
 compile :: Text -> IO CompileResult
 compile source = do
   snapshot <- newSource (SourceName "type.pudu") source
-  pure (runCompile snapshot)
+  runCompile snapshot

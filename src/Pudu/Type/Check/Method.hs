@@ -4,6 +4,7 @@ module Pudu.Type.Check.Method
   , declareMethods
   , declareInterfaceMethods
   , declareBuiltinConstructors
+  , effectNames
   , dischargeObligations
   , methodScheme
   , functionRigid
@@ -53,6 +54,7 @@ import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
 import Pudu.Type.Value
   ( NominalId (..)
   , Scheme
+  , boolType
   , charType
   , integerType
   , stringType
@@ -290,6 +292,13 @@ declareBuiltinConstructors = do
       implemented for each. -}
   bindName "show"
     (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+  {-| The effects a program may perform.
+
+      Each answers with `Result[T, Str]` rather than failing: the language has
+      no exceptions, so a missing file is an outcome a caller handles. The
+      failure carries what the operating system said, which is more useful to a
+      program's own user than a message this compiler invented. -}
+  mapM_ (uncurry bindName) effectSignatures
   bindName "setOf"
     ( polytype ["T"] []
         ( FunctionTypeValue False
@@ -300,6 +309,38 @@ declareBuiltinConstructors = do
  where
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
+
+{-| The type of every effect the runtime provides.
+
+    Listed here and nowhere else, so the checker and the evaluator cannot
+    disagree about which names exist or what they answer with. -}
+effectSignatures :: [(Text, Scheme)]
+effectSignatures =
+  [ ("print", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("printError", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("readLine", monotype (FunctionTypeValue False [] (resultOf (optionOf stringType))))
+  , ("readFile", monotype (FunctionTypeValue False [stringType] (resultOf stringType)))
+  , ("writeFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("appendFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
+  , ("fileExists", monotype (FunctionTypeValue False [stringType] boolType))
+  , ("removeFile", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
+  , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("arguments", monotype (FunctionTypeValue False [] (arrayOf stringType)))
+  , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
+  , ("exit", monotype (FunctionTypeValue False [integerType] UnitTypeValue))
+  , ("clock", monotype (FunctionTypeValue False [] integerType))
+  ]
+ where
+  resultOf held = NominalType "Result" [held, stringType]
+  optionOf held = NominalType "Option" [held]
+  arrayOf held = NominalType "Array" [held]
+  unitTypeValue = UnitTypeValue
+
+{-| The names the effects are bound under, for the prelude and the compile-time
+    purity check that must know them. -}
+effectNames :: [Text]
+effectNames = map fst effectSignatures
 
 {-| The trait bounds a function's generic parameters carry, from the parameter
     list and from its `where` clause alike: both are obligations a call must

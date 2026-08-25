@@ -34,6 +34,17 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- Evaluation runs over `IO`. A program reads a file, writes to its output, and asks its environment
+  questions; running over `IO` is what lets it, rather than a second interpreter existing beside
+  this one for the effectful half of the language.
+- **Compile-time evaluation runs the same interpreter with effects denied.** A constant is folded
+  while the compiler runs, and letting it read a file would make compilation depend on the world the
+  compiler happened to be in, and would produce output nobody asked for. `E7009` reports the
+  refusal, naming the boundary rather than the operation, because every operation behind it is
+  refused for one reason.
+- Every effect answers with `Result[T, Str]`. `exit` is the only one that does not, because a
+  program that asked to stop has nothing left to decide.
+
 - A function literal captures the environment it was written in; a declaration does not. A
   declaration is called in the environment it is called from, which is what lets a module's functions
   see each other and an imported module's frame stay reachable. A literal may be returned, stored,

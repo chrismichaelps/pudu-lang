@@ -308,7 +308,7 @@ emptyResolution =
 compile :: [Text] -> IO CompileResult
 compile inputLines = do
   source <- newSource (SourceName "resolve.pudu") (Text.unlines inputLines)
-  pure (runCompile source)
+  runCompile source
 
 codes :: (Resolution, [Diagnostic]) -> [Text]
 codes (_, diagnostics) = map (diagnosticCodeText . diagnosticCode) diagnostics

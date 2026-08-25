@@ -1,6 +1,7 @@
 {-| @Eval.Value.Module — models runtime values -}
 module Pudu.Eval.Value
   ( Builtin (..)
+  , builtinName
   , ArrayMethod (..)
   , CharMethod (..)
   , MapMethod (..)
@@ -54,6 +55,29 @@ data Value
   | SetMethodValue !SetMethod !Value
   deriving stock (Eq, Show)
 
+{-| The name a built-in answers to, which is the name it was bound under. -}
+builtinName :: Builtin -> Text
+builtinName value = case value of
+  PanicBuiltin -> "panic"
+  CharFromCodeBuiltin -> "charFromCode"
+  MapOfBuiltin -> "mapOf"
+  SetOfBuiltin -> "setOf"
+  ShowBuiltin -> "show"
+  PrintBuiltin -> "print"
+  PrintErrorBuiltin -> "printError"
+  ReadLineBuiltin -> "readLine"
+  ReadFileBuiltin -> "readFile"
+  WriteFileBuiltin -> "writeFile"
+  AppendFileBuiltin -> "appendFile"
+  FileExistsBuiltin -> "fileExists"
+  RemoveFileBuiltin -> "removeFile"
+  ListDirectoryBuiltin -> "listDirectory"
+  CreateDirectoryBuiltin -> "createDirectory"
+  ArgumentsBuiltin -> "arguments"
+  EnvironmentBuiltin -> "environment"
+  ExitBuiltin -> "exit"
+  ClockBuiltin -> "clock"
+
 {-| A wired-in function the evaluator recognizes by name rather than by closure.
     `panic` is the prelude's unrecoverable abort: it takes a message and stops
     evaluation with `E7007`, matching [[architecture/SEMANTICS]]'s rule that
@@ -64,6 +88,20 @@ data Builtin
   | MapOfBuiltin
   | SetOfBuiltin
   | ShowBuiltin
+  | PrintBuiltin
+  | PrintErrorBuiltin
+  | ReadLineBuiltin
+  | ReadFileBuiltin
+  | WriteFileBuiltin
+  | AppendFileBuiltin
+  | FileExistsBuiltin
+  | RemoveFileBuiltin
+  | ListDirectoryBuiltin
+  | CreateDirectoryBuiltin
+  | ArgumentsBuiltin
+  | EnvironmentBuiltin
+  | ExitBuiltin
+  | ClockBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
@@ -225,6 +263,7 @@ renderValue value = case value of
   BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
   BuiltinValue SetOfBuiltin -> "<builtin setOf>"
   BuiltinValue ShowBuiltin -> "<builtin show>"
+  BuiltinValue other -> "<builtin " <> builtinName other <> ">"
   MapValue entries ->
     "{" <> Text.intercalate ", " [renderValue key <> ": " <> renderValue held | (key, held) <- entries] <> "}"
   SetValue members -> "#{" <> Text.intercalate ", " (map renderValue members) <> "}"
