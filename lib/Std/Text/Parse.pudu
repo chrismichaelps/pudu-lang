@@ -22,7 +22,7 @@ export type Parser[T] = fn(Input) -> Step[T]
 /// Text left over is a problem: a caller that wanted a prefix says so with
 /// `partial`, and one that did not would otherwise accept a truncated parse.
 export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
-  match parser(Input { text: text, position: 0 }) {
+  match parser(Input{text: text, position: 0}) {
     case Err(problem) => Err(problem)
     case Ok(pair) => {
       if pair[1].position < text.length() {
@@ -36,7 +36,7 @@ export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
 
 /// Run a parser over text, allowing input to remain.
 export fn partial[T](parser: Parser[T], text: Str) -> Result[(T, Int), Problem] {
-  match parser(Input { text: text, position: 0 }) {
+  match parser(Input{text: text, position: 0}) {
     case Err(problem) => Err(problem)
     case Ok(pair) => Ok((pair[0], pair[1].position))
   }

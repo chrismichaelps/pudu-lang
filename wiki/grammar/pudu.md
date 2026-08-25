@@ -69,6 +69,7 @@ trait_decl       = "trait", upper_ident, type_params?, where_clause?, "{", trait
 trait_member     = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression)? ;
 impl_decl        = "impl", type_params?, type_ref, "for", type_ref, where_clause?, "{", function_decl*, "}" ;
+(* impl[T] Holds[T] for Boxed[T] — the parameters bind across the trait and the target *)
 ```
 
 Rules:
@@ -163,8 +164,6 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
 - A method may be called qualified by the type that implements it or by the trait that declares it: `Bot.label(&bot)` and `Speak.label(&bot)` both select `label`. The trait form is how a program picks one provider when several traits declare the same member for one type.
 - A qualified call passes the receiver as an ordinary first argument, so a method declared with `self: &Self` takes a borrow. Method-call syntax borrows the receiver for you; the qualified form does not, because it is an ordinary call.
-- A trait may carry its own type parameters, written `trait Holds[T] { ... }`, and an implementation says what they are for the type it is written for: `impl Holds[Int] for Box`. The parameters are rigid inside the trait's members, exactly as a function's own parameters are inside its body.
-- A trait-qualified call is typed from the implementation it will run, not from the trait's declaration. `Holds.get(&box)` has the result `Box`'s implementation gives it, because the declaration deliberately leaves that open and only the implementation closes it. This is the same selection the evaluator makes for the same call.
 - Declaring the same member in two traits for one type is legal. Only an unqualified call has to choose, and that call is rejected until it is written qualified.
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.
@@ -174,6 +173,10 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - A label may name only a loop (`E1053`). A `break` or `continue` outside every loop is `E2016`, and one naming a label no enclosing loop carries is `E2017`; both are reported before the program runs. A label repeating one already enclosing it is `W2002` — the inner one wins, but the outer loop can no longer be named.
 - A function body is never inside a loop that encloses its definition: a closure may outlive the loop entirely, so a `break` written in one is `E2016`.
 - Sum variants are namespaced by their type; qualification is required when ambiguous.
+- **A type declaration's parameters are instantiated at every use.** `type Boxed[T] = { value: T }` makes `Boxed{value: 7}` a `Boxed[Int]`, and reading `value` from it gives `Int` — not the declaration's parameter, which nothing could ever satisfy. This holds for records exactly as it already did for sums, and in every position a type is used: construction, field access, and patterns.
+- **An implementation may carry its own type parameters**, written `impl[T] Trait[T] for Boxed[T]`. Inside it, `Self` is the target *with its arguments* — `Boxed[T]`, not a bare `Boxed` — and the implementation's parameters are rigid in its methods, exactly as a function's are inside its body. Bounds written on those parameters are in force there too, so `impl[N: Ord + Add] Sequence[N, N] for Range[N]` may call what `Ord` and `Add` promise.
+- A trait may carry its own type parameters, written `trait Holds[T] { ... }`, and an implementation says what they are for the type it is written for: `impl Holds[Int] for Box`. The parameters are rigid inside the trait's members.
+- A trait-qualified call is typed from the implementation it will run, not from the trait's declaration. `Holds.get(&box)` has the result `Box`'s implementation gives it, because the declaration deliberately leaves that open and only the implementation closes it. This is the same selection the evaluator makes for the same call.
 - Matches are exhaustive for closed types. A guarded arm does not contribute exhaustiveness because its guard may be false.
 - Pattern alternatives must bind identical names with identical inferred types.
 - `_` ignores a value and never binds.
@@ -229,7 +232,18 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 ## Iteration and Control Flow
 
-- `for pattern in expression` desugars through the `IntoIterator`/`Iterator` traits exactly once.
+- `for pattern in expression` binds the pattern at the **element type of what is iterated**, which is decided by the value beside it and never left open. An `Array[T]` yields `T`, a `Str` yields `Char`, a `Set[T]` yields `T`, a `Map[K, V]` yields `(K, V)`, a tuple yields its members' common type, and a sum yields the type its variants carry — which is what makes an `Option[T]` a sequence of nought or one `T`. A tuple or sum whose members disagree is rejected, because one binder cannot hold two types.
+- A user type is iterated through `Std.Iter.Sequence`, which is `begin` and `advance`:
+
+  ```pudu
+  export trait Sequence[S, T] {
+    fn begin(self: &Self) -> S
+    fn advance(self: &Self, state: S) -> Option[(S, T)]
+  }
+  ```
+
+  `begin` answers the state to start from and `advance` answers the next item and the state after it, or `None` when the sequence is finished. The state is **passed rather than mutated**, so a sequence is an ordinary value: two walks of the same value see the same items. A type with no such implementation reports `E3030` at the `for` rather than part way through one.
+- The element type a `for` binds over a user type is read from that type's own `advance`, so the type the checker binds is the type the loop actually produces.
 - Iterator adapters are lazy; terminal collection/consumption drives them.
 - `while` reevaluates its condition before each iteration.
 - `loop` takes the type of what its `break` statements carry, so a search with no natural end is still an expression: `let found = loop { ... break value }`. A `loop` no `break` leaves does not finish, and its type is `Never`, which stands wherever any type is wanted. A `break` carrying nothing carries `()`.

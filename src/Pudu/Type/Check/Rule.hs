@@ -37,6 +37,7 @@ import Pudu.Type.Env
   , ambiguousProviders
   , lookupField
   , lookupName
+  , lookupTypeParams
   , negateIntegerLiteral
   , report
   , rigidBoundsOf
@@ -113,6 +114,21 @@ enclosingFunctionType binding = do
   case found of
     Just (Scheme _ _ (FunctionTypeValue asynchronous _ result)) -> pure (asynchronous, result)
     _ -> (,) False <$> freshVariable
+
+{-| Replace a declaration's rigid parameters with a use's arguments. -}
+substituteRigidType :: [(Text, Type)] -> Type -> Type
+substituteRigidType replacements typeValue = case typeValue of
+  RigidType name -> maybe typeValue id (lookup name replacements)
+  NominalType name arguments ->
+    NominalType name (map (substituteRigidType replacements) arguments)
+  TupleTypeValue members -> TupleTypeValue (map (substituteRigidType replacements) members)
+  FunctionTypeValue asynchronous inputs result ->
+    FunctionTypeValue asynchronous
+      (map (substituteRigidType replacements) inputs)
+      (substituteRigidType replacements result)
+  ReferenceTypeValue mutable target ->
+    ReferenceTypeValue mutable (substituteRigidType replacements target)
+  other -> other
 
 tryType :: Span -> Type -> Type -> Checker Type
 tryType spanValue targetType declaredResult = do
@@ -353,10 +369,18 @@ memberType spanValue targetType member = do
     NominalType "Char" [] -> charMethodType spanValue member
     NominalType "Map" [key, held] -> mapMethodType spanValue member key held
     NominalType "Set" [element] -> setMethodType spanValue member element
-    NominalType name _ -> do
+    {-| A field of a generic record carries the arguments the value was built
+        with, not the declaration's rigid parameters: reading `value` from a
+        `Boxed[Int]` gives `Int`. -}
+    NominalType name arguments -> do
       fields <- lookupField name
       case fields >>= lookup member of
-        Just found -> pure found
+        Just found -> do
+          parameters <- maybe [] id <$> lookupTypeParams name
+          pure $
+            if length parameters == length arguments
+              then substituteRigidType (zip parameters arguments) found
+              else found
         Nothing -> methodType spanValue name member
     RigidType name -> do
       bounds <- rigidBoundsOf name

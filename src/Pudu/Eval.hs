@@ -1374,17 +1374,62 @@ evaluateLoop spanValue label body = loop (0 :: Int)
           Escape transfer -> unwind transfer
           Finished -> loop (iterations + 1)
 
-{-| Iteration is defined over the values the evaluator can enumerate without a
-    trait system: tuples and strings. Anything else reports that iteration is
-    not yet available for it. -}
+{-| Iterate a value.
+
+    The shapes the evaluator can enumerate directly — arrays, tuples, strings,
+    a variant's payload — are walked as a list. Anything else is asked whether
+    it is a sequence: a type carrying `begin` and `advance` produces its items
+    one at a time, which is how a user type becomes iterable without the
+    evaluator knowing anything about it.
+
+    The protocol passes state rather than mutating it. `begin` answers the
+    state to start from and `advance` answers the next item and the state after
+    it, so an iterator is an ordinary value in a language whose values are
+    ordinary. -}
 evaluateFor :: Span -> Maybe Text -> Located Pattern -> Value -> Located Block -> Evaluator Value
 evaluateFor spanValue label binder iterated body = case elements of
-  Nothing ->
-    abortAt (Just spanValue) "E7001"
-      ("cannot iterate a " <> valueKind iterated)
-      (Just "iteration over user types arrives with the trait system")
+  Nothing -> do
+    sequenced <- sequenceMethods iterated
+    case sequenced of
+      Just (begin, advance) -> do
+        start <- callClosureValue spanValue begin [iterated]
+        walk advance start (0 :: Int)
+      Nothing ->
+        abortAt (Just spanValue) "E7001"
+          ("cannot iterate a " <> valueKind iterated)
+          ( Just
+              ( "implement Std.Iter.Sequence for it, which is begin and advance, "
+                  <> "or convert it to an array first"
+              )
+          )
   Just values -> step values
  where
+  {-| Walk a sequence one item at a time, threading the state each `advance`
+      answers with. The step limit is the loop's, because a sequence that never
+      ends is a loop that never ends. -}
+  walk advance state iterations
+    | iterations > iterationLimit =
+        abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
+          (Just "the interactive evaluator bounds iteration; end the sequence or break")
+    | otherwise = do
+        stepped <- callClosureValue spanValue advance [iterated, state]
+        case stepped of
+          VariantValue "None" _ -> pure UnitValue
+          VariantValue "Some" [TupleValue [nextState, item]] ->
+            case matchPattern binder item of
+              Nothing -> walk advance nextState (iterations + 1)
+              Just bindings -> do
+                outcome <- withFrame bindings (catchUnwind (evaluateBlock body))
+                case transferFor label outcome of
+                  Stop _ -> pure UnitValue
+                  Again -> walk advance nextState (iterations + 1)
+                  Escape transfer -> unwind transfer
+                  Finished -> walk advance nextState (iterations + 1)
+          other ->
+            abortAt (Just spanValue) "E7001"
+              ("advance must answer Option[(State, Item)], not a " <> valueKind other)
+              Nothing
+
   elements = case iterated of
     TupleValue members -> Just members
     ArrayValue members -> Just (toList members)
@@ -1402,6 +1447,25 @@ evaluateFor spanValue label binder iterated body = case elements of
           Again -> step rest
           Escape transfer -> unwind transfer
           Finished -> step rest
+
+{-| The `begin` and `advance` a value's own type provides, when it provides
+    both. A type with only one of them is not a sequence, and saying so here
+    keeps the failure at the `for` rather than inside it. -}
+sequenceMethods :: Value -> Evaluator (Maybe (Value, Value))
+sequenceMethods value = case receiverOwner value of
+  Nothing -> pure Nothing
+  Just owner -> do
+    begin <- lookupName (owner <> ".begin")
+    advance <- lookupName (owner <> ".advance")
+    pure ((,) <$> begin <*> advance)
+
+{-| Apply a method value the evaluator found by name. -}
+callClosureValue :: Span -> Value -> [Value] -> Evaluator Value
+callClosureValue spanValue callee arguments = case callee of
+  FunctionValue closure -> callClosure closure arguments (Just spanValue)
+  other ->
+    abortAt (Just spanValue) "E7001"
+      ("a sequence method must be a function, not a " <> valueKind other) Nothing
 
 {-| @Eval.LoopTransfer — what a loop body's outcome means to the loop. -}
 data LoopTransfer

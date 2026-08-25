@@ -1,0 +1,162 @@
+module UsesIter
+
+import Std.Iter as I
+
+/// A whole-number range, walked by `for` through the trait rather than by any
+/// knowledge the evaluator has of ranges.
+fn rangeWalks() -> Bool {
+  var total = 0
+  for n in I.range(1, 5) {
+    total = total + n
+  }
+  total == 10
+}
+
+/// The same range type at a different width. Nothing here is fixed to `Int`:
+/// a caller counting in `UInt8` stays in `UInt8`.
+fn widthIsTheCallersChoice() -> Bool {
+  var total = 0u8
+  for n in I.range(1u8, 4u8) {
+    total = total + n
+  }
+  total == 6u8
+}
+
+/// An array walk carries the array's own element type.
+fn itemsCarryTheirType() -> Bool {
+  var joined = ""
+  for word in I.items(["a", "b", "c"]) {
+    joined = joined + word
+  }
+  joined == "abc"
+}
+
+fn indexedPairsPositionWithItem() -> Bool {
+  var total = 0
+  for pair in I.indexed([10, 20, 30]) {
+    total = total + pair[0] * pair[1]
+  }
+  total == 80
+}
+
+fn repeatYieldsTheSameItem() -> Bool {
+  var seen = 0
+  for word in I.repeat("x", 4) {
+    if word == "x" { seen = seen + 1 }
+  }
+  seen == 4
+}
+
+/// A sequence a program declares itself, with no relationship to anything in
+/// the library beyond implementing the trait.
+type Countdown = { from: Int }
+
+impl I.Sequence[Int, Int] for Countdown {
+  fn begin(self: &Self) -> Int { self.from }
+  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {
+    if state > 0 { Some((state - 1, state)) } else { None }
+  }
+}
+
+fn ownSequenceWalks() -> Bool {
+  var order = ""
+  for n in (Countdown{from: 3}) {
+    order = order + display(n)
+  }
+  order == "321"
+}
+
+/// A sequence whose state is not a number, which is the point of letting the
+/// implementation choose it.
+type Fib = { limit: Int }
+
+impl I.Sequence[(Int, Int), Int] for Fib {
+  fn begin(self: &Self) -> (Int, Int) { (0, 1) }
+  fn advance(self: &Self, state: (Int, Int)) -> Option[((Int, Int), Int)] {
+    if state[0] > self.limit {
+      None
+    } else {
+      Some(((state[1], state[0] + state[1]), state[0]))
+    }
+  }
+}
+
+fn statefulSequenceWalks() -> Bool {
+  var total = 0
+  for n in (Fib{limit: 20}) {
+    total = total + n
+  }
+  total == 33
+}
+
+/// `break` and a labelled `continue` work over a user sequence exactly as they
+/// do over an array, because the loop is the same loop.
+fn transfersWorkOverASequence() -> Bool {
+  var counted = 0
+  for n in I.range(0, 100) {
+    if n == 5 { break }
+    counted = counted + 1
+  }
+  var skipped = 0
+  @outer for a in I.range(0, 3) {
+    for b in I.range(0, 3) {
+      if b == 2 { continue @outer }
+      skipped = skipped + 1
+    }
+  }
+  counted == 5 && skipped == 6
+}
+
+/// Walking the same value twice sees the same items, because the state is
+/// passed rather than held.
+fn sequencesAreOrdinaryValues() -> Bool {
+  let counting = I.range(1, 4)
+  var first = 0
+  for n in counting {
+    first = first + n
+  }
+  var second = 0
+  for n in counting {
+    second = second + n
+  }
+  first == 6 && second == 6
+}
+
+/// A bound of `Sequence` works like any other bound, so a function may be
+/// written once for every sequence there will ever be.
+fn boundsReachAnySequence() -> Bool {
+  I.toArray(&I.range(1, 4)).length() == 3 &&
+  I.count(&I.repeat("x", 5)) == 5 &&
+  I.isEmpty(&I.range(3, 3))
+}
+
+/// An `Option` is a sequence of nought or one, which falls out of a sum's
+/// payload being what its walk carries.
+fn optionIsASequenceOfNoughtOrOne() -> Bool {
+  var seen = 0
+  let present: Option[Int] = Some(7)
+  for n in present {
+    seen = seen + n
+  }
+  let absent: Option[Int] = None
+  for n in absent {
+    seen = seen + 100
+  }
+  seen == 7
+}
+
+export fn main() -> Int {
+  var passed = 0
+  if rangeWalks() { passed = passed + 1 }
+  if widthIsTheCallersChoice() { passed = passed + 1 }
+  if itemsCarryTheirType() { passed = passed + 1 }
+  if indexedPairsPositionWithItem() { passed = passed + 1 }
+  if repeatYieldsTheSameItem() { passed = passed + 1 }
+  if ownSequenceWalks() { passed = passed + 1 }
+  if statefulSequenceWalks() { passed = passed + 1 }
+  if transfersWorkOverASequence() { passed = passed + 1 }
+  if sequencesAreOrdinaryValues() { passed = passed + 1 }
+  if boundsReachAnySequence() { passed = passed + 1 }
+  if optionIsASequenceOfNoughtOrOne() { passed = passed + 1 }
+  passed
+}

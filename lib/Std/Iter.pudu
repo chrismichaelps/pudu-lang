@@ -1,0 +1,159 @@
+module Std.Iter
+
+import Std.Num {Add, One, Zero}
+import Std.Order {Ord}
+
+/// A value that produces a sequence of items.
+///
+/// `S` is the state the walk carries and `T` is what it yields. `begin` answers
+/// the state to start from; `advance` answers the next item and the state after
+/// it, or `None` when the sequence is finished.
+///
+/// The state is passed rather than mutated, so a sequence is an ordinary value:
+/// it can be held, copied, and started again without anything having changed
+/// underneath. Two walks of the same value see the same items.
+///
+/// `for item in value` uses this. A type implementing it is iterable with no
+/// further ceremony, and a type that is not says so at the `for` rather than
+/// part way through one.
+export trait Sequence[S, T] {
+  fn begin(self: &Self) -> S
+  fn advance(self: &Self, state: S) -> Option[(S, T)]
+}
+
+/// A half-open range of whole numbers, from `first` up to but not including
+/// `last`.
+///
+/// Generic over the integer family rather than fixed to `Int`: a range of
+/// `UInt8` indices is a range, and a caller working in one width should not
+/// have to leave it to count.
+export type Range[N] = { first: N, last: N }
+
+/// The numbers from `first` up to but not including `last`.
+export fn range[N](first: N, last: N) -> Range[N] {
+  Range{first: first, last: last}
+}
+
+impl [N: Ord + Add + One] Sequence[N, N] for Range[N] {
+  fn begin(self: &Self) -> N { self.first }
+  fn advance(self: &Self, state: N) -> Option[(N, N)] {
+    if state.before(&self.last) {
+      Some((state.plus(&state.one()), state))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk over an array's items.
+///
+/// The element type is the array's own. Fixing it to one type would make the
+/// whole module useless for every array that is not of that type, which is the
+/// mistake this type exists to avoid.
+export type Items[T] = { values: Array[T] }
+
+/// Walk an array's items.
+export fn items[T](values: Array[T]) -> Items[T] { Items{values: values} }
+
+impl [T] Sequence[Int, T] for Items[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.values.length() {
+      Some((state + 1, self.values[state]))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk over an array's items paired with their positions.
+export type Indexed[T] = { values: Array[T] }
+
+/// Pair each of an array's items with its position.
+export fn indexed[T](values: Array[T]) -> Indexed[T] { Indexed{values: values} }
+
+impl [T] Sequence[Int, (Int, T)] for Indexed[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, (Int, T))] {
+    if state < self.values.length() {
+      Some((state + 1, (state, self.values[state])))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk that yields the same item a fixed number of times.
+export type Repeated[T] = { item: T, times: Int }
+
+/// The same value, `count` times.
+export fn repeat[T](item: T, times: Int) -> Repeated[T] {
+  Repeated{item: item, times: times}
+}
+
+impl [T] Sequence[Int, T] for Repeated[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.times { Some((state + 1, self.item)) } else { None }
+  }
+}
+
+/// A walk that yields nothing.
+export type Empty[T] = { unused: Int }
+
+/// The sequence with no items.
+export fn empty[T]() -> Empty[T] { Empty{unused: 0} }
+
+impl [T] Sequence[Int, T] for Empty[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] { None }
+}
+
+/// Collect a sequence into an array.
+///
+/// Bounded by `Sequence` rather than written for one type, so it works for any
+/// sequence a program declares as well as for the ones here.
+export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
+  var out = []
+  var state = Sequence.begin(source)
+  loop {
+    match Sequence.advance(source, state) {
+      case Some(pair) => {
+        state = pair[0]
+        out = out.push(pair[1])
+      }
+      case None => { break }
+    }
+  }
+  out
+}
+
+/// How many items a sequence yields.
+export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
+  toArray(source).length()
+}
+
+/// Whether a sequence yields nothing.
+export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
+  count(source) == 0
+}
+
+/// The sum of a sequence's items.
+export fn sum[S, N: Zero + Add, Q: Sequence[S, N]](source: &Q) -> N {
+  var total = zeroOf(source)
+  for item in toArray(source) {
+    total = total.plus(&item)
+  }
+  total
+}
+
+/// The additive identity of a sequence's item type, taken from the type itself
+/// rather than assumed to be a whole number.
+fn zeroOf[S, N: Zero + Add, Q: Sequence[S, N]](source: &Q) -> N {
+  let values = toArray(source)
+  if values.length() == 0 {
+    panic("a sum needs an item to take its zero from")
+  } else {
+    values[0].zero()
+  }
+}

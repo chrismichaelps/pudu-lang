@@ -7,11 +7,11 @@ module UsesLabels
 /// the outer loop to start the next one.
 fn findCell(grid: Array[Array[Int]], wanted: Int) -> Int {
   var found = -1
-    @ rows for row in grid {
+  @rows for row in grid {
     for cell in row {
       if cell == wanted {
         found = cell
-        break @ rows
+        break @rows
       }
     }
   }
@@ -34,10 +34,10 @@ fn firstPowerOverTwo(base: Int) -> Int {
 /// so the rest of the outer iteration is skipped too.
 fn countUntilNegative(grid: Array[Array[Int]]) -> Int {
   var seen = 0
-    @ rows for row in grid {
+  @rows for row in grid {
     for cell in row {
       if cell < 0 {
-        continue @ rows
+        continue @rows
       }
       seen = seen + 1
     }

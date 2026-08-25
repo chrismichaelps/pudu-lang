@@ -161,7 +161,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-seven modules, 792 documented exports, every one written in Pudu.
+Twenty-eight modules, 807 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -171,6 +171,7 @@ Twenty-seven modules, 792 documented exports, every one written in Pudu.
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
 | `Std.Num` | 24 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Iter` | 15 | the `Sequence` trait `for` walks, and the sequences over ranges, arrays, and repetition |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
@@ -199,6 +200,35 @@ The numeric surface is **generic, bounded by traits**, not `Int`-only. `Std.Orde
 `Ord`, `Std.Num` carries `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
 `Bits` — each implemented across the integer family and, where it makes sense, both floating widths
 and `Str`, `Char`, and `Bool`.
+
+### `Std.Iter`
+
+`for item in value` had only ever worked for shapes the evaluator knew by name. `Std.Iter` is the
+trait that opens it to anything:
+
+```pudu
+export trait Sequence[S, T] {
+  fn begin(self: &Self) -> S
+  fn advance(self: &Self, state: S) -> Option[(S, T)]
+}
+```
+
+The state is **passed rather than mutated**, which is the decision the rest of the module follows
+from. An iterator is then an ordinary value: it can be held, copied, and walked twice, and both
+walks see the same items. A protocol built on a mutable cursor would make an iterator the one value
+in the language that quietly changes when you look at it.
+
+Nothing here is fixed to `Int`. `Range[N]` is generic over the integer family so a caller counting
+in `UInt8` stays in `UInt8`, and `Items[T]`, `Indexed[T]`, and `Repeated[T]` carry the caller's own
+element type. Fixing any of them to one type would have made the module useless for every other —
+the same mistake [[ADR-0006]] was written to stop.
+
+The functions over sequences are bounded by the trait rather than written per type, so `toArray`,
+`count`, and `isEmpty` work for every sequence a program will ever declare:
+
+```pudu
+export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T]
+```
 
 ### `Std.Decimal`
 

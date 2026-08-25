@@ -34,6 +34,8 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- A value the evaluator cannot enumerate directly is asked whether it is a sequence: a type carrying `begin` and `advance` produces its items one at a time. The protocol passes state rather than mutating it, so an iterator is an ordinary value and two walks of the same one see the same items. A type with only one of the two methods is not a sequence, and saying so at the `for` keeps the failure out of the middle of a loop.
+
 - A type argument is **not erased before the call that carries it**. Types have no run-time form,
   but the syntax the reader wrote is still in the tree, and `convertInteger` needs to know which type
   it was asked for. Reading it is not the evaluator knowing about types; it is the evaluator reading

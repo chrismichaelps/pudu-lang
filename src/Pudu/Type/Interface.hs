@@ -131,10 +131,19 @@ exportedBindings declarations =
     generic unusable across modules: `Std.List.sum` is bounded by `Add`, whose
     implementations live in `Std.Num`, and a caller importing only `Std.List`
     was told `Int does not implement Add` about a program in which it plainly
-    does. -}
+    does.
+
+    **The consumer's own module is removed.** Its implementations are declared
+    by the local pass, and declaring them a second time through the interface
+    path made every one of them collide with itself: a module that implemented
+    an imported trait for its own type was told the method was ambiguous, which
+    made `impl Eq for MyType` impossible to write outside the module that
+    declared `Eq`. -}
 importsFor :: Map ModuleName TypeInterface -> Module -> ImportTypes
 importsFor available consumer =
-  (foldMap one (moduleImports consumer)){importedInterfaces = Map.elems available}
+  (foldMap one (moduleImports consumer))
+    { importedInterfaces = Map.elems (Map.delete (locatedValue (moduleName consumer)) available)
+    }
  where
   one (Located _ value) =
     case Map.lookup (locatedValue (importModule value)) available of
