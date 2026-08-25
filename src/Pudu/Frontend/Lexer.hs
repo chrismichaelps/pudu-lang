@@ -1,5 +1,5 @@
 {-| @Source.Lexer.Module — exposes total lossless tokenization -}
-module Pudu.Frontend.Lexer (LexResult (..), lexSource) where
+module Pudu.Frontend.Lexer (LexResult (..), lexSource, scanOne) where
 
 import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe, mapMaybe)
@@ -36,10 +36,15 @@ drive cursor
   | cursorAtEnd cursor = completeCursor cursor
   | otherwise = scanOne cursor >>= drive
 
+{-| Scan one token.
+
+    Exposed because an interpolation's expression is lexed by it, and because a
+    test of the quoted scanner needs the same scanner the lexer uses rather than
+    a stand-in that would agree with it only by accident. -}
 scanOne :: LexerCursor -> Maybe LexerCursor
 scanOne cursor =
   scanTrivia cursor
-    <|> scanQuoted cursor
+    <|> scanQuoted scanOne cursor
     <|> scanNumber cursor
     <|> scanIdentifier cursor
     <|> scanSymbol cursor

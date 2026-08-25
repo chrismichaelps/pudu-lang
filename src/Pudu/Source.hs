@@ -44,6 +44,12 @@ data SourceIdentity = SourceIdentity
 instance Eq SourceIdentity where
   left == right = identityUnique left == identityUnique right
 
+{-| Sources order by the identity they were given, which is stable within a run
+    and means nothing beyond that. It exists so values carrying a span can be
+    ordered at all, not because one source precedes another. -}
+instance Ord SourceIdentity where
+  compare left right = compare (identityUnique left) (identityUnique right)
+
 {-| @Source.Text.Value — pairs an immutable snapshot with cached bounds -}
 data Source = Source
   { sourceIdentity :: !SourceIdentity
@@ -63,6 +69,16 @@ instance Eq Span where
     spanIdentity left == spanIdentity right
       && spanStart left == spanStart right
       && spanEnd left == spanEnd right
+
+{-| Spans order by where they start and then by where they end, within one
+    source. Across two sources the order is by identity and means nothing beyond
+    being stable — which is all an ordering on spans is ever asked for, since
+    comparing positions in different files is not a question with an answer. -}
+instance Ord Span where
+  compare left right =
+    compare (spanIdentity left) (spanIdentity right)
+      <> compare (spanStart left) (spanStart right)
+      <> compare (spanEnd left) (spanEnd right)
 
 instance Show Source where
   show source =

@@ -27,6 +27,18 @@ scanQuoted :: LexerCursor -> Maybe LexerCursor
 
 ## Governance
 
+- `{ expression }` inside a string is an interpolation. Its expression is lexed by the **same
+  scanner** as everything else, from the same source, so its tokens carry real spans and a
+  diagnostic inside an interpolation points at the interpolation rather than at a copy of it.
+- The scanner is **injected**, not imported. Importing the whole lexer into one of its own pieces
+  would tie the two together for a single construct; it is the same shape the parser uses for
+  blocks, and for the same reason.
+- Braces nest and a nested string is respected, so `"{ f("}") }"` scans the way a reader expects
+  rather than ending at the first `}` it meets.
+- An interpolation that never closes is reported once. It is why the string never closed, and
+  reporting the unterminated string as well would explain one mistake as two.
+- `\{` and `\}` still write a literal brace, and a `}` with no interpolation to close is `E0008`.
+
 - A brace stays reserved inside a string so interpolation can be added later without changing what
   existing programs mean, but `\{` and `\}` escape one. Until the escape existed, no JSON, shell
   snippet, or code template could be written as a literal at all — the reservation was costing more

@@ -292,6 +292,11 @@ declareBuiltinConstructors = do
       implemented for each. -}
   bindName "show"
     (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+  {-| What an interpolated string renders each hole through. Separate from
+      `show` because a message wants a string's content and an inspection wants
+      its quotes. -}
+  bindName "display"
+    (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
   {-| The effects a program may perform.
 
       Each answers with `Result[T, Str]` rather than failing: the language has

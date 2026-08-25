@@ -27,6 +27,7 @@ evalProperties =
   , ("array concatenation joins two arrays", testArrayConcat)
   , ("maps and sets keep their contents in key order", testKeyed)
   , ("effects answer with a result and are refused at compile time", testEffects)
+  , ("interpolated strings render their holes", testInterpolation)
   ]
 
 testScopes :: IO Property
@@ -443,6 +444,32 @@ testKeyed = do
     language has no exceptions, so a missing file is an outcome a caller
     handles. Compile-time folding is refused every effect, because a constant is
     evaluated while the compiler runs. -}
+{-| An interpolated string is concatenation with each hole rendered, so a value
+    of any type may appear in one and text keeps its own content rather than
+    gaining the quotes an inspection would add. -}
+testInterpolation :: IO Property
+testInterpolation = do
+  plain <- runProgram [] ["let name = \"ada\""] "\"hi {name}\""
+  arithmetic <- evaluate "\"sum {1 + 2}\""
+  collection <- evaluate "\"list {[1, 2]}\""
+  character <- evaluate "\"char {'x'}\""
+  several <- runProgram [] ["let a = 1", "let b = 2"] "\"{a} and {b}\""
+  onlyHole <- runProgram [] ["let a = 7"] "\"{a}\""
+  nestedCall <- evaluate "\"len {[1, 2, 3].length()}\""
+  nestedString <- evaluate "\"in {\"q\"}\""
+  escaped <- evaluate "\"a\\{b\\}c\""
+  pure $ conjoin
+    [ counterexample "text keeps its own content" (plain === "\"hi ada\"")
+    , counterexample "an expression is evaluated" (arithmetic === "\"sum 3\"")
+    , counterexample "a collection renders" (collection === "\"list [1, 2]\"")
+    , counterexample "a character keeps its own content" (character === "\"char x\"")
+    , counterexample "several holes render in order" (several === "\"1 and 2\"")
+    , counterexample "a template may be only a hole" (onlyHole === "\"7\"")
+    , counterexample "a hole may call a method" (nestedCall === "\"len 3\"")
+    , counterexample "a hole may contain a string" (nestedString === "\"in q\"")
+    , counterexample "an escaped brace is not a hole" (escaped === "\"a{b}c\"")
+    ]
+
 testEffects :: IO Property
 testEffects = do
   written <- evaluate "writeFile(\"/tmp/pudu-effect-test.txt\", \"x\")"

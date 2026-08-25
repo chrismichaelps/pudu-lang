@@ -33,6 +33,13 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 
 ### Governance
 
+- An interpolated string is **sugar for concatenation**: `"a{x}b"` is `"a" + display(x) + "b"`.
+  There is nothing a template means that concatenation does not, and a node of its own would make
+  resolution, typing, and evaluation each carry a case for a construct with no new meaning.
+- Each hole is rendered through `display` rather than `show`. A message being built wants a string's
+  own content; the quotes an inspection adds would be wrong in every interpolated string that
+  contains one.
+
 - The future declaration parser injects its block parser, avoiding a module cycle.
 - Prefix parses literals, single-segment names, parentheses/grouping, blocks, array literals `[a, b, c]`, `if`, and `!`/`-`/`&`/`&mut`/`~` unary forms.
 - The postfix family is call, member, index, `?` failure propagation, and `.await`; every member of it binds tighter than every unary and binary operator, matching [[grammar/pudu]]'s precedence table.

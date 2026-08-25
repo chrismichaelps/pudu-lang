@@ -63,6 +63,7 @@ builtinName value = case value of
   MapOfBuiltin -> "mapOf"
   SetOfBuiltin -> "setOf"
   ShowBuiltin -> "show"
+  DisplayBuiltin -> "display"
   PrintBuiltin -> "print"
   PrintErrorBuiltin -> "printError"
   ReadLineBuiltin -> "readLine"
@@ -88,6 +89,7 @@ data Builtin
   | MapOfBuiltin
   | SetOfBuiltin
   | ShowBuiltin
+  | DisplayBuiltin
   | PrintBuiltin
   | PrintErrorBuiltin
   | ReadLineBuiltin
