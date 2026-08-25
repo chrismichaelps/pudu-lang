@@ -51,6 +51,7 @@ effectValueNames =
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
   , "listDirectory", "createDirectory"
   , "arguments", "environment", "exit", "clock"
+  , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
   ]
 
 {-| The implicit import is suppressed by an explicit import of the same module,

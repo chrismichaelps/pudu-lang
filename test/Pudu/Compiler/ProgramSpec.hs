@@ -140,6 +140,7 @@ testProgramEvaluation = do
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   effects <- runEntry "test-fixtures/stdlib/UsesIo.pudu"
+  scheduling <- runEntry "test-fixtures/stdlib/UsesTime.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -158,6 +159,8 @@ testProgramEvaluation = do
         (protocol === Just "247")
     , counterexample "the effect modules reach the world and report failures"
         (effects === Just "19")
+    , counterexample "the time and process modules reach the world"
+        (scheduling === Just "84")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

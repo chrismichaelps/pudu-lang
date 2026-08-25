@@ -335,6 +335,25 @@ effectSignatures =
   , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
   , ("exit", monotype (FunctionTypeValue False [integerType] UnitTypeValue))
   , ("clock", monotype (FunctionTypeValue False [] integerType))
+  , ("now", monotype (FunctionTypeValue False [] integerType))
+  , ("zoneOffset", monotype (FunctionTypeValue False [] integerType))
+  ,
+    ( "formatTime"
+    , monotype
+        (FunctionTypeValue False [stringType, integerType, stringType] (resultOf stringType))
+    )
+  ,
+    ( "parseTime"
+    , monotype (FunctionTypeValue False [stringType, stringType] (resultOf integerType))
+    )
+  ,
+    ( "runProgram"
+    , monotype
+        ( FunctionTypeValue False
+            [stringType, arrayOf stringType, stringType]
+            (resultOf (TupleTypeValue [integerType, stringType, stringType]))
+        )
+    )
   ]
  where
   resultOf held = NominalType "Result" [held, stringType]

@@ -1,0 +1,85 @@
+module Std.Process
+
+/// What a program left behind when it finished.
+export type Finished = { status: Int, output: Str, errors: Str }
+
+/// Run a program with arguments and no input, and collect what it produced.
+/// A non-zero status is not a failure of this call: the program ran, and what
+/// it decided is the answer. Only being unable to run it at all fails.
+export fn run(program: Str, arguments: &Array[Str]) -> Result[Finished, Str] {
+  withInput(program, arguments, "")
+}
+
+/// Run a program with arguments and text on its input.
+export fn withInput(
+  program: Str,
+  arguments: &Array[Str],
+  standardInput: Str
+) -> Result[Finished, Str] {
+  match runProgram(program, *arguments, standardInput) {
+    case Ok(triple) => Ok(Finished { status: triple[0], output: triple[1], errors: triple[2] })
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Run a program and answer with its output, treating a non-zero status as a
+/// failure carrying whatever it wrote to its error stream.
+/// The form to reach for when the program is a step that must work.
+export fn output(program: Str, arguments: &Array[Str]) -> Result[Str, Str] {
+  match run(program, arguments) {
+    case Ok(finished) => {
+      if finished.status == 0 { Ok(finished.output) } else {
+        Err(describe(&finished))
+      }
+    }
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Run a program and answer with its output in lines.
+export fn lines(program: Str, arguments: &Array[Str]) -> Result[Array[Str], Str] {
+  match output(program, arguments) {
+    case Ok(text) => Ok(text.lines())
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Run a program only for its status.
+export fn status(program: Str, arguments: &Array[Str]) -> Result[Int, Str] {
+  match run(program, arguments) {
+    case Ok(finished) => Ok(finished.status)
+    case Err(problem) => Err(problem)
+  }
+}
+
+/// Whether a program ran and reported success.
+export fn succeeded(program: Str, arguments: &Array[Str]) -> Bool {
+  match status(program, arguments) {
+    case Ok(code) => code == 0
+    case Err(_) => false
+  }
+}
+
+/// Whether a program can be found and run at all.
+/// Asked by running it with no arguments, so a program that refuses those still
+/// counts as present.
+export fn isAvailable(program: Str) -> Bool {
+  match run(program, &[]) {
+    case Ok(_) => true
+    case Err(_) => false
+  }
+}
+
+/// A finished program described the way an error message should say it.
+export fn describe(value: &Finished) -> Str {
+  var out = "the program exited with status " + show(value.status)
+  if !value.errors.trim().isEmpty() { out = out + ": " + value.errors.trim() }
+  out
+}
+
+/// Whether a program reported success.
+export fn isSuccess(value: &Finished) -> Bool { value.status == 0 }
+
+/// The output with trailing whitespace removed, which is what a program that
+/// wrote one line meant to say.
+export fn trimmedOutput(value: &Finished) -> Str { value.output.trim() }
