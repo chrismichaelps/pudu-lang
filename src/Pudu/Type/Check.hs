@@ -739,6 +739,10 @@ inferExpression declared rigid spanValue expression = case expression of
     resolvedTarget <- zonk targetType
     (asynchronous, declaredResult) <- enclosingFunctionType selfName
     awaitType spanValue asynchronous resolvedTarget declaredResult
+  {-| An empty tuple is the unit *value*, not a tuple of nothing. The evaluator
+      already produces `UnitValue` for it, and typing it as an empty tuple made
+      `()` fail against the `()` type it was annotated with. -}
+  TupleExpression [] -> pure UnitTypeValue
   TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
   ArrayExpression members -> do
     elementTypes <- mapM (checkExpression declared rigid) members

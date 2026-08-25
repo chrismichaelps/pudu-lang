@@ -1,0 +1,200 @@
+module Std.Bits
+
+/// Both values' bits, kept where both are set.
+export fn and(left: Int, right: Int) -> Int { left & right }
+
+/// Both values' bits, kept where either is set.
+export fn or(left: Int, right: Int) -> Int { left | right }
+
+/// Both values' bits, kept where exactly one is set.
+export fn xor(left: Int, right: Int) -> Int { left ^ right }
+
+/// Every bit inverted.
+export fn complement(value: Int) -> Int { ~value }
+
+/// The bits moved toward the high end, filling with noughts.
+export fn shiftLeft(value: Int, places: Int) -> Int { value << places }
+
+/// The bits moved toward the low end.
+export fn shiftRight(value: Int, places: Int) -> Int { value >> places }
+
+/// Whether the bit at a position is set. Positions count from nought.
+export fn testBit(value: Int, position: Int) -> Bool {
+  if position < 0 { false } else { (value >> position) & 1 == 1 }
+}
+
+/// The value with one bit set.
+export fn setBit(value: Int, position: Int) -> Int {
+  if position < 0 { value } else { value | (1 << position) }
+}
+
+/// The value with one bit cleared.
+export fn clearBit(value: Int, position: Int) -> Int {
+  if position < 0 { value } else { value & ~(1 << position) }
+}
+
+/// The value with one bit inverted.
+export fn flipBit(value: Int, position: Int) -> Int {
+  if position < 0 { value } else { value ^ (1 << position) }
+}
+
+/// How many bits are set. Counted over the low sixty-four positions, which is
+/// the width the language's own integer arithmetic works in.
+export fn popCount(value: Int) -> Int {
+  var total = 0
+  var position = 0
+  while position < 64 {
+    if testBit(value, position) { total = total + 1 }
+    position = position + 1
+  }
+  total
+}
+
+/// The position of the lowest set bit, or `None` when no bit is set.
+export fn lowestSetBit(value: Int) -> Option[Int] {
+  var position = 0
+  while position < 64 {
+    if testBit(value, position) { return Some(position) }
+    position = position + 1
+  }
+  None
+}
+
+/// The position of the highest set bit, or `None` when no bit is set.
+export fn highestSetBit(value: Int) -> Option[Int] {
+  var position = 63
+  while position >= 0 {
+    if testBit(value, position) { return Some(position) }
+    position = position - 1
+  }
+  None
+}
+
+/// Whether a value is a power of two. Nought and negative values are not.
+export fn isPowerOfTwo(value: Int) -> Bool {
+  value > 0 && (value & (value - 1)) == 0
+}
+
+/// The value written in binary, without a sign or a prefix.
+/// Nought is a single nought rather than empty text.
+export fn toBinary(value: Int) -> Str {
+  if value == 0 { "0" } else {
+    var out = ""
+    var remaining = value
+    while remaining > 0 {
+      out = "01".slice(remaining & 1, (remaining & 1) + 1) + out
+      remaining = remaining >> 1
+    }
+    out
+  }
+}
+
+/// The value written in lower-case hexadecimal, without a prefix.
+export fn toHex(value: Int) -> Str {
+  if value == 0 { "0" } else {
+    var out = ""
+    var remaining = value
+    while remaining > 0 {
+      let digit = remaining & 15
+      out = "0123456789abcdef".slice(digit, digit + 1) + out
+      remaining = remaining >> 4
+    }
+    out
+  }
+}
+
+/// The bits of a value, lowest position first, over a width the caller names.
+export fn bits(value: Int, width: Int) -> Array[Bool] {
+  var out = []
+  var position = 0
+  while position < width {
+    out = out.push(testBit(value, position))
+    position = position + 1
+  }
+  out
+}
+
+/// A value with only one bit set.
+export fn bit(position: Int) -> Int { if position < 0 { 0 } else { 1 << position } }
+
+/// A value with no bits set.
+export fn zero() -> Int { 0 }
+
+/// A value with every bit set.
+export fn ones() -> Int { ~0 }
+
+/// The bits moved toward the high end, with the ones that leave reappearing at
+/// the low end. Rotation is over the low sixty-four positions.
+export fn rotateLeft(value: Int, places: Int) -> Int {
+  let shift = ((places % 64) + 64) % 64
+  if shift == 0 { value } else {
+    (value << shift) | ((value >> (64 - shift)) & ((1 << shift) - 1))
+  }
+}
+
+/// The bits moved toward the low end, with the ones that leave reappearing at
+/// the high end.
+export fn rotateRight(value: Int, places: Int) -> Int {
+  rotateLeft(value, 64 - (((places % 64) + 64) % 64))
+}
+
+/// How many high positions are clear before the first set bit, over sixty-four
+/// positions. A value with no bits set has sixty-four.
+export fn countLeadingZeros(value: Int) -> Int {
+  match highestSetBit(value) {
+    case Some(position) => 63 - position
+    case None => 64
+  }
+}
+
+/// How many low positions are clear before the first set bit. A value with no
+/// bits set has sixty-four.
+export fn countTrailingZeros(value: Int) -> Int {
+  match lowestSetBit(value) {
+    case Some(position) => position
+    case None => 64
+  }
+}
+
+/// The value with its low `width` bits kept and the rest cleared.
+export fn mask(value: Int, width: Int) -> Int {
+  if width <= 0 { 0 } else {
+    if width >= 64 { value } else { value & ((1 << width) - 1) }
+  }
+}
+
+/// The bits at positions `from` up to but not including `to`, moved down.
+export fn extract(value: Int, from: Int, to: Int) -> Int {
+  if to <= from { 0 } else { mask(value >> from, to - from) }
+}
+
+/// The smallest power of two that is not below the value.
+/// Nought and negative values answer with one, which is the smallest power of
+/// two there is.
+export fn nextPowerOfTwo(value: Int) -> Int {
+  if value <= 1 { 1 } else {
+    match highestSetBit(value - 1) {
+      case Some(position) => 1 << (position + 1)
+      case None => 1
+    }
+  }
+}
+
+/// The value read from binary text, or `None` when it is not binary.
+export fn fromBinary(text: Str) -> Option[Int] { fromBase(text, 2, "01") }
+
+/// The value read from hexadecimal text, or `None` when it is not hexadecimal.
+export fn fromHex(text: Str) -> Option[Int] { fromBase(text, 16, "0123456789abcdef") }
+
+/// Text read as a number in a base, using the given digits.
+fn fromBase(text: Str, base: Int, digits: Str) -> Option[Int] {
+  if text.isEmpty() { None } else {
+    var total = 0
+    for character in text.toLower().chars() {
+      let digit = digits.indexOf(character.toText())
+      if digit < 0 { return None }
+      total = total * base + digit
+    }
+    Some(total)
+  }
+}

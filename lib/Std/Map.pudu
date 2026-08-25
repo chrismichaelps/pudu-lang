@@ -1,0 +1,364 @@
+module Std.Map
+
+/// A map with no entries.
+export fn empty[K, V]() -> Map[K, V] { mapOf([]) }
+
+/// A map with one entry.
+export fn singleton[K, V](key: K, value: V) -> Map[K, V] { mapOf([(key, value)]) }
+
+/// A map built from key and value pairs.
+/// A later pair replaces an earlier one with the same key.
+export fn fromPairs[K, V](entries: &Array[(K, V)]) -> Map[K, V] { mapOf(*entries) }
+
+/// The number of entries.
+export fn size[K, V](value: &Map[K, V]) -> Int { value.size() }
+
+/// Whether the map has no entries.
+export fn isEmpty[K, V](value: &Map[K, V]) -> Bool { value.isEmpty() }
+
+/// The value stored under a key, or `None`.
+export fn get[K, V](value: &Map[K, V], key: K) -> Option[V] { value.get(key) }
+
+/// The value stored under a key, or a fallback.
+export fn getOr[K, V](value: &Map[K, V], key: K, fallback: V) -> V {
+  match value.get(key) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// Whether a key has an entry.
+export fn containsKey[K, V](value: &Map[K, V], key: K) -> Bool { value.containsKey(key) }
+
+/// The map with an entry added or replaced.
+export fn insert[K, V](value: &Map[K, V], key: K, held: V) -> Map[K, V] {
+  value.insert(key, held)
+}
+
+/// The map with a key's entry removed, or unchanged when there is none.
+export fn remove[K, V](value: &Map[K, V], key: K) -> Map[K, V] { value.remove(key) }
+
+/// Every key, in order.
+export fn keys[K, V](value: &Map[K, V]) -> Array[K] { value.keys() }
+
+/// Every value, in the order of its key.
+export fn values[K, V](value: &Map[K, V]) -> Array[V] { value.values() }
+
+/// Every entry as a pair, in key order.
+export fn pairs[K, V](value: &Map[K, V]) -> Array[(K, V)] { value.entries() }
+
+/// Two maps combined, with the second map's entries winning.
+/// That is the order an override is written in, which is what merging is for.
+export fn merge[K, V](left: &Map[K, V], right: &Map[K, V]) -> Map[K, V] {
+  left.merge(*right)
+}
+
+/// An entry added only when its key has none.
+export fn insertIfAbsent[K, V](value: &Map[K, V], key: K, held: V) -> Map[K, V] {
+  if value.containsKey(key) { *value } else { value.insert(key, held) }
+}
+
+/// An entry's value transformed, or the map unchanged when the key has none.
+export fn adjust[K, V](value: &Map[K, V], key: K, transform: fn(V) -> V) -> Map[K, V] {
+  match value.get(key) {
+    case Some(found) => value.insert(key, transform(found))
+    case None => *value
+  }
+}
+
+/// An entry's value transformed, inserting a starting value when it is absent.
+/// This is how a counter or an accumulator is kept in a map without the caller
+/// writing the same two-case match every time.
+export fn upsert[K, V](value: &Map[K, V], key: K, start: V, transform: fn(V) -> V) -> Map[K, V] {
+  match value.get(key) {
+    case Some(found) => value.insert(key, transform(found))
+    case None => value.insert(key, start)
+  }
+}
+
+/// Every value transformed.
+export fn mapValues[K, A, B](value: &Map[K, A], transform: fn(A) -> B) -> Map[K, B] {
+  var out = mapOf([])
+  for pair in value.entries() {
+    out = out.insert(pair[0], transform(pair[1]))
+  }
+  out
+}
+
+/// Only the entries whose value the predicate accepts.
+export fn filterValues[K, V](value: &Map[K, V], keep: fn(V) -> Bool) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in value.entries() {
+    if keep(pair[1]) { out = out.insert(pair[0], pair[1]) }
+  }
+  out
+}
+
+/// Only the entries whose key the predicate accepts.
+export fn filterKeys[K, V](value: &Map[K, V], keep: fn(K) -> Bool) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in value.entries() {
+    if keep(pair[0]) { out = out.insert(pair[0], pair[1]) }
+  }
+  out
+}
+
+/// Every entry combined into one value, in key order.
+export fn fold[K, V, A](value: &Map[K, V], combine: fn(A, K, V) -> A, start: A) -> A {
+  var accumulated = start
+  for pair in value.entries() {
+    accumulated = combine(accumulated, pair[0], pair[1])
+  }
+  accumulated
+}
+
+/// The keys of one map that the other does not have.
+export fn keysNotIn[K, V](left: &Map[K, V], right: &Map[K, V]) -> Array[K] {
+  var out = []
+  for key in left.keys() {
+    if !right.containsKey(key) { out = out.push(key) }
+  }
+  out
+}
+
+/// How many values the predicate accepts.
+export fn countValues[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Int {
+  var total = 0
+  for pair in value.entries() {
+    if holds(pair[1]) { total = total + 1 }
+  }
+  total
+}
+
+/// How many times each value appears in an array.
+/// The common reason to reach for a map at all, so it is here rather than left
+/// for every caller to write again.
+export fn tally[T](items: &Array[T]) -> Map[T, Int] {
+  var out = mapOf([])
+  for item in items {
+    match out.get(item) {
+      case Some(seen) => { out = out.insert(item, seen + 1) }
+      case None => { out = out.insert(item, 1) }
+    }
+  }
+  out
+}
+
+/// Items collected under the key each one produces.
+export fn groupBy[T, K](items: &Array[T], key: fn(T) -> K) -> Map[K, Array[T]] {
+  var out = mapOf([])
+  for item in items {
+    let group = key(item)
+    match out.get(group) {
+      case Some(existing) => { out = out.insert(group, existing.push(item)) }
+      case None => { out = out.insert(group, [item]) }
+    }
+  }
+  out
+}
+
+/// Whether a key has no entry.
+export fn notContainsKey[K, V](value: &Map[K, V], key: K) -> Bool {
+  !value.containsKey(key)
+}
+
+/// An entry inserted, replaced, or removed by one transformation.
+/// The general form the others are special cases of: `None` in means the key is
+/// absent, and `None` out removes it.
+export fn alter[K, V](
+  value: &Map[K, V],
+  key: K,
+  transform: fn(Option[V]) -> Option[V]
+) -> Map[K, V] {
+  match transform(value.get(key)) {
+    case Some(held) => value.insert(key, held)
+    case None => value.remove(key)
+  }
+}
+
+/// An entry's value transformed, removing the entry when the result is absent.
+export fn update[K, V](
+  value: &Map[K, V],
+  key: K,
+  transform: fn(V) -> Option[V]
+) -> Map[K, V] {
+  match value.get(key) {
+    case Some(found) => match transform(found) {
+      case Some(held) => value.insert(key, held)
+      case None => value.remove(key)
+    }
+    case None => *value
+  }
+}
+
+/// Two maps combined, with a caller-supplied rule for keys in both.
+export fn mergeWith[K, V](
+  left: &Map[K, V],
+  right: &Map[K, V],
+  combine: fn(V, V) -> V
+) -> Map[K, V] {
+  var out = *left
+  for pair in right.entries() {
+    match out.get(pair[0]) {
+      case Some(existing) => { out = out.insert(pair[0], combine(existing, pair[1])) }
+      case None => { out = out.insert(pair[0], pair[1]) }
+    }
+  }
+  out
+}
+
+/// Only the keys both maps have, with their values combined.
+export fn intersectWith[K, V](
+  left: &Map[K, V],
+  right: &Map[K, V],
+  combine: fn(V, V) -> V
+) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in left.entries() {
+    match right.get(pair[0]) {
+      case Some(other) => { out = out.insert(pair[0], combine(pair[1], other)) }
+      case None => { }
+    }
+  }
+  out
+}
+
+/// Only the keys the first map has and the second does not.
+export fn without[K, V](left: &Map[K, V], right: &Map[K, V]) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in left.entries() {
+    if !right.containsKey(pair[0]) { out = out.insert(pair[0], pair[1]) }
+  }
+  out
+}
+
+/// Only the keys the given array names.
+export fn restrictTo[K, V](value: &Map[K, V], wanted: &Array[K]) -> Map[K, V] {
+  var out = mapOf([])
+  for key in wanted {
+    match value.get(key) {
+      case Some(held) => { out = out.insert(key, held) }
+      case None => { }
+    }
+  }
+  out
+}
+
+/// Every key the given array does not name.
+export fn withoutKeys[K, V](value: &Map[K, V], unwanted: &Array[K]) -> Map[K, V] {
+  var out = *value
+  for key in unwanted { out = out.remove(key) }
+  out
+}
+
+/// The entries the predicate accepts, and the entries it rejects.
+export fn partition[K, V](
+  value: &Map[K, V],
+  keep: fn(K, V) -> Bool
+) -> (Map[K, V], Map[K, V]) {
+  var kept = mapOf([])
+  var rejected = mapOf([])
+  for pair in value.entries() {
+    if keep(pair[0], pair[1]) { kept = kept.insert(pair[0], pair[1]) }
+    else { rejected = rejected.insert(pair[0], pair[1]) }
+  }
+  (kept, rejected)
+}
+
+/// Every key transformed. A transformation that sends two keys to one keeps the
+/// entry that comes later in key order, which is the same rule insertion uses.
+export fn mapKeys[K, L, V](value: &Map[K, V], transform: fn(K) -> L) -> Map[L, V] {
+  var out = mapOf([])
+  for pair in value.entries() { out = out.insert(transform(pair[0]), pair[1]) }
+  out
+}
+
+/// The smallest key and its value, or `None` for an empty map.
+export fn least[K, V](value: &Map[K, V]) -> Option[(K, V)] {
+  let entries = value.entries()
+  if entries.length() == 0 { None } else { Some(entries[0]) }
+}
+
+/// The largest key and its value, or `None` for an empty map.
+export fn greatest[K, V](value: &Map[K, V]) -> Option[(K, V)] {
+  let entries = value.entries()
+  let total = entries.length()
+  if total == 0 { None } else { Some(entries[total - 1]) }
+}
+
+/// The map without its smallest key.
+export fn removeLeast[K, V](value: &Map[K, V]) -> Map[K, V] {
+  match least(value) {
+    case Some(pair) => value.remove(pair[0])
+    case None => *value
+  }
+}
+
+/// The map without its largest key.
+export fn removeGreatest[K, V](value: &Map[K, V]) -> Map[K, V] {
+  match greatest(value) {
+    case Some(pair) => value.remove(pair[0])
+    case None => *value
+  }
+}
+
+/// Every map combined in order, with later maps' entries winning.
+export fn mergeAll[K, V](maps: &Array[Map[K, V]]) -> Map[K, V] {
+  var out = mapOf([])
+  for value in maps { out = out.merge(value) }
+  out
+}
+
+/// A map built from pairs, with a rule for keys that appear more than once.
+export fn fromPairsWith[K, V](
+  entries: &Array[(K, V)],
+  combine: fn(V, V) -> V
+) -> Map[K, V] {
+  var out = mapOf([])
+  for pair in entries {
+    match out.get(pair[0]) {
+      case Some(existing) => { out = out.insert(pair[0], combine(existing, pair[1])) }
+      case None => { out = out.insert(pair[0], pair[1]) }
+    }
+  }
+  out
+}
+
+/// The keys as a set.
+export fn keySet[K, V](value: &Map[K, V]) -> Set[K] { setOf(value.keys()) }
+
+/// Whether every entry satisfies the predicate. True for an empty map.
+export fn all[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in value.entries() {
+    if !holds(pair[0], pair[1]) { return false }
+  }
+  true
+}
+
+/// Whether any entry satisfies the predicate. False for an empty map.
+export fn any[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in value.entries() {
+    if holds(pair[0], pair[1]) { return true }
+  }
+  false
+}
+
+/// The entries as an array, in key order.
+export fn toArray[K, V](value: &Map[K, V]) -> Array[(K, V)] { value.entries() }
+
+/// The first key whose value the predicate accepts, or `None`.
+export fn findKey[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Option[K] {
+  for pair in value.entries() {
+    if holds(pair[1]) { return Some(pair[0]) }
+  }
+  None
+}
+
+/// The map with its keys and values exchanged.
+/// Two keys sharing a value collapse into one entry, keeping the key that comes
+/// later in order.
+export fn invert[K, V](value: &Map[K, V]) -> Map[V, K] {
+  var out = mapOf([])
+  for pair in value.entries() { out = out.insert(pair[1], pair[0]) }
+  out
+}

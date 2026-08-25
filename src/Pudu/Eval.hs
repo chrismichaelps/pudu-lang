@@ -16,6 +16,8 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
+import Pudu.Eval.Keyed
+import Pudu.Eval.Order (comparableValue)
 import Pudu.Eval.Env
   ( Env (..)
   , captureEnvironment
@@ -63,6 +65,10 @@ import Pudu.Eval.Value
   ( ArrayMethod (..)
   , Builtin (..)
   , CharMethod (..)
+  , MapMethod (..)
+  , SetMethod (..)
+  , mapMethodName
+  , setMethodName
   , Closure (..)
   , StringMethod (..)
   , Value (..)
@@ -243,6 +249,8 @@ installBuiltinConstructors = do
     ["Some", "None", "Ok", "Err"]
   bind "panic" (BuiltinValue PanicBuiltin)
   bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
+  bind "mapOf" (BuiltinValue MapOfBuiltin)
+  bind "setOf" (BuiltinValue SetOfBuiltin)
 
 installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
 installDeclaration traits (Located _ declaration) = case declaration of
@@ -536,8 +544,12 @@ evaluateCall spanValue callee arguments = do
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
+    BuiltinValue MapOfBuiltin -> callMapOf spanValue values
+    BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
+    MapMethodValue method receiver -> callMapMethod spanValue method receiver values
+    SetMethodValue method receiver -> callSetMethod spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
@@ -574,6 +586,93 @@ receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
   _ -> Nothing
+
+{-| Build a map from an array of key and value pairs.
+
+    A key must be comparable: a map keeps its entries in key order so that two
+    maps built differently with the same entries are the same map, and a
+    function has no order. The refusal is a diagnostic rather than a silent
+    fallback to insertion order, which would make equality depend on how a map
+    was assembled. -}
+callMapOf :: Span -> [Value] -> Evaluator Value
+callMapOf spanValue arguments = case arguments of
+  [ArrayValue members] -> do
+    entries <- mapM (pairOf spanValue) (toList members)
+    case filter (not . comparableValue . fst) entries of
+      (offender, _) : _ ->
+        abortAt (Just spanValue) "E7008"
+          ("a " <> valueKind offender <> " cannot be a map key")
+          (Just "use a value the language can order, such as text, a number, or a tuple of those")
+      [] -> pure (mapFromEntries entries)
+  _ -> abortAt (Just spanValue) "E7002" "mapOf expects one array of pairs" Nothing
+
+pairOf :: Span -> Value -> Evaluator (Value, Value)
+pairOf spanValue value = case value of
+  TupleValue [key, held] -> pure (key, held)
+  _ -> abortAt (Just spanValue) "E7002" "mapOf expects an array of pairs" Nothing
+
+{-| Build a set from an array of members, with the same ordering requirement a
+    map places on its keys and for the same reason. -}
+callSetOf :: Span -> [Value] -> Evaluator Value
+callSetOf spanValue arguments = case arguments of
+  [ArrayValue members] ->
+    case filter (not . comparableValue) (toList members) of
+      offender : _ ->
+        abortAt (Just spanValue) "E7008"
+          ("a " <> valueKind offender <> " cannot be a set member")
+          (Just "use a value the language can order, such as text, a number, or a tuple of those")
+      [] -> pure (setFromMembers (toList members))
+  _ -> abortAt (Just spanValue) "E7002" "setOf expects one array" Nothing
+
+{-| Apply a built-in map method. Every one answers with a new value. -}
+callMapMethod :: Span -> MapMethod -> Value -> [Value] -> Evaluator Value
+callMapMethod spanValue method receiver arguments = case (method, arguments) of
+  (MapSize, []) -> pure (IntValue (fromIntegral (mapSize receiver)))
+  (MapIsEmpty, []) -> pure (BoolValue (mapSize receiver == 0))
+  (MapGet, [key]) -> pure (optionOf (mapGet receiver key))
+  (MapContainsKey, [key]) -> pure (BoolValue (mapContainsKey receiver key))
+  (MapInsert, [key, held])
+    | comparableValue key -> pure (mapInsert receiver key held)
+    | otherwise -> unorderableKey spanValue key "map key"
+  (MapRemove, [key]) -> pure (mapRemove receiver key)
+  (MapKeys, []) -> pure (ArrayValue (Seq.fromList (mapKeys receiver)))
+  (MapValues, []) -> pure (ArrayValue (Seq.fromList (map snd (mapEntries receiver))))
+  (MapEntries, []) ->
+    pure (ArrayValue (Seq.fromList [TupleValue [key, held] | (key, held) <- mapEntries receiver]))
+  (MapMerge, [other@(MapValue _)]) -> pure (mapMerge receiver other)
+  _ ->
+    abortAt (Just spanValue) "E7002"
+      ("wrong arguments for " <> mapMethodName method) Nothing
+
+{-| Apply a built-in set method. -}
+callSetMethod :: Span -> SetMethod -> Value -> [Value] -> Evaluator Value
+callSetMethod spanValue method receiver arguments = case (method, arguments) of
+  (SetSize, []) -> pure (IntValue (fromIntegral (setSize receiver)))
+  (SetIsEmpty, []) -> pure (BoolValue (setSize receiver == 0))
+  (SetContains, [value]) -> pure (BoolValue (setContains receiver value))
+  (SetInsert, [value])
+    | comparableValue value -> pure (setInsert receiver value)
+    | otherwise -> unorderableKey spanValue value "set member"
+  (SetRemove, [value]) -> pure (setRemove receiver value)
+  (SetToArray, []) -> pure (ArrayValue (Seq.fromList (setMembers receiver)))
+  (SetUnion, [other@(SetValue _)]) -> pure (setUnion receiver other)
+  (SetIntersect, [other@(SetValue _)]) -> pure (setIntersect receiver other)
+  (SetDifference, [other@(SetValue _)]) -> pure (setDifference receiver other)
+  _ ->
+    abortAt (Just spanValue) "E7002"
+      ("wrong arguments for " <> setMethodName method) Nothing
+
+unorderableKey :: Span -> Value -> Text -> Evaluator Value
+unorderableKey spanValue value described =
+  abortAt (Just spanValue) "E7008"
+    ("a " <> valueKind value <> " cannot be a " <> described)
+    (Just "use a value the language can order, such as text, a number, or a tuple of those")
+
+{-| A lookup that may find nothing, as the language's own absence carrier. -}
+optionOf :: Maybe Value -> Value
+optionOf found = case found of
+  Just value -> VariantValue "Some" [value]
+  Nothing -> VariantValue "None" []
 
 {-| Turn a scalar value into a character.
 
@@ -758,6 +857,8 @@ applyFunction spanValue function arguments = case function of
   FunctionValue closure -> callClosure closure arguments (Just spanValue)
   ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver arguments
   StringMethodValue method receiver -> callStringMethod spanValue method receiver arguments
+  MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
+  SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 

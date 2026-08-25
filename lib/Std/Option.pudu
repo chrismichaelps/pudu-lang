@@ -135,3 +135,87 @@ export fn zip[A, B](left: Option[A], right: Option[B]) -> Option[(A, B)] {
     case None => None
   }
 }
+
+/// Whether a value is present, as a plain question about an owned value.
+export fn exists[T](value: Option[T]) -> Bool {
+  match value {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// The first element of an array, as an option.
+/// The bridge from "a collection that might be empty" to "a value that might be
+/// absent", which is the shape the rest of this module works on.
+export fn fromArray[T](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else { Some(items[0]) }
+}
+
+/// Every element transformed, keeping only the results that are present.
+/// One pass rather than a map followed by a filter, which is why it exists.
+export fn mapPresent[A, B](items: &Array[A], transform: fn(A) -> Option[B]) -> Array[B] {
+  var out = []
+  for item in items {
+    match transform(item) {
+      case Some(found) => { out = out.push(found) }
+      case None => { }
+    }
+  }
+  out
+}
+
+/// The value, or the failure a caller names, without discarding either.
+export fn okOrElse[T, E](value: Option[T], failure: fn() -> E) -> Result[T, E] {
+  match value {
+    case Some(found) => Ok(found)
+    case None => Err(failure())
+  }
+}
+
+/// Both values if both are present, combined.
+export fn map2[A, B, C](left: Option[A], right: Option[B], combine: fn(A, B) -> C) -> Option[C] {
+  match left {
+    case Some(first) => match right {
+      case Some(second) => Some(combine(first, second))
+      case None => None
+    }
+    case None => None
+  }
+}
+
+/// Every value if every one is present, otherwise nothing.
+export fn allPresent[T](values: &Array[Option[T]]) -> Option[Array[T]] {
+  var out = []
+  for value in values {
+    match value {
+      case Some(found) => { out = out.push(found) }
+      case None => { return None }
+    }
+  }
+  Some(out)
+}
+
+/// The first present value, or nothing when there is none.
+export fn firstPresent[T](values: &Array[Option[T]]) -> Option[T] {
+  for value in values {
+    match value {
+      case Some(found) => { return Some(found) }
+      case None => { }
+    }
+  }
+  None
+}
+
+/// The value if it is present, otherwise nothing, with the option discarded.
+/// The counterpart to `keepIf`: it drops a value the predicate accepts.
+export fn dropIf[T](value: Option[T], reject: fn(T) -> Bool) -> Option[T] {
+  match value {
+    case Some(found) => if reject(found) { None } else { Some(found) }
+    case None => None
+  }
+}
+
+/// A value made present when a condition holds.
+export fn when[T](condition: Bool, value: T) -> Option[T] {
+  if condition { Some(value) } else { None }
+}

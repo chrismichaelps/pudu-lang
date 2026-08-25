@@ -16,7 +16,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("a tuple is indexed by a literal position", testTupleIndex)
+  [ ("maps and sets are typed by what they hold", testKeyedTypes)
+  , ("a tuple is indexed by a literal position", testTupleIndex)
   , ("function literals are typed and inferred", testLambdaTypes)
   , ("a match reads through a borrow", testMatchThroughBorrow)
   , ("built-in text methods are typed exactly", testTextMethods)
@@ -1341,6 +1342,31 @@ region source needle = case Text.breakOnEnd needle source of
     the type is decided. It was not: `(Int, Str)[1]` reported `Int` while the
     value was text, which is a type the checker guaranteed and the program did
     not have. -}
+{-| A map and a set are wired-in types with closed method vocabularies, typed
+    exactly the way arrays and text are. -}
+testKeyedTypes :: IO Property
+testKeyedTypes = do
+  mapType <- typeOf "mapOf([(\"a\", 1)])"
+  setType <- typeOf "setOf([1, 2])"
+  lookupType <- typeOf "mapOf([(\"a\", 1)]).get(\"a\")"
+  keysType <- typeOf "mapOf([(\"a\", 1)]).keys()"
+  entriesType <- typeOf "mapOf([(\"a\", 1)]).entries()"
+  membersType <- typeOf "setOf([1]).toArray()"
+  unknownMap <- codesOfExpression "mapOf([(\"a\", 1)]).shout()"
+  unknownSet <- codesOfExpression "setOf([1]).shout()"
+  badKey <- codesOfExpression "mapOf([(\"a\", 1)]).get(1)"
+  pure $ conjoin
+    [ counterexample "a map is typed by key and value" (mapType === "Map[Str, Int]")
+    , counterexample "a set is typed by its member" (setType === "Set[Int]")
+    , counterexample "a lookup answers with an option" (lookupType === "Option[Int]")
+    , counterexample "keys answer as an array" (keysType === "Array[Str]")
+    , counterexample "entries answer as an array of pairs" (entriesType === "Array[(Str, Int)]")
+    , counterexample "members answer as an array" (membersType === "Array[Int]")
+    , counterexample "an unknown map method is E3005" (unknownMap === ["E3005"])
+    , counterexample "an unknown set method is E3005" (unknownSet === ["E3005"])
+    , counterexample "a key of the wrong type is E3001" (badKey === ["E3001"])
+    ]
+
 testTupleIndex :: IO Property
 testTupleIndex = do
   firstMember <- typeOf "(1, \"x\")[0]"

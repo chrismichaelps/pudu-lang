@@ -32,6 +32,9 @@ isPreludeModule :: ModuleName -> Bool
 
 ### Governance
 
+- `Map` and `Set` are wired-in types and `mapOf`, `setOf`, and `charFromCode` are prelude values,
+  because each is a construction or conversion nothing written in the language can express.
+
 - Wired-in names are the grammar's builtin set plus the compiler-controlled `Copy` marker: sized signed and unsigned integers through 128 bits, target-width `Int`/`UInt`, `Float32`, `Float64`, the `Float` alias, `Bool`, `Char`, `Str`, `Never`, `BigInt`, `Decimal`, and the constructors `Option`, `Result`, `Array`, and `Task`. No module can remove them.
 - The wired-in `Option` and `Result` carry their constructors — `Some`, `None`, `Ok`, `Err` — because a type the compiler provides is useless without the variants that build it. A module may declare its own `Ok`, which shadows the wired-in one.
 - Prelude names are ordinary library declarations that happen to be imported implicitly: the traits and failure types [[architecture/SEMANTICS]] already names — `Drop`, `Send`, `Sync`, `Iterator`, `IntoIterator`, `From`, `Overflow`, `DivisionByZero` — and the value `panic`.

@@ -136,6 +136,7 @@ testProgramEvaluation = do
   everything <- runEntry "test-fixtures/stdlib/UsesAll.pudu"
   collections <- runEntry "test-fixtures/stdlib/UsesList.pudu"
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
+  keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -146,6 +147,8 @@ testProgramEvaluation = do
         (collections === Just "41")
     , counterexample "every standard module links into one program"
         (wide === Just "64")
+    , counterexample "maps, sets, and bit work link together"
+        (keyed === Just "158")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

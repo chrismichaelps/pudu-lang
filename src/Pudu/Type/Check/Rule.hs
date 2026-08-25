@@ -304,6 +304,8 @@ memberType spanValue targetType member = do
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
     NominalType "Char" [] -> charMethodType spanValue member
+    NominalType "Map" [key, held] -> mapMethodType spanValue member key held
+    NominalType "Set" [element] -> setMethodType spanValue member element
     NominalType name _ -> do
       fields <- lookupField name
       case fields >>= lookup member of
@@ -317,6 +319,51 @@ memberType spanValue targetType member = do
       report "E3005" spanValue ("a " <> renderType resolved <> " has no fields")
         (Just "read a field from a record value")
       pure ErrorType
+
+{-| Built-in map methods, typed exactly.
+
+    A map answers with a new map rather than changing the one it was given, so
+    `insert` and `remove` return maps and `W3002` catches a discarded one. `get`
+    answers with `Option` because a missing key is an ordinary outcome, not a
+    failure — which is why there is no form that fails. -}
+mapMethodType :: Span -> Text -> Type -> Type -> Checker Type
+mapMethodType spanValue member key held = case member of
+  "size" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "get" -> pure (FunctionTypeValue False [key] (NominalType "Option" [held]))
+  "containsKey" -> pure (FunctionTypeValue False [key] boolType)
+  "insert" -> pure (FunctionTypeValue False [key, held] mapType)
+  "remove" -> pure (FunctionTypeValue False [key] mapType)
+  "keys" -> pure (FunctionTypeValue False [] (arrayOf key))
+  "values" -> pure (FunctionTypeValue False [] (arrayOf held))
+  "entries" -> pure (FunctionTypeValue False [] (arrayOf (TupleTypeValue [key, held])))
+  "merge" -> pure (FunctionTypeValue False [mapType] mapType)
+  _ -> do
+    report "E3005" spanValue ("Map has no method " <> member)
+      (Just "check the method name against the documented map methods")
+    pure ErrorType
+ where
+  mapType = NominalType "Map" [key, held]
+  arrayOf element = NominalType "Array" [element]
+
+{-| Built-in set methods, typed exactly. -}
+setMethodType :: Span -> Text -> Type -> Checker Type
+setMethodType spanValue member element = case member of
+  "size" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "contains" -> pure (FunctionTypeValue False [element] boolType)
+  "insert" -> pure (FunctionTypeValue False [element] setType)
+  "remove" -> pure (FunctionTypeValue False [element] setType)
+  "toArray" -> pure (FunctionTypeValue False [] (NominalType "Array" [element]))
+  "union" -> pure (FunctionTypeValue False [setType] setType)
+  "intersect" -> pure (FunctionTypeValue False [setType] setType)
+  "difference" -> pure (FunctionTypeValue False [setType] setType)
+  _ -> do
+    report "E3005" spanValue ("Set has no method " <> member)
+      (Just "check the method name against the documented set methods")
+    pure ErrorType
+ where
+  setType = NominalType "Set" [element]
 
 {-| The one built-in character method.
 

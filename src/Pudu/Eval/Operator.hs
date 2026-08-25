@@ -12,7 +12,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
-import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), valueKind)
+import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..), valueKind)
 import Pudu.FloatLiteral (FloatWidth, normalizeFloat)
 import Pudu.Source (Span)
 
@@ -127,6 +127,8 @@ readMember spanValue value member = case value of
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   CharValue _ -> readCharMember spanValue value member
+  MapValue _ -> readKeyedMember spanValue value member mapMethods MapMethodValue "a map"
+  SetValue _ -> readKeyedMember spanValue value member setMethods SetMethodValue "a set"
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
@@ -171,6 +173,44 @@ readCharMember spanValue character member
   | otherwise =
       abortAt (Just spanValue) "E7001"
         ("no method " <> member <> " on a character") Nothing
+
+{-| Map and set methods share one lookup: both are closed vocabularies keyed by
+    name, and writing the search twice would let the two drift. -}
+readKeyedMember
+  :: Span -> Value -> Text -> [(Text, method)] -> (method -> Value -> Value) -> Text -> Evaluator Value
+readKeyedMember spanValue receiver member table build described =
+  case lookup member table of
+    Just method -> pure (build method receiver)
+    Nothing ->
+      abortAt (Just spanValue) "E7001"
+        ("no method " <> member <> " on " <> described) Nothing
+
+mapMethods :: [(Text, MapMethod)]
+mapMethods =
+  [ ("size", MapSize)
+  , ("isEmpty", MapIsEmpty)
+  , ("get", MapGet)
+  , ("containsKey", MapContainsKey)
+  , ("insert", MapInsert)
+  , ("remove", MapRemove)
+  , ("keys", MapKeys)
+  , ("values", MapValues)
+  , ("entries", MapEntries)
+  , ("merge", MapMerge)
+  ]
+
+setMethods :: [(Text, SetMethod)]
+setMethods =
+  [ ("size", SetSize)
+  , ("isEmpty", SetIsEmpty)
+  , ("contains", SetContains)
+  , ("insert", SetInsert)
+  , ("remove", SetRemove)
+  , ("toArray", SetToArray)
+  , ("union", SetUnion)
+  , ("intersect", SetIntersect)
+  , ("difference", SetDifference)
+  ]
 
 stringMethods :: [(Text, StringMethod)]
 stringMethods =
