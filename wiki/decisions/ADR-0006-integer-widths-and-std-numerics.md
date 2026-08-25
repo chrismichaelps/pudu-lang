@@ -68,21 +68,52 @@ only ever reached for a program the checker already agreed about.
 falls through to the type's own implementations, and `Self` aliases to a wired-in target. `impl Ord
 for Int` now works, which is the prerequisite for everything below.
 
+**An implementation is a global fact, not an imported one.** Obligations are discharged against every
+implementation in the program rather than only those from directly imported modules. Names still come
+from imports — a name has to be imported to be written — but a bound is about a type and a trait, and
+scoping implementations made a bounded generic unusable across modules: `Std.List.sum` is bounded by
+`Add`, whose implementations live in `Std.Num`, and a caller importing only `Std.List` was told
+`Int does not implement Add` about a program in which it plainly does.
+
+**A prefix operator binds tighter than every binary one.** `*a * *b` parsed as `*(a * (*b))` — a
+dereference of a product rather than a product of two dereferences — which made a `Mul`
+implementation impossible to write.
+
+**A shift's count is a plain count.** It answers "how far", which is the same question whatever the
+value's width is; requiring the two operands to match would mean writing `1u8 << 3u8` and would make
+a generic shift over the integer family impossible.
+
 ## What `Std` promises about numbers
 
-**Target:** the numeric and bitwise surface is generic, bounded by traits — `Eq`, `Ord` for
-comparison; `Zero`, `Add` for aggregation; `Bits` for the bitwise family, with the width taken from
-the type rather than assumed. Implementations for the whole integer family.
+The numeric and bitwise surface is **generic, bounded by traits**, and the traits are written:
 
-**Now:** the runtime work above is done, so those traits can be written; they are the next slice.
-Until they land, the numeric helpers in `Std.List` and the whole of `Std.Bits` remain `Int`-only and
-are marked provisional in their own documentation. Two rules hold in the meantime:
+| Trait | Module | Implemented for |
+|---|---|---|
+| `Eq`, `Ord` | `Std.Order` | every integer width, both floating widths, `Str`, `Char`, `Bool` |
+| `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div` | `Std.Num` | every integer width, both floating widths |
+| `Bits` | `Std.Bits` | every integer width; **not** `BigInt`, which has no width |
 
-- **No new `Int`-only numeric API is added.** The interim surface does not grow.
+`Std.Bits` no longer claims sixty-four positions. `width` is a method, so a value answers for its
+own: `countLeadingZeros(1u8)` is 7 and `countLeadingZeros(1u32)` is 31.
+
+`Std.List`'s aggregates follow the same bounds. `sum`, `product`, `minimum`, `maximum`, and `sorted`
+are generic; `sum` and `product` answer with `Option` because an empty collection has no sum, and
+`sumOr` takes the value a caller wants for empty. That is a pre-1.0 signature change and the fixtures
+moved with it.
+
+Two rules that shaped the work and still hold:
+
 - **`Std` never converts to `Int` internally to make a signature fit.** That would hide the
   narrowness rather than record it, and would lose signedness and width at the boundary.
+- **A bound belongs to the library, not the caller.** `Std.Bits` carries `noBits` and `lowBit` on its
+  own trait rather than borrowing `Zero` and `One`, so calling `popCount` needs one import.
 
-`Std.Bits` no longer claims sixty-four positions; it asks the value.
+## Still missing
+
+**There is no conversion between integer types.** A `UInt8` cannot become an `Int` at all, which
+means a program mixing widths has to keep each width in its own arithmetic. The conversion cannot be
+written in Pudu — the language has no cast — so it needs a runtime primitive with a decision about
+what a narrowing one does. That is the next numeric slice, and this ADR does not settle it.
 
 ## Consequences
 

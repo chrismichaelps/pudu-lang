@@ -33,6 +33,11 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 
 ### Governance
 
+- A prefix operator binds tighter than **every** binary one. Its operand was parsed at the
+  multiplying level, which is *inside* that level, so `*a * *b` parsed as `*(a * (*b))` — a
+  dereference of a product rather than a product of two dereferences. The threshold is named rather
+  than written as a number, so a new operator cannot leave the prefix rule behind.
+
 - An interpolated string is **sugar for concatenation**: `"a{x}b"` is `"a" + display(x) + "b"`.
   There is nothing a template means that concatenation does not, and a node of its own would make
   resolution, typing, and evaluation each carry a case for a construct with no new meaning.

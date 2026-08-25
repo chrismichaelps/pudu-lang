@@ -1,0 +1,36 @@
+module UsesNumeric
+
+import Std.Bits as Bits
+import Std.List as List
+import Std.Num as Num
+import Std.Order as Order
+
+export fn main() -> Int {
+  var total = 0
+  match List.sum(&[1u8, 2u8, 3u8]) {
+    case Some(found) => { if found == 6u8 { total = total + 1 } }
+    case None => { }
+  }
+  if List.sumOr(&[100u32, 200u32], 0u32) == 300u32 { total = total + 1 }
+  match Num.product(&[2i16, 3i16, 4i16]) {
+    case Some(found) => { if found == 24i16 { total = total + 1 } }
+    case None => { }
+  }
+  match List.minimum(&[9u8, 4u8, 7u8]) {
+    case Some(found) => { if found == 4u8 { total = total + 1 } }
+    case None => { }
+  }
+  match List.maximum(&["pear", "apple", "zed"]) {
+    case Some(found) => { if found == "zed" { total = total + 1 } }
+    case None => { }
+  }
+  total = total + Bits.width(&0u8) + Bits.width(&0u32)
+  total = total + Bits.countLeadingZeros(&1u8) + Bits.countLeadingZeros(&1u32)
+  total = total + Bits.popCount(&255u8)
+  if Bits.rotateLeft(&128u8, 1) == 1u8 { total = total + 1 }
+  if Bits.nextPowerOfTwo(&100u8) == 128u8 { total = total + 1 }
+  if Order.precedes(&"apple", &"pear") { total = total + 1 }
+  if Order.equivalent(&3u8, &3u8) { total = total + 1 }
+  if List.sorted(&[3u8, 1u8, 2u8])[0] == 1u8 { total = total + 1 }
+  total
+}

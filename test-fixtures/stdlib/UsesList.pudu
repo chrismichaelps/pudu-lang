@@ -8,5 +8,5 @@ export fn main() -> Int {
   let evens = List.filter(&items, fn(n: Int) -> Bool => n % 2 == 0)
   let doubled = List.map(&items, fn(n: Int) -> Int => n * 2)
   let joined = List.concat(&ordered, &doubled)
-  ordered[0] + List.sum(&items) + List.length(&evens) + List.length(&joined)
+  ordered[0] + List.sumOr(&items, 0) + List.length(&evens) + List.length(&joined)
 }

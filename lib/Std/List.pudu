@@ -1,5 +1,8 @@
 module Std.List
 
+import Std.Num {Add, Mul, One, Zero}
+import Std.Order {Ord}
+
 /// Whether the array has no elements.
 export fn isEmpty[T](items: &Array[T]) -> Bool { items.length() == 0 }
 
@@ -68,31 +71,63 @@ export fn count[T](items: &Array[T], wanted: T) -> Int {
   total
 }
 
-/// The sum of every element. An empty array sums to zero.
-/// Provisional: `Int` only, pending the `Zero` and `Add` bounds ADR-0006
-/// describes. Nothing here converts to `Int` to widen its reach.
-export fn sum(items: &Array[Int]) -> Int {
-  items.reduce(fn(total: Int, item: Int) -> Int => total + item, 0)
+/// The sum of every element, or `None` for an empty array.
+/// Generic over any type with an additive identity and an addition, which is
+/// every integer width and both floating widths.
+export fn sum[T: Zero + Add](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var running = items[0].zero()
+    for item in items { running = running.plus(&item) }
+    Some(running)
+  }
 }
 
-/// The product of every element. An empty array multiplies to one.
-export fn product(items: &Array[Int]) -> Int {
-  items.reduce(fn(total: Int, item: Int) -> Int => total * item, 1)
+/// Every element added together, with a caller-supplied value for empty.
+/// The form to reach for when nought is the right answer for nothing; `sum`
+/// keeps the distinction for callers that need it.
+export fn sumOr[T: Zero + Add](items: &Array[T], empty: T) -> T {
+  match sum(items) {
+    case Some(found) => found
+    case None => empty
+  }
+}
+
+/// The product of every element, or `None` for an empty array.
+export fn product[T: One + Mul](items: &Array[T]) -> Option[T] {
+  if items.length() == 0 { None } else {
+    var running = items[0].one()
+    for item in items { running = running.times(&item) }
+    Some(running)
+  }
+}
+
+/// Every element multiplied together, with a caller-supplied value for empty.
+export fn productOr[T: One + Mul](items: &Array[T], empty: T) -> T {
+  match product(items) {
+    case Some(found) => found
+    case None => empty
+  }
 }
 
 /// The smallest element, or `None` for an empty array.
-export fn minimum(items: &Array[Int]) -> Option[Int] {
+export fn minimum[T: Ord](items: &Array[T]) -> Option[T] {
   if items.length() == 0 { None } else {
-    let smaller = fn(best: Int, item: Int) -> Int => if item < best { item } else { best }
-    Some(items.reduce(smaller, items[0]))
+    var best = items[0]
+    for item in items {
+      if item.before(&best) { best = item }
+    }
+    Some(best)
   }
 }
 
 /// The largest element, or `None` for an empty array.
-export fn maximum(items: &Array[Int]) -> Option[Int] {
+export fn maximum[T: Ord](items: &Array[T]) -> Option[T] {
   if items.length() == 0 { None } else {
-    let larger = fn(best: Int, item: Int) -> Int => if item > best { item } else { best }
-    Some(items.reduce(larger, items[0]))
+    var best = items[0]
+    for item in items {
+      if best.before(&item) { best = item }
+    }
+    Some(best)
   }
 }
 
@@ -121,40 +156,18 @@ export fn any[T](items: &Array[T], holds: fn(T) -> Bool) -> Bool {
   items.filter(holds).length() > 0
 }
 
-/// The elements in ascending order.
-/// Provisional: `Int` only, pending the `Ord` bound ADR-0006 describes;
-/// `sortBy` is already generic and takes the comparison instead.
+/// The elements in ascending order, under the type's own ordering.
 /// Merge sort: the input is halved with `slice` and rejoined with `concat`,
 /// both of which the runtime does on the structure rather than by rebuilding.
-export fn sorted(items: &Array[Int]) -> Array[Int] {
-  let size = items.length()
-  if size <= 1 { items.slice(0, size) } else {
-    let middle = size / 2
-    let front = sorted(&items.slice(0, middle))
-    let back = sorted(&items.slice(middle, size))
-    merge(&front, &back)
-  }
+export fn sorted[T: Ord](items: &Array[T]) -> Array[T] {
+  sortBy(items, fn(left: T, right: T) -> Bool => left.before(&right))
 }
 
 /// Two ascending arrays interleaved into one.
 /// Exported because merging already-sorted input is worth doing without sorting
 /// it again, which is the whole reason a merge sort has this step.
-export fn merge(left: &Array[Int], right: &Array[Int]) -> Array[Int] {
-  var out = []
-  var leftIndex = 0
-  var rightIndex = 0
-  let leftCount = left.length()
-  let rightCount = right.length()
-  while leftIndex < leftCount && rightIndex < rightCount {
-    if left[leftIndex] <= right[rightIndex] {
-      out = out.push(left[leftIndex])
-      leftIndex = leftIndex + 1
-    } else {
-      out = out.push(right[rightIndex])
-      rightIndex = rightIndex + 1
-    }
-  }
-  out.concat(left.slice(leftIndex, leftCount)).concat(right.slice(rightIndex, rightCount))
+export fn merge[T: Ord](left: &Array[T], right: &Array[T]) -> Array[T] {
+  mergeBy(left, right, fn(a: T, b: T) -> Bool => a.before(&b))
 }
 
 /// Every element but the first, or an empty array when there is none.

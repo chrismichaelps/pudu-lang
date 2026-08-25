@@ -598,9 +598,20 @@ parseUnary blockParser operatorToken operator = do
   rendered <- if operator == SymAmpersand
     then maybe "&" (const "&mut") <$> matchKeyword KwMut
     else pure (symbolText operator)
-  operand <- parseExpressionAt blockParser 8
+  {-| A prefix operator binds tighter than every binary one, so its operand is
+      parsed above the highest binary precedence. At the multiplying level it
+      was inside it, and `*a * *b` parsed as `*(a * (*b))` — a dereference of a
+      product rather than a product of two dereferences. -}
+  operand <- parseExpressionAt blockParser (highestBinaryPrecedence + 1)
   pure (Located (mergedOrLeft (tokenSpan operatorToken) (locatedSpan operand))
     (UnaryExpression rendered operand))
+
+{-| The precedence of the tightest-binding binary operator.
+
+    Named rather than written as a number where it is used, so a new operator
+    added to the table below cannot leave the prefix rule behind. -}
+highestBinaryPrecedence :: Int
+highestBinaryPrecedence = 8
 
 parseIf :: BlockParser -> Parser (Located Expression)
 parseIf blockParser = do

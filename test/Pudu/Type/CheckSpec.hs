@@ -16,7 +16,8 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
 typeProperties :: [(String, IO Property)]
 typeProperties =
-  [ ("maps and sets are typed by what they hold", testKeyedTypes)
+  [ ("a trait bound is satisfied by any implementation in the program", testGlobalImpls)
+  , ("maps and sets are typed by what they hold", testKeyedTypes)
   , ("a tuple is indexed by a literal position", testTupleIndex)
   , ("function literals are typed and inferred", testLambdaTypes)
   , ("a match reads through a borrow", testMatchThroughBorrow)
@@ -1344,6 +1345,31 @@ region source needle = case Text.breakOnEnd needle source of
     not have. -}
 {-| A map and a set are wired-in types with closed method vocabularies, typed
     exactly the way arrays and text are. -}
+{-| An implementation is a fact about a type and a trait, true everywhere in a
+    program once it exists anywhere in it. Scoping obligations to directly
+    imported modules made a bounded generic unusable across modules. -}
+testGlobalImpls :: IO Property
+testGlobalImpls = do
+  shifting <- codesOfExpression "1u8 << 3"
+  sameType <- codesOfExpression "1u8 << 3u8"
+  prefixProduct <- codes
+    [ "module M"
+    , "fn run(a: &Int, b: &Int) -> Int { (*a) * (*b) }"
+    ]
+  prefixBare <- codes
+    [ "module M"
+    , "fn run(a: &Int, b: &Int) -> Int { *a * *b }"
+    ]
+  pure $ conjoin
+    [ counterexample "a shift count is a plain Int" (shifting === [])
+    , counterexample "a count of another integer type is refused, as every other conversion is"
+        (sameType === ["E3001"])
+    , counterexample "a parenthesised product of dereferences checks"
+        (prefixProduct === [])
+    , counterexample "an unparenthesised one checks the same way"
+        (prefixBare === [])
+    ]
+
 testKeyedTypes :: IO Property
 testKeyedTypes = do
   mapType <- typeOf "mapOf([(\"a\", 1)])"

@@ -21,6 +21,10 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- A shift's count is a **position, not a second operand of the same type**. It answers "how far",
+  which is the same question whatever the value's width is; requiring the two to match would mean
+  writing `1u8 << 3u8` and would make a generic shift over the integer family impossible to write.
+
 - A tuple is indexed by a **literal** position. Its members have different types, so the position
   must be known when the type is decided; it was not, and `(Int, Str)[1]` reported `Int` while the
   value was text — a type the checker guaranteed and the program did not have. `E3027` reports a

@@ -141,6 +141,7 @@ testProgramEvaluation = do
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   effects <- runEntry "test-fixtures/stdlib/UsesIo.pudu"
   scheduling <- runEntry "test-fixtures/stdlib/UsesTime.pudu"
+  numeric <- runEntry "test-fixtures/stdlib/UsesNumeric.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -152,7 +153,7 @@ testProgramEvaluation = do
     , counterexample "every standard module links into one program"
         (wide === Just "64")
     , counterexample "maps, sets, and bit work link together"
-        (keyed === Just "158")
+        (keyed === Just "30")
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "the protocol modules parse and render messages"
@@ -161,6 +162,8 @@ testProgramEvaluation = do
         (effects === Just "19")
     , counterexample "the time and process modules reach the world"
         (scheduling === Just "84")
+    , counterexample "the numeric surface is generic over the integer family"
+        (numeric === Just "96")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
