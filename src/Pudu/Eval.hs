@@ -18,7 +18,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
-import Pudu.IntegerLiteral (integerKindFits)
+import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
 import Pudu.Eval.Clock
 import Pudu.Eval.Io
 import Pudu.Eval.Keyed
@@ -467,6 +467,10 @@ evaluate (Located spanValue expression) = case expression of
   UnsafeExpression _ body -> evaluateBlock body
   MacroCall _ _ ->
     abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
+  {-| Types are erased at run time, so a type application evaluates to what it
+      was applied to. It exists to tell the checker which instantiation was
+      meant, and the checker has already been told by the time this runs. -}
+  TypeApplication target _ -> evaluate target
   LambdaExpression value -> do
     {-| A literal captures the environment it was written in, so calling it
         later means what it meant then. A declaration does not, and the two
@@ -564,10 +568,42 @@ longestBinding (first :| rest) = search (reverse (prefixes rest))
 evaluateCall :: Span -> Located Expression -> [Located Expression] -> Evaluator Value
 evaluateCall spanValue callee arguments = do
   values <- mapM evaluate arguments
-  qualified <- qualifiedCallee callee values
-  target <- case qualified of
-    Just found -> pure found
-    Nothing -> evaluateCallee callee
+  {-| A type argument is not erased before the call that carries it. Types have
+      no run-time form, but the *syntax* the reader wrote is still here, and a
+      conversion needs to know which type it was asked for. Reading it is not
+      the evaluator knowing about types; it is the evaluator reading the call it
+      was given. -}
+  case typeArgumentNames (locatedValue callee) of
+    Just (names, inner) -> do
+      {-| The callee under a type application is read as an ordinary expression
+          rather than as a callee, because a qualified name is what carries type
+          arguments and reading it as a path is what resolves it. -}
+      target <- evaluate inner
+      case target of
+        BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
+        _ -> dispatchCall spanValue target values
+    Nothing -> do
+      qualified <- qualifiedCallee callee values
+      target <- case qualified of
+        Just found -> pure found
+        Nothing -> evaluateCallee callee
+      dispatchCall spanValue target values
+
+{-| The type arguments a callee carries, and the callee under them. -}
+typeArgumentNames :: Expression -> Maybe ([Text], Located Expression)
+typeArgumentNames expression = case expression of
+  TypeApplication inner arguments -> Just (map typeArgumentName arguments, inner)
+  _ -> Nothing
+
+{-| A written type's name, or empty when it was not a plain nominal one. -}
+typeArgumentName :: Located TypeSyntax -> Text
+typeArgumentName located = case locatedValue located of
+  NamedType path _ -> moduleNameText path
+  _ -> Text.empty
+
+{-| Apply an evaluated callee to evaluated arguments. -}
+dispatchCall :: Span -> Value -> [Value] -> Evaluator Value
+dispatchCall spanValue target values =
   case target of
     FunctionValue closure -> callClosure closure values (Just spanValue)
     VariantValue name [] -> pure (VariantValue name values)
@@ -577,7 +613,7 @@ evaluateCall spanValue callee arguments = do
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
-    BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue values
+    BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
     BuiltinValue effect -> callEffect spanValue effect values
     ArrayMethodValue method receiver -> callArrayMethod spanValue method receiver values
     StringMethodValue method receiver -> callStringMethod spanValue method receiver values
@@ -636,29 +672,31 @@ callDisplay spanValue arguments = case arguments of
 
 {-| Move an integer to another integer type, refusing what will not fit.
 
-    The target type comes from an example value rather than being written,
-    because the language has no way to name a type in an expression. It is the
-    one integer operation that cannot be written in Pudu at all: every other one
-    is arithmetic on values of a single type, and this one is the boundary
-    between two.
+    It is the one integer operation that cannot be written in Pudu at all: every
+    other one is arithmetic on values of a single type, and this one is the
+    boundary between two.
 
     Answering `None` rather than truncating is the same rule checked arithmetic
     follows. A caller that wants the low bits of a value says so with a mask
     before converting. -}
-callConvertInteger :: Span -> [Value] -> Evaluator Value
-callConvertInteger spanValue arguments = case arguments of
-  [IntValue _ value, IntValue target _]
-    | integerKindFits target value -> pure (VariantValue "Some" [IntValue target value])
-    | otherwise -> pure (VariantValue "None" [])
-  [left, right] ->
+callConvertInteger :: Span -> [Text] -> [Value] -> Evaluator Value
+callConvertInteger spanValue names arguments = case (names, arguments) of
+  (target : _, [IntValue _ value]) -> case integerKindOf target of
+    Just kind
+      | integerKindFits kind value -> pure (VariantValue "Some" [IntValue kind value])
+      | otherwise -> pure (VariantValue "None" [])
+    Nothing ->
+      abortAt (Just spanValue) "E7002"
+        (target <> " is not an integer type")
+        (Just "convert to one of the integer types, such as UInt8 or Int64")
+  ([], _) ->
+    abortAt (Just spanValue) "E7002" "convertInteger needs the type to convert to"
+      (Just "write it as a type argument, as in convertInteger[UInt8](value)")
+  (_, [other]) ->
     abortAt (Just spanValue) "E7002"
-      ( "convertInteger moves between integers, not between a "
-          <> valueKind left
-          <> " and a "
-          <> valueKind right
-      )
+      ("convertInteger moves between integers, not from a " <> valueKind other)
       Nothing
-  _ -> abortAt (Just spanValue) "E7002" "convertInteger expects a value and an example" Nothing
+  _ -> abortAt (Just spanValue) "E7002" "convertInteger expects one value" Nothing
 
 {-| The built-ins that reach the world.
 

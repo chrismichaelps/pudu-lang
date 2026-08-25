@@ -516,10 +516,10 @@ testIntegerWidths = do
   negativeShift <- codesOf "1u8 << (0 - 1)"
   annotated <- runProgram [] ["let value: UInt8 = 200"] "value &+ 100u8"
   plainStaysPlain <- evaluate "2000000 + 1"
-  fits <- evaluate "convertInteger(65, 0u8)"
-  doesNot <- evaluate "convertInteger(300, 0u8)"
-  negative <- evaluate "convertInteger(0 - 1, 0u8)"
-  widened <- evaluate "convertInteger(200u8, 0)"
+  fits <- evaluate "convertInteger[UInt8](65)"
+  doesNot <- evaluate "convertInteger[UInt8](300)"
+  negative <- evaluate "convertInteger[UInt8](0 - 1)"
+  widened <- evaluate "convertInteger[Int](200u8)"
   pure $ conjoin
     [ counterexample "complement is taken over the type's width" (complemented === "255")
     , counterexample "checked addition reports overflow" (overflowed === ["E7005"])

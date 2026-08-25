@@ -315,6 +315,9 @@ walkExpression (Located spanValue expression) = case expression of
   MacroCall _ arguments -> mapM_ walkExpression arguments
   ScopeExpression body -> walkBlock body
   LambdaExpression value -> walkFunction value
+  TypeApplication target arguments -> do
+    walkExpression target
+    mapM_ walkType arguments
   RecordExpression path fields -> do
     resolveConstructorPath spanValue path
     mapM_ walkFieldInit fields

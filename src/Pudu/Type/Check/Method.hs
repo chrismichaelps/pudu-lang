@@ -312,12 +312,13 @@ declareBuiltinConstructors = do
     (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
   {-| The conversion between integer types, which nothing in the language can
       express: every other integer operation works within one type, and this one
-      crosses. The target type comes from an example value because an expression
-      has no way to name a type. -}
+      crosses. The target is the first type parameter so a caller writes only
+      it — `convertInteger[UInt8](300)` — and inference settles the source from
+      the argument. -}
   bindName "convertInteger"
-    ( polytype ["S", "T"] []
+    ( polytype ["T", "S"] []
         ( FunctionTypeValue False
-            [RigidType "S", RigidType "T"]
+            [RigidType "S"]
             (NominalType "Option" [RigidType "T"])
         )
     )

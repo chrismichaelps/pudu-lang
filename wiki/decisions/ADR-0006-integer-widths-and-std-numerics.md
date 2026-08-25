@@ -135,10 +135,10 @@ caller wanting values of another type maps over it.
 `Option` of the example's type. It is the one integer operation that cannot be written in Pudu at
 all: every other one is arithmetic within a single type, and this one is the boundary between two.
 
-The target type comes from an example value because an expression has no way to name a type. That is
-a real limitation of the language rather than a choice, and it is why the shape reads oddly —
-`convertInteger(300, 0u8)` rather than `convertInteger[UInt8](300)`. A way to name a type in an
-expression would fix it, and is not in this ADR's scope.
+It is written `convertInteger[UInt8](300)`. The shape needed a language feature that did not exist —
+a way to name a type in an expression — and that gap is now closed: a call may carry explicit type
+arguments, and the target type is the first one. Inference settles the source from the argument, so a
+caller writes only the type they are asking for.
 
 `None` rather than truncation, for the same reason checked arithmetic reports rather than wraps. A
 caller who wants the low bits masks before converting.

@@ -321,6 +321,7 @@ data Expression
   | MacroCall !(Located Text) ![Located Expression]
   | ScopeExpression !(Located Block)
   | LambdaExpression !Function
+  | TypeApplication !(Located Expression) ![Located TypeSyntax]
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))

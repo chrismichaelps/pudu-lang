@@ -30,6 +30,18 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- Explicit type arguments pin what inference cannot settle. They instantiate the scheme with the
+  caller's types in place of fresh variables, and carry the **same obligations**, so writing one
+  never skips a bound the inferred version would have proved.
+- **Fewer arguments than parameters is admitted**, and the rest are inferred. A caller writes one
+  because inference could not settle that one; making them write the others too would mean writing
+  down what the compiler already knows, which is the opposite of why they wrote any. More than the
+  parameter count is `E3028`.
+- Only a **name** may carry them — bare or qualified, since a qualifier is written as a member
+  access and the chain is flattened back into the dotted name it stands for. An arbitrary expression
+  has already been instantiated by the time it is an expression, which is a real restriction and is
+  reported rather than worked around.
+
 - A function literal is checked exactly like a declaration's body: parameters bound, result unified
   with what the body produced. Sharing the path is what keeps a literal and a declaration from
   drifting into two dialects of the same thing.

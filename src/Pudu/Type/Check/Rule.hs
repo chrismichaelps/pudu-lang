@@ -8,6 +8,7 @@ module Pudu.Type.Check.Rule
   , enclosingFunctionType
   , enclosingReturnType
   , instantiate
+  , instantiateWith
   , literalType
   , memberType
   , nameType
@@ -134,6 +135,37 @@ instantiate spanValue scheme
   | null (schemeParams scheme) = pure (schemeType scheme)
   | otherwise = do
       replacements <- mapM (\name -> (,) name <$> freshVariable) (schemeParams scheme)
+      mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
+      pure (substitute replacements (schemeType scheme))
+
+{-| Instantiate a scheme with the types the caller wrote.
+
+    The same substitution inference performs, with the caller's types in place
+    of fresh variables — and the same obligations, so writing a type argument
+    never skips a bound the inferred version would have proved.
+
+    A count that does not match is reported rather than padded: a caller who
+    wrote one type for a function with two parameters meant something, and
+    inventing the second would answer a question they did not ask. -}
+instantiateWith :: Span -> Scheme -> [Type] -> Checker Type
+instantiateWith spanValue scheme arguments
+  | length arguments > length (schemeParams scheme) = do
+      report "E3028" spanValue
+        ( "this takes at most "
+            <> Text.pack (show (length (schemeParams scheme)))
+            <> " type arguments, and "
+            <> Text.pack (show (length arguments))
+            <> " were written"
+        )
+        (Just "write one type for each parameter, or fewer and let inference settle the rest")
+      pure ErrorType
+  | otherwise = do
+      {-| Fewer type arguments than parameters is admitted, and the rest are
+          inferred. A caller writes one because inference could not settle that
+          one; making them write the others too would mean writing down what the
+          compiler already knows, which is the opposite of why they wrote any. -}
+      inferred <- mapM (const freshVariable) (drop (length arguments) (schemeParams scheme))
+      let replacements = zip (schemeParams scheme) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       pure (substitute replacements (schemeType scheme))
 

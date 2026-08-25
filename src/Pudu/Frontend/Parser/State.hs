@@ -14,6 +14,7 @@ module Pudu.Frontend.Parser.State
   , isSymbol
   , initialParserState
   , lookaheadKind
+  , matchingBracketDistance
   , matchKeyword
   , matchKind
   , matchSymbol
@@ -135,6 +136,24 @@ startsLine = any (Text.any isLineBreak . triviaText) . tokenLeadingTrivia
 
 peekKind :: Parser TokenKind
 peekKind = tokenKind <$> peekToken
+
+{-| How many tokens ahead the bracket opening here closes, or nothing when it
+    does not close before the stream ends.
+
+    A type-argument list and an index both open with `[`, and only what follows
+    the closing bracket tells them apart. -}
+matchingBracketDistance :: Parser (Maybe Int)
+matchingBracketDistance = Parser $ \state -> (scan 0 (0 :: Int) state, state)
+ where
+  scan distance depth state
+    | distance > 256 = Nothing
+    | otherwise = case tokenKind (tokenAt distance state) of
+        EndOfFile -> Nothing
+        kind
+          | isSymbol "[" kind -> scan (distance + 1) (depth + 1) state
+          | isSymbol "]" kind ->
+              if depth <= 1 then Just distance else scan (distance + 1) (depth - 1) state
+          | otherwise -> scan (distance + 1) depth state
 
 lookaheadKind :: Int -> Parser TokenKind
 lookaheadKind distance = Parser $ \state -> (tokenKind (tokenAt distance state), state)
