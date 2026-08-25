@@ -9,6 +9,7 @@ import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
   , budgetExhausted
+  , expectIdentifier
   , expectSymbol
   , isSymbol
   , peekKind
@@ -17,12 +18,14 @@ import Pudu.Frontend.Parser.State
   , withRecursionBudget
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Block (..), Statement (..))
+import Pudu.Frontend.Syntax.Tree (Block (..), Expression, Statement (..))
 import Pudu.Frontend.Token
   ( Keyword (KwBreak, KwConst, KwContinue, KwLet, KwReturn, KwVar)
+  , SymbolKind (SymAt)
   , Token (..)
   , TokenKind (..)
   )
+import Data.Text (Text)
 import Pudu.Source (Span, mergeSpans)
 
 {-| Parse `{ statement* }`. This module is the fixed point of the
@@ -72,18 +75,59 @@ parseStatement = do
     Keyword KwVar -> declarationStatement
     Keyword KwConst -> declarationStatement
     Keyword KwReturn -> parseReturn
-    Keyword KwBreak -> keywordStatement BreakStatement
-    Keyword KwContinue -> keywordStatement ContinueStatement
+    Keyword KwBreak -> parseBreak
+    Keyword KwContinue -> parseContinue
     _ -> do
       expression <- parseExpression parseBlock
       pure (Located (locatedSpan expression) (ExpressionStatement expression))
 
-{-| `break` and `continue` carry no value in this slice; whether they sit
-    inside a loop is a semantic rule, not a parsing one. -}
-keywordStatement :: Statement -> Parser (Located Statement)
-keywordStatement statement = do
+{-| `break [@label] [value]`.
+
+    Both parts are optional and independent: `break` leaves the nearest loop,
+    `break @outer` leaves the loop that label names, `break value` gives the
+    nearest `loop` its result, and `break @outer value` does both. Whether the
+    label exists and whether the loop can carry a value are semantic rules, not
+    parsing ones. -}
+parseBreak :: Parser (Located Statement)
+parseBreak = do
   keyword <- advanceToken
-  pure (Located (tokenSpan keyword) statement)
+  label <- parseLoopLabel
+  value <- parseCarriedValue
+  let ending = maybe (maybe (tokenSpan keyword) locatedSpan label) locatedSpan value
+  pure (Located (mergedOrLeft (tokenSpan keyword) ending) (BreakStatement label value))
+
+{-| `continue [@label]` never carries a value: it goes back to a loop that is
+    about to run again, and there is nothing waiting to receive one. -}
+parseContinue :: Parser (Located Statement)
+parseContinue = do
+  keyword <- advanceToken
+  label <- parseLoopLabel
+  let ending = maybe (tokenSpan keyword) locatedSpan label
+  pure (Located (mergedOrLeft (tokenSpan keyword) ending) (ContinueStatement label))
+
+{-| An `@name` immediately after `break` or `continue`, if one is written. -}
+parseLoopLabel :: Parser (Maybe (Located Text))
+parseLoopLabel = do
+  kind <- peekKind
+  newLine <- peekStartsLine
+  if kind == Symbol SymAt && not newLine
+    then do
+      _ <- advanceToken
+      Just <$> expectIdentifier "after @ to name the loop to leave"
+    else pure Nothing
+
+{-| The value a `break` carries, when one follows on the same line.
+
+    The line rule is the same one `return` uses: a `break` alone on its line
+    carries nothing, so a following statement is never swallowed as its
+    value. -}
+parseCarriedValue :: Parser (Maybe (Located Expression))
+parseCarriedValue = do
+  kind <- peekKind
+  newLine <- peekStartsLine
+  if isSymbol "}" kind || kind == EndOfFile || newLine
+    then pure Nothing
+    else Just <$> parseExpression parseBlock
 
 declarationStatement :: Parser (Located Statement)
 declarationStatement = do

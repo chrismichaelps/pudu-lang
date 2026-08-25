@@ -107,15 +107,16 @@ parsePrefix blockParser = do
     Keyword KwNull -> literal token NullValue
     Keyword KwIf -> parseIf blockParser
     Keyword KwMatch -> parseMatch blockParser
-    Keyword KwWhile -> parseWhile blockParser
+    Keyword KwWhile -> parseWhile blockParser Nothing
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
     Keyword KwFn -> parseLambda blockParser
     Keyword KwAsync
       | nextIsFunction -> parseLambda blockParser
       | otherwise -> parseScope blockParser
-    Keyword KwLoop -> parseLoop blockParser
-    Keyword KwFor -> parseFor blockParser
+    Keyword KwLoop -> parseLoop blockParser Nothing
+    Keyword KwFor -> parseFor blockParser Nothing
     Identifier name -> parseNameOrRecord blockParser token name
+    Symbol SymAt -> parseLabelled blockParser
     Symbol symbol
       | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
       | symbol == SymLeftBrace -> blockExpression blockParser
@@ -706,29 +707,59 @@ parseArmBody blockParser = do
     then blockExpression blockParser
     else parseExpression blockParser
 
-{-| `while`, `loop`, and `for` are expressions whose bodies are blocks; their
-    value is `()` in this slice, which typing — not parsing — enforces. -}
-parseWhile :: BlockParser -> Parser (Located Expression)
-parseWhile blockParser = do
+{-| Parse a labelled loop.
+
+    A label is written `@name` before the loop it names, and `break @name`
+    leaves that loop from inside any number of nested ones. The sigil is what
+    makes `break @outer value` readable at all: with bare names, `break outer`
+    could equally be a label or the value `outer`, and no lookahead settles it,
+    so a reader would have to know which loops were labelled to know what the
+    statement did.
+
+    Only a loop may be labelled. Naming anything else would promise a `break`
+    that has nowhere to go. -}
+parseLabelled :: BlockParser -> Parser (Located Expression)
+parseLabelled blockParser = do
+  sigil <- advanceToken
+  name <- expectIdentifier "after @ to name the loop"
+  let label = Just name
+      start = tokenSpan sigil
+  kind <- peekKind
+  case kind of
+    Keyword KwLoop -> extend start <$> parseLoop blockParser label
+    Keyword KwWhile -> extend start <$> parseWhile blockParser label
+    Keyword KwFor -> extend start <$> parseFor blockParser label
+    _ -> do
+      token <- peekToken
+      labelWithoutLoop token
+ where
+  extend start (Located here value) = Located (mergedOrLeft start here) value
+
+{-| `while`, `loop`, and `for` are expressions whose bodies are blocks. `loop`
+    takes the type of what its `break` statements carry; the other two are `()`,
+    because a loop with a condition can finish without ever reaching a `break`
+    and would then have no value to give. Typing enforces that, not parsing. -}
+parseWhile :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
+parseWhile blockParser label = do
   keyword <- advanceToken
   condition <- parseScrutinee blockParser
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (WhileExpression condition body)
+        (WhileExpression label condition body)
     )
 
-parseLoop :: BlockParser -> Parser (Located Expression)
-parseLoop blockParser = do
+parseLoop :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
+parseLoop blockParser label = do
   keyword <- advanceToken
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (LoopExpression body)
+        (LoopExpression label body)
     )
 
-parseFor :: BlockParser -> Parser (Located Expression)
-parseFor blockParser = do
+parseFor :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
+parseFor blockParser label = do
   keyword <- advanceToken
   binder <- parsePattern
   _ <- expectKeyword KwIn "between the pattern and the iterated expression"
@@ -736,7 +767,7 @@ parseFor blockParser = do
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (ForExpression binder iterated body)
+        (ForExpression label binder iterated body)
     )
 
 parsePostfix :: BlockParser -> Located Expression -> Parser (Located Expression)
@@ -949,6 +980,18 @@ operatorInfo symbol = case symbol of
   _ -> Nothing
  where
   binary precedence rightAssociative = Just (symbolText symbol, precedence, rightAssociative)
+
+{-| A label that names no loop.
+
+    Reported where the label was written rather than where the loop should have
+    been, because the label is the part the reader can delete to make the
+    program legal again. -}
+labelWithoutLoop :: Token -> Parser (Located Expression)
+labelWithoutLoop token = do
+  emitParseError "E1053" (tokenSpan token) "label does not name a loop"
+    (Just "write the label directly before `loop`, `while`, or `for`")
+  skipToLineBoundary
+  pure (Located (tokenSpan token) InvalidExpression)
 
 invalidPrefix :: Token -> Parser (Located Expression)
 invalidPrefix token = do

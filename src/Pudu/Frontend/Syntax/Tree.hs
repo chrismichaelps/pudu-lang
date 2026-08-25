@@ -252,8 +252,8 @@ data Statement
   = DeclarationStatement !(Located Declaration)
   | ExpressionStatement !(Located Expression)
   | ReturnStatement !(Maybe (Located Expression))
-  | BreakStatement
-  | ContinueStatement
+  | BreakStatement !(Maybe (Located Text)) !(Maybe (Located Expression))
+  | ContinueStatement !(Maybe (Located Text))
   | InvalidStatement
   deriving stock (Eq, Show)
 
@@ -326,8 +326,8 @@ data Expression
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
-  | WhileExpression !(Located Expression) !(Located Block)
-  | LoopExpression !(Located Block)
-  | ForExpression !(Located Pattern) !(Located Expression) !(Located Block)
+  | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
+  | LoopExpression !(Maybe (Located Text)) !(Located Block)
+  | ForExpression !(Maybe (Located Text)) !(Located Pattern) !(Located Expression) !(Located Block)
   | InvalidExpression
   deriving stock (Eq, Show)

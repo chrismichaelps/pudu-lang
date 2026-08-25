@@ -1,8 +1,14 @@
 {-| @Type.Env.Module — owns checker state and declared signatures -}
 module Pudu.Type.Env
   ( Checker
+  , LoopFrame (..)
   , UnsafeFrame (..)
+  , enterLoop
   , enterUnsafe
+  , leaveLoop
+  , loopTarget
+  , markLoopBroken
+  , withoutLoops
   , insideUnsafe
   , leaveUnsafe
   , recordComptimeFunction
@@ -119,6 +125,7 @@ data CheckerState = CheckerState
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateReservedSpans :: ![(Int, Int)]
   , stateUnsafeFrames :: ![UnsafeFrame]
+  , stateLoopFrames :: ![LoopFrame]
   , stateUnsafeFunctions :: !(Map Text [Capability])
   , stateComptimeFunctions :: ![Text]
   , stateInComptime :: !Bool
@@ -201,6 +208,7 @@ initialState =
     , stateAmbiguousMethods = Map.empty
     , stateReservedSpans = []
     , stateUnsafeFrames = []
+    , stateLoopFrames = []
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = []
     , stateInComptime = False
@@ -516,6 +524,76 @@ data UnsafeFrame = UnsafeFrame
   , frameUsed :: ![Capability]
   }
   deriving stock (Eq, Show)
+
+{-| @Type.Env.LoopFrame — one enclosing loop, as `break` sees it.
+
+    `frameResult` is the type the loop produces, which every `break` that
+    leaves it must agree on. `frameCarries` says whether a value may be carried
+    at all: `loop` produces what its breaks carry, while `while` and `for` can
+    finish without reaching a `break` and so have nothing to produce. -}
+data LoopFrame = LoopFrame
+  { frameLabel :: !(Maybe Text)
+  , frameResult :: !Type
+  , frameCarries :: !Bool
+  , frameBroken :: !Bool
+  }
+  deriving stock (Eq, Show)
+
+{-| Enter a loop, and leave it reporting whether anything broke out of it. -}
+enterLoop :: Maybe Text -> Type -> Bool -> Checker ()
+enterLoop label result carries =
+  Checker $ \state ->
+    ( ()
+    , state
+        { stateLoopFrames =
+            LoopFrame{frameLabel = label, frameResult = result, frameCarries = carries, frameBroken = False}
+              : stateLoopFrames state
+        }
+    )
+
+leaveLoop :: Checker Bool
+leaveLoop =
+  Checker $ \state -> case stateLoopFrames state of
+    [] -> (False, state)
+    frame : rest -> (frameBroken frame, state{stateLoopFrames = rest})
+
+{-| The loop a `break` or `continue` acts on: the one its label names, or the
+    innermost when it names none. -}
+loopTarget :: Maybe Text -> Checker (Maybe LoopFrame)
+loopTarget label =
+  Checker $ \state -> (pick (stateLoopFrames state), state)
+ where
+  pick frames = case label of
+    Nothing -> case frames of
+      [] -> Nothing
+      frame : _ -> Just frame
+    Just name -> case filter ((== Just name) . frameLabel) frames of
+      [] -> Nothing
+      frame : _ -> Just frame
+
+{-| Record that some `break` left the loop a label names, so a `loop` whose
+    body never breaks can be told apart from one that does. -}
+markLoopBroken :: Maybe Text -> Checker ()
+markLoopBroken label =
+  Checker $ \state -> ((), state{stateLoopFrames = map mark (stateLoopFrames state)})
+ where
+  mark frame
+    | matches frame = frame{frameBroken = True}
+    | otherwise = frame
+  matches frame = case label of
+    Nothing -> True
+    Just name -> frameLabel frame == Just name
+
+{-| Type-check an action as though no loop encloses it.
+
+    A function body written inside a loop is not inside it: the closure may
+    outlive the loop entirely, so a `break` in one leaves nothing. -}
+withoutLoops :: Checker a -> Checker a
+withoutLoops action = do
+  saved <- Checker $ \state -> (stateLoopFrames state, state{stateLoopFrames = []})
+  result <- action
+  Checker $ \state -> ((), state{stateLoopFrames = saved})
+  pure result
 
 {-| Enter an unsafe region. An empty grant list is the blanket form and offers
     every capability; naming some offers exactly those. -}

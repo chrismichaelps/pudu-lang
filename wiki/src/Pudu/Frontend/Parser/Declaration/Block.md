@@ -33,7 +33,9 @@ parseBlock :: Parser (Located Block)
 - A block opens with `{` and closes with `}`; the closing brace is owned here through the state-owned `E1001` expectation.
 - Statements are separated by line breaks, not by punctuation, using [[grammar/pudu]]'s continuation rule; the module owns no `;` token and inserts no terminator.
 - `let`, `var`, and `const` statements delegate to [[Parser Binding]]'s local entry point, which is the only admitted binding path inside a block.
-- `break` and `continue` are statements carrying no value; whether they sit inside a loop is a semantic rule.
+- `break` takes an optional `@label` and an optional value, independently: `break`, `break @outer`, `break value`, and `break @outer value` are all admitted. `continue` takes only the label, because it returns to a loop that is about to run again and nothing is waiting to receive a value.
+- A `break`'s value follows the same line rule as `return`'s: absent when the next token closes the block or begins a new line, so a `break` alone on its line never swallows the statement after it.
+- Whether a label names an enclosing loop, and whether that loop can carry a value at all, are semantic rules owned by [[Name Resolution]] and [[Type Check]] rather than parsing ones.
 - `return` produces `ReturnStatement`; its value is absent when the next token closes the block or begins a new line, and is otherwise a full expression.
 - Every other statement is an expression statement. A trailing expression statement becomes `blockResult`, matching "a block yields its final unterminated expression"; a block whose last entry is a binding or `return` yields `()` by carrying no result.
 - Block nesting and each statement's own descent are charged to [[Parser State]]'s shared 512-level budget, so a hostile brace flood reports one `E1099`. Statement iteration itself is bounded by required token progress, not by the depth budget, because a long statement list is ordinary input and must stay linear.

@@ -93,6 +93,7 @@ data SymbolKind
   | SymRightShift
   | SymCaret
   | SymTilde
+  | SymAt
   | SymLess
   | SymLessEqual
   | SymGreater
@@ -238,6 +239,7 @@ symbolText symbol =
     SymRightShift -> ">>"
     SymCaret -> "^"
     SymTilde -> "~"
+    SymAt -> "@"
     SymLess -> "<"
     SymLessEqual -> "<="
     SymGreater -> ">"

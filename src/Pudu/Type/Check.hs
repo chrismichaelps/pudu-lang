@@ -47,7 +47,13 @@ import Pudu.Type.Env
   , integerLiteralCheckpoint
   , ambiguousProviders
   , UnsafeFrame (..)
+  , LoopFrame (..)
+  , enterLoop
   , enterUnsafe
+  , leaveLoop
+  , loopTarget
+  , markLoopBroken
+  , withoutLoops
   , insideUnsafe
   , leaveUnsafe
   , unsafeFunctionCapabilities
@@ -349,7 +355,7 @@ dottedName expression = case expression of
     silent second instantiation of something they wrote once. Generalisation
     belongs to a declaration, which has a name to attach it to. -}
 lambdaType :: DeclaredTypes -> [Text] -> Function -> Checker Type
-lambdaType declared rigid value = inTypeScopeWith $ do
+lambdaType declared rigid value = withoutLoops $ inTypeScopeWith $ do
   inputs <- mapM (bindParameter declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
   let signature = FunctionTypeValue (functionAsync value) inputs result
@@ -508,7 +514,7 @@ checkBlock declared rigid (Located _ block) = do
     Just expression -> checkExpression declared rigid expression
 
 checkStatement :: DeclaredTypes -> [Text] -> Located Statement -> Checker ()
-checkStatement declared rigid (Located _ statement) = case statement of
+checkStatement declared rigid (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name annotation value)) -> do
     expected <- formOptionalType declared rigid annotation
     actual <- checkExpression declared rigid value
@@ -528,9 +534,56 @@ checkStatement declared rigid (Located _ statement) = case statement of
       Just expression -> do
         _ <- unify (locatedSpan expression) expected actual
         pure ()
-  BreakStatement -> pure ()
-  ContinueStatement -> pure ()
+  BreakStatement label value -> checkBreak declared rigid spanValue label value
+  ContinueStatement _ -> pure ()
   InvalidStatement -> pure ()
+
+{-| Check a `break`, against the loop it leaves.
+
+    A `break` carrying a value must leave a `loop`: `while` and `for` finish on
+    their own condition, so a value carried out of one would be produced on
+    some runs and not others, and there is no type for that. Reported here
+    rather than made to work, because the honest fix is a `loop` and saying so
+    is more use than inventing a default.
+
+    Every `break` leaving the same loop must carry the same type, which is what
+    unifying against the loop's result variable enforces. -}
+checkBreak
+  :: DeclaredTypes
+  -> [Text]
+  -> Span
+  -> Maybe (Located Text)
+  -> Maybe (Located Expression)
+  -> Checker ()
+checkBreak declared rigid spanValue label value = do
+  target <- loopTarget (fmap locatedValue label)
+  markLoopBroken (fmap locatedValue label)
+  case (target, value) of
+    (_, Nothing) -> pure ()
+    (Nothing, Just expression) -> do
+      _ <- checkExpression declared rigid expression
+      pure ()
+    (Just frame, Just expression) -> do
+      carried <- checkExpression declared rigid expression
+      if frameCarries frame
+        then do
+          _ <- unify (locatedSpan expression) (frameResult frame) carried
+          pure ()
+        else
+          report "E3029" spanValue "this loop cannot carry a value out of a break"
+            ( Just
+                ( "while and for finish when their own condition does, so a value "
+                    <> "carried out would exist on some runs and not others; use loop"
+                )
+            )
+
+{-| Check a loop body with that loop on the stack, reporting whether any
+    `break` left it. -}
+aroundLoop :: Maybe (Located Text) -> Type -> Bool -> Checker a -> Checker Bool
+aroundLoop label result carries action = do
+  enterLoop (fmap locatedValue label) result carries
+  _ <- action
+  leaveLoop
 
 {-| A member in callee position prefers a method over a field of the same
     name, because `value.name()` reads as a call and a field would have to be
@@ -812,22 +865,29 @@ inferExpression declared rigid spanValue expression = case expression of
     resolvedSubject <- zonk subjectType
     checkExhaustive spanValue resolvedSubject arms
     zonk result
-  WhileExpression condition body -> do
+  WhileExpression label condition body -> do
     conditionCheckpoint <- integerLiteralCheckpoint
     conditionType <- checkExpression declared rigid condition
     _ <- unify (locatedSpan condition) boolType conditionType
     validateIntegerLiteralsSince conditionCheckpoint
-    _ <- checkBlock declared rigid body
+    _ <- aroundLoop label UnitTypeValue False (checkBlock declared rigid body)
     pure UnitTypeValue
-  LoopExpression body -> do
-    _ <- checkBlock declared rigid body
-    pure UnitTypeValue
-  ForExpression binder iterated body -> do
+  {-| A `loop` has the type its `break` statements carry.
+
+      One that never breaks does not finish, so its type is `Never` and it may
+      stand where any type is wanted. That is not a special case bolted on: a
+      loop with no exit genuinely produces no value, and `Never` is the type of
+      an expression that produces none. -}
+  LoopExpression label body -> do
+    result <- freshVariable
+    broken <- aroundLoop label result True (checkBlock declared rigid body)
+    if broken then zonk result else pure NeverType
+  ForExpression label binder iterated body -> do
     _ <- checkExpression declared rigid iterated
-    inTypeScope $ do
+    _ <- inTypeScope $ do
       element <- freshVariable
       bindPattern declared rigid binder element
-      checkBlock declared rigid body
+      aroundLoop label UnitTypeValue False (checkBlock declared rigid body)
     pure UnitTypeValue
   {-| A type application pins what inference could not settle.
 

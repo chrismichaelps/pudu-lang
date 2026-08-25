@@ -6,8 +6,11 @@ module Pudu.Semantic.Resolve.Context
   , declarePreludeName
   , declareNamed
   , inScope
+  , insideLoop
   , markAmbiguousVariant
+  , outsideLoops
   , recordVariantSymbol
+  , resolveLoopTarget
   , resolveTypeName
   , resolveValueName
   , runResolver
@@ -49,6 +52,7 @@ data ResolveState = ResolveState
   { stateAmbiguous :: ![Text]
   , stateNext :: !Int
   , stateScopes :: !ScopeStack
+  , stateLoops :: ![Maybe Text]
   , stateSymbolsRev :: ![Symbol]
   , stateReferencesRev :: ![Reference]
   , stateDiagnosticsRev :: ![Diagnostic]
@@ -98,10 +102,77 @@ initialState =
     { stateAmbiguous = []
     , stateNext = 0
     , stateScopes = emptyStack
+    , stateLoops = []
     , stateSymbolsRev = []
     , stateReferencesRev = []
     , stateDiagnosticsRev = []
     }
+
+{-| Run an action inside one more enclosing loop.
+
+    Labels live on their own stack rather than in the ordinary scope, because
+    they are not names: nothing evaluates a label, nothing shadows a value with
+    one, and a label is legal only in the two statements that can name it. The
+    stack runs innermost first, which is the order `break` searches.
+
+    A label repeating one already enclosing it is a warning rather than an
+    error. The program still means something definite — the inner label wins,
+    since it is nearer — but the outer loop has become unreachable by name, and
+    that is almost always a mistake in the making rather than a plan. -}
+insideLoop :: Maybe (Located Text) -> Resolver a -> Resolver a
+insideLoop label action = do
+  enclosing <- readLoops
+  case label of
+    Just (Located spanValue name)
+      | Just name `elem` enclosing ->
+          emit "W2002" Warning spanValue ("label @" <> name <> " shadows an enclosing label")
+            (Just "give one of the two loops a different label")
+    _ -> pure ()
+  modifyLoops (fmap locatedValue label :)
+  result <- action
+  modifyLoops (drop 1)
+  pure result
+
+{-| Check that a `break` or `continue` has a loop to act on.
+
+    Both failures are reported here rather than left to run time. A `break`
+    outside every loop is not a program that might work on some input: there is
+    no loop to leave on any path, and the reader learns that sooner from the
+    compiler than from a program that ran halfway first. -}
+resolveLoopTarget :: Text -> Span -> Maybe (Located Text) -> Resolver ()
+resolveLoopTarget keyword spanValue label = do
+  enclosing <- readLoops
+  case (enclosing, label) of
+    ([], _) ->
+      emit "E2016" Error spanValue (keyword <> " is not inside a loop")
+        (Just ("write " <> keyword <> " inside `loop`, `while`, or `for`"))
+    (_, Nothing) -> pure ()
+    (_, Just (Located labelSpan name))
+      | Just name `elem` enclosing -> pure ()
+      | otherwise ->
+          emit "E2017" Error labelSpan ("no enclosing loop is labelled @" <> name)
+            (Just "label the loop you meant, or drop the label to leave the nearest one")
+
+{-| Run an action with no enclosing loop, whatever surrounds it.
+
+    A function body is not inside the loop that happens to contain its
+    definition. A closure written in a loop and called long after it has
+    finished cannot leave a loop that is no longer running, so `break` inside
+    one is out of every loop even when the text around it is not. -}
+outsideLoops :: Resolver a -> Resolver a
+outsideLoops action = do
+  enclosing <- readLoops
+  modifyLoops (const [])
+  result <- action
+  modifyLoops (const enclosing)
+  pure result
+
+readLoops :: Resolver [Maybe Text]
+readLoops = Resolver $ \state -> (stateLoops state, state)
+
+modifyLoops :: ([Maybe Text] -> [Maybe Text]) -> Resolver ()
+modifyLoops transform =
+  Resolver $ \state -> ((), state{stateLoops = transform (stateLoops state)})
 
 {-| Run an action inside a fresh lexical frame. The frame is discarded on exit,
     so nothing a nested scope declared can leak outward. -}

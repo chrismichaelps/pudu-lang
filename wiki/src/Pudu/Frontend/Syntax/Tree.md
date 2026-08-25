@@ -83,7 +83,8 @@ data Block = Block
 data Statement
   = DeclarationStatement !(Located Declaration) | ExpressionStatement !(Located Expression)
   | ReturnStatement !(Maybe (Located Expression))
-  | BreakStatement | ContinueStatement | InvalidStatement
+  | BreakStatement !(Maybe (Located Text)) !(Maybe (Located Expression))
+  | ContinueStatement !(Maybe (Located Text)) | InvalidStatement
 data Pattern
   = WildcardPattern | BindingPattern !(Located Text) | LiteralPattern !Literal
   | RangePattern !Literal !Bool !Literal | TuplePattern ![Located Pattern]
@@ -114,7 +115,8 @@ data Expression
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
-  | WhileExpression !(Located Expression) !(Located Block) | LoopExpression !(Located Block)
+  | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
+  | LoopExpression !(Maybe (Located Text)) !(Located Block)
   | ForExpression !(Located Pattern) !(Located Expression) !(Located Block)
   | InvalidExpression
 ```

@@ -27,6 +27,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - Scope frames record the children a structured scope started, in order. The frame is a stack like the environment's, so a nested scope owns only what it began and a task started outside every scope stays cold — which is what makes a detached task unrepresentable.
 
+- An unwind carries what the transfer needs to find its owner. A break and a continue carry their optional label, so a loop can tell one addressed to it from one meant for a loop further out and re-raise the latter untouched; a break also carries the value its loop will produce, which is unit when none was written.
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
