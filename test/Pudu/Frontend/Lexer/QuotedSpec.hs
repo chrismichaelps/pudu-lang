@@ -30,6 +30,8 @@ validFixtures =
   , ("\"light:\\u{1F4A1}\"", StringLiteral "light:💡"), ("'x'", CharLiteral 'x')
   , ("'\\n'", CharLiteral '\n'), ("'\\''", CharLiteral '\'')
   , ("'\\u{0}'", CharLiteral '\0'), ("'\\u{10FFFF}'", CharLiteral '\x10FFFF')
+  , ("\"a\\{b\\}c\"", StringLiteral "a{b}c")
+  , ("'\\{'", CharLiteral '{')
   ]
 
 invalidFixtures :: [(Text, Text, Text)]

@@ -63,6 +63,7 @@ data Builtin
   | CharFromCodeBuiltin
   | MapOfBuiltin
   | SetOfBuiltin
+  | ShowBuiltin
   deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
@@ -223,6 +224,7 @@ renderValue value = case value of
   BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
   BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
   BuiltinValue SetOfBuiltin -> "<builtin setOf>"
+  BuiltinValue ShowBuiltin -> "<builtin show>"
   MapValue entries ->
     "{" <> Text.intercalate ", " [renderValue key <> ": " <> renderValue held | (key, held) <- entries] <> "}"
   SetValue members -> "#{" <> Text.intercalate ", " (map renderValue members) <> "}"

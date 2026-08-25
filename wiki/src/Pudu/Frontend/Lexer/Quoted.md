@@ -27,6 +27,16 @@ scanQuoted :: LexerCursor -> Maybe LexerCursor
 
 ## Governance
 
+- A brace stays reserved inside a string so interpolation can be added later without changing what
+  existing programs mean, but `\{` and `\}` escape one. Until the escape existed, no JSON, shell
+  snippet, or code template could be written as a literal at all — the reservation was costing more
+  than the future feature is worth.
+
+- A brace stays reserved inside a string so interpolation can be added later without changing what
+  existing programs mean, but `\{` and `\}` escape one. Until the escape existed, no JSON, shell
+  snippet, or code template could be written as a literal at all — the reservation was costing more
+  than the future feature is worth.
+
 - `"` begins a string and `'` begins a character literal. A non-match returns `Nothing`; every match consumes and commits positive width.
 - String escapes are `\n`, `\r`, `\t`, `\\`, `\"`, `\0`, and `\u{HEX}`. Character literals additionally admit `\'`.
 - A Unicode escape contains one through six ASCII hexadecimal digits and a closing `}`. It is decoded through unbounded `Integer`, then rejected when empty, overlong, non-hexadecimal, surrogate-valued, or above U+10FFFF before conversion to `Char`.

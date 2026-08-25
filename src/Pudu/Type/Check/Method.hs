@@ -55,6 +55,7 @@ import Pudu.Type.Value
   , Scheme
   , charType
   , integerType
+  , stringType
   , Type (..)
   , monotype
   , nominalKey
@@ -283,6 +284,12 @@ declareBuiltinConstructors = do
             (NominalType "Map" [RigidType "K", RigidType "V"])
         )
     )
+  {-| Rendering is polymorphic in what it renders and answers with text. It is a
+      prelude value rather than a trait method because it works for every type
+      including the ones no module declared, and a trait would have to be
+      implemented for each. -}
+  bindName "show"
+    (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
   bindName "setOf"
     ( polytype ["T"] []
         ( FunctionTypeValue False

@@ -1,0 +1,497 @@
+module Std.Json
+
+/// A JSON value.
+/// Numbers are whole here: the language's floating types exist, but a decoder
+/// that silently turned `1` into a float would lose the distinction a caller
+/// cares about. A fractional literal decodes as `Fractional`, keeping its text
+/// so nothing is rounded on the way through.
+export type Json
+  = Null
+  | Boolean(Bool)
+  | Number(Int)
+  | Fractional(Str)
+  | Text(Str)
+  | List(Array[Json])
+  | Object(Array[(Str, Json)])
+
+/// What went wrong while reading JSON.
+export type JsonError
+  = Unexpected(Int, Str)
+  | Unterminated(Str)
+  | Trailing(Int)
+  | Empty
+
+/// A value read from text, or what stopped the reader.
+export fn decode(source: Str) -> Result[Json, JsonError] {
+  if source.trim().isEmpty() { Err(Empty) } else {
+    let started = skipSpace(source, 0)
+    match readValue(source, started) {
+      case Ok(pair) => {
+        let after = skipSpace(source, pair[1])
+        if after < source.length() { Err(Trailing(after)) } else { Ok(pair[0]) }
+      }
+      case Err(problem) => Err(problem)
+    }
+  }
+}
+
+/// A value written as compact text, with no spaces between its parts.
+export fn encode(value: &Json) -> Str {
+  match value {
+    case Null => "null"
+    case Boolean(flag) => if flag { "true" } else { "false" }
+    case Number(number) => show(number)
+    case Fractional(digits) => digits
+    case Text(content) => quote(content)
+    case List(members) => encodeList(&members)
+    case Object(entries) => encodeObject(&entries)
+  }
+}
+
+/// A value written across lines, each level indented by two spaces.
+export fn encodePretty(value: &Json) -> Str { prettyAt(value, 0) }
+
+/// The value stored under a key, or `None` when the value is not an object or
+/// has no such key.
+export fn field(value: &Json, key: Str) -> Option[Json] {
+  match value {
+    case Object(entries) => {
+      for entry in entries {
+        if entry[0] == key { return Some(entry[1]) }
+      }
+      None
+    }
+    case _ => None
+  }
+}
+
+/// The value at a position in a list, or `None`.
+export fn at(value: &Json, index: Int) -> Option[Json] {
+  match value {
+    case List(members) => {
+      if index < 0 || index >= members.length() { None } else { Some(members[index]) }
+    }
+    case _ => None
+  }
+}
+
+/// The value reached by following a path of object keys.
+export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
+  var current = *value
+  for key in steps {
+    match field(&current, key) {
+      case Some(found) => { current = found }
+      case None => { return None }
+    }
+  }
+  Some(current)
+}
+
+/// The text a value holds, or `None` when it holds something else.
+export fn asText(value: &Json) -> Option[Str] {
+  match value {
+    case Text(content) => Some(content)
+    case _ => None
+  }
+}
+
+/// The whole number a value holds, or `None`.
+export fn asInt(value: &Json) -> Option[Int] {
+  match value {
+    case Number(number) => Some(number)
+    case _ => None
+  }
+}
+
+/// The truth value a value holds, or `None`.
+export fn asBool(value: &Json) -> Option[Bool] {
+  match value {
+    case Boolean(flag) => Some(flag)
+    case _ => None
+  }
+}
+
+/// The members a list holds, or `None`.
+export fn asList(value: &Json) -> Option[Array[Json]] {
+  match value {
+    case List(members) => Some(members)
+    case _ => None
+  }
+}
+
+/// The entries an object holds, or `None`.
+export fn asObject(value: &Json) -> Option[Array[(Str, Json)]] {
+  match value {
+    case Object(entries) => Some(entries)
+    case _ => None
+  }
+}
+
+/// Whether a value is null.
+export fn isNull(value: &Json) -> Bool {
+  match value {
+    case Null => true
+    case _ => false
+  }
+}
+
+/// An object built from key and value pairs.
+export fn object(entries: &Array[(Str, Json)]) -> Json { Object(*entries) }
+
+/// A list built from values.
+export fn list(members: &Array[Json]) -> Json { List(*members) }
+
+/// An object with one key added or replaced.
+export fn withField(value: &Json, key: Str, held: Json) -> Json {
+  match value {
+    case Object(entries) => {
+      var out = []
+      var replaced = false
+      for entry in entries {
+        if entry[0] == key {
+          out = out.push((key, held))
+          replaced = true
+        } else { out = out.push(entry) }
+      }
+      if replaced { Object(out) } else { Object(out.push((key, held))) }
+    }
+    case _ => *value
+  }
+}
+
+/// Every key an object has, in the order they were written.
+export fn keys(value: &Json) -> Array[Str] {
+  match value {
+    case Object(entries) => {
+      var out = []
+      for entry in entries { out = out.push(entry[0]) }
+      out
+    }
+    case _ => []
+  }
+}
+
+/// A reader's failure explained in the terms a caller can report.
+export fn explain(problem: &JsonError) -> Str {
+  match problem {
+    case Unexpected(position, wanted) => "expected " + wanted + " at " + show(position)
+    case Unterminated(what) => "unterminated " + what
+    case Trailing(position) => "unexpected text after the value at " + show(position)
+    case Empty => "no value at all"
+  }
+}
+
+fn encodeList(members: &Array[Json]) -> Str {
+  var out = "["
+  var index = 0
+  while index < members.length() {
+    if index > 0 { out = out + "," }
+    out = out + encode(&members[index])
+    index = index + 1
+  }
+  out + "]"
+}
+
+fn encodeObject(entries: &Array[(Str, Json)]) -> Str {
+  var out = "" + openBrace()
+  var index = 0
+  while index < entries.length() {
+    if index > 0 { out = out + "," }
+    out = out + quote(entries[index][0]) + ":" + encode(&entries[index][1])
+    index = index + 1
+  }
+  out + closeBrace()
+}
+
+fn prettyAt(value: &Json, depth: Int) -> Str {
+  match value {
+    case List(members) => {
+      if members.length() == 0 { "[]" } else {
+        var out = "["
+        var index = 0
+        while index < members.length() {
+          if index > 0 { out = out + "," }
+          out = out + "\n" + indent(depth + 1) + prettyAt(&members[index], depth + 1)
+          index = index + 1
+        }
+        out + "\n" + indent(depth) + "]"
+      }
+    }
+    case Object(entries) => {
+      if entries.length() == 0 { openBrace() + closeBrace() } else {
+        var out = "" + openBrace()
+        var index = 0
+        while index < entries.length() {
+          if index > 0 { out = out + "," }
+          out = out + "\n" + indent(depth + 1) + quote(entries[index][0]) + ": "
+          out = out + prettyAt(&entries[index][1], depth + 1)
+          index = index + 1
+        }
+        out + "\n" + indent(depth) + closeBrace()
+      }
+    }
+    case _ => encode(value)
+  }
+}
+
+fn indent(depth: Int) -> Str {
+  var out = ""
+  var remaining = depth
+  while remaining > 0 {
+    out = out + "  "
+    remaining = remaining - 1
+  }
+  out
+}
+
+/// Text written as a JSON string, with the escapes the format requires.
+fn quote(content: Str) -> Str {
+  var out = "\""
+  for character in content.chars() {
+    if character == '"' { out = out + "\\\"" }
+    else {
+      if character == '\\' { out = out + "\\\\" }
+      else {
+        if character == '\n' { out = out + "\\n" }
+        else {
+          if character == '\r' { out = out + "\\r" }
+          else {
+            if character == '\t' { out = out + "\\t" }
+            else { out = out + character.toText() }
+          }
+        }
+      }
+    }
+  }
+  out + "\""
+}
+
+/// The brace characters, built from their scalar values because a brace inside
+/// a string literal is reserved for interpolation.
+fn openBrace() -> Str {
+  match charFromCode(123) {
+    case Some(found) => found.toText()
+    case None => ""
+  }
+}
+
+fn closeBrace() -> Str {
+  match charFromCode(125) {
+    case Some(found) => found.toText()
+    case None => ""
+  }
+}
+
+/// The position of the first character at or after `from` that is not
+/// whitespace.
+fn skipSpace(source: Str, from: Int) -> Int {
+  var index = from
+  let size = source.length()
+  while index < size && isSpace(source.charAt(index)) { index = index + 1 }
+  index
+}
+
+fn isSpace(value: Char) -> Bool {
+  value == ' ' || value == '\t' || value == '\r' || value == '\n'
+}
+
+/// One value read at a position, with the position just after it.
+fn readValue(source: Str, from: Int) -> Result[(Json, Int), JsonError] {
+  let start = skipSpace(source, from)
+  if start >= source.length() { Err(Unexpected(start, "a value")) } else {
+    let character = source.charAt(start)
+    if character == '"' { readText(source, start) }
+    else {
+      if character == '[' { readList(source, start) }
+      else {
+        if character.code() == 123 { readObject(source, start) }
+        else {
+          if character == '-' || isDigitChar(character) { readNumber(source, start) }
+          else { readKeyword(source, start) }
+        }
+      }
+    }
+  }
+}
+
+fn isDigitChar(value: Char) -> Bool { value >= '0' && value <= '9' }
+
+/// `true`, `false`, or `null`, whichever begins at the position.
+fn readKeyword(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
+  if startsAt(source, start, "true") { Ok((Boolean(true), start + 4)) }
+  else {
+    if startsAt(source, start, "false") { Ok((Boolean(false), start + 5)) }
+    else {
+      if startsAt(source, start, "null") { Ok((Null, start + 4)) }
+      else { Err(Unexpected(start, "a value")) }
+    }
+  }
+}
+
+fn startsAt(source: Str, start: Int, wanted: Str) -> Bool {
+  let end = start + wanted.length()
+  if end > source.length() { false } else { source.slice(start, end) == wanted }
+}
+
+/// A number, kept whole when it has no fraction or exponent and kept as written
+/// when it has, so nothing is rounded on the way through.
+fn readNumber(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
+  var index = start
+  let size = source.length()
+  var fractional = false
+  if index < size && source.charAt(index) == '-' { index = index + 1 }
+  while index < size && isDigitChar(source.charAt(index)) { index = index + 1 }
+  if index < size && source.charAt(index) == '.' {
+    fractional = true
+    index = index + 1
+    while index < size && isDigitChar(source.charAt(index)) { index = index + 1 }
+  }
+  if index < size && (source.charAt(index) == 'e' || source.charAt(index) == 'E') {
+    fractional = true
+    index = index + 1
+    if index < size && (source.charAt(index) == '+' || source.charAt(index) == '-') {
+      index = index + 1
+    }
+    while index < size && isDigitChar(source.charAt(index)) { index = index + 1 }
+  }
+  let written = source.slice(start, index)
+  if written.isEmpty() || written == "-" { Err(Unexpected(start, "a number")) } else {
+    if fractional { Ok((Fractional(written), index)) } else {
+      match wholeOf(written) {
+        case Some(number) => Ok((Number(number), index))
+        case None => Err(Unexpected(start, "a number"))
+      }
+    }
+  }
+}
+
+/// Digits read as a whole number, with a leading minus admitted.
+fn wholeOf(written: Str) -> Option[Int] {
+  var negative = false
+  var body = written
+  if body.startsWith("-") {
+    negative = true
+    body = body.slice(1, body.length())
+  }
+  if body.isEmpty() { None } else {
+    var total = 0
+    for character in body.chars() {
+      if !isDigitChar(character) { return None }
+      total = total * 10 + (character.code() - 48)
+    }
+    if negative { Some(0 - total) } else { Some(total) }
+  }
+}
+
+/// A quoted string, with the escapes the format defines.
+fn readText(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
+  var index = start + 1
+  let size = source.length()
+  var out = ""
+  while index < size {
+    let character = source.charAt(index)
+    if character == '"' { return Ok((Text(out), index + 1)) }
+    if character == '\\' {
+      index = index + 1
+      if index >= size { return Err(Unterminated("string")) }
+      let escaped = source.charAt(index)
+      if escaped == 'n' { out = out + "\n" }
+      else {
+        if escaped == 't' { out = out + "\t" }
+        else {
+          if escaped == 'r' { out = out + "\r" }
+          else {
+            if escaped == 'u' {
+              if index + 4 >= size { return Err(Unterminated("escape")) }
+              match hexOf(source.slice(index + 1, index + 5)) {
+                case Some(code) => {
+                  match charFromCode(code) {
+                    case Some(found) => { out = out + found.toText() }
+                    case None => { return Err(Unexpected(index, "a scalar value")) }
+                  }
+                  index = index + 4
+                }
+                case None => { return Err(Unexpected(index, "four hex digits")) }
+              }
+            } else { out = out + escaped.toText() }
+          }
+        }
+      }
+    } else { out = out + character.toText() }
+    index = index + 1
+  }
+  Err(Unterminated("string"))
+}
+
+fn hexOf(digits: Str) -> Option[Int] {
+  var total = 0
+  for character in digits.toLower().chars() {
+    let found = "0123456789abcdef".indexOf(character.toText())
+    if found < 0 { return None }
+    total = total * 16 + found
+  }
+  Some(total)
+}
+
+/// A bracketed list of values.
+fn readList(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
+  var index = skipSpace(source, start + 1)
+  var members = []
+  let size = source.length()
+  if index < size && source.charAt(index) == ']' { return Ok((List(members), index + 1)) }
+  while index < size {
+    match readValue(source, index) {
+      case Ok(pair) => {
+        members = members.push(pair[0])
+        index = skipSpace(source, pair[1])
+      }
+      case Err(problem) => { return Err(problem) }
+    }
+    if index >= size { return Err(Unterminated("list")) }
+    let character = source.charAt(index)
+    if character == ']' { return Ok((List(members), index + 1)) }
+    if character != ',' { return Err(Unexpected(index, "a comma or a closing bracket")) }
+    index = skipSpace(source, index + 1)
+  }
+  Err(Unterminated("list"))
+}
+
+/// A braced object of key and value pairs.
+fn readObject(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
+  var index = skipSpace(source, start + 1)
+  var entries = []
+  let size = source.length()
+  if index < size && source.charAt(index).code() == 125 {
+    return Ok((Object(entries), index + 1))
+  }
+  while index < size {
+    if source.charAt(index) != '"' { return Err(Unexpected(index, "a key")) }
+    match readText(source, index) {
+      case Ok(keyPair) => {
+        match keyPair[0] {
+          case Text(key) => {
+            var afterKey = skipSpace(source, keyPair[1])
+            if afterKey >= size || source.charAt(afterKey) != ':' {
+              return Err(Unexpected(afterKey, "a colon"))
+            }
+            match readValue(source, afterKey + 1) {
+              case Ok(valuePair) => {
+                entries = entries.push((key, valuePair[0]))
+                index = skipSpace(source, valuePair[1])
+              }
+              case Err(problem) => { return Err(problem) }
+            }
+          }
+          case _ => { return Err(Unexpected(index, "a key")) }
+        }
+      }
+      case Err(problem) => { return Err(problem) }
+    }
+    if index >= size { return Err(Unterminated("object")) }
+    let character = source.charAt(index)
+    if character.code() == 125 { return Ok((Object(entries), index + 1)) }
+    if character != ',' { return Err(Unexpected(index, "a comma or a closing brace")) }
+    index = skipSpace(source, index + 1)
+  }
+  Err(Unterminated("object"))
+}

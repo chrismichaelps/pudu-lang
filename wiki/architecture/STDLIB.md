@@ -148,33 +148,44 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Thirteen modules, 422 documented exports, every one written in Pudu.
+Eighteen modules, 579 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
 | `Std.List` | 95 | folds, scans, slicing, searching, set operations, zipping, sorting, subsequences, permutations, windows |
 | `Std.Text` | 64 | slicing, splitting, padding, per-character work, prefixes, comparison, case |
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
-| `Std.Set` | 33 | membership, the three set operations, subset tests, splitting, products |
+| `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 29 | the bit operators as functions, positions, rotation, base conversion |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
 | `Std.Math` | 27 | integer arithmetic, divisibility, roots, primality, checked partial operators |
+| `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
+| `Std.Http.Message` | 12 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
+| `Std.Json` | 19 | a `Json` value, a decoder with positions in its errors, compact and pretty encoding |
+| `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
 | `Std.Order` | 16 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
+| `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
 
-`Map[K, V]` and `Set[T]` are wired-in types with closed method vocabularies, like `Array` and `Str`.
-They keep their contents in key order, which is what makes two of them equal when their contents are
-however they were built — see [[Eval Keyed]]. A value with no meaningful order, such as a function,
-is refused as a key with `E7008` rather than silently ordered by something arbitrary.
+### On HTTP
 
-Everything else in the tables above is designed and unwritten. One thing blocks the rest, and it is
-runtime work rather than library work: `Std.Io`, `Std.Http`, `Std.Net`, `Std.Process`, and `Std.Db`
-need a foreign interface, which needs the `foreign` capability from [[Unsafe Capabilities]] and a
-decision about how a foreign type's ownership is described.
+`Std.Http` and `Std.Http.Message` carry everything about the protocol that does not touch a socket:
+building and inspecting requests, the full status and header vocabulary, cookies, basic and bearer
+authorization, content negotiation with weights, form bodies, byte ranges, chunked framing, and
+parsing or rendering a complete message.
+
+**There is no client, and there will not be one until the foreign interface exists.** A `send` that
+could not send would be worse than none: it would make a program compile and fail at run time for a
+reason the type system could have carried. Everything up to the moment of sending is here and
+testable without a network, which is the part a program spends most of its code on anyway.
+
+Everything else in the tables above is designed and unwritten, blocked on the same thing:
+`Std.Io`, `Std.Net`, `Std.Process`, and `Std.Db` need the `foreign` capability from
+[[Unsafe Capabilities]] and a decision about how a foreign type's ownership is described.
 
 ## What writing it found
 
@@ -195,6 +206,8 @@ one became a language change rather than a workaround:
 | `out.push(x)` doing nothing | `W3002` for a discarded collection result |
 | any keyed collection | `Map` and `Set` as wired-in types |
 | `Ok(())` against `Result[(), E]` | an empty tuple types as unit |
+| a brace in a string literal | `\{` escapes one, keeping `{` reserved |
+| rendering any value as text | `show` in the prelude |
 
 One of them was a soundness bug rather than a gap: `(Int, Str)[1]` reported `Int` while the value
 was text, because a tuple's members were all typed as the first member's type. A tuple is now
