@@ -30,6 +30,7 @@ pudu check <file>... compile files and report diagnostics
 pudu run <file>      compile a program and run its main function
 pudu doc <file>...   describe every name a program declares
 pudu doc --json ...  the same index, for an editor or a search server
+pudu doc --html ...  emit a self-contained searchable documentation page
 pudu search <query> <file>...  find a name, or a type shape
 pudu version         print the version
 pudu help            print usage
@@ -50,8 +51,14 @@ pudu help            print usage
 
 - `pudu doc` and `pudu search` write the index to stdout and every diagnostic to stderr, so a
   program with errors still yields a machine-readable index rather than a corrupted one.
+- Documentation and search finish writing every recoverable result before returning non-zero when
+  any indexed root has error diagnostics. Output availability never turns a failed compile into a
+  successful process status.
 - `pudu doc --json` and `pudu doc` emit the same index. Nothing is expressible in the human form
   that the machine form omits, so a tool never has to scrape the terminal output.
+- `pudu doc --html` projects that same index through [[Doc Site]]. It writes one complete page to
+  stdout, so redirection chooses the artifact path and the CLI does not invent directory or
+  overwrite policy.
 
 - The entry point decides presentation and the library decides meaning: colour, exit codes, and stream choice live here, and nothing here parses or evaluates Pudu.
 - Colour is used only for an interactive terminal and never when `NO_COLOR` is set, so piped and redirected output stays plain and diffable.
@@ -61,7 +68,7 @@ pudu help            print usage
 
 ### Linkage
 
-- **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Diagnostic Render]], [[Pudu REPL]], [[Source]].
+- **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Diagnostic Render]], [[Doc Site]], [[Pudu REPL]], [[Source]].
 - **Consumed by:** people and scripts.
 
 ## Algorithm
@@ -76,6 +83,8 @@ Read arguments, detect the render style once, dispatch to the session or the che
 ## Edge Cases
 
 - `pudu check` with no files is a usage error rather than a silent success.
+- `pudu doc --html` with no files is the same explicit usage error as the other documentation
+  formats; an intentionally empty site can still be rendered by the pure [[Doc Site]] interface.
 - A path may exist and still be unreadable; `check` trusts the loader's diagnostic result, so this cannot become a zero-error summary.
 - Standard output is set to UTF-8 by the session so identifiers outside ASCII render correctly.
 
@@ -88,6 +97,9 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 - **Q:** Should the checker stop at the first failing file? **A:** No. _Rationale:_ a person fixing a project wants every file's diagnostics in one run. _Rejected:_ fail-fast checking.
 - **Q:** Where is colour decided? **A:** Here, once, from the terminal and `NO_COLOR`. _Rationale:_ [[Diagnostic Render]] stays pure and testable byte for byte. _Rejected:_ ambient detection inside the renderer.
 - **Q:** Should `pudu check B.pudu` ignore `B`'s imports? **A:** No; each argument is a root program and its absolute imports are loaded transitively. _Rationale:_ command-line and REPL loading must compile the program the file declares. _Rejected:_ independent opaque single-file checks.
+- **Q:** Should `pudu doc --html` take an output directory? **A:** No. _Rationale:_ the page is one
+  artifact and stdout composes with shells, build tools, and release pipelines without defining
+  overwrite behaviour in the compiler. _Rejected:_ an output path with implicit replacement.
 
 ## Referenced by
 

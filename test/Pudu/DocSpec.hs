@@ -11,6 +11,7 @@ import Pudu.Doc
 import Pudu.Doc.Json (encodeIndex, escapeJson)
 import Pudu.Doc.Query (Query (..), parseQuery)
 import Pudu.Doc.Search (Match (..), searchText)
+import Pudu.Doc.Site (renderSite)
 import Pudu.Doc.Signature (renderSignature)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -23,6 +24,8 @@ docProperties =
   , ("a name query ranks exact matches first", testNameSearch)
   , ("queries are read as names or as shapes", testQueryParsing)
   , ("the encoded index is well formed", testEncoding)
+  , ("the documentation site embeds and presents the index", testSite)
+  , ("the documentation site contains source text safely", testSiteSafety)
   ]
 
 {-| The whole point of building the index from the checker: a declaration with
@@ -92,6 +95,10 @@ testTypeSearch = do
         (namesOf (searchText "Int -> Int" index) === ["twice"])
     , counterexample "a shape nothing has finds nothing"
         (namesOf (searchText "Str -> Str" index) === [])
+    , counterexample "a leading arrow searches only by result"
+        (property ("label" `elem` namesOf (searchText "-> Str" index)))
+    , counterexample "a result-only match stays on the documented weakest rung"
+        (scoresOf "label" (searchText "-> Str" index) === [60])
     , counterexample "a variable query does not match a concrete signature exactly"
         (notElem "twice" (namesOf (searchText "a -> a" index)) === True)
     ]
@@ -121,7 +128,16 @@ testQueryParsing =
     , counterexample "an applied type with no arrow is still a name"
         (isName (parseQuery "Array[Int]") === True)
     , counterexample "an arrow makes it a shape" (isShape (parseQuery "Int -> Int") === True)
+    , counterexample "a leading arrow asks for a result shape"
+        (renderedQuery (parseQuery "-> Array[Int]") === Just "Array[Int]")
     , counterexample "blank input is no query" (parseQuery "   " === Nothing)
+    , counterexample "a trailing arrow remains incomplete" (parseQuery "Int ->" === Nothing)
+    , counterexample "an omitted middle type remains malformed"
+        (parseQuery "Int -> -> Str" === Nothing)
+    , counterexample "uncased Unicode letters remain query variables"
+        (isShape (parseQuery "你 -> 你") === True)
+    , counterexample "hostile query nesting is refused before recursive parsing"
+        (parseQuery (Text.replicate 65 "Array[" <> "Int" <> Text.replicate 65 "]" <> " -> Int") === Nothing)
     , counterexample "a nested arrow stays inside its argument"
         (renderedQuery (parseQuery "(fn(Int) -> Str) -> Bool") === Just "fn(Int) -> Str -> Bool")
     ]
@@ -156,6 +172,50 @@ testEncoding = do
         (property (Text.isInfixOf "\"form\":\"con\"" encoded))
     ]
 
+{-| The site is one complete artifact and projects the same index fields the
+    terminal and JSON forms expose. -}
+testSite :: IO Property
+testSite = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// Double a number."
+    , "fn twice(n: Int) -> Int { n * 2 }"
+    ]
+  let site = renderSite index
+      emptySite = renderSite (DocIndex [])
+  pure $ conjoin
+    [ counterexample "the artifact declares HTML" (property ("<!doctype html>" `Text.isPrefixOf` site))
+    , counterexample "the index entry is embedded" (property (Text.isInfixOf "\"name\":\"twice\"" site))
+    , counterexample "name and type search are available" (property (Text.isInfixOf "function shapeScore" site))
+    , counterexample "browser identifiers use Unicode letter categories"
+        (property (Text.isInfixOf "\\p{L}" site && Text.isInfixOf "\\p{N}" site))
+    , counterexample "the search control is labelled" (property (Text.isInfixOf "label for='query'" site))
+    , counterexample "the artifact has no remote dependency" (property (not (Text.isInfixOf "https://" site)))
+    , counterexample "an empty index keeps an explicit state"
+        (property (Text.isInfixOf "\"entries\":[]" emptySite && Text.isInfixOf "No declarations indexed" emptySite))
+    ]
+
+{-| JSON is not an HTML raw-text escape boundary. A documentation comment that
+    looks like a closing script tag must remain data when embedded. -}
+testSiteSafety :: IO Property
+testSiteSafety = do
+  index <- indexOf
+    [ "module Doc"
+    , "/// </script><script>globalThis.compromised = true</script>"
+    , "fn safe(n: Int) -> Int { n }"
+    ]
+  let site = renderSite index
+      dataStart = snd (Text.breakOn "<script id='pudu-index'" site)
+      beforeProgram = fst (Text.breakOn "</script>\n<script>" dataStart)
+  pure $ conjoin
+    [ counterexample "source markup is neutralised inside the embedded index"
+        (property (not (Text.isInfixOf "<script>globalThis.compromised" beforeProgram)))
+    , counterexample "markup-opening scalars use JSON escapes"
+        (property (Text.isInfixOf "\\u003c/script\\u003e" beforeProgram))
+    , counterexample "the page owns only its fixed executable script"
+        (Text.count "</script>" site === 2)
+    ]
+
 indexOf :: [Text] -> IO DocIndex
 indexOf lines' = do
   source <- newSource (SourceName "Doc.pudu") (Text.unlines lines')
@@ -173,3 +233,6 @@ commentOf name index = case entriesFor name index of
 
 namesOf :: [Match] -> [Text]
 namesOf = map (docName . matchEntry)
+
+scoresOf :: Text -> [Match] -> [Int]
+scoresOf name = map matchScore . filter ((== name) . docName . matchEntry)

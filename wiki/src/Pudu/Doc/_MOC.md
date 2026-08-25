@@ -11,8 +11,9 @@ aliases: [Doc Module Map]
 - [[Doc Query]] — parses a search query into a name or a type shape.
 - [[Doc Search]] — ranks index entries against a query.
 - [[Doc Json]] — the encoding editors and a search server consume.
+- [[Doc Site]] — the self-contained browser projection of an index and its search contract.
 
-Dependency direction: Signature → Index → Query/Search/Json. Nothing here performs IO, and
+Dependency direction: Signature → Index → Query/Search/Json → Site. Nothing here performs IO, and
 nothing re-derives a type from written syntax.
 
 ## Referenced by

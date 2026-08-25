@@ -36,10 +36,25 @@ data Query
 parseQuery :: Text -> Maybe Query
 parseQuery raw
   | Text.null trimmed = Nothing
+  | not (withinQueryBudget trimmed) = Nothing
   | Text.isInfixOf "->" trimmed = TypeQuery . alphaNormalise <$> parseSignature trimmed
   | otherwise = Just (NameQuery trimmed)
  where
   trimmed = Text.strip raw
+
+{-| Keep an interactive query from turning recursive type parsing into an
+    unbounded call stack. The budget counts decoded scalars and structural
+    nesting; ordinary long identifiers remain comfortably inside it. -}
+withinQueryBudget :: Text -> Bool
+withinQueryBudget text =
+ Text.length text <= 512 && go 0 (Text.unpack text)
+ where
+  go :: Int -> String -> Bool
+  go _ [] = True
+  go depth (scalar : rest)
+    | scalar `elem` ("[(" :: String) = depth < 64 && go (depth + 1) rest
+    | scalar `elem` ("])" :: String) = go (max 0 (depth - 1)) rest
+    | otherwise = go depth rest
 
 {-| Split on top-level arrows and parse each piece.
 
@@ -50,7 +65,7 @@ parseSignature :: Text -> Maybe Signature
 parseSignature text = case splitArrows text of
   [] -> Nothing
   pieces -> do
-    parts <- traverse parseSigType pieces
+    parts <- traverse parseSigType (dropLeadingArgument pieces)
     case reverse parts of
       [] -> Nothing
       result : reversedArguments ->
@@ -60,6 +75,13 @@ parseSignature text = case splitArrows text of
             , signatureArguments = reverse reversedArguments
             , signatureResult = result
             }
+ where
+  {-| A leading arrow asks only for a result type. No other empty piece is
+      admitted: a trailing arrow is unfinished input, and two adjacent arrows
+      do not name an omitted argument. -}
+  dropLeadingArgument pieces = case pieces of
+    first : rest | Text.null first, not (null rest) -> rest
+    _ -> pieces
 
 {-| Split on arrows that are not inside brackets or parentheses, so the inputs
     of a function-typed argument stay with it. -}

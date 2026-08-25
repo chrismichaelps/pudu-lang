@@ -91,8 +91,8 @@ shapeScore :: Signature -> Signature -> Maybe Int
 shapeScore wanted found
   | sameShape = Just 0
   | reorderedShape = Just 40
+  | sameResult && null wantedArguments = Just 60
   | argumentsContained && sameResult = Just 50
-  | sameResult && null (signatureArguments wanted) = Just 60
   | otherwise = Nothing
  where
   wantedArguments = signatureArguments wanted

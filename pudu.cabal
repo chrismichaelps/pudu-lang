@@ -79,6 +79,7 @@ library
     Pudu.Doc.Query
     Pudu.Doc.Search
     Pudu.Doc.Signature
+    Pudu.Doc.Site
     Pudu.Repl
     Pudu.Repl.Command
     Pudu.Repl.Describe

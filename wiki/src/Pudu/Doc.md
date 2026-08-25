@@ -66,7 +66,7 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 ### Linkage
 
 - **Requires:** [[Doc Signature]], [[Syntax Tree]], [[Source Token]], [[Type Boundary]].
-- **Consumed by:** [[Compiler Pipeline]], [[Doc Search]], [[Doc Json]], [[Pudu REPL]], [[Program Cli]].
+- **Consumed by:** [[Compiler Pipeline]], [[Doc Search]], [[Doc Json]], [[Pudu REPL]], [[Pudu CLI]].
 
 ## Algorithm
 
