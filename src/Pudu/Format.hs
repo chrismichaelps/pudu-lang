@@ -287,6 +287,9 @@ braceKinds pieces
         top : below -> top : go below inHead rest
         [] -> Block : go [] inHead rest
       Keyword keyword | keyword `elem` headKeywords -> Block : go stack True rest
+      {-| A `{` after a return arrow opens a body, never a record: `-> Int {` is
+          a function's result followed by what computes it. -}
+      Symbol SymThinArrow -> Block : go stack True rest
       {-| A parenthesised expression inside a head is not the head's own brace
           position, so `for x in (Thing{v: 1})` still holds a record. -}
       Symbol SymLeftParen -> Block : go stack False rest

@@ -3,5 +3,5 @@ module HiddenOne
 type Hidden = { value: Int }
 export type Public = Hidden
 
-export fn keep(value: Public) -> Public{value}
+export fn keep(value: Public) -> Public { value }
 export fn make() -> Hidden { Hidden{value: 1} }

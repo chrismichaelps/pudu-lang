@@ -8,6 +8,7 @@ tags: [moc, module]
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
 - [[Integer Literal]] — shared arbitrary-precision integer decoding, suffix vocabulary, and concrete-type fit laws.
+- [[Language Server]] — answers an editor about an open program, over the protocol, using the ordinary compile.
 - [[Format]] — the one committed style, applied from the token stream so it can only move whitespace.
 - [[Decimal Literal]] — the exact base-ten number: coefficient and scale, exact arithmetic, exact-or-error division, and the seven rounding modes.
 - [[Float Literal]] — shared floating suffixes, total conversion, overflow detection, and runtime precision normalization.
