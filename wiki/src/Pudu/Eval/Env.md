@@ -25,6 +25,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
+
 - Scope frames record the children a structured scope started, in order. The frame is a stack like the environment's, so a nested scope owns only what it began and a task started outside every scope stays cold — which is what makes a detached task unrepresentable.
 
 - An unwind carries what the transfer needs to find its owner. A break and a continue carry their optional label, so a loop can tell one addressed to it from one meant for a loop further out and re-raise the latter untouched; a break also carries the value its loop will produce, which is unit when none was written.

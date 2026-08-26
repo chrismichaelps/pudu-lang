@@ -13,6 +13,7 @@ module Pudu.Eval.Env
   , catchUnwind
   , ascend
   , bind
+  , bindMethod
   , callLimit
   , captureEnvironment
   , currentFrame
@@ -26,6 +27,7 @@ module Pudu.Eval.Env
   , lookupName
   , popFrame
   , pushFrame
+  , replaceFrame
   , update
   , withFrame
   , withNewFrame
@@ -48,6 +50,7 @@ import Pudu.Source (Span)
 {-| @Eval.Env — name-keyed frames, innermost first -}
 data Env = Env
   { envFrames :: ![Map Text Value]
+  , envMethods :: !(Map Text Value)
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
@@ -203,7 +206,14 @@ catchUnwind (Evaluator action) =
       Aborted stop -> Aborted stop
 
 emptyEnv :: Env
-emptyEnv = Env{envFrames = [Map.empty], envDepth = 0, envScopes = [], envEffects = True}
+emptyEnv =
+  Env
+    { envFrames = [Map.empty]
+    , envMethods = Map.empty
+    , envDepth = 0
+    , envScopes = []
+    , envEffects = True
+    }
 
 bind :: Text -> Value -> Evaluator ()
 bind name value =
@@ -222,14 +232,31 @@ update name value = Evaluator $ \env -> pure (Done () env{envFrames = go (envFra
       | Map.member name current -> Map.insert name value current : rest
       | otherwise -> current : go rest
 
+{-| Find a name: lexically first, then among the program's implementations.
+
+    The two namespaces are separate because their scoping rules are opposite. A
+    function belongs to the module that declared it, and a module's own name
+    must win over another module's. An **implementation is global** — a fact
+    about a type and a trait, true everywhere in a program once it exists
+    anywhere in it, which is what the orphan rule is for — so it cannot live in
+    a frame that only the module declaring it can see. Keeping impls out of the
+    frame stack is what lets a library's adapter dispatch to a program's own
+    type, which was linked long after the library was. -}
 lookupName :: Text -> Evaluator (Maybe Value)
-lookupName name = Evaluator $ \env -> pure (Done (search (envFrames env)) env)
+lookupName name =
+  Evaluator $ \env ->
+    pure (Done (maybe (Map.lookup name (envMethods env)) Just (search (envFrames env))) env)
  where
   search frames = case frames of
     [] -> Nothing
     current : rest -> case Map.lookup name current of
       Just found -> Just found
       Nothing -> search rest
+
+{-| Record an implementation's method, where every module can reach it. -}
+bindMethod :: Text -> Value -> Evaluator ()
+bindMethod name value =
+  Evaluator $ \env -> pure (Done () env{envMethods = Map.insert name value (envMethods env)})
 
 withFrame :: [(Text, Value)] -> Evaluator a -> Evaluator a
 withFrame bindings (Evaluator action) =
@@ -290,6 +317,17 @@ currentFrame =
   Evaluator $ \env -> pure $ case envFrames env of
     current : _ -> Done current env
     [] -> Done Map.empty env
+
+{-| Replace what the innermost frame holds.
+
+    Linking a module needs it: the module's functions are loaded first so they
+    can see each other, and then rewritten to capture the environment they were
+    loaded into. -}
+replaceFrame :: Map Text Value -> Evaluator ()
+replaceFrame frame =
+  Evaluator $ \env -> pure $ case envFrames env of
+    _ : rest -> Done () env{envFrames = frame : rest}
+    [] -> Done () env{envFrames = [frame]}
 
 popFrame :: Evaluator ()
 popFrame =

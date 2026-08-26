@@ -1,0 +1,17 @@
+module Main
+
+import Own.Helper as H
+
+/// A different module's export, sharing the name and answering differently.
+export fn pick(left: Int, right: Int) -> Int { right }
+
+/// A module calls the function it declared, not one that happens to share the
+/// name. Before, every module's functions shared one namespace and the last
+/// linked won for everybody — so a private helper could be replaced by a
+/// stranger's export.
+export fn main() -> Int {
+  var passed = 0
+  if H.useOwn() == 1 { passed = passed + 1 }
+  if pick(1, 2) == 2 { passed = passed + 1 }
+  passed
+}
