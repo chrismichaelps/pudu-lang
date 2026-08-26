@@ -102,10 +102,20 @@ labelWithoutLoop token = do
   skipToLineBoundary
   pure (Located (tokenSpan token) InvalidExpression)
 
+{-| Recover where an expression was wanted and none could be read.
+
+    A token the lexer marked `Invalid` has already been diagnosed, and
+    precisely: `"{}"` is an interpolation with no expression, and `1.2.3` is a
+    malformed number. Adding a generic "expected expression" over the top gives
+    the reader two diagnostics for one mistake, with the less useful one first.
+    Recovery still happens; only the second message goes. -}
 invalidPrefix :: Token -> Parser (Located Expression)
 invalidPrefix token = do
-  emitParseError "E1040" (tokenSpan token) "expected expression"
-    (Just "start with a literal, name, (, {, if, or unary operator")
+  case tokenKind token of
+    Invalid _ -> pure ()
+    _ ->
+      emitParseError "E1040" (tokenSpan token) "expected expression"
+        (Just "start with a literal, name, (, {, if, or unary operator")
   case tokenKind token of
     EndOfFile -> pure ()
     kind | isRecoveryBoundary kind -> pure ()

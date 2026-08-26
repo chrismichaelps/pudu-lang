@@ -37,6 +37,8 @@ mergedOrLeft              :: Span -> Span -> Span
 
 ### Governance
 
+- A token the lexer marked `Invalid` has already been diagnosed, and precisely — `"{}"` is an interpolation with no expression — so the parser adds nothing over it. Recovery still happens; only the second, vaguer message goes.
+
 - Recovery always makes forward progress or stops at a boundary it did not consume. `invalidPrefix`
   advances one token unless the token closes a group or ends the file, so an unrecognised expression
   start can never loop.

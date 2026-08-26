@@ -139,9 +139,19 @@ testRecovery = do
   invalid <- parse ")"
   malformedElse <- parse "if true {} else 1"
   delimited <- parse "(a +)"
+  {-| A token the lexer marked invalid has already been diagnosed, and
+      precisely: `"{}"` is an interpolation with no expression. Saying "expected expression" over the top gives the
+      reader two diagnostics for one mistake, with the less useful one first.
+
+      This harness collects parser diagnostics only, so an empty list here is
+      the parser staying quiet; the lexer's own message is covered by
+      [[Lexer Quoted]]'s tests. -}
+  emptyHole <- parse "\"{}\""
   pure $ conjoin [codes missing === ["E1040"], codes invalid === ["E1040"],
     codes malformedElse === ["E1042"], diagnosticOffsets malformedElse === [16],
-    codes delimited === ["E1040"], resultKind delimited === EndOfFile]
+    codes delimited === ["E1040"], resultKind delimited === EndOfFile,
+    counterexample "the parser adds nothing to an invalid string"
+      (codes emptyHole === [])]
 
 testReservedKeywords :: IO Property
 testReservedKeywords = do
