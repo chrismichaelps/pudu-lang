@@ -1,6 +1,7 @@
 {-| @Program.Parser.State — owns bounded token traversal -}
 module Pudu.Frontend.Parser.State
-  ( Parser
+  ( BlockParser
+  , Parser
   , advanceToken
   , budgetExhausted
   , currentSpan
@@ -42,6 +43,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (Located))
+import Pudu.Frontend.Syntax.Tree (Block)
 import Pudu.Frontend.Token
   ( Keyword (KwAsync, KwComptime, KwConst, KwEnum, KwExport, KwFn, KwImpl
     , KwLet, KwMacro, KwStruct, KwTrait, KwType, KwVar)
@@ -52,6 +54,15 @@ import Pudu.Frontend.Token
   , symbolFromText
   )
 import Pudu.Source (Source, Span, emptySpan, sourceLength, zeroWidthSpan)
+
+{-| @Parser.State.BlockParser — the capability of reading a brace-delimited block.
+
+    Blocks, expressions, and declarations are mutually recursive, and this alias
+    is what lets each of them accept the others as an argument instead of
+    importing them. It lives here rather than with any one of them because a
+    shared capability that lived in one participant would put that participant
+    in every cycle it exists to break. -}
+type BlockParser = Parser (Located Block)
 
 {-| @Program.Parser.State — isolates cursor and diagnostic invariants -}
 data ParserState = ParserState

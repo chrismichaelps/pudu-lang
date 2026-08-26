@@ -59,6 +59,8 @@ synchronizeDeclaration :: Parser ()
 
 ### Governance
 
+- `BlockParser` is the capability of reading a brace-delimited block, and it lives here rather than with any one participant. Blocks, expressions, and declarations are mutually recursive, and a shared capability that lived in one of them would put that one in every cycle it exists to break.
+
 - No parse diagnostic is emitted once the nesting budget is exhausted. The parse has given up by then, and every message after describes the wreckage rather than the mistake — without it, one hostile file was amplified into thousands of diagnostics as recovery unwound past each unmatched delimiter.
 
 - Input that ends before a construct is closed reports `E1000`, not `E1001`. A file that ran out is a different mistake from a wrong token, and `expected }` against the last line tells the reader nothing about which brace.

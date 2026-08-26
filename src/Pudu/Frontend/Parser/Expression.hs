@@ -10,10 +10,18 @@ import Data.Char (isUpper)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Frontend.Parser.Expression.Control
+  ( ExpressionParsers (..)
+  , parseFor
+  , parseIf
+  , parseLabelled
+  , parseLoop
+  , parseMatch
+  , parseWhile
+  )
 import Pudu.Frontend.Parser.Expression.Recovery
   ( invalidAtCurrent
   , invalidPrefix
-  , labelWithoutLoop
   , mergedOrLeft
   , parseCapabilityAnnotation
   , reservedKeywordGuidance
@@ -22,9 +30,9 @@ import Pudu.Frontend.Parser.Expression.Recovery
   )
 import Pudu.Frontend.Parser.Name (parseModuleName)
 import Pudu.Frontend.Parser.State
-  ( Parser
+  ( BlockParser
+  , Parser
   , advanceToken
-  , currentSpan
   , emitParseError
   , expectIdentifier
   , expectSymbol
@@ -45,24 +53,21 @@ import Pudu.Frontend.Parser.State
   , withTokens
   )
 import Pudu.Frontend.Parser.Name (expectValueIdentifier)
-import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Block
-  , Expression (..)
+  ( Expression (..)
   , FieldInit (..)
   , Function (..)
   , FunctionBody (..)
   , Literal (..)
-  , MatchArm (..)
   , Parameter (..)
   , TypeSyntax
   , Visibility (Private)
   , lambdaName
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
+  ( Keyword (KwAsync, KwAwait, KwFalse, KwFn, KwFor, KwIf, KwLoop
     , KwMatch, KwMut, KwNull, KwScope, KwTrue, KwUnsafe, KwWhile, KwWith)
   , TemplatePart (..)
   , SymbolKind (..)
@@ -72,7 +77,14 @@ import Pudu.Frontend.Token
   )
 import Pudu.Source (Span)
 
-type BlockParser = Parser (Located Block)
+
+{-| The entry points [[Parser Expression Control]] reads expressions through.
+
+    Control forms contain expressions and expressions contain control forms, so
+    one direction has to be a capability rather than an import. This is that
+    direction, and it is the same trick the block parser already uses. -}
+controlParsers :: ExpressionParsers
+controlParsers = ExpressionParsers parseExpression parseScrutinee parseExpressionAt
 
 parseExpression :: BlockParser -> Parser (Located Expression)
 parseExpression blockParser = parseExpressionAt blockParser 0
@@ -115,18 +127,18 @@ parsePrefix blockParser = do
     Keyword KwTrue -> literal token (BoolValue True)
     Keyword KwFalse -> literal token (BoolValue False)
     Keyword KwNull -> literal token NullValue
-    Keyword KwIf -> parseIf blockParser
-    Keyword KwMatch -> parseMatch blockParser
-    Keyword KwWhile -> parseWhile blockParser Nothing
+    Keyword KwIf -> parseIf controlParsers blockParser
+    Keyword KwMatch -> parseMatch controlParsers blockParser
+    Keyword KwWhile -> parseWhile controlParsers blockParser Nothing
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
     Keyword KwFn -> parseLambda blockParser
     Keyword KwAsync
       | nextIsFunction -> parseLambda blockParser
       | otherwise -> parseScope blockParser
-    Keyword KwLoop -> parseLoop blockParser Nothing
-    Keyword KwFor -> parseFor blockParser Nothing
+    Keyword KwLoop -> parseLoop controlParsers blockParser Nothing
+    Keyword KwFor -> parseFor controlParsers blockParser Nothing
     Identifier name -> parseNameOrRecord blockParser token name
-    Symbol SymAt -> parseLabelled blockParser
+    Symbol SymAt -> parseLabelled controlParsers blockParser
     Symbol symbol
       | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
       | symbol == SymLeftBrace -> blockExpression blockParser
@@ -577,161 +589,6 @@ parseUnary blockParser operatorToken operator = do
     added to the table below cannot leave the prefix rule behind. -}
 highestBinaryPrecedence :: Int
 highestBinaryPrecedence = 8
-
-parseIf :: BlockParser -> Parser (Located Expression)
-parseIf blockParser = do
-  keyword <- advanceToken
-  condition <- parseScrutinee blockParser
-  case locatedValue condition of
-    InvalidExpression ->
-      pure (Located (mergedOrLeft (tokenSpan keyword) (locatedSpan condition)) InvalidExpression)
-    _ -> do
-      thenBlock <- blockParser
-      elseExpression <- parseElse blockParser
-      let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
-      pure (Located (mergedOrLeft (tokenSpan keyword) final)
-        (IfExpression condition thenBlock elseExpression))
-
-parseElse :: BlockParser -> Parser (Maybe (Located Expression))
-parseElse blockParser = do
-  elseKeyword <- matchKeyword KwElse
-  case elseKeyword of
-    Nothing -> pure Nothing
-    Just _ -> do
-      kind <- peekKind
-      case kind of
-        Keyword KwIf -> Just <$> parseExpressionAt blockParser 0
-        _ | isSymbol "{" kind -> Just <$> blockExpression blockParser
-        _ -> do
-          spanValue <- currentSpan
-          emitParseError "E1042" spanValue "expected if or block after else"
-            (Just "add if or a block after else")
-          pure (Just (Located spanValue InvalidExpression))
-
-{-| Postfix continuation is line-sensitive per [[grammar/pudu]]: a line-initial
-    `(` or `[` starts a new statement, while a line-initial `.`, `?`, or
-    `.await` continues a fluent chain. -}
-{-| `match` scrutinizes one expression and requires at least one `case` arm.
-    Arms are separated by line breaks like every other construct. -}
-parseMatch :: BlockParser -> Parser (Located Expression)
-parseMatch blockParser = do
-  keyword <- advanceToken
-  scrutinee <- parseScrutinee blockParser
-  _ <- expectSymbol "{" "to start the match arms"
-  arms <- parseArms blockParser []
-  closing <- expectSymbol "}" "to close the match arms"
-  case arms of
-    [] ->
-      emitParseError "E1051" (tokenSpan closing) "match requires at least one case arm"
-        (Just "add a case arm, or replace the match with an if expression")
-    _ -> pure ()
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (tokenSpan closing))
-        (MatchExpression scrutinee arms)
-    )
-
-parseArms :: BlockParser -> [Located MatchArm] -> Parser [Located MatchArm]
-parseArms blockParser reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol "}" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      arm <- parseArm blockParser
-      after <- peekToken
-      if before == after
-        then advanceToken >> pure (reverse reversed)
-        else parseArms blockParser (arm : reversed)
-
-parseArm :: BlockParser -> Parser (Located MatchArm)
-parseArm blockParser = do
-  keyword <- expectKeyword KwCase "to start a match arm"
-  pattern' <- parsePattern
-  guard <- parseGuard blockParser
-  _ <- expectSymbol "=>" "before the arm body"
-  body <- parseArmBody blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        MatchArm{armPattern = pattern', armGuard = guard, armBody = body}
-    )
-
-parseGuard :: BlockParser -> Parser (Maybe (Located Expression))
-parseGuard blockParser = do
-  guardKeyword <- matchKeyword KwIf
-  case guardKeyword of
-    Nothing -> pure Nothing
-    Just _ -> Just <$> parseExpression blockParser
-
-parseArmBody :: BlockParser -> Parser (Located Expression)
-parseArmBody blockParser = do
-  kind <- peekKind
-  if isSymbol "{" kind
-    then blockExpression blockParser
-    else parseExpression blockParser
-
-{-| Parse a labelled loop.
-
-    A label is written `@name` before the loop it names, and `break @name`
-    leaves that loop from inside any number of nested ones. The sigil is what
-    makes `break @outer value` readable at all: with bare names, `break outer`
-    could equally be a label or the value `outer`, and no lookahead settles it,
-    so a reader would have to know which loops were labelled to know what the
-    statement did.
-
-    Only a loop may be labelled. Naming anything else would promise a `break`
-    that has nowhere to go. -}
-parseLabelled :: BlockParser -> Parser (Located Expression)
-parseLabelled blockParser = do
-  sigil <- advanceToken
-  name <- expectIdentifier "after @ to name the loop"
-  let label = Just name
-      start = tokenSpan sigil
-  kind <- peekKind
-  case kind of
-    Keyword KwLoop -> extend start <$> parseLoop blockParser label
-    Keyword KwWhile -> extend start <$> parseWhile blockParser label
-    Keyword KwFor -> extend start <$> parseFor blockParser label
-    _ -> do
-      token <- peekToken
-      labelWithoutLoop token
- where
-  extend start (Located here value) = Located (mergedOrLeft start here) value
-
-{-| `while`, `loop`, and `for` are expressions whose bodies are blocks. `loop`
-    takes the type of what its `break` statements carry; the other two are `()`,
-    because a loop with a condition can finish without ever reaching a `break`
-    and would then have no value to give. Typing enforces that, not parsing. -}
-parseWhile :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseWhile blockParser label = do
-  keyword <- advanceToken
-  condition <- parseScrutinee blockParser
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (WhileExpression label condition body)
-    )
-
-parseLoop :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseLoop blockParser label = do
-  keyword <- advanceToken
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (LoopExpression label body)
-    )
-
-parseFor :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseFor blockParser label = do
-  keyword <- advanceToken
-  binder <- parsePattern
-  _ <- expectKeyword KwIn "between the pattern and the iterated expression"
-  iterated <- parseScrutinee blockParser
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (ForExpression label binder iterated body)
-    )
 
 parsePostfix :: BlockParser -> Located Expression -> Parser (Located Expression)
 parsePostfix blockParser expression = do
