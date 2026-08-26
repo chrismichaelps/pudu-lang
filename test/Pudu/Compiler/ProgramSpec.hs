@@ -214,8 +214,8 @@ testProgramEvaluation = do
         (sumTraits === Just "88")
     , counterexample "a running program loops as long as its work takes"
         (longLoops === Just "127")
-    , counterexample "dates, record files, and delimited rows all parse"
-        (realFormats === Just "1023")
+    , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
+        (realFormats === Just "16383")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

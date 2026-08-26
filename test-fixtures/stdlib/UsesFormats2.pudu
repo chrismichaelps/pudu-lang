@@ -12,6 +12,11 @@ import Std.Time as T
 /// scanned against a set rather than a character at a time.
 type Record = { name: Str, sequence: Str }
 
+/// FASTQ is positional: four lines per record. The quality line may itself
+/// begin with `@`, so a reader that finds records by looking for `@` at the
+/// start of a line is wrong on real data.
+type Read = { name: Str, bases: Str, quality: Str }
+
 fn digits(width: Int) -> P.Parser[Int] {
   P.map(P.count(width, P.digit()), fn(found: Array[Char]) -> Int => {
       var total = 0
@@ -55,6 +60,51 @@ fn records() -> P.Parser[Array[Record]] { P.many(record()) }
 
 fn row() -> P.Parser[Array[Str]] {
   P.keepFirst(P.separatedBy(P.takeNotOf("\t\n\r"), P.character('\t')), P.lineEnd())
+}
+
+fn fastqRecord() -> P.Parser[Read] {
+  P.map(
+    P.both(
+      P.keepSecond(P.character('@'), P.line()),
+      P.both(
+        P.keepFirst(P.takeOf1("bases", "ACGTUNacgtun"), P.lineEnd()),
+        P.keepSecond(
+          P.keepFirst(P.keepSecond(P.character('+'), P.restOfLine()), P.lineEnd()),
+          P.keepFirst(P.takeNotOf("\n\r"), P.lineEnd())
+        )
+      )
+    ),
+    fn(parts: (Str, (Str, Str))) -> Read =>
+    Read{name: parts[0], bases: parts[1][0], quality: parts[1][1]}
+  )
+}
+
+/// A quoted field may hold commas, and a doubled quote standing for one.
+fn quotedField() -> P.Parser[Str] {
+  P.map(
+    P.between(
+      P.character('"'),
+      P.many(P.orElse(
+          P.map(P.attempt(P.literal("\"\"")), fn(_d: Str) -> Str => "\""),
+          P.takeNotOf1("field text", "\"")
+        )),
+      P.character('"')
+    ),
+    fn(pieces: Array[Str]) -> Str => {
+      var joined = ""
+      for piece in pieces {
+        joined = joined + piece
+      }
+      joined
+    }
+  )
+}
+
+fn csvRow() -> P.Parser[Array[Str]] {
+  P.keepFirst(
+    P.separatedBy(P.orElse(quotedField(), P.takeNotOf(",\n\r")), P.character(',')),
+    P.lineEnd()
+  )
 }
 
 export fn main() -> Int {
@@ -136,6 +186,32 @@ export fn main() -> Int {
         total = total + 512
       }
     }
+  }
+
+  let fastq = "@read1 first\nACGTACGT\n+\n@@@BBBFF\n@read2\nTTTT\n+again\n!!!!\n"
+  match P.run(P.many(fastqRecord()), fastq) {
+    case Ok(reads) => {
+      // the quality line begins with '@' and is not the next record
+      if reads.length() == 2 && reads[0].quality == "@@@BBBFF" {
+        total = total + 1024
+      }
+      if reads[1].name == "read2" && reads[1].quality == "!!!!" {
+        total = total + 2048
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  match P.run(P.many(csvRow()), "plain,\"has,comma\",\"says \"\"hi\"\"\"\na,b,c\n") {
+    case Ok(rows) => {
+      if rows.length() == 2 && rows[0][1] == "has,comma" {
+        total = total + 4096
+      }
+      if rows[0][2] == "says \"hi\"" {
+        total = total + 8192
+      }
+    }
+    case Err(_e) => {}
   }
 
   total
