@@ -19,6 +19,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/DELIVERY|Engineering Delivery]] — branches, issues, agents, reviews, gates, and releases.
 - [[architecture/MACROS|Macro Design]] — the macro form as hygienic typed syntax transformers, and what was rejected.
 - [[architecture/STDLIB|Standard Library Design]] — the `Std` namespace, the shipped modules, the import DX, and what production-ready is required to mean.
+- [[architecture/PATTERNS]] — every design pattern written in Pudu and run: which dissolve, which are ordinary generics, and the one feature that was missing.
 - [[architecture/PERFORMANCE|Performance Constitution]] — compiler throughput, low-level IR, optimization barriers, and benchmarks.
 
 ## Governance Dashboard
