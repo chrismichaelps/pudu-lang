@@ -94,6 +94,7 @@ library
     Pudu.Doc.Site
     Pudu.Repl
     Pudu.Repl.Command
+    Pudu.Repl.Input
     Pudu.Repl.Describe
     Pudu.Repl.Complete
     Pudu.Repl.Outline

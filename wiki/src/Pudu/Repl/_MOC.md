@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # REPL Module Map
 
+- [[Repl Input]] — when an entry at the prompt is finished, decided over real tokens.
 - [[Pudu REPL]] — the `puduci` loop, prompting, continuation, and command dispatch.
 - [[Repl Session]] — session state, entry classification, buffer assembly, and compilation.
 - [[Repl Command]] — the closed colon-command vocabulary and its abbreviations.
