@@ -59,6 +59,8 @@ synchronizeDeclaration :: Parser ()
 
 ### Governance
 
+- No parse diagnostic is emitted once the nesting budget is exhausted. The parse has given up by then, and every message after describes the wreckage rather than the mistake — without it, one hostile file was amplified into thousands of diagnostics as recovery unwound past each unmatched delimiter.
+
 - Input that ends before a construct is closed reports `E1000`, not `E1001`. A file that ran out is a different mistake from a wrong token, and `expected }` against the last line tells the reader nothing about which brace.
 - `diagnosticCount` lets a recovery rule that only makes sense on otherwise-clean input stay quiet once something has already gone wrong.
 

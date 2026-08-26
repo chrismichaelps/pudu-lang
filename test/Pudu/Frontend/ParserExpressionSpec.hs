@@ -46,6 +46,7 @@ parserExpressionProperties =
   , ("tuples and record constructions parse", testAggregates)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
+  , ("an exhausted budget reports once and stops", testExhaustedBudgetIsQuiet)
   ]
 
 testPrecedence :: IO Property
@@ -246,6 +247,24 @@ testHostileConditionals = do
   let input = "if true {}" <> Text.concat (replicate 519 " else if true {}")
   result <- parse input
   pure $ conjoin [codes result === ["E1099"], diagnosticOffsets result === [8179]]
+
+{-| Once the budget is gone the parse has given up, and every message after
+    that describes the wreckage rather than the mistake.
+
+    Five thousand nested parentheses used to report one `E1099` and then four
+    and a half thousand `E1001`s as recovery unwound past each unmatched
+    delimiter — one hostile file amplified into thousands of diagnostics, which
+    is the cascade the budget exists to prevent. -}
+testExhaustedBudgetIsQuiet :: IO Property
+testExhaustedBudgetIsQuiet = do
+  balanced <- parse (Text.replicate 5000 "(" <> "1" <> Text.replicate 5000 ")")
+  unclosed <- parse (Text.replicate 5000 "(" <> "1")
+  brackets <- parse (Text.replicate 5000 "[" <> Text.replicate 5000 "]")
+  pure $ conjoin
+    [ counterexample "a balanced flood reports once" (codes balanced === ["E1099"])
+    , counterexample "an unclosed flood reports once" (codes unclosed === ["E1099"])
+    , counterexample "and so does a bracket flood" (codes brackets === ["E1099"])
+    ]
 
 parse :: Text -> IO (Located Expression, TokenKind, [Diagnostic])
 parse input = do

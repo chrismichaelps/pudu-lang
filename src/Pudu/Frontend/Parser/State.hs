@@ -228,15 +228,22 @@ emitParseDiagnostic value =
 diagnosticCount :: Parser Int
 diagnosticCount = Parser $ \state -> (length (parserDiagnosticsRev state), state)
 
-emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
-emitParseError codeText spanValue message help =
-  case parseDiagnostic codeText spanValue message help of
-    Just value -> emitParseDiagnostic value
-    Nothing -> pure ()
+{-| Report a parse error, unless the nesting budget has already been exhausted.
 
-{-| Report whether the shared nesting budget has already been exhausted during
-    this parse. Grammar loops stop instead of re-descending, so one hostile
-    input reports exactly one E1099 and no unwinding delimiter cascade. -}
+    Once the budget is gone the parse has given up, and every message after that
+    describes the wreckage rather than the mistake. Without this an input of
+    five thousand nested parentheses reported one `E1099` and then four and a
+    half thousand `E1001`s as recovery unwound past each unmatched delimiter —
+    one hostile file amplified into thousands of diagnostics. -}
+emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
+emitParseError codeText spanValue message help = do
+  exhausted <- budgetExhausted
+  if exhausted
+    then pure ()
+    else case parseDiagnostic codeText spanValue message help of
+      Just value -> emitParseDiagnostic value
+      Nothing -> pure ()
+
 {-| Whether a record construction may start here. It is withheld only for the
     expression that precedes a block, where `Name {` would be ambiguous with the
     block itself, and is reinstated inside any bracketed context. -}
@@ -249,6 +256,9 @@ withRecordAdmission admitted (Parser action) =
     let (value, next) = action state{parserAdmitsRecords = admitted}
      in (value, next{parserAdmitsRecords = parserAdmitsRecords state})
 
+{-| Whether the shared nesting budget has already been exhausted during this
+    parse. Grammar loops stop instead of re-descending, so one hostile input
+    reports exactly one `E1099` and no unwinding delimiter cascade. -}
 budgetExhausted :: Parser Bool
 budgetExhausted = Parser $ \state -> (parserBudgetExhausted state, state)
 
