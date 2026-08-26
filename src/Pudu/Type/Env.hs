@@ -36,6 +36,7 @@ module Pudu.Type.Env
   , lookupOwnerVariants
   , lookupTypeParams
   , lookupName
+  , qualifiesSomething
   , isImportedMethod
   , lookupVariant
   , recordExpression
@@ -410,6 +411,20 @@ lookupName name = Checker $ \state -> (search (stateFrames state), state)
     current : rest -> case Map.lookup name current of
       Just found -> Just found
       Nothing -> search rest
+
+{-| Whether any name is bound beneath this qualifier.
+
+    A module alias has no type of its own, so the only way to tell
+    `Std.Text.thing` — a member that does not exist — from `value.thing` on an
+    unresolved value is to ask whether anything at all is bound under the
+    qualifier. If something is, the qualifier names a module and the member is
+    the mistake. -}
+qualifiesSomething :: Text -> Checker Bool
+qualifiesSomething qualifier =
+  Checker $ \state -> (any covered (stateFrames state), state)
+ where
+  prefix = qualifier <> "."
+  covered frame = any (Text.isPrefixOf prefix) (Map.keys frame)
 
 {-| Run an action in a fresh name frame; the frame is discarded on exit. -}
 inTypeScope :: Checker a -> Checker ()

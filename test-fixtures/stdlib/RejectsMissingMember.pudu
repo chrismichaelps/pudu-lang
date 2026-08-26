@@ -1,0 +1,10 @@
+module RejectsMissingMember
+
+import Std.Text as T
+
+/// `length` is a built-in method on the value, not a `Std.Text` export. Asking
+/// the module for it used to type-check and fail at run time with
+/// `undefined name T` — naming the alias rather than the member.
+fn wrong(value: Str) -> Int {
+  T.length(value)
+}

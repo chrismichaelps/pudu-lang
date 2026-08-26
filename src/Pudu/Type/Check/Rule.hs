@@ -37,6 +37,7 @@ import Pudu.Type.Env
   , ambiguousProviders
   , lookupField
   , lookupName
+  , qualifiesSomething
   , lookupTypeParams
   , negateIntegerLiteral
   , report
@@ -89,20 +90,67 @@ literalType spanValue literal = case literal of
 {-| A name's type comes from its declaration. A declared generic is
     instantiated with fresh variables at every use, which is what makes one
     generic function usable at several types. -}
+{-| The type a name refers to.
+
+    A dotted name that resolves but has no type is a member the module does not
+    export. Resolution admitted it because the module alias is in scope, and
+    returning `ErrorType` silently let `Std.Text.length` — which is a built-in
+    method, not a `Std.Text` export — type-check and then fail at run time with
+    `undefined name T`, naming the alias rather than the member and pointing at
+    the wrong thing entirely.
+
+    An undotted miss stays silent: resolution reports those as `E2010`, and
+    saying it twice would be two diagnostics for one mistake. -}
 nameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 nameType spanValue names = do
-  found <- lookupName (Text.intercalate "." (NonEmpty.toList names))
+  let written = Text.intercalate "." (NonEmpty.toList names)
+  found <- lookupName written
   case found of
-    Nothing -> pure ErrorType
     Just scheme -> instantiate spanValue scheme
+    Nothing -> do
+      case NonEmpty.nonEmpty (NonEmpty.init names) of
+        Nothing -> pure ()
+        Just qualifier -> do
+          let owner = Text.intercalate "." (NonEmpty.toList qualifier)
+              member = NonEmpty.last names
+          report "E3033" spanValue (owner <> " exports no " <> member)
+            ( Just
+                ( "check the spelling against " <> owner
+                    <> ", or reach it another way; a built-in method is called on the "
+                    <> "value rather than through the module"
+                )
+            )
+      pure ErrorType
 
+{-| The type of `Qualifier.member`, when the qualifier names something that has
+    members rather than a value with fields.
+
+    A qualifier that binds nothing at all is not a module, so the miss is left
+    to ordinary member typing on whatever the target turns out to be. A
+    qualifier that binds *something* is a module, and then a member it does not
+    export is the mistake — reported here rather than left to become an
+    `undefined name` at run time naming the alias instead of the member. -}
 qualifiedMemberType :: Span -> Tree.Expression -> Text -> Checker (Maybe Type)
 qualifiedMemberType spanValue target member = case target of
   Tree.NameExpression names -> do
-    found <- lookupName (Text.intercalate "." (NonEmpty.toList names <> [member]))
+    let owner = Text.intercalate "." (NonEmpty.toList names)
+    found <- lookupName (owner <> "." <> member)
     case found of
-      Nothing -> pure Nothing
       Just scheme -> Just <$> instantiate spanValue scheme
+      Nothing -> do
+        ownsMembers <- qualifiesSomething owner
+        selfIsValue <- lookupName owner
+        if ownsMembers && selfIsValue == Nothing
+          then do
+            report "E3033" spanValue (owner <> " exports no " <> member)
+              ( Just
+                  ( "check the spelling against " <> owner
+                      <> "; a built-in method is called on the value itself, as in "
+                      <> "value." <> member <> "()"
+                  )
+              )
+            pure (Just ErrorType)
+          else pure Nothing
   _ -> pure Nothing
 
 enclosingReturnType :: Text -> Checker Type

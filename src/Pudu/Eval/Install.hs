@@ -11,12 +11,10 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Eval.Builtin
-  ( callArrayMethod
-  , effectBuiltins
+  ( effectBuiltins
   )
 import Pudu.Eval.Env
-  ( Env (..)
-  , Evaluator (..)
+  ( Evaluator (..)
   , bind
   , bindMethod
   )
@@ -27,10 +25,9 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Import (..)
-  , Declaration (..)
+  ( Declaration (..)
   , Expression (..)
   , Function (..)
   , Impl (..)

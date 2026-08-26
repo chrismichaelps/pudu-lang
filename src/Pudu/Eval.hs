@@ -60,7 +60,7 @@ import Pudu.Eval.Env
   , withFrame
   , withNewFrame
   )
-import Pudu.Eval.Install (lastSegmentOf, loadDeclarations, targetNameOf)
+import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
 import Pudu.Eval.Match (literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value

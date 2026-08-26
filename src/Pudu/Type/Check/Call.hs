@@ -12,8 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
-  , Expression (..)
+  ( Expression (..)
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
@@ -25,16 +24,14 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Check.Rule
-  ( awaitType
-  , instantiate
+  ( instantiate
   , qualifiedMemberType
   )
 import Pudu.Type.Check.Method
-  ( declareBounds
-  , methodScheme
+  ( methodScheme
   , targetName
   )
-import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value
   ( NominalId (..)
   , nominalKey

@@ -12,8 +12,7 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
 import Pudu.Source (SourceName (SourceName), newSource)
 import System.Console.Haskeline
-  ( Completion (..)
-  , InputT
+  ( InputT
   , getInputLine
   )
 

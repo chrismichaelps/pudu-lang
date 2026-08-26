@@ -116,6 +116,7 @@ testStandardLibrary = do
   missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
   floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
+  missingMember <- codes "test-fixtures/stdlib/RejectsMissingMember.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
@@ -126,6 +127,8 @@ testStandardLibrary = do
     , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
     , counterexample "a numeric range still requires a whole-number type"
         (floatRangeDiagnostics === ["E3012"])
+    , counterexample "a member the module does not export is reported once"
+        (missingMember === ["E3033"])
     , counterexample "the standard module joins the program graph"
         (elem "Std.Math" resolved === True)
     ]

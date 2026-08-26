@@ -25,7 +25,7 @@ import Pudu.Eval.Value (Value, renderValue, valueKind)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
-import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
+import Pudu.Frontend.Token (Token (..), TokenKind (..))
 import Pudu.Repl.Input (continuationPrompt, readContinuation, readEntry)
 import Pudu.Repl.Command (Command (..), Entry (..), commandHelp, parseEntry)
 import Pudu.Repl.Complete
