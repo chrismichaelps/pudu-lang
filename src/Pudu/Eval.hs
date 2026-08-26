@@ -31,6 +31,7 @@ import Pudu.Eval.Env
   , performEffect
   , withCaptured
   , pushFrame
+  , replaceFrame
   , Eval (..)
   , adoptChild
   , closeScope
@@ -40,6 +41,7 @@ import Pudu.Eval.Env
   , abortAt
   , ascend
   , bind
+  , bindMethod
   , catchUnwind
   , descend
   , emptyEnv
@@ -175,13 +177,22 @@ evaluateModule moduleValue =
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
 
-    The frame stays on the stack rather than being popped, because a function is
-    a closure over the environment it is called in, not over one captured when
-    it was defined: `gcd` calling its sibling `abs` needs `abs` to still be a
-    plain name. Leaving it is safe — a dependency's frame is *outside* the
-    importing module's, so the importer's own declarations shadow it, and name
-    resolution has already rejected any unqualified use of a name the importer
-    did not import.
+    **Each module's functions capture the module they were declared in.** They
+    are loaded first, so a sibling is an ordinary name while loading, and then
+    rewritten to hold the environment that load produced. Without it every
+    module shared one namespace: dependencies are linked onto a single stack, so
+    the last one linked shadowed every earlier one *for everybody*, and a
+    module's own private helper could be replaced by a later module's export of
+    the same name. `Std.Random`'s private `orElse` became `Std.Option.orElse`
+    that way, and `below` answered with a function where a number belonged.
+
+    The rewrite ties a knot: the captured environment contains the frame whose
+    functions capture it, which is exactly what makes a sibling call work. It is
+    built lazily, so nothing forces the frame while it is still being defined.
+
+    The frame stays on the stack as well. Nothing depends on it for correctness
+    now that closures carry their own scope, and name resolution has already
+    rejected any unqualified use of a name the importer did not import.
 
     A dependency's private declarations are published under the qualified path
     too. Visibility is resolution's decision and it has already been made: a
@@ -194,10 +205,25 @@ linkDependencies = mapM_ linkOne
     pushFrame Map.empty
     installImportAliases (moduleImports dependency)
     loadDeclarations (moduleDeclarations dependency)
-    frame <- currentFrame
-    mapM_ (publish path) (Map.toList frame)
+    loaded <- currentFrame
+    outer <- captureEnvironment
+    let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
+    replaceFrame scoped
+    mapM_ (publish path) (Map.toList scoped)
 
   publish path (name, value) = bind (path <> "." <> name) value
+
+{-| Give a declared function the environment of the module that declared it.
+
+    Only a function needs it. A constant is already a value, and a closure that
+    captured something at the point it was written keeps what it captured — a
+    lambda's scope is where it was written, not the module it ended up in. -}
+scopeTo :: [Map Text Value] -> Value -> Value
+scopeTo environment value = case value of
+  FunctionValue closure
+    | closureCaptured closure == Nothing ->
+        FunctionValue closure{closureCaptured = Just environment}
+  other -> other
 
 {-| Bind the names an import makes available without qualification.
 
@@ -321,10 +347,10 @@ installMethods traits value = case targetNameOf (implTarget value) of
   installMethod owner (Located _ method) = do
     let name = locatedValue (functionName method)
         implementation = FunctionValue (Closure name method Nothing Nothing)
-    bind (owner <> "." <> name) implementation
+    bindMethod (owner <> "." <> name) implementation
     case traitNameOf (implTrait value) of
       Nothing -> pure ()
-      Just traitText -> bind (traitText <> "." <> owner <> "." <> name) implementation
+      Just traitText -> bindMethod (traitText <> "." <> owner <> "." <> name) implementation
 
 {-| A trait member with a body is a default the implementation inherits when it
     does not provide its own. -}

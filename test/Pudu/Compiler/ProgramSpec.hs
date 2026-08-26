@@ -152,6 +152,7 @@ testProgramEvaluation = do
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
+  scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
     [ counterexample "an aliased and a selected import both evaluate"
@@ -188,6 +189,8 @@ testProgramEvaluation = do
         (sequences === Just "14")
     , counterexample "drawing and parsing keep the caller's integer type"
         (widths === Just "8")
+    , counterexample "a module calls the function it declared, not a stranger's"
+        (scoped === Just "2")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

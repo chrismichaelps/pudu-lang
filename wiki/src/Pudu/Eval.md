@@ -34,6 +34,9 @@ evaluateModule :: Module -> EvalOutcome
 
 ### Governance
 
+- **A module's functions capture the module that declared them.** They load first, so a sibling is an ordinary name while loading, and are then rewritten to hold the environment the load produced. Without it every module shared one namespace: dependencies link onto a single stack, so the last one linked shadowed every earlier one *for everybody*, and a module's own private helper could be replaced by a later module's export of the same name.
+- **An implementation is not lexical.** Methods live in their own table, outside the frame stack, because an implementation is a fact about a type and a trait that is true everywhere in a program once it exists anywhere in it — which is what the orphan rule is for. Keeping them out of the frames is what lets a library's adapter dispatch to a program's own type, linked long after the library was. The two namespaces have opposite scoping rules, so they are two namespaces.
+
 - A value the evaluator cannot enumerate directly is asked whether it is a sequence: a type carrying `begin` and `advance` produces its items one at a time. The protocol passes state rather than mutating it, so an iterator is an ordinary value and two walks of the same one see the same items. A type with only one of the two methods is not a sequence, and saying so at the `for` keeps the failure out of the middle of a loop.
 
 - A type argument is **not erased before the call that carries it**. Types have no run-time form,

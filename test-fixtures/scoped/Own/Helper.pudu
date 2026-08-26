@@ -1,0 +1,8 @@
+module Own.Helper
+
+/// A private helper. Nothing outside this module can name it, and nothing
+/// outside this module may replace it.
+fn pick(left: Int, right: Int) -> Int { left }
+
+/// Calls its own `pick`, whatever any other module declares.
+export fn useOwn() -> Int { pick(1, 2) }
