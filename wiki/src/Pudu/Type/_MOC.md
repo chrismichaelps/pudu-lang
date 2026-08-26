@@ -15,6 +15,8 @@ tags: [moc, module]
 - [[Type Check Rule]] — the closed operator, call, member, and index rules.
 - [[Type Marker]] — the compiler-controlled `Copy`, `Send`, and `Sync` markers, decided structurally.
 - [[Type Exhaust]] — match coverage and arm reachability.
+- [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.
+- [[Type Check Iteration]] — what a `for` loop's binder takes, from the value beside it.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
 - [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.

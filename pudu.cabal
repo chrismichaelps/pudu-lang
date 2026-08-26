@@ -103,6 +103,8 @@ library
     Pudu.Type.Check
     Pudu.Type.Check.Import
     Pudu.Type.Check.Coherence
+    Pudu.Type.Check.Iteration
+    Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Rule
