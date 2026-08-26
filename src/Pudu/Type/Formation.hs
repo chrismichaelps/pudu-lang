@@ -11,6 +11,7 @@ module Pudu.Type.Formation
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Control.Monad (unless)
 import qualified Data.Set as Set
 import Pudu.Source (Span)
 import Data.Text (Text)
@@ -32,6 +33,7 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Type.Env
   ( Checker
   , report
+  , reportedAt
   , DeclaredTypes (..)
   , emptyDeclared
   , freshVariable
@@ -51,6 +53,21 @@ formTraitReference = formTypeWith False
 
 formTypeWith :: Bool -> DeclaredTypes -> [Text] -> Located TypeSyntax -> Checker Type
 formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case syntax of
+  {-| `dynamic Shape` is some value implementing `Shape`. Only a trait can stand
+      here: `dynamic Circle` would be a dynamic type over a set with one member,
+      which is `Circle` written the long way. -}
+  DynamicType path -> case Map.lookup (moduleNameText path) (declaredNames declared) of
+    Just identity
+      | Set.member identity (declaredTraitNames declared) -> pure (DynamicTypeValue identity)
+    Just _ -> do
+      reportOnce typeSpan "E3031"
+        (moduleNameText path <> " is not a trait, so dynamic cannot name it")
+        "dynamic names a trait; write the type itself if you meant one type"
+      pure ErrorType
+    Nothing -> do
+      reportOnce typeSpan "E3031" ("dynamic names no trait called " <> moduleNameText path)
+        "declare the trait, import it, or check the spelling"
+      pure ErrorType
   NamedType path arguments -> do
     formed <- mapM (formTypeWith valuePosition declared rigid) arguments
     refused <-
@@ -81,17 +98,24 @@ rejectTraitAsType :: DeclaredTypes -> Span -> ModuleName -> Checker Bool
 rejectTraitAsType declared typeSpan path = case Map.lookup pathText (declaredNames declared) of
   Just identity
     | Set.member identity (declaredTraitNames declared) -> do
-        report "E3030" typeSpan (pathText <> " is a trait, so it cannot be written as a type")
-          ( Just
-              ( "bound a type parameter by it — fn draw[T: " <> pathText
-                  <> "](shape: &T) — or declare a type with a case for each "
-                  <> "implementation and match on it"
-              )
+        reportOnce typeSpan "E3030"
+          (pathText <> " is a trait, so it cannot be written as a type")
+          ( "write dynamic " <> pathText <> " for a value whose type is not known here, "
+              <> "or bound a type parameter by it — fn draw[T: " <> pathText <> "](shape: &T)"
           )
         pure True
   _ -> pure False
  where
   pathText = moduleNameText path
+
+{-| Report a formation diagnostic at most once for a given span.
+
+    A signature is formed both when it is declared and when its body is checked
+    against it, and one mistake written in one signature is one mistake. -}
+reportOnce :: Span -> Text -> Text -> Text -> Checker ()
+reportOnce typeSpan code message help = do
+  seen <- reportedAt typeSpan code
+  unless seen (report code typeSpan message (Just help))
 
 formNamed :: DeclaredTypes -> [Text] -> ModuleName -> [Type] -> Type
 formNamed declared rigid path arguments

@@ -33,6 +33,8 @@ polytype :: [Text] -> [(Text, [NominalId])] -> Type -> Scheme
 
 ### Governance
 
+- `DynamicTypeValue` is a value implementing a trait whose concrete type is not known. It is the only type in the language that stands for more than one runtime shape, which is what a heterogeneous collection needs and what a sum type cannot give without closing the set.
+
 - Nominal types are equal by canonical declaration identity and equal arguments. User declarations carry their defining module plus name; compiler-wired types carry no module. Rendering may shorten an identity, but equality never does.
 - `Never` unifies with every type, which is the rule it is given for unreachable control-flow joins, and the error type absorbs so one mistake never cascades.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.

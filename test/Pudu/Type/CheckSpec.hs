@@ -52,6 +52,7 @@ typeProperties =
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
   , ("a type declaration's parameters are instantiated at every use", testGenericTypes)
   , ("a for loop binds at the element type of what it iterates", testIterationTypes)
+  , ("a dynamic type accepts any implementation and nothing else", testDynamicTypes)
   , ("Decimal is an ordinary type with exact literals", testDecimalType)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("compile-time functions keep their evaluator pure", testComptime)
@@ -206,6 +207,40 @@ testIterationTypes = do
         (notIterable === ["E3030"])
     , counterexample "a type implementing Sequence is iterable"
         (ownSequence === [])
+    ]
+
+{-| A dynamic type is the one place the language admits a value whose concrete
+    type is not known at the use site. It is what every pattern needing an open
+    set of implementations was missing. -}
+testDynamicTypes :: IO Property
+testDynamicTypes = do
+  heterogeneous <- codes (shapes <> ["fn all() -> Array[dynamic Shape] { [Circle{r: 1}, Square{s: 2}] }"])
+  branches <- codes
+    (shapes <> ["fn pick(f: Bool) -> dynamic Shape { if f { Circle{r: 1} } else { Square{s: 2} } }"])
+  callable <- codes (shapes <> ["fn area(s: dynamic Shape) -> Int { s.area() }"])
+  notImplementing <- codes
+    (shapes <> ["type Other = { n: Int }", "fn bad() -> dynamic Shape { Other{n: 1} }"])
+  notATrait <- codes (shapes <> ["fn bad() -> dynamic Circle { Circle{r: 1} }"])
+  traitWithoutDynamic <- codes (shapes <> ["fn bad(s: Shape) -> Int { 1 }"])
+  pure $ conjoin
+    [ counterexample "a collection holds several implementations" (heterogeneous === [])
+    , counterexample "branches of different types widen where one is asked for"
+        (branches === [])
+    , counterexample "a trait member is callable through it" (callable === [])
+    , counterexample "a type that does not implement the trait is refused"
+        (notImplementing === ["E3032"])
+    , counterexample "dynamic names a trait, not a type" (notATrait === ["E3031"])
+    , counterexample "a bare trait in type position still points at dynamic"
+        (traitWithoutDynamic === ["E3030"])
+    ]
+ where
+  shapes =
+    [ "module M"
+    , "trait Shape { fn area(self: &Self) -> Int }"
+    , "type Circle = { r: Int }"
+    , "type Square = { s: Int }"
+    , "impl Shape for Circle { fn area(self: &Self) -> Int { self.r } }"
+    , "impl Shape for Square { fn area(self: &Self) -> Int { self.s } }"
     ]
 
 testOperators :: IO Property

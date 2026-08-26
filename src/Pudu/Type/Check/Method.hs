@@ -544,6 +544,13 @@ boundName declared (Located _ syntax) = case syntax of
     time. -}
 methodScheme :: Span -> Type -> Text -> Checker (Maybe Scheme)
 methodScheme spanValue receiver member = case receiver of
+  {-| A dynamic value answers with the trait's own declaration, which is the
+      only thing known about it. `Self` stays rigid there, so a member that
+      returns `Self` is not callable through a `dynamic` — the caller would have no
+      type to give the result. That is a real restriction and it is the honest
+      one: the concrete type is exactly what a dynamic value does not carry. -}
+  DynamicTypeValue traitIdentity ->
+    lookupName (nominalKey traitIdentity <> "." <> member)
   NominalType owner _ -> do
     let key = nominalKey owner <> "." <> member
     providers <- ambiguousProviders key

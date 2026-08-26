@@ -1,0 +1,127 @@
+module UsesDynamic
+
+/// A value whose concrete type is not known where it is used.
+///
+/// Every design pattern that needs one — Observer over listeners of different
+/// types, a factory returning "some Shape", a composite with mixed children,
+/// a registry of handlers — is the same missing feature. A sum type closes the
+/// set, and a bound names one type per call site; neither expresses a
+/// collection whose members were written by someone else.
+trait Listener {
+  fn notify(self: &Self, event: Str) -> Int
+}
+
+type Logger = { weight: Int }
+type Counter = { weight: Int }
+type Silent = {}
+
+impl Listener for Logger {
+  fn notify(self: &Self, event: Str) -> Int { self.weight }
+}
+
+impl Listener for Counter {
+  fn notify(self: &Self, event: Str) -> Int { self.weight * 2 }
+}
+
+impl Listener for Silent {
+  fn notify(self: &Self, event: Str) -> Int { 0 }
+}
+
+trait Shape {
+  fn area(self: &Self) -> Int
+}
+
+type Circle = { r: Int }
+type Square = { s: Int }
+
+impl Shape for Circle {
+  fn area(self: &Self) -> Int { 3 * self.r * self.r }
+}
+
+impl Shape for Square {
+  fn area(self: &Self) -> Int { self.s * self.s }
+}
+
+/// The Observer pattern: one collection, several implementing types.
+fn observersOfDifferentTypes() -> Bool {
+  let listeners: Array[dynamic Listener] =
+  [Logger{weight: 1}, Counter{weight: 5}, Silent{}]
+  var total = 0
+  for listener in listeners {
+    total = total + listener.notify("tick")
+  }
+  total == 11
+}
+
+/// The Factory pattern: a return type that names behaviour, not a type. The
+/// branches have different types and both widen where the signature asks.
+fn make(kind: Str) -> dynamic Shape {
+  if kind == "circle" {
+    Circle{r: 2}
+  } else {
+    Square{s: 3}
+  }
+}
+
+fn factoryReturnsEither() -> Bool {
+  make("circle").area() == 12 && make("square").area() == 9
+}
+
+/// A match arm widens the same way a branch does.
+fn fromCode(code: Int) -> dynamic Shape {
+  match code {
+    case 0 => Circle{r: 1}
+    case _ => Square{s: 4}
+  }
+}
+
+fn matchArmsWiden() -> Bool {
+  fromCode(0).area() == 3 && fromCode(1).area() == 16
+}
+
+/// A dynamic value is an ordinary value: it goes in a record, comes back out,
+/// and is passed to a function.
+type Registry = { primary: dynamic Listener, weight: Int }
+
+fn ring(registry: &Registry) -> Int {
+  registry.primary.notify("ring") + registry.weight
+}
+
+fn dynamicValuesAreOrdinary() -> Bool {
+  let registry = Registry{primary: Counter{weight: 3}, weight: 4}
+  ring(&registry) == 10
+}
+
+/// A function taking a dynamic argument accepts every implementation, and
+/// takes them without a type parameter per call.
+fn loudest(left: dynamic Listener, right: dynamic Listener) -> Int {
+  let a = left.notify("x")
+  let b = right.notify("x")
+  if a > b { a } else { b }
+}
+
+fn dynamicParametersAccentAnyImplementation() -> Bool {
+  loudest(Logger{weight: 9}, Counter{weight: 2}) == 9
+}
+
+/// The point of a dynamic type over a sum: this array holds three types, and
+/// adding a fourth needs no edit here or anywhere else that walks it.
+fn theSetIsOpen() -> Bool {
+  let shapes: Array[dynamic Shape] = [Circle{r: 1}, Square{s: 2}, Circle{r: 3}]
+  var total = 0
+  for shape in shapes {
+    total = total + shape.area()
+  }
+  total == 34
+}
+
+export fn main() -> Int {
+  var passed = 0
+  if observersOfDifferentTypes() { passed = passed + 1 }
+  if factoryReturnsEither() { passed = passed + 1 }
+  if matchArmsWiden() { passed = passed + 1 }
+  if dynamicValuesAreOrdinary() { passed = passed + 1 }
+  if dynamicParametersAccentAnyImplementation() { passed = passed + 1 }
+  if theSetIsOpen() { passed = passed + 1 }
+  passed
+}

@@ -327,8 +327,8 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
             opening a region of its own. -}
         mapM_ (enterUnsafe . map locatedValue) (functionUnsafe value)
         actual <- case body of
-          BlockBody block -> checkBlock declared rigid block
-          ExpressionBody expression -> checkExpression declared rigid expression
+          BlockBody block -> checkBlockAgainst declared rigid result block
+          ExpressionBody expression -> checkAgainst declared rigid result expression
         {-| A function's unsafety is a contract its callers uphold, not a use
             its body has to justify, so leaving the body's region reports
             nothing. Only an explicit `unsafe { ... }` earns that warning. -}
@@ -549,7 +549,9 @@ checkStatement :: DeclaredTypes -> [Text] -> Located Statement -> Checker ()
 checkStatement declared rigid (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name annotation value)) -> do
     expected <- formOptionalType declared rigid annotation
-    actual <- checkExpression declared rigid value
+    actual <- case annotation of
+      Just _ -> checkAgainst declared rigid expected value
+      Nothing -> checkExpression declared rigid value
     unified <- unify (locatedSpan value) expected actual
     bindName (locatedValue name) (monotype unified)
   DeclarationStatement other -> checkDeclaration declared other
@@ -922,6 +924,92 @@ traitQualifiedCall declared rigid (Located calleeSpan callee) arguments = case (
   namedType expression = case expression of
     NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
     _ -> Nothing
+
+{-| Check an expression against a type the context already knows.
+
+    Inference alone cannot place a value into a `dynamic`: the branches of an `if`,
+    the arms of a `match`, and the elements of an array literal are unified with
+    *each other* before any declared type is consulted, so two types that widen
+    to the same dynamic type disagree before the widening is ever considered.
+
+    Pushing the expectation inward fixes that at its source. Each branch is
+    checked against what the context wants rather than against its sibling, and
+    a widening happens per branch. Everything else falls through to ordinary
+    inference followed by the same unification as before, so this changes what
+    is accepted only where an expectation genuinely exists. -}
+checkAgainst :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
+checkAgainst declared rigid expected located@(Located spanValue expression) = do
+  resolved <- zonk expected
+  if not (worthPushing resolved)
+    then fallback
+    else case expression of
+      IfExpression condition thenBlock elseBranch -> do
+        conditionType <- checkExpression declared rigid condition
+        _ <- unify (locatedSpan condition) boolType conditionType
+        _ <- checkBlockAgainst declared rigid resolved thenBlock
+        mapM_ (checkAgainst declared rigid resolved) elseBranch
+        recordExpression spanValue resolved
+        pure resolved
+      MatchExpression scrutinee arms -> do
+        subject <- checkExpression declared rigid scrutinee
+        resolvedSubject <- zonk subject
+        mapM_ (checkArmAgainst declared rigid resolved resolvedSubject) arms
+        checkExhaustive spanValue resolvedSubject arms
+        recordExpression spanValue resolved
+        pure resolved
+      ArrayExpression members
+        | NominalType identity [element] <- resolved
+        , nominalName identity == "Array" -> do
+            mapM_ (checkAgainst declared rigid element) members
+            recordExpression spanValue resolved
+            pure resolved
+      BlockExpression block -> do
+        _ <- checkBlockAgainst declared rigid resolved block
+        recordExpression spanValue resolved
+        pure resolved
+      _ -> fallback
+ where
+  {-| Returning what `unify` produced, rather than the inferred type, is what
+      keeps a failure from being reported twice: the caller unifies again
+      against the same expectation, and `ErrorType` absorbs there. -}
+  fallback = do
+    actual <- checkExpression declared rigid located
+    unify spanValue expected actual
+
+  {-| Only a dynamic expectation changes an outcome, and pushing one inward
+      costs a walk. Anything else is left to inference, which already handles
+      it and produces the diagnostics readers are used to. -}
+  worthPushing typeValue = case typeValue of
+    DynamicTypeValue _ -> True
+    NominalType _ arguments -> any worthPushing arguments
+    TupleTypeValue members -> any worthPushing members
+    ReferenceTypeValue _ target -> worthPushing target
+    _ -> False
+
+{-| A block checked against an expectation pushes it to the trailing
+    expression, which is the block's value. -}
+checkBlockAgainst :: DeclaredTypes -> [Text] -> Type -> Located Block -> Checker Type
+checkBlockAgainst declared rigid expected (Located blockSpan block) = do
+  mapM_ (checkStatement declared rigid) (blockStatements block)
+  case blockResult block of
+    Nothing -> do
+      _ <- unify blockSpan expected UnitTypeValue
+      pure UnitTypeValue
+    Just expression -> checkAgainst declared rigid expected expression
+
+checkArmAgainst
+  :: DeclaredTypes -> [Text] -> Type -> Type -> Located MatchArm -> Checker ()
+checkArmAgainst declared rigid expected subject (Located _ arm) = inTypeScope $ do
+  bindPattern declared rigid (armPattern arm) subject
+  mapM_ (checkGuard declared rigid) (armGuard arm)
+  _ <- checkAgainst declared rigid expected (armBody arm)
+  pure ()
+
+checkGuard :: DeclaredTypes -> [Text] -> Located Expression -> Checker ()
+checkGuard declared rigid guard = do
+  guardType <- checkExpression declared rigid guard
+  _ <- unify (locatedSpan guard) boolType guardType
+  pure ()
 
 {-| Check one expression and record the type it was given, so tooling can
     report it later. -}

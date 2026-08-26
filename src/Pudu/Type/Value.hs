@@ -53,6 +53,14 @@ nominalKey value = case nominalModule value of
     unifies with everything so one mistake does not cascade. -}
 data Type
   = NominalType !NominalId ![Type]
+  {-| Some value implementing a trait, whose own type is not named here.
+
+      This is the one place the language admits a value whose concrete type is
+      not known statically. It exists because a heterogeneous collection — a
+      list of listeners, a registry of handlers, a factory's result — cannot be
+      written any other way: a sum type closes the set, and a bound names one
+      type per call site. -}
+  | DynamicTypeValue !NominalId
   | TupleTypeValue ![Type]
   | FunctionTypeValue !Bool ![Type] !Type
   | ReferenceTypeValue !Bool !Type
@@ -120,6 +128,7 @@ variableName identifier
 {-| Render a type the way a diagnostic quotes it. -}
 renderType :: Type -> Text
 renderType typeValue = case typeValue of
+  DynamicTypeValue identity -> "dynamic " <> nominalName identity
   NominalType identity arguments
     | null arguments -> nominalName identity
     | otherwise -> nominalName identity <> "[" <> Text.intercalate ", " (map renderType arguments) <> "]"

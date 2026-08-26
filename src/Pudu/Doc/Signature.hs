@@ -90,6 +90,9 @@ schemeSignature scheme = case schemeType scheme of
     wanted. -}
 sigTypeFromType :: Type -> SigType
 sigTypeFromType typeValue = case typeValue of
+  {-| A dynamic type searches as the trait it names, so `-> dyn Shape` is
+      found by a reader who asked for `Shape`. -}
+  DynamicTypeValue identity -> SigCon ("dynamic " <> nominalLabel identity) []
   NominalType identity arguments -> SigCon (nominalLabel identity) (map sigTypeFromType arguments)
   TupleTypeValue members -> SigTuple (map sigTypeFromType members)
   FunctionTypeValue _ inputs result -> SigFun (map sigTypeFromType inputs) (sigTypeFromType result)

@@ -27,7 +27,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 
 ## Reserved Keywords
 
-`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe with scope`
+`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe with scope dynamic`
 
 `enum`, `struct`, `task`, and `spawn` are reserved for compatibility even where v1 canonical syntax uses `type` and structured `scope` forms.
 
@@ -56,6 +56,7 @@ return_stmt      = "return", expression? ;
 break_stmt       = "break", loop_label?, expression? ;
 continue_stmt    = "continue", loop_label? ;
 loop_label       = "@", lower_ident ;
+dynamic_type     = "dynamic", upper_path ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 params           = param, (",", param)*, ","? ;
@@ -164,6 +165,11 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
 - A method may be called qualified by the type that implements it or by the trait that declares it: `Bot.label(&bot)` and `Speak.label(&bot)` both select `label`. The trait form is how a program picks one provider when several traits declare the same member for one type.
 - A qualified call passes the receiver as an ordinary first argument, so a method declared with `self: &Self` takes a borrow. Method-call syntax borrows the receiver for you; the qualified form does not, because it is an ordinary call.
+- `dynamic Trait` is a type: some value implementing that trait, whose own type is not named. It is the one place the language admits a value whose concrete type is not known at the use site, and it is what a heterogeneous collection needs — `Array[dynamic Listener]` holds any mix of implementations, and a fourth implementation added elsewhere needs no edit where the array is walked.
+- Only a trait may follow `dynamic` (`E3031`). A trait written in type position without it is `E3030`, which names `dynamic` as one of the two forms that work.
+- A concrete type widens into a dynamic one wherever a dynamic type is expected, and only there: a widening is not a conversion the reader has to write, but a narrowing is a `match`. A type that does not implement the trait is `E3032`.
+- The expectation reaches into an `if`, a `match`, an array literal, and a block, so branches of different types each widen against what the context asked for rather than against each other. Without that, two implementations of one trait would disagree before the declared type was ever consulted.
+- A trait member returning `Self` is not callable through a dynamic value: the caller would have no type to give the result. That restriction is the honest one — the concrete type is exactly what a dynamic value does not carry.
 - Declaring the same member in two traits for one type is legal. Only an unqualified call has to choose, and that call is rejected until it is written qualified.
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.
