@@ -35,6 +35,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 
+- **Which sum a variant belongs to is recorded as declarations are installed.** A runtime value names the variant it is and nothing else, so without this an implementation written for `List` is unreachable from a `Cons`.
+
 ### Linkage
 
 - **Requires:** [[Eval Value]], [[Syntax Tree]], [[Diagnostic Model]].

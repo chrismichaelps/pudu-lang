@@ -16,6 +16,7 @@ import Pudu.Eval.Builtin
 import Pudu.Eval.Env
   ( Evaluator (..)
   , bind
+  , recordVariantOwner
   , bindMethod
   )
 import Pudu.Eval.Value
@@ -145,6 +146,7 @@ installVariants typeText (Located _ definition) = case definition of
   SumDefinition variants -> do
     let entries = map variantEntry variants
     mapM_ (uncurry bind) entries
+    mapM_ (\(name, _) -> recordVariantOwner name typeText) entries
     bind typeText (RecordValue typeText entries)
   _ -> pure ()
  where

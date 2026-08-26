@@ -169,6 +169,7 @@ testProgramEvaluation = do
   effectSurface <- runEntry "test-fixtures/stdlib/UsesEffects.pudu"
   routing <- runEntry "test-fixtures/stdlib/UsesRouter.pudu"
   named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
+  ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -201,6 +202,8 @@ testProgramEvaluation = do
         (labelled === Just "4")
     , counterexample "a named variant is built and matched by its names, and by the name it writes"
         (named === Just "119")
+    , counterexample "a type that writes its own Sequence is iterated by it"
+        (ownSequence === Just "45")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

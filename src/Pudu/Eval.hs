@@ -35,6 +35,7 @@ import Pudu.Eval.Builtin
   )
 import Pudu.Eval.Env
   ( Env (..)
+  , variantOwner
   , captureEnvironment
   , currentFrame
   , withCaptured
@@ -714,21 +715,28 @@ evaluateLoop spanValue label body = loop (0 :: Int)
     ordinary. -}
 evaluateFor :: Span -> Maybe Text -> Located Pattern -> Value -> Located Block -> Evaluator Value
 evaluateFor spanValue label binder iterated body = case elements of
+  Just values -> step values
   Nothing -> do
     sequenced <- sequenceMethods iterated
     case sequenced of
       Just (begin, advance) -> do
         start <- callClosureValue spanValue begin [iterated]
         walk advance start (0 :: Int)
-      Nothing ->
-        abortAt (Just spanValue) "E7001"
-          ("cannot iterate a " <> valueKind iterated)
-          ( Just
-              ( "implement Std.Iter.Sequence for it, which is begin and advance, "
-                  <> "or convert it to an array first"
-              )
-          )
-  Just values -> step values
+      {-| Only once nothing implements the protocol does a sum fall back to the
+          payload its matched variant carries. The checker decides the binder's
+          type in exactly this order, and taking the payload first made the two
+          disagree: a program with its own `Sequence` type checked against the
+          implementation and then ran against the payload. -}
+      Nothing -> case variantElements of
+        Just values -> step values
+        Nothing ->
+          abortAt (Just spanValue) "E7001"
+            ("cannot iterate a " <> valueKind iterated)
+            ( Just
+                ( "implement Std.Iter.Sequence for it, which is begin and advance, "
+                    <> "or convert it to an array first"
+                )
+            )
  where
   {-| Walk a sequence one item at a time, threading the state each `advance`
       answers with. The step limit is the loop's, because a sequence that never
@@ -760,6 +768,9 @@ evaluateFor spanValue label binder iterated body = case elements of
     TupleValue members -> Just members
     ArrayValue members -> Just (toList members)
     StrValue text -> Just (map CharValue (Text.unpack text))
+    _ -> Nothing
+
+  variantElements = case iterated of
     VariantValue _ payload -> Just payload
     _ -> Nothing
   step values = case values of
@@ -781,6 +792,17 @@ sequenceMethods :: Value -> Evaluator (Maybe (Value, Value))
 sequenceMethods value = case receiverOwner value of
   Nothing -> pure Nothing
   Just owner -> do
+    own <- methodsUnder owner
+    case own of
+      Just found -> pure (Just found)
+      {-| A value names the variant it is, and an implementation is written for
+          the type that declares it, so a `Cons` finds `List`'s `begin` only by
+          asking what `Cons` belongs to. -}
+      Nothing -> do
+        declaring <- variantOwner owner
+        maybe (pure Nothing) methodsUnder declaring
+ where
+  methodsUnder owner = do
     begin <- lookupName (owner <> ".begin")
     advance <- lookupName (owner <> ".advance")
     pure ((,) <$> begin <*> advance)

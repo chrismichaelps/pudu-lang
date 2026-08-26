@@ -101,6 +101,9 @@ evaluateModule :: Module -> EvalOutcome
 - Runtime failures are ordinary diagnostics: `E7001` shape and definedness, `E7002` limits, `E7003` arity, `E7004` domain errors such as division by zero and index range, `E7005` no matching arm – a defensive path once exhaustiveness checking runs, but still reported rather than crashing – `E7006` a jump outside a loop — now a defensive path, since [[Name Resolution]] rejects one as `E2016` before the program runs — `E7007` a panic from the prelude's `panic` builtin, which represents a violated invariant rather than a recoverable domain failure, `E7010` a decimal quotient with no terminating base-ten expansion, which is reported rather than rounded because rounding is the decimal analogue of a silent integer wrap.
 - Calling an async closure evaluates supplied arguments and omitted defaults left to right, then returns a cold `TaskValue` without running the body. `.await` starts that prepared body; `Ok` yields its payload, `Err` propagates like `?`, and awaiting a non-task is defensive runtime `E7008`.
 
+- **A type that writes `Sequence` is iterated by it, and a sum falls back to its payload only when nothing does.** [[Type Check Iteration]] decides the binder's type in exactly this order, and taking the payload first made the two disagree: a program with its own implementation type checked against the implementation and then ran against the payload, so a binder the checker called `Int` held a variant.
+- A value names the variant it is; an implementation is written for the type that declares it. Asking whether a `Cons` is a sequence therefore asks what `Cons` belongs to, which is why the evaluator records each variant's owning type as it installs it.
+
 ### Linkage
 
 - **Requires:** [[Eval Value]], [[Eval Env]], [[Eval Match]], [[Eval Operator]], [[Syntax Tree]], [[Diagnostic Model]].
@@ -130,6 +133,7 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 
 ## Grill Log
 
+- **Q:** Why does the evaluator need a variant-to-type map when the checker does not? **A:** Because a runtime value has lost its type. _Rationale:_ the checker holds `List` and looks up `List.begin` directly; the evaluator holds a `Cons` and nothing in the value says which sum it came from, so the declaration has to leave that behind at install time. _Rejected:_ tagging every value with its owning type, which costs every value for a lookup few need.
 - **Q:** Should the evaluator wait for the type checker? **A:** No. _Rationale:_ an interactive session that cannot produce a value teaches nothing about the language, and every rule the evaluator applies here is one typing will later refine rather than contradict. _Rejected:_ a checking-only session; a stub evaluator returning placeholders.
 - **Q:** How do `return`, `break`, and `continue` leave nested blocks? **A:** As unwinds through the evaluator's own result type. _Rationale:_ the first attempt made a block yield a control value, and a `return` inside an `if` became the `if`'s value — the tests caught it immediately. _Rejected:_ threading a flow value through every expression; host exceptions.
 - **Q:** What width do fixed-width operators use? **A:** None yet; they compute exactly and are documented as awaiting typing. _Rationale:_ guessing 64 bits would produce wrapping the declared type never asked for, which is worse than exact arithmetic. _Rejected:_ assuming a default width; refusing to evaluate arithmetic at all.

@@ -21,6 +21,8 @@ module Pudu.Eval.Env
   , descend
   , effectsAdmitted
   , emptyEnv
+  , recordVariantOwner
+  , variantOwner
   , performEffect
   , withoutEffects
   , expectBool
@@ -51,6 +53,7 @@ import Pudu.Source (Span)
 data Env = Env
   { envFrames :: ![Map Text Value]
   , envMethods :: !(Map Text Value)
+  , envVariantOwners :: !(Map Text Text)
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
@@ -210,6 +213,7 @@ emptyEnv =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
+    , envVariantOwners = Map.empty
     , envDepth = 0
     , envScopes = []
     , envEffects = True
@@ -257,6 +261,22 @@ lookupName name =
 bindMethod :: Text -> Value -> Evaluator ()
 bindMethod name value =
   Evaluator $ \env -> pure (Done () env{envMethods = Map.insert name value (envMethods env)})
+
+{-| Record which sum a variant belongs to.
+
+    A runtime value names the variant it is, not the type that declares it, and
+    an implementation is written for the type. Without this, asking whether a
+    `Cons` is a sequence looks for `Cons.begin` and finds nothing, while the
+    implementation the program wrote sits under `List`. -}
+recordVariantOwner :: Text -> Text -> Evaluator ()
+recordVariantOwner variant owner =
+  Evaluator $ \env ->
+    pure (Done () env{envVariantOwners = Map.insert variant owner (envVariantOwners env)})
+
+{-| The sum a variant belongs to, when the variant is one. -}
+variantOwner :: Text -> Evaluator (Maybe Text)
+variantOwner variant =
+  Evaluator $ \env -> pure (Done (Map.lookup variant (envVariantOwners env)) env)
 
 withFrame :: [(Text, Value)] -> Evaluator a -> Evaluator a
 withFrame bindings (Evaluator action) =
