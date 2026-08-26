@@ -39,6 +39,7 @@ module Pudu.Type.Env
   , qualifiesSomething
   , isImportedMethod
   , lookupVariant
+  , lookupVariantFields
   , recordExpression
   , report
   , reportedAt
@@ -92,6 +93,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
   , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
+  , declaredVariantFields :: !(Map Text [Text])
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map NominalId [NominalId])
   , declaredAliases :: !(Map Text ([Text], Type))
@@ -106,6 +108,7 @@ emptyDeclared =
     , declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredVariants = Map.empty
+    , declaredVariantFields = Map.empty
     , declaredOwners = Map.empty
     , declaredImpls = Map.empty
     , declaredAliases = Map.empty
@@ -470,6 +473,17 @@ lookupOwnerVariants owner =
 lookupVariant :: Text -> Checker (Maybe (NominalId, [Text], [Type]))
 lookupVariant name =
   Checker $ \state -> (Map.lookup name (declaredVariants (stateDeclared state)), state)
+
+{-| The names a variant declared for its payload, when it declared any.
+
+    A variant written `Circle{ r: Int }` carries the same positional payload a
+    variant written `Circle(Int)` does; the names are how a construction and a
+    pattern may say which element they mean. A variant with no names is absent
+    here rather than present and empty, because writing `Circle{}` for a
+    positional variant is a different mistake from leaving a field out. -}
+lookupVariantFields :: Text -> Checker (Maybe [Text])
+lookupVariantFields name =
+  Checker $ \state -> (Map.lookup name (declaredVariantFields (stateDeclared state)), state)
 
 {-| Record the type an expression was given, so tooling can report it. -}
 recordExpression :: Span -> Type -> Checker ()

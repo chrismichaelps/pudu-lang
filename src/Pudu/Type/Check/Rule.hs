@@ -12,6 +12,7 @@ module Pudu.Type.Check.Rule
   , literalType
   , memberType
   , nameType
+  , namedVariantAsValue
   , qualifiedMemberType
   , tryType
   , unaryType
@@ -37,6 +38,7 @@ import Pudu.Type.Env
   , ambiguousProviders
   , lookupField
   , lookupName
+  , lookupVariantFields
   , qualifiesSomething
   , lookupTypeParams
   , negateIntegerLiteral
@@ -105,9 +107,11 @@ nameType :: Span -> NonEmpty.NonEmpty Text -> Checker Type
 nameType spanValue names = do
   let written = Text.intercalate "." (NonEmpty.toList names)
   found <- lookupName written
-  case found of
-    Just scheme -> instantiate spanValue scheme
-    Nothing -> do
+  named <- namedVariantAsValue spanValue (NonEmpty.last names)
+  case (found, named) of
+    (Just _, Just refused) -> pure refused
+    (Just scheme, Nothing) -> instantiate spanValue scheme
+    (Nothing, _) -> do
       case NonEmpty.nonEmpty (NonEmpty.init names) of
         Nothing -> pure ()
         Just qualifier -> do
@@ -148,6 +152,31 @@ qualifiedMemberType spanValue target member = case target of
             pure (Just ErrorType)
           else pure Nothing
   _ -> pure Nothing
+
+{-| Refuse a variant that named its payload where a value was wanted.
+
+    Such a variant is built by naming its payload and never reaches a program
+    as a value. Its constructor stays bound so the name still resolves — the
+    reader gets this message rather than `undefined name` — but every use of it
+    as a value is the mistake, whether written bare, qualified, or stored in a
+    binding and called later. Were it callable, `Circle(2)` and
+    `Circle{radius: 2}` would build two things that no one pattern could match,
+    and a program mixing them would type check and then find no arm at run
+    time. One spelling reaches the value, so the other cannot be allowed to
+    start. -}
+namedVariantAsValue :: Span -> Text -> Checker (Maybe Type)
+namedVariantAsValue spanValue name = do
+  fieldNames <- lookupVariantFields name
+  case fieldNames of
+    Nothing -> pure Nothing
+    Just names -> do
+      report "E3034" spanValue (name <> " names its payload")
+        ( Just
+            ( "write " <> name <> "{" <> Text.intercalate ", " names
+                <> ": ...} to build one"
+            )
+        )
+      pure (Just ErrorType)
 
 {-| What to suggest for a member a module does not export.
 

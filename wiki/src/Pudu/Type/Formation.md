@@ -48,6 +48,8 @@ The exported signatures are the module header's export list.
 - `DeclaredTypes` carries a path-to-canonical-identity map assembled by [[Type Interface]]. `formType` resolves the complete syntax path through that map before constructing `NominalType`; it never drops qualifiers to their last segment.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
+- A variant written with field names carries the same positional payload as one written with types alone. The names are collected alongside the payload rather than instead of it, so nothing that reads a variant's shape needs to know which spelling declared it.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
@@ -72,6 +74,7 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 
 ## Grill Log
 
+- **Q:** Why keep the names at all, when the payload is positional either way? **A:** Because a construction and a pattern say which element they mean by naming it. _Rationale:_ the payload is what the type system needs and the names are what the reader needs; dropping them made `Circle{radius: 2}` compile to a positional constructor and then fail far from the declaration. _Rejected:_ discarding the names as the first version did.
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
 - **Q:** Where are import aliases interpreted? **A:** [[Type Interface]] produces canonical path bindings; formation only consumes them. _Rationale:_ import policy stays out of recursive type construction. _Rejected:_ inspecting `Import` syntax inside every `formType` call.
 

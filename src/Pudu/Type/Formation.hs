@@ -271,10 +271,18 @@ collectOne owner declared (Located _ declaration) = case declaration of
         pure declared{declaredFields = Map.insert identity formed (declaredFields declared)}
       SumDefinition variants -> do
         entries <- mapM (formVariant declared rigid identity) variants
+        let named =
+              [ (variantName', fieldNames)
+              | (variantName', _, Just fieldNames) <- entries
+              ]
+            payloads = [(variantName', shape) | (variantName', shape, _) <- entries]
         pure
           declared
-            { declaredVariants = insertAll entries (declaredVariants declared)
-            , declaredOwners = Map.insert identity (map fst entries) (declaredOwners declared)
+            { declaredVariants = insertAll payloads (declaredVariants declared)
+            , declaredVariantFields =
+                foldr (\(key, value') acc -> Map.insert key value' acc)
+                  (declaredVariantFields declared) named
+            , declaredOwners = Map.insert identity (map fst payloads) (declaredOwners declared)
             }
       AliasDefinition aliased -> do
         {-| The alias body is formed with its own parameters rigid, so they can
@@ -297,19 +305,27 @@ formField declared rigid (Located _ field) = do
   pure (locatedValue (fieldName field), formed)
 
 {-| A variant is recorded under its own name together with the type it belongs
-    to, which is how a constructor call and a pattern both find its payload. -}
+    to, which is how a constructor call and a pattern both find its payload.
+
+    A variant written with field names carries the same positional payload as
+    one written with types alone; the names come back alongside it so a
+    construction and a pattern may say which element they mean. -}
 formVariant
   :: DeclaredTypes
   -> [Text]
   -> NominalId
   -> Located Variant
-  -> Checker (Text, (NominalId, [Text], [Type]))
+  -> Checker (Text, (NominalId, [Text], [Type]), Maybe [Text])
 formVariant declared rigid owner (Located _ variant) = do
-  payload <- case variantPayload variant of
-    UnitPayload -> pure []
-    TuplePayload members -> mapM (formType declared rigid) members
-    RecordPayload fields -> map snd <$> mapM (formField declared rigid) fields
-  pure (locatedValue (variantName variant), (owner, rigid, payload))
+  (payload, names) <- case variantPayload variant of
+    UnitPayload -> pure ([], Nothing)
+    TuplePayload members -> do
+      formed <- mapM (formType declared rigid) members
+      pure (formed, Nothing)
+    RecordPayload fields -> do
+      formed <- mapM (formField declared rigid) fields
+      pure (map snd formed, Just (map fst formed))
+  pure (locatedValue (variantName variant), (owner, rigid, payload), names)
 
 insertAll
   :: [(Text, (NominalId, [Text], [Type]))]

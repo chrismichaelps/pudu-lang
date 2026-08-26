@@ -57,6 +57,8 @@ import Pudu.Type.Env
   , recordComptimeFunction
   , withComptime
   , lookupField
+  , lookupVariant
+  , lookupVariantFields
   , lookupTypeParams
   , lookupName
   , recordExpression
@@ -92,6 +94,7 @@ import Pudu.Type.Check.Rule
   , literalType
   , memberType
   , nameType
+  , namedVariantAsValue
   , qualifiedMemberType
   , tryType
   , unaryType
@@ -729,7 +732,13 @@ inferExpression declared rigid spanValue expression = case expression of
         argumentTypes <- mapM (checkExpression declared rigid) arguments
         callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
-    qualified <- qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
+    {-| A variant that named its payload is refused here rather than inside
+        qualified member typing, which a call reaches twice — once for the
+        callee and once for the expression — and would report twice. -}
+    refused <- namedVariantAsValue spanValue (locatedValue member)
+    qualified <- case refused of
+      Just value -> pure (Just value)
+      Nothing -> qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
     case qualified of
       Just value -> pure value
       Nothing -> do
@@ -900,10 +909,22 @@ recordType declared rigid spanValue path fields = do
   declaredFieldTypes <- lookupField identity
   case declaredFieldTypes of
     Nothing -> do
-      report "E3007" spanValue (name <> " is not a record type")
-        (Just "construct a record whose type declares fields")
-      mapM_ (checkFieldInit declared rigid) fields
-      pure ErrorType
+      variantShape <- namedVariantShape name
+      case variantShape of
+        Just (owner, ownerParams, expected) ->
+          variantRecordType declared rigid spanValue name owner ownerParams expected fields
+        Nothing -> do
+          positional <- lookupVariant name
+          report "E3007" spanValue (name <> " is not a record type")
+            ( Just $ case positional of
+                Just (_, _, payload) | not (null payload) ->
+                  name <> " carries a positional payload; write "
+                    <> name <> "(...) with one argument per element"
+                Just _ -> name <> " carries no payload; write " <> name <> " on its own"
+                Nothing -> "construct a record whose type declares fields"
+            )
+          mapM_ (checkFieldInit declared rigid) fields
+          pure ErrorType
     Just declaredFields' -> do
       {-| A generic record is instantiated at every construction, exactly as a
           generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
@@ -925,6 +946,52 @@ recordType declared rigid spanValue path fields = do
             (name <> " construction is missing " <> Text.intercalate ", " missing)
             (Just "supply every declared field")
       pure (NominalType identity (map snd replacements))
+
+{-| A variant's payload paired with the names it declared for it.
+
+    A variant is present here only when its declaration gave names. The names
+    sit over the same positional payload a bare `Circle(Int)` would carry, so
+    nothing downstream needs to know which spelling was used. -}
+namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
+namedVariantShape name = do
+  fieldNames <- lookupVariantFields name
+  variant <- lookupVariant name
+  pure $ case (fieldNames, variant) of
+    (Just names, Just (owner, ownerParams, payload))
+      | length names == length payload -> Just (owner, ownerParams, zip names payload)
+    _ -> Nothing
+
+{-| Construct a variant by naming its payload elements.
+
+    The variant's own type is instantiated at the construction, exactly as a
+    record's is, so `Wrap{value: 7}` is a `Wrap[Int]` and the field is checked
+    against `Int` rather than against the declaration's rigid parameter. -}
+variantRecordType
+  :: DeclaredTypes
+  -> [Text]
+  -> Span
+  -> Text
+  -> NominalId
+  -> [Text]
+  -> [(Text, Type)]
+  -> [Located FieldInit]
+  -> Checker Type
+variantRecordType declared rigid spanValue name owner ownerParams declaredShape fields = do
+  replacements <- freshFor ownerParams
+  let expected =
+        [ (fieldName, substituteRigid replacements fieldType)
+        | (fieldName, fieldType) <- declaredShape
+        ]
+  mapM_ (checkField declared rigid expected) fields
+  let supplied = map (locatedValue . fieldInitName . locatedValue) fields
+      missing = [fieldName | (fieldName, _) <- expected, fieldName `notElem` supplied]
+  case missing of
+    [] -> pure ()
+    _ ->
+      report "E3008" spanValue
+        (name <> " construction is missing " <> Text.intercalate ", " missing)
+        (Just "supply every declared field")
+  pure (NominalType owner (map snd replacements))
 
 checkField
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()

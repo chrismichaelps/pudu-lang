@@ -39,6 +39,8 @@ The exported signatures are the module header's export list.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared. Coverage diagnostics use `E5xxx`, and a warning is available for rules that are advisory rather than prohibitive.
 - Each integer literal receives a fresh variable plus its mathematical value and optional suffix-selected type. A type-variable creation frontier lets a semantic construct select only constraints created within its own walk or operand range. Validation checks solved constraints while retaining unresolved ones; forced finalization additionally defaults unresolved constraints to `Int`. Body finalization drains the remainder, and final products rewrite tooling types through the completed substitution.
 
+- **A variant's declared field names are held apart from its payload types.** A variant is present in `declaredVariantFields` only when its declaration gave names; one that gave none is absent rather than present and empty, because writing `Circle{}` for a positional variant is a different mistake from leaving a field out.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
@@ -66,6 +68,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 
 ## Grill Log
 
+- **Q:** Why a second map rather than a fourth component on `declaredVariants`? **A:** Because most variants have no names. _Rationale:_ absence is the answer for every positional variant, and a `Maybe` in a four-tuple would make every reader of the payload destructure a field they do not want. _Rejected:_ widening the existing tuple.
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
 - **Q:** When are obligations discharged? **A:** After the function body, not at the call. _Rationale:_ the argument type may be an inference variable at call time and only solved later; discharging after the body checks what the reader wrote, not a guess. _Rejected:_ discharging at the call site; deferring to module end, which loses the enclosing scope's bounds.
 - **Q:** Imported or local signatures first? **A:** Imported interface bindings form an outer checker frame; local signatures form the inner frame. _Rationale:_ resolution rejects illegal conflicts and local checking cannot overwrite a dependency interface silently. _Rejected:_ one biased `Map.union`.
