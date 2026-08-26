@@ -1,5 +1,7 @@
 module Std.Random
 
+import Std.Num {Integer}
+
 /// A generator's state: one number that carries everything it remembers.
 /// A value rather than something hidden, so a program that generates the same
 /// sequence twice does so because it asked to and not by accident. Every
@@ -36,24 +38,52 @@ export fn next(source: &Generator) -> (Generator, UInt64) {
 }
 
 /// A number below a bound, and the generator that follows.
+///
+/// The bound's own type is the answer's type: a caller drawing indices for a
+/// `UInt8` array gets a `UInt8` back and never leaves its width. The bound is
+/// the type witness, which is what lets one function serve the whole integer
+/// family without a conversion the caller has to undo.
+///
 /// A bound of nought or less answers nought, because there is no number below
 /// it and refusing would make every caller handle a case they can see is
 /// impossible.
-export fn below(source: &Generator, bound: Int) -> (Generator, Int) {
-  if bound <= 0 { (*source, 0) } else {
+export fn below[N: Integer](source: &Generator, bound: N) -> (Generator, N) {
+  let limit = bound.toBigInt()
+  if limit <= 0 {
+    (*source, fittedOr(bound, bound.fromBigInt(0)))
+  } else {
     let stepped = next(source)
-    match convertInteger[Int](stepped[1] >> 1) {
-      case Some(drawn) => (stepped[0], drawn % bound)
-      case None => (stepped[0], 0)
+    match convertInteger[BigInt](stepped[1] >> 1) {
+      case Some(drawn) => (stepped[0], fittedOr(bound, bound.fromBigInt(drawn % limit)))
+      case None => (stepped[0], fittedOr(bound, bound.fromBigInt(0)))
     }
   }
 }
 
+/// The value when there is one, and the witness when the conversion could not
+/// be made. A drawn number is always below the bound, so the fallback is
+/// unreachable; it is written rather than panicked so a caller never inherits a
+/// failure this function cannot actually produce.
+fn fittedOr[N](fallback: N, value: Option[N]) -> N {
+  match value {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
 /// A number between two bounds, the lower included and the upper excluded.
-export fn between(source: &Generator, lower: Int, upper: Int) -> (Generator, Int) {
-  if upper <= lower { (*source, lower) } else {
-    let stepped = below(source, upper - lower)
-    (stepped[0], lower + stepped[1])
+/// Both bounds and the answer share the caller's type.
+export fn between[N: Integer](source: &Generator, lower: N, upper: N) -> (Generator, N) {
+  let span = upper.toBigInt() - lower.toBigInt()
+  if span <= 0 {
+    (*source, lower)
+  } else {
+    let stepped = next(source)
+    match convertInteger[BigInt](stepped[1] >> 1) {
+      case Some(drawn) =>
+      (stepped[0], fittedOr(lower, lower.fromBigInt(lower.toBigInt() + drawn % span)))
+      case None => (stepped[0], lower)
+    }
   }
 }
 
@@ -106,7 +136,7 @@ export fn sample[T](source: &Generator, items: &Array[T], count: Int) -> (Genera
 }
 
 /// An array of numbers below a bound.
-export fn numbers(source: &Generator, count: Int, bound: Int) -> (Generator, Array[Int]) {
+export fn numbers[N: Integer](source: &Generator, count: Int, bound: N) -> (Generator, Array[N]) {
   var out = []
   var generator = *source
   var remaining = count
