@@ -93,6 +93,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map NominalId [NominalId])
   , declaredAliases :: !(Map Text ([Text], Type))
+  , declaredTraitNames :: !(Set NominalId)
   }
   deriving stock (Eq, Show)
 
@@ -106,6 +107,7 @@ emptyDeclared =
     , declaredOwners = Map.empty
     , declaredImpls = Map.empty
     , declaredAliases = Map.empty
+    , declaredTraitNames = Set.empty
     }
 
 {-| @Type.Env.State — the checker's working state.

@@ -36,6 +36,7 @@ import Pudu.Type.Formation
   ( collectDeclaredFrom
   , declaredParameterType
   , formOptionalType
+  , formTraitReference
   , formType
   )
 import Pudu.Type.Interface
@@ -118,7 +119,7 @@ declareInterface declared visibleTraits available traits defaults value = do
         _ -> pure ()
     TraitDeclaration trait -> declareTraitMembers interfaceDeclared trait
     ImplDeclaration implementation -> do
-      formed <- formType interfaceDeclared [] (implTrait implementation)
+      formed <- formTraitReference interfaceDeclared [] (implTrait implementation)
       case formed of
         NominalType identity _ ->
           when (Set.member identity visibleTraits)
