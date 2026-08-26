@@ -47,6 +47,7 @@ parserExpressionProperties =
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   , ("an exhausted budget reports once and stops", testExhaustedBudgetIsQuiet)
+  , ("every precedence band binds as the grammar states", testPrecedenceBands)
   ]
 
 testPrecedence :: IO Property
@@ -264,6 +265,42 @@ testExhaustedBudgetIsQuiet = do
     [ counterexample "a balanced flood reports once" (codes balanced === ["E1099"])
     , counterexample "an unclosed flood reports once" (codes unclosed === ["E1099"])
     , counterexample "and so does a bracket flood" (codes brackets === ["E1099"])
+    ]
+
+{-| Check the precedence table in [[grammar/pudu]] band by band.
+
+    The grammar states one ordering, tightest to loosest, and this walks every
+    adjacent pair of bands: for a tighter operator `t` and a looser one `l`,
+    `a t b l c` must parse as `(a t b) l c`. A table stated in prose and a table
+    implemented in a parser are two tables until something compares them. -}
+testPrecedenceBands :: IO Property
+testPrecedenceBands = do
+  let bands =
+        [ ("*", "multiplicative"), ("+", "additive"), ("<<", "shift")
+        , ("^", "range and bitwise xor"), ("<", "comparison"), ("==", "equality")
+        , ("&&", "boolean and"), ("||", "boolean or")
+        ]
+      adjacent = zip bands (drop 1 bands)
+  tighter <- traverse (\((t, _), (l, _)) -> parse ("a " <> t <> " b " <> l <> " c")) adjacent
+  let expected =
+        [ "((a" <> t <> "b)" <> l <> "c)" | ((t, _), (l, _)) <- adjacent ]
+  associativity <- traverse (\(op, _) -> parse ("a " <> op <> " b " <> op <> " c")) bands
+  let leftAssociative =
+        [ "((a" <> op <> "b)" <> op <> "c)" | (op, _) <- bands ]
+  assignment <- parse "a = b = c"
+  unaryBinding <- parse "-a * -b"
+  postfixBinding <- parse "-f(a)"
+  pure $ conjoin
+    [ counterexample "each band binds tighter than the next"
+        (map validShape tighter === expected)
+    , counterexample "every binary band is left-associative"
+        (map validShape associativity === leftAssociative)
+    , counterexample "assignment is right-associative"
+        (validShape assignment === "(a=(b=c))")
+    , counterexample "a prefix operator binds tighter than every binary one"
+        (validShape unaryBinding === "((-a)*(-b))")
+    , counterexample "and looser than every postfix one"
+        (validShape postfixBinding === "(-f(a))")
     ]
 
 parse :: Text -> IO (Located Expression, TokenKind, [Diagnostic])
