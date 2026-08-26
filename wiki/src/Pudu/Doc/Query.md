@@ -31,6 +31,8 @@ renderQuery :: Query -> Text
 
 ### Governance
 
+- `dynamic Shape` parses as one atom rather than an application, matching how the index writes it: a dynamic type takes no arguments of its own.
+
 - A query is a name or a type. Nothing else is admitted: a query language that grew predicates
   would need its own grammar, errors, and documentation, and these two forms answer the two
   questions a reader has — "where is this thing" and "what has this shape".

@@ -110,6 +110,11 @@ parseSigType raw
   | trimmed == "()" = Just SigUnit
   | trimmed == "_" || trimmed == "?" = Just SigUnknown
   | trimmed == "!" = Just SigNever
+  {-| `dynamic Shape` is one atom, not an application: the index writes it that
+      way because a dynamic type takes no arguments of its own. -}
+  | Just rest <- Text.stripPrefix "dynamic " trimmed
+  , let traitName = Text.strip rest
+  , isIdentifier traitName = Just (SigCon ("dynamic " <> traitName) [])
   | Text.isPrefixOf "&mut " trimmed = SigRef True <$> parseSigType (Text.drop 5 trimmed)
   | Text.isPrefixOf "&" trimmed = SigRef False <$> parseSigType (Text.drop 1 trimmed)
   | Text.isPrefixOf "fn(" trimmed = parseFunction trimmed

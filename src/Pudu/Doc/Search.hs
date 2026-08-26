@@ -134,7 +134,7 @@ compatible wanted found = case (wanted, found) of
   (_, SigVar _) -> True
   (SigVar _, _) -> False
   (SigCon leftName leftArguments, SigCon rightName rightArguments) ->
-    leftName == rightName
+    sameConstructor leftName rightName
       && length leftArguments == length rightArguments
       && and (zipWith compatible leftArguments rightArguments)
   (SigRef leftMutable leftTarget, SigRef rightMutable rightTarget) ->
@@ -149,6 +149,29 @@ compatible wanted found = case (wanted, found) of
   (SigNever, _) -> True
   (_, SigNever) -> True
   _ -> False
+
+{-| Whether two constructor names name the same type.
+
+    The index qualifies a name when the module it came from matters, and a
+    reader searching for `Circle` should still find `Shapes.Circle` — they are
+    asking about a type, not about where it was declared. A query that *does*
+    qualify is matched in full, so a reader who knows which module they mean can
+    still say so. -}
+sameConstructor :: Text -> Text -> Bool
+sameConstructor wanted found
+  | wanted == found = True
+  | Text.isInfixOf "." wanted = False
+  | otherwise = simpleName found == wanted
+
+{-| A qualified name's last segment, keeping any `dynamic ` prefix. -}
+simpleName :: Text -> Text
+simpleName name = case Text.stripPrefix "dynamic " name of
+  Just rest -> "dynamic " <> lastSegment rest
+  Nothing -> lastSegment name
+ where
+  lastSegment text = case reverse (Text.splitOn "." text) of
+    final : _ -> final
+    [] -> text
 
 {-| Whether every scalar of the first text appears in order in the second. -}
 isSubsequence :: Text -> Text -> Bool

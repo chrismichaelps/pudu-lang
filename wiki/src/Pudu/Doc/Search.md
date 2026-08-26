@@ -31,6 +31,8 @@ searchText :: Text -> DocIndex -> [Match]
 
 ### Governance
 
+- A constructor name matches on its last segment when the query is unqualified: a reader searching for `Circle` should find `Shapes.Circle`, because they are asking about a type rather than about where it was declared. A query that qualifies is matched in full, so a reader who knows the module can still say so.
+
 - The score is exposed rather than hidden in the ordering, so a caller merging results from several
   modules can rank them together instead of re-deriving a comparison it was already given.
 - A query that matches nothing scores nothing. A bad match at the bottom of a list is still a claim
