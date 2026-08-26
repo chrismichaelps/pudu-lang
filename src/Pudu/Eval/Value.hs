@@ -234,6 +234,8 @@ data StringMethod
   | StringEndsWith
   | StringDrop
   | StringTake
+  | StringSpanOf
+  | StringSpanNotOf
   | StringSlice
   | StringTrim
   | StringToUpper
@@ -371,6 +373,8 @@ stringMethodName method = case method of
   StringEndsWith -> "endsWith"
   StringDrop -> "drop"
   StringTake -> "take"
+  StringSpanOf -> "spanOf"
+  StringSpanNotOf -> "spanNotOf"
   StringSlice -> "slice"
   StringTrim -> "trim"
   StringToUpper -> "toUpper"

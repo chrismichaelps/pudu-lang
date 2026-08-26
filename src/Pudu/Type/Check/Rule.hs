@@ -206,7 +206,7 @@ missingMemberHelp owner member inScopeUnqualified
 builtinMethodNames :: [Text]
 builtinMethodNames =
   [ "length", "isEmpty", "charAt", "indexOf", "contains", "startsWith", "endsWith"
-  , "drop", "take"
+  , "drop", "take", "spanOf", "spanNotOf"
   , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
   , "map", "filter", "reduce"
@@ -579,6 +579,8 @@ stringMethodType spanValue member = case member of
   "endsWith" -> pure (FunctionTypeValue False [stringType] boolType)
   "drop" -> pure (FunctionTypeValue False [integerType] stringType)
   "take" -> pure (FunctionTypeValue False [integerType] stringType)
+  "spanOf" -> pure (FunctionTypeValue False [stringType] integerType)
+  "spanNotOf" -> pure (FunctionTypeValue False [stringType] integerType)
   "slice" -> pure (FunctionTypeValue False [integerType, integerType] stringType)
   "trim" -> pure (FunctionTypeValue False [] stringType)
   "toUpper" -> pure (FunctionTypeValue False [] stringType)

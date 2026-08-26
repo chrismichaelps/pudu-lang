@@ -348,6 +348,14 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringTake, [IntValue _ count])
       | count < 0 -> outOfRange "a take count cannot be negative"
       | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
+    {-| How long a run at the front is made only of the given characters, or
+        only of characters outside them. A run scanned in one step costs one
+        call rather than one call for every character it covers, which is the
+        difference between reading a line and reading a file — the set is the
+        same vocabulary `oneOf` and `noneOf` already take. -}
+    (StringSpanOf, [StrValue accepted]) -> pure (spanLength (`Text.elem` accepted) text)
+    (StringSpanNotOf, [StrValue rejected]) ->
+      pure (spanLength (not . (`Text.elem` rejected)) text)
     (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
@@ -367,6 +375,8 @@ callStringMethod spanValue method receiver arguments = case receiver of
     _ -> wrongStringArity (stringMethodName method)
 
   textArray = ArrayValue . Seq.fromList . map StrValue
+
+  spanLength holds = intOf . fromIntegral . Text.length . Text.takeWhile holds
 
   charAt text index
     | index < 0 || index >= fromIntegral (Text.length text) =

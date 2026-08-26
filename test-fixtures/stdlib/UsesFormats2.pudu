@@ -1,0 +1,142 @@
+module UsesFormats2
+
+import Std.Text.Parse as P
+import Std.Time as T
+
+/// Formats a program actually meets: a date, a record file, a delimited row.
+///
+/// Each of these needs something the combinators could not say before. A date
+/// needs "exactly four digits", because a shape that resembles the format is
+/// not the format. A record file needs line endings both ways a file writes
+/// them, and a last line that may have none. A delimited row needs a run
+/// scanned against a set rather than a character at a time.
+type Record = { name: Str, sequence: Str }
+
+fn digits(width: Int) -> P.Parser[Int] {
+  P.map(P.count(width, P.digit()), fn(found: Array[Char]) -> Int => {
+      var total = 0
+      for one in found {
+        total = total * 10 + (one.code() - '0'.code())
+      }
+      total
+    })
+}
+
+fn isoDate() -> P.Parser[T.Date] {
+  P.label("an ISO-8601 date",
+    P.map(
+      P.both(
+        P.keepFirst(digits(4), P.character('-')),
+        P.both(P.keepFirst(digits(2), P.character('-')), digits(2))
+      ),
+      fn(parts: (Int, (Int, Int))) -> T.Date =>
+      T.Date{year: parts[0], month: parts[1][0], day: parts[1][1]}
+    ))
+}
+
+fn header() -> P.Parser[Str] { P.keepSecond(P.character('>'), P.line()) }
+
+fn residues() -> P.Parser[Str] {
+  P.keepFirst(P.takeOf1("sequence residues", "ACGTUNacgtun"), P.lineEnd())
+}
+
+fn record() -> P.Parser[Record] {
+  P.map(P.both(header(), P.some(residues())),
+    fn(parts: (Str, Array[Str])) -> Record => {
+      var joined = ""
+      for piece in parts[1] {
+        joined = joined + piece
+      }
+      Record{name: parts[0], sequence: joined}
+    })
+}
+
+fn records() -> P.Parser[Array[Record]] { P.many(record()) }
+
+fn row() -> P.Parser[Array[Str]] {
+  P.keepFirst(P.separatedBy(P.takeNotOf("\t\n\r"), P.character('\t')), P.lineEnd())
+}
+
+export fn main() -> Int {
+  var total = 0
+
+  match P.run(isoDate(), "2026-08-26") {
+    case Ok(found) => {
+      if found.year == 2026 && found.month == 8 && found.day == 26 {
+        total = total + 1
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  // one digit short is a different thing wearing the same punctuation
+  match P.run(isoDate(), "2026-8-26") {
+    case Ok(_f) => {}
+    case Err(_e) => { total = total + 2 }
+  }
+
+  match P.run(records(), ">seq1 first\nACGT\nTTGA\n>seq2 second\nGGCC\n") {
+    case Ok(found) => {
+      if found.length() == 2 {
+        total = total + 4
+      }
+      if found[0].name == "seq1 first" && found[0].sequence == "ACGTTTGA" {
+        total = total + 8
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  // a file written on another system, and a last line with no ending
+  match P.run(records(), ">a\r\nACGT\r\n>b\nGG") {
+    case Ok(found) => {
+      if found.length() == 2 && found[0].sequence == "ACGT" && found[1].sequence == "GG" {
+        total = total + 16
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  match P.run(row(), "chr1\t1000\tA\tG\n") {
+    case Ok(cells) => {
+      if cells.length() == 4 && cells[1] == "1000" && cells[3] == "G" {
+        total = total + 32
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  // a problem a reader can act on names the line, not the character count
+  match P.run(P.many(row()), "chr1\tA\nchr2\tB\n") {
+    case Ok(_c) => { total = total + 64 }
+    case Err(_e) => {}
+  }
+
+  match P.run(P.keepSecond(P.literal("x"), P.hexadecimal()), "xff") {
+    case Ok(value) => {
+      if value == 255 {
+        total = total + 128
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  match P.run(P.signed(P.integer()), "-42") {
+    case Ok(value) => {
+      if value == 0 - 42 {
+        total = total + 256
+      }
+    }
+    case Err(_e) => {}
+  }
+
+  match P.lineAndColumn("one\ntwo\nthree", 8) {
+    case place => {
+      if place[0] == 3 && place[1] == 1 {
+        total = total + 512
+      }
+    }
+  }
+
+  total
+}

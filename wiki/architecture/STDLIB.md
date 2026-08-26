@@ -20,6 +20,37 @@ taste, but it is not guessable from the outside, so it is written here.
 `E3033` catches the commonest form of the confusion in the other direction — asking a module for a
 name it does not export, when the operation is a method on the value.
 
+## Reading a format
+
+`Std.Text.Parse` is a combinator library: a `Parser[T]` is `fn(Input) -> Step[T]`
+and nothing more, so a reader writes their own primitives without asking the
+module's permission. Two things decide whether it reaches a file rather than a
+line.
+
+**It carries the text it has not read yet.** Reaching the *n*th character of a
+text walks past the first *n*, so a reader holding an index into the whole input
+pays again for everything it has already passed and a scan costs the square of
+the input. `Input` holds the remaining text; reading is always at the front and
+advancing moves one character, both constant.
+
+**A run is scanned against a set, not a character at a time.** `takeOf` and
+`takeNotOf` name a set of characters — the same vocabulary `oneOf` and `noneOf`
+already take — and consume the whole run in one step. A predicate written as a
+function is a call for every character it is asked about, which for a quarter of
+a megabyte is a quarter of a million calls; `takeWhile` keeps that form for a
+rule a set cannot state. Reading the lines of a 257 KB file takes 0.65s through
+the set form and 6.07s through the predicate.
+
+**Choice commits.** A parser that failed *after* consuming does not fall through
+to the next branch: the input it read is what said which branch was meant, and
+trying another would report a problem from the wrong one. `attempt` opts out
+where a format is genuinely ambiguous.
+
+**A problem names a line.** `Problem` carries how many characters were consumed,
+because counting lines on every step would charge every parse for an answer
+almost none asks for. `explainIn` makes the count once, when a person is about
+to read it, and says `line 3, column 1` rather than `position 18`.
+
 ## Decision
 
 Pudu ships one **standard library** under the `Std` namespace, versioned with the compiler and

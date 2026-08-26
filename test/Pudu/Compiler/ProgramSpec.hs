@@ -173,6 +173,7 @@ testProgramEvaluation = do
   acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
   sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   longLoops <- runEntry "test-fixtures/stdlib/UsesLongLoops.pudu"
+  realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -213,6 +214,8 @@ testProgramEvaluation = do
         (sumTraits === Just "88")
     , counterexample "a running program loops as long as its work takes"
         (longLoops === Just "127")
+    , counterexample "dates, record files, and delimited rows all parse"
+        (realFormats === Just "1023")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

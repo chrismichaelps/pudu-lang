@@ -369,6 +369,8 @@ stringMethods =
   , ("endsWith", StringEndsWith)
   , ("drop", StringDrop)
   , ("take", StringTake)
+  , ("spanOf", StringSpanOf)
+  , ("spanNotOf", StringSpanNotOf)
   , ("slice", StringSlice)
   , ("trim", StringTrim)
   , ("toUpper", StringToUpper)
