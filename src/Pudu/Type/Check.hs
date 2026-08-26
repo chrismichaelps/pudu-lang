@@ -811,9 +811,12 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
     mapM_ (unify spanValue first) rest
     pure first
   NominalType owner arguments -> do
-    stepped <- lookupName (nominalKey owner <> ".advance")
-    case stepped of
-      Nothing -> do
+    let receiver = NominalType owner arguments
+        receiverReference = ReferenceTypeValue False receiver
+    begun <- instantiateMethod receiver "begin"
+    stepped <- instantiateMethod receiver "advance"
+    case (begun, stepped) of
+      (Nothing, Nothing) -> do
         {-| A sum walks the payload the matched variant carries, which is what
             makes an `Option` a sequence of nought or one. Every variant's
             payload must agree, because one binder cannot hold two types. -}
@@ -840,19 +843,36 @@ iterationElement spanValue iteratedType = case throughReference iteratedType of
                   )
               )
             pure ErrorType
-      Just scheme -> do
-        instantiated <- instantiate spanValue scheme
-        case instantiated of
-          FunctionTypeValue _ _ (NominalType "Option" [TupleTypeValue [_, item]]) -> pure item
-          _ -> do
-            report "E3030" spanValue
-              (nominalName owner <> " has an advance that does not walk a sequence")
-              (Just "advance must answer Option[(State, Item)]")
-            pure ErrorType
+      (Just ErrorType, _) -> pure ErrorType
+      (_, Just ErrorType) -> pure ErrorType
+      ( Just (FunctionTypeValue False [beginReceiver] beginState)
+        , Just
+            ( FunctionTypeValue False [advanceReceiver, advanceState]
+                (NominalType "Option" [TupleTypeValue [nextState, item]])
+              )
+        ) -> do
+          _ <- unify spanValue receiverReference beginReceiver
+          _ <- unify spanValue receiverReference advanceReceiver
+          _ <- unify spanValue beginState advanceState
+          _ <- unify spanValue beginState nextState
+          zonk item
+      _ -> do
+        report "E3030" spanValue
+          (nominalName owner <> " does not provide one coherent sequence")
+          ( Just
+              ( "begin must take &Self and answer State; advance must take "
+                  <> "&Self and State and answer Option[(State, Item)]"
+              )
+          )
+        pure ErrorType
   other -> do
     report "E3030" spanValue ("a " <> renderType other <> " cannot be iterated")
       (Just "iterate an array, a string, a map, a set, or a type implementing Std.Iter.Sequence")
     pure ErrorType
+ where
+  instantiateMethod receiver name = do
+    found <- methodScheme spanValue receiver name
+    mapM (instantiate spanValue) found
 
 throughReference :: Type -> Type
 throughReference typeValue = case typeValue of
@@ -1040,7 +1060,18 @@ inferExpression declared rigid spanValue expression = case expression of
     broken <- aroundLoop label result True (checkBlock declared rigid body)
     if broken then zonk result else pure NeverType
   ForExpression label binder iterated body -> do
+    {-| The iterated expression's integer literals are settled before its
+        element type is read.
+
+        A literal defers its type until inference has seen enough to choose
+        one, which is right nearly everywhere and wrong here: the binder's type
+        comes from this expression and nothing else, so leaving it a variable
+        meant the loop body could ask it for any method at all. `for x in
+        [1, 2, 3] { x.length() }` passed because `x` had no type yet, not
+        because whole numbers have a length. -}
+    iteratedCheckpoint <- integerLiteralCheckpoint
     iteratedType <- checkExpression declared rigid iterated
+    finalizeIntegerLiteralsSince iteratedCheckpoint
     resolved <- zonk iteratedType
     element <- iterationElement spanValue resolved
     _ <- inTypeScope $ do

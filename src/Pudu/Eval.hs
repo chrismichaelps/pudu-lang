@@ -52,7 +52,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Match (literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Array
   ( arrayFromList
   , arrayToList
@@ -677,7 +677,7 @@ receiverOwner :: Value -> Maybe Text
 receiverOwner value = case value of
   RecordValue owner _ -> Just owner
   VariantValue owner _ -> Just owner
-  _ -> Nothing
+  _ -> nominalNameOf value
 
 {-| Render any value as the text a message should carry.
 

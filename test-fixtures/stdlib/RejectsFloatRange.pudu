@@ -1,0 +1,9 @@
+module RejectsFloatRange
+
+import Std.Iter as I
+
+fn walk() -> () {
+  for value in I.range(0.0, 2.0) {
+    display(value)
+  }
+}

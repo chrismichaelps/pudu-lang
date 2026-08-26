@@ -115,6 +115,7 @@ testStandardLibrary = do
   missing <- codes "test-fixtures/stdlib/MissingStd.pudu"
   missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
+  floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
@@ -123,6 +124,8 @@ testStandardLibrary = do
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)
     , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
+    , counterexample "a numeric range still requires a whole-number type"
+        (floatRangeDiagnostics === ["E3012"])
     , counterexample "the standard module joins the program graph"
         (elem "Std.Math" resolved === True)
     ]
@@ -180,8 +183,8 @@ testProgramEvaluation = do
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"
         (generic === Just "5")
-    , counterexample "a user type is iterated through its own sequence"
-        (sequences === Just "11")
+    , counterexample "a user type and lazy adapters use the open sequence protocol"
+        (sequences === Just "14")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

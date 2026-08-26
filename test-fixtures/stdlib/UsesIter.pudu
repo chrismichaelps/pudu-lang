@@ -145,6 +145,57 @@ fn optionIsASequenceOfNoughtOrOne() -> Bool {
   seen == 7
 }
 
+/// An endless sequence. Only laziness makes this walkable at all.
+type Naturals = { unused: Int }
+
+impl I.Sequence[Int, Int] for Naturals {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] { Some((state + 1, state)) }
+}
+
+/// Each adapter is a sequence over another that computes nothing until asked.
+fn adaptersTransform() -> Bool {
+  var mapped = 0
+  for n in I.map(I.range(1, 4), fn(x: Int) -> Int => x * 10) {
+    mapped = mapped + n
+  }
+  var kept = 0
+  for n in I.filter(I.range(1, 10), fn(x: Int) -> Bool => x % 2 == 0) {
+    kept = kept + n
+  }
+  var dropped = 0
+  for n in I.drop(I.range(0, 6), 3) {
+    dropped = dropped + n
+  }
+  var paired = 0
+  for pair in I.zip(I.range(1, 4), I.items(["a", "b"])) {
+    paired = paired + pair[0]
+  }
+  mapped == 60 && kept == 20 && dropped == 12 && paired == 3
+}
+
+/// `take` is what makes an endless sequence usable: the source is never asked
+/// for an item past the limit, so this ends.
+fn takeBoundsAnEndlessSequence() -> Bool {
+  var total = 0
+  for n in I.take(Naturals{unused: 0}, 5) {
+    total = total + n
+  }
+  total == 10
+}
+
+/// Adapters compose, and the composition stays lazy: this walks an endless
+/// sequence through two adapters and stops after four items.
+fn adaptersCompose() -> Bool {
+  var total = 0
+  let tripled = I.map(Naturals{unused: 0}, fn(x: Int) -> Int => x * 3)
+  let evens = I.filter(tripled, fn(x: Int) -> Bool => x % 2 == 0)
+  for n in I.take(evens, 4) {
+    total = total + n
+  }
+  total == 36
+}
+
 export fn main() -> Int {
   var passed = 0
   if rangeWalks() { passed = passed + 1 }
@@ -158,5 +209,8 @@ export fn main() -> Int {
   if sequencesAreOrdinaryValues() { passed = passed + 1 }
   if boundsReachAnySequence() { passed = passed + 1 }
   if optionIsASequenceOfNoughtOrOne() { passed = passed + 1 }
+  if adaptersTransform() { passed = passed + 1 }
+  if takeBoundsAnEndlessSequence() { passed = passed + 1 }
+  if adaptersCompose() { passed = passed + 1 }
   passed
 }

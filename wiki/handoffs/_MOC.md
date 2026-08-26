@@ -8,6 +8,7 @@ tags: [moc, handoff]
 - [[2026-08-21-frontend-foundation]] — DNA-to-Shadow handoff for the first compiler slice.
 - [[2026-08-25-doc-site]] — architecture-to-tooling handoff for the static documentation website.
 - [[2026-08-25-labelled-loops]] — architecture-to-semantics handoff for labelled loops and value-carrying `break`.
+- [[2026-08-25-generic-types-iter]] — architecture-to-semantics/stdlib handoff for generic user types, open iteration, and the integer-family boundary.
 
 ## Referenced by
 

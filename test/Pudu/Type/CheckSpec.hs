@@ -168,6 +168,8 @@ testIterationTypes = do
     ["module M", "fn run(xs: Array[Int]) -> Int { var n = 0", "  for x in xs { n = n + x }", "  n }"]
   wrongElement <- codes
     ["module M", "fn run(xs: Array[Int]) -> Int { var n = 0", "  for x in xs { n = n + x.length() }", "  n }"]
+  wrongElementOfLiteral <- codes
+    ["module M", "fn run() -> Int { var n = 0", "  for x in [1, 2, 3] { n = n + x.length() }", "  n }"]
   textElement <- codes
     ["module M", "fn run(t: Str) -> Int { var n = 0", "  for c in t { n = n + c.code() }", "  n }"]
   optionElement <- codes
@@ -196,6 +198,8 @@ testIterationTypes = do
   pure $ conjoin
     [ counterexample "an array yields its element type" (arrayElement === [])
     , counterexample "and a wrong use of it is now caught" (wrongElement === ["E3005"])
+    , counterexample "including over a literal, whose element is settled first"
+        (wrongElementOfLiteral === ["E3005"])
     , counterexample "a string yields Char" (textElement === [])
     , counterexample "a sum yields what its variants carry" (optionElement === [])
     , counterexample "a type that is not a sequence is reported at the for"

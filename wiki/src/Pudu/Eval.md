@@ -109,14 +109,15 @@ Install declarations, evaluate module constants, then evaluate the named entry p
 
 ## Negative Logic (Prohibited Paths)
 
-- No type checking, coercion, or inference; no trait or method dispatch; no ownership, borrow, or drop behaviour; no IO, filesystem, clock, or randomness; no scheduler or parallel execution; no compile-time evaluation semantics; and no silent recovery from a runtime failure.
+- No type checking, coercion, or inference; no ownership, borrow, or drop behaviour; no scheduler or parallel execution; and no silent recovery from a runtime failure. Method dispatch follows the implementations already admitted by semantic checking, and effects use the explicit evaluator boundary described above.
 
 ## Edge Cases
 
 - A control transfer that reaches the top has left every construct that could own it: a return yields its value, a stray break or continue yields unit rather than losing the run.
-- Iteration is defined over the values the evaluator can enumerate without traits — tuples, strings, and variant payloads — and anything else says so instead of silently doing nothing.
+- Iteration handles built-in enumerable values directly and asks every other nominal value for the admitted `begin`/`advance` sequence protocol; a missing or malformed protocol says so instead of silently doing nothing.
 - `?` yields the success value or returns the failure from the enclosing function unchanged, which is the elaboration [[architecture/SEMANTICS]] gives it.
 - A member access finds a field first and a method of the value's type second; in callee position the method wins, matching how the same call is typed. A method call binds the receiver as the function's first parameter.
+- A trait-qualified call derives its receiver owner through [[Eval Operator]]'s `nominalNameOf`, so implementations for wired-in scalars dispatch by exact kind (`UInt8`, not a generic integer label) as well as implementations for records and variants.
 - The interpreter's task is cold and deterministic but not concurrently scheduled. Awaiting the same immutable task value again replays its pure body until the scheduler slice introduces task identity and at-most-once state; current Pudu has no task-observable IO, clock, or randomness.
 - `evaluateEntryPoint` drives a task only when the named entry function itself is async. An ordinary entry that returns a task receives the opaque task unchanged, preserving cold calls at the host boundary.
 

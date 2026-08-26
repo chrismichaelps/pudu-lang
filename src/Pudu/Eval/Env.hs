@@ -232,11 +232,13 @@ lookupName name = Evaluator $ \env -> pure (Done (search (envFrames env)) env)
       Nothing -> search rest
 
 withFrame :: [(Text, Value)] -> Evaluator a -> Evaluator a
-withFrame bindings action = do
-  pushFrame (Map.fromList bindings)
-  value <- action
-  popFrame
-  pure value
+withFrame bindings (Evaluator action) =
+  Evaluator $ \env -> do
+    outcome <- action env{envFrames = Map.fromList bindings : envFrames env}
+    pure $ case outcome of
+      Done value next -> Done value (dropInnermostFrame next)
+      Unwound transfer next -> Unwound transfer (dropInnermostFrame next)
+      Aborted stop -> Aborted stop
 
 {-| The environment as it stands, for a function literal to carry away.
 
@@ -255,11 +257,22 @@ captureEnvironment = Evaluator $ \env -> pure (Done (envFrames env) env)
     written — not what it happens to mean where it is finally called. -}
 withCaptured :: Maybe [Map Text Value] -> Evaluator a -> Evaluator a
 withCaptured Nothing action = action
-withCaptured (Just frames) action = do
-  restored <- Evaluator $ \env -> pure (Done (envFrames env) env{envFrames = frames})
-  value <- action
-  Evaluator $ \env -> pure (Done () env{envFrames = restored})
-  pure value
+withCaptured (Just frames) (Evaluator action) =
+  Evaluator $ \env -> do
+    outcome <- action env{envFrames = frames}
+    pure $ case outcome of
+      Done value next -> Done value next{envFrames = envFrames env}
+      Unwound transfer next -> Unwound transfer next{envFrames = envFrames env}
+      Aborted stop -> Aborted stop
+
+{-| Remove the lexical frame a `withFrame` introduced while retaining every
+    other part of the nested evaluator's state. Nested frame combinators clean
+    their own frames before returning, including during an unwind, so this is
+    always the frame owned by the current combinator. -}
+dropInnermostFrame :: Env -> Env
+dropInnermostFrame env = case envFrames env of
+  _ : rest@(_ : _) -> env{envFrames = rest}
+  _ -> env
 
 withNewFrame :: Evaluator a -> Evaluator a
 withNewFrame = withFrame []

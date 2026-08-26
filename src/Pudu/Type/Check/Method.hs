@@ -91,7 +91,9 @@ traitTable declared declarations =
     rigid: the implementing type is not known here. -}
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareTraitMembers declared value =
-  mapM_ (declareTraitMember declared owner (traitRigid value)) (traitMembers value)
+  mapM_
+    (declareTraitMember declared owner (traitRigid value) (traitBounds declared value))
+    (traitMembers value)
  where
   name = locatedValue (traitName value)
   owner = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
@@ -106,13 +108,21 @@ declareTraitMembers declared value =
 traitRigid :: Trait -> [Text]
 traitRigid value = map (locatedValue . typeParamName . locatedValue) (traitTypeParams value)
 
-declareTraitMember :: DeclaredTypes -> NominalId -> [Text] -> Located Function -> Checker ()
-declareTraitMember declared owner traitParams (Located _ method) = do
+declareTraitMember
+  :: DeclaredTypes
+  -> NominalId
+  -> [Text]
+  -> [(Text, [NominalId])]
+  -> Located Function
+  -> Checker ()
+declareTraitMember declared owner traitParams bounds (Located _ method) = do
   let rigid = "Self" : traitParams <> functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
   bindName (methodKey owner (locatedValue (functionName method)))
-    (polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result))
+    ( polytype rigid (bounds <> declareBounds declared method)
+        (FunctionTypeValue (functionAsync method) inputs result)
+    )
 
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
@@ -184,7 +194,9 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
       localCollision =
         not rejectCollision
           && maybe False (\earlier -> Just earlier /= providing) provider
-  let scheme = polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result)
+  let scheme =
+        polytype rigid (implBounds declared value <> declareBounds aliases method)
+          (FunctionTypeValue (functionAsync method) inputs result)
   if importedCollision
     then do
       report "E3013" methodSpan
@@ -281,10 +293,16 @@ methodKey owner method = nominalKey owner <> "." <> method
 dischargeObligations :: Checker ()
 dischargeObligations = do
   obligations <- takeObligations
-  mapM_ discharge obligations
+  dischargeAll [] obligations
  where
-  discharge (spanValue, typeValue, traitText) = do
+  dischargeAll _ [] = pure ()
+  dischargeAll seen ((spanValue, typeValue, traitText) : rest) = do
     resolved <- zonk typeValue
+    let key = (spanValue, resolved, traitText)
+    unless (key `elem` seen) (discharge spanValue resolved traitText)
+    dischargeAll (key : seen) rest
+
+  discharge spanValue resolved traitText =
     case resolved of
       ErrorType -> pure ()
       VariableType _ -> pure ()

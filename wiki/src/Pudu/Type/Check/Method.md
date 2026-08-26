@@ -50,7 +50,14 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 - A trait member that carries a body is a default. An implementation that does not provide its own gets it, bound at the target type exactly as an overriding method would be.
 - `declareTraitMembers` binds a trait's own members under the trait's name with `Self` rigid, so a call on a parameter bounded by that trait finds them through `methodScheme`'s rigid path.
 - `declareBounds` collects the trait bounds a function's generic parameters carry from both the parameter list and the `where` clause, since [[grammar/pudu]] gives them the same meaning; these become the obligations a call must prove.
+- A method scheme retains both the implementation's parameter bounds and the method's own bounds.
+  Dropping the implementation bounds made `impl[N: Integer] Sequence[N, N] for Range[N]` enforce
+  `Integer` inside the method body but not when a caller selected that method, so a floating range
+  incorrectly satisfied the protocol.
 - `dischargeObligations` proves every obligation a call registered, after the enclosing function's body is checked and while the declaration's own parameter bounds are still in scope. A rigid parameter satisfies a bound its own declaration declared; a nominal type satisfies one through its implementations; an unsolved variable proves nothing and is left alone; `E3012` reports an unsatisfied bound.
+- Obligations are deduplicated after substitution is resolved. Two protocol methods may impose the
+  same bound through different fresh variables that both settle to `Float64`; the caller made one
+  mistake and receives one `E3012`, not one per method inspected.
 - `declareBuiltinConstructors` binds `Some`/`None`/`Ok`/`Err` before the module's own declarations, so a module that declares its own `Ok` shadows the binding rather than colliding with it.
 - `methodScheme` finds a method on a nominal type through its implementations or on a rigid parameter through the traits its bounds declared, which is what a bound is for. When two or more bounds provide the same member, the lookup is ambiguous and reports `E3013` rather than silently picking the first.
 - [[Type Check Coherence]] rejects orphan implementations and duplicate implementation heads after method signatures are collected; general unification overlap remains a separate resolved-type slice. Nothing here silently picks between candidates.
@@ -63,7 +70,7 @@ traitTable :: DeclaredTypes -> [Located Declaration] -> Map NominalId [Located F
 
 ## Algorithm
 
-Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target, then bind every trait default the implementation did not override. For a trait, bind its members under the trait's own name with `Self` rigid. For a function, collect its parameter bounds; at each call site, instantiation registers the obligations the bounds impose; after the body, discharge them by checking the resolved argument type against the trait, through `implementsTrait` for a nominal type or `rigidSatisfies` for a rigid parameter.
+Form the implementation's target, bind each of its functions under the target's method key with `Self` aliased to the target and with implementation-plus-method bounds retained in its scheme, then bind every trait default the implementation did not override. For a trait, bind its members under the trait's own name with `Self` rigid and retain trait-plus-member bounds. For a function, collect its parameter bounds; at each call site, instantiation registers the obligations the bounds impose; after the body, discharge them by checking the resolved argument type against the trait, through `implementsTrait` for a nominal type or `rigidSatisfies` for a rigid parameter.
 
 ## Negative Logic (Prohibited Paths)
 

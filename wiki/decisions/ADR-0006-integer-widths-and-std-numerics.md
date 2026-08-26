@@ -90,6 +90,7 @@ The numeric and bitwise surface is **generic, bounded by traits**, and the trait
 | Trait | Module | Implemented for |
 |---|---|---|
 | `Eq`, `Ord` | `Std.Order` | every integer width, both floating widths, `Str`, `Char`, `Bool` |
+| `Integer` | `Std.Num` | every integer width and `BigInt`; user numeric wrappers may implement its exact conversion contract |
 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div` | `Std.Num` | every integer width, both floating widths |
 | `Bits` | `Std.Bits` | every integer width; **not** `BigInt`, which has no width |
 
@@ -108,6 +109,12 @@ Two rules that shaped the work and still hold:
 - **A bound belongs to the library, not the caller.** `Std.Bits` carries `noBits` and `lowBit` on its
   own trait rather than borrowing `Zero` and `One`, so calling `popCount` needs one import.
 
+`Integer` is the boundary that distinguishes whole-number algorithms from merely numeric ones. It
+converts losslessly to `BigInt` and converts back with `Option`, so a generic algorithm can do
+width-independent work without erasing the caller's selected type. A user-defined numeric wrapper
+may implement the same contract; a floating type cannot satisfy it merely because it supports
+ordering and addition.
+
 ## The audit
 
 Every `Int` in a public `Std` signature, classified. An `Int` is **correct** where it names a
@@ -125,6 +132,10 @@ the caller chose the type of.
 | `Std.Time` | milliseconds, calendar fields, zone offsets | correct — the units are the library's own |
 | `Std.Http` | status codes, content lengths, ports | correct — the protocol defines them |
 | `Std.Json`, `Std.Url`, `Std.Map`, `Std.Set`, `Std.Env`, `Std.Process`, `Std.Show`, `Std.Bool`, `Std.Function`, `Std.Order` | positions, sizes, statuses | correct |
+| `Std.Iter` | array positions, yielded counts, take/drop limits, and adapter state | correct — these values measure a walk; `Range[N]` itself is bounded by `Integer` and preserves `N` |
+| `Std.Random` | `below`, `between`, and `numbers` results | **must be generalised** — these are caller-chosen numeric values; counts, lengths, and percentages remain `Int` |
+| `Std.Text.Parse` | input positions and `partial` offsets | correct — positions count text scalars |
+| `Std.Text.Parse` | `integer` result | **must be generalised** — parsed magnitude is caller data and range failure belongs in `Problem` |
 
 `Std.List.range(from, to) -> Array[Int]` stays `Int`: it produces a range of *positions*, and a
 caller wanting values of another type maps over it.
