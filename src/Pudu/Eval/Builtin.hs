@@ -21,20 +21,15 @@ module Pudu.Eval.Builtin
 
 import Control.Monad (filterM, foldM)
 import Data.Foldable (toList)
-import Data.Maybe (fromMaybe)
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
-import Pudu.Eval.Clock
-import Pudu.Eval.Io
+import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
 import Pudu.Eval.Env
-  ( effectsAdmitted
-  , performEffect
-  , Evaluator (..)
+  ( Evaluator (..)
   , abortAt
   )
 import Pudu.Source (Span)
@@ -193,165 +188,6 @@ roundingOfCode code = case code of
   4 -> RoundHalfUp
   5 -> RoundHalfDown
   _ -> RoundHalfEven
-
-{-| The built-ins that reach the world.
-
-    They are listed once so the evaluator and the checker cannot disagree about
-    which names exist, and so adding one is a single edit rather than three. -}
-effectBuiltins :: [Builtin]
-effectBuiltins =
-  [ PrintBuiltin
-  , PrintErrorBuiltin
-  , ReadLineBuiltin
-  , ReadFileBuiltin
-  , WriteFileBuiltin
-  , AppendFileBuiltin
-  , FileExistsBuiltin
-  , RemoveFileBuiltin
-  , ListDirectoryBuiltin
-  , CreateDirectoryBuiltin
-  , ArgumentsBuiltin
-  , EnvironmentBuiltin
-  , ExitBuiltin
-  , ClockBuiltin
-  , NowBuiltin
-  , FormatTimeBuiltin
-  , ParseTimeBuiltin
-  , ZoneOffsetBuiltin
-  , RunBuiltin
-  ]
-
-{-| Perform one effect.
-
-    Every one answers with a `Result` rather than failing the program: the
-    language has no exceptions, and a runtime that unwound past a boundary the
-    program cannot see would take away the only decision worth having. A missing
-    file is an outcome a caller handles, not a crash.
-
-    `exit` is the exception to that, and is the only one: a program that asked
-    to stop has nothing left to decide. -}
-callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
-callEffect spanValue builtin arguments = do
-  admitted <- effectsAdmitted
-  if not admitted
-    then
-      abortAt (Just spanValue) "E7009"
-        (builtinName builtin <> " reaches outside the program")
-        ( Just
-            ( "a compile-time constant is folded while the compiler runs, so it "
-                <> "cannot read, write, or ask the environment anything"
-            )
-        )
-    else case (builtin, arguments) of
-      (PrintBuiltin, [value]) -> effectUnit (writeStandardOutput (textOf value))
-      (PrintErrorBuiltin, [value]) -> effectUnit (writeStandardError (textOf value))
-      (ReadLineBuiltin, []) -> do
-        outcome <- lift refusal readStandardLine
-        pure (resultOf (fmap optionalText outcome))
-      (ReadFileBuiltin, [StrValue path]) ->
-        resultOf . fmap StrValue <$> lift refusal (readTextFile (Text.unpack path))
-      (WriteFileBuiltin, [StrValue path, value]) ->
-        effectUnit (writeTextFile (Text.unpack path) (textOf value))
-      (AppendFileBuiltin, [StrValue path, value]) ->
-        effectUnit (appendTextFile (Text.unpack path) (textOf value))
-      (FileExistsBuiltin, [StrValue path]) ->
-        BoolValue <$> lift refusal (testFileExists (Text.unpack path))
-      (RemoveFileBuiltin, [StrValue path]) -> effectUnit (removeFileAt (Text.unpack path))
-      (ListDirectoryBuiltin, [StrValue path]) ->
-        resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
-      (CreateDirectoryBuiltin, [StrValue path]) ->
-        effectUnit (createDirectoryAt (Text.unpack path))
-      (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
-      (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
-      (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
-      (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
-      (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset
-      (FormatTimeBuiltin, [StrValue pattern, IntValue _ milliseconds, StrValue zone]) -> do
-        rendered <- lift refusal (formatInstant pattern milliseconds zone)
-        pure (eitherOf (StrValue <$> rendered))
-      (ParseTimeBuiltin, [StrValue pattern, StrValue text]) ->
-        pure (eitherOf (intOf <$> parseInstant pattern text))
-      (RunBuiltin, [StrValue program, ArrayValue given, StrValue standardInput]) -> do
-        outcome <- lift refusal (runProcess (Text.unpack program) (textsOf given) standardInput)
-        pure (eitherOf (processValue <$> outcome))
-      (ExitBuiltin, [IntValue _ code]) -> do
-        _ <- lift refusal (exitWith code)
-        pure UnitValue
-      _ ->
-        abortAt (Just spanValue) "E7002"
-          ("wrong arguments for " <> builtinName builtin) Nothing
- where
-  refusal = effectRefusal spanValue builtin
-
-  effectUnit action = resultOf . fmap (const UnitValue) <$> lift refusal action
-
-  textOf value = case value of
-    StrValue text -> text
-    other -> renderValue other
-
-  textArray = ArrayValue . Seq.fromList . map StrValue
-  pairArray pairs =
-    ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
-  optionalText found = case found of
-    Just text -> VariantValue "Some" [StrValue text]
-    Nothing -> VariantValue "None" []
-
-{-| Run one effect behind the refusal that applies to it.
-
-    A top-level binding rather than a local one so it stays polymorphic in what
-    the effect produces; every effect here produces something different. -}
-lift :: Diagnostic -> IO a -> Evaluator a
-lift refusal action = performEffect refusal action
-
-{-| An either as the language's own failure carrier. -}
-eitherOf :: Either Text Value -> Value
-eitherOf outcome = case outcome of
-  Right value -> VariantValue "Ok" [value]
-  Left message -> VariantValue "Err" [StrValue message]
-
-{-| A finished program's status and its two streams.
-
-    A tuple rather than a record, because a record would have to be a wired-in
-    nominal type with wired-in fields — a second way for the compiler to know
-    about a shape, for one built-in. `Std.Process` gives it names, in the
-    language, where a reader can see them. -}
-processValue :: ProcessOutcome -> Value
-processValue outcome =
-  TupleValue
-    [ intOf (processStatus outcome)
-    , StrValue (processOutput outcome)
-    , StrValue (processErrors outcome)
-    ]
-
-textsOf :: Seq.Seq Value -> [Text]
-textsOf values = [text | StrValue text <- toList values]
-
-{-| An outcome as the language's own failure carrier. -}
-resultOf :: IoOutcome Value -> Value
-resultOf outcome = case outcome of
-  IoDone value -> VariantValue "Ok" [value]
-  IoFailed message -> VariantValue "Err" [StrValue message]
-
-{-| The diagnostic a refused effect reports, built once so the message a reader
-    sees does not depend on which effect they reached for. -}
-effectRefusal :: Span -> Builtin -> Diagnostic
-effectRefusal spanValue builtin =
-  fromMaybe (fallbackRefusal spanValue) $ do
-    code <- mkDiagnosticCode "E7009"
-    value <-
-      diagnostic code Error spanValue
-        (builtinName builtin <> " reaches outside the program")
-    pure
-      ( withHelp
-          "a compile-time constant is folded while the compiler runs, so it cannot reach the world"
-          value
-      )
-
-fallbackRefusal :: Span -> Diagnostic
-fallbackRefusal spanValue =
-  fromMaybe
-    (error "the refusal diagnostic must exist")
-    (mkDiagnosticCode "E7009" >>= \code -> diagnostic code Error spanValue "effect refused")
 
 {-| Render any value as text.
 
