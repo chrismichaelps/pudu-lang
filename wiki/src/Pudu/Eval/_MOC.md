@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
 - [[Eval Clock]] — calendar time and subprocesses.

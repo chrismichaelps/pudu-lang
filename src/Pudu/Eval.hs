@@ -31,7 +31,6 @@ import Pudu.Eval.Builtin
   , callSetOf
   , callShow
   , callStringMethod
-  , effectBuiltins
   , isDecimalBuiltin
   )
 import Pudu.Eval.Env
@@ -50,7 +49,6 @@ import Pudu.Eval.Env
   , abortAt
   , ascend
   , bind
-  , bindMethod
   , catchUnwind
   , descend
   , emptyEnv
@@ -62,11 +60,11 @@ import Pudu.Eval.Env
   , withFrame
   , withNewFrame
   )
+import Pudu.Eval.Install (lastSegmentOf, loadDeclarations, targetNameOf)
 import Pudu.Eval.Match (literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value
   ( Builtin (..)
-  , builtinName
   , Closure (..)
   , Value (..)
   , renderValue
@@ -82,18 +80,13 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , Function (..)
-  , Impl (..)
   , FunctionBody (..)
   , MatchArm (..)
   , Module (..)
-  , Trait (..)
   , Parameter (..)
   , Pattern
   , Statement (..)
-  , TypeDeclarationValue (..)
   , TypeSyntax (..)
-  , TypeDefinition (..)
-  , Variant (..)
   )
 import Pudu.Source (Span)
 
@@ -129,7 +122,7 @@ evaluateProgramEntry dependencies entryName moduleValue =
         dependency's rather than sharing a frame with the last one linked. -}
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
-    loadDeclarations (moduleDeclarations moduleValue)
+    loadDeclarations evaluate (moduleDeclarations moduleValue)
     found <- lookupName entryName
     case found of
       Just (FunctionValue closure) -> do
@@ -146,7 +139,7 @@ evaluateProgramEntry dependencies entryName moduleValue =
     the effects a run of the program would. -}
 evaluateModule :: Module -> IO EvalOutcome
 evaluateModule moduleValue =
-  runWithEffects False (loadDeclarations (moduleDeclarations moduleValue) >> pure UnitValue)
+  runWithEffects False (loadDeclarations evaluate (moduleDeclarations moduleValue) >> pure UnitValue)
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -178,7 +171,7 @@ linkDependencies = mapM_ linkOne
   linkOne (path, dependency) = do
     pushFrame Map.empty
     installImportAliases (moduleImports dependency)
-    loadDeclarations (moduleDeclarations dependency)
+    loadDeclarations evaluate (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
@@ -256,120 +249,6 @@ runWithEffects effects (Evaluator action) = do
       EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
     Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
     Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
-
-{-| Functions and variant constructors are installed before any constant runs,
-    so mutual recursion and forward references work exactly as resolution
-    promised they would. -}
-loadDeclarations :: [Located Declaration] -> Evaluator ()
-loadDeclarations declarations = do
-  installBuiltinConstructors
-  let traits = traitTable declarations
-  mapM_ (installDeclaration traits) declarations
-  mapM_ initializeDeclaration declarations
-
-{-| Trait members by trait name, so an implementation inherits the defaults it
-    does not override. -}
-traitTable :: [Located Declaration] -> Map Text [Located Function]
-traitTable declarations =
-  Map.fromList
-    [ (locatedValue (traitName value), traitMembers value)
-    | Located _ (TraitDeclaration value) <- declarations
-    ]
-
-{-| The wired-in sums' constructors and the prelude's builtin functions exist
-    without a declaration. A module that declares its own is installed
-    afterwards and therefore wins. -}
-installBuiltinConstructors :: Evaluator ()
-installBuiltinConstructors = do
-  mapM_ (\name -> bind name (VariantValue name []))
-    ["Some", "None", "Ok", "Err"]
-  bind "panic" (BuiltinValue PanicBuiltin)
-  bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
-  bind "mapOf" (BuiltinValue MapOfBuiltin)
-  bind "setOf" (BuiltinValue SetOfBuiltin)
-  bind "show" (BuiltinValue ShowBuiltin)
-  bind "display" (BuiltinValue DisplayBuiltin)
-  bind "convertInteger" (BuiltinValue ConvertIntegerBuiltin)
-  bind "decimalOf" (BuiltinValue DecimalOfBuiltin)
-  bind "decimalFromInt" (BuiltinValue DecimalFromIntBuiltin)
-  bind "decimalScale" (BuiltinValue DecimalScaleBuiltin)
-  bind "decimalToInt" (BuiltinValue DecimalToIntBuiltin)
-  bind "decimalToFloat" (BuiltinValue DecimalToFloatBuiltin)
-  bind "decimalDivide" (BuiltinValue DecimalDivideBuiltin)
-  bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
-  mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
-
-installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
-installDeclaration traits (Located _ declaration) = case declaration of
-  FunctionDeclaration value ->
-    bind (locatedValue (functionName value))
-      (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing))
-  TypeDeclaration value ->
-    installVariants (locatedValue (typeName value)) (typeDefinition value)
-  ImplDeclaration value -> installMethods traits value
-  _ -> pure ()
-
-{-| An implementation's functions are installed under a key naming the type they
-    implement for, so a member access on a value of that type finds them. -}
-installMethods :: Map Text [Located Function] -> Impl -> Evaluator ()
-installMethods traits value = case targetNameOf (implTarget value) of
-  Nothing -> pure ()
-  Just owner -> do
-    mapM_ (installMethod owner) (implFunctions value)
-    mapM_ (installMethod owner) (inheritedDefaults traits value)
- where
-  installMethod owner (Located _ method) = do
-    let name = locatedValue (functionName method)
-        implementation = FunctionValue (Closure name method Nothing Nothing)
-    bindMethod (owner <> "." <> name) implementation
-    case traitNameOf (implTrait value) of
-      Nothing -> pure ()
-      Just traitText -> bindMethod (traitText <> "." <> owner <> "." <> name) implementation
-
-{-| A trait member with a body is a default the implementation inherits when it
-    does not provide its own. -}
-inheritedDefaults :: Map Text [Located Function] -> Impl -> [Located Function]
-inheritedDefaults traits value = case traitNameOf (implTrait value) of
-  Nothing -> []
-  Just traitText ->
-    [ member
-    | member@(Located _ method) <- maybe [] id (Map.lookup traitText traits)
-    , functionBody method /= Nothing
-    , locatedValue (functionName method) `notElem` provided
-    ]
- where
-  provided = map (locatedValue . functionName . locatedValue) (implFunctions value)
-
-traitNameOf :: Located TypeSyntax -> Maybe Text
-traitNameOf = targetNameOf
-
-targetNameOf :: Located TypeSyntax -> Maybe Text
-targetNameOf (Located _ syntax) = case syntax of
-  NamedType (ModuleName segments) _ -> Just (lastSegmentOf segments)
-  _ -> Nothing
-
-{-| Each variant is bound unqualified and, together with its siblings, under its
-    type's name. A variant with a payload starts life as an empty constructor
-    that a call fills in, so `Circle` and `Shape.Circle(3)` reach the same
-    value. -}
-installVariants :: Text -> Located TypeDefinition -> Evaluator ()
-installVariants typeText (Located _ definition) = case definition of
-  SumDefinition variants -> do
-    let entries = map variantEntry variants
-    mapM_ (uncurry bind) entries
-    bind typeText (RecordValue typeText entries)
-  _ -> pure ()
- where
-  variantEntry (Located _ variant) =
-    let name = locatedValue (variantName variant)
-     in (name, VariantValue name [])
-
-initializeDeclaration :: Located Declaration -> Evaluator ()
-initializeDeclaration (Located _ declaration) = case declaration of
-  BindingDeclaration _ _ name _ value -> do
-    evaluated <- evaluate value
-    bind (locatedValue name) evaluated
-  _ -> pure ()
 
 callClosure :: Closure -> [Value] -> Maybe Span -> Evaluator Value
 callClosure closure arguments callSpan = do
@@ -749,8 +628,6 @@ evaluateFieldInit recordSpan (Located _ field) = do
 lastPathSegment :: ModuleName -> Text
 lastPathSegment (ModuleName segments) = lastSegmentOf segments
 
-lastSegmentOf :: NonEmpty Text -> Text
-lastSegmentOf (first :| rest) = last (first : rest)
 
 evaluateCallee :: Located Expression -> Evaluator Value
 evaluateCallee located@(Located calleeSpan expression) = case expression of

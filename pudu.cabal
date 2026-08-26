@@ -39,6 +39,7 @@ library
     Pudu.Eval.Builtin
     Pudu.Eval.Clock
     Pudu.Eval.Effect
+    Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Io
     Pudu.Eval.Keyed
