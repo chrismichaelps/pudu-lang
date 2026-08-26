@@ -1,0 +1,318 @@
+module Std.Iter
+
+import Std.Num {Add, Integer, One}
+import Std.Order {Ord}
+
+/// A value that produces a sequence of items.
+///
+/// `S` is the state the walk carries and `T` is what it yields. `begin` answers
+/// the state to start from; `advance` answers the next item and the state after
+/// it, or `None` when the sequence is finished.
+///
+/// The state is passed rather than mutated, so a sequence is an ordinary value:
+/// it can be held, copied, and started again without anything having changed
+/// underneath. Two walks of the same value see the same items.
+///
+/// `for item in value` uses this. A type implementing it is iterable with no
+/// further ceremony, and a type that is not says so at the `for` rather than
+/// part way through one.
+export trait Sequence[S, T] {
+  fn begin(self: &Self) -> S
+  fn advance(self: &Self, state: S) -> Option[(S, T)]
+}
+
+/// A half-open range of whole numbers, from `first` up to but not including
+/// `last`.
+///
+/// Generic over the integer family rather than fixed to `Int`: a range of
+/// `UInt8` indices is a range, and a caller working in one width should not
+/// have to leave it to count.
+export type Range[N] = { first: N, last: N }
+
+/// The numbers from `first` up to but not including `last`.
+export fn range[N](first: N, last: N) -> Range[N] {
+  Range{first: first, last: last}
+}
+
+impl [N: Integer + Ord + Add + One] Sequence[N, N] for Range[N] {
+  fn begin(self: &Self) -> N { self.first }
+  fn advance(self: &Self, state: N) -> Option[(N, N)] {
+    if state.before(&self.last) {
+      Some((state.plus(&state.one()), state))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk over an array's items.
+///
+/// The element type is the array's own. Fixing it to one type would make the
+/// whole module useless for every array that is not of that type, which is the
+/// mistake this type exists to avoid.
+export type Items[T] = { values: Array[T] }
+
+/// Walk an array's items.
+export fn items[T](values: Array[T]) -> Items[T] { Items{values: values} }
+
+impl [T] Sequence[Int, T] for Items[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.values.length() {
+      Some((state + 1, self.values[state]))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk over an array's items paired with their positions.
+export type Indexed[T] = { values: Array[T] }
+
+/// Pair each of an array's items with its position.
+export fn indexed[T](values: Array[T]) -> Indexed[T] { Indexed{values: values} }
+
+impl [T] Sequence[Int, (Int, T)] for Indexed[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, (Int, T))] {
+    if state < self.values.length() {
+      Some((state + 1, (state, self.values[state])))
+    } else {
+      None
+    }
+  }
+}
+
+/// A walk that yields the same item a fixed number of times.
+export type Repeated[T] = { item: T, times: Int }
+
+/// The same value, `count` times.
+export fn repeat[T](item: T, times: Int) -> Repeated[T] {
+  Repeated{item: item, times: times}
+}
+
+impl [T] Sequence[Int, T] for Repeated[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] {
+    if state < self.times { Some((state + 1, self.item)) } else { None }
+  }
+}
+
+/// A walk that yields nothing.
+export type Empty[T] = { unused: () }
+
+/// The sequence with no items.
+export fn empty[T]() -> Empty[T] { Empty{unused: ()} }
+
+impl [T] Sequence[Int, T] for Empty[T] {
+  fn begin(self: &Self) -> Int { 0 }
+  fn advance(self: &Self, state: Int) -> Option[(Int, T)] { None }
+}
+
+/// Collect a sequence into an array.
+///
+/// Bounded by `Sequence` rather than written for one type, so it works for any
+/// sequence a program declares as well as for the ones here.
+export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T] {
+  var out = []
+  var state = Sequence.begin(source)
+  loop {
+    match Sequence.advance(source, state) {
+      case Some(pair) => {
+        state = pair[0]
+        out = out.push(pair[1])
+      }
+      case None => { break }
+    }
+  }
+  out
+}
+
+/// How many items a sequence yields.
+export fn count[S, T, Q: Sequence[S, T]](source: &Q) -> Int {
+  var total = 0
+  var state = Sequence.begin(source)
+  loop {
+    match Sequence.advance(source, state) {
+      case Some(pair) => {
+        state = pair[0]
+        total = total + 1
+      }
+      case None => { break }
+    }
+  }
+  total
+}
+
+/// Whether a sequence yields nothing.
+export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
+  match Sequence.advance(source, Sequence.begin(source)) {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+/// The sum of a sequence's items, or `None` when it has no first value.
+export fn sum[S, N: Add, Q: Sequence[S, N]](source: &Q) -> Option[N] {
+  var state = Sequence.begin(source)
+  match Sequence.advance(source, state) {
+    case None => None
+    case Some(first) => {
+      state = first[0]
+      var total = first[1]
+      loop {
+        match Sequence.advance(source, state) {
+          case Some(pair) => {
+            state = pair[0]
+            total = total.plus(&pair[1])
+          }
+          case None => { break }
+        }
+      }
+      Some(total)
+    }
+  }
+}
+
+/// A sequence whose items are another's, transformed.
+///
+/// Nothing is computed until the walk asks for it: `advance` transforms one
+/// item and returns. Building a `Mapped` over a sequence of a million does no
+/// work at all, which is what "lazy" has to mean to be worth having.
+export type Mapped[Q, A, B] = { source: Q, transform: fn(A) -> B }
+
+/// Transform each item of a sequence as it is produced.
+export fn map[Q, A, B](source: Q, transform: fn(A) -> B) -> Mapped[Q, A, B] {
+  Mapped{source: source, transform: transform}
+}
+
+impl [S, A, B, Q: Sequence[S, A]] Sequence[S, B] for Mapped[Q, A, B] {
+  fn begin(self: &Self) -> S { Sequence.begin(&self.source) }
+  fn advance(self: &Self, state: S) -> Option[(S, B)] {
+    let source = &self.source
+    let transform = self.transform
+    match Sequence.advance(source, state) {
+      case Some(pair) => Some((pair[0], transform(pair[1])))
+      case None => None
+    }
+  }
+}
+
+/// A sequence of another's items that satisfy a test.
+export type Filtered[Q, T] = { source: Q, keep: fn(T) -> Bool }
+
+/// Keep only the items a test accepts.
+export fn filter[Q, T](source: Q, keep: fn(T) -> Bool) -> Filtered[Q, T] {
+  Filtered{source: source, keep: keep}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Filtered[Q, T] {
+  fn begin(self: &Self) -> S { Sequence.begin(&self.source) }
+  /// Walks the source until an item is accepted, so a rejected item costs one
+  /// step and no allocation.
+  fn advance(self: &Self, state: S) -> Option[(S, T)] {
+    let source = &self.source
+    let keep = self.keep
+    var current = state
+    loop {
+      match Sequence.advance(source, current) {
+        case Some(pair) => {
+          current = pair[0]
+          if keep(pair[1]) {
+            break Some((current, pair[1]))
+          }
+        }
+        case None => { break None }
+      }
+    }
+  }
+}
+
+/// A sequence of at most the first `limit` items of another.
+export type Taken[Q, T] = { source: Q, limit: Int }
+
+/// The first `limit` items, or all of them if there are fewer.
+///
+/// This is what makes an endless sequence usable: the source is never asked
+/// for an item past the limit, so a walk of `take(naturals(), 5)` ends.
+export fn take[Q, T](source: Q, limit: Int) -> Taken[Q, T] {
+  Taken{source: source, limit: limit}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), T] for Taken[Q, T] {
+  fn begin(self: &Self) -> (S, Int) { (Sequence.begin(&self.source), 0) }
+  fn advance(self: &Self, state: (S, Int)) -> Option[((S, Int), T)] {
+    if state[1] >= self.limit {
+      None
+    } else {
+      match Sequence.advance(&self.source, state[0]) {
+        case Some(pair) => Some(((pair[0], state[1] + 1), pair[1]))
+        case None => None
+      }
+    }
+  }
+}
+
+/// A sequence of another's items past the first `skip`.
+export type Dropped[Q, T] = { source: Q, skip: Int }
+
+/// Everything after the first `skip` items.
+export fn drop[Q, T](source: Q, skip: Int) -> Dropped[Q, T] {
+  Dropped{source: source, skip: skip}
+}
+
+impl [S, T, Q: Sequence[S, T]] Sequence[S, T] for Dropped[Q, T] {
+  /// The skipping happens once, when the walk begins, rather than on every
+  /// item.
+  fn begin(self: &Self) -> S {
+    let source = &self.source
+    let limit = self.skip
+    var current = Sequence.begin(source)
+    var skipped = 0
+    loop {
+      if skipped >= limit {
+        break current
+      }
+      match Sequence.advance(source, current) {
+        case Some(pair) => {
+          current = pair[0]
+          skipped = skipped + 1
+        }
+        case None => { break current }
+      }
+    }
+  }
+  fn advance(self: &Self, state: S) -> Option[(S, T)] {
+    Sequence.advance(&self.source, state)
+  }
+}
+
+/// A sequence pairing two others item by item.
+export type Zipped[P, Q, A, B] = { left: P, right: Q }
+
+/// Pair two sequences, ending when either does.
+export fn zip[P, Q, A, B](left: P, right: Q) -> Zipped[P, Q, A, B] {
+  Zipped{left: left, right: right}
+}
+
+impl [S, U, A, B, P: Sequence[S, A], Q: Sequence[U, B]] Sequence[(S, U), (A, B)] for Zipped[P, Q, A, B] {
+  fn begin(self: &Self) -> (S, U) {
+    let left = &self.left
+    let right = &self.right
+    (Sequence.begin(left), Sequence.begin(right))
+  }
+  fn advance(self: &Self, state: (S, U)) -> Option[((S, U), (A, B))] {
+    let left = &self.left
+    let right = &self.right
+    match Sequence.advance(left, state[0]) {
+      case Some(leftPair) => {
+        match Sequence.advance(right, state[1]) {
+          case Some(rightPair) =>
+          Some(((leftPair[0], rightPair[0]), (leftPair[1], rightPair[1])))
+          case None => None
+        }
+      }
+      case None => None
+    }
+  }
+}

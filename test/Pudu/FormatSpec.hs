@@ -20,6 +20,7 @@ formatProperties =
   , ("imports sort with the standard library first", testImportOrder)
   , ("input that does not lex is returned untouched", testUnlexable)
   , ("blank-line runs collapse to one", testBlankLines)
+  , ("a loop label is one thing and starts its own line", testLabels)
   ]
 
 {-| The property that makes the formatter safe to run on anything.
@@ -192,6 +193,47 @@ testBlankLines = do
   expected =
     ["module M", "", "fn one() -> Int { 1 }", "", "fn two() -> Int { 2 }"]
 
+{-| A label is `@outer`, never `@ outer`, and a line opening with one starts a
+    statement rather than continuing the line above. Both were wrong when the
+    formatter first met labelled loops in real code. -}
+testLabels :: IO Property
+testLabels = do
+  formatted <- formatOf source
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  source =
+    Text.unlines
+      [ "module M"
+      , "fn run(grid: Array[Array[Int]]) -> Int {"
+      , "var seen = 0"
+      , "@rows for row in grid {"
+      , "for cell in row {"
+      , "if cell < 0 { break @rows }"
+      , "if cell == 0 { continue @rows }"
+      , "seen = seen + 1"
+      , "}"
+      , "}"
+      , "seen"
+      , "}"
+      ]
+  expected =
+    [ "module M"
+    , "fn run(grid: Array[Array[Int]]) -> Int {"
+    , "  var seen = 0"
+    , "  @rows for row in grid {"
+    , "    for cell in row {"
+    , "      if cell < 0 { break @rows }"
+    , "      if cell == 0 { continue @rows }"
+    , "      seen = seen + 1"
+    , "    }"
+    , "  }"
+    , "  seen"
+    , "}"
+    ]
+
 samples :: [Text]
 samples =
   [ Text.unlines
@@ -231,6 +273,15 @@ samples =
       , "    case Some(_) => 0"
       , "    case None => 0 - 1"
       , "  }"
+      , "}"
+      ]
+  , Text.unlines
+      [ "module Parenthesised"
+      , "type Thing = { v: Int }"
+      , "fn run() -> Int {"
+      , "  var n = 0"
+      , "  for x in (Thing{v: 1}) { n = n + 1 }"
+      , "  n"
       , "}"
       ]
   , Text.unlines

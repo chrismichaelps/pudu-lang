@@ -21,7 +21,7 @@ Own operator and access semantics for [[Evaluator]]. `readIndex` handles tuples,
 
 ## Interface
 
-The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit.
+The exported signatures are the module header's export list; [[Evaluator]] is the only consumer, and every function here is total with respect to the values the earlier phases admit. `nominalNameOf` gives the evaluator the same runtime owner used by ordinary method lookup, including the exact integer kind and floating width.
 
 ### Governance
 
@@ -43,6 +43,9 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - A built-in method vocabulary that does not hold a name **falls through to the type's own
   implementations**, so `impl Ord for Int` is reachable. Without it, every trait-bounded generic was
   unusable for the types a program actually holds.
+- Trait-qualified dispatch uses that same nominal owner. A scalar is not excluded merely because it
+  has no record constructor: `Integer.fromBigInt(&0u8, value)` must select the `UInt8`
+  implementation exactly as `0u8.fromBigInt(value)` does.
 
 - Text methods are built into the evaluator rather than written in `Std`, because implementing them
   in the language would need `unsafe` to reach the representation — and a standard library that

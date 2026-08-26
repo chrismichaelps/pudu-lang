@@ -161,7 +161,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-seven modules, 792 documented exports, every one written in Pudu.
+Twenty-eight modules, 818 documented exports, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -170,7 +170,8 @@ Twenty-seven modules, 792 documented exports, every one written in Pudu.
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
-| `Std.Num` | 24 | `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Num` | 25 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
@@ -196,9 +197,64 @@ Twenty-seven modules, 792 documented exports, every one written in Pudu.
 ### On numbers
 
 The numeric surface is **generic, bounded by traits**, not `Int`-only. `Std.Order` carries `Eq` and
-`Ord`, `Std.Num` carries `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
+`Ord`, `Std.Num` carries `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
 `Bits` — each implemented across the integer family and, where it makes sense, both floating widths
 and `Str`, `Char`, and `Bool`.
+
+`Integer` is the whole-number boundary the other numeric traits cannot express: floats can add and
+order, but they are not integer ranges or integer parser results. It converts through `BigInt`
+without losing the caller's width or signedness, and conversion back is fallible rather than
+truncating.
+
+### `Std.Iter`
+
+`for item in value` had only ever worked for shapes the evaluator knew by name. `Std.Iter` is the
+trait that opens it to anything:
+
+```pudu
+export trait Sequence[S, T] {
+  fn begin(self: &Self) -> S
+  fn advance(self: &Self, state: S) -> Option[(S, T)]
+}
+```
+
+The state is **passed rather than mutated**, which is the decision the rest of the module follows
+from. An iterator is then an ordinary value: it can be held, copied, and walked twice, and both
+walks see the same items. A protocol built on a mutable cursor would make an iterator the one value
+in the language that quietly changes when you look at it.
+
+`Range[N]` is bounded by `Integer` as well as the operations it uses, so a caller counting in
+`UInt8` stays in `UInt8` while a floating range is rejected. `Items[T]`, `Indexed[T]`, and
+`Repeated[T]` carry the caller's own element type. The `Int` values that remain are positions,
+yielded counts, and take/drop limits — quantities defined by the walk, not values whose width the
+caller selected. Fixing an element or range value to `Int` would repeat the mistake [[ADR-0006]]
+was written to stop.
+
+The functions over sequences are bounded by the trait rather than written per type, so `toArray`,
+`count`, and `isEmpty` work for every sequence a program will ever declare:
+
+```pudu
+export fn toArray[S, T, Q: Sequence[S, T]](source: &Q) -> Array[T]
+```
+
+The adapters — `map`, `filter`, `take`, `drop`, `zip` — are themselves sequences over other
+sequences, which is what makes [[grammar/pudu]]'s "iterator adapters are lazy" true rather than
+aspirational. Building one does no work; `advance` does one item's worth and returns. That is what
+lets an endless sequence be used at all:
+
+```pudu
+let evens = I.filter(I.map(naturals, triple), isEven)
+for n in I.take(evens, 4) { ... }        // ends
+```
+
+Each adapter is an ordinary `impl` bounded by `Sequence` on its source, so nothing about them is
+special to the library: a program can write its own the same way.
+
+`map`, `filter`, `take`, `drop`, and `zip` are lazy adapters: construction performs no traversal,
+and each `advance` asks only for the source work needed for its next answer. `count`, `isEmpty`, and
+`sum` traverse without first materialising an array; `isEmpty` asks for at most one item, and `sum`
+returns `Option` because an empty sequence provides no value from which to obtain its additive
+identity.
 
 ### `Std.Decimal`
 

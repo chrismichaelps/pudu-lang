@@ -6,8 +6,12 @@ module Pudu.Type.Check.Method
   , declareBuiltinConstructors
   , effectNames
   , dischargeObligations
+  , implBounds
+  , implRigid
   , methodScheme
   , targetName
+  , traitBounds
+  , traitRigid
   , functionRigid
   , declareTraitMembers
   , implAliases
@@ -87,7 +91,9 @@ traitTable declared declarations =
     rigid: the implementing type is not known here. -}
 declareTraitMembers :: DeclaredTypes -> Trait -> Checker ()
 declareTraitMembers declared value =
-  mapM_ (declareTraitMember declared owner (traitRigid value)) (traitMembers value)
+  mapM_
+    (declareTraitMember declared owner (traitRigid value) (traitBounds declared value))
+    (traitMembers value)
  where
   name = locatedValue (traitName value)
   owner = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
@@ -102,13 +108,21 @@ declareTraitMembers declared value =
 traitRigid :: Trait -> [Text]
 traitRigid value = map (locatedValue . typeParamName . locatedValue) (traitTypeParams value)
 
-declareTraitMember :: DeclaredTypes -> NominalId -> [Text] -> Located Function -> Checker ()
-declareTraitMember declared owner traitParams (Located _ method) = do
+declareTraitMember
+  :: DeclaredTypes
+  -> NominalId
+  -> [Text]
+  -> [(Text, [NominalId])]
+  -> Located Function
+  -> Checker ()
+declareTraitMember declared owner traitParams bounds (Located _ method) = do
   let rigid = "Self" : traitParams <> functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
   bindName (methodKey owner (locatedValue (functionName method)))
-    (polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result))
+    ( polytype rigid (bounds <> declareBounds declared method)
+        (FunctionTypeValue (functionAsync method) inputs result)
+    )
 
 {-| An impl's functions are methods of its target type, not module-scope names.
     They are bound under a qualified key so a member access on a value of that
@@ -180,7 +194,9 @@ declareMethod rejectCollision declared value owner (Located methodSpan method) =
       localCollision =
         not rejectCollision
           && maybe False (\earlier -> Just earlier /= providing) provider
-  let scheme = polytype rigid [] (FunctionTypeValue (functionAsync method) inputs result)
+  let scheme =
+        polytype rigid (implBounds declared value <> declareBounds aliases method)
+          (FunctionTypeValue (functionAsync method) inputs result)
   if importedCollision
     then do
       report "E3013" methodSpan
@@ -201,8 +217,37 @@ implAliases declared value = case implTargetName declared value of
   Just name ->
     declared
       { declaredAliases =
-          Map.insert "Self" ([], NominalType name []) (declaredAliases declared)
+          Map.insert "Self" ([], NominalType name (selfArguments value)) (declaredAliases declared)
       }
+
+{-| The arguments `Self` carries inside an implementation.
+
+    For `impl[T] Holds[T] for Boxed[T]`, `Self` is `Boxed[T]` with the impl's
+    own `T` — not a bare `Boxed`. Aliasing it without its arguments made the
+    type's parameter and the implementation's parameter two different rigid
+    types that happened to share a name, so `self.value` had a type the method's
+    declared result could not match and the checker reported `expected T, found
+    T` about them.
+
+    An argument naming one of the implementation's parameters becomes that rigid
+    parameter; anything else is formed as it was written, which is what makes
+    `impl Sequence[Int, Int] for Range` and the generic form agree. -}
+selfArguments :: Impl -> [Type]
+selfArguments value = case locatedValue (implTarget value) of
+  Tree.NamedType _ arguments -> map (argumentType (implRigid value) . locatedValue) arguments
+  _ -> []
+
+argumentType :: [Text] -> Tree.TypeSyntax -> Type
+argumentType parameters syntax = case syntax of
+  Tree.NamedType path []
+    | segment `elem` parameters -> RigidType segment
+    | otherwise -> NominalType (NominalId Nothing segment) []
+   where
+    segment = moduleNameText path
+  Tree.NamedType path arguments ->
+    NominalType (NominalId Nothing (moduleNameText path))
+      (map (argumentType parameters . locatedValue) arguments)
+  _ -> ErrorType
 
 {-| The nominal type an implementation is for.
 
@@ -248,10 +293,16 @@ methodKey owner method = nominalKey owner <> "." <> method
 dischargeObligations :: Checker ()
 dischargeObligations = do
   obligations <- takeObligations
-  mapM_ discharge obligations
+  dischargeAll [] obligations
  where
-  discharge (spanValue, typeValue, traitText) = do
+  dischargeAll _ [] = pure ()
+  dischargeAll seen ((spanValue, typeValue, traitText) : rest) = do
     resolved <- zonk typeValue
+    let key = (spanValue, resolved, traitText)
+    unless (key `elem` seen) (discharge spanValue resolved traitText)
+    dischargeAll (key : seen) rest
+
+  discharge spanValue resolved traitText =
     case resolved of
       ErrorType -> pure ()
       VariableType _ -> pure ()
@@ -452,6 +503,30 @@ declareBounds declared value =
   ]
     <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
        | Located _ constraint <- functionConstraints value
+       ]
+
+{-| The bounds an implementation's own type parameters carry, so a method may
+    call what those bounds promise. `impl[N: Ord + Add] Sequence[N, N] for
+    Range[N]` means `N` has `before` and `plus` inside every method here, and
+    without installing them the methods were told `N has no method before`
+    about a parameter whose declaration says it does. -}
+implBounds :: DeclaredTypes -> Impl -> [(Text, [NominalId])]
+implBounds declared value =
+  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
+  | Located _ param <- implTypeParams value
+  ]
+    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+       | Located _ constraint <- implConstraints value
+       ]
+
+{-| The bounds a trait's own type parameters carry. -}
+traitBounds :: DeclaredTypes -> Trait -> [(Text, [NominalId])]
+traitBounds declared value =
+  [ (locatedValue (typeParamName param), map (boundName declared) (typeParamBounds param))
+  | Located _ param <- traitTypeParams value
+  ]
+    <> [ (locatedValue (constraintSubject constraint), map (boundName declared) (constraintBounds constraint))
+       | Located _ constraint <- traitConstraints value
        ]
 
 boundName :: DeclaredTypes -> Located Tree.TypeSyntax -> NominalId

@@ -41,6 +41,8 @@ importsFor
 
 ### Governance
 
+- The consumer's own module is removed from the interfaces it declares. Its implementations are declared by the local pass, and declaring them a second time through the interface path made every one of them collide with itself — so a module implementing a trait it had imported was told the method was ambiguous, which made `impl Eq for MyType` impossible to write outside the module that declared `Eq`.
+
 - Names and values come from what a module imported; **implementations do not**. An implementation is
   a fact about a type and a trait, true everywhere in a program once it exists anywhere in it — which
   is what an orphan rule is for. Scoping them to direct imports made a bounded generic unusable

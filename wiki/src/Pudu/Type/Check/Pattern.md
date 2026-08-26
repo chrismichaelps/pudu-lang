@@ -21,6 +21,8 @@ Own checking patterns against the type they match for [[Type Check]].
 
 ### Governance
 
+- A record's declared field types are instantiated with the arguments the subject carries, exactly as a sum's payload already was. Matching a `Boxed[Int]` gives the field `Int` rather than the declaration's rigid parameter.
+
 - Every rule is the one [[grammar/pudu]] states for that construct; nothing here invents a coercion the language does not have.
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.

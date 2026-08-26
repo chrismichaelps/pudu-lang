@@ -28,6 +28,17 @@ export trait Rem { fn remainderOf(self: &Self, other: &Self) -> Option[Self] }
 /// with an input it has no answer for.
 export trait Div { fn dividedBy(self: &Self, other: &Self) -> Option[Self] }
 
+/// A whole-number type that can cross the width-independent `BigInt`
+/// boundary without losing information.
+///
+/// `toBigInt` is exact. `fromBigInt` is fallible because the mathematical
+/// value may not fit the receiver's signedness or width. The receiver is the
+/// type witness that lets a generic algorithm preserve the caller's type.
+export trait Integer {
+  fn toBigInt(self: &Self) -> BigInt
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self]
+}
+
 /// Every element added together, or `None` for an empty collection.
 /// `None` rather than the identity because a caller that wants nought for an
 /// empty collection can say so, while one that needs to know it was empty
@@ -312,4 +323,67 @@ impl Rem for BigInt {
   fn remainderOf(self: &Self, other: &Self) -> Option[Self] {
     if (*other) == 0 { None } else { Some((*self) % (*other)) }
   }
+}
+
+/// Widen one of the integer implementations below. `None` would mean the
+/// evaluator rejected an integer as a `BigInt`, which is an implementation
+/// defect rather than an input a caller can provide.
+fn widenInteger[T](value: T) -> BigInt {
+  match convertInteger[BigInt](value) {
+    case Some(widened) => widened
+    case None => panic("an integer must fit BigInt")
+  }
+}
+
+impl Integer for Int {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int](value) }
+}
+impl Integer for Int8 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int8](value) }
+}
+impl Integer for Int16 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int16](value) }
+}
+impl Integer for Int32 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int32](value) }
+}
+impl Integer for Int64 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int64](value) }
+}
+impl Integer for Int128 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[Int128](value) }
+}
+impl Integer for UInt {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt](value) }
+}
+impl Integer for UInt8 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt8](value) }
+}
+impl Integer for UInt16 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt16](value) }
+}
+impl Integer for UInt32 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt32](value) }
+}
+impl Integer for UInt64 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt64](value) }
+}
+impl Integer for UInt128 {
+  fn toBigInt(self: &Self) -> BigInt { widenInteger(*self) }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { convertInteger[UInt128](value) }
+}
+impl Integer for BigInt {
+  fn toBigInt(self: &Self) -> BigInt { *self }
+  fn fromBigInt(self: &Self, value: BigInt) -> Option[Self] { Some(value) }
 }

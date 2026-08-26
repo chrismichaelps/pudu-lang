@@ -50,6 +50,8 @@ typeProperties =
   , ("compiler-controlled markers are decided structurally", testMarkers)
   , ("same-named trait methods are selected by a qualified call", testQualifiedMethods)
   , ("a generic trait's parameters are solved from its implementation", testGenericTraits)
+  , ("a type declaration's parameters are instantiated at every use", testGenericTypes)
+  , ("a for loop binds at the element type of what it iterates", testIterationTypes)
   , ("Decimal is an ordinary type with exact literals", testDecimalType)
   , ("unsafe regions grant named capabilities and contain their calls", testUnsafe)
   , ("compile-time functions keep their evaluator pure", testComptime)
@@ -97,6 +99,113 @@ testGenericTraits = do
     , "type Box = { v: Int }"
     , "trait Holds[T] { fn get(self: &Self) -> T }"
     , "impl Holds[Int] for Box { fn get(self: &Self) -> Int { self.v } }"
+    ]
+
+{-| A generic record used to type as its bare nominal with the declaration's
+    own rigid parameters in its fields, so `Boxed{value: 7}` was a `Boxed` whose
+    `value` was some type called `T` that nothing could satisfy. Sums were
+    already instantiated; records simply never were. -}
+testGenericTypes :: IO Property
+testGenericTypes = do
+  construction <- codes (boxed <> ["fn run() -> Boxed[Int] { Boxed{value: 7} }"])
+  fieldRead <- codes (boxed <> ["fn run(b: &Boxed[Int]) -> Int { b.value }"])
+  throughFunction <- codes
+    (boxed <> ["fn unwrap[T](b: &Boxed[T]) -> T { b.value }", "fn run() -> Int { unwrap(&Boxed{value: 7}) }"])
+  wrongField <- codes (boxed <> ["fn run(b: &Boxed[Int]) -> Str { b.value }"])
+  inPattern <- codes
+    ( boxed
+        <> [ "fn run(b: Boxed[Int]) -> Int { match b { case Boxed{value} => value } }" ]
+    )
+  genericImpl <- codes
+    [ "module M"
+    , "trait Holds[T] { fn get(self: &Self) -> T }"
+    , "type Boxed[T] = { value: T }"
+    , "impl[T] Holds[T] for Boxed[T] { fn get(self: &Self) -> T { self.value } }"
+    , "fn run() -> Int { Holds.get(&Boxed{value: 7}) }"
+    ]
+  boundedImpl <- codes
+    [ "module M"
+    , "trait Joins { fn join(self: &Self, other: &Self) -> Self }"
+    , "trait Doubles { fn twice(self: &Self) -> Self }"
+    , "type Wrap[N] = { held: N }"
+    , "impl[N: Joins] Doubles for Wrap[N] {"
+    , "  fn twice(self: &Self) -> Self { Wrap{held: self.held.join(&self.held)} }"
+    , "}"
+    ]
+  unboundedImpl <- codes
+    [ "module M"
+    , "trait Joins { fn join(self: &Self, other: &Self) -> Self }"
+    , "trait Doubles { fn twice(self: &Self) -> Self }"
+    , "type Wrap[N] = { held: N }"
+    , "impl[N] Doubles for Wrap[N] {"
+    , "  fn twice(self: &Self) -> Self { Wrap{held: self.held.join(&self.held)} }"
+    , "}"
+    ]
+  pure $ conjoin
+    [ counterexample "construction carries its arguments" (construction === [])
+    , counterexample "a field read substitutes them" (fieldRead === [])
+    , counterexample "and so does a call through a generic function"
+        (throughFunction === [])
+    , counterexample "a field is still checked against its instantiated type"
+        (wrongField === ["E3001"])
+    , counterexample "a record pattern instantiates too" (inPattern === [])
+    , counterexample "an implementation may carry its own parameters"
+        (genericImpl === [])
+    , counterexample "and the bounds on them are in force inside its methods"
+        (boundedImpl === [])
+    , counterexample "a parameter with no bound still promises nothing"
+        (unboundedImpl === ["E3005"])
+    ]
+ where
+  boxed = ["module M", "type Boxed[T] = { value: T }"]
+
+{-| `for` used to bind an unconstrained fresh variable, so the loop — the one
+    place a binder's type is decided entirely by the value beside it — decided
+    nothing, and every use of the binding was let through. -}
+testIterationTypes :: IO Property
+testIterationTypes = do
+  arrayElement <- codes
+    ["module M", "fn run(xs: Array[Int]) -> Int { var n = 0", "  for x in xs { n = n + x }", "  n }"]
+  wrongElement <- codes
+    ["module M", "fn run(xs: Array[Int]) -> Int { var n = 0", "  for x in xs { n = n + x.length() }", "  n }"]
+  wrongElementOfLiteral <- codes
+    ["module M", "fn run() -> Int { var n = 0", "  for x in [1, 2, 3] { n = n + x.length() }", "  n }"]
+  textElement <- codes
+    ["module M", "fn run(t: Str) -> Int { var n = 0", "  for c in t { n = n + c.code() }", "  n }"]
+  optionElement <- codes
+    ["module M", "fn run(o: Option[Int]) -> Int { var n = 0", "  for x in o { n = n + x }", "  n }"]
+  notIterable <- codes
+    [ "module M"
+    , "type Thing = { v: Int }"
+    , "fn run(t: Thing) -> Int { var n = 0"
+    , "  for x in t { n = n + 1 }"
+    , "  n }"
+    ]
+  ownSequence <- codes
+    [ "module M"
+    , "import Std.Iter {Sequence}"
+    , "type Down = { from: Int }"
+    , "impl Sequence[Int, Int] for Down {"
+    , "  fn begin(self: &Self) -> Int { self.from }"
+    , "  fn advance(self: &Self, state: Int) -> Option[(Int, Int)] {"
+    , "    if state > 0 { Some((state - 1, state)) } else { None }"
+    , "  }"
+    , "}"
+    , "fn run(d: Down) -> Int { var n = 0"
+    , "  for x in d { n = n + x }"
+    , "  n }"
+    ]
+  pure $ conjoin
+    [ counterexample "an array yields its element type" (arrayElement === [])
+    , counterexample "and a wrong use of it is now caught" (wrongElement === ["E3005"])
+    , counterexample "including over a literal, whose element is settled first"
+        (wrongElementOfLiteral === ["E3005"])
+    , counterexample "a string yields Char" (textElement === [])
+    , counterexample "a sum yields what its variants carry" (optionElement === [])
+    , counterexample "a type that is not a sequence is reported at the for"
+        (notIterable === ["E3030"])
+    , counterexample "a type implementing Sequence is iterable"
+        (ownSequence === [])
     ]
 
 testOperators :: IO Property

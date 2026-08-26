@@ -66,6 +66,9 @@ import Pudu.Type.Env
   , inComptime
   , withComptime
   , lookupField
+  , lookupOwnerVariants
+  , lookupTypeParams
+  , lookupVariant
   , lookupName
   , recordExpression
   , report
@@ -74,7 +77,7 @@ import Pudu.Type.Env
   , runChecker
   , withDeclared
   )
-import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Pattern (bindPattern, freshFor, substituteRigid)
 import Pudu.Type.Check.Coherence (checkCoherence)
 import Pudu.Type.Check.Rule
   ( awaitType
@@ -100,8 +103,12 @@ import Pudu.Type.Check.Method
   , dischargeObligations
   , functionRigid
   , implAliases
+  , implBounds
+  , implRigid
   , methodScheme
   , targetName
+  , traitBounds
+  , traitRigid
   , traitTable
   )
 import Pudu.Type.Exhaust (checkExhaustive)
@@ -120,6 +127,8 @@ import Pudu.Type.Value
   , polytype
   , Type (..)
   , boolType
+  , charType
+  , renderType
   , integerType
   )
 import Pudu.Type.Interface (ImportTypes)
@@ -227,25 +236,35 @@ checkDeclaration declared (Located _ declaration) = case declaration of
     actual <- checkExpression declared [] value
     _ <- unify (locatedSpan value) expected actual
     bindName (locatedValue name) (monotype expected)
-  FunctionDeclaration value -> checkFunctionWith ModuleScopeFunction declared Nothing value
+  FunctionDeclaration value -> checkFunctionWith ModuleScopeFunction declared [] [] Nothing value
   TraitDeclaration value ->
     let name = locatedValue (traitName value)
         identity = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
      in do
        when (traitVisibility value == Exported) $
          mapM_ (requireInterfaceAnnotations "exported trait member" . locatedValue) (traitMembers value)
-       mapM_ (checkMember (traitAliases declared) (Just identity)) (traitMembers value)
+       mapM_
+         (checkMember (traitAliases declared) (traitRigid value) (traitBounds declared value) (Just identity))
+         (traitMembers value)
   ImplDeclaration value ->
     do
       mapM_ (requireInterfaceAnnotations "implementation method" . locatedValue) (implFunctions value)
-      mapM_ (checkMember (implAliases declared value) Nothing) (implFunctions value)
+      mapM_
+        (checkMember (implAliases declared value) (implRigid value) (implBounds declared value) Nothing)
+        (implFunctions value)
   _ -> pure ()
 
 {-| Check a trait member with a rigid `Self` bound, or an implementation member
     with `Self` aliased to its canonical target. -}
-checkMember :: DeclaredTypes -> Maybe NominalId -> Located Function -> Checker ()
-checkMember declared selfBound (Located _ value) =
-  checkFunctionWith MemberFunction declared selfBound value
+checkMember
+  :: DeclaredTypes
+  -> [Text]
+  -> [(Text, [NominalId])]
+  -> Maybe NominalId
+  -> Located Function
+  -> Checker ()
+checkMember declared enclosing enclosingBounds selfBound (Located _ value) =
+  checkFunctionWith MemberFunction declared enclosing enclosingBounds selfBound value
 
 {-| @Type.Check.FunctionRole — whether a function owns the module-scope name it
     is written under.
@@ -265,10 +284,22 @@ traitAliases = id
 {-| Check a function body against its declared result. Exported signatures are
     annotated interfaces; a trait member receives its canonical trait as the
     rigid `Self` bound used by default-body method calls. -}
-checkFunctionWith :: FunctionRole -> DeclaredTypes -> Maybe NominalId -> Function -> Checker ()
-checkFunctionWith role declared selfBound value = do
-  let rigid = functionRigid value <> foldMap selfRigid selfBound
-      bounds = declareBounds declared value <> foldMap selfBoundAsBound selfBound
+checkFunctionWith
+  :: FunctionRole
+  -> DeclaredTypes
+  -> [Text]
+  -> [(Text, [NominalId])]
+  -> Maybe NominalId
+  -> Function
+  -> Checker ()
+checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
+  {-| The declaration a member belongs to contributes its own type parameters.
+      An implementation's `T` is rigid inside its methods for the same reason a
+      function's is inside its body, and without it the annotation `-> T` was
+      formed as a nominal type named `T` while `self.value` gave the real one,
+      so the two disagreed while printing identically. -}
+  let rigid = enclosing <> functionRigid value <> foldMap selfRigid selfBound
+      bounds = enclosingBounds <> declareBounds declared value <> foldMap selfBoundAsBound selfBound
   requireFunctionAnnotations value
   requireComptimePurity value
   declaredScheme <- case role of
@@ -751,6 +782,103 @@ qualifiedByName declared spanValue target member = case target of
             Just scheme -> Just <$> instantiate spanValue scheme
   _ -> pure Nothing
 
+{-| The type a `for` binds, taken from what is being iterated.
+
+    This used to be an unconstrained fresh variable, so `for x in [1, 2, 3]`
+    left `x` free and `x.length()` on a whole number passed the checker. The
+    loop is the one place a binder's type is decided entirely by the value
+    beside it, and deciding nothing there let every use of it through.
+
+    A user type answers through its own `advance`, whose result shape
+    `Option[(State, Item)]` is what `Std.Iter.Sequence` requires — the same
+    method [[Evaluator]] calls to walk it, so the type a `for` binds is the type
+    the loop will actually produce.
+
+    An unresolved type stays unconstrained rather than reported: inference may
+    still settle it, and refusing early would reject a program that is fine. -}
+iterationElement :: Span -> Type -> Checker Type
+iterationElement spanValue iteratedType = case throughReference iteratedType of
+  ErrorType -> pure ErrorType
+  VariableType _ -> freshVariable
+  NominalType "Array" [element] -> pure element
+  NominalType "Str" [] -> pure charType
+  NominalType "Set" [element] -> pure element
+  NominalType "Map" [key, held] -> pure (TupleTypeValue [key, held])
+  UnitTypeValue -> freshVariable
+  {-| A tuple's members must agree, because one binder cannot hold two types. -}
+  TupleTypeValue [] -> freshVariable
+  TupleTypeValue (first : rest) -> do
+    mapM_ (unify spanValue first) rest
+    pure first
+  NominalType owner arguments -> do
+    let receiver = NominalType owner arguments
+        receiverReference = ReferenceTypeValue False receiver
+    begun <- instantiateMethod receiver "begin"
+    stepped <- instantiateMethod receiver "advance"
+    case (begun, stepped) of
+      (Nothing, Nothing) -> do
+        {-| A sum walks the payload the matched variant carries, which is what
+            makes an `Option` a sequence of nought or one. Every variant's
+            payload must agree, because one binder cannot hold two types. -}
+        variants <- lookupOwnerVariants owner
+        case variants of
+          Just names@(_ : _) -> do
+            payloads <- mapM lookupVariant names
+            let carried =
+                  [ substituteRigid (zip variantParams arguments) payloadType
+                  | Just (_, variantParams, declaredPayload) <- payloads
+                  , length variantParams == length arguments
+                  , payloadType <- declaredPayload
+                  ]
+            case carried of
+              [] -> freshVariable
+              first : rest -> do
+                mapM_ (unify spanValue first) rest
+                pure first
+          _ -> do
+            report "E3030" spanValue ("a " <> nominalName owner <> " cannot be iterated")
+              ( Just
+                  ( "implement Std.Iter.Sequence for it, which is begin and advance, "
+                      <> "or iterate an array, a string, a map, or a set"
+                  )
+              )
+            pure ErrorType
+      (Just ErrorType, _) -> pure ErrorType
+      (_, Just ErrorType) -> pure ErrorType
+      ( Just (FunctionTypeValue False [beginReceiver] beginState)
+        , Just
+            ( FunctionTypeValue False [advanceReceiver, advanceState]
+                (NominalType "Option" [TupleTypeValue [nextState, item]])
+              )
+        ) -> do
+          _ <- unify spanValue receiverReference beginReceiver
+          _ <- unify spanValue receiverReference advanceReceiver
+          _ <- unify spanValue beginState advanceState
+          _ <- unify spanValue beginState nextState
+          zonk item
+      _ -> do
+        report "E3030" spanValue
+          (nominalName owner <> " does not provide one coherent sequence")
+          ( Just
+              ( "begin must take &Self and answer State; advance must take "
+                  <> "&Self and State and answer Option[(State, Item)]"
+              )
+          )
+        pure ErrorType
+  other -> do
+    report "E3030" spanValue ("a " <> renderType other <> " cannot be iterated")
+      (Just "iterate an array, a string, a map, a set, or a type implementing Std.Iter.Sequence")
+    pure ErrorType
+ where
+  instantiateMethod receiver name = do
+    found <- methodScheme spanValue receiver name
+    mapM (instantiate spanValue) found
+
+throughReference :: Type -> Type
+throughReference typeValue = case typeValue of
+  ReferenceTypeValue _ target -> throughReference target
+  other -> other
+
 {-| Resolve a trait-qualified call against the type its receiver actually has.
 
     `Speak.label(&bot)` names the trait, but the method it runs is the one `Bot`
@@ -932,9 +1060,21 @@ inferExpression declared rigid spanValue expression = case expression of
     broken <- aroundLoop label result True (checkBlock declared rigid body)
     if broken then zonk result else pure NeverType
   ForExpression label binder iterated body -> do
-    _ <- checkExpression declared rigid iterated
+    {-| The iterated expression's integer literals are settled before its
+        element type is read.
+
+        A literal defers its type until inference has seen enough to choose
+        one, which is right nearly everywhere and wrong here: the binder's type
+        comes from this expression and nothing else, so leaving it a variable
+        meant the loop body could ask it for any method at all. `for x in
+        [1, 2, 3] { x.length() }` passed because `x` had no type yet, not
+        because whole numbers have a length. -}
+    iteratedCheckpoint <- integerLiteralCheckpoint
+    iteratedType <- checkExpression declared rigid iterated
+    finalizeIntegerLiteralsSince iteratedCheckpoint
+    resolved <- zonk iteratedType
+    element <- iterationElement spanValue resolved
     _ <- inTypeScope $ do
-      element <- freshVariable
       bindPattern declared rigid binder element
       aroundLoop label UnitTypeValue False (checkBlock declared rigid body)
     pure UnitTypeValue
@@ -989,7 +1129,17 @@ recordType declared rigid spanValue path fields = do
         (Just "construct a record whose type declares fields")
       mapM_ (checkFieldInit declared rigid) fields
       pure ErrorType
-    Just expected -> do
+    Just declaredFields' -> do
+      {-| A generic record is instantiated at every construction, exactly as a
+          generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
+          field is checked against `Int` rather than against the declaration's
+          rigid parameter — which nothing could ever satisfy. -}
+      parameters <- maybe [] id <$> lookupTypeParams identity
+      replacements <- freshFor parameters
+      let expected =
+            [ (fieldName, substituteRigid replacements fieldType)
+            | (fieldName, fieldType) <- declaredFields'
+            ]
       mapM_ (checkField declared rigid expected) fields
       let supplied = map (locatedValue . fieldInitName . locatedValue) fields
           missing = [fieldName | (fieldName, _) <- expected, fieldName `notElem` supplied]
@@ -999,7 +1149,7 @@ recordType declared rigid spanValue path fields = do
           report "E3008" spanValue
             (name <> " construction is missing " <> Text.intercalate ", " missing)
             (Just "supply every declared field")
-      pure (NominalType identity [])
+      pure (NominalType identity (map snd replacements))
 
 checkField
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()

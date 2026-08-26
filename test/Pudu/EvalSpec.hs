@@ -16,6 +16,7 @@ evalProperties =
   , ("functions defaults and recursion evaluate", testFunctions)
   , ("conditionals and pattern matching select branches", testBranching)
   , ("loops iterate and jumps leave them", testLoops)
+  , ("control unwinds restore lexical frames", testUnwindFrameCleanup)
   , ("sum and record values construct and destructure", testData)
   , ("runtime failures report exact diagnostics", testFailures)
   , ("async calls stay cold until an async entry awaits them", testAsync)
@@ -175,6 +176,38 @@ testBindings = do
     [ sequential === "30"
     , counterexample "assignment writes the existing binding" (mutation === "10")
     , counterexample "an inner block shadows" (shadowing === "2")
+    ]
+
+testUnwindFrameCleanup :: IO Property
+testUnwindFrameCleanup = do
+  broken <- evaluateWith
+    [ "fn leaveLoop() -> Int {"
+    , "  loop {"
+    , "    { let source = 99  break 7 }"
+    , "  }"
+    , "}"
+    , "fn caller() -> Int {"
+    , "  let source = 5"
+    , "  let result = leaveLoop()"
+    , "  source + result"
+    , "}"
+    ]
+    "caller()"
+  returned <- evaluateWith
+    [ "fn leaveFunction() -> Int {"
+    , "  { let source = 99  return 7 }"
+    , "  0"
+    , "}"
+    , "fn caller() -> Int {"
+    , "  let source = 5"
+    , "  let result = leaveFunction()"
+    , "  source + result"
+    , "}"
+    ]
+    "caller()"
+  pure $ conjoin
+    [ counterexample "break removes every crossed lexical frame" (broken === "12")
+    , counterexample "return removes every crossed lexical frame" (returned === "12")
     ]
 
 testFunctions :: IO Property

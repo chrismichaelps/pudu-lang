@@ -1,6 +1,9 @@
 {-| @Type.Check.Pattern.Module — checks patterns against the type they match -}
 module Pudu.Type.Check.Pattern
   ( bindPattern
+  , freshFor
+  , recordFieldsFor
+  , substituteRigid
   ) where
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -16,6 +19,7 @@ import Pudu.Type.Env
   , bindName
   , freshVariable
   , lookupField
+  , lookupTypeParams
   , lookupVariant
   , report
   )
@@ -84,17 +88,38 @@ substituteRigid replacements typeValue = case typeValue of
     ReferenceTypeValue mutable (substituteRigid replacements target)
   other -> other
 
+{-| A record's declared field types, with the type's own parameters replaced by
+    the arguments the subject carries.
+
+    A generic record is instantiated wherever it is matched, exactly as a
+    generic sum already was: matching a `Boxed[Int]` gives the field `Int`
+    rather than the declaration's rigid parameter. -}
 recordFieldsFor :: DeclaredTypes -> Maybe ModuleName -> Type -> Checker [(Text, Type)]
 recordFieldsFor declared path subjectType = do
   resolved <- zonk subjectType
-  let name = case path of
+  let subjectArguments = case throughReferences resolved of
+        NominalType _ arguments -> arguments
+        _ -> []
+      name = case path of
         Just modulePath -> Map.lookup (moduleNameText modulePath) (declaredNames declared)
-        Nothing -> case resolved of
+        Nothing -> case throughReferences resolved of
           NominalType nominal _ -> Just nominal
           _ -> Nothing
   case name of
     Nothing -> pure []
-    Just found -> maybe [] id <$> lookupField found
+    Just found -> do
+      fields <- maybe [] id <$> lookupField found
+      parameters <- maybe [] id <$> lookupTypeParams found
+      replacements <-
+        if length parameters == length subjectArguments
+          then pure (zip parameters subjectArguments)
+          else freshFor parameters
+      pure [(fieldName, substituteRigid replacements fieldType) | (fieldName, fieldType) <- fields]
+
+throughReferences :: Type -> Type
+throughReferences typeValue = case typeValue of
+  ReferenceTypeValue _ target -> throughReferences target
+  other -> other
 
 bindFieldPattern
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldPattern -> Checker ()

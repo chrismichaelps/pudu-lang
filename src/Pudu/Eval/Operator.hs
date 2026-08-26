@@ -2,6 +2,7 @@
 module Pudu.Eval.Operator
   ( applyUnary
   , combine
+  , nominalNameOf
   , readIndex
   , readMember
   , unwrapTry

@@ -155,6 +155,8 @@ indentLines = go 0
       what they are. -}
   continues pieces = case dropWhile isComment pieces of
     TokenPiece token : _ -> case tokenKind token of
+      {-| A label opens a loop; it never continues the line above. -}
+      Symbol SymAt -> False
       Symbol symbol -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
       Keyword KwElse -> True
       _ -> False
@@ -285,6 +287,9 @@ braceKinds pieces
         top : below -> top : go below inHead rest
         [] -> Block : go [] inHead rest
       Keyword keyword | keyword `elem` headKeywords -> Block : go stack True rest
+      {-| A parenthesised expression inside a head is not the head's own brace
+          position, so `for x in (Thing{v: 1})` still holds a record. -}
+      Symbol SymLeftParen -> Block : go stack False rest
       _ -> Block : go stack inHead rest
     CommentPiece _ -> Block : go stack inHead rest
 
@@ -341,6 +346,8 @@ wantsSpace leftShape shape before after = case (before, after) of
     | isSymbol left SymComma = True
     | isSymbol right SymComma = False
     | isSymbol left SymDot || isSymbol right SymDot = False
+    {-| A label is one thing: `@outer`, never `@ outer`. -}
+    | isSymbol left SymAt = False
     | shapePrefix leftShape = False
     | isSymbol right SymColon = False
     | isSymbol left SymColon = True
