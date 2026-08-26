@@ -133,9 +133,9 @@ the caller chose the type of.
 | `Std.Http` | status codes, content lengths, ports | correct — the protocol defines them |
 | `Std.Json`, `Std.Url`, `Std.Map`, `Std.Set`, `Std.Env`, `Std.Process`, `Std.Show`, `Std.Bool`, `Std.Function`, `Std.Order` | positions, sizes, statuses | correct |
 | `Std.Iter` | array positions, yielded counts, take/drop limits, and adapter state | correct — these values measure a walk; `Range[N]` itself is bounded by `Integer` and preserves `N` |
-| `Std.Random` | `below`, `between`, and `numbers` results | **must be generalised** — these are caller-chosen numeric values; counts, lengths, and percentages remain `Int` |
+| `Std.Random` | `below`, `between`, and `numbers` results | **generalised** — the bound is the type witness and the answer shares its type; counts, lengths, and percentages remain `Int` |
 | `Std.Text.Parse` | input positions and `partial` offsets | correct — positions count text scalars |
-| `Std.Text.Parse` | `integer` result | **must be generalised** — parsed magnitude is caller data and range failure belongs in `Problem` |
+| `Std.Text.Parse` | `integer` result | **generalised** — `integerIn` takes a witness, the magnitude accumulates in `BigInt`, and a value the type cannot hold is a `Problem` at the position it was read |
 
 `Std.List.range(from, to) -> Array[Int]` stays `Int`: it produces a range of *positions*, and a
 caller wanting values of another type maps over it.

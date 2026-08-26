@@ -34,6 +34,11 @@ fitsIntegerType :: Int -> Text -> Integer -> Maybe Bool
 
 ## Governance
 
+- **Arbitrary precision absorbs.** A `BigInt` met with anything narrower stays a `BigInt`. The rule
+  was originally the reverse, and that overflowed `total * 10 + digit` part way through a number
+  `BigInt` was chosen to hold — carrying a mixed result in the narrower type is the quiet truncation
+  checked arithmetic exists to prevent.
+
 - `IntegerKind` is the width and signedness a value carries at run time. `Int` and `UInt` keep their
   own constructors rather than being written as the target's width, because they are distinct types:
   an implementation for `Int` is not an implementation for `Int64`, however wide the target is.

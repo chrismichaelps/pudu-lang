@@ -1,5 +1,7 @@
 module Std.Text.Parse
 
+import Std.Num {Integer}
+
 /// What a parser is reading and how far it has read.
 export type Input = { text: Str, position: Int }
 
@@ -342,18 +344,24 @@ export fn asText(parser: Parser[Array[Char]]) -> Parser[Str] {
   )
 }
 
-/// One or more digits as a whole number.
+/// One or more digits as an arbitrary-precision whole number.
+///
 /// A leading minus is admitted, so a negative number reads as one value rather
-/// than as an operator a caller has to reassemble.
-export fn integer() -> Parser[Int] {
+/// than as an operator a caller has to reassemble. The magnitude is
+/// accumulated in `BigInt` because the text may name a number larger than any
+/// fixed width, and deciding that too early would turn a range question into a
+/// parse failure at the wrong place.
+export fn bigInteger() -> Parser[BigInt] {
   andThen(
     optional(character('-')),
-    fn(sign: Option[Char]) -> Parser[Int] =>
+    fn(sign: Option[Char]) -> Parser[BigInt] =>
     map(
       asText(some(digit())),
-      fn(digits: Str) -> Int => {
-        var total = 0
-        for digitChar in digits.chars() { total = total * 10 + (digitChar.code() - 48) }
+      fn(digits: Str) -> BigInt => {
+        var total = wide(0)
+        for digitChar in digits.chars() {
+          total = total * 10 + wide(digitChar.code() - 48)
+        }
         match sign {
           case Some(_) => 0 - total
           case None => total
@@ -362,6 +370,41 @@ export fn integer() -> Parser[Int] {
     )
   )
 }
+
+/// A whole number as `BigInt`.
+///
+/// Written as a conversion rather than as the literal `0`, because a written
+/// annotation selects a literal's *static* type and not the width it carries at
+/// run time: `var total: BigInt = 0` is a platform `Int` while it runs, and
+/// accumulating a long number into one overflows. The conversion is what makes
+/// the value arbitrary-precision in fact as well as in type.
+fn wide(value: Int) -> BigInt {
+  match convertInteger[BigInt](value) {
+    case Some(widened) => widened
+    case None => 0
+  }
+}
+
+/// A whole number counted in the caller's own integer type.
+///
+/// The witness carries the type: `integerIn(0u8)` parses a `UInt8`. A number
+/// the text names but the type cannot hold is a **parse problem**, reported at
+/// the position where it was read, rather than a silently wrapped value — which
+/// is the same stance the language takes everywhere else about a number that
+/// does not fit.
+export fn integerIn[N: Integer](witness: N) -> Parser[N] {
+  andThen(
+    bigInteger(),
+    fn(value: BigInt) -> Parser[N] =>
+    match witness.fromBigInt(value) {
+      case Some(fitted) => pure(fitted)
+      case None => fail("a number this type can hold")
+    }
+  )
+}
+
+/// One or more digits as an `Int`, the common case of `integerIn`.
+export fn integer() -> Parser[Int] { integerIn(0) }
 
 /// A run of letters, digits, and underscores beginning with a letter.
 export fn identifier() -> Parser[Str] {

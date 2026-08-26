@@ -186,8 +186,15 @@ integerKindMeet :: IntegerKind -> IntegerKind -> IntegerKind
 integerKindMeet left right
   | left == right = left
   | otherwise = case (left, right) of
-      (BigIntKind, other) -> other
-      (other, BigIntKind) -> other
+      {-| Arbitrary precision absorbs. A `BigInt` met with anything narrower
+          stays a `BigInt`, because the alternative is to carry the result in
+          the narrower type and overflow it — which is exactly the quiet
+          truncation checked arithmetic exists to prevent. Accumulating a long
+          number by `total * 10 + digit` is the case that shows it: with the
+          narrow kind winning, the multiply fails part way through a number the
+          type was chosen to hold. -}
+      (BigIntKind, _) -> BigIntKind
+      (_, BigIntKind) -> BigIntKind
       (candidate, other)
         | candidate == defaultIntegerKind -> other
         | other == defaultIntegerKind -> candidate
