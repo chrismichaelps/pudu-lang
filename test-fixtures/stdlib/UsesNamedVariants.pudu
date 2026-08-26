@@ -1,0 +1,77 @@
+module UsesNamedVariants
+
+/// A sum whose variants name their payload elements.
+///
+/// The names sit over the same positional payload a variant written with types
+/// alone would carry, so a variant may be built and matched either way and the
+/// two spellings mean one thing.
+type Shape
+  = Circle{radius: Int}
+  | Rect{width: Int, height: Int}
+  | Point
+
+/// A generic sum: the type's parameter is instantiated at every construction,
+/// so `Node{item: 7}` is a `Chain[Int]` and the field is `Int`.
+type Chain[T]
+  = Node{item: T, rest: Int}
+  | End
+
+fn area(shape: Shape) -> Int {
+  match shape {
+    case Circle{radius} => 3 * radius * radius
+    case Rect{width, height} => width * height
+    case Point => 0
+  }
+}
+
+/// A named field may test rather than bind, and then it covers nothing — the
+/// rule a positional `case Ok(1)` already followed.
+fn describe(shape: Shape) -> Int {
+  match shape {
+    case Rect{width: 0, height: _} => 0
+    case Rect{width, height} => width + height
+    case Circle{radius} => radius
+    case Point => 1
+  }
+}
+
+/// A named variant is a constructor like any other, so it is also a function.
+fn built() -> Int {
+  [1, 2, 3].map(fn(n: Int) -> Int => area(Circle{radius: n})).reduce(fn(a: Int, b: Int) -> Int => a + b, 0)
+}
+
+fn carried(chain: Chain[Int]) -> Int {
+  match chain {
+    case Node{item, rest} => item + rest
+    case End => 0
+  }
+}
+
+/// Two variants may declare the same field names, so a pattern must match the
+/// name it writes and not merely the fields it finds.
+type Node
+  = Leaf{value: Int}
+  | Add{left: Node, right: Node}
+  | Mul{left: Node, right: Node}
+
+fn compute(node: Node) -> Int {
+  match node {
+    case Leaf{value} => value
+    case Add{left, right} => compute(left) + compute(right)
+    case Mul{left, right} => compute(left) * compute(right)
+  }
+}
+
+export fn main() -> Int {
+  var total = 0
+  total = total + area(Circle{radius: 2})
+  total = total + area(Rect{width: 3, height: 4})
+  total = total + area(Point)
+  total = total + describe(Rect{width: 0, height: 9})
+  total = total + describe(Rect{width: 5, height: 6})
+  total = total + carried(Node{item: 7, rest: 8})
+  total = total + carried(End)
+  total = total + built()
+  total = total + compute(Mul{left: Leaf{value: 3}, right: Add{left: Leaf{value: 4}, right: Leaf{value: 5}}})
+  total
+}

@@ -1,0 +1,9 @@
+module RejectsUnknownMember
+
+import Std.Map as M
+
+/// `of` is neither a prelude binding nor a built-in method, so the only honest
+/// advice is to look at what the module exports.
+fn wrong() -> Map[Str, Int] {
+  M.of([("a", 1)])
+}

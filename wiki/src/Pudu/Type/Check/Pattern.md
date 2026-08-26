@@ -30,6 +30,10 @@ Own checking patterns against the type they match for [[Type Check]].
 - Record-pattern owner annotations are formed through `declaredNames` using their full qualified path, so imported nominal identity is canonical and two equal basenames from different modules cannot unify accidentally. Constructor patterns continue to resolve through the variant table because the AST carries the constructor spelling rather than an owner path.
 - Literal patterns register the same deferred integer constraints as expressions. A range checks both endpoints against the subject, so suffix selection and exact fit cannot be bypassed through the upper bound.
 
+- **A record pattern reaches a sum only through a variant that named its payload.** `case Circle{radius}` names one variant, so the subject is that variant's owner and the fields stand for its payload; a record type's own pattern names no variant and takes the other path.
+- **A variant that named its payload is not matched by position** (`E3034`). One spelling reaches the value, so the other could only ever fail to match — and it would fail at run time, in a program the checker had accepted.
+- The variant's own type is instantiated at the pattern, exactly as a positional constructor's already was, so matching a `Chain[Int]` gives the field `Int` rather than the declaration's rigid parameter.
+
 ### Linkage
 
 - **Requires:** [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
@@ -54,6 +58,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 ## Grill Log
 
+- **Q:** Why refuse a positional pattern rather than make it work? **A:** Because making it work needs the field order where the match runs, and the declaration is the only place that has it. _Rationale:_ admitting both spellings without one representation is what let a type-correct program find no arm; refusing one spelling removes the divergence at its source instead of reconciling it downstream. _Rejected:_ carrying the field order into matching; normalising the value at construction.
 - **Q:** Why not inline these into the walk? **A:** The walk would exceed the reviewable size, and these rules are the part a reader checks against the grammar. _Rationale:_ they are a table, and a table is easier to audit alone. _Rejected:_ inlining; a generic operator-table abstraction.
 - **Q:** Is checking only a range's lower endpoint sufficient? **A:** No; form and unify both endpoints. _Rationale:_ otherwise an out-of-range upper literal reaches exhaustiveness and evaluation without the numeric contract being enforced. _Rejected:_ trusting the parser; checking only the endpoint used to infer subject type.
 

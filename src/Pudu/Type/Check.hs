@@ -16,8 +16,7 @@ import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
-  ( Capability (..)
-  , Block (..)
+  ( Block (..)
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
@@ -45,8 +44,6 @@ import Pudu.Type.Env
   , inTypeScope
   , inTypeScopeWith
   , integerLiteralCheckpoint
-  , ambiguousProviders
-  , UnsafeFrame (..)
   , LoopFrame (..)
   , enterLoop
   , enterUnsafe
@@ -54,21 +51,15 @@ import Pudu.Type.Env
   , loopTarget
   , markLoopBroken
   , withoutLoops
-  , insideUnsafe
   , leaveUnsafe
-  , unsafeFunctionCapabilities
-  , useCapability
-  , useUnsafeRegion
   , warn
   , recordUnsafeFunction
   , recordComptimeFunction
-  , isComptimeFunction
-  , inComptime
   , withComptime
   , lookupField
-  , lookupOwnerVariants
-  , lookupTypeParams
   , lookupVariant
+  , lookupVariantFields
+  , lookupTypeParams
   , lookupName
   , recordExpression
   , report
@@ -78,19 +69,32 @@ import Pudu.Type.Env
   , withDeclared
   )
 import Pudu.Type.Check.Pattern (bindPattern, freshFor, substituteRigid)
+import Pudu.Type.Check.Iteration (iterationElement)
+import Pudu.Type.Check.Safety
+  ( checkComptimeCall
+  , checkUnsafeCall
+  , reportUnusedCapabilities
+  , requireComptimePurity
+  )
+import Pudu.Type.Check.Call
+  ( CheckExpression (..)
+  , checkCallee
+  , throughBorrow
+  , traitQualifiedCall
+  )
 import Pudu.Type.Check.Coherence (checkCoherence)
 import Pudu.Type.Check.Rule
   ( awaitType
   , binaryType
   , enclosingFunctionType
   , enclosingReturnType
-  , instantiate
   , instantiateWith
   , callType
   , elementType
   , literalType
   , memberType
   , nameType
+  , namedVariantAsValue
   , qualifiedMemberType
   , tryType
   , unaryType
@@ -105,8 +109,6 @@ import Pudu.Type.Check.Method
   , implAliases
   , implBounds
   , implRigid
-  , methodScheme
-  , targetName
   , traitBounds
   , traitRigid
   , traitTable
@@ -122,13 +124,10 @@ import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( NominalId (..)
   , Scheme (..)
-  , nominalKey
   , monotype
   , polytype
   , Type (..)
   , boolType
-  , charType
-  , renderType
   , integerType
   )
 import Pudu.Type.Interface (ImportTypes)
@@ -402,17 +401,6 @@ lambdaType declared rigid value = withoutLoops $ inTypeScopeWith $ do
       pure ()
   zonk signature
 
-{-| The type a borrow refers to, following as many references as were written.
-
-    A `&&T` is unusual but writable, and stopping after one would report a
-    confusing mismatch against a type the reader never intended to match on. -}
-throughBorrow :: Type -> Checker Type
-throughBorrow typeValue = do
-  resolved <- zonk typeValue
-  case resolved of
-    ReferenceTypeValue _ referent -> throughBorrow referent
-    _ -> pure resolved
-
 {-| Warn when a statement throws away a value that is the whole point of the
     call that produced it.
 
@@ -619,312 +607,6 @@ aroundLoop label result carries action = do
   _ <- action
   leaveLoop
 
-{-| A member in callee position prefers a method over a field of the same
-    name, because `value.name()` reads as a call and a field would have to be
-    parenthesized to be called anyway. -}
-checkCallee :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
-checkCallee declared rigid located@(Located calleeSpan expression) = case expression of
-  MemberExpression target member -> do
-    named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
-    qualified <- case named of
-      Just found -> pure (Just found)
-      Nothing -> qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
-    case qualified of
-      Just instantiated -> do
-        recordExpression calleeSpan instantiated
-        pure instantiated
-      Nothing -> do
-        targetType <- checkExpression declared rigid target
-        resolved <- zonk targetType
-        method <- methodScheme calleeSpan resolved (locatedValue member)
-        case method of
-          Nothing -> checkExpression declared rigid located
-          Just scheme -> do
-            instantiated <- instantiate calleeSpan scheme
-            let applied = case instantiated of
-                  FunctionTypeValue asynchronous (_ : rest) result ->
-                    FunctionTypeValue asynchronous rest result
-                  other -> other
-            recordExpression calleeSpan applied
-            pure applied
-  _ -> checkExpression declared rigid located
-
-{-| A compile-time function runs in an evaluator with no IO, environment, time,
-    randomness, unsafe, or task operations, so the shapes that could reach one
-    are refused at the declaration rather than discovered when it runs. -}
-requireComptimePurity :: Function -> Checker ()
-requireComptimePurity value
-  | not (functionComptime value) = pure ()
-  | otherwise = do
-      when (functionAsync value) $
-        report "E3025" nameSpan
-          ("comptime function " <> name <> " cannot be async")
-          (Just "compile-time evaluation excludes task operations")
-      case functionUnsafe value of
-        Nothing -> pure ()
-        Just _ ->
-          report "E3025" nameSpan
-            ("comptime function " <> name <> " cannot be unsafe")
-            (Just "compile-time evaluation excludes unchecked operations")
- where
-  name = locatedValue (functionName value)
-  nameSpan = locatedSpan (functionName value)
-
-{-| A compile-time body may call only other compile-time functions. The
-    guarantee has to be transitive, or a pure-looking function could reach an
-    arbitrary one and the evaluator would meet it at compile time. -}
-checkComptimeCall :: Span -> Located Expression -> Checker ()
-checkComptimeCall spanValue callee = do
-  inside <- inComptime
-  when inside $ case locatedValue callee of
-    NameExpression (name NonEmpty.:| []) -> do
-      comptime <- isComptimeFunction name
-      builtin <- pure (name `elem` comptimeBuiltins)
-      unless (comptime || builtin) $
-        report "E3025" spanValue
-          ("comptime function cannot call " <> name)
-          (Just "declare the callee comptime, or move the call out of compile-time code")
-    _ -> pure ()
-
-{-| Names a compile-time body may reach that are not user declarations. -}
-comptimeBuiltins :: [Text]
-comptimeBuiltins = ["Some", "None", "Ok", "Err", "panic", "charFromCode", "show", "display", "convertInteger"]
-
-{-| A granted capability that the region never reached for is noise: it widens
-    the audited surface without buying anything, so leaving the region reports
-    it. -}
-reportUnusedCapabilities :: Span -> Checker ()
-reportUnusedCapabilities spanValue = do
-  frame <- leaveUnsafe
-  case frame of
-    Nothing -> pure ()
-    Just found -> do
-      let granted = frameGranted found
-          unused = [capability | capability <- granted, capability `notElem` frameUsed found]
-      if null granted
-        then
-          when (null (frameUsed found)) $
-            warn "W3001" spanValue "this unsafe region grants abilities nothing in it uses"
-              (Just "remove the unsafe region, or name the capabilities the code needs")
-        else
-          unless (null unused) $
-            warn "W3001" spanValue
-              ("unsafe region grants unused " <> Text.intercalate ", " (map capabilityName unused))
-              (Just "drop the capabilities the region does not need")
-
-capabilityName :: Capability -> Text
-capabilityName capability = case capability of
-  RawCapability -> "raw"
-  ForeignCapability -> "foreign"
-  UncheckedCapability -> "unchecked"
-  NullCapability -> "null"
-
-{-| Calling an unsafe function requires an unsafe context that grants what the
-    declaration asked for. A blanket declaration requires only that some region
-    is open; a declaration that names capabilities requires each of them, which
-    is what makes the requirement auditable rather than all-or-nothing. -}
-checkUnsafeCall :: Span -> Located Expression -> Checker ()
-checkUnsafeCall spanValue callee = case locatedValue callee of
-  NameExpression (name NonEmpty.:| []) -> do
-    declaredCapabilities <- unsafeFunctionCapabilities name
-    case declaredCapabilities of
-      Nothing -> pure ()
-      Just [] -> do
-        open <- insideUnsafe
-        if open
-          then useUnsafeRegion
-          else
-            report "E3023" spanValue
-              ("unsafe function " <> name <> " called outside an unsafe region")
-              (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
-      Just required -> mapM_ (requireCapability spanValue name) required
-  _ -> pure ()
-
-requireCapability :: Span -> Text -> Capability -> Checker ()
-requireCapability spanValue name capability = do
-  granted <- useCapability capability
-  unless granted $
-    report "E3023" spanValue
-      ( "unsafe function " <> name <> " needs the "
-          <> capabilityName capability <> " capability here"
-      )
-      ( Just
-          ( "wrap the call in unsafe(" <> capabilityName capability
-              <> ") { ... }, or declare the caller with that capability"
-          )
-      )
-
-{-| A callee written as `Name.member` may select a method by the trait that
-    declares it or by the type that implements it. The written name is mapped to
-    the declaration it identifies before the method key is built, so a local
-    declaration and an imported one are reached the same way. -}
-qualifiedByName
-  :: DeclaredTypes -> Span -> Expression -> Text -> Checker (Maybe Type)
-qualifiedByName declared spanValue target member = case target of
-  NameExpression (first NonEmpty.:| []) -> case Map.lookup first (declaredNames declared) of
-    Nothing -> pure Nothing
-    Just identity -> do
-      let key = nominalKey identity <> "." <> member
-      providers <- ambiguousProviders key
-      case providers of
-        _ : _ -> do
-          report "E3013" spanValue
-            (member <> " is ambiguous for " <> nominalName identity)
-            ( Just
-                ( "name the trait instead: "
-                    <> Text.intercalate " or "
-                      [nominalName provider <> "." <> member <> "(value)" | provider <- providers]
-                )
-            )
-          pure (Just ErrorType)
-        [] -> do
-          found <- lookupName key
-          case found of
-            Nothing -> pure Nothing
-            Just scheme -> Just <$> instantiate spanValue scheme
-  _ -> pure Nothing
-
-{-| The type a `for` binds, taken from what is being iterated.
-
-    This used to be an unconstrained fresh variable, so `for x in [1, 2, 3]`
-    left `x` free and `x.length()` on a whole number passed the checker. The
-    loop is the one place a binder's type is decided entirely by the value
-    beside it, and deciding nothing there let every use of it through.
-
-    A user type answers through its own `advance`, whose result shape
-    `Option[(State, Item)]` is what `Std.Iter.Sequence` requires — the same
-    method [[Evaluator]] calls to walk it, so the type a `for` binds is the type
-    the loop will actually produce.
-
-    An unresolved type stays unconstrained rather than reported: inference may
-    still settle it, and refusing early would reject a program that is fine. -}
-iterationElement :: Span -> Type -> Checker Type
-iterationElement spanValue iteratedType = case throughReference iteratedType of
-  ErrorType -> pure ErrorType
-  VariableType _ -> freshVariable
-  NominalType "Array" [element] -> pure element
-  NominalType "Str" [] -> pure charType
-  NominalType "Set" [element] -> pure element
-  NominalType "Map" [key, held] -> pure (TupleTypeValue [key, held])
-  UnitTypeValue -> freshVariable
-  {-| A tuple's members must agree, because one binder cannot hold two types. -}
-  TupleTypeValue [] -> freshVariable
-  TupleTypeValue (first : rest) -> do
-    mapM_ (unify spanValue first) rest
-    pure first
-  NominalType owner arguments -> do
-    let receiver = NominalType owner arguments
-        receiverReference = ReferenceTypeValue False receiver
-    begun <- instantiateMethod receiver "begin"
-    stepped <- instantiateMethod receiver "advance"
-    case (begun, stepped) of
-      (Nothing, Nothing) -> do
-        {-| A sum walks the payload the matched variant carries, which is what
-            makes an `Option` a sequence of nought or one. Every variant's
-            payload must agree, because one binder cannot hold two types. -}
-        variants <- lookupOwnerVariants owner
-        case variants of
-          Just names@(_ : _) -> do
-            payloads <- mapM lookupVariant names
-            let carried =
-                  [ substituteRigid (zip variantParams arguments) payloadType
-                  | Just (_, variantParams, declaredPayload) <- payloads
-                  , length variantParams == length arguments
-                  , payloadType <- declaredPayload
-                  ]
-            case carried of
-              [] -> freshVariable
-              first : rest -> do
-                mapM_ (unify spanValue first) rest
-                pure first
-          _ -> do
-            report "E3030" spanValue ("a " <> nominalName owner <> " cannot be iterated")
-              ( Just
-                  ( "implement Std.Iter.Sequence for it, which is begin and advance, "
-                      <> "or iterate an array, a string, a map, or a set"
-                  )
-              )
-            pure ErrorType
-      (Just ErrorType, _) -> pure ErrorType
-      (_, Just ErrorType) -> pure ErrorType
-      ( Just (FunctionTypeValue False [beginReceiver] beginState)
-        , Just
-            ( FunctionTypeValue False [advanceReceiver, advanceState]
-                (NominalType "Option" [TupleTypeValue [nextState, item]])
-              )
-        ) -> do
-          _ <- unify spanValue receiverReference beginReceiver
-          _ <- unify spanValue receiverReference advanceReceiver
-          _ <- unify spanValue beginState advanceState
-          _ <- unify spanValue beginState nextState
-          zonk item
-      _ -> do
-        report "E3030" spanValue
-          (nominalName owner <> " does not provide one coherent sequence")
-          ( Just
-              ( "begin must take &Self and answer State; advance must take "
-                  <> "&Self and State and answer Option[(State, Item)]"
-              )
-          )
-        pure ErrorType
-  other -> do
-    report "E3030" spanValue ("a " <> renderType other <> " cannot be iterated")
-      (Just "iterate an array, a string, a map, a set, or a type implementing Std.Iter.Sequence")
-    pure ErrorType
- where
-  instantiateMethod receiver name = do
-    found <- methodScheme spanValue receiver name
-    mapM (instantiate spanValue) found
-
-throughReference :: Type -> Type
-throughReference typeValue = case typeValue of
-  ReferenceTypeValue _ target -> throughReference target
-  other -> other
-
-{-| Resolve a trait-qualified call against the type its receiver actually has.
-
-    `Speak.label(&bot)` names the trait, but the method it runs is the one `Bot`
-    implements, and only that one knows the concrete types. The trait's own
-    declaration cannot: a generic trait leaves its parameters open there by
-    design, so typing the call from the declaration gave back the parameter
-    itself and every use was a mismatch against it.
-
-    This is the rule [[Evaluator]] already followed for the same call, so the
-    two phases now agree about what a trait-qualified call means rather than
-    only appearing to.
-
-    The receiver is checked once, here, and its type handed back so the call is
-    not walked twice. -}
-traitQualifiedCall
-  :: DeclaredTypes
-  -> [Text]
-  -> Located Expression
-  -> [Located Expression]
-  -> Checker (Maybe (Type, [Type]))
-traitQualifiedCall declared rigid (Located calleeSpan callee) arguments = case (callee, arguments) of
-  (MemberExpression target member, receiver : rest)
-    | Just traitIdentity <- namedType (locatedValue target) -> do
-        receiverType <- checkExpression declared rigid receiver
-        resolved <- throughBorrow =<< zonk receiverType
-        case targetName resolved of
-          Nothing -> pure Nothing
-          Just owner -> do
-            found <- lookupName (nominalKey owner <> "." <> locatedValue member)
-            case found of
-              Nothing -> pure Nothing
-              Just scheme
-                | nominalKey owner == nominalKey traitIdentity -> pure Nothing
-                | otherwise -> do
-                    instantiated <- instantiate calleeSpan scheme
-                    recordExpression calleeSpan instantiated
-                    restTypes <- mapM (checkExpression declared rigid) rest
-                    pure (Just (instantiated, receiverType : restTypes))
-  _ -> pure Nothing
- where
-  namedType expression = case expression of
-    NameExpression (first NonEmpty.:| []) -> Map.lookup first (declaredNames declared)
-    _ -> Nothing
-
 {-| Check an expression against a type the context already knows.
 
     Inference alone cannot place a value into a `dynamic`: the branches of an `if`,
@@ -1013,6 +695,14 @@ checkGuard declared rigid guard = do
 
 {-| Check one expression and record the type it was given, so tooling can
     report it later. -}
+{-| The way [[Type Check Call]] checks an expression.
+
+    A call's arguments are expressions and an expression may be a call, so one
+    direction has to be a capability rather than an import. This is that
+    direction. -}
+expressionChecker :: CheckExpression
+expressionChecker = CheckExpression checkExpression
+
 checkExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
 checkExpression declared rigid (Located spanValue expression) = do
   typeValue <- inferExpression declared rigid spanValue expression
@@ -1034,15 +724,21 @@ inferExpression declared rigid spanValue expression = case expression of
   CallExpression callee arguments -> do
     checkUnsafeCall spanValue callee
     checkComptimeCall spanValue callee
-    dispatched <- traitQualifiedCall declared rigid callee arguments
+    dispatched <- traitQualifiedCall expressionChecker declared rigid callee arguments
     case dispatched of
       Just (calleeType, argumentTypes) -> callType spanValue calleeType argumentTypes
       Nothing -> do
-        calleeType <- checkCallee declared rigid callee
+        calleeType <- checkCallee expressionChecker declared rigid callee
         argumentTypes <- mapM (checkExpression declared rigid) arguments
         callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
-    qualified <- qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
+    {-| A variant that named its payload is refused here rather than inside
+        qualified member typing, which a call reaches twice — once for the
+        callee and once for the expression — and would report twice. -}
+    refused <- namedVariantAsValue spanValue (locatedValue member)
+    qualified <- case refused of
+      Just value -> pure (Just value)
+      Nothing -> qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
     case qualified of
       Just value -> pure value
       Nothing -> do
@@ -1213,10 +909,22 @@ recordType declared rigid spanValue path fields = do
   declaredFieldTypes <- lookupField identity
   case declaredFieldTypes of
     Nothing -> do
-      report "E3007" spanValue (name <> " is not a record type")
-        (Just "construct a record whose type declares fields")
-      mapM_ (checkFieldInit declared rigid) fields
-      pure ErrorType
+      variantShape <- namedVariantShape name
+      case variantShape of
+        Just (owner, ownerParams, expected) ->
+          variantRecordType declared rigid spanValue name owner ownerParams expected fields
+        Nothing -> do
+          positional <- lookupVariant name
+          report "E3007" spanValue (name <> " is not a record type")
+            ( Just $ case positional of
+                Just (_, _, payload) | not (null payload) ->
+                  name <> " carries a positional payload; write "
+                    <> name <> "(...) with one argument per element"
+                Just _ -> name <> " carries no payload; write " <> name <> " on its own"
+                Nothing -> "construct a record whose type declares fields"
+            )
+          mapM_ (checkFieldInit declared rigid) fields
+          pure ErrorType
     Just declaredFields' -> do
       {-| A generic record is instantiated at every construction, exactly as a
           generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
@@ -1238,6 +946,52 @@ recordType declared rigid spanValue path fields = do
             (name <> " construction is missing " <> Text.intercalate ", " missing)
             (Just "supply every declared field")
       pure (NominalType identity (map snd replacements))
+
+{-| A variant's payload paired with the names it declared for it.
+
+    A variant is present here only when its declaration gave names. The names
+    sit over the same positional payload a bare `Circle(Int)` would carry, so
+    nothing downstream needs to know which spelling was used. -}
+namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
+namedVariantShape name = do
+  fieldNames <- lookupVariantFields name
+  variant <- lookupVariant name
+  pure $ case (fieldNames, variant) of
+    (Just names, Just (owner, ownerParams, payload))
+      | length names == length payload -> Just (owner, ownerParams, zip names payload)
+    _ -> Nothing
+
+{-| Construct a variant by naming its payload elements.
+
+    The variant's own type is instantiated at the construction, exactly as a
+    record's is, so `Wrap{value: 7}` is a `Wrap[Int]` and the field is checked
+    against `Int` rather than against the declaration's rigid parameter. -}
+variantRecordType
+  :: DeclaredTypes
+  -> [Text]
+  -> Span
+  -> Text
+  -> NominalId
+  -> [Text]
+  -> [(Text, Type)]
+  -> [Located FieldInit]
+  -> Checker Type
+variantRecordType declared rigid spanValue name owner ownerParams declaredShape fields = do
+  replacements <- freshFor ownerParams
+  let expected =
+        [ (fieldName, substituteRigid replacements fieldType)
+        | (fieldName, fieldType) <- declaredShape
+        ]
+  mapM_ (checkField declared rigid expected) fields
+  let supplied = map (locatedValue . fieldInitName . locatedValue) fields
+      missing = [fieldName | (fieldName, _) <- expected, fieldName `notElem` supplied]
+  case missing of
+    [] -> pure ()
+    _ ->
+      report "E3008" spanValue
+        (name <> " construction is missing " <> Text.intercalate ", " missing)
+        (Just "supply every declared field")
+  pure (NominalType owner (map snd replacements))
 
 checkField
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()

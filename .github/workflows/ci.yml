@@ -26,10 +26,8 @@ jobs:
       - run: cabal test all --enable-optimization=2 --test-show-details=direct
       - name: Verify every committed Pudu file is formatted
         run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures -name '*.pudu')
-      - name: Verify the language server answers a session
-        run: |
-          printf 'Content-Length: 58\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            | cabal run -v0 pudu -- lsp | grep -q '"hoverProvider":true'
+      - name: Verify the language server answers a real session
+        run: node test/lsp-session.mjs "$(cabal list-bin pudu)"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

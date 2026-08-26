@@ -9,6 +9,7 @@ module Pudu.Type.Check.Pattern
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree (FieldPattern (..), Pattern (..))
@@ -21,10 +22,11 @@ import Pudu.Type.Env
   , lookupField
   , lookupTypeParams
   , lookupVariant
+  , lookupVariantFields
   , report
   )
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Value (Type (..), monotype)
+import Pudu.Type.Value (NominalId, Type (..), monotype)
 
 {-| Check a pattern against the type it matches, binding the names it
     introduces at the types their positions imply. -}
@@ -49,6 +51,20 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
   ConstructorPattern path arguments -> do
     let name = NonEmpty.last (moduleNameSegments path)
     variant <- lookupVariant name
+    {-| A variant that named its payload is matched by naming it, for the
+        reason it is built that way: one spelling reaches the value, so the
+        other can only ever fail to match. -}
+    named <- lookupVariantFields name
+    case named of
+      Just names
+        | not (null arguments) ->
+            report "E3034" patternSpan (name <> " names its payload")
+              ( Just
+                  ( "write case " <> name <> "{" <> Text.intercalate ", " names
+                      <> "} rather than matching it by position"
+                  )
+              )
+      _ -> pure ()
     case variant of
       Nothing -> mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
       Just (owner, ownerParams, declaredPayload) -> do
@@ -64,8 +80,20 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
               (Just "match one pattern per declared payload element")
             mapM_ (\argument -> bindPattern declared rigid argument ErrorType) arguments
   RecordPattern path fields _ -> do
-    declaredFieldTypes <- recordFieldsFor declared path subjectType
-    mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
+    variantShape <- namedVariantShapeFor path
+    case variantShape of
+      Just (owner, ownerParams, declaredShape) -> do
+        replacements <- freshFor ownerParams
+        let ownerType = NominalType owner (map snd replacements)
+            expected =
+              [ (fieldName, substituteRigid replacements fieldType)
+              | (fieldName, fieldType) <- declaredShape
+              ]
+        _ <- unify patternSpan subjectType ownerType
+        mapM_ (bindFieldPattern declared rigid expected) fields
+      Nothing -> do
+        declaredFieldTypes <- recordFieldsFor declared path subjectType
+        mapM_ (bindFieldPattern declared rigid declaredFieldTypes) fields
   AlternativePattern alternatives ->
     mapM_ (\alternative -> bindPattern declared rigid alternative subjectType) alternatives
   InvalidPattern -> pure ()
@@ -115,6 +143,25 @@ recordFieldsFor declared path subjectType = do
           then pure (zip parameters subjectArguments)
           else freshFor parameters
       pure [(fieldName, substituteRigid replacements fieldType) | (fieldName, fieldType) <- fields]
+
+{-| The payload a variant named, when the pattern's path names such a variant.
+
+    A record pattern reaches a sum only this way: `case Circle{r}` names one
+    variant of the type, so the subject is that variant's owner and the fields
+    stand for its payload. A record type's own pattern has no variant to find
+    and takes the other path. -}
+namedVariantShapeFor
+  :: Maybe ModuleName -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
+namedVariantShapeFor path = case path of
+  Nothing -> pure Nothing
+  Just modulePath -> do
+    let name = NonEmpty.last (moduleNameSegments modulePath)
+    fieldNames <- lookupVariantFields name
+    variant <- lookupVariant name
+    pure $ case (fieldNames, variant) of
+      (Just names, Just (owner, ownerParams, payload))
+        | length names == length payload -> Just (owner, ownerParams, zip names payload)
+      _ -> Nothing
 
 throughReferences :: Type -> Type
 throughReferences typeValue = case typeValue of

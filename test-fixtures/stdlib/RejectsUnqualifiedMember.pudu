@@ -1,0 +1,10 @@
+module RejectsUnqualifiedMember
+
+import Std.Io as Io
+
+/// `writeFile` is a prelude binding every program can call, not a `Std.Io`
+/// export. Reaching for it through the module used to be told to try
+/// `value.writeFile()`, which does not exist either.
+fn wrong(path: Str) -> Result[(), Str] {
+  Io.writeFile(path, "x")
+}

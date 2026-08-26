@@ -11,7 +11,7 @@ import Pudu.Frontend.Syntax.Name (moduleNameSegments)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree (MatchArm (..), Pattern (..))
 import Pudu.Source (Span)
-import Pudu.Type.Env (Checker, lookupOwnerVariants, report, warn)
+import Pudu.Type.Env (Checker, lookupOwnerVariants, lookupVariant, report, warn)
 import Pudu.Type.Unify (zonk)
 import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 
@@ -25,37 +25,67 @@ import Pudu.Type.Value (NominalId, Type (..), nominalName, renderType)
 checkExhaustive :: Span -> Type -> [Located MatchArm] -> Checker ()
 checkExhaustive spanValue subjectType arms = do
   resolved <- zonk subjectType
-  reportUnreachable arms
+  isVariant <- variantNamer arms
+  reportUnreachable isVariant arms
   case resolved of
     ErrorType -> pure ()
     VariableType _ -> pure ()
-    NominalType "Bool" [] -> checkClosed spanValue "Bool" ["true", "false"] arms
+    NominalType "Bool" [] -> checkClosed isVariant spanValue "Bool" ["true", "false"] arms
     NominalType owner _ -> do
       variants <- lookupOwnerVariants owner
       case variants of
-        Just names -> checkClosed spanValue owner names arms
-        Nothing -> checkOpen spanValue resolved arms
-    _ -> checkOpen spanValue resolved arms
+        Just names -> checkClosed isVariant spanValue owner names arms
+        Nothing -> checkOpen isVariant spanValue resolved arms
+    _ -> checkOpen isVariant spanValue resolved arms
+
+{-| Decide, for the names these arms actually mention, which are sum variants.
+
+    A record pattern reaches a sum when a variant declared names for its
+    payload, and `case Circle{radius}` is then a test rather than a binding —
+    it matches one variant of several. A record type's own pattern names no
+    variant and stays irrefutable, which is what it has always been. The
+    question is asked once per name the arms mention rather than at every
+    recursive step, because the answer cannot change within a match. -}
+variantNamer :: [Located MatchArm] -> Checker (Text -> Bool)
+variantNamer arms = do
+  let mentioned = concatMap (recordNames . armPattern . locatedValue) arms
+  found <- mapM (\name -> (,) name . (/= Nothing) <$> lookupVariant name) mentioned
+  pure (\name -> Just True == lookup name found)
+
+{-| Every name a record pattern in this tree writes before its braces. -}
+recordNames :: Located Pattern -> [Text]
+recordNames (Located _ pattern') = case pattern' of
+  RecordPattern path fields _ ->
+    maybe [] (pure . NonEmpty.last . moduleNameSegments) path
+      <> concatMap fieldNames fields
+  ConstructorPattern _ arguments -> concatMap recordNames arguments
+  TuplePattern members -> concatMap recordNames members
+  AlternativePattern alternatives -> concatMap recordNames alternatives
+  _ -> []
+ where
+  fieldNames (Located _ field) =
+    maybe [] recordNames (Tree.fieldPatternValue field)
 
 {-| A closed domain is covered when every constructor appears in an unguarded
     arm whose sub-patterns bind rather than test, or when an irrefutable arm
     covers what remains. -}
-checkClosed :: Span -> NominalId -> [Text] -> [Located MatchArm] -> Checker ()
-checkClosed spanValue owner names arms
-  | any irrefutableArm arms = pure ()
+checkClosed
+  :: (Text -> Bool) -> Span -> NominalId -> [Text] -> [Located MatchArm] -> Checker ()
+checkClosed isVariant spanValue owner names arms
+  | any (irrefutableArm isVariant) arms = pure ()
   | null missing = pure ()
   | otherwise =
       report "E5001" spanValue
         ("match on " <> nominalName owner <> " does not cover " <> Text.intercalate ", " missing)
         (Just "add a case for each remaining constructor, or a wildcard case")
  where
-  covered = concatMap coveredNames arms
+  covered = concatMap (coveredNames isVariant) arms
   missing = [name | name <- names, name `notElem` covered]
 
 {-| An open domain cannot be enumerated, so only an irrefutable arm covers it. -}
-checkOpen :: Span -> Type -> [Located MatchArm] -> Checker ()
-checkOpen spanValue resolved arms
-  | any irrefutableArm arms = pure ()
+checkOpen :: (Text -> Bool) -> Span -> Type -> [Located MatchArm] -> Checker ()
+checkOpen isVariant spanValue resolved arms
+  | any (irrefutableArm isVariant) arms = pure ()
   | otherwise =
       report "E5001" spanValue
         ("match on " <> renderType resolved <> " does not cover every value")
@@ -63,46 +93,104 @@ checkOpen spanValue resolved arms
 
 {-| An arm covers a name when it is unguarded and its payload patterns only
     bind. `case Ok(1)` tests its payload, so it does not cover `Ok`. -}
-coveredNames :: Located MatchArm -> [Text]
-coveredNames (Located _ arm)
+coveredNames :: (Text -> Bool) -> Located MatchArm -> [Text]
+coveredNames isVariant (Located _ arm)
   | armGuard arm /= Nothing = []
-  | otherwise = namesOf (armPattern arm)
+  | otherwise = namesOf isVariant (armPattern arm)
 
-namesOf :: Located Pattern -> [Text]
-namesOf (Located _ pattern') = case pattern' of
+namesOf :: (Text -> Bool) -> Located Pattern -> [Text]
+namesOf isVariant (Located _ pattern') = case pattern' of
   ConstructorPattern path arguments
-    | all irrefutable arguments -> [NonEmpty.last (moduleNameSegments path)]
+    | all (irrefutable isVariant) arguments -> [NonEmpty.last (moduleNameSegments path)]
     | otherwise -> []
-  RecordPattern path _ _ -> maybe [] (pure . NonEmpty.last . moduleNameSegments) path
+  {-| A variant matched by name covers it only when its fields bind rather than
+      test, for the reason `case Ok(1)` does not cover `Ok`. -}
+  RecordPattern path fields _
+    | all (irrefutableField isVariant) fields ->
+        maybe [] (pure . NonEmpty.last . moduleNameSegments) path
+    | otherwise -> []
   LiteralPattern (Tree.BoolValue flag) -> [if flag then "true" else "false"]
-  AlternativePattern alternatives -> concatMap namesOf alternatives
+  AlternativePattern alternatives -> concatMap (namesOf isVariant) alternatives
   _ -> []
 
-irrefutableArm :: Located MatchArm -> Bool
-irrefutableArm (Located _ arm) =
-  armGuard arm == Nothing && irrefutable (armPattern arm)
+irrefutableArm :: (Text -> Bool) -> Located MatchArm -> Bool
+irrefutableArm isVariant (Located _ arm) =
+  armGuard arm == Nothing && irrefutable isVariant (armPattern arm)
 
 {-| A pattern is irrefutable when it always matches: a wildcard, a binding, or
     an aggregate whose parts are all irrefutable. -}
-irrefutable :: Located Pattern -> Bool
-irrefutable (Located _ pattern') = case pattern' of
+irrefutable :: (Text -> Bool) -> Located Pattern -> Bool
+irrefutable isVariant (Located _ pattern') = case pattern' of
   WildcardPattern -> True
   BindingPattern _ -> True
-  TuplePattern members -> all irrefutable members
-  RecordPattern _ fields _ -> all irrefutableField fields
+  TuplePattern members -> all (irrefutable isVariant) members
+  {-| Naming a variant is a test. `case Circle{radius}` matches one variant of
+      several, so it cannot stand for the whole type the way a record type's own
+      pattern does. -}
+  RecordPattern path fields _
+    | any isVariant (maybe [] (pure . NonEmpty.last . moduleNameSegments) path) -> False
+    | otherwise -> all (irrefutableField isVariant) fields
   _ -> False
 
-irrefutableField :: Located Tree.FieldPattern -> Bool
-irrefutableField (Located _ field) = case Tree.fieldPatternValue field of
+irrefutableField :: (Text -> Bool) -> Located Tree.FieldPattern -> Bool
+irrefutableField isVariant (Located _ field) = case Tree.fieldPatternValue field of
   Nothing -> True
-  Just nested -> irrefutable nested
+  Just nested -> irrefutable isVariant nested
 
-{-| An arm after one that already matches everything can never run. -}
-reportUnreachable :: [Located MatchArm] -> Checker ()
-reportUnreachable arms = case break irrefutableArm arms of
-  (_, _ : rest@(_ : _)) -> mapM_ unreachable rest
-  _ -> pure ()
+{-| What an earlier unguarded arm has already taken.
+
+    Only tests whose whole extent is one name or one literal are recorded. A
+    pattern that binds part of what it matches spans more values than any key
+    could stand for, so it contributes nothing here and nothing is claimed
+    about it. -}
+data Taken
+  = TakenConstructor !Text
+  | TakenLiteral !Tree.Literal
+  deriving stock (Eq)
+
+{-| An arm that can never run, either because an earlier arm matches everything
+    or because an earlier arm already took every value this one names.
+
+    Both are the same mistake to a reader — a case that looks live and is not —
+    but they are different mistakes to make, so each says which happened. -}
+reportUnreachable :: (Text -> Bool) -> [Located MatchArm] -> Checker ()
+reportUnreachable isVariant = walk False []
  where
-  unreachable (Located armSpan _) =
-    warn "W5001" armSpan "this case can never match"
-      (Just "an earlier case already covers every remaining value")
+  walk _ _ [] = pure ()
+  walk closed taken (Located armSpan arm : rest)
+    | closed = unreachable armSpan coveredHelp >> walk True taken rest
+    | subsumed = unreachable armSpan takenHelp >> walk closed taken rest
+    | otherwise = walk closed' taken' rest
+   where
+    keys = takenBy isVariant (armPattern arm)
+    unguarded = armGuard arm == Nothing
+    subsumed = not (null keys) && all (`elem` taken) keys
+    closed' = closed || (unguarded && irrefutable isVariant (armPattern arm))
+    taken' = if unguarded then keys <> taken else taken
+
+  unreachable armSpan help =
+    warn "W5001" armSpan "this case can never match" (Just help)
+
+  coveredHelp = "an earlier case already covers every remaining value"
+  takenHelp = "an earlier case already matches this pattern"
+
+{-| The values a pattern names, when they can be named exactly.
+
+    A constructor stands for all of its values only when its payload binds
+    rather than tests: `case Ok(1)` leaves the rest of `Ok` for a later arm,
+    so it takes nothing. An alternative takes what its branches take, and only
+    when every branch is nameable — one open branch leaves the whole
+    alternative open. -}
+takenBy :: (Text -> Bool) -> Located Pattern -> [Taken]
+takenBy isVariant (Located _ pattern') = case pattern' of
+  ConstructorPattern path arguments
+    | all (irrefutable isVariant) arguments ->
+        [TakenConstructor (NonEmpty.last (moduleNameSegments path))]
+  RecordPattern (Just path) fields _
+    | all (irrefutableField isVariant) fields ->
+        [TakenConstructor (NonEmpty.last (moduleNameSegments path))]
+  LiteralPattern literal -> [TakenLiteral literal]
+  AlternativePattern alternatives ->
+    let branches = map (takenBy isVariant) alternatives
+     in if any null branches then [] else concat branches
+  _ -> []

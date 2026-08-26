@@ -61,6 +61,9 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 - Prefix `*` reads through a borrow: `*r` has the referent's type when `r` is `&T` or `&mut T`, an unsolved operand is constrained to a shared reference, and anything else reports `E3020`. There is no implicit conversion in either direction, because [[architecture/SEMANTICS]] admits no general subtyping in v1.
 - Floating text decodes through [[Float Literal]]. Unsuffixed/`f64` values are `Float64`, `f32` is `Float32`, and overflow reports `E3019` before an infinity can enter evaluation; no contextual narrowing is invented.
 
+- **A variant that named its payload is refused where a value was wanted** (`E3034`). Its constructor stays bound so the name still resolves — the reader gets this message rather than `undefined name` — but every use of it as a value is the mistake, whether written bare, written through its type, or stored in a binding and called later.
+- The refusal is asked once, by `namedVariantAsValue`, and applied at the two places an expression names something: a bare name here, and a qualified member in [[Type Check]]. Putting it inside qualified member typing reported a call twice, because a call reaches that typing once for its callee and once for the expression.
+
 ### Linkage
 
 - **Requires:** [[Float Literal]], [[Integer Literal]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
@@ -88,6 +91,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 
 ## Grill Log
 
+- **Q:** Why does the constructor stay bound when it can never be used? **A:** So the diagnostic can say what is wrong. _Rationale:_ unbinding it makes `Circle(2)` an undefined name, which is true and tells the reader nothing about the spelling that would work. _Rejected:_ removing the binding; binding it to the owner type.
 - **Q:** Why not inline these into the walk? **A:** The walk would exceed the reviewable size, and these rules are the part a reader checks against the grammar. _Rationale:_ they are a table, and a table is easier to audit alone. _Rejected:_ inlining; a generic operator-table abstraction.
 - **Q:** Nest an async `Result[S, E]` as `Task[Result[S, E], Never]`? **A:** No; normalize it to `Task[S, E]`. _Rationale:_ the failure channel is part of the task contract and `.await` propagates it exactly once. _Rejected:_ nested carriers; erasing the failure as `Never`.
 - **Q:** Should `callType` guess channels for an unresolved async result variable? **A:** No; async declarations are complete contracts before calls are typed. _Rationale:_ a later `Result[S, E]` solution cannot retroactively split a previously guessed `Task[result, Never]`. _Rejected:_ declaration-order-dependent normalization; deferred ad-hoc rewriting.

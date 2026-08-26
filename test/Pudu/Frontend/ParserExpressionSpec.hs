@@ -46,6 +46,8 @@ parserExpressionProperties =
   , ("tuples and record constructions parse", testAggregates)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
+  , ("an exhausted budget reports once and stops", testExhaustedBudgetIsQuiet)
+  , ("every precedence band binds as the grammar states", testPrecedenceBands)
   ]
 
 testPrecedence :: IO Property
@@ -137,9 +139,19 @@ testRecovery = do
   invalid <- parse ")"
   malformedElse <- parse "if true {} else 1"
   delimited <- parse "(a +)"
+  {-| A token the lexer marked invalid has already been diagnosed, and
+      precisely: `"{}"` is an interpolation with no expression. Saying "expected expression" over the top gives the
+      reader two diagnostics for one mistake, with the less useful one first.
+
+      This harness collects parser diagnostics only, so an empty list here is
+      the parser staying quiet; the lexer's own message is covered by
+      [[Lexer Quoted]]'s tests. -}
+  emptyHole <- parse "\"{}\""
   pure $ conjoin [codes missing === ["E1040"], codes invalid === ["E1040"],
     codes malformedElse === ["E1042"], diagnosticOffsets malformedElse === [16],
-    codes delimited === ["E1040"], resultKind delimited === EndOfFile]
+    codes delimited === ["E1040"], resultKind delimited === EndOfFile,
+    counterexample "the parser adds nothing to an invalid string"
+      (codes emptyHole === [])]
 
 testReservedKeywords :: IO Property
 testReservedKeywords = do
@@ -246,6 +258,58 @@ testHostileConditionals = do
   let input = "if true {}" <> Text.concat (replicate 519 " else if true {}")
   result <- parse input
   pure $ conjoin [codes result === ["E1099"], diagnosticOffsets result === [8179]]
+
+{-| Once the budget is gone the parse has given up, and every message after
+    that describes the wreckage rather than the mistake.
+
+    Five thousand nested parentheses used to report one `E1099` and then four
+    and a half thousand `E1001`s as recovery unwound past each unmatched
+    delimiter — one hostile file amplified into thousands of diagnostics, which
+    is the cascade the budget exists to prevent. -}
+testExhaustedBudgetIsQuiet :: IO Property
+testExhaustedBudgetIsQuiet = do
+  balanced <- parse (Text.replicate 5000 "(" <> "1" <> Text.replicate 5000 ")")
+  unclosed <- parse (Text.replicate 5000 "(" <> "1")
+  brackets <- parse (Text.replicate 5000 "[" <> Text.replicate 5000 "]")
+  pure $ conjoin
+    [ counterexample "a balanced flood reports once" (codes balanced === ["E1099"])
+    , counterexample "an unclosed flood reports once" (codes unclosed === ["E1099"])
+    , counterexample "and so does a bracket flood" (codes brackets === ["E1099"])
+    ]
+
+{-| Check the precedence table in [[grammar/pudu]] band by band.
+
+    The grammar states one ordering, tightest to loosest, and this walks every
+    adjacent pair of bands: for a tighter operator `t` and a looser one `l`,
+    `a t b l c` must parse as `(a t b) l c`. A table stated in prose and a table
+    implemented in a parser are two tables until something compares them. -}
+testPrecedenceBands :: IO Property
+testPrecedenceBands = do
+  {-| One representative per band, tightest first, in the order
+      [[grammar/pudu]] lists them: multiplicative, additive, shift, range and
+      bitwise xor, comparison, equality, boolean and, boolean or. -}
+  let bands :: [Text]
+      bands = ["*", "+", "<<", "^", "<", "==", "&&", "||"]
+      adjacent = zip bands (drop 1 bands)
+  tighter <- traverse (\(t, l) -> parse ("a " <> t <> " b " <> l <> " c")) adjacent
+  let expected = ["((a" <> t <> "b)" <> l <> "c)" | (t, l) <- adjacent]
+  associativity <- traverse (\op -> parse ("a " <> op <> " b " <> op <> " c")) bands
+  let leftAssociative = ["((a" <> op <> "b)" <> op <> "c)" | op <- bands]
+  assignment <- parse "a = b = c"
+  unaryBinding <- parse "-a * -b"
+  postfixBinding <- parse "-f(a)"
+  pure $ conjoin
+    [ counterexample "each band binds tighter than the next"
+        (map validShape tighter === expected)
+    , counterexample "every binary band is left-associative"
+        (map validShape associativity === leftAssociative)
+    , counterexample "assignment is right-associative"
+        (validShape assignment === "(a=(b=c))")
+    , counterexample "a prefix operator binds tighter than every binary one"
+        (validShape unaryBinding === "((-a)*(-b))")
+    , counterexample "and looser than every postfix one"
+        (validShape postfixBinding === "(-f(a))")
+    ]
 
 parse :: Text -> IO (Located Expression, TokenKind, [Diagnostic])
 parse input = do

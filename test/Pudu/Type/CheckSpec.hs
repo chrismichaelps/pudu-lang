@@ -42,6 +42,7 @@ typeProperties =
   , ("trait methods dispatch on the receiver type", testTraits)
   , ("trait default bodies call other trait methods on Self", testTraitDefaultCalls)
   , ("matches are checked for coverage and reachability", testExhaustiveness)
+  , ("a variant may name its payload", testNamedVariants)
   , ("trait bounds are proved at the call site", testBounds)
   , ("ambiguous trait method dispatch reports E3013", testAmbiguousMethod)
   , ("duplicate trait implementation heads are rejected", testCoherence)
@@ -840,6 +841,126 @@ testTraitDefaultCalls = do
 colorProgram :: [Text]
 colorProgram = ["module M", "type Color = | Red | Green | Blue"]
 
+{-| A variant that names its payload is built and matched by those names.
+
+    The names sit over the same positional payload, so what already held of a
+    positional variant must still hold: a field that tests does not cover its
+    variant, and naming one variant is a test rather than a binding. -}
+testNamedVariants :: IO Property
+testNamedVariants = do
+  let shape =
+        [ "module M"
+        , "type Shape = Circle{ radius: Int } | Rect{ width: Int, height: Int } | Point"
+        ]
+  built <- codes (shape <> ["fn run() -> Shape { Circle{radius: 2} }"])
+  matched <- codes (shape <>
+    [ "fn run(s: Shape) -> Int {"
+    , "  match s {"
+    , "    case Circle{radius} => radius"
+    , "    case Rect{width, height} => width * height"
+    , "    case Point => 0"
+    , "  }"
+    , "}"
+    ])
+  missingField <- codes (shape <> ["fn run() -> Shape { Rect{width: 3} }"])
+  unknownField <- codes (shape <> ["fn run() -> Shape { Circle{diameter: 2} }"])
+  wrongFieldType <- codes (shape <> ["fn run() -> Shape { Circle{radius: \"big\"} }"])
+  positional <- codes (shape <> ["fn run() -> Shape { Point{x: 1} }"])
+  {-| Naming one variant is a test, so the arms that follow are live and the
+      ones that are missing are still missing. -}
+  incomplete <- codes (shape <>
+    [ "fn run(s: Shape) -> Int {"
+    , "  match s { case Circle{radius} => radius case Point => 0 }"
+    , "}"
+    ])
+  {-| A named field that tests covers nothing, exactly as `case Ok(1)` does. -}
+  testedField <- codes (shape <>
+    [ "fn run(s: Shape) -> Int {"
+    , "  match s {"
+    , "    case Circle{radius: 0} => 0"
+    , "    case Rect{width, height} => width * height"
+    , "    case Point => 0"
+    , "  }"
+    , "}"
+    ])
+  {-| A variant named twice is the repeat the reachability walk reports. -}
+  repeated <- codes (shape <>
+    [ "fn run(s: Shape) -> Int {"
+    , "  match s {"
+    , "    case Circle{radius} => radius"
+    , "    case Circle{radius} => radius"
+    , "    case Rect{width, height} => width * height"
+    , "    case Point => 0"
+    , "  }"
+    , "}"
+    ])
+  {-| A record type's own pattern names no variant and stays irrefutable. -}
+  plainRecord <- codes
+    [ "module M"
+    , "type Boxed = { value: Int }"
+    , "fn run(b: Boxed) -> Int { match b { case Boxed{value} => value } }"
+    ]
+  {-| The type's parameters are instantiated at the construction and at the
+      pattern, so the field is `Int` rather than the declaration's parameter. -}
+  generic <- codes
+    [ "module M"
+    , "type Chain[T] = Node{ item: T } | End"
+    , "fn run() -> Int {"
+    , "  let chain = Node{item: 7}"
+    , "  match chain { case Node{item} => item case End => 0 }"
+    , "}"
+    ]
+  {-| One spelling reaches the value. A named variant refused as a value is
+      what keeps `Circle(2)` and `Circle{radius: 2}` from building two things
+      no one pattern could match. -}
+  calledBare <- codes (shape <> ["fn run() -> Shape { Circle(5) }"])
+  calledQualified <- codes (shape <> ["fn run() -> Shape { Shape.Circle(5) }"])
+  unapplied <- codes (shape <>
+    [ "fn run() -> Int {"
+    , "  var make = Circle"
+    , "  0"
+    , "}"
+    ])
+  matchedByPosition <- codes (shape <>
+    [ "fn run(s: Shape) -> Int {"
+    , "  match s { case Circle(r) => r case Rect(w, h) => w * h case Point => 0 }"
+    , "}"
+    ])
+  {-| A variant that named nothing is unaffected, and still both a constructor
+      and a function. -}
+  positionalVariant <- codes
+    [ "module M"
+    , "type Wrapped = Wrap(Int) | Empty"
+    , "fn run() -> Wrapped { Wrap(5) }"
+    ]
+  pure $ conjoin
+    [ counterexample "a named variant is constructed by its field names" (built === [])
+    , counterexample "a named variant is matched by its field names" (matched === [])
+    , counterexample "a missing field is reported" (missingField === ["E3008"])
+    , counterexample "a field the variant does not declare is reported"
+        (unknownField === ["E3008", "E3005"])
+    , counterexample "a field is checked against its declared type"
+        (wrongFieldType === ["E3001"])
+    , counterexample "a variant with no names is not a record" (positional === ["E3007"])
+    , counterexample "naming one variant leaves the others to cover"
+        (incomplete === ["E5001"])
+    , counterexample "a named field that tests does not cover its variant"
+        (testedField === ["E5001"])
+    , counterexample "a variant named twice is unreachable the second time"
+        (repeated === ["W5001"])
+    , counterexample "a record type's own pattern covers it" (plainRecord === [])
+    , counterexample "a generic variant is instantiated where it is written"
+        (generic === [])
+    , counterexample "a named variant is not called" (calledBare === ["E3034"])
+    , counterexample "a named variant is not called through its type"
+        (calledQualified === ["E3034"])
+    , counterexample "a named variant is not a value" (unapplied === ["E3034"])
+    , counterexample "a named variant is not matched by position"
+        (matchedByPosition === ["E3034", "E3034"])
+    , counterexample "a variant that names nothing is still a constructor"
+        (positionalVariant === [])
+    ]
+
 testExhaustiveness :: IO Property
 testExhaustiveness = do
   complete <- codes (colorProgram <>
@@ -887,6 +1008,53 @@ testExhaustiveness = do
     , "}"
     ])
   payloadTested <- codes ["module M", "fn run(value: Option[Int]) -> Int { match value { case Some(1) => 1 case None => 0 } }"]
+  repeatedName <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case Red => 2"
+    , "    case Green => 3"
+    , "    case Blue => 4"
+    , "  }"
+    , "}"
+    ])
+  repeatedLiteral <- codes
+    [ "module M"
+    , "fn run(n: Int) -> Int { match n { case 1 => 1 case 1 => 2 case _ => 0 } }"
+    ]
+  repeatedAlternative <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red | Green => 1"
+    , "    case Red => 2"
+    , "    case Blue => 3"
+    , "  }"
+    , "}"
+    ])
+  widerAlternative <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red | Green => 1"
+    , "    case Green | Blue => 2"
+    , "  }"
+    , "}"
+    ])
+  distinctPayloads <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  match value { case Some(1) => 1 case Some(2) => 2 case Some(n) => n case None => 0 }"
+    , "}"
+    ]
+  guardTakesNothing <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red if false => 0"
+    , "    case Red => 1"
+    , "    case Green => 2"
+    , "    case Blue => 3"
+    , "  }"
+    , "}"
+    ])
   pure $ conjoin
     [ counterexample "every constructor covered" (complete === [])
     , counterexample "a missing constructor is reported" (missing === ["E5001"])
@@ -897,6 +1065,16 @@ testExhaustiveness = do
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])
+    , counterexample "a repeated constructor is unreachable" (repeatedName === ["W5001"])
+    , counterexample "a repeated literal is unreachable" (repeatedLiteral === ["W5001"])
+    , counterexample "a name an earlier alternative took is unreachable"
+        (repeatedAlternative === ["W5001"])
+    , counterexample "an alternative naming something new is reachable"
+        (widerAlternative === [])
+    , counterexample "distinct payload tests do not subsume each other"
+        (distinctPayloads === [])
+    , counterexample "a guarded arm leaves its pattern for a later one"
+        (guardTakesNothing === [])
     ]
 
 boundProgram :: [Text]

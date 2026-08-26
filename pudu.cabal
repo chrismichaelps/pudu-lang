@@ -36,7 +36,10 @@ library
     Pudu.Diagnostic.Render
     Pudu.Eval
     Pudu.Eval.Array
+    Pudu.Eval.Builtin
     Pudu.Eval.Clock
+    Pudu.Eval.Effect
+    Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Io
     Pudu.Eval.Keyed
@@ -65,6 +68,10 @@ library
     Pudu.Frontend.Parser.Declaration.Import
     Pudu.Frontend.Parser.Declaration.Macro
     Pudu.Frontend.Parser.Expression
+    Pudu.Frontend.Parser.Expression.Aggregate
+    Pudu.Frontend.Parser.Expression.Control
+    Pudu.Frontend.Parser.Expression.Postfix
+    Pudu.Frontend.Parser.Expression.Recovery
     Pudu.Frontend.Parser.State
     Pudu.Frontend.Parser.Type
     Pudu.Frontend.Syntax
@@ -88,6 +95,7 @@ library
     Pudu.Doc.Site
     Pudu.Repl
     Pudu.Repl.Command
+    Pudu.Repl.Input
     Pudu.Repl.Describe
     Pudu.Repl.Complete
     Pudu.Repl.Outline
@@ -97,7 +105,10 @@ library
     Pudu.Type
     Pudu.Type.Check
     Pudu.Type.Check.Import
+    Pudu.Type.Check.Call
     Pudu.Type.Check.Coherence
+    Pudu.Type.Check.Iteration
+    Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Rule

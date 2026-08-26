@@ -23,6 +23,8 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- Framing is checked on **raw bytes** by `test/lsp-session.mjs`. A harness that reads the stream as text with universal newlines silently rewrites CRLF to LF and then reports a protocol violation that is its own — which is exactly what happened the first time this was tested.
+
 - **Everything is bytes.** `Content-Length` counts UTF-8 bytes, and reading that many *characters* would desynchronise the stream the first time a client sent a non-ASCII identifier — after which every later message is read from the wrong offset.
 - A request and a notification are separated at the point of decoding rather than checked later, because replying to a notification is the one protocol error a client cannot recover from.
 - Only `Content-Length` is acted on. An unknown header is skipped rather than refused, so a newer client can still talk to an older server.

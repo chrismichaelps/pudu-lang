@@ -1,6 +1,7 @@
 {-| @Program.Parser.State — owns bounded token traversal -}
 module Pudu.Frontend.Parser.State
-  ( Parser
+  ( BlockParser
+  , Parser
   , advanceToken
   , budgetExhausted
   , currentSpan
@@ -26,6 +27,8 @@ module Pudu.Frontend.Parser.State
   , runParser
   , synchronizeDeclaration
   , withRecordAdmission
+  , withRecords
+  , withoutRecords
   , withRecursionBudget
   , withTokens
   ) where
@@ -42,6 +45,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (Located))
+import Pudu.Frontend.Syntax.Tree (Block)
 import Pudu.Frontend.Token
   ( Keyword (KwAsync, KwComptime, KwConst, KwEnum, KwExport, KwFn, KwImpl
     , KwLet, KwMacro, KwStruct, KwTrait, KwType, KwVar)
@@ -52,6 +56,15 @@ import Pudu.Frontend.Token
   , symbolFromText
   )
 import Pudu.Source (Source, Span, emptySpan, sourceLength, zeroWidthSpan)
+
+{-| @Parser.State.BlockParser — the capability of reading a brace-delimited block.
+
+    Blocks, expressions, and declarations are mutually recursive, and this alias
+    is what lets each of them accept the others as an argument instead of
+    importing them. It lives here rather than with any one of them because a
+    shared capability that lived in one participant would put that participant
+    in every cycle it exists to break. -}
+type BlockParser = Parser (Located Block)
 
 {-| @Program.Parser.State — isolates cursor and diagnostic invariants -}
 data ParserState = ParserState
@@ -228,20 +241,38 @@ emitParseDiagnostic value =
 diagnosticCount :: Parser Int
 diagnosticCount = Parser $ \state -> (length (parserDiagnosticsRev state), state)
 
-emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
-emitParseError codeText spanValue message help =
-  case parseDiagnostic codeText spanValue message help of
-    Just value -> emitParseDiagnostic value
-    Nothing -> pure ()
+{-| Report a parse error, unless the nesting budget has already been exhausted.
 
-{-| Report whether the shared nesting budget has already been exhausted during
-    this parse. Grammar loops stop instead of re-descending, so one hostile
-    input reports exactly one E1099 and no unwinding delimiter cascade. -}
+    Once the budget is gone the parse has given up, and every message after that
+    describes the wreckage rather than the mistake. Without this an input of
+    five thousand nested parentheses reported one `E1099` and then four and a
+    half thousand `E1001`s as recovery unwound past each unmatched delimiter —
+    one hostile file amplified into thousands of diagnostics. -}
+emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
+emitParseError codeText spanValue message help = do
+  exhausted <- budgetExhausted
+  if exhausted
+    then pure ()
+    else case parseDiagnostic codeText spanValue message help of
+      Just value -> emitParseDiagnostic value
+      Nothing -> pure ()
+
 {-| Whether a record construction may start here. It is withheld only for the
     expression that precedes a block, where `Name {` would be ambiguous with the
     block itself, and is reinstated inside any bracketed context. -}
 recordsAdmitted :: Parser Bool
 recordsAdmitted = Parser $ \state -> (parserAdmitsRecords state, state)
+
+{-| Run an action with record constructions admitted, or withheld.
+
+    Withheld only for the expression that precedes a block, where `Name {` is
+    ambiguous with the block itself, and reinstated inside any bracketed
+    context. -}
+withRecords :: Parser a -> Parser a
+withRecords = withRecordAdmission True
+
+withoutRecords :: Parser a -> Parser a
+withoutRecords = withRecordAdmission False
 
 withRecordAdmission :: Bool -> Parser a -> Parser a
 withRecordAdmission admitted (Parser action) =
@@ -249,6 +280,9 @@ withRecordAdmission admitted (Parser action) =
     let (value, next) = action state{parserAdmitsRecords = admitted}
      in (value, next{parserAdmitsRecords = parserAdmitsRecords state})
 
+{-| Whether the shared nesting budget has already been exhausted during this
+    parse. Grammar loops stop instead of re-descending, so one hostile input
+    reports exactly one `E1099` and no unwinding delimiter cascade. -}
 budgetExhausted :: Parser Bool
 budgetExhausted = Parser $ \state -> (parserBudgetExhausted state, state)
 

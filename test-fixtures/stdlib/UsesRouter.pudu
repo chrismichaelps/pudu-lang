@@ -1,0 +1,47 @@
+module UsesRouter
+
+import Std.Http as Http
+import Std.Map as M
+import Std.Option as O
+import Std.Set as S
+import Std.Text as T
+import Std.Url as Url
+
+/// A tiny request router over the protocol surface.
+type Route = { method: Http.Method, path: Str, status: Int }
+
+fn table() -> Array[Route] {
+  [Route{method: Http.Get, path: "/", status: 200}
+      , Route{method: Http.Get, path: "/health", status: 204}
+      , Route{method: Http.Post, path: "/items", status: 201}
+  ]
+}
+
+fn match_(routes: &Array[Route], method: Http.Method, path: Str) -> Int {
+  for route in routes {
+    if route.path == path && route.method == method { return route.status }
+  }
+  404
+}
+
+export fn main() -> Int {
+  var passed = 0
+
+  if match_(&table(), Http.Get, "/health") == 204 { passed = passed + 1 }
+  if match_(&table(), Http.Post, "/items") == 201 { passed = passed + 1 }
+  if match_(&table(), Http.Get, "/missing") == 404 { passed = passed + 1 }
+  if match_(&table(), Http.Post, "/health") == 404 { passed = passed + 1 }
+
+  let counts = M.fromPairs(&[("get", 2), ("post", 1)])
+  if O.unwrapOr(M.get(&counts, "get"), 0) == 2 { passed = passed + 1 }
+
+  let methods = S.fromArray(&["GET", "POST", "GET"])
+  if S.size(&methods) == 2 { passed = passed + 1 }
+
+  match Url.parse("https://example.test/a/b?x=1") {
+    case Ok(parts) => { if parts.host == "example.test" { passed = passed + 1 } }
+    case Err(_) => {}
+  }
+
+  passed
+}

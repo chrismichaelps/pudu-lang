@@ -6,6 +6,20 @@ aliases: [Standard Library, Stdlib Design]
 
 # Standard Library Design
 
+### Methods and module functions
+
+A value has methods from exactly two places: the closed sets the compiler wires into `Array`,
+`Str`, `Map`, `Set`, and `Char`, and the `impl` blocks a program writes. Everything else is a
+module function taking the value as an argument.
+
+That is why `text.contains("an")` works and `Option.unwrapOr(value, fallback)` does not become
+`value.unwrapOr(fallback)`: `Str` is a built-in with a method set, and `Option` is an ordinary sum
+type that nothing has implemented anything for. The rule is mechanical rather than a matter of
+taste, but it is not guessable from the outside, so it is written here.
+
+`E3033` catches the commonest form of the confusion in the other direction — asking a module for a
+name it does not export, when the operation is a method on the value.
+
 ## Decision
 
 Pudu ships one **standard library** under the `Std` namespace, versioned with the compiler and

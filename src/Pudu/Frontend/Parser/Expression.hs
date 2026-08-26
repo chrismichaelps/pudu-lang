@@ -6,64 +6,87 @@ module Pudu.Frontend.Parser.Expression
   , parseScrutinee
   ) where
 
-import Data.Char (isUpper)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Frontend.Parser.Name (parseModuleName)
+import Pudu.Frontend.Parser.Expression.Aggregate
+  ( blockExpression
+  , literal
+  , parseArrayLiteral
+  , parseGrouped
+  , parseNameOrRecord
+  )
+import Pudu.Frontend.Parser.Expression.Control
+  ( ExpressionParsers (..)
+  , parseFor
+  , parseIf
+  , parseLabelled
+  , parseLoop
+  , parseMatch
+  , parseWhile
+  )
+import Pudu.Frontend.Parser.Expression.Postfix (parsePostfix)
+import Pudu.Frontend.Parser.Expression.Recovery
+  ( invalidAtCurrent
+  , invalidPrefix
+  , mergedOrLeft
+  , parseCapabilityAnnotation
+  , reservedKeywordGuidance
+  , reservedPrefix
+  , unaryOperators
+  )
 import Pudu.Frontend.Parser.State
-  ( Parser
+  ( BlockParser
+  , Parser
   , advanceToken
-  , currentSpan
   , emitParseError
-  , expectIdentifier
   , expectSymbol
   , isSymbol
   , lookaheadKind
   , matchKeyword
   , matchSymbol
-  , budgetExhausted
   , expectKeyword
   , peekKind
   , peekStartsLine
-  , recordsAdmitted
-  , withRecordAdmission
   , lookaheadKind
-  , matchingBracketDistance
   , peekToken
+  , withRecords
+  , withoutRecords
   , withRecursionBudget
   , withTokens
   )
 import Pudu.Frontend.Parser.Name (expectValueIdentifier)
-import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
-  ( Block
-  , Capability (..)
-  , Expression (..)
-  , FieldInit (..)
+  ( Expression (..)
   , Function (..)
   , FunctionBody (..)
   , Literal (..)
-  , MatchArm (..)
   , Parameter (..)
   , TypeSyntax
   , Visibility (Private)
   , lambdaName
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwAwait, KwCase, KwElse, KwEnum, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
-    , KwMatch, KwModule, KwMut, KwNull, KwSpawn, KwStruct, KwScope, KwTask, KwTrue, KwUnsafe, KwWhile, KwWith)
+  ( Keyword (KwAsync, KwFalse, KwFn, KwFor, KwIf, KwLoop
+    , KwMatch, KwMut, KwNull, KwScope, KwTrue, KwUnsafe, KwWhile, KwWith)
   , TemplatePart (..)
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
   , symbolText
   )
-import Pudu.Source (Span, mergeSpans)
+import Pudu.Source (Span)
 
-type BlockParser = Parser (Located Block)
+
+{-| The entry points [[Parser Expression Control]] reads expressions through.
+
+    Control forms contain expressions and expressions contain control forms, so
+    one direction has to be a capability rather than an import. This is that
+    direction, and it is the same trick the block parser already uses. -}
+controlParsers :: ExpressionParsers
+controlParsers = ExpressionParsers parseExpression parseScrutinee parseExpressionAt
 
 parseExpression :: BlockParser -> Parser (Located Expression)
 parseExpression blockParser = parseExpressionAt blockParser 0
@@ -77,17 +100,11 @@ parseScrutinee blockParser = withoutRecords (parseExpressionAt blockParser 0)
 
 {-| Records are admitted again inside any bracketed context, so an argument, an
     index, or a parenthesized expression may construct one. -}
-withRecords :: Parser a -> Parser a
-withRecords = withRecordAdmission True
-
-withoutRecords :: Parser a -> Parser a
-withoutRecords = withRecordAdmission False
-
 parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
 parseExpressionAt blockParser minimumPrecedence = do
   bounded <- withRecursionBudget $ do
     prefix <- parsePrefix blockParser
-    postfixed <- parsePostfix blockParser prefix
+    postfixed <- parsePostfix controlParsers blockParser prefix
     parseBinaryTail blockParser minimumPrecedence postfixed
   maybe invalidAtCurrent pure bounded
 
@@ -106,22 +123,22 @@ parsePrefix blockParser = do
     Keyword KwTrue -> literal token (BoolValue True)
     Keyword KwFalse -> literal token (BoolValue False)
     Keyword KwNull -> literal token NullValue
-    Keyword KwIf -> parseIf blockParser
-    Keyword KwMatch -> parseMatch blockParser
-    Keyword KwWhile -> parseWhile blockParser Nothing
+    Keyword KwIf -> parseIf controlParsers blockParser
+    Keyword KwMatch -> parseMatch controlParsers blockParser
+    Keyword KwWhile -> parseWhile controlParsers blockParser Nothing
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
     Keyword KwFn -> parseLambda blockParser
     Keyword KwAsync
       | nextIsFunction -> parseLambda blockParser
       | otherwise -> parseScope blockParser
-    Keyword KwLoop -> parseLoop blockParser Nothing
-    Keyword KwFor -> parseFor blockParser Nothing
-    Identifier name -> parseNameOrRecord blockParser token name
-    Symbol SymAt -> parseLabelled blockParser
+    Keyword KwLoop -> parseLoop controlParsers blockParser Nothing
+    Keyword KwFor -> parseFor controlParsers blockParser Nothing
+    Identifier name -> parseNameOrRecord controlParsers blockParser token name
+    Symbol SymAt -> parseLabelled controlParsers blockParser
     Symbol symbol
-      | symbol == SymLeftParen -> withRecords (parseGrouped blockParser)
-      | symbol == SymLeftBrace -> blockExpression blockParser
-      | symbol == SymLeftBracket -> parseArrayLiteral blockParser
+      | symbol == SymLeftParen -> withRecords (parseGrouped controlParsers blockParser)
+      | symbol == SymLeftBrace -> blockExpression controlParsers blockParser
+      | symbol == SymLeftBracket -> parseArrayLiteral controlParsers blockParser
       | symbol `elem` unaryOperators -> parseUnary blockParser token symbol
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
@@ -322,279 +339,6 @@ parseUnsafeBlock blockParser = do
         (UnsafeExpression capabilities body)
     )
 
-parseCapabilityAnnotation :: Parser [Located Capability]
-parseCapabilityAnnotation = do
-  opening <- matchSymbol "("
-  case opening of
-    Nothing -> pure []
-    Just _ -> do
-      capabilities <- capabilityList []
-      _ <- expectSymbol ")" "to close the capability list"
-      pure capabilities
-
-capabilityList :: [Located Capability] -> Parser [Located Capability]
-capabilityList reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol ")" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      capability <- oneCapability
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else do
-          comma <- matchSymbol ","
-          let collected = maybe reversed (: reversed) capability
-          case comma of
-            Nothing -> pure (reverse collected)
-            Just _ -> capabilityList collected
-
-oneCapability :: Parser (Maybe (Located Capability))
-oneCapability = do
-  token <- advanceToken
-  case capabilityFor (tokenKind token) of
-    Just capability -> pure (Just (Located (tokenSpan token) capability))
-    Nothing -> do
-      emitParseError "E1044" (tokenSpan token) "unknown unsafe capability"
-        (Just "name one of raw, foreign, unchecked, or null")
-      pure Nothing
-
-capabilityFor :: TokenKind -> Maybe Capability
-capabilityFor kind = case kind of
-  Identifier "raw" -> Just RawCapability
-  Identifier "foreign" -> Just ForeignCapability
-  Identifier "unchecked" -> Just UncheckedCapability
-  Keyword KwNull -> Just NullCapability
-  _ -> Nothing
-
-{-| An uppercase name directly followed by `{` builds a record, when records are
-    admitted here; every other name is a plain reference. -}
-parseNameOrRecord :: BlockParser -> Token -> Text -> Parser (Located Expression)
-parseNameOrRecord blockParser token name
-  | not (startsUpper name) = do
-      macroCall <- macroFollows
-      if macroCall then parseMacroCall blockParser token name else plainName
-  | otherwise = do
-      admitted <- recordsAdmitted
-      opensRecord <- recordFollows
-      if admitted && opensRecord
-        then parseRecordExpression blockParser
-        else plainName
- where
-  plainName = advanceToken >> pure (Located (tokenSpan token) (NameExpression (name :| [])))
-
-{-| A record construction may be introduced by a qualified path, so the scan
-    walks `Name.Name` segments before deciding whether a `{` follows. The walk
-    is bounded by the path length the name grammar admits. -}
-recordFollows :: Parser Bool
-recordFollows = walk 1 (0 :: Int)
- where
-  walk offset segments
-    | segments > 64 = pure False
-    | otherwise = do
-        following <- lookaheadKind offset
-        if isSymbol "." following
-          then do
-            segment <- lookaheadKind (offset + 1)
-            case segment of
-              Identifier _ -> walk (offset + 2) (segments + 1)
-              _ -> pure False
-          else pure (isSymbol "{" following)
-
-{-| A macro call is written `name!(...)`, so expansion is visible at the call
-    rather than depending on knowing which names are macros. -}
-macroFollows :: Parser Bool
-macroFollows = do
-  bang <- lookaheadKind 1
-  opening <- lookaheadKind 2
-  pure (isSymbol "!" bang && isSymbol "(" opening)
-
-parseMacroCall :: BlockParser -> Token -> Text -> Parser (Located Expression)
-parseMacroCall blockParser token name = do
-  _ <- advanceToken
-  _ <- advanceToken
-  _ <- expectSymbol "(" "before the macro arguments"
-  arguments <- parseMacroArguments blockParser []
-  closing <- expectSymbol ")" "to close the macro arguments"
-  pure
-    ( Located (mergedOrLeft (tokenSpan token) (tokenSpan closing))
-        (MacroCall (Located (tokenSpan token) name) arguments)
-    )
-
-parseMacroArguments :: BlockParser -> [Located Expression] -> Parser [Located Expression]
-parseMacroArguments blockParser reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol ")" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      argument <- withRecords (parseArgumentSyntax blockParser)
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else do
-          comma <- matchSymbol ","
-          case comma of
-            Nothing -> pure (reverse (argument : reversed))
-            Just _ -> parseMacroArguments blockParser (argument : reversed)
-
-{-| A macro argument may be a block, which an ordinary expression position would
-    read as a record or a nested scope; parsing it here keeps `block` parameters
-    writable as `{ ... }`. -}
-parseArgumentSyntax :: BlockParser -> Parser (Located Expression)
-parseArgumentSyntax blockParser = do
-  kind <- peekKind
-  if isSymbol "{" kind
-    then blockExpression blockParser
-    else parseExpression blockParser
-
-startsUpper :: Text -> Bool
-startsUpper value = maybe False (isUpper . fst) (Text.uncons value)
-
-parseRecordExpression :: BlockParser -> Parser (Located Expression)
-parseRecordExpression blockParser = do
-  path <- parseModuleName
-  _ <- expectSymbol "{" "to start the record fields"
-  fields <- withRecords (parseFieldInits blockParser [])
-  closing <- expectSymbol "}" "to close the record fields"
-  pure
-    ( Located (mergedOrLeft (locatedSpan path) (tokenSpan closing))
-        (RecordExpression (locatedValue path) fields)
-    )
-
-parseFieldInits :: BlockParser -> [Located FieldInit] -> Parser [Located FieldInit]
-parseFieldInits blockParser reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol "}" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      field <- parseFieldInit blockParser
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else do
-          comma <- matchSymbol ","
-          case comma of
-            Nothing -> pure (reverse (field : reversed))
-            Just _ -> parseFieldInits blockParser (field : reversed)
-
-{-| A field written without `:` takes the binding with its own name, mirroring
-    the record pattern's shorthand. -}
-parseFieldInit :: BlockParser -> Parser (Located FieldInit)
-parseFieldInit blockParser = do
-  name <- expectIdentifier "for the record field"
-  colon <- matchSymbol ":"
-  value <- case colon of
-    Nothing -> pure Nothing
-    Just _ -> Just <$> parseExpression blockParser
-  pure
-    ( Located (maybe (locatedSpan name) (mergedOrLeft (locatedSpan name) . locatedSpan) value)
-        FieldInit{fieldInitName = name, fieldInitValue = value}
-    )
-
-literal :: Token -> Literal -> Parser (Located Expression)
-literal token value = do
-  _ <- advanceToken
-  pure (Located (tokenSpan token) (LiteralExpression value))
-
-blockExpression :: BlockParser -> Parser (Located Expression)
-blockExpression blockParser = do
-  block <- blockParser
-  pure (Located (locatedSpan block) (BlockExpression block))
-
-{-| Parentheses group one expression; a comma makes the same syntax a tuple,
-    matching the type grammar's `(T)` and `(T, U)` rule. -}
-parseGrouped :: BlockParser -> Parser (Located Expression)
-parseGrouped blockParser = do
-  opening <- expectSymbol "(" "to start the grouped expression"
-  empty <- matchSymbol ")"
-  case empty of
-    Just closing ->
-      pure
-        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
-            (TupleExpression [])
-        )
-    Nothing -> do
-      first <- parseExpression blockParser
-      comma <- matchSymbol ","
-      case comma of
-        Nothing -> do
-          closing <- expectSymbol ")" "to close the grouped expression"
-          pure first{locatedSpan = mergedOrLeft (tokenSpan opening) (tokenSpan closing)}
-        Just _ -> do
-          rest <- parseTupleTail blockParser []
-          closing <- expectSymbol ")" "to close the tuple expression"
-          pure
-            ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
-                (TupleExpression (first : rest))
-            )
-
-parseTupleTail :: BlockParser -> [Located Expression] -> Parser [Located Expression]
-parseTupleTail blockParser reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol ")" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      next <- parseExpression blockParser
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else do
-          comma <- matchSymbol ","
-          case comma of
-            Nothing -> pure (reverse (next : reversed))
-            Just _ -> parseTupleTail blockParser (next : reversed)
-
-{-| An array literal `[a, b, c]` admits expressions separated by commas with an
-    optional trailing comma. `[]` is the empty array. Records are admitted inside
-    the bracketed context so `Some{value: 1}` works as an element. -}
-parseArrayLiteral :: BlockParser -> Parser (Located Expression)
-parseArrayLiteral blockParser = do
-  opening <- expectSymbol "[" "to start the array literal"
-  empty <- matchSymbol "]"
-  case empty of
-    Just closing ->
-      pure
-        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
-            (ArrayExpression [])
-        )
-    Nothing -> do
-      first <- withRecords (parseExpression blockParser)
-      rest <- parseArrayTail blockParser []
-      closing <- expectSymbol "]" "to close the array literal"
-      pure
-        ( Located (mergedOrLeft (tokenSpan opening) (tokenSpan closing))
-            (ArrayExpression (first : rest))
-        )
-
-parseArrayTail :: BlockParser -> [Located Expression] -> Parser [Located Expression]
-parseArrayTail blockParser reversed = do
-  comma <- matchSymbol ","
-  case comma of
-    Nothing -> pure (reverse reversed)
-    Just _ -> do
-      kind <- peekKind
-      if isSymbol "]" kind
-        then pure (reverse reversed)
-        else do
-          bounded <- withRecursionBudget $ do
-            before <- peekToken
-            next <- withRecords (parseExpression blockParser)
-            after <- peekToken
-            if before == after
-              then pure (reverse reversed, True)
-              else do
-                rest <- parseArrayTail blockParser (next : reversed)
-                pure (rest, False)
-          pure (maybe (reverse reversed) fst bounded)
-
 parseUnary :: BlockParser -> Token -> SymbolKind -> Parser (Located Expression)
 parseUnary blockParser operatorToken operator = do
   _ <- advanceToken
@@ -616,315 +360,6 @@ parseUnary blockParser operatorToken operator = do
 highestBinaryPrecedence :: Int
 highestBinaryPrecedence = 8
 
-parseIf :: BlockParser -> Parser (Located Expression)
-parseIf blockParser = do
-  keyword <- advanceToken
-  condition <- parseScrutinee blockParser
-  case locatedValue condition of
-    InvalidExpression ->
-      pure (Located (mergedOrLeft (tokenSpan keyword) (locatedSpan condition)) InvalidExpression)
-    _ -> do
-      thenBlock <- blockParser
-      elseExpression <- parseElse blockParser
-      let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
-      pure (Located (mergedOrLeft (tokenSpan keyword) final)
-        (IfExpression condition thenBlock elseExpression))
-
-parseElse :: BlockParser -> Parser (Maybe (Located Expression))
-parseElse blockParser = do
-  elseKeyword <- matchKeyword KwElse
-  case elseKeyword of
-    Nothing -> pure Nothing
-    Just _ -> do
-      kind <- peekKind
-      case kind of
-        Keyword KwIf -> Just <$> parseExpressionAt blockParser 0
-        _ | isSymbol "{" kind -> Just <$> blockExpression blockParser
-        _ -> do
-          spanValue <- currentSpan
-          emitParseError "E1042" spanValue "expected if or block after else"
-            (Just "add if or a block after else")
-          pure (Just (Located spanValue InvalidExpression))
-
-{-| Postfix continuation is line-sensitive per [[grammar/pudu]]: a line-initial
-    `(` or `[` starts a new statement, while a line-initial `.`, `?`, or
-    `.await` continues a fluent chain. -}
-{-| `match` scrutinizes one expression and requires at least one `case` arm.
-    Arms are separated by line breaks like every other construct. -}
-parseMatch :: BlockParser -> Parser (Located Expression)
-parseMatch blockParser = do
-  keyword <- advanceToken
-  scrutinee <- parseScrutinee blockParser
-  _ <- expectSymbol "{" "to start the match arms"
-  arms <- parseArms blockParser []
-  closing <- expectSymbol "}" "to close the match arms"
-  case arms of
-    [] ->
-      emitParseError "E1051" (tokenSpan closing) "match requires at least one case arm"
-        (Just "add a case arm, or replace the match with an if expression")
-    _ -> pure ()
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (tokenSpan closing))
-        (MatchExpression scrutinee arms)
-    )
-
-parseArms :: BlockParser -> [Located MatchArm] -> Parser [Located MatchArm]
-parseArms blockParser reversed = do
-  kind <- peekKind
-  exhausted <- budgetExhausted
-  if isSymbol "}" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
-    else do
-      before <- peekToken
-      arm <- parseArm blockParser
-      after <- peekToken
-      if before == after
-        then advanceToken >> pure (reverse reversed)
-        else parseArms blockParser (arm : reversed)
-
-parseArm :: BlockParser -> Parser (Located MatchArm)
-parseArm blockParser = do
-  keyword <- expectKeyword KwCase "to start a match arm"
-  pattern' <- parsePattern
-  guard <- parseGuard blockParser
-  _ <- expectSymbol "=>" "before the arm body"
-  body <- parseArmBody blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        MatchArm{armPattern = pattern', armGuard = guard, armBody = body}
-    )
-
-parseGuard :: BlockParser -> Parser (Maybe (Located Expression))
-parseGuard blockParser = do
-  guardKeyword <- matchKeyword KwIf
-  case guardKeyword of
-    Nothing -> pure Nothing
-    Just _ -> Just <$> parseExpression blockParser
-
-parseArmBody :: BlockParser -> Parser (Located Expression)
-parseArmBody blockParser = do
-  kind <- peekKind
-  if isSymbol "{" kind
-    then blockExpression blockParser
-    else parseExpression blockParser
-
-{-| Parse a labelled loop.
-
-    A label is written `@name` before the loop it names, and `break @name`
-    leaves that loop from inside any number of nested ones. The sigil is what
-    makes `break @outer value` readable at all: with bare names, `break outer`
-    could equally be a label or the value `outer`, and no lookahead settles it,
-    so a reader would have to know which loops were labelled to know what the
-    statement did.
-
-    Only a loop may be labelled. Naming anything else would promise a `break`
-    that has nowhere to go. -}
-parseLabelled :: BlockParser -> Parser (Located Expression)
-parseLabelled blockParser = do
-  sigil <- advanceToken
-  name <- expectIdentifier "after @ to name the loop"
-  let label = Just name
-      start = tokenSpan sigil
-  kind <- peekKind
-  case kind of
-    Keyword KwLoop -> extend start <$> parseLoop blockParser label
-    Keyword KwWhile -> extend start <$> parseWhile blockParser label
-    Keyword KwFor -> extend start <$> parseFor blockParser label
-    _ -> do
-      token <- peekToken
-      labelWithoutLoop token
- where
-  extend start (Located here value) = Located (mergedOrLeft start here) value
-
-{-| `while`, `loop`, and `for` are expressions whose bodies are blocks. `loop`
-    takes the type of what its `break` statements carry; the other two are `()`,
-    because a loop with a condition can finish without ever reaching a `break`
-    and would then have no value to give. Typing enforces that, not parsing. -}
-parseWhile :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseWhile blockParser label = do
-  keyword <- advanceToken
-  condition <- parseScrutinee blockParser
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (WhileExpression label condition body)
-    )
-
-parseLoop :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseLoop blockParser label = do
-  keyword <- advanceToken
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (LoopExpression label body)
-    )
-
-parseFor :: BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
-parseFor blockParser label = do
-  keyword <- advanceToken
-  binder <- parsePattern
-  _ <- expectKeyword KwIn "between the pattern and the iterated expression"
-  iterated <- parseScrutinee blockParser
-  body <- blockParser
-  pure
-    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
-        (ForExpression label binder iterated body)
-    )
-
-parsePostfix :: BlockParser -> Located Expression -> Parser (Located Expression)
-parsePostfix blockParser expression = do
-  kind <- peekKind
-  newLine <- peekStartsLine
-  await <- isAwaitPostfix kind
-  let lineBreaks = newLine && (isSymbol "(" kind || isSymbol "[" kind)
-  if (isPostfixStart kind || await) && not lineBreaks
-    then do
-      bounded <- withRecursionBudget (parsePostfixStep blockParser expression kind await)
-      pure (maybe expression id bounded)
-    else pure expression
-
-isAwaitPostfix :: TokenKind -> Parser Bool
-isAwaitPostfix kind
-  | isSymbol "." kind = (== Keyword KwAwait) <$> lookaheadKind 1
-  | otherwise = pure False
-
-{-| Postfix forms bind tighter than every unary and binary operator: call,
-    member, index, `?` failure propagation, and `.await`. -}
-parsePostfixStep :: BlockParser -> Located Expression -> TokenKind -> Bool -> Parser (Located Expression)
-parsePostfixStep blockParser expression kind await
-  | await = do
-      _ <- advanceToken
-      keyword <- advanceToken
-      let awaited = Located (mergedOrLeft (locatedSpan expression) (tokenSpan keyword))
-            (AwaitExpression expression)
-      parsePostfix blockParser awaited
-  | isSymbol "?" kind = do
-      question <- advanceToken
-      let tried = Located (mergedOrLeft (locatedSpan expression) (tokenSpan question))
-            (TryExpression expression)
-      parsePostfix blockParser tried
-  | isSymbol "[" kind = do
-      typed <- bracketOpensTypeArguments
-      if typed then parseTypeArguments blockParser expression else do
-        _ <- advanceToken
-        index <- withRecords (parseExpression blockParser)
-        closing <- expectSymbol "]" "to close the index expression"
-        let indexed = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
-              (IndexExpression expression index)
-        parsePostfix blockParser indexed
-  | isSymbol "(" kind = do
-      _ <- advanceToken
-      (arguments, closing) <- parseArguments blockParser
-      case closing of
-        Just closingToken -> do
-          let call = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closingToken))
-                (CallExpression expression arguments)
-          parsePostfix blockParser call
-        Nothing -> pure (Located (callRecoverySpan expression arguments) InvalidExpression)
-  | otherwise = do
-      _ <- advanceToken
-      member <- expectIdentifier "after ."
-      let selection = Located (mergedOrLeft (locatedSpan expression) (locatedSpan member))
-            (MemberExpression expression member)
-      parsePostfix blockParser selection
-
-{-| Whether the `[` here opens a type-argument list rather than an index.
-
-    A type-argument list is always applied, so a closing `]` followed by `(`
-    decides it: `convertInteger[UInt8](300)` names a type, `handlers[index](x)`
-    reads one out of an array and calls it. The second form is the one that
-    loses, and a reader who means it writes `(handlers[index])(x)`.
-
-    What the brackets contain narrows it further: only a token that could begin
-    a type is admitted, and an identifier counts only when it is capitalised.
-    An index by a variable or a literal is therefore never mistaken. What
-    remains is an index by a capitalised constant that is immediately called —
-    `handlers[DEFAULT](value)` — which is rare and which parentheses settle. -}
-bracketOpensTypeArguments :: Parser Bool
-bracketOpensTypeArguments = do
-  opens <- opensWithType <$> lookaheadKind 1
-  if not opens then pure False else do
-    closing <- matchingBracketDistance
-    case closing of
-      Nothing -> pure False
-      Just distance -> isSymbol "(" <$> lookaheadKind (distance + 1)
-
-{-| Whether a token could begin a written type.
-
-    An identifier counts only when it is capitalised, which [[grammar/pudu]]
-    already requires of every type name and forbids of every value name. So
-    `handlers[index](value)` reads an element and calls it, while
-    `convert[UInt8](value)` names a type — and neither reader has to think about
-    it. -}
-opensWithType :: TokenKind -> Bool
-opensWithType kind = case kind of
-  Identifier name -> maybe False (isUpper . fst) (Text.uncons name)
-  Symbol symbol -> symbol == SymAmpersand || symbol == SymLeftParen
-  Keyword KwFn -> True
-  Keyword KwAsync -> True
-  _ -> False
-
-{-| Parse `name[Type, Type]`, the explicit type arguments of a call.
-
-    Inference settles a type parameter from the arguments wherever it can. This
-    is for where it cannot: a function whose parameter appears only in its
-    result has nothing to infer from, and before this the only way to pin one
-    was to pass a value of the type purely as an example. -}
-parseTypeArguments :: BlockParser -> Located Expression -> Parser (Located Expression)
-parseTypeArguments blockParser expression = do
-  _ <- advanceToken
-  arguments <- parseTypeArgumentList []
-  closing <- expectSymbol "]" "to close the type arguments"
-  let applied = Located (mergedOrLeft (locatedSpan expression) (tokenSpan closing))
-        (TypeApplication expression arguments)
-  parsePostfix blockParser applied
-
-parseTypeArgumentList :: [Located TypeSyntax] -> Parser [Located TypeSyntax]
-parseTypeArgumentList reversed = do
-  closing <- isSymbol "]" <$> peekKind
-  if closing
-    then pure (reverse reversed)
-    else do
-      argument <- parseTypeSyntax
-      let extended = argument : reversed
-      separator <- matchSymbol ","
-      case separator of
-        Just _ -> parseTypeArgumentList extended
-        Nothing -> pure (reverse extended)
-
-isPostfixStart :: TokenKind -> Bool
-isPostfixStart kind =
-  isSymbol "(" kind || isSymbol "." kind || isSymbol "[" kind || isSymbol "?" kind
-
-parseArguments :: BlockParser -> Parser ([Located Expression], Maybe Token)
-parseArguments blockParser = do
-  kind <- peekKind
-  if isSymbol ")" kind then advanceToken >>= \closing -> pure ([], Just closing)
-    else withRecords (parseExpression blockParser) >>= \first -> parseArgumentTail blockParser [first]
-
-parseArgumentTail :: BlockParser -> [Located Expression] -> Parser ([Located Expression], Maybe Token)
-parseArgumentTail blockParser reversed = do
-  comma <- matchSymbol ","
-  case comma of
-    Nothing -> do
-      closing <- expectSymbol ")" "to close the function arguments"
-      pure (reverse reversed, Just closing)
-    Just _ -> do
-      kind <- peekKind
-      if isSymbol ")" kind
-        then advanceToken >>= \closing -> pure (reverse reversed, Just closing)
-        else do
-          bounded <- withRecursionBudget $ do
-            before <- peekToken
-            next <- withRecords (parseExpression blockParser)
-            after <- peekToken
-            if before == after
-              then pure (reverse reversed, Nothing)
-              else parseArgumentTail blockParser (next : reversed)
-          pure (maybe (reverse reversed, Nothing) id bounded)
-
-callRecoverySpan :: Located Expression -> [Located Expression] -> Span
-callRecoverySpan expression = foldl' mergedOrLeft (locatedSpan expression) . map locatedSpan
 
 parseBinaryTail :: BlockParser -> Int -> Located Expression -> Parser (Located Expression)
 parseBinaryTail blockParser minimumPrecedence left = do
@@ -981,80 +416,3 @@ operatorInfo symbol = case symbol of
   _ -> Nothing
  where
   binary precedence rightAssociative = Just (symbolText symbol, precedence, rightAssociative)
-
-{-| A label that names no loop.
-
-    Reported where the label was written rather than where the loop should have
-    been, because the label is the part the reader can delete to make the
-    program legal again. -}
-labelWithoutLoop :: Token -> Parser (Located Expression)
-labelWithoutLoop token = do
-  emitParseError "E1053" (tokenSpan token) "label does not name a loop"
-    (Just "write the label directly before `loop`, `while`, or `for`")
-  skipToLineBoundary
-  pure (Located (tokenSpan token) InvalidExpression)
-
-invalidPrefix :: Token -> Parser (Located Expression)
-invalidPrefix token = do
-  emitParseError "E1040" (tokenSpan token) "expected expression"
-    (Just "start with a literal, name, (, {, if, or unary operator")
-  case tokenKind token of
-    EndOfFile -> pure ()
-    kind | isRecoveryBoundary kind -> pure ()
-    _ -> advanceToken >> pure ()
-  pure (Located (tokenSpan token) InvalidExpression)
-
-{-| Reserved keywords that appear in expression position — typically because the
-    REPL submits them as entries — produce a targeted diagnostic instead of the
-    generic E1040. Each message points the reader toward the canonical form, so
-    `enum`/`struct` point to `type`, `task`/`spawn` point to `async`/`scope`,
-    `module` explains it is file-only, and `mut` points to `var`. -}
-reservedKeywordGuidance :: Keyword -> Maybe Text
-reservedKeywordGuidance keyword = case keyword of
-  KwEnum -> Just "enum is reserved; use type for sum and record declarations"
-  KwStruct -> Just "struct is reserved; use type for record declarations"
-  KwTask -> Just "task is reserved; use async fn and scope for structured concurrency"
-  KwSpawn -> Just "spawn is reserved; use async fn and scope for structured concurrency"
-  KwModule -> Just "module declarations are only valid at the top of a file"
-  KwMut -> Just "use var for mutable bindings; mut modifies references and fields"
-  _ -> Nothing
-
-reservedPrefix :: Token -> Text -> Parser (Located Expression)
-reservedPrefix token guidance = do
-  emitParseError "E1041" (tokenSpan token) "reserved keyword in expression position"
-    (Just guidance)
-  _ <- advanceToken
-  skipToLineBoundary
-  pure (Located (tokenSpan token) InvalidExpression)
-
-{-| Consume the remaining tokens on the reserved keyword's line so a construct
-    like `task my_task() -> Int { 42 }` reports one E1041 rather than a cascade
-    of downstream parse errors. Recovery stops only at EOF or a line-initial
-    token, never consuming the next line's first token. Closing delimiters and
-    commas are skipped because they belong to the same line as the reserved
-    keyword; stopping at them would leave trailing tokens that produce cascading
-    errors. -}
-skipToLineBoundary :: Parser ()
-skipToLineBoundary = do
-  kind <- peekKind
-  case kind of
-    EndOfFile -> pure ()
-    _ -> do
-      startsNewLine <- peekStartsLine
-      if startsNewLine
-        then pure ()
-        else advanceToken >> skipToLineBoundary
-
-invalidAtCurrent :: Parser (Located Expression)
-invalidAtCurrent = currentSpan >>= \spanValue -> pure (Located spanValue InvalidExpression)
-
-{-| Prefix position decides these: `&` and `*` are also binary operators, and
-    the parser only consults this list where an operand is expected. -}
-unaryOperators :: [SymbolKind]
-unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
-
-isRecoveryBoundary :: TokenKind -> Bool
-isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}"]
-
-mergedOrLeft :: Span -> Span -> Span
-mergedOrLeft left right = maybe left id (mergeSpans left right)

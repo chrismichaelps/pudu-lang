@@ -39,8 +39,17 @@ matchPattern (Located _ pattern') value = case pattern' of
       | name == lastSegment segments && length payload == length arguments ->
           concat <$> sequence (zipWith matchPattern arguments payload)
     _ -> Nothing
-  RecordPattern _ fields _ -> case value of
-    RecordValue _ present -> concat <$> mapM (matchField present) fields
+  {-| A record pattern that names something must match that name.
+
+      A record type has one shape, so its own pattern could ignore the tag and
+      nothing depended on it. A variant that names its payload does not: `Add`
+      and `Mul` may declare the same fields, and matching on fields alone let
+      the first arm accept the other's value — a program that read
+      `case Add{left, right}` and computed a product. -}
+  RecordPattern path fields _ -> case value of
+    RecordValue name present
+      | maybe True (== name) (patternName path) ->
+          concat <$> mapM (matchField present) fields
     _ -> Nothing
   AlternativePattern alternatives -> firstMatch alternatives
   InvalidPattern -> Nothing
@@ -57,6 +66,12 @@ matchPattern (Located _ pattern') value = case pattern' of
           Just fieldValue -> case fieldPatternValue field of
             Nothing -> Just [(name, fieldValue)]
             Just nested -> matchPattern nested fieldValue
+
+{-| The name a record pattern writes before its braces, when it writes one. -}
+patternName :: Maybe ModuleName -> Maybe Text
+patternName path = case path of
+  Nothing -> Nothing
+  Just (ModuleName segments) -> Just (lastSegment segments)
 
 lastSegment :: NonEmpty Text -> Text
 lastSegment (first :| rest) = last (first : rest)

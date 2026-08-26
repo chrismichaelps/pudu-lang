@@ -13,7 +13,8 @@ import Pudu.Compiler.Program
   )
 import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
 import Pudu.Eval.Value (renderValue)
-import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
+  , diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Repl.Session
   ( EntryResult (..)
@@ -116,6 +117,10 @@ testStandardLibrary = do
   missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
   floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
+  missingMember <- codes "test-fixtures/stdlib/RejectsMissingMember.pudu"
+  missingMemberHelp <- helps "test-fixtures/stdlib/RejectsMissingMember.pudu"
+  unqualifiedHelp <- helps "test-fixtures/stdlib/RejectsUnqualifiedMember.pudu"
+  unknownHelp <- helps "test-fixtures/stdlib/RejectsUnknownMember.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
@@ -126,6 +131,14 @@ testStandardLibrary = do
     , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
     , counterexample "a numeric range still requires a whole-number type"
         (floatRangeDiagnostics === ["E3012"])
+    , counterexample "a member the module does not export is reported once"
+        (missingMember === ["E3033"])
+    , counterexample "a built-in method written as a module function says so"
+        (any (Text.isInfixOf "built-in method") missingMemberHelp === True)
+    , counterexample "a prelude binding reached through a module says so instead"
+        (any (Text.isInfixOf "available unqualified") unqualifiedHelp === True)
+    , counterexample "and a name that is neither only says to check the exports"
+        (any (Text.isInfixOf "check the spelling against what") unknownHelp === True)
     , counterexample "the standard module joins the program graph"
         (elem "Std.Math" resolved === True)
     ]
@@ -152,6 +165,13 @@ testProgramEvaluation = do
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
   dynamic <- runEntry "test-fixtures/stdlib/UsesDynamic.pudu"
+  registry <- runEntry "test-fixtures/stdlib/UsesRegistry.pudu"
+  effectSurface <- runEntry "test-fixtures/stdlib/UsesEffects.pudu"
+  routing <- runEntry "test-fixtures/stdlib/UsesRouter.pudu"
+  named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
+  ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
+  acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
+  sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -182,6 +202,14 @@ testProgramEvaluation = do
         (parsing === Just "22")
     , counterexample "labelled loops break and continue across nesting"
         (labelled === Just "4")
+    , counterexample "a named variant is built and matched by its names, and by the name it writes"
+        (named === Just "119")
+    , counterexample "a type that writes its own Sequence is iterated by it"
+        (ownSequence === Just "45")
+    , counterexample "an imported variant carries the names its declaration gave it"
+        (acrossModules === Just "24")
+    , counterexample "a trait implemented for a sum reaches every variant's value"
+        (sumTraits === Just "88")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"
@@ -194,6 +222,12 @@ testProgramEvaluation = do
         (scoped === Just "2")
     , counterexample "a dynamic type holds any implementation of its trait"
         (dynamic === Just "9")
+    , counterexample "traits, dynamic values, and bounded generics compose"
+        (registry === Just "6")
+    , counterexample "a program writes, reads, and removes a file and reports failure"
+        (effectSurface === Just "6")
+    , counterexample "the protocol, keyed, and url modules serve one program"
+        (routing === Just "7")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
@@ -216,6 +250,14 @@ messages :: FilePath -> IO [Text]
 messages path = do
   result <- compileProgram path
   pure (map diagnosticMessage (programDiagnostics result))
+
+{-| The help lines a compile produced. A diagnostic's help is where it tells the
+    reader what to do, so a test about advice has to read that rather than the
+    message. -}
+helps :: FilePath -> IO [Text]
+helps path = do
+  result <- compileProgram path
+  pure [help | Just help <- map diagnosticHelp (programDiagnostics result)]
 
 codes :: FilePath -> IO [Text]
 codes path = do
