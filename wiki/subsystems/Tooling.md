@@ -6,6 +6,7 @@ aliases: [Tooling]
 
 # Tooling
 
+- [[Language Server]] — `pudu lsp`, which answers an editor from the ordinary compile so the editor and the command line can never disagree.
 - [[Format]] — `pudu fmt`, the one committed style, applied from the token stream so it can only move whitespace.
 
 ## Purpose

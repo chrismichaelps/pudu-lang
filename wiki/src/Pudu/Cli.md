@@ -38,6 +38,7 @@ pudu help            print usage
 
 ### Governance
 
+- `pudu lsp` speaks the language server protocol over stdio. It takes no arguments and reads until the client closes the stream; everything it answers comes from the same compile the other commands run.
 - `pudu fmt` rewrites files in place, `--check` reports which would change and exits non-zero without touching any, and `--stdout` writes the result for a caller that wants to diff it. The check form is the shape a continuous-integration step needs.
 
 - `main`'s answer decides what the run does. A whole number becomes the exit status, because that is

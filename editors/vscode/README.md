@@ -1,0 +1,55 @@
+# Pudu for VS Code
+
+Diagnostics, hover, go to definition, an outline, completion, and formatting —
+all answered by the compiler itself.
+
+## What it is
+
+The extension is a thin client. Everything it shows comes from `pudu lsp`,
+which is the same binary that runs `pudu check`, `pudu doc`, and `pudu fmt`.
+That is deliberate: an editor and a command line that disagree about what a
+program means is worse than an editor that says nothing, and a second analyser
+written for the editor would drift from the first within a release.
+
+## Installing
+
+1. Build the compiler and put it on your `PATH`:
+
+   ```bash
+   cabal install pudu
+   ```
+
+   Or point the extension at a build with the `pudu.serverPath` setting.
+
+2. From this directory:
+
+   ```bash
+   npm install
+   ```
+
+3. Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host, or
+   package it with `npx vsce package` and install the `.vsix`.
+
+## What works
+
+| Feature | Comes from |
+|---|---|
+| Diagnostics as you type | the ordinary compile — same codes, spans, and help as `pudu check` |
+| Hover | the signature the checker *inferred*, plus the doc comment |
+| Go to definition | the documentation index |
+| Outline and breadcrumbs | every documented declaration, with its signature |
+| Completion | every documented name, with its signature and documentation |
+| Format document | `pudu fmt`, applied as one edit |
+
+Hover shows what the compiler concluded, not what was written down: an
+unannotated function still has a signature, and an annotated one is shown as it
+was *understood*.
+
+## What does not work yet
+
+Rename, find references, workspace symbols, and semantic tokens. The server
+does not announce these, so VS Code keeps offering its own text-based fallback
+rather than showing an empty result.
+
+Synchronisation is full-document. Incremental edits are not accepted, because
+the server would be applying a range it has no guarantee it can interpret.

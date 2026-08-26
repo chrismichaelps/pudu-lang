@@ -1,0 +1,42 @@
+{
+  "name": "pudu",
+  "displayName": "Pudu",
+  "description": "Language support for Pudu: diagnostics, hover, go to definition, outline, completion, and formatting.",
+  "version": "0.1.0",
+  "publisher": "pudu-lang",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "activationEvents": ["onLanguage:pudu"],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "pudu",
+        "aliases": ["Pudu"],
+        "extensions": [".pudu"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pudu",
+        "scopeName": "source.pudu",
+        "path": "./syntaxes/pudu.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Pudu",
+      "properties": {
+        "pudu.serverPath": {
+          "type": "string",
+          "default": "pudu",
+          "description": "Path to the pudu executable. The extension runs `<path> lsp`."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

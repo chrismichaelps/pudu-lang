@@ -17,6 +17,7 @@ import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
 import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Format (FormatResult (..), formatSource)
+import Pudu.Lsp.Server (runServer)
 import Pudu.Doc.Json (encodeIndex)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
@@ -45,6 +46,7 @@ main = do
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
+    ("lsp" : _) -> runServer
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
     ("fmt" : paths) -> formatPaths InPlace paths
@@ -278,6 +280,7 @@ usage =
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu lsp             speak the language server protocol over stdio"
     , "  pudu fmt <file>...   rewrite files in the one committed style"
     , "  pudu fmt --check ... report which files are not formatted, changing none"
     , "  pudu fmt --stdout .. write the formatted text to stdout"

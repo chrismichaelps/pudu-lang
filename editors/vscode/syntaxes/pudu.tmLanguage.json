@@ -1,0 +1,106 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Pudu",
+  "scopeName": "source.pudu",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#labels"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.documentation.pudu",
+          "match": "///.*$"
+        },
+        {
+          "name": "comment.line.double-slash.pudu",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.pudu",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.pudu",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.pudu",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.pudu",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.pudu",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.pudu",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9]+)?(d|f32|f64|[iu](8|16|32|64|128)?)?\\b"
+        },
+        {
+          "name": "constant.numeric.pudu",
+          "match": "\\b0[box][0-9a-fA-F_]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.pudu",
+          "match": "\\b(module|import|export|as|let|var|const|mut|fn|async|return|if|else|match|case|for|in|while|loop|break|continue|type|enum|struct|trait|impl|where|await|task|spawn|comptime|macro|true|false|null|unsafe|with|scope)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "entity.name.type.pudu",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "name": "entity.name.label.pudu",
+          "match": "@[a-z_][A-Za-z0-9_]*"
+        }
+      ]
+    }
+  }
+}
