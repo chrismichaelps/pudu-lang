@@ -97,12 +97,57 @@ irrefutableField (Located _ field) = case Tree.fieldPatternValue field of
   Nothing -> True
   Just nested -> irrefutable nested
 
-{-| An arm after one that already matches everything can never run. -}
+{-| What an earlier unguarded arm has already taken.
+
+    Only tests whose whole extent is one name or one literal are recorded. A
+    pattern that binds part of what it matches spans more values than any key
+    could stand for, so it contributes nothing here and nothing is claimed
+    about it. -}
+data Taken
+  = TakenConstructor !Text
+  | TakenLiteral !Tree.Literal
+  deriving stock (Eq)
+
+{-| An arm that can never run, either because an earlier arm matches everything
+    or because an earlier arm already took every value this one names.
+
+    Both are the same mistake to a reader — a case that looks live and is not —
+    but they are different mistakes to make, so each says which happened. -}
 reportUnreachable :: [Located MatchArm] -> Checker ()
-reportUnreachable arms = case break irrefutableArm arms of
-  (_, _ : rest@(_ : _)) -> mapM_ unreachable rest
-  _ -> pure ()
+reportUnreachable = walk False []
  where
-  unreachable (Located armSpan _) =
-    warn "W5001" armSpan "this case can never match"
-      (Just "an earlier case already covers every remaining value")
+  walk _ _ [] = pure ()
+  walk closed taken (Located armSpan arm : rest)
+    | closed = unreachable armSpan coveredHelp >> walk True taken rest
+    | subsumed = unreachable armSpan takenHelp >> walk closed taken rest
+    | otherwise = walk closed' taken' rest
+   where
+    keys = takenBy (armPattern arm)
+    unguarded = armGuard arm == Nothing
+    subsumed = not (null keys) && all (`elem` taken) keys
+    closed' = closed || (unguarded && irrefutable (armPattern arm))
+    taken' = if unguarded then keys <> taken else taken
+
+  unreachable armSpan help =
+    warn "W5001" armSpan "this case can never match" (Just help)
+
+  coveredHelp = "an earlier case already covers every remaining value"
+  takenHelp = "an earlier case already matches this pattern"
+
+{-| The values a pattern names, when they can be named exactly.
+
+    A constructor stands for all of its values only when its payload binds
+    rather than tests: `case Ok(1)` leaves the rest of `Ok` for a later arm,
+    so it takes nothing. An alternative takes what its branches take, and only
+    when every branch is nameable — one open branch leaves the whole
+    alternative open. -}
+takenBy :: Located Pattern -> [Taken]
+takenBy (Located _ pattern') = case pattern' of
+  ConstructorPattern path arguments
+    | all irrefutable arguments ->
+        [TakenConstructor (NonEmpty.last (moduleNameSegments path))]
+  LiteralPattern literal -> [TakenLiteral literal]
+  AlternativePattern alternatives ->
+    let branches = map takenBy alternatives
+     in if any null branches then [] else concat branches
+  _ -> []

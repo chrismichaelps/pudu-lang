@@ -887,6 +887,53 @@ testExhaustiveness = do
     , "}"
     ])
   payloadTested <- codes ["module M", "fn run(value: Option[Int]) -> Int { match value { case Some(1) => 1 case None => 0 } }"]
+  repeatedName <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red => 1"
+    , "    case Red => 2"
+    , "    case Green => 3"
+    , "    case Blue => 4"
+    , "  }"
+    , "}"
+    ])
+  repeatedLiteral <- codes
+    [ "module M"
+    , "fn run(n: Int) -> Int { match n { case 1 => 1 case 1 => 2 case _ => 0 } }"
+    ]
+  repeatedAlternative <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red | Green => 1"
+    , "    case Red => 2"
+    , "    case Blue => 3"
+    , "  }"
+    , "}"
+    ])
+  widerAlternative <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red | Green => 1"
+    , "    case Green | Blue => 2"
+    , "  }"
+    , "}"
+    ])
+  distinctPayloads <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  match value { case Some(1) => 1 case Some(2) => 2 case Some(n) => n case None => 0 }"
+    , "}"
+    ]
+  guardTakesNothing <- codes (colorProgram <>
+    [ "fn run(c: Color) -> Int {"
+    , "  match c {"
+    , "    case Red if false => 0"
+    , "    case Red => 1"
+    , "    case Green => 2"
+    , "    case Blue => 3"
+    , "  }"
+    , "}"
+    ])
   pure $ conjoin
     [ counterexample "every constructor covered" (complete === [])
     , counterexample "a missing constructor is reported" (missing === ["E5001"])
@@ -897,6 +944,16 @@ testExhaustiveness = do
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])
+    , counterexample "a repeated constructor is unreachable" (repeatedName === ["W5001"])
+    , counterexample "a repeated literal is unreachable" (repeatedLiteral === ["W5001"])
+    , counterexample "a name an earlier alternative took is unreachable"
+        (repeatedAlternative === ["W5001"])
+    , counterexample "an alternative naming something new is reachable"
+        (widerAlternative === [])
+    , counterexample "distinct payload tests do not subsume each other"
+        (distinctPayloads === [])
+    , counterexample "a guarded arm leaves its pattern for a later one"
+        (guardTakesNothing === [])
     ]
 
 boundProgram :: [Text]
