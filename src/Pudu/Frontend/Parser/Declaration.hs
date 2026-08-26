@@ -131,9 +131,13 @@ rejectedModuleBinding visibility = do
   synchronizeDeclaration
   pure rejected
 
-{-| `enum`, `struct`, `macro`, and `comptime` remain reserved: their meaning is
-    not yet represented by [[Syntax Tree]], and record/sum shapes are declared
-    with `type` in [[grammar/pudu]]. -}
+{-| `enum` and `struct` remain reserved. Record and sum shapes are both
+    declared with `type` in [[grammar/pudu]], so admitting a second spelling
+    would give one construct two syntaxes and every reader two things to know.
+
+    `macro` and `comptime` were once listed here and no longer are: both are
+    implemented, and leaving them named in this comment claimed a limitation
+    the compiler had already outgrown. -}
 isReservedDeclaration :: Keyword -> Bool
 isReservedDeclaration keyword =
   keyword `elem` [KwEnum, KwStruct]
