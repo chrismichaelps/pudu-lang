@@ -207,6 +207,7 @@ variantShape (Located _ variant) =
 
 typeShape :: Located TypeSyntax -> Text
 typeShape (Located _ value) = case value of
+  DynamicType path -> "dynamic " <> moduleNameText path
   NamedType path arguments ->
     moduleNameText path
       <> if null arguments then Text.empty

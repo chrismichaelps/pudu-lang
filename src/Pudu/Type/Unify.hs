@@ -7,7 +7,8 @@ module Pudu.Type.Unify
 
 import Data.Text (Text)
 import Pudu.Source (Span)
-import Pudu.Type.Env (Checker, report, resolveVariable, setVariable)
+import Control.Monad (unless)
+import Pudu.Type.Env (Checker, implementsTrait, report, reportedAt, resolveVariable, setVariable)
 import Pudu.Type.Value (Type (..), TypeVar, nominalKey, nominalName, renderType)
 
 {-| Unify two types, reporting `E3001` when they cannot be made equal.
@@ -44,6 +45,30 @@ unify spanValue expected actual = do
     (RigidType leftName, RigidType rightName)
       | leftName == rightName -> pure left
     (UnitTypeValue, UnitTypeValue) -> pure UnitTypeValue
+    (DynamicTypeValue leftTrait, DynamicTypeValue rightTrait)
+      | leftTrait == rightTrait -> pure left
+    {-| A concrete type widens into a dynamic one when it implements the trait.
+
+        This is the one direction the rule runs, and `unify` is already
+        oriented — its message names the expected type first — so a widening
+        can only happen where a `dynamic` was asked for. The reverse would be a
+        narrowing, which needs a match, not an assignment. -}
+    (DynamicTypeValue traitIdentity, NominalType concrete _) -> do
+      implements <- implementsTrait concrete traitIdentity
+      if implements
+        then pure left
+        else do
+          seen <- reportedAt spanValue "E3032"
+          unless seen $
+            report "E3032" spanValue
+              (nominalName concrete <> " does not implement " <> nominalName traitIdentity)
+              ( Just
+                  ( "implement it for this type, or use a type that does; a dynamic "
+                      <> nominalName traitIdentity
+                      <> " holds only values that implement it"
+                  )
+              )
+          pure ErrorType
     _ -> mismatch spanValue left right
 
 {-| Check an actual type against an expected one. The message names the

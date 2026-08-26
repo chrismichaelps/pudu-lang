@@ -306,6 +306,9 @@ braceKinds pieces
       _ -> False
 
   fieldsAfter index = case [token | (position, token) <- tokens, position > index] of
+    {-| An empty pair right after a name is a record construction with no
+        fields — `Silent{}` — and stays tight like any other. -}
+    first : _ | closesImmediately first -> True
     first : second : _ -> named first && follows second
     [first] -> named first
     [] -> False
@@ -321,6 +324,10 @@ braceKinds pieces
       _ -> False
 
   isFieldStart scalar = scalar == '_' || (scalar >= 'a' && scalar <= 'z')
+
+  closesImmediately token = case tokenKind token of
+    Symbol SymRightBrace -> True
+    _ -> False
 
 {-| The keywords whose head runs up to a block, where the grammar does not admit
     a record construction. -}

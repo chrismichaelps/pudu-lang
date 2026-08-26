@@ -40,6 +40,7 @@ module Pudu.Type.Env
   , lookupVariant
   , recordExpression
   , report
+  , reportedAt
   , negateIntegerLiteral
   , rigidBoundsOf
   , rigidSatisfies
@@ -93,6 +94,7 @@ data DeclaredTypes = DeclaredTypes
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map NominalId [NominalId])
   , declaredAliases :: !(Map Text ([Text], Type))
+  , declaredTraitNames :: !(Set NominalId)
   }
   deriving stock (Eq, Show)
 
@@ -106,6 +108,7 @@ emptyDeclared =
     , declaredOwners = Map.empty
     , declaredImpls = Map.empty
     , declaredAliases = Map.empty
+    , declaredTraitNames = Set.empty
     }
 
 {-| @Type.Env.State — the checker's working state.
@@ -124,6 +127,7 @@ data CheckerState = CheckerState
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateUnsafeFrames :: ![UnsafeFrame]
   , stateLoopFrames :: ![LoopFrame]
+  , stateReportedSpans :: ![((Int, Int), Text)]
   , stateUnsafeFunctions :: !(Map Text [Capability])
   , stateComptimeFunctions :: ![Text]
   , stateInComptime :: !Bool
@@ -206,6 +210,7 @@ initialState =
     , stateAmbiguousMethods = Map.empty
     , stateUnsafeFrames = []
     , stateLoopFrames = []
+    , stateReportedSpans = []
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = []
     , stateInComptime = False
@@ -680,6 +685,21 @@ recordUnsafeFunction name capabilities =
 unsafeFunctionCapabilities :: Text -> Checker (Maybe [Capability])
 unsafeFunctionCapabilities name =
   Checker $ \state -> (Map.lookup name (stateUnsafeFunctions state), state)
+
+{-| Whether this span has already carried a diagnostic of its own.
+
+    A signature is formed twice — once when the module declares it, once when
+    the body is checked against it — and a mistake written in a signature is
+    one mistake however many times the checker walks it.
+
+    Keyed by code as well as span, so suppressing a repeat of one diagnostic
+    never hides a different one that happens to point at the same text. -}
+reportedAt :: Span -> Text -> Checker Bool
+reportedAt spanValue code =
+  Checker $ \state ->
+    let key = ((unOffset (spanStart spanValue), unOffset (spanEnd spanValue)), code)
+        seen = key `elem` stateReportedSpans state
+     in (seen, state{stateReportedSpans = key : stateReportedSpans state})
 
 {-| Record that two traits provide the same member for one type. Declaring both
     is legal; only an unqualified call has to choose, so the ambiguity is stored

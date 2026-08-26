@@ -54,6 +54,10 @@ decide marker visiting typeValue = case typeValue of
   ErrorType -> pure True
   VariableType _ -> pure False
   RigidType _ -> pure False
+  {-| A dynamic value carries whatever its concrete type carries, and that is
+      not known here. Only the markers the trait itself guarantees can be
+      claimed, and a trait guarantees none of them, so this answers no. -}
+  DynamicTypeValue _ -> pure False
   TupleTypeValue members -> allDecide marker visiting members
   FunctionTypeValue{} -> pure (marker /= "Copy")
   ReferenceTypeValue mutable target -> reference marker visiting mutable target

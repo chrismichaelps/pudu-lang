@@ -38,18 +38,18 @@ testScopes :: IO Property
 testScopes = do
   awaitedChild <- evaluateAsyncWith
     [ "async fn work(n: Int) -> Result[Int, Str] { Ok(n * 2) }" ]
-    "async with scope { let first = work(5).await  Ok(first) }"
+    "async with scope { let first = work(5).await\n Ok(first) }"
   unawaitedChild <- evaluateAsyncWith
     [ "async fn work(n: Int) -> Result[Int, Str] { Ok(n * 2) }" ]
-    "async with scope { work(3)  Ok(1) }"
+    "async with scope { work(3)\n Ok(1) }"
   failingChild <- evaluateAsyncWith
     [ "async fn failing() -> Result[Int, Str] { Err(\"child failed\") }" ]
-    "async with scope { failing()  Ok(1) }"
+    "async with scope { failing()\n Ok(1) }"
   earliestFailure <- evaluateAsyncWith
     [ "async fn first() -> Result[Int, Str] { Err(\"first\") }"
     , "async fn second() -> Result[Int, Str] { Err(\"second\") }"
     ]
-    "async with scope { first()  second()  Ok(1) }"
+    "async with scope { first()\n second()\n Ok(1) }"
   pure $ conjoin
     [ counterexample "a scope yields its block's value" (awaitedChild === "10")
     , counterexample "an unawaited child still runs before the scope yields"
@@ -183,7 +183,7 @@ testUnwindFrameCleanup = do
   broken <- evaluateWith
     [ "fn leaveLoop() -> Int {"
     , "  loop {"
-    , "    { let source = 99  break 7 }"
+    , "    { let source = 99\n break 7 }"
     , "  }"
     , "}"
     , "fn caller() -> Int {"
@@ -195,7 +195,7 @@ testUnwindFrameCleanup = do
     "caller()"
   returned <- evaluateWith
     [ "fn leaveFunction() -> Int {"
-    , "  { let source = 99  return 7 }"
+    , "  { let source = 99\n return 7 }"
     , "  0"
     , "}"
     , "fn caller() -> Int {"

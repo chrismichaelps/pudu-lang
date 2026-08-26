@@ -27,6 +27,9 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- A trait written where a type belongs is `E3030`, reported at the signature rather than at the first call that fails against the phantom type it used to form. Only a trait may follow `dynamic` (`E3031`); a dynamic type over one concrete type would be that type written the long way.
+- Formation diagnostics report once per span and code. A signature is formed both when the module declares it and when its body is checked against it, and one mistake in one signature is one mistake.
+
 - An alias is a **synonym**: writing it is writing what it stands for. A generic one substitutes its
   arguments, so `type Boxed[T] = Option[T]` used as `Boxed[Int]` *is* `Option[Int]`. Before this it
   was a nominal type of its own that unified with nothing, which made a type like

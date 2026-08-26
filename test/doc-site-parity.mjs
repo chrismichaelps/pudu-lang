@@ -23,6 +23,32 @@ index.entries.push({
   doc: ["An intentionally incomplete declaration."],
   span: [0, 0],
 });
+index.entries.push({
+  name: "makeShape",
+  kind: "function",
+  module: "Parity",
+  signature: "Str -> dynamic Parity.Shape",
+  shape: {
+    arguments: [{form: "con", name: "Str", arguments: [], rendered: "Str"}],
+    result: {form: "con", name: "dynamic Parity.Shape", arguments: [], rendered: "dynamic Parity.Shape"},
+    constraints: [],
+  },
+  doc: [],
+  span: [0, 0],
+});
+index.entries.push({
+  name: "sizeOfCircle",
+  kind: "function",
+  module: "Parity",
+  signature: "Parity.Circle -> Int",
+  shape: {
+    arguments: [{form: "con", name: "Parity.Circle", arguments: [], rendered: "Parity.Circle"}],
+    result: {form: "con", name: "Int", arguments: [], rendered: "Int"},
+    constraints: [],
+  },
+  doc: [],
+  span: [0, 0],
+});
 const runtimeIndexText = JSON.stringify(index);
 const program = html.slice(scriptStart, scriptEnd);
 
@@ -78,6 +104,28 @@ assert(resultOnly.length > 0 && resultOnly.every(match => match.score === 60), "
 assert(site.ranked("Int ->").length === 0, "incomplete query produced results");
 assert(site.ranked("Int -> -> Str").length === 0, "malformed query produced results");
 assert(site.parseQuery("你 -> 你")?.kind === "shape", "Unicode query classification diverged");
+
+// A dynamic type is one atom, and an unqualified name matches a qualified
+// signature. Both rules live in two implementations — the CLI's and this
+// page's — so both are checked here.
+const named = list => list.map(match => match.entry.name);
+assert(
+  named(site.ranked("Str -> dynamic Shape")).includes("makeShape"),
+  "a dynamic result was not found by its unqualified trait",
+);
+assert(
+  named(site.ranked("Str -> dynamic Parity.Shape")).includes("makeShape"),
+  "a dynamic result was not found by its qualified trait",
+);
+assert(
+  named(site.ranked("Circle -> Int")).includes("sizeOfCircle"),
+  "an unqualified query did not match a qualified signature",
+);
+assert(
+  !named(site.ranked("Other.Circle -> Int")).includes("sizeOfCircle"),
+  "a query naming the wrong module still matched",
+);
+
 assert(site.ranked("Array[".repeat(65) + "Int" + "]".repeat(65) + " -> Int").length === 0, "hostile query depth was admitted");
 
 process.stdout.write(JSON.stringify({entries: index.entries.length - 1, bytes: Buffer.byteLength(html)}) + "\n");

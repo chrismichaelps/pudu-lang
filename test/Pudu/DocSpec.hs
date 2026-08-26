@@ -21,6 +21,7 @@ docProperties =
   [ ("the index reports the type the checker inferred", testInferredSignatures)
   , ("doc comments attach to the declaration they precede", testDocComments)
   , ("a type query finds a function by its shape", testTypeSearch)
+  , ("a dynamic type is searchable and a name matches unqualified", testDynamicSearch)
   , ("a name query ranks exact matches first", testNameSearch)
   , ("queries are read as names or as shapes", testQueryParsing)
   , ("the encoded index is well formed", testEncoding)
@@ -80,6 +81,29 @@ testDocComments = do
 
 {-| Search by shape, which is the question a reader with a type but no name
     is asking. -}
+{-| A dynamic type is one atom in the index, and a reader searching for a type
+    should not have to know which module declared it. -}
+testDynamicSearch :: IO Property
+testDynamicSearch = do
+  index <- indexOf
+    [ "module Doc"
+    , "trait Shape { fn area(self: &Self) -> Int }"
+    , "type Circle = { r: Int }"
+    , "impl Shape for Circle { fn area(self: &Self) -> Int { self.r } }"
+    , "fn make(kind: Str) -> dynamic Shape { Circle{r: 1} }"
+    , "fn sized(c: Circle) -> Int { c.r }"
+    ]
+  pure $ conjoin
+    [ counterexample "a dynamic result is found by its trait"
+        (property ("make" `elem` namesOf (searchText "Str -> dynamic Shape" index)))
+    , counterexample "and by the qualified form"
+        (property ("make" `elem` namesOf (searchText "Str -> dynamic Doc.Shape" index)))
+    , counterexample "an unqualified nominal query finds a qualified signature"
+        (property ("sized" `elem` namesOf (searchText "Circle -> Int" index)))
+    , counterexample "a qualified query that names the wrong module finds nothing"
+        (notElem "sized" (namesOf (searchText "Other.Circle -> Int" index)) === True)
+    ]
+
 testTypeSearch :: IO Property
 testTypeSearch = do
   index <- indexOf

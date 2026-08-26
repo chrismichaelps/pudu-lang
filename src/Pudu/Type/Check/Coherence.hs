@@ -150,6 +150,7 @@ ownsRoot parameters owners local = go Set.empty
 
 substituteType :: Map Text (Located TypeSyntax) -> TypeSyntax -> TypeSyntax
 substituteType bindings syntax = case syntax of
+  DynamicType _ -> syntax
   NamedType path arguments -> case (unqualifiedName path, arguments) of
     (Just name, []) -> maybe syntax locatedValue (Map.lookup name bindings)
     _ -> NamedType path (map (mapLocated (substituteType bindings)) arguments)
@@ -178,6 +179,7 @@ implementationKey value =
 
 typeKey :: Map.Map Text Int -> TypeSyntax -> TypeKey
 typeKey parameters syntax = case syntax of
+  DynamicType path -> NamedKey path []
   NamedType path arguments ->
     case parameterIndex parameters path arguments of
       Just index -> ParameterKey index

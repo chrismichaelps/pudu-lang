@@ -205,6 +205,7 @@ renderTypeParam param =
 
 renderType :: Located TypeSyntax -> Text
 renderType (Located _ syntax) = case syntax of
+  DynamicType path -> "dynamic " <> moduleNameText path
   NamedType path arguments ->
     moduleNameText path
       <> if null arguments

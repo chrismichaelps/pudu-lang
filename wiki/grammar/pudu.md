@@ -20,6 +20,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 - Value identifiers may use `snake_case` or `camelCase`; public API formatter preference is `snake_case`. Types, traits, modules, and variants use `PascalCase`. Constant declarations use `UPPER_SNAKE_CASE`.
 - Numeric-literal digits are ASCII. `_` may occur only between digits. Integer bases use lowercase `0b`, `0o`, or `0x` and require at least one base-valid digit. An integer may end in one closed lowercase width suffix: `i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, or `u128`; the suffix is part of the literal token, including after a base-prefixed body.
 - Decimal floats require either `.` followed by a decimal digit or an `e`/`E` exponent. Exponents allow one optional `+`/`-` and require digits. A float may end in the closed lowercase suffix `f32` or `f64`; the suffix is part of the literal token. The closed lowercase suffix `d` selects `Decimal` and is admitted after either shape, so `1d` and `1.5d` are both decimal literals while `1f32` and `1.5u8` stay malformed. A dot not followed by a digit remains punctuation, so `1..2` is integer, range, integer. Malformed owned numeric candidates are retained as `Invalid` and produce `E0004`.
+- Input that ends before a construct is closed reports `E1000` rather than `E1001`: a file that ran out is a different mistake from a wrong token, and naming the end of input says the construct was never closed at all.
 - Strings are UTF-8 text with `\n`, `\r`, `\t`, `\\`, `\"`, `\0`, and `\u{HEX}` escapes. String interpolation is reserved but not admitted in the 0.1 core; an unescaped `{` or `}` produces E0008 rather than silently becoming text. A later semantic slice will admit `{expression}` segments and `{{`/`}}` brace escapes together. Raw CR/LF is not admitted.
 - Character literals contain exactly one Unicode scalar value after escapes and additionally admit `\'`. Raw CR/LF is not admitted.
 - Quoted input that reaches EOF or raw CR/LF before its closing delimiter produces E0002 without consuming the line break. Unknown escapes produce E0005. `\u{HEX}` requires one through six ASCII hexadecimal digits and rejects surrogates and values above U+10FFFF with E0006. Closed characters whose decoded payload is not exactly one scalar produce E0007.
@@ -27,7 +28,7 @@ This page is normative for surface syntax. [[architecture/SEMANTICS]] is normati
 
 ## Reserved Keywords
 
-`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe with scope`
+`module import export as let var const mut fn async return if else match case for in while loop break continue type enum struct trait impl where await task spawn comptime macro true false null unsafe with scope dynamic`
 
 `enum`, `struct`, `task`, and `spawn` are reserved for compatibility even where v1 canonical syntax uses `type` and structured `scope` forms.
 
@@ -56,6 +57,7 @@ return_stmt      = "return", expression? ;
 break_stmt       = "break", loop_label?, expression? ;
 continue_stmt    = "continue", loop_label? ;
 loop_label       = "@", lower_ident ;
+dynamic_type     = "dynamic", upper_path ;
 function_decl    = "async"?, "fn", lower_ident, type_params?, "(", params?, ")",
                    ("->", type_ref)?, where_clause?, (block | "=", expression) ;
 params           = param, (",", param)*, ","? ;
@@ -85,7 +87,7 @@ Rules:
 - `lower_ident` begins with `_` or a Unicode letter that is not uppercase; remaining characters follow the identifier lexical rule. The single `_` spelling is reserved for discard patterns and is not a binding name.
 - Module-scope values are `const` only. Runtime `let` and `var` bindings are admitted inside blocks, preventing module-load execution and global mutable state.
 - `let` is immutable, `var` is mutable, and `const` is evaluated and stored at compile time.
-- A statement ends at a line break unless the expression is explicitly continued. A line break continues the previous statement when the preceding line ends with a binary operator awaiting its right operand, or when the following line begins with `.`, `?`, or `.await`. A line-initial `(` or `[` starts a new statement and never becomes a call or index. Keywords that cannot begin a statement, such as `else`, always continue the construct that requires them.
+- A statement ends at a line break unless the expression is explicitly continued. Two statements written on one line are not separated — the language has no statement terminator — and the second is rejected with `E1049`, reported once per block and never where recovery has already reported something else. A line break continues the previous statement when the preceding line ends with a binary operator awaiting its right operand, or when the following line begins with `.`, `?`, or `.await`. A line-initial `(` or `[` starts a new statement and never becomes a call or index. Keywords that cannot begin a statement, such as `else`, always continue the construct that requires them.
 - A block yields its final unterminated expression statement, or `()` when its last entry is a binding or `return`.
 - `Array` and `Str` carry closed sets of built-in methods. Every one answers with a new value rather than changing its receiver, so writing one as a statement does nothing and is reported as `W3002`. Text indices count Unicode scalars, and an index outside the text is `E7004`.
 - A function literal is written `fn(params) => expression` or `fn(params) -> Type { block }`, reusing the same `fn` the function type uses. It captures the bindings in scope where it is written, takes no default arguments, and is not generalized: its type is fixed at the point it appears.
@@ -164,6 +166,11 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
 - A method may be called qualified by the type that implements it or by the trait that declares it: `Bot.label(&bot)` and `Speak.label(&bot)` both select `label`. The trait form is how a program picks one provider when several traits declare the same member for one type.
 - A qualified call passes the receiver as an ordinary first argument, so a method declared with `self: &Self` takes a borrow. Method-call syntax borrows the receiver for you; the qualified form does not, because it is an ordinary call.
+- `dynamic Trait` is a type: some value implementing that trait, whose own type is not named. It is the one place the language admits a value whose concrete type is not known at the use site, and it is what a heterogeneous collection needs — `Array[dynamic Listener]` holds any mix of implementations, and a fourth implementation added elsewhere needs no edit where the array is walked.
+- Only a trait may follow `dynamic` (`E3031`). A trait written in type position without it is `E3030`, which names `dynamic` as one of the two forms that work.
+- A concrete type widens into a dynamic one wherever a dynamic type is expected, and only there: a widening is not a conversion the reader has to write, but a narrowing is a `match`. A type that does not implement the trait is `E3032`.
+- The expectation reaches into an `if`, a `match`, an array literal, a block, and a record field, so branches of different types each widen against what the context asked for rather than against each other. A field declared `Array[dynamic Node]` therefore takes a literal of mixed implementations, which is what a composite needs. Without that, two implementations of one trait would disagree before the declared type was ever consulted.
+- A trait member returning `Self` is not callable through a dynamic value: the caller would have no type to give the result. That restriction is the honest one — the concrete type is exactly what a dynamic value does not carry.
 - Declaring the same member in two traits for one type is legal. Only an unqualified call has to choose, and that call is rejected until it is written qualified.
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.

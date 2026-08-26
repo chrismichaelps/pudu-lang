@@ -151,6 +151,7 @@ testProgramEvaluation = do
   exact <- runEntry "test-fixtures/stdlib/UsesDecimal.pudu"
   generic <- runEntry "test-fixtures/stdlib/UsesGenericTraits.pudu"
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
+  dynamic <- runEntry "test-fixtures/stdlib/UsesDynamic.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -191,6 +192,8 @@ testProgramEvaluation = do
         (widths === Just "8")
     , counterexample "a module calls the function it declared, not a stranger's"
         (scoped === Just "2")
+    , counterexample "a dynamic type holds any implementation of its trait"
+        (dynamic === Just "9")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

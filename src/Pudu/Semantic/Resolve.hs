@@ -383,6 +383,7 @@ bindFieldPattern (Located _ field) = case fieldPatternValue field of
 
 walkType :: Located TypeSyntax -> Resolver ()
 walkType (Located typeSpan value) = case value of
+  DynamicType path -> resolveTypePath typeSpan path
   NamedType path arguments -> do
     resolveTypePath typeSpan path
     mapM_ walkType arguments

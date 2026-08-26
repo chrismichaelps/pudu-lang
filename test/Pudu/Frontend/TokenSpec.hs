@@ -176,7 +176,7 @@ expectedKeywordTexts =
   [ "module", "import", "export", "as", "let", "var", "const", "mut", "fn", "async"
   , "return", "if", "else", "match", "case", "for", "in", "while", "loop", "break"
   , "continue", "type", "enum", "struct", "trait", "impl", "where", "await", "task", "spawn"
-  , "comptime", "macro", "true", "false", "null", "unsafe", "with", "scope"
+  , "comptime", "macro", "true", "false", "null", "unsafe", "with", "scope", "dynamic"
   ]
 
 expectedSymbolTexts :: [Text]

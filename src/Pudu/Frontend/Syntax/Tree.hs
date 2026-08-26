@@ -227,6 +227,7 @@ data Parameter = Parameter
 {-| @Type.Syntax.Reference — models unresolved type spelling -}
 data TypeSyntax
   = NamedType !ModuleName ![Located TypeSyntax]
+  | DynamicType !ModuleName
   | ReferenceType !Bool !(Located TypeSyntax)
   | TupleType ![Located TypeSyntax]
   | FunctionType !Bool ![Located TypeSyntax] !(Located TypeSyntax)

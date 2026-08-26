@@ -56,6 +56,7 @@ data Keyword
   | KwUnsafe
   | KwWith
   | KwScope
+  | KwDynamic
   deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 {-| @Source.Token.Symbol — enumerates admitted punctuation and operators -}
@@ -200,6 +201,7 @@ keywordText keyword =
     KwUnsafe -> "unsafe"
     KwWith -> "with"
     KwScope -> "scope"
+    KwDynamic -> "dynamic"
 
 symbolFromText :: Text -> Maybe SymbolKind
 symbolFromText value = lookup value symbolMappings

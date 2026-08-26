@@ -23,7 +23,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree (TypeSyntax (..))
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwFn, KwMut)
+  ( Keyword (KwDynamic, KwAsync, KwFn, KwMut)
   , Token (tokenKind, tokenSpan)
   , TokenKind (..)
   )
@@ -77,11 +77,27 @@ parseTypeAtom = do
   case kind of
     Keyword KwAsync -> parseFunctionType
     Keyword KwFn -> parseFunctionType
+    Keyword KwDynamic -> parseDynamicType
     _ -> do
       opening <- matchSymbol "("
       case opening of
         Just token -> parseParenthesized (tokenSpan token)
         Nothing -> parseNamed
+
+{-| Parse `dynamic Trait`.
+
+    The trait takes no arguments here. A dynamic type over a generic trait would
+    have to say what its parameters are, and every value in a collection of them
+    would have to agree — which is a bound, not a dynamic type. -}
+parseDynamicType :: Parser (Located TypeSyntax)
+parseDynamicType = do
+  keyword <- advanceToken
+  name <- parseModuleName
+  pure
+    Located
+      { locatedSpan = mergedOrLeft (tokenSpan keyword) (locatedSpan name)
+      , locatedValue = DynamicType (locatedValue name)
+      }
 
 {-| Parse `async? fn(A, B) -> T`. The async marker and the declared return type
     are preserved so a first-class function type keeps its capability and its

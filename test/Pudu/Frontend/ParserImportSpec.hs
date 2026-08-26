@@ -43,7 +43,7 @@ testInvalidSuffixes = do
   pure $ conjoin
     [ counterexample "lowercase alias codes" (codes lowercase === ["E1011"])
     , diagnosticOffsets lowercase === [15]
-    , counterexample "missing alias codes" (codes missingAlias === ["E1001"])
+    , counterexample "missing alias codes" (codes missingAlias === ["E1000"])
     , diagnosticOffsets missingAlias === [14]
     , counterexample "empty selection codes" (codes emptySelection === ["E1030"])
     , diagnosticOffsets emptySelection === [13]
@@ -54,7 +54,7 @@ testInvalidSuffixes = do
 testMissingClosure :: IO Property
 testMissingClosure = do
   result <- parseOne "import Core {Thing"
-  pure $ conjoin [codes result === ["E1001"], remainingKind result === EndOfFile]
+  pure $ conjoin [codes result === ["E1000"], remainingKind result === EndOfFile]
 
 testHostileSelection :: IO Property
 testHostileSelection = do

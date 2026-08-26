@@ -25,6 +25,8 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- A concrete type widens into a dynamic one when it implements the trait. `unify` is already oriented — its message names the expected type first — so a widening can only happen where a dynamic type was asked for. The reverse would be a narrowing, which needs a `match`, not an assignment.
+
 - A mismatch whose two types differ only by a borrow names the operator that closes the gap: `*` to read the value, `&` to pass a reference. The language converts in neither direction on its own, so the reader has to know which way to write it.
 
 - Nominal types are equal by declaration identity and equal arguments; tuples, functions, and references are structural, matching [[architecture/SEMANTICS]].

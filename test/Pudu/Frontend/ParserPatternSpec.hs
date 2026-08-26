@@ -118,7 +118,7 @@ testRecovery = do
   pure $ conjoin
     [ counterexample "invalid start" (codes operator === ["E1050"])
     , shape operator === "invalid"
-    , counterexample "unclosed tuple" (codes unclosed === ["E1001"])
+    , counterexample "unclosed tuple" (codes unclosed === ["E1000"])
     , counterexample "missing range endpoint" (codes missingBound === ["E1050"])
     , diagnosticOffsets operator === [0]
     ]
