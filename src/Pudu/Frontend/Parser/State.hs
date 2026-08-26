@@ -5,6 +5,7 @@ module Pudu.Frontend.Parser.State
   , budgetExhausted
   , currentSpan
   , emitParseDiagnostic
+  , diagnosticCount
   , emitParseError
   , expectIdentifier
   , expectKeyword
@@ -219,6 +220,14 @@ emitParseDiagnostic value =
   Parser $ \state ->
     ((), state{parserDiagnosticsRev = value : parserDiagnosticsRev state})
 
+{-| How many diagnostics this parse has produced so far.
+
+    A recovery rule that only makes sense on otherwise-clean input reads this
+    to stay quiet once something has already gone wrong, which is what keeps a
+    hostile file from turning one mistake into hundreds. -}
+diagnosticCount :: Parser Int
+diagnosticCount = Parser $ \state -> (length (parserDiagnosticsRev state), state)
+
 emitParseError :: Text -> Span -> Text -> Maybe Text -> Parser ()
 emitParseError codeText spanValue message help =
   case parseDiagnostic codeText spanValue message help of
@@ -280,11 +289,23 @@ synchronizeDeclaration = do
       then pure ()
       else advanceToken >> seekBoundary
 
+{-| Report what was wanted where it was not found.
+
+    A file that simply ran out is not the same mistake as a wrong token, and it
+    reads differently: `expected }` against the last line of a file tells the
+    reader nothing about which brace, while naming the end of input says the
+    construct was never closed at all. [[grammar/pudu]] gives the second case
+    its own code. -}
 expectedToken :: TokenKind -> Text -> Text -> Parser Token
 expectedToken expected display context = do
   token <- peekToken
-  emitParseError "E1001" (tokenSpan token) ("expected " <> display)
-    (Just ("add " <> display <> " " <> context))
+  if tokenKind token == EndOfFile
+    then
+      emitParseError "E1000" (tokenSpan token) ("the file ends before " <> display)
+        (Just ("add " <> display <> " " <> context <> "; the construct is never closed"))
+    else
+      emitParseError "E1001" (tokenSpan token) ("expected " <> display)
+        (Just ("add " <> display <> " " <> context))
   pure
     Token
       { tokenKind = expected

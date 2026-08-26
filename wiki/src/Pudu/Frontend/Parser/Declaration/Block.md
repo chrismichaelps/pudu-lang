@@ -29,6 +29,8 @@ parseBlock :: Parser (Located Block)
 
 ### Governance
 
+- Two statements written on one line are rejected with `E1049`. A newline delimits a statement here and there is no terminator, so `{ 1 2 }` is not one expression and not two statements — it is two with the separator missing, and it silently became the second one. The rule reports once per block and never where the statement it followed already failed, which is what keeps a hostile `{{{{...` reporting one `E1099` rather than one diagnostic per brace.
+
 - The block is the fixed point of the declaration/statement/expression recursion: it supplies itself as the `BlockParser` capability to [[Parser Expression]] and [[Parser Binding]], so no module needs a declaration orchestrator import or an `hs-boot` file.
 - A block opens with `{` and closes with `}`; the closing brace is owned here through the state-owned `E1001` expectation.
 - Statements are separated by line breaks, not by punctuation, using [[grammar/pudu]]'s continuation rule; the module owns no `;` token and inserts no terminator.

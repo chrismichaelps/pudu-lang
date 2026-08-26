@@ -31,6 +31,7 @@ parserBlockProperties =
   , ("nested blocks resolve the parser recursion", testNesting)
   , ("unclosed and unrecognized statements recover exactly", testRecovery)
   , ("loops and jumps parse as statements", testLoopStatements)
+  , ("a statement ends at the line break", testAdjacentStatements)
   , ("long statement lists stay linear while brace floods share the budget", testHostileBlocks)
   ]
 
@@ -102,7 +103,7 @@ testRecovery = do
   unclosed <- parse "{\n  let a = 1\n"
   unrecognized <- parse "{\n  ,\n  a\n}"
   pure $ conjoin
-    [ counterexample "missing brace" (codes unclosed === ["E1001"])
+    [ counterexample "missing brace" (codes unclosed === ["E1000"])
     , shape unclosed === "[let a=1]"
     , counterexample "unrecognized statement" (codes unrecognized === ["E1040"])
     , diagnosticOffsets unrecognized === [4]
@@ -134,6 +135,28 @@ testLoopStatements = do
     , codes whileBlock === []
     , codes continueBlock === []
     , codes carried === []
+    ]
+
+{-| A newline delimits a statement, so two on one line are not separated. The
+    rule stays quiet where recovery has already spoken, which is what keeps a
+    hostile file from turning one mistake into hundreds. -}
+testAdjacentStatements :: IO Property
+testAdjacentStatements = do
+  adjacent <- parse "{\n  1 2\n}"
+  several <- parse "{\n  1 2 3 4\n}"
+  separated <- parse "{\n  1\n  2\n}"
+  continued <- parse "{\n  1 +\n    2\n}"
+  memberChain <- parse "{\n  value\n    .first\n}"
+  pure $ conjoin
+    [ counterexample "two statements on one line are reported"
+        (codes adjacent === ["E1049"])
+    , counterexample "and reported once, however many were crowded on"
+        (codes several === ["E1049"])
+    , counterexample "separate lines are ordinary" (codes separated === [])
+    , counterexample "a continuation is not a second statement"
+        (codes continued === [])
+    , counterexample "nor is a line opening with a member access"
+        (codes memberChain === [])
     ]
 
 testHostileBlocks :: IO Property

@@ -71,7 +71,7 @@ testMissingHeader = do
   pure $ conjoin
     [ counterexample "headerless" (codes headerless === ["E1001"])
     , counterexample "no module node" (property (not (hasModule headerless)))
-    , counterexample "empty source" (codes empty === ["E1001"])
+    , counterexample "empty source" (codes empty === ["E1000"])
     ]
 
 testImportOrdering :: IO Property

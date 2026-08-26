@@ -30,7 +30,7 @@ testExpansion = do
     "pick!(chosen)()"
   block <- evaluateWith
     [ "macro run(body: block) = body" ]
-    "run!({ let inner = 3  inner * 2 })"
+    "run!({ let inner = 3\n inner * 2 })"
   nested <- evaluateWith
     [ "macro twice(value: expr) = value + value"
     , "macro quadruple(value: expr) = twice!(twice!(value))"
@@ -83,12 +83,12 @@ testKinds = do
 testHygiene :: IO Property
 testHygiene = do
   captured <- evaluateStatements
-    [ "macro shadowing(value: expr) = { let hidden = value  hidden * 10 }"
+    [ "macro shadowing(value: expr) = { let hidden = value\n hidden * 10 }"
     , "let hidden = 1"
     , "shadowing!(hidden)"
     ]
   leaked <- evaluateStatements
-    [ "macro shadowing(value: expr) = { let hidden = value  hidden * 10 }"
+    [ "macro shadowing(value: expr) = { let hidden = value\n hidden * 10 }"
     , "let hidden = 1"
     , "shadowing!(hidden)"
     , "hidden"

@@ -61,7 +61,7 @@ testModulePaths = do
       (_, deepDiagnostics) = runParser deepSource parseModuleName deepTokens
   pure $ conjoin [moduleNameText validName === "Core.Util", unOffset (spanStart validSpan) === 0,
     unOffset (spanEnd validSpan) === 9, validDiagnostics === [], moduleNameText invalidName === "core",
-    map (diagnosticCodeText . diagnosticCode) invalidDiagnostics === ["E1011", "E1001"],
+    map (diagnosticCodeText . diagnosticCode) invalidDiagnostics === ["E1011", "E1000"],
     map (unOffset . spanStart . diagnosticSpan) invalidDiagnostics === [0, 5],
     map (diagnosticCodeText . diagnosticCode) deepDiagnostics === ["E1099"]]
 

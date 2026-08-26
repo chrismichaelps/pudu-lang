@@ -9,6 +9,8 @@ import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
   , budgetExhausted
+  , emitParseError
+  , diagnosticCount
   , expectIdentifier
   , expectSymbol
   , isSymbol
@@ -49,23 +51,39 @@ parseBlock = do
     statement list is ordinary input — but each statement must consume a token,
     so an unrecognized statement start can never loop. -}
 parseStatements :: [Located Statement] -> Parser [Located Statement]
-parseStatements reversed = do
+parseStatements = parseStatementsFrom False
+
+{-| `reported` carries whether this block has already named a missing line
+    break, and a missing one is only worth naming when the statement before it
+    parsed cleanly. One block reports one, and a statement whose own parse
+    already failed reports none: a hostile `{{{{...` opens a fresh block per
+    brace, and without both rules it would emit a diagnostic for every one. -}
+parseStatementsFrom :: Bool -> [Located Statement] -> Parser [Located Statement]
+parseStatementsFrom reported reversed = do
   kind <- peekKind
   if isSymbol "}" kind || kind == EndOfFile
     then pure (reverse reversed)
     else do
+      beforeCount <- diagnosticCount
       bounded <- withRecursionBudget $ do
         before <- peekToken
         statement <- parseStatement
         after <- peekToken
         if before == after
-          then advanceToken >> pure (Located (locatedSpan statement) InvalidStatement : reversed)
-          else pure (statement : reversed)
+          then do
+            _ <- advanceToken
+            pure (reported, Located (locatedSpan statement) InvalidStatement : reversed)
+          else do
+            after' <- diagnosticCount
+            nowReported <- reportAdjacent (reported || after' > beforeCount) 
+            pure (nowReported, statement : reversed)
       case bounded of
         Nothing -> pure (reverse reversed)
-        Just extended -> do
+        Just (nowReported, extended) -> do
           exhausted <- budgetExhausted
-          if exhausted then pure (reverse extended) else parseStatements extended
+          if exhausted
+            then pure (reverse extended)
+            else parseStatementsFrom nowReported extended
 
 parseStatement :: Parser (Located Statement)
 parseStatement = do
@@ -80,6 +98,32 @@ parseStatement = do
     _ -> do
       expression <- parseExpression parseBlock
       pure (Located (locatedSpan expression) (ExpressionStatement expression))
+
+{-| Reject a second statement written on the line a first one ended.
+
+    A newline delimits a statement here, so `1 2` is not one expression and not
+    two statements — it is two statements with the separator missing. Left
+    unreported it silently became the second one, and `{ 1 2 }` evaluated to 2
+    without a word. [[grammar/pudu]] requires `E1049`.
+
+    A token that closes the block or ends the file is not a statement, and a
+    continuation line is not one either — the continuation rule already decided
+    that before this ever runs. -}
+reportAdjacent :: Bool -> Parser Bool
+reportAdjacent reported = do
+  kind <- peekKind
+  newLine <- peekStartsLine
+  token <- peekToken
+  if reported || isSymbol "}" kind || kind == EndOfFile || newLine
+    then pure reported
+    else do
+      emitParseError "E1049" (tokenSpan token) "a statement ends at the line break"
+        ( Just
+            ( "put this on its own line; two statements on one line are not "
+                <> "separated, and the language has no statement terminator"
+            )
+        )
+      pure True
 
 {-| `break [@label] [value]`.
 

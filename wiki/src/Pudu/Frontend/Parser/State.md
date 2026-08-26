@@ -59,6 +59,9 @@ synchronizeDeclaration :: Parser ()
 
 ### Governance
 
+- Input that ends before a construct is closed reports `E1000`, not `E1001`. A file that ran out is a different mistake from a wrong token, and `expected }` against the last line tells the reader nothing about which brace.
+- `diagnosticCount` lets a recovery rule that only makes sense on otherwise-clean input stay quiet once something has already gone wrong.
+
 - Constructor/state fields are internal; current peek/advance are O(1) over a strict remaining-token list and lookahead is O(k), with grammar callers restricted to bounded `k`.
 - Input is normalized to exactly one canonical final EOF at the supplied source end; a supplied EOF contributes only its trailing trivia, never foreign span/kind/lexeme data.
 - Expectations diagnose without host failure; synthetic tokens are never returned as ordinary input.
