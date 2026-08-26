@@ -367,6 +367,8 @@ stringMethods =
   , ("contains", StringContains)
   , ("startsWith", StringStartsWith)
   , ("endsWith", StringEndsWith)
+  , ("drop", StringDrop)
+  , ("take", StringTake)
   , ("slice", StringSlice)
   , ("trim", StringTrim)
   , ("toUpper", StringToUpper)

@@ -2,8 +2,17 @@ module Std.Text.Parse
 
 import Std.Num {Integer}
 
-/// What a parser is reading and how far it has read.
-export type Input = { text: Str, position: Int }
+/// What a parser has not read yet, and how far it has come.
+///
+/// The text that remains is carried rather than an index into the whole input.
+/// Character access walks from the start of a text, so an index into the whole
+/// input costs what has already been passed, and a scan of a file costs the
+/// square of its length. Reading the front of what remains costs nothing, and
+/// advancing costs only what it moves over, so a scan is linear.
+///
+/// `position` is how many characters have been consumed. It is what a problem
+/// points at, and what tells `orElse` whether a branch committed.
+export type Input = { rest: Str, position: Int }
 
 /// What a parser wanted where it stopped.
 /// The position is kept so a caller can point at the input rather than repeat
@@ -24,13 +33,13 @@ export type Parser[T] = fn(Input) -> Step[T]
 /// Text left over is a problem: a caller that wanted a prefix says so with
 /// `partial`, and one that did not would otherwise accept a truncated parse.
 export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
-  match parser(Input{text: text, position: 0}) {
+  match parser(Input{rest: text, position: 0}) {
     case Err(problem) => Err(problem)
     case Ok(pair) => {
-      if pair[1].position < text.length() {
-        Err(Problem{position: pair[1].position, expected: "the end of the input"})
-      } else {
+      if pair[1].rest.isEmpty() {
         Ok(pair[0])
+      } else {
+        Err(Problem{position: pair[1].position, expected: "the end of the input"})
       }
     }
   }
@@ -38,7 +47,7 @@ export fn run[T](parser: Parser[T], text: Str) -> Result[T, Problem] {
 
 /// Run a parser over text, allowing input to remain.
 export fn partial[T](parser: Parser[T], text: Str) -> Result[(T, Int), Problem] {
-  match parser(Input{text: text, position: 0}) {
+  match parser(Input{rest: text, position: 0}) {
     case Err(problem) => Err(problem)
     case Ok(pair) => Ok((pair[0], pair[1].position))
   }
@@ -62,12 +71,12 @@ export fn fail[T](expected: Str) -> Parser[T] {
 /// One character the predicate accepts.
 export fn satisfy(expected: Str, holds: fn(Char) -> Bool) -> Parser[Char] {
   fn(input: Input) -> Step[Char] => {
-    if input.position >= input.text.length() {
+    if input.rest.isEmpty() {
       Err(Problem{position: input.position, expected: expected})
     } else {
-      let found = input.text.charAt(input.position)
+      let found = input.rest.charAt(0)
       if holds(found) {
-        Ok((found, Input{text: input.text, position: input.position + 1}))
+        Ok((found, Input{rest: input.rest.drop(1), position: input.position + 1}))
       } else {
         Err(Problem{position: input.position, expected: expected})
       }
@@ -83,15 +92,11 @@ export fn character(wanted: Char) -> Parser[Char] {
 /// A particular piece of text.
 export fn literal(wanted: Str) -> Parser[Str] {
   fn(input: Input) -> Step[Str] => {
-    let end = input.position + wanted.length()
-    if end > input.text.length() {
-      Err(Problem{position: input.position, expected: wanted})
+    let width = wanted.length()
+    if input.rest.startsWith(wanted) {
+      Ok((wanted, Input{rest: input.rest.drop(width), position: input.position + width}))
     } else {
-      if input.text.slice(input.position, end) == wanted {
-        Ok((wanted, Input{text: input.text, position: end}))
-      } else {
-        Err(Problem{position: input.position, expected: wanted})
-      }
+      Err(Problem{position: input.position, expected: wanted})
     }
   }
 }
@@ -142,7 +147,7 @@ export fn anyCharacter() -> Parser[Char] {
 /// The end of the input, consuming nothing.
 export fn endOfInput() -> Parser[()] {
   fn(input: Input) -> Step[()] => {
-    if input.position >= input.text.length() { Ok(((), input)) }
+    if input.rest.isEmpty() { Ok(((), input)) }
       else { Err(Problem{position: input.position, expected: "the end of the input"}) }
   }
 }

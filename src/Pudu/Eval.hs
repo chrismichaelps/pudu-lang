@@ -35,6 +35,7 @@ import Pudu.Eval.Builtin
   )
 import Pudu.Eval.Env
   ( Env (..)
+  , effectsAdmitted
   , variantOwner
   , captureEnvironment
   , currentFrame
@@ -690,11 +691,13 @@ evaluateGuard guard = case guard of
 evaluateWhile :: Span -> Maybe Text -> Located Expression -> Located Block -> Evaluator Value
 evaluateWhile spanValue label condition body = loop (0 :: Int)
  where
-  loop iterations
-    | iterations > iterationLimit =
+  loop iterations = do
+    stop <- exceededStepLimit iterations
+    if stop
+      then
         abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
-          (Just "the interactive evaluator bounds iteration; restructure the loop")
-    | otherwise = do
+          (Just "a constant is folded while the compiler runs; restructure the loop")
+      else do
         test <- evaluate condition
         truth <- expectBool spanValue test
         if not truth
@@ -710,11 +713,13 @@ evaluateWhile spanValue label condition body = loop (0 :: Int)
 evaluateLoop :: Span -> Maybe Text -> Located Block -> Evaluator Value
 evaluateLoop spanValue label body = loop (0 :: Int)
  where
-  loop iterations
-    | iterations > iterationLimit =
+  loop iterations = do
+    stop <- exceededStepLimit iterations
+    if stop
+      then
         abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
-          (Just "the interactive evaluator bounds iteration; add a break")
-    | otherwise = do
+          (Just "a constant is folded while the compiler runs; add a break")
+      else do
         outcome <- catchUnwind (evaluateBlock body)
         case transferFor label outcome of
           Stop carried -> pure carried
@@ -762,11 +767,13 @@ evaluateFor spanValue label binder iterated body = case elements of
   {-| Walk a sequence one item at a time, threading the state each `advance`
       answers with. The step limit is the loop's, because a sequence that never
       ends is a loop that never ends. -}
-  walk advance state iterations
-    | iterations > iterationLimit =
+  walk advance state iterations = do
+    stop <- exceededStepLimit iterations
+    if stop
+      then
         abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
-          (Just "the interactive evaluator bounds iteration; end the sequence or break")
-    | otherwise = do
+          (Just "a constant is folded while the compiler runs; end the sequence or break")
+      else do
         stepped <- callClosureValue spanValue advance [iterated, state]
         case stepped of
           VariantValue "None" _ -> pure UnitValue
@@ -852,6 +859,23 @@ transferFor label outcome = case outcome of
   addressed target = case target of
     Nothing -> True
     Just name -> label == Just name
+
+{-| Whether a loop that has run this long should be stopped.
+
+    The compiler must terminate; a program need not. A `const` initialiser runs
+    while the compiler runs, so a loop that never ends there is a build that
+    never ends, and bounding it is what keeps one from happening. A program the
+    reader asked to run is bounded by the machine, exactly as it would be in any
+    other language — stopping it at a fixed count is not a safety property, it
+    is a language that cannot read a file, because a file of any size needs more
+    steps than any constant this module could pick.
+
+    The two are told apart by whether effects are admitted, which is already how
+    the language distinguishes compile-time evaluation from running. -}
+exceededStepLimit :: Int -> Evaluator Bool
+exceededStepLimit iterations
+  | iterations <= iterationLimit = pure False
+  | otherwise = not <$> effectsAdmitted
 
 iterationLimit :: Int
 iterationLimit = 100000

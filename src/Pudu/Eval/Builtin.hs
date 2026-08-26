@@ -337,6 +337,17 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringContains, [StrValue needle]) -> pure (BoolValue (Text.isInfixOf needle text))
     (StringStartsWith, [StrValue needle]) -> pure (BoolValue (Text.isPrefixOf needle text))
     (StringEndsWith, [StrValue needle]) -> pure (BoolValue (Text.isSuffixOf needle text))
+    {-| `drop` and `take` cost what they move, not what the text holds, which
+        is what lets a parser carry the text it has not read yet and advance
+        through a file in linear time. Indexing walks from the start, so a
+        parser that kept a position into the whole text paid for every
+        character it had already passed. -}
+    (StringDrop, [IntValue _ count])
+      | count < 0 -> outOfRange "a drop count cannot be negative"
+      | otherwise -> pure (StrValue (Text.drop (fromInteger count) text))
+    (StringTake, [IntValue _ count])
+      | count < 0 -> outOfRange "a take count cannot be negative"
+      | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
     (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))

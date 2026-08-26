@@ -104,6 +104,8 @@ evaluateModule :: Module -> EvalOutcome
 - **A type that writes `Sequence` is iterated by it, and a sum falls back to its payload only when nothing does.** [[Type Check Iteration]] decides the binder's type in exactly this order, and taking the payload first made the two disagree: a program with its own implementation type checked against the implementation and then ran against the payload, so a binder the checker called `Int` held a variant.
 - **A value names the variant it is; an implementation is written for the type that declares it.** Every method lookup on a receiver therefore tries the variant's own name and then what that variant belongs to — a direct call, a trait-qualified call, and the sequence protocol all go through the same two names. Without the second, `impl Shaped for Round` was unreachable from a `Circle` and no trait method worked on any sum at all. The variant's own name is tried first, because a record type is its own owner and must not be looked past.
 
+- **The compiler must terminate; a program need not.** A loop is bounded only while effects are refused, which is exactly when a `const` is being folded and a loop that never ends would be a build that never ends. A program the reader ran is bounded by the machine. A fixed step count applied to both is not a safety property — an input of any size needs more steps than any constant this module could pick, so the bound made every file unreadable rather than making anything safe.
+
 ### Linkage
 
 - **Requires:** [[Eval Value]], [[Eval Env]], [[Eval Match]], [[Eval Operator]], [[Syntax Tree]], [[Diagnostic Model]].
@@ -133,6 +135,7 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 
 ## Grill Log
 
+- **Q:** Why not keep a very large bound instead of removing it while running? **A:** Because any constant is wrong for some input. _Rationale:_ the bound exists to stop the compiler hanging, and nothing about running a program needs it; picking a bigger number only moves the size of file that fails. _Rejected:_ raising the limit; making it a flag, which asks every reader to know a number that should not exist.
 - **Q:** Why does the evaluator need a variant-to-type map when the checker does not? **A:** Because a runtime value has lost its type. _Rationale:_ the checker holds `List` and looks up `List.begin` directly; the evaluator holds a `Cons` and nothing in the value says which sum it came from, so the declaration has to leave that behind at install time. _Rejected:_ tagging every value with its owning type, which costs every value for a lookup few need.
 - **Q:** Should the evaluator wait for the type checker? **A:** No. _Rationale:_ an interactive session that cannot produce a value teaches nothing about the language, and every rule the evaluator applies here is one typing will later refine rather than contradict. _Rejected:_ a checking-only session; a stub evaluator returning placeholders.
 - **Q:** How do `return`, `break`, and `continue` leave nested blocks? **A:** As unwinds through the evaluator's own result type. _Rationale:_ the first attempt made a block yield a control value, and a `return` inside an `if` became the `if`'s value — the tests caught it immediately. _Rejected:_ threading a flow value through every expression; host exceptions.

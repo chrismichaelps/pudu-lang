@@ -232,6 +232,8 @@ data StringMethod
   | StringContains
   | StringStartsWith
   | StringEndsWith
+  | StringDrop
+  | StringTake
   | StringSlice
   | StringTrim
   | StringToUpper
@@ -367,6 +369,8 @@ stringMethodName method = case method of
   StringContains -> "contains"
   StringStartsWith -> "startsWith"
   StringEndsWith -> "endsWith"
+  StringDrop -> "drop"
+  StringTake -> "take"
   StringSlice -> "slice"
   StringTrim -> "trim"
   StringToUpper -> "toUpper"
