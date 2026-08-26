@@ -5,6 +5,7 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
 - [[Eval Clock]] — calendar time and subprocesses.
 - [[Eval Io]] — the effects a program may perform, each answering with an outcome.
 - [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order.

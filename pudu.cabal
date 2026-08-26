@@ -36,6 +36,7 @@ library
     Pudu.Diagnostic.Render
     Pudu.Eval
     Pudu.Eval.Array
+    Pudu.Eval.Builtin
     Pudu.Eval.Clock
     Pudu.Eval.Env
     Pudu.Eval.Io
