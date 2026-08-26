@@ -1,0 +1,86 @@
+module UsesSumTraits
+
+/// A trait implemented for a sum type.
+///
+/// A value names the variant it is, and an implementation is written for the
+/// type that declares the variant, so calling a method on a `Circle` has to
+/// reach `impl Shaped for Round` through what `Circle` belongs to.
+trait Shaped {
+  fn area(self: &Self) -> Int
+  fn label(self: &Self) -> Str
+}
+
+type Round
+  = Circle{radius: Int}
+  | Ring{outer: Int, inner: Int}
+
+/// The same shape written with a positional payload, so both spellings are
+/// shown to reach one implementation.
+type Angular
+  = Square(Int)
+  | Oblong(Int, Int)
+
+/// A record type is its own owner and must not be looked past.
+type Boxed = { side: Int }
+
+impl Shaped for Round {
+  fn area(self: &Round) -> Int {
+    match *self {
+      case Circle{radius} => 3 * radius * radius
+      case Ring{outer, inner} => 3 * (outer * outer - inner * inner)
+    }
+  }
+  fn label(self: &Round) -> Str { "round" }
+}
+
+impl Shaped for Angular {
+  fn area(self: &Angular) -> Int {
+    match *self {
+      case Square(side) => side * side
+      case Oblong(width, height) => width * height
+    }
+  }
+  fn label(self: &Angular) -> Str { "angular" }
+}
+
+impl Shaped for Boxed {
+  fn area(self: &Boxed) -> Int { self.side * self.side }
+  fn label(self: &Boxed) -> Str { "boxed" }
+}
+
+/// A method called directly on a value of the sum type.
+fn direct(shape: &Round) -> Int { shape.area() }
+
+/// The same method reached through the trait that declares it, which dispatches
+/// on the receiver's type.
+fn throughTrait(shape: &Angular) -> Int { Shaped.area(shape) }
+
+/// Every implementation behind one dynamic type.
+fn totalOf(shapes: &Array[dynamic Shaped]) -> Int {
+  var sum = 0
+  for shape in shapes {
+    sum = sum + shape.area()
+  }
+  sum
+}
+
+fn labelled(shapes: &Array[dynamic Shaped]) -> Int {
+  var named = 0
+  for shape in shapes {
+    if shape.label().length() > 0 {
+      named = named + 1
+    }
+  }
+  named
+}
+
+export fn main() -> Int {
+  var shapes: Array[dynamic Shaped] =
+  [Circle{radius: 2}, Ring{outer: 3, inner: 1}, Square(4), Oblong(2, 5), Boxed{side: 3}]
+  var total = 0
+  total = total + direct(&Circle{radius: 1})
+  total = total + throughTrait(&Square(3))
+  total = total + totalOf(&shapes)
+  total = total + labelled(&shapes)
+  total
+}

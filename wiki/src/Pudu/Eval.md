@@ -102,7 +102,7 @@ evaluateModule :: Module -> EvalOutcome
 - Calling an async closure evaluates supplied arguments and omitted defaults left to right, then returns a cold `TaskValue` without running the body. `.await` starts that prepared body; `Ok` yields its payload, `Err` propagates like `?`, and awaiting a non-task is defensive runtime `E7008`.
 
 - **A type that writes `Sequence` is iterated by it, and a sum falls back to its payload only when nothing does.** [[Type Check Iteration]] decides the binder's type in exactly this order, and taking the payload first made the two disagree: a program with its own implementation type checked against the implementation and then ran against the payload, so a binder the checker called `Int` held a variant.
-- A value names the variant it is; an implementation is written for the type that declares it. Asking whether a `Cons` is a sequence therefore asks what `Cons` belongs to, which is why the evaluator records each variant's owning type as it installs it.
+- **A value names the variant it is; an implementation is written for the type that declares it.** Every method lookup on a receiver therefore tries the variant's own name and then what that variant belongs to — a direct call, a trait-qualified call, and the sequence protocol all go through the same two names. Without the second, `impl Shaped for Round` was unreachable from a `Circle` and no trait method worked on any sum at all. The variant's own name is tried first, because a record type is its own owner and must not be looked past.
 
 ### Linkage
 

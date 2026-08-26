@@ -171,6 +171,7 @@ testProgramEvaluation = do
   named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
   ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
   acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
+  sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -207,6 +208,8 @@ testProgramEvaluation = do
         (ownSequence === Just "45")
     , counterexample "an imported variant carries the names its declaration gave it"
         (acrossModules === Just "24")
+    , counterexample "a trait implemented for a sum reaches every variant's value"
+        (sumTraits === Just "88")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

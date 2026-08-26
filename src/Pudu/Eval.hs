@@ -537,9 +537,9 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
     case direct of
       Just found -> pure (Just found)
       Nothing -> case values of
-        receiver : _ -> case receiverOwner receiver of
-          Nothing -> pure Nothing
-          Just owner -> lookupName (first <> "." <> owner <> "." <> method)
+        receiver : _ -> do
+          owners <- receiverOwners receiver
+          firstBound (\owner -> lookupName (first <> "." <> owner <> "." <> method)) owners
         [] -> pure Nothing
 
 {-| A qualified callee reaches the parser as a member access on a bare name, so
@@ -550,6 +550,29 @@ qualifiedParts expression = case expression of
   MemberExpression (Located _ (NameExpression (first :| []))) member ->
     Just (first, locatedValue member)
   _ -> Nothing
+
+{-| The names a receiver may have its methods written under.
+
+    A value names the variant it is, and an implementation is written for the
+    type that declares the variant, so a `Circle` finds `impl Shaped for Round`
+    only by asking what `Circle` belongs to. The variant's own name comes first
+    because a record type is its own owner and must not be looked past. -}
+receiverOwners :: Value -> Evaluator [Text]
+receiverOwners value = case receiverOwner value of
+  Nothing -> pure []
+  Just owner -> do
+    declaring <- variantOwner owner
+    pure (owner : maybe [] pure declaring)
+
+{-| The first of these names that binds something. -}
+firstBound :: (Text -> Evaluator (Maybe a)) -> [Text] -> Evaluator (Maybe a)
+firstBound look names = case names of
+  [] -> pure Nothing
+  name : rest -> do
+    found <- look name
+    case found of
+      Just value -> pure (Just value)
+      Nothing -> firstBound look rest
 
 {-| The nominal name a runtime value carries, which is how a trait-qualified
     call finds the implementation for the receiver it was given. -}
@@ -634,10 +657,8 @@ evaluateCallee :: Located Expression -> Evaluator Value
 evaluateCallee located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
     receiver <- evaluate target
-    method <- case receiver of
-      RecordValue owner _ -> lookupName (owner <> "." <> locatedValue member)
-      VariantValue owner _ -> lookupName (owner <> "." <> locatedValue member)
-      _ -> pure Nothing
+    owners <- receiverOwners receiver
+    method <- firstBound (\owner -> lookupName (owner <> "." <> locatedValue member)) owners
     case method of
       Just (FunctionValue closure) ->
         pure (FunctionValue closure{closureSelf = Just receiver})
@@ -789,18 +810,7 @@ evaluateFor spanValue label binder iterated body = case elements of
     both. A type with only one of them is not a sequence, and saying so here
     keeps the failure at the `for` rather than inside it. -}
 sequenceMethods :: Value -> Evaluator (Maybe (Value, Value))
-sequenceMethods value = case receiverOwner value of
-  Nothing -> pure Nothing
-  Just owner -> do
-    own <- methodsUnder owner
-    case own of
-      Just found -> pure (Just found)
-      {-| A value names the variant it is, and an implementation is written for
-          the type that declares it, so a `Cons` finds `List`'s `begin` only by
-          asking what `Cons` belongs to. -}
-      Nothing -> do
-        declaring <- variantOwner owner
-        maybe (pure Nothing) methodsUnder declaring
+sequenceMethods value = receiverOwners value >>= firstBound methodsUnder
  where
   methodsUnder owner = do
     begin <- lookupName (owner <> ".begin")
