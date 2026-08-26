@@ -27,6 +27,8 @@ module Pudu.Frontend.Parser.State
   , runParser
   , synchronizeDeclaration
   , withRecordAdmission
+  , withRecords
+  , withoutRecords
   , withRecursionBudget
   , withTokens
   ) where
@@ -260,6 +262,17 @@ emitParseError codeText spanValue message help = do
     block itself, and is reinstated inside any bracketed context. -}
 recordsAdmitted :: Parser Bool
 recordsAdmitted = Parser $ \state -> (parserAdmitsRecords state, state)
+
+{-| Run an action with record constructions admitted, or withheld.
+
+    Withheld only for the expression that precedes a block, where `Name {` is
+    ambiguous with the block itself, and reinstated inside any bracketed
+    context. -}
+withRecords :: Parser a -> Parser a
+withRecords = withRecordAdmission True
+
+withoutRecords :: Parser a -> Parser a
+withoutRecords = withRecordAdmission False
 
 withRecordAdmission :: Bool -> Parser a -> Parser a
 withRecordAdmission admitted (Parser action) =
