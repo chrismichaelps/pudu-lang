@@ -275,18 +275,16 @@ testExhaustedBudgetIsQuiet = do
     implemented in a parser are two tables until something compares them. -}
 testPrecedenceBands :: IO Property
 testPrecedenceBands = do
-  let bands =
-        [ ("*", "multiplicative"), ("+", "additive"), ("<<", "shift")
-        , ("^", "range and bitwise xor"), ("<", "comparison"), ("==", "equality")
-        , ("&&", "boolean and"), ("||", "boolean or")
-        ]
+  {-| One representative per band, tightest first, in the order
+      [[grammar/pudu]] lists them: multiplicative, additive, shift, range and
+      bitwise xor, comparison, equality, boolean and, boolean or. -}
+  let bands :: [Text]
+      bands = ["*", "+", "<<", "^", "<", "==", "&&", "||"]
       adjacent = zip bands (drop 1 bands)
-  tighter <- traverse (\((t, _), (l, _)) -> parse ("a " <> t <> " b " <> l <> " c")) adjacent
-  let expected =
-        [ "((a" <> t <> "b)" <> l <> "c)" | ((t, _), (l, _)) <- adjacent ]
-  associativity <- traverse (\(op, _) -> parse ("a " <> op <> " b " <> op <> " c")) bands
-  let leftAssociative =
-        [ "((a" <> op <> "b)" <> op <> "c)" | (op, _) <- bands ]
+  tighter <- traverse (\(t, l) -> parse ("a " <> t <> " b " <> l <> " c")) adjacent
+  let expected = ["((a" <> t <> "b)" <> l <> "c)" | (t, l) <- adjacent]
+  associativity <- traverse (\op -> parse ("a " <> op <> " b " <> op <> " c")) bands
+  let leftAssociative = ["((a" <> op <> "b)" <> op <> "c)" | op <- bands]
   assignment <- parse "a = b = c"
   unaryBinding <- parse "-a * -b"
   postfixBinding <- parse "-f(a)"

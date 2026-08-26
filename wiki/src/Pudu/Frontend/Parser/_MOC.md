@@ -9,6 +9,7 @@ tags: [moc, module]
 - [[Parser Name]] — dotted module/name paths and identifiers.
 - [[Parser Type]] — bounded reference, tuple/unit, named, and generic type syntax.
 - [[Parser Expression]] — bounded precedence, the full postfix family, literals, block capability, and the `if`/`match`/`while`/`loop`/`for` control expressions.
+- [[Parser Expression Recovery]] — what expression parsing does when it cannot read one, plus the closed capability and unary vocabularies.
 - [[Parser Pattern]] — wildcard, binding, literal, range, tuple, constructor, record, and alternation patterns.
 - [[src/Pudu/Frontend/Parser/Declaration/_MOC|Declaration modules]] — modular imports, bindings, blocks, functions, generics, type declarations, traits, and impls.
 - [[Parser Declaration]] — compilation-unit orchestration, `export` ownership, import ordering, and module-scope recovery.

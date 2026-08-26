@@ -65,6 +65,7 @@ library
     Pudu.Frontend.Parser.Declaration.Import
     Pudu.Frontend.Parser.Declaration.Macro
     Pudu.Frontend.Parser.Expression
+    Pudu.Frontend.Parser.Expression.Recovery
     Pudu.Frontend.Parser.State
     Pudu.Frontend.Parser.Type
     Pudu.Frontend.Syntax
