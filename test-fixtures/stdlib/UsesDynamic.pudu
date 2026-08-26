@@ -115,6 +115,114 @@ fn theSetIsOpen() -> Bool {
   total == 34
 }
 
+/// Composite: children of mixed types, and the tree itself is dynamic.
+trait Node {
+  fn total(self: &Self) -> Int
+}
+
+type Leaf = { value: Int }
+type Group = { children: Array[dynamic Node] }
+
+impl Node for Leaf {
+  fn total(self: &Self) -> Int { self.value }
+}
+
+impl Node for Group {
+  fn total(self: &Self) -> Int {
+    var sum = 0
+    for child in self.children {
+      sum = sum + child.total()
+    }
+    sum
+  }
+}
+
+/// A record field's declared type is an expectation too, so a field declared
+/// `Array[dynamic Node]` takes a literal of mixed implementations.
+fn compositeNestsHeterogeneously() -> Bool {
+  let tree: dynamic Node = Group{children: [
+      Leaf{value: 1},
+      Group{children: [Leaf{value: 2}, Leaf{value: 3}]}
+    ] }
+  tree.total() == 6
+}
+
+/// Chain of Responsibility: an open set of handlers, first answer wins.
+trait Handler {
+  fn handle(self: &Self, value: Int) -> Option[Int]
+}
+
+type Small = {}
+type Large = {}
+
+impl Handler for Small {
+  fn handle(self: &Self, value: Int) -> Option[Int] {
+    if value < 10 { Some(1) } else { None }
+  }
+}
+
+impl Handler for Large {
+  fn handle(self: &Self, value: Int) -> Option[Int] {
+    if value >= 10 { Some(2) } else { None }
+  }
+}
+
+fn firstHandlerThatAnswers(handlers: &Array[dynamic Handler], value: Int) -> Int {
+  for handler in handlers {
+    match handler.handle(value) {
+      case Some(answer) => { return answer }
+      case None => {}
+    }
+  }
+  0
+}
+
+fn chainOfResponsibility() -> Bool {
+  let handlers: Array[dynamic Handler] = [Small{}, Large{}]
+  firstHandlerThatAnswers(&handlers, 5) == 1 &&
+  firstHandlerThatAnswers(&handlers, 50) == 2 &&
+  firstHandlerThatAnswers(&handlers, 0 - 1) == 1
+}
+
+/// Abstract Factory: the factory is dynamic and what it makes is dynamic too.
+trait Widget {
+  fn draw(self: &Self) -> Int
+}
+
+trait Maker {
+  fn create(self: &Self) -> dynamic Widget
+}
+
+type Button = {}
+type Slider = {}
+type ButtonMaker = {}
+type SliderMaker = {}
+
+impl Widget for Button {
+  fn draw(self: &Self) -> Int { 1 }
+}
+
+impl Widget for Slider {
+  fn draw(self: &Self) -> Int { 2 }
+}
+
+impl Maker for ButtonMaker {
+  fn create(self: &Self) -> dynamic Widget { Button{} }
+}
+
+impl Maker for SliderMaker {
+  fn create(self: &Self) -> dynamic Widget { Slider{} }
+}
+
+fn abstractFactory() -> Bool {
+  let makers: Array[dynamic Maker] = [ButtonMaker{}, SliderMaker{}]
+  var total = 0
+  for maker in makers {
+    total = total + maker.create().draw()
+  }
+  total == 3
+}
+
 export fn main() -> Int {
   var passed = 0
   if observersOfDifferentTypes() { passed = passed + 1 }
@@ -123,5 +231,8 @@ export fn main() -> Int {
   if dynamicValuesAreOrdinary() { passed = passed + 1 }
   if dynamicParametersAccentAnyImplementation() { passed = passed + 1 }
   if theSetIsOpen() { passed = passed + 1 }
+  if compositeNestsHeterogeneously() { passed = passed + 1 }
+  if chainOfResponsibility() { passed = passed + 1 }
+  if abstractFactory() { passed = passed + 1 }
   passed
 }

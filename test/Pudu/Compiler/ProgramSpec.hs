@@ -193,7 +193,7 @@ testProgramEvaluation = do
     , counterexample "a module calls the function it declared, not a stranger's"
         (scoped === Just "2")
     , counterexample "a dynamic type holds any implementation of its trait"
-        (dynamic === Just "6")
+        (dynamic === Just "9")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

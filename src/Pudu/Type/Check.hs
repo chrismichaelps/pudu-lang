@@ -1242,15 +1242,25 @@ recordType declared rigid spanValue path fields = do
 checkField
   :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()
 checkField declared rigid expected located@(Located fieldSpan field) = do
-  actual <- checkFieldInit declared rigid located
   let name = locatedValue (fieldInitName field)
   case lookup name expected of
-    Nothing ->
+    Nothing -> do
+      _ <- checkFieldInit declared rigid located
       report "E3005" fieldSpan ("no declared field " <> name)
         (Just "check the field name against the type declaration")
-    Just declaredType -> do
-      _ <- unify fieldSpan declaredType actual
-      pure ()
+    {-| The declared field type is an expectation, so it reaches the value the
+        same way a binding's annotation does. A field declared
+        `Array[dynamic Node]` accepts a literal of mixed implementations; before
+        this the literal was inferred on its own and its elements disagreed
+        before the field's type was ever consulted. -}
+    Just declaredType -> case fieldInitValue field of
+      Just value -> do
+        _ <- checkAgainst declared rigid declaredType value
+        pure ()
+      Nothing -> do
+        actual <- checkFieldInit declared rigid located
+        _ <- unify fieldSpan declaredType actual
+        pure ()
 
 checkFieldInit :: DeclaredTypes -> [Text] -> Located FieldInit -> Checker Type
 checkFieldInit declared rigid (Located fieldSpan field) = case fieldInitValue field of

@@ -30,6 +30,8 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- Checking pushes an expectation inward at an `if`, a `match`, an array literal, a block, and a record field, so branches of different types widen against what the context asked for rather than against each other. It engages only where the expectation actually contains a dynamic type, so ordinary inference is unchanged. A record field's declared type is an expectation for the same reason a binding's annotation is.
+
 - A trait-qualified call is resolved against the type its receiver actually has, not against the trait's declaration. `Speak.label(&bot)` names the trait, but the method it runs is the one `Bot` implements, and only that one knows the concrete types — a generic trait leaves its parameters open in the declaration by design. This is the rule [[Evaluator]] already followed for the same call, so the two phases now agree rather than only appearing to. The receiver is checked once and its type reused, so the call is never walked twice.
 
 - Explicit type arguments pin what inference cannot settle. They instantiate the scheme with the
