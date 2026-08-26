@@ -199,8 +199,8 @@ testProgramEvaluation = do
         (parsing === Just "22")
     , counterexample "labelled loops break and continue across nesting"
         (labelled === Just "4")
-    , counterexample "a variant may name its payload, and be built and matched by those names"
-        (named === Just "92")
+    , counterexample "a named variant is built and matched by its names, and by the name it writes"
+        (named === Just "119")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"
