@@ -151,22 +151,36 @@ qualifiedMemberType spanValue target member = case target of
 
 {-| What to suggest for a member a module does not export.
 
-    A name that is already in scope unqualified is a prelude binding, and the
-    reader has simply reached for it through a module — `Io.writeFile` for the
-    `writeFile` every program can call. Saying "it is a method on the value"
-    there would send them somewhere it is not.
+    Three cases, and guessing between them is what made the first version of
+    this message confidently wrong.
 
-    Otherwise the commonest cause is a built-in method written as a module
-    function, which is what `Text.length(value)` is. -}
+    A name already in scope unqualified is a prelude binding the reader reached
+    for through a module — `Io.writeFile` for the `writeFile` every program can
+    call. A name that is a built-in method is one written as a module function,
+    which is what `Text.length(value)` is. Anything else is a spelling the
+    module does not have, and the only honest advice is to look at what it
+    does. -}
 missingMemberHelp :: Text -> Text -> Bool -> Text
 missingMemberHelp owner member inScopeUnqualified
   | inScopeUnqualified =
       member <> " is available unqualified; write " <> member
         <> "(...) without " <> owner <> "."
-  | otherwise =
-      "check the spelling against " <> owner
-        <> "; a built-in method is called on the value itself, as in value."
+  | member `elem` builtinMethodNames =
+      member <> " is a built-in method; call it on the value itself, as in value."
         <> member <> "()"
+  | otherwise = "check the spelling against what " <> owner <> " exports"
+
+{-| The built-in method names, so the help can tell a member written the wrong
+    way from one that does not exist at all. Kept beside the tables that define
+    them, because a method added to either without a line here would quietly
+    make the message worse. -}
+builtinMethodNames :: [Text]
+builtinMethodNames =
+  [ "length", "isEmpty", "charAt", "indexOf", "contains", "startsWith", "endsWith"
+  , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
+  , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
+  , "map", "filter", "reduce"
+  ]
 
 enclosingReturnType :: Text -> Checker Type
 enclosingReturnType binding = snd <$> enclosingFunctionType binding

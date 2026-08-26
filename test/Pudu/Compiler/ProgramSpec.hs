@@ -13,7 +13,8 @@ import Pudu.Compiler.Program
   )
 import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
 import Pudu.Eval.Value (renderValue)
-import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticMessage)
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
+  , diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Repl.Session
   ( EntryResult (..)
@@ -117,6 +118,9 @@ testStandardLibrary = do
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
   floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
   missingMember <- codes "test-fixtures/stdlib/RejectsMissingMember.pudu"
+  missingMemberHelp <- helps "test-fixtures/stdlib/RejectsMissingMember.pudu"
+  unqualifiedHelp <- helps "test-fixtures/stdlib/RejectsUnqualifiedMember.pudu"
+  unknownHelp <- helps "test-fixtures/stdlib/RejectsUnknownMember.pudu"
   resolved <- moduleNames "test-fixtures/stdlib/UsesStd.pudu"
   pure $ conjoin
     [ counterexample "a standard import compiles with no program-local module" (uses === [])
@@ -129,6 +133,12 @@ testStandardLibrary = do
         (floatRangeDiagnostics === ["E3012"])
     , counterexample "a member the module does not export is reported once"
         (missingMember === ["E3033"])
+    , counterexample "a built-in method written as a module function says so"
+        (any (Text.isInfixOf "built-in method") missingMemberHelp === True)
+    , counterexample "a prelude binding reached through a module says so instead"
+        (any (Text.isInfixOf "available unqualified") unqualifiedHelp === True)
+    , counterexample "and a name that is neither only says to check the exports"
+        (any (Text.isInfixOf "check the spelling against what") unknownHelp === True)
     , counterexample "the standard module joins the program graph"
         (elem "Std.Math" resolved === True)
     ]
@@ -157,6 +167,7 @@ testProgramEvaluation = do
   dynamic <- runEntry "test-fixtures/stdlib/UsesDynamic.pudu"
   registry <- runEntry "test-fixtures/stdlib/UsesRegistry.pudu"
   effectSurface <- runEntry "test-fixtures/stdlib/UsesEffects.pudu"
+  routing <- runEntry "test-fixtures/stdlib/UsesRouter.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -203,6 +214,8 @@ testProgramEvaluation = do
         (registry === Just "6")
     , counterexample "a program writes, reads, and removes a file and reports failure"
         (effectSurface === Just "6")
+    , counterexample "the protocol, keyed, and url modules serve one program"
+        (routing === Just "7")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]
@@ -225,6 +238,14 @@ messages :: FilePath -> IO [Text]
 messages path = do
   result <- compileProgram path
   pure (map diagnosticMessage (programDiagnostics result))
+
+{-| The help lines a compile produced. A diagnostic's help is where it tells the
+    reader what to do, so a test about advice has to read that rather than the
+    message. -}
+helps :: FilePath -> IO [Text]
+helps path = do
+  result <- compileProgram path
+  pure [help | Just help <- map diagnosticHelp (programDiagnostics result)]
 
 codes :: FilePath -> IO [Text]
 codes path = do
