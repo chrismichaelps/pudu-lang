@@ -12,6 +12,7 @@ tags: [moc, module]
 - [[Parser Generic]] — bracketed type parameters, bounds, and `where` constraint clauses shared by every generic construct.
 - [[Parser Type Declaration]] — record, sum, and alias `type` declarations.
 - [[Parser Trait]] — trait contracts and `impl` blocks.
+- [[Parser Macro]] — typed syntax transformers, whose parameters declare the syntax each accepts.
 
 The submodules accept narrow parser capabilities and never import the declaration orchestrator, preventing the recursive block/expression/declaration knot from becoming a Haskell module cycle.
 
