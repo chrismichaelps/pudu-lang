@@ -1,0 +1,54 @@
+module UsesEffects
+
+import Std.Env as Env
+import Std.Io as Io
+import Std.Option as O
+import Std.Result as R
+import Std.Time as Time
+
+/// A word-count utility: read a file, count, report, clean up.
+fn countWords(contents: Str) -> Int {
+  var words = 0
+  var inWord = false
+  for character in contents.chars() {
+    if character == ' ' || character == '\n' {
+      inWord = false
+    } else {
+      if !inWord { words = words + 1 }
+      inWord = true
+    }
+  }
+  words
+}
+
+export fn main() -> Int {
+  var passed = 0
+
+  let path = "/tmp/pudu-effects-probe.txt"
+  match writeFile(path, "one two three\nfour five\n") {
+    case Ok(_) => { passed = passed + 1 }
+    case Err(_) => {}
+  }
+
+  match readFile(path) {
+    case Ok(contents) => { if countWords(contents) == 5 { passed = passed + 1 } }
+    case Err(_) => {}
+  }
+
+  if fileExists(path) { passed = passed + 1 }
+
+  match removeFile(path) {
+    case Ok(_) => { if !fileExists(path) { passed = passed + 1 } }
+    case Err(_) => {}
+  }
+
+  match readFile("/tmp/pudu-definitely-absent-xyz") {
+    case Ok(_) => {}
+    case Err(_) => { passed = passed + 1 }
+  }
+
+  let started = clock()
+  if started >= 0 { passed = passed + 1 }
+
+  passed
+}

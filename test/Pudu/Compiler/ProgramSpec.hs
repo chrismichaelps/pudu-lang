@@ -156,6 +156,7 @@ testProgramEvaluation = do
   sequences <- runEntry "test-fixtures/stdlib/UsesIter.pudu"
   dynamic <- runEntry "test-fixtures/stdlib/UsesDynamic.pudu"
   registry <- runEntry "test-fixtures/stdlib/UsesRegistry.pudu"
+  effectSurface <- runEntry "test-fixtures/stdlib/UsesEffects.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -200,6 +201,8 @@ testProgramEvaluation = do
         (dynamic === Just "9")
     , counterexample "traits, dynamic values, and bounded generics compose"
         (registry === Just "6")
+    , counterexample "a program writes, reads, and removes a file and reports failure"
+        (effectSurface === Just "6")
     , counterexample "a program with no entry point evaluates to unit"
         (aliased === Just "()")
     ]

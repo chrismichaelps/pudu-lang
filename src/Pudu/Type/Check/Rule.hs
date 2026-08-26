@@ -142,16 +142,31 @@ qualifiedMemberType spanValue target member = case target of
         selfIsValue <- lookupName owner
         if ownsMembers && selfIsValue == Nothing
           then do
+            unqualified <- lookupName member
             report "E3033" spanValue (owner <> " exports no " <> member)
-              ( Just
-                  ( "check the spelling against " <> owner
-                      <> "; a built-in method is called on the value itself, as in "
-                      <> "value." <> member <> "()"
-                  )
-              )
+              (Just (missingMemberHelp owner member (unqualified /= Nothing)))
             pure (Just ErrorType)
           else pure Nothing
   _ -> pure Nothing
+
+{-| What to suggest for a member a module does not export.
+
+    A name that is already in scope unqualified is a prelude binding, and the
+    reader has simply reached for it through a module — `Io.writeFile` for the
+    `writeFile` every program can call. Saying "it is a method on the value"
+    there would send them somewhere it is not.
+
+    Otherwise the commonest cause is a built-in method written as a module
+    function, which is what `Text.length(value)` is. -}
+missingMemberHelp :: Text -> Text -> Bool -> Text
+missingMemberHelp owner member inScopeUnqualified
+  | inScopeUnqualified =
+      member <> " is available unqualified; write " <> member
+        <> "(...) without " <> owner <> "."
+  | otherwise =
+      "check the spelling against " <> owner
+        <> "; a built-in method is called on the value itself, as in value."
+        <> member <> "()"
 
 enclosingReturnType :: Text -> Checker Type
 enclosingReturnType binding = snd <$> enclosingFunctionType binding

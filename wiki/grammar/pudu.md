@@ -272,6 +272,8 @@ scope_expr       = "async", "with", "scope", block ;
 - Leaving a scope normally awaits children; leaving by failure or cancellation cancels children, runs cleanup, then waits for termination.
 - Cancellation is distinct from domain `Result` failure and cannot be swallowed accidentally.
 - A value crossing into a concurrently executing task must satisfy `Send`; shared cross-task references additionally require `Sync` and cannot outlive the scope.
+- **A program reaches concurrency by declaring `main` itself `async`.** Calling an `async fn` gives a `Task`, `.await` is legal only inside an `async fn`, and a `Task` is not a `Result` — so a synchronous `main` can call an async function but can do nothing with what it gets back. `export async fn main() -> Result[Int, Str]` is the entry point that can, and its whole-number result is still the exit status.
+- `.await` on a `Task[T, E]` yields `T`, not `Result[T, E]`. The failure channel belongs to the enclosing scope, which is what makes a child's failure leave the scope rather than something each await has to unwrap. Writing `task.await?` is therefore a type error: there is no `Result` there to propagate.
 - Detached tasks are absent from v1. `task` and bare `spawn` remain reserved.
 
 ## Traits and Dispatch
