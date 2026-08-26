@@ -170,6 +170,7 @@ testProgramEvaluation = do
   routing <- runEntry "test-fixtures/stdlib/UsesRouter.pudu"
   named <- runEntry "test-fixtures/stdlib/UsesNamedVariants.pudu"
   ownSequence <- runEntry "test-fixtures/stdlib/UsesUserSequence.pudu"
+  acrossModules <- runEntry "test-fixtures/namedvariants/Main.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -204,6 +205,8 @@ testProgramEvaluation = do
         (named === Just "119")
     , counterexample "a type that writes its own Sequence is iterated by it"
         (ownSequence === Just "45")
+    , counterexample "an imported variant carries the names its declaration gave it"
+        (acrossModules === Just "24")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

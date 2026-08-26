@@ -25,6 +25,7 @@ import Pudu.Type.Env
   )
 import Pudu.Type.Check.Rule
   ( instantiate
+  , namedVariantAsValue
   , qualifiedMemberType
   )
 import Pudu.Type.Check.Method
@@ -53,28 +54,36 @@ newtype CheckExpression = CheckExpression
 checkCallee :: CheckExpression -> DeclaredTypes -> [Text] -> Located Expression -> Checker Type
 checkCallee checker declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
-    named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
-    qualified <- case named of
-      Just found -> pure (Just found)
-      Nothing -> qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
-    case qualified of
-      Just instantiated -> do
-        recordExpression calleeSpan instantiated
-        pure instantiated
+    {-| A variant that named its payload is refused before the callee is
+        resolved at all, and answered here rather than left to fall through.
+        Falling through re-checks the same member as an expression, which
+        reports the one mistake twice. -}
+    refused <- namedVariantAsValue calleeSpan (locatedValue member)
+    case refused of
+      Just value -> pure value
       Nothing -> do
-        targetType <- runCheck checker declared rigid target
-        resolved <- zonk targetType
-        method <- methodScheme calleeSpan resolved (locatedValue member)
-        case method of
-          Nothing -> runCheck checker declared rigid located
-          Just scheme -> do
-            instantiated <- instantiate calleeSpan scheme
-            let applied = case instantiated of
-                  FunctionTypeValue asynchronous (_ : rest) result ->
-                    FunctionTypeValue asynchronous rest result
-                  other -> other
-            recordExpression calleeSpan applied
-            pure applied
+        named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
+        qualified <- case named of
+          Just found -> pure (Just found)
+          Nothing -> qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
+        case qualified of
+          Just instantiated -> do
+            recordExpression calleeSpan instantiated
+            pure instantiated
+          Nothing -> do
+            targetType <- runCheck checker declared rigid target
+            resolved <- zonk targetType
+            method <- methodScheme calleeSpan resolved (locatedValue member)
+            case method of
+              Nothing -> runCheck checker declared rigid located
+              Just scheme -> do
+                instantiated <- instantiate calleeSpan scheme
+                let applied = case instantiated of
+                      FunctionTypeValue asynchronous (_ : rest) result ->
+                        FunctionTypeValue asynchronous rest result
+                      other -> other
+                recordExpression calleeSpan applied
+                pure applied
   _ -> runCheck checker declared rigid located
 
 {-| A callee written as `Name.member` may select a method by the trait that

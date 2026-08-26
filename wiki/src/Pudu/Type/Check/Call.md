@@ -55,6 +55,8 @@ A call's arguments are expressions and an expression may be a call, so one direc
 argument rather than an import. `CheckExpression` is that direction — the same shape
 [[Parser Expression Control]] uses for the same reason.
 
+- **A variant that named its payload is refused before the callee is resolved**, and answered here rather than left to fall through. Falling through re-checks the same member as an expression, which reports one mistake twice; short-circuiting is also what reaches an imported variant, whose qualified name resolves before qualified member typing is ever consulted.
+
 ### Linkage
 
 - **Requires:** [[Type Env]], [[Type Unify]], [[Type Check Rule]], [[Type Check Method]].
