@@ -69,6 +69,9 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - Public accessors are total. Accessors, cached length, span equality, and `mergeSpans` are O(1); content-free `Show` is O(source-name length); `offsetPosition` is O(prefix scalars).
 - `newSource` is the only identity-minting effect. All span construction, traversal, merging, and later compiler phases remain pure.
 
+- **A position is found, not counted to.** Where each line begins is built once, in the pass that already reads the text, and `offsetPosition` looks the answer up. Folding over the first *n* characters cost what it skipped, and every caller asks per token rather than once — laying out a file asked for every token it held, which made formatting cost the square of the file's size and checking it nearly as much.
+- The line starts are read straight off the rule a count would follow, so the answers agree with what counting gave: a carriage return begins a line, a newline after one continues it rather than beginning another, and a newline alone begins one. A carriage-return-newline pair records twice, once after each half, because a position between them is column one as surely as the position after them is.
+
 ### Linkage
 
 - **Requires:** [[Source Text]], [[grammar/haskell]].
@@ -106,6 +109,7 @@ DEPTH 0.61 (MEDIUM). A small interface hides validation and position conventions
 
 ## Grill Log
 
+- **Q:** Why keep the whole map rather than a line count? **A:** Because a column needs the line's own start. _Rationale:_ knowing which line an offset falls on is half the answer; subtracting the line's start is what gives the column, and storing both costs one entry per line rather than one per character. _Rejected:_ counting newlines on demand, which is what this replaced.
 - **Q:** Bytes, scalars, or graphemes for stored offsets? **A:** Unicode scalar indices for v0.1 because Haskell `Text` traversal and lexer semantics align; document artifact tooling conversions later. _Rationale:_ correctness before premature byte-index optimization. _Rejected:_ pretending `Text` offsets are UTF-8 bytes; grapheme indices (wrong for compiler tokens).
 - **Q:** Should invalid spans clamp? **A:** No; return `Nothing`. _Rationale:_ clamping hides compiler defects and corrupts diagnostics. _Rejected:_ permissive normalization.
 - **Q:** Should position lookup be indexed now? **A:** No; keep linear until diagnostic rendering benchmarks justify a source index. _Rationale:_ no measured workload. _Rejected:_ eager line tables in every source.

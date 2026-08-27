@@ -1,20 +1,20 @@
-# Private project inputs
-fmcf.md
-fmfc.md
-lang_proposal.md
-proposal.md
-goal.md
-
-# Haskell build artifacts
-dist-newstyle/
-cabal.project.local
 
 # Claude Code
-.claude/
-claude/
-.claude.json
-
 # Codex
+# Haskell build artifacts
+# Private project inputs
+.claude.json
+.claude/
 .codex/
+cabal.project.local
+claude/
 codex/
 dist-ir
+dist-newstyle/
+dist-prof
+fmcf.md
+fmfc.md
+goal.md
+lang_proposal.md
+proposal.md
+pudu.prof
