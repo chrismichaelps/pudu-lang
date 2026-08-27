@@ -103,7 +103,7 @@ callDisplay spanValue arguments = case arguments of
   [StrValue text] -> pure (StrValue text)
   [CharValue character] -> pure (StrValue (Text.singleton character))
   [value] -> pure (StrValue (renderValue value))
-  _ -> abortAt (Just spanValue) "E7002" "display expects one value" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "display expects one value" Nothing
 
 {-| Move an integer to another integer type, refusing what will not fit.
 
@@ -121,17 +121,17 @@ callConvertInteger spanValue names arguments = case (names, arguments) of
       | integerKindFits kind value -> pure (VariantValue "Some" [IntValue kind value])
       | otherwise -> pure (VariantValue "None" [])
     Nothing ->
-      abortAt (Just spanValue) "E7002"
+      abortAt (Just spanValue) "E7012"
         (target <> " is not an integer type")
         (Just "convert to one of the integer types, such as UInt8 or Int64")
   ([], _) ->
-    abortAt (Just spanValue) "E7002" "convertInteger needs the type to convert to"
+    abortAt (Just spanValue) "E7012" "convertInteger needs the type to convert to"
       (Just "write it as a type argument, as in convertInteger[UInt8](value)")
   (_, [other]) ->
-    abortAt (Just spanValue) "E7002"
+    abortAt (Just spanValue) "E7012"
       ("convertInteger moves between integers, not from a " <> valueKind other)
       Nothing
-  _ -> abortAt (Just spanValue) "E7002" "convertInteger expects one value" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "convertInteger expects one value" Nothing
 
 {-| Whether a built-in is one of the decimal primitives. -}
 isDecimalBuiltin :: Builtin -> Bool
@@ -173,7 +173,7 @@ callDecimal spanValue builtin values = case (builtin, values) of
   (DecimalRoundBuiltin, [DecimalValue number, IntValue _ digits, IntValue _ mode]) ->
     pure (DecimalValue (decimalRound (fromInteger digits) (roundingOfCode mode) number))
   _ ->
-    abortAt (Just spanValue) "E7002"
+    abortAt (Just spanValue) "E7012"
       (builtinName builtin <> " was given arguments it does not accept")
       Nothing
 
@@ -203,7 +203,7 @@ roundingOfCode code = case code of
 callShow :: Span -> [Value] -> Evaluator Value
 callShow spanValue arguments = case arguments of
   [value] -> pure (StrValue (renderValue value))
-  _ -> abortAt (Just spanValue) "E7002" "show expects one value" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "show expects one value" Nothing
 
 {-| Build a map from an array of key and value pairs.
 
@@ -222,12 +222,12 @@ callMapOf spanValue arguments = case arguments of
           ("a " <> valueKind offender <> " cannot be a map key")
           (Just "use a value the language can order, such as text, a number, or a tuple of those")
       [] -> pure (mapFromEntries entries)
-  _ -> abortAt (Just spanValue) "E7002" "mapOf expects one array of pairs" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "mapOf expects one array of pairs" Nothing
 
 pairOf :: Span -> Value -> Evaluator (Value, Value)
 pairOf spanValue value = case value of
   TupleValue [key, held] -> pure (key, held)
-  _ -> abortAt (Just spanValue) "E7002" "mapOf expects an array of pairs" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "mapOf expects an array of pairs" Nothing
 
 {-| Build a set from an array of members, with the same ordering requirement a
     map places on its keys and for the same reason. -}
@@ -240,7 +240,7 @@ callSetOf spanValue arguments = case arguments of
           ("a " <> valueKind offender <> " cannot be a set member")
           (Just "use a value the language can order, such as text, a number, or a tuple of those")
       [] -> pure (setFromMembers (toList members))
-  _ -> abortAt (Just spanValue) "E7002" "setOf expects one array" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "setOf expects one array" Nothing
 
 {-| Apply a built-in map method. Every one answers with a new value. -}
 callMapMethod :: Span -> MapMethod -> Value -> [Value] -> Evaluator Value
@@ -259,7 +259,7 @@ callMapMethod spanValue method receiver arguments = case (method, arguments) of
     pure (ArrayValue (Seq.fromList [TupleValue [key, held] | (key, held) <- mapEntries receiver]))
   (MapMerge, [other@(MapValue _)]) -> pure (mapMerge receiver other)
   _ ->
-    abortAt (Just spanValue) "E7002"
+    abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> mapMethodName method) Nothing
 
 {-| Apply a built-in set method. -}
@@ -277,7 +277,7 @@ callSetMethod spanValue method receiver arguments = case (method, arguments) of
   (SetIntersect, [other@(SetValue _)]) -> pure (setIntersect receiver other)
   (SetDifference, [other@(SetValue _)]) -> pure (setDifference receiver other)
   _ ->
-    abortAt (Just spanValue) "E7002"
+    abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> setMethodName method) Nothing
 
 unorderableKey :: Span -> Value -> Text -> Evaluator Value
@@ -306,14 +306,14 @@ callCharFromCode spanValue arguments = case arguments of
         pure (VariantValue "Some" [CharValue (toEnum (fromInteger code))])
     | otherwise -> pure (VariantValue "None" [])
   _ ->
-    abortAt (Just spanValue) "E7002" "charFromCode expects one integer" Nothing
+    abortAt (Just spanValue) "E7012" "charFromCode expects one integer" Nothing
 
 {-| Apply a built-in character method. -}
 callCharMethod :: Span -> CharMethod -> Value -> [Value] -> Evaluator Value
 callCharMethod spanValue method receiver arguments = case (method, receiver, arguments) of
   (CharCode, CharValue character, []) -> pure (intOf (fromIntegral (fromEnum character)))
   (CharToText, CharValue character, []) -> pure (StrValue (Text.singleton character))
-  _ -> abortAt (Just spanValue) "E7002" "wrong arguments for a character method" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "wrong arguments for a character method" Nothing
 
 {-| Apply a built-in text method.
 
@@ -403,7 +403,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
   outOfRange message = abortAt (Just spanValue) "E7004" message Nothing
 
   wrongStringArity name =
-    abortAt (Just spanValue) "E7002"
+    abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> name) Nothing
 
 {-| Where one text first occurs inside another, or -1 when it does not.

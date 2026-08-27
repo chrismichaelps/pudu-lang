@@ -74,8 +74,8 @@ testKinds = do
     , "macro bad(value: thing) = value"
     ]
   pure $ conjoin
-    [ counterexample "an expression is not an identifier" (identifierGiven === ["E1049"])
-    , counterexample "an expression is not a block" (blockGiven === ["E1049"])
+    [ counterexample "an expression is not an identifier" (identifierGiven === ["E1054"])
+    , counterexample "an expression is not a block" (blockGiven === ["E1054"])
     , counterexample "an expression parameter takes anything" (expressionAccepts === [])
     , counterexample "the kind vocabulary is closed" (unknownKind === ["E1045"])
     ]

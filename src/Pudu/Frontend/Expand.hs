@@ -305,8 +305,13 @@ checkKind name (Located _ parameter, Located argumentSpan argument) =
     (ExpressionKind, _) -> pure False
     (IdentifierKind, NameExpression _) -> pure False
     (BlockKind, BlockExpression _) -> pure False
+    {-| `E1054` rather than a code beside `E1048`, because `E1049` already
+        belongs to the statement-separator rule [[grammar/pudu]] states. One
+        code cannot mean two things: a reader who looked it up would be told
+        about a macro argument or about a missing line break depending on which
+        answer they found first. -}
     (kind, _) -> do
-      report "E1049" argumentSpan
+      report "E1054" argumentSpan
         ( "macro " <> locatedValue name <> " expects "
             <> kindName kind <> " for " <> locatedValue (macroParamName parameter)
         )

@@ -669,7 +669,7 @@ evaluateCallee located@(Located calleeSpan expression) = case expression of
 evaluateArms :: Span -> Value -> [Located MatchArm] -> Evaluator Value
 evaluateArms spanValue subject arms = case arms of
   [] ->
-    abortAt (Just spanValue) "E7005" ("no match arm accepted " <> renderValue subject)
+    abortAt (Just spanValue) "E7011" ("no match arm accepted " <> renderValue subject)
       (Just "add a case that covers this value")
   Located _ arm : rest -> case matchPattern (armPattern arm) subject of
     Nothing -> evaluateArms spanValue subject rest
