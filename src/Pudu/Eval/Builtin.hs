@@ -337,6 +337,25 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringContains, [StrValue needle]) -> pure (BoolValue (Text.isInfixOf needle text))
     (StringStartsWith, [StrValue needle]) -> pure (BoolValue (Text.isPrefixOf needle text))
     (StringEndsWith, [StrValue needle]) -> pure (BoolValue (Text.isSuffixOf needle text))
+    {-| `drop` and `take` cost what they move, not what the text holds, which
+        is what lets a parser carry the text it has not read yet and advance
+        through a file in linear time. Indexing walks from the start, so a
+        parser that kept a position into the whole text paid for every
+        character it had already passed. -}
+    (StringDrop, [IntValue _ count])
+      | count < 0 -> outOfRange "a drop count cannot be negative"
+      | otherwise -> pure (StrValue (Text.drop (fromInteger count) text))
+    (StringTake, [IntValue _ count])
+      | count < 0 -> outOfRange "a take count cannot be negative"
+      | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
+    {-| How long a run at the front is made only of the given characters, or
+        only of characters outside them. A run scanned in one step costs one
+        call rather than one call for every character it covers, which is the
+        difference between reading a line and reading a file — the set is the
+        same vocabulary `oneOf` and `noneOf` already take. -}
+    (StringSpanOf, [StrValue accepted]) -> pure (spanLength (`Text.elem` accepted) text)
+    (StringSpanNotOf, [StrValue rejected]) ->
+      pure (spanLength (not . (`Text.elem` rejected)) text)
     (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
@@ -356,6 +375,8 @@ callStringMethod spanValue method receiver arguments = case receiver of
     _ -> wrongStringArity (stringMethodName method)
 
   textArray = ArrayValue . Seq.fromList . map StrValue
+
+  spanLength holds = intOf . fromIntegral . Text.length . Text.takeWhile holds
 
   charAt text index
     | index < 0 || index >= fromIntegral (Text.length text) =

@@ -1,0 +1,60 @@
+module UsesLongLoops
+
+/// A program may loop for as long as its work takes.
+///
+/// The compiler must terminate, so a `const` folded while the compiler runs is
+/// bounded. A program the reader asked to run is bounded by the machine, the
+/// same as in any other language: a file of any size needs more steps than any
+/// fixed count could allow, so a bound here is not a safety property but a
+/// language that cannot read a file.
+fn counted(limit: Int) -> Int {
+  var seen = 0
+  var index = 0
+  while index < limit {
+    seen = seen + 1
+    index = index + 1
+  }
+  seen
+}
+
+/// `drop` and `take` cost what they move rather than what the text holds, which
+/// is what lets a scan carry the text it has not read yet.
+fn cursorScan(text: Str) -> Int {
+  var rest = text
+  var seen = 0
+  while !rest.isEmpty() {
+    if rest.charAt(0) == 'a' {
+      seen = seen + 1
+    }
+    rest = rest.drop(1)
+  }
+  seen
+}
+
+export fn main() -> Int {
+  var total = 0
+  // above the count that used to stop every loop
+  if counted(150000) == 150000 {
+    total = total + 1
+  }
+  if cursorScan("a".repeat(1000)) == 1000 {
+    total = total + 2
+  }
+  if "hello".drop(2) == "llo" {
+    total = total + 4
+  }
+  if "hello".take(2) == "he" {
+    total = total + 8
+  }
+  if "hello".drop(99) == "" {
+    total = total + 16
+  }
+  if "hello".take(99) == "hello" {
+    total = total + 32
+  }
+  // indices count characters, not bytes, exactly as charAt and slice already do
+  if "héllo".drop(1) == "éllo" {
+    total = total + 64
+  }
+  total
+}

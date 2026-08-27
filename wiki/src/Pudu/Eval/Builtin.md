@@ -54,6 +54,8 @@ isDecimalBuiltin :: Builtin -> Bool
 - `effectBuiltins` is one list so the evaluator and the checker cannot disagree about which names
   exist, and adding an effect is one edit rather than three.
 
+- **`drop` and `take` cost what they move, not what the text holds.** Indexing walks from the start, so a reader that keeps a position into the whole text pays again for every character it has already passed and a scan costs the square of the input. These two are what let a reader carry the text it has not read yet, which is the shape every parser over a file needs.
+
 ### Linkage
 
 - **Requires:** [[Eval Value]], [[Eval Env]], [[Eval Array]], [[Eval Keyed]], [[Eval Io]],

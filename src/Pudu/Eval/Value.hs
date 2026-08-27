@@ -232,6 +232,10 @@ data StringMethod
   | StringContains
   | StringStartsWith
   | StringEndsWith
+  | StringDrop
+  | StringTake
+  | StringSpanOf
+  | StringSpanNotOf
   | StringSlice
   | StringTrim
   | StringToUpper
@@ -367,6 +371,10 @@ stringMethodName method = case method of
   StringContains -> "contains"
   StringStartsWith -> "startsWith"
   StringEndsWith -> "endsWith"
+  StringDrop -> "drop"
+  StringTake -> "take"
+  StringSpanOf -> "spanOf"
+  StringSpanNotOf -> "spanNotOf"
   StringSlice -> "slice"
   StringTrim -> "trim"
   StringToUpper -> "toUpper"
