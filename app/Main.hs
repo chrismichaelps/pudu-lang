@@ -3,6 +3,8 @@ module Main (main) where
 
 import Control.Monad (unless, when)
 import Data.Text (Text)
+import qualified Data.Map.Strict as Map
+import Data.List (sortOn)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import Pudu.Compiler (CompileResult (..))
@@ -14,7 +16,7 @@ import Pudu.Compiler.Program
   , programDocs
   , rootCompileResult
   )
-import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry, evaluateProgramTallied)
 import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Format (FormatResult (..), formatSource)
@@ -44,6 +46,7 @@ main = do
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
     ("run" : path : _) -> runProgram style path
+    ("explain" : path : _) -> explainProgram style path
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
@@ -105,6 +108,53 @@ checkOne style path = do
     A program with errors is not run. Evaluating a module whose meaning was
     never established produces a second, less useful account of the same
     defect. -}
+{-| Run a program and say what running it cost.
+
+    A Pudu program has no machine code to read, so the honest account of what it
+    does is what the evaluator did: the names it looked up, the closures it
+    called, the expressions of each kind it walked. Those are the costs this
+    implementation actually has, and the ones a reader optimising it can act on.
+
+    A count is a fact about the program, not a time, so it does not move when
+    the machine is busy and two runs of the same program agree. -}
+explainProgram :: RenderStyle -> FilePath -> IO ()
+explainProgram style path = do
+  program <- compileProgram path
+  let diagnostics = programDiagnostics program
+  unless (null diagnostics) $
+    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+  if hasErrors diagnostics
+    then exitFailure
+    else case rootCompileResult program >>= compileModule of
+      Nothing -> do
+        hPutStrLn stderr "pudu explain: the program produced no module"
+        exitFailure
+      Just parsed -> do
+        (outcome, counted) <-
+          evaluateProgramTallied
+            (programIntegerKinds program)
+            (programDependencies program)
+            entryPointName
+            parsed
+        mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
+        TextIO.putStrLn (renderTally counted)
+        when (hasErrors (outcomeDiagnostics outcome)) exitFailure
+
+{-| The tally, widest first, because the largest number is where the work is. -}
+renderTally :: Map.Map Text.Text Int -> Text.Text
+renderTally counted =
+  Text.unlines $
+    ["", "what running this cost", ""]
+      <> map row ordered
+      <> ["", "  " <> pad "total steps" <> right (show total)]
+ where
+  ordered = sortOn (negate . snd) (Map.toList counted)
+  total = sum (map snd ordered)
+  row (name, count) = "  " <> pad name <> right (show count)
+  pad name = name <> Text.replicate (max 1 (22 - Text.length name)) " "
+  right shown =
+    Text.replicate (max 1 (12 - length shown)) " " <> Text.pack shown
+
 runProgram :: RenderStyle -> FilePath -> IO ()
 runProgram style path = do
   program <- compileProgram path
@@ -285,6 +335,7 @@ usage =
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu explain <file>  run a program and report what running it cost"
     , "  pudu lsp             speak the language server protocol over stdio"
     , "  pudu fmt <file>...   rewrite files in the one committed style"
     , "  pudu fmt --check ... report which files are not formatted, changing none"

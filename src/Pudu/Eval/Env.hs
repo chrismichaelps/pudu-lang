@@ -22,6 +22,8 @@ module Pudu.Eval.Env
   , effectsAdmitted
   , emptyEnv
   , integerKindAt
+  , tally
+  , withTally
   , withIntegerKinds
   , recordVariantOwner
   , variantOwner
@@ -49,6 +51,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Eval.Value (Value (..), valueKind)
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
 
 {-| @Eval.Env — name-keyed frames, innermost first -}
@@ -57,6 +60,12 @@ data Env = Env
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
   , envIntegerKinds :: !(Map Span Text)
+  {-| Where to tally the work, when someone asked to see it.
+
+      `Nothing` is the ordinary case and costs one comparison. A tally is not
+      free, and a program that nobody asked to explain should not pay for the
+      explanation. -}
+  , envTally :: !(Maybe (IORef (Map Text Int)))
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
@@ -218,6 +227,7 @@ emptyEnv =
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
     , envIntegerKinds = Map.empty
+    , envTally = Nothing
     , envDepth = 0
     , envScopes = []
     , envEffects = True
@@ -252,7 +262,12 @@ update name value = Evaluator $ \env -> pure (Done () env{envFrames = go (envFra
     type, which was linked long after the library was. -}
 lookupName :: Text -> Evaluator (Maybe Value)
 lookupName name =
-  Evaluator $ \env ->
+  Evaluator $ \env -> do
+    {-| Counted here rather than at the call sites, because every way a name is
+        reached goes through this one search and a reader wants the total. -}
+    case envTally env of
+      Nothing -> pure ()
+      Just counters -> modifyIORef' counters (Map.insertWith (+) "name lookup" 1)
     pure (Done (maybe (Map.lookup name (envMethods env)) Just (search (envFrames env))) env)
  where
   search frames = case frames of
@@ -284,6 +299,30 @@ recordVariantOwner variant owner =
     passing it to a parameter declared one. Only the checker knows, so it says
     here, and building the literal any other way is what let a value outgrow the
     width its declaration promised without a word. -}
+{-| Count one unit of work, when the work is being counted.
+
+    The name is the thing being counted, not where it happened: a reader asking
+    where the time goes wants "how many name lookups", not a line number, and a
+    per-site tally would cost more than the work it measures. -}
+tally :: Text -> Evaluator ()
+tally what =
+  Evaluator $ \env -> do
+    case envTally env of
+      Nothing -> pure ()
+      Just counters -> modifyIORef' counters (Map.insertWith (+) what 1)
+    pure (Done () env)
+
+{-| Run an action with the work counted, and answer with the tally. -}
+withTally :: Evaluator a -> Evaluator (a, Map Text Int)
+withTally (Evaluator action) =
+  Evaluator $ \env -> do
+    counters <- newIORef Map.empty
+    outcome <- action env{envTally = Just counters}
+    collected <- readIORef counters
+    pure $ case outcome of
+      Done value next -> Done (value, collected) next{envTally = envTally env}
+      Unwound transfer next -> Unwound transfer next{envTally = envTally env}
+
 withIntegerKinds :: Map Span Text -> Evaluator ()
 withIntegerKinds kinds =
   Evaluator $ \env -> pure (Done () env{envIntegerKinds = kinds})

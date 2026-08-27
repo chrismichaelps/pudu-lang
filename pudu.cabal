@@ -143,6 +143,7 @@ executable pudu
   ghc-options:      -threaded -rtsopts
   build-depends:
     base >=4.20 && <4.23,
+    containers >=0.6 && <0.8,
     directory >=1.3 && <1.4,
     pudu,
     text >=2.1 && <2.2
