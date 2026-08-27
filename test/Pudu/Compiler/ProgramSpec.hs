@@ -174,6 +174,8 @@ testProgramEvaluation = do
   sumTraits <- runEntry "test-fixtures/stdlib/UsesSumTraits.pudu"
   longLoops <- runEntry "test-fixtures/stdlib/UsesLongLoops.pudu"
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
+  widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
+  widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -216,6 +218,10 @@ testProgramEvaluation = do
         (longLoops === Just "127")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
         (realFormats === Just "16383")
+    , counterexample "matching and equality agree about a number's width"
+        (widthPatterns === Just "63")
+    , counterexample "matching and equality agree about a number's width"
+        (widthPatterns === Just "63")
     , counterexample "decimal arithmetic is exact and rounds only when told"
         (exact === Just "12")
     , counterexample "a generic trait's parameters follow its implementation"

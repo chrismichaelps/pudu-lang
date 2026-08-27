@@ -4,6 +4,7 @@ module Pudu.Eval.Match
   , matchPattern
   ) where
 
+import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Eval.Value (Value (..), intOf)
@@ -28,7 +29,7 @@ matchPattern :: Located Pattern -> Value -> Maybe [(Text, Value)]
 matchPattern (Located _ pattern') value = case pattern' of
   WildcardPattern -> Just []
   BindingPattern name -> Just [(locatedValue name, value)]
-  LiteralPattern literal -> if literalValue literal == value then Just [] else Nothing
+  LiteralPattern literal -> if sameValue (literalValue literal) value then Just [] else Nothing
   RangePattern lower inclusive upper -> matchRange (literalValue lower) inclusive (literalValue upper) value
   TuplePattern members -> case value of
     TupleValue values | length values == length members ->
@@ -72,6 +73,35 @@ patternName :: Maybe ModuleName -> Maybe Text
 patternName path = case path of
   Nothing -> Nothing
   Just (ModuleName segments) -> Just (lastSegment segments)
+
+{-| Whether a pattern's literal and the value it is matched against are the
+    same value.
+
+    An integer carries the width it was given, and two integers of different
+    widths holding the same number are the same number. `==` says so — it meets
+    the two kinds and compares what they hold — and matching has to say the same
+    thing, or a program is told that `a == 7` and that `case 7` does not match
+    `a`, about the same two values on adjacent lines.
+
+    Structural equality was what made them disagree: it compares the width tag
+    as though it were part of the value, so `7i8` did not match `case 7` and
+    fell to the wildcard instead. Everything that is not a number compares
+    exactly as it did, and aggregates compare by their parts so a number nested
+    inside one is judged the same way as one that is not. -}
+sameValue :: Value -> Value -> Bool
+sameValue left right = case (left, right) of
+  (IntValue _ a, IntValue _ b) -> a == b
+  (TupleValue a, TupleValue b) -> sameList a b
+  (ArrayValue a, ArrayValue b) -> sameList (toList a) (toList b)
+  (VariantValue leftName a, VariantValue rightName b) ->
+    leftName == rightName && sameList a b
+  (RecordValue leftName a, RecordValue rightName b) ->
+    leftName == rightName
+      && map fst a == map fst b
+      && sameList (map snd a) (map snd b)
+  _ -> left == right
+ where
+  sameList a b = length a == length b && and (zipWith sameValue a b)
 
 lastSegment :: NonEmpty Text -> Text
 lastSegment (first :| rest) = last (first : rest)

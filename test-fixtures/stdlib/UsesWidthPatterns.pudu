@@ -1,0 +1,66 @@
+module UsesWidthPatterns
+
+/// A number is the same number whatever width holds it.
+///
+/// `==` meets the two widths and compares what they hold, so `a == 7` is true
+/// for an `Int8` holding seven. Matching has to say the same thing, or a
+/// program is told both that `a == 7` and that `case 7` does not match `a`,
+/// about the same two values on adjacent lines.
+type Wrapped
+  = Small(Int8)
+  | Wide(Int)
+
+fn matched(value: Int8) -> Int {
+  match value {
+    case 7 => 1
+    case _ => 0
+  }
+}
+
+fn compared(value: Int8) -> Int {
+  if value == 7 {
+    1
+  } else {
+    0
+  }
+}
+
+export fn main() -> Int {
+  var total = 0
+  let narrow = 7i8
+
+  // the two must agree, and both must say yes
+  if matched(narrow) == 1 && compared(narrow) == 1 {
+    total = total + 1
+  }
+
+  // a width nested inside an aggregate is judged the same way
+  match (3i8, 4u16) {
+    case (3, 4) => { total = total + 2 }
+    case _ => {}
+  }
+
+  match Small(9i8) {
+    case Small(9) => { total = total + 4 }
+    case _ => {}
+  }
+
+  // distinct numbers still do not match
+  match narrow {
+    case 8 => {}
+    case _ => { total = total + 8 }
+  }
+
+  // and nothing that is not a number changed
+  match "hi" {
+    case "hi" => { total = total + 16 }
+    case _ => {}
+  }
+
+  match 'x' {
+    case 'x' => { total = total + 32 }
+    case _ => {}
+  }
+
+  total
+}
