@@ -41,6 +41,8 @@ The exported signatures are the module header's export list.
 
 - **A variant's declared field names are held apart from its payload types.** A variant is present in `declaredVariantFields` only when its declaration gave names; one that gave none is absent rather than present and empty, because writing `Circle{}` for a positional variant is a different mistake from leaving a field out.
 
+- **What inference settled on for each integer literal is published, keyed by its whole span.** A literal written without a suffix is not a platform `Int` merely because it was written plainly, and only the checker knows what it became; without this the evaluator built every such literal as a platform integer and the width a declaration promised was never enforced on it. The key is the span rather than its offsets, because two files hold a literal at the same offsets all the time and one table serves a program and everything it depends on.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].

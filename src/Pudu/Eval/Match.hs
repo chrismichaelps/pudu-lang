@@ -1,9 +1,11 @@
 {-| @Eval.Match.Module — matches values against patterns -}
 module Pudu.Eval.Match
-  ( literalValue
+  ( integerLiteralValue
+  , literalValue
   , matchPattern
   ) where
 
+import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 import Pudu.Eval.Value (Value (..), intOf)
@@ -19,6 +21,7 @@ import Pudu.IntegerLiteral
   , IntegerSuffix (..)
   , ParsedInteger (..)
   , defaultIntegerKind
+  , integerKindOf
   , parseIntegerLiteral
   )
 
@@ -28,7 +31,7 @@ matchPattern :: Located Pattern -> Value -> Maybe [(Text, Value)]
 matchPattern (Located _ pattern') value = case pattern' of
   WildcardPattern -> Just []
   BindingPattern name -> Just [(locatedValue name, value)]
-  LiteralPattern literal -> if literalValue literal == value then Just [] else Nothing
+  LiteralPattern literal -> if sameValue (literalValue literal) value then Just [] else Nothing
   RangePattern lower inclusive upper -> matchRange (literalValue lower) inclusive (literalValue upper) value
   TuplePattern members -> case value of
     TupleValue values | length values == length members ->
@@ -73,6 +76,35 @@ patternName path = case path of
   Nothing -> Nothing
   Just (ModuleName segments) -> Just (lastSegment segments)
 
+{-| Whether a pattern's literal and the value it is matched against are the
+    same value.
+
+    An integer carries the width it was given, and two integers of different
+    widths holding the same number are the same number. `==` says so — it meets
+    the two kinds and compares what they hold — and matching has to say the same
+    thing, or a program is told that `a == 7` and that `case 7` does not match
+    `a`, about the same two values on adjacent lines.
+
+    Structural equality was what made them disagree: it compares the width tag
+    as though it were part of the value, so `7i8` did not match `case 7` and
+    fell to the wildcard instead. Everything that is not a number compares
+    exactly as it did, and aggregates compare by their parts so a number nested
+    inside one is judged the same way as one that is not. -}
+sameValue :: Value -> Value -> Bool
+sameValue left right = case (left, right) of
+  (IntValue _ a, IntValue _ b) -> a == b
+  (TupleValue a, TupleValue b) -> sameList a b
+  (ArrayValue a, ArrayValue b) -> sameList (toList a) (toList b)
+  (VariantValue leftName a, VariantValue rightName b) ->
+    leftName == rightName && sameList a b
+  (RecordValue leftName a, RecordValue rightName b) ->
+    leftName == rightName
+      && map fst a == map fst b
+      && sameList (map snd a) (map snd b)
+  _ -> left == right
+ where
+  sameList a b = length a == length b && and (zipWith sameValue a b)
+
 lastSegment :: NonEmpty Text -> Text
 lastSegment (first :| rest) = last (first : rest)
 
@@ -97,6 +129,19 @@ kindOfSuffix suffix = case suffix of
   Just (SignedSuffix width) -> SignedKind width
   Just (UnsignedSuffix width) -> UnsignedKind width
   Nothing -> defaultIntegerKind
+
+{-| A literal built as the kind the checker settled on, when it settled on one.
+
+    The suffix still wins where there is one, because it said the kind outright.
+    Where there is neither a suffix nor an answer, the platform integer is the
+    default the checker itself would have chosen. -}
+integerLiteralValue :: Maybe Text -> Tree.Literal -> Value
+integerLiteralValue selected literal = case (selected, literalValue literal) of
+  (Just name, IntValue kind number)
+    | kind == defaultIntegerKind
+    , Just chosen <- integerKindOf name ->
+        IntValue chosen number
+  (_, value) -> value
 
 literalValue :: Tree.Literal -> Value
 literalValue literal = case literal of

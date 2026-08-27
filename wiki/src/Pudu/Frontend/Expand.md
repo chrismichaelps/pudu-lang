@@ -39,6 +39,8 @@ expandModule :: Module -> (Module, [Diagnostic])
 - Expanded syntax carries the call's span. A diagnostic inside an expansion therefore points at what the reader wrote, not at a position in a body they may not have read.
 - A call that cannot expand becomes an explicit invalid node, so later phases do not explain the same defect a second time.
 
+- **A macro argument of the wrong kind is `E1054`, not a code beside `E1048`.** `E1049` already belongs to the statement-separator rule [[grammar/pudu]] states, and one code cannot mean two things — a reader looking it up would be told about a macro argument or about a missing line break depending on which answer they found first.
+
 ### Linkage
 
 - **Requires:** [[Syntax Tree]], [[Diagnostic Model]], [[Source]], [[Macro Design]].

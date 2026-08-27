@@ -137,6 +137,7 @@ data CheckerState = CheckerState
   , stateInComptime :: !Bool
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
+  , stateIntegerKinds :: ![(Span, Text)]
   , stateRigidBounds :: !(Map Text [NominalId])
   , stateDiagnosticsRev :: ![Diagnostic]
   }
@@ -154,6 +155,15 @@ data CheckerProducts = CheckerProducts
   { producedTypes :: ![(SpanKey, Type)]
   , producedSchemes :: ![(Text, Scheme)]
   , producedDiagnostics :: ![Diagnostic]
+  {-| The type inference settled on for each integer literal.
+
+      A literal written without a suffix is not a platform `Int` merely because
+      it was written plainly: `let count: Int8 = 127` makes it an `Int8`, and so
+      does passing it to a parameter declared one. Only the checker knows, and
+      without this nothing downstream could — the evaluator built every
+      suffixless literal as a platform integer, so the width a declaration
+      promised was never enforced on it. -}
+  , producedIntegerKinds :: ![(Span, Text)]
   }
 
 newtype Checker a = Checker (CheckerState -> (a, CheckerState))
@@ -185,6 +195,7 @@ runChecker (Checker action) =
             reverse (map (fmap (resolveFinal (stateSubstitution finalState))) (stateTypes finalState))
         , producedSchemes = finalSchemes finalState
         , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
+        , producedIntegerKinds = reverse (stateIntegerKinds finalState)
         }
 
 {-| The module frame as inference left it, with every variable resolved.
@@ -220,6 +231,7 @@ initialState =
     , stateInComptime = False
     , stateObligations = []
     , stateIntegerLiterals = []
+    , stateIntegerKinds = []
     , stateRigidBounds = Map.empty
     , stateDiagnosticsRev = []
     }
@@ -253,6 +265,16 @@ negateIntegerLiteral typeValue = case typeValue of
       let (found, constraints) = negateMatching variable (stateIntegerLiterals state)
        in (found, state{stateIntegerLiterals = constraints})
   _ -> pure False
+
+{-| Remember what inference settled on for a literal, so evaluation can build
+    it as the type it is rather than as the type it was spelled. -}
+{-| The whole span is the key, not its offsets. Two files hold a literal at the
+    same offsets all the time, and the evaluator reads one table for a program
+    and every module it depends on. -}
+recordIntegerKind :: Span -> Text -> Checker ()
+recordIntegerKind spanValue name =
+  Checker $ \state ->
+    ((), state{stateIntegerKinds = (spanValue, name) : stateIntegerKinds state})
 
 finalizeIntegerLiterals :: Checker ()
 finalizeIntegerLiterals = do
@@ -291,7 +313,8 @@ finalizeIntegerConstraint constraint = do
     other -> pure other
   case selected of
     NominalType identity []
-      | nominalModule identity == Nothing ->
+      | nominalModule identity == Nothing -> do
+          recordIntegerKind spanValue (nominalName identity)
           case fitsIntegerType (finiteBitSize (0 :: Int)) (nominalName identity) value of
             Just True -> pure ()
             Just False -> do

@@ -140,8 +140,8 @@ checkModule = checkModuleWith mempty
 
 checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 checkModuleWith imported moduleValue =
-  let (types, schemes, diagnostics) = checkModuleDetailed imported moduleValue
-   in schemes `seq` (types, diagnostics)
+  let (types, schemes, kinds, diagnostics) = checkModuleDetailed imported moduleValue
+   in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
     module frame ended with for each declared name, and the diagnostics.
@@ -150,10 +150,16 @@ checkModuleWith imported moduleValue =
     it to re-derive them from the written syntax would let its answers drift
     from the compiler's. -}
 checkModuleDetailed
-  :: ImportTypes -> Module -> ([((Int, Int), Type)], [(Text, Scheme)], [Diagnostic])
+  :: ImportTypes
+  -> Module
+  -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [Diagnostic])
 checkModuleDetailed imported moduleValue =
   let products = runChecker (checkUnit imported moduleValue)
-   in (producedTypes products, producedSchemes products, producedDiagnostics products)
+   in ( producedTypes products
+      , producedSchemes products
+      , producedIntegerKinds products
+      , producedDiagnostics products
+      )
 
 checkUnit :: ImportTypes -> Module -> Checker ()
 checkUnit imported moduleValue = do

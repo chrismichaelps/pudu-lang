@@ -23,7 +23,8 @@ import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, 
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
 import Pudu.Type.Interface (TypeInterface, importsFor)
-import Pudu.Source (Source)
+import Data.Text (Text)
+import Pudu.Source (Source, Span)
 
 {-| @Program.Compiler.FrontendResult — exposes valid frontend products -}
 data FrontendResult = FrontendResult
@@ -40,6 +41,12 @@ data CompileResult = CompileResult
   , compileModule :: !(Maybe Module)
   , compileResolution :: !(Maybe Resolution)
   , compileTypes :: !(Maybe TypeInfo)
+  {-| What inference settled on for each integer literal this module wrote.
+
+      A literal written without a suffix is not a platform `Int` merely because
+      it was written plainly, and only the checker knows what it became. The
+      evaluator reads this to build the literal as the type it is. -}
+  , compileIntegerKinds :: !(Map Span Text)
   , compileDocs :: !(Maybe DocIndex)
   , compileDiagnostics :: ![Diagnostic]
   }
@@ -81,6 +88,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
             , compileModule = Nothing
             , compileResolution = Nothing
             , compileTypes = Nothing
+            , compileIntegerKinds = Map.empty
             , compileDocs = Nothing
             , compileDiagnostics = frontendDiagnostics
             }
@@ -99,7 +107,9 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
                 constantDiagnostics <-
-                  if hasErrors typed then pure [] else foldConstants parsed
+                  if hasErrors typed
+                    then pure []
+                    else foldConstants (maybe Map.empty moduleIntegerKinds typing) parsed
                 let diagnostics = sortDiagnostics (typed <> constantDiagnostics)
                 pure
                   CompileResult
@@ -107,6 +117,8 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                     , compileModule = if hasErrors diagnostics then Nothing else Just parsed
                     , compileResolution = Just resolution
                     , compileTypes = types
+                    , compileIntegerKinds =
+                        maybe Map.empty moduleIntegerKinds typing
                     , compileDocs =
                         (\checked -> buildIndex frontendTokens checked parsed) <$> typing
                     , compileDiagnostics = diagnostics
@@ -122,8 +134,9 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
 
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
-foldConstants :: Module -> IO [Diagnostic]
-foldConstants parsed = outcomeDiagnostics <$> evaluateModule parsed
+foldConstants :: Map Span Text -> Module -> IO [Diagnostic]
+foldConstants integerKinds parsed =
+  outcomeDiagnostics <$> evaluateModule integerKinds parsed
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}

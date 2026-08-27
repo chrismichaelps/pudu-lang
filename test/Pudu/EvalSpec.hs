@@ -720,7 +720,7 @@ outcomeOfWithEntry opening declarations statements expression = do
           { outcomeValue = Nothing
           , outcomeDiagnostics = compileDiagnostics result
           }
-    Just parsed -> evaluateEntryPoint "__entry" parsed
+    Just parsed -> evaluateEntryPoint (compileIntegerKinds result) "__entry" parsed
 
 renderCodes :: EvalOutcome -> Text
 renderCodes outcome =

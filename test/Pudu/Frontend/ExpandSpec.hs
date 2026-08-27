@@ -74,8 +74,8 @@ testKinds = do
     , "macro bad(value: thing) = value"
     ]
   pure $ conjoin
-    [ counterexample "an expression is not an identifier" (identifierGiven === ["E1049"])
-    , counterexample "an expression is not a block" (blockGiven === ["E1049"])
+    [ counterexample "an expression is not an identifier" (identifierGiven === ["E1054"])
+    , counterexample "an expression is not a block" (blockGiven === ["E1054"])
     , counterexample "an expression parameter takes anything" (expressionAccepts === [])
     , counterexample "the kind vocabulary is closed" (unknownKind === ["E1045"])
     ]
@@ -144,7 +144,7 @@ runProgram declarations statements expression = do
   case compileModule result of
     Nothing -> pure ("failed: " <> Text.intercalate "," (codesOf result))
     Just parsed -> do
-      outcome <- evaluateEntryPoint "__entry" parsed
+      outcome <- evaluateEntryPoint (compileIntegerKinds result) "__entry" parsed
       case outcomeValue outcome of
         Nothing -> pure "no value"
         Just value -> pure (renderValue value)

@@ -206,8 +206,16 @@ bufferOffsetOf session kind =
 evaluateFor :: [(Text, Module)] -> CompileResult -> IO (Maybe EvalOutcome)
 evaluateFor dependencies result = case compileModule result of
   Nothing -> pure Nothing
+  {-| The entry's own literal kinds go with it, so `let count: Int8 = 127` means
+      at the prompt what it means in a file. A session that answered differently
+      from the program it loaded would be worse than no session. -}
   Just parsed ->
-    Just <$> evaluateProgramEntry dependencies sessionFunction parsed
+    Just
+      <$> evaluateProgramEntry
+        (compileIntegerKinds result)
+        dependencies
+        sessionFunction
+        parsed
 
 {-| Compile the assembled buffer, and say what it must be linked against.
 

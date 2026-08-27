@@ -3,6 +3,7 @@ module Pudu.Eval
   ( EvalOutcome (..)
   , evaluateEntryPoint
   , evaluateProgramEntry
+  , evaluateProgramTallied
   , evaluateModule
   , runWithEffects
   ) where
@@ -36,6 +37,10 @@ import Pudu.Eval.Builtin
 import Pudu.Eval.Env
   ( Env (..)
   , effectsAdmitted
+  , integerKindAt
+  , tally
+  , withTally
+  , withIntegerKinds
   , variantOwner
   , captureEnvironment
   , currentFrame
@@ -63,7 +68,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
-import Pudu.Eval.Match (literalValue, matchPattern)
+import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value
   ( Builtin (..)
@@ -75,7 +80,8 @@ import Pudu.Eval.Value
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Import (..)
+  ( Literal (IntegerValue)
+  , Import (..)
   , Block (..)
   , lambdaName
   , FieldInit (..)
@@ -90,6 +96,7 @@ import Pudu.Frontend.Syntax.Tree
   , Statement (..)
   , TypeSyntax (..)
   )
+import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
 
 {-| @Eval.Outcome — a value or the diagnostic that stopped evaluation -}
@@ -102,8 +109,8 @@ data EvalOutcome = EvalOutcome
 {-| Evaluate a module and return the value of its entry point. Module constants
     are evaluated in declaration order, so a constant that reads one declared
     later is a runtime diagnostic rather than a silent default. -}
-evaluateEntryPoint :: Text -> Module -> IO EvalOutcome
-evaluateEntryPoint = evaluateProgramEntry []
+evaluateEntryPoint :: Map.Map Span Text -> Text -> Module -> IO EvalOutcome
+evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
 
 {-| Evaluate a module that imports others, with its dependencies linked in.
 
@@ -116,9 +123,37 @@ evaluateEntryPoint = evaluateProgramEntry []
 
     Dependencies arrive in dependency order, so a module's own imports are
     already linked when it loads. -}
-evaluateProgramEntry :: [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramEntry dependencies entryName moduleValue =
-  run $ do
+{-| Every caller says what inference settled on for each integer literal.
+
+    A literal written without a suffix is not a platform `Int` merely because it
+    was written plainly, and only the checker knows what it became. This is an
+    argument rather than a default because a caller that forgets it gets a
+    program whose declared widths are not enforced, and nothing says so — which
+    is what happened to the one caller that was allowed to forget. An empty map
+    is a caller saying it has not checked the program, not a caller that failed
+    to pass what it had. -}
+evaluateProgramEntry
+  :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
+evaluateProgramEntry integerKinds dependencies entryName moduleValue =
+  fst <$> evaluateProgramTallied integerKinds dependencies entryName moduleValue
+
+{-| The same, and what running it cost.
+
+    A program has no machine code to read, so the honest account of what it does
+    is what the evaluator did: how many names it looked up, how many closures it
+    called, how many expressions of each kind it walked. That is the audit a
+    reader optimising this compiler can act on, and it is the layer where the
+    costs actually live. -}
+evaluateProgramTallied
+  :: Map.Map Span Text
+  -> [(Text, Module)]
+  -> Text
+  -> Module
+  -> IO (EvalOutcome, Map.Map Text Int)
+evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
+  counters <- newIORef Map.empty
+  outcome <- runCounted (Just counters) $ do
+    withIntegerKinds integerKinds
     linkDependencies dependencies
     {-| The root gets a frame of its own so its declarations shadow every
         dependency's rather than sharing a frame with the last one linked. -}
@@ -133,15 +168,26 @@ evaluateProgramEntry dependencies entryName moduleValue =
           then awaitTask (locatedSpan (functionName (closureFunction closure))) result
           else pure result
       _ -> pure UnitValue
+  collected <- readIORef counters
+  pure (outcome, collected)
 
 {-| Evaluate a module for its constants alone, with no access to the world.
 
     This is the compile-time path: [[architecture/SEMANTICS]] makes a
     module-scope `const` a compile-time value, and folding it must not perform
     the effects a run of the program would. -}
-evaluateModule :: Module -> IO EvalOutcome
-evaluateModule moduleValue =
-  runWithEffects False (loadDeclarations evaluate (moduleDeclarations moduleValue) >> pure UnitValue)
+{-| A `const` is folded while the compiler runs, so its literals need their
+    kinds here for the same reason a program's do: a constant declared `Int8`
+    that cannot hold what it computes is a mistake worth naming at compile
+    time. -}
+evaluateModule :: Map.Map Span Text -> Module -> IO EvalOutcome
+evaluateModule integerKinds moduleValue =
+  runWithEffects
+    False
+    ( withIntegerKinds integerKinds
+        >> loadDeclarations evaluate (moduleDeclarations moduleValue)
+        >> pure UnitValue
+    )
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -236,6 +282,13 @@ installImportAliases = mapM_ (installOne . locatedValue)
 run :: Evaluator Value -> IO EvalOutcome
 run = runWithEffects True
 
+{-| Run with the world available and the work counted where a counter is given.
+    Passing no counter is the ordinary path and costs one comparison per step. -}
+runCounted :: Maybe (IORef (Map.Map Text Int)) -> Evaluator Value -> IO EvalOutcome
+runCounted counters (Evaluator action) = do
+  outcome <- action emptyEnv{envEffects = True, envTally = counters}
+  pure (outcomeOf outcome)
+
 {-| Run an evaluation, choosing whether the program may reach the world.
 
     Compile-time folding passes `False`: a constant is evaluated while the
@@ -245,15 +298,21 @@ run = runWithEffects True
 runWithEffects :: Bool -> Evaluator Value -> IO EvalOutcome
 runWithEffects effects (Evaluator action) = do
   outcome <- action emptyEnv{envEffects = effects}
-  pure $ case outcome of
-    Done value _ -> EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
-    Unwound (ReturnUnwind value) _ ->
-      EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
-    Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
-    Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
+  pure (outcomeOf outcome)
+
+{-| What a finished evaluation answers with. A control transfer that reached the
+    top is the value it carried; only an abort has nothing to answer. -}
+outcomeOf :: Eval Value -> EvalOutcome
+outcomeOf outcome = case outcome of
+  Done value _ -> EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+  Unwound (ReturnUnwind value) _ ->
+    EvalOutcome{outcomeValue = Just value, outcomeDiagnostics = []}
+  Unwound _ _ -> EvalOutcome{outcomeValue = Just UnitValue, outcomeDiagnostics = []}
+  Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
 
 callClosure :: Closure -> [Value] -> Maybe Span -> Evaluator Value
 callClosure closure arguments callSpan = do
+  tally "closure call"
   let value = closureFunction closure
       parameters = functionParameters value
       supplied = maybe arguments (: arguments) (closureSelf closure)
@@ -335,14 +394,38 @@ evaluateStatement (Located _ statement) = case statement of
   ContinueStatement label -> unwind (ContinueUnwind (fmap locatedValue label))
   InvalidStatement -> pure ()
 
+{-| Evaluation is not counted per expression.
+
+    A tally on every node of every program costs more than it reports: measured
+    on a quarter-megabyte parse, a bind there took the run from 0.93s to 1.50s,
+    and writing it against the environment directly still left it at 1.30s.
+    `evaluate` is the hottest function in the evaluator and nothing belongs in
+    it that the program did not ask for.
+
+    What is counted is counted where the evaluator already stops: a name lookup,
+    which every way of reaching a name goes through, and the constructs that
+    already open a block to do their work. Those are the costs worth knowing and
+    they are free to take. -}
 evaluate :: Located Expression -> Evaluator Value
-evaluate (Located spanValue expression) = case expression of
-  LiteralExpression literal -> pure (literalValue literal)
+evaluate = evaluateHere
+
+evaluateHere :: Located Expression -> Evaluator Value
+evaluateHere (Located spanValue expression) = case expression of
+  {-| A literal is built as the type inference gave it, not as it was spelled.
+      A suffix says the kind outright; without one the checker's answer for this
+      span is the kind, and only where it has none is the platform integer the
+      right default. -}
+  LiteralExpression literal -> case literal of
+    IntegerValue _ -> do
+      selected <- integerKindAt spanValue
+      pure (integerLiteralValue selected literal)
+    _ -> pure (literalValue literal)
   NameExpression names -> readPath spanValue names
   UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
   BinaryExpression left operator right -> applyBinary spanValue left operator right
   CallExpression callee arguments -> evaluateCall spanValue callee arguments
   MemberExpression target member -> do
+    tally "member"
     {-| A member access on a linked module is a name, not a read: `Std.Char.toUpper`
         is one binding, while `record.field.inner` is two reads. Trying the whole
         chain as a path first is what lets a module's function be passed as a
@@ -354,6 +437,7 @@ evaluate (Located spanValue expression) = case expression of
         value <- evaluate target
         readMember spanValue value (locatedValue member)
   IndexExpression target index -> do
+    tally "index"
     container <- evaluate target
     key <- evaluate index
     readIndex spanValue container key
@@ -669,7 +753,7 @@ evaluateCallee located@(Located calleeSpan expression) = case expression of
 evaluateArms :: Span -> Value -> [Located MatchArm] -> Evaluator Value
 evaluateArms spanValue subject arms = case arms of
   [] ->
-    abortAt (Just spanValue) "E7005" ("no match arm accepted " <> renderValue subject)
+    abortAt (Just spanValue) "E7011" ("no match arm accepted " <> renderValue subject)
       (Just "add a case that covers this value")
   Located _ arm : rest -> case matchPattern (armPattern arm) subject of
     Nothing -> evaluateArms spanValue subject rest

@@ -1,0 +1,49 @@
+module UsesWidths
+
+/// A declared width is enforced wherever the value came from.
+///
+/// A literal written without a suffix is not a platform integer merely because
+/// it was written plainly: `let count: Int8 = 127` makes it an `Int8`, and so
+/// does passing it to a parameter declared one. Only the checker knows which,
+/// so it says, and the value is built as the type it is.
+fn addNarrow(left: Int8, right: Int8) -> Int8 { left + right }
+
+fn wrapNarrow(left: Int8, right: Int8) -> Int8 { left &+ right }
+
+fn clampNarrow(left: Int8, right: Int8) -> Int8 { left +| right }
+
+export fn main() -> Int {
+  var total = 0
+
+  // in range, from every direction
+  if addNarrow(100, 20) == 120 {
+    total = total + 1
+  }
+
+  let annotated: Int8 = 100
+  if annotated + 20 == 120 {
+    total = total + 2
+  }
+
+  if 100i8 + 20i8 == 120 {
+    total = total + 4
+  }
+
+  // the width is what wrapping and clamping are computed against
+  // written so every literal fits Int8; 128 itself does not, and is refused
+  if wrapNarrow(127, 1) == (0 - 127) - 1 {
+    total = total + 8
+  }
+
+  if clampNarrow(127, 100) == 127 {
+    total = total + 32
+  }
+
+  // a plain integer is untouched by any of this
+  let wide = 2000000
+  if wide * 2 == 4000000 {
+    total = total + 16
+  }
+
+  total
+}

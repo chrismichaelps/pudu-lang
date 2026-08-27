@@ -4,6 +4,7 @@ module Pudu.Compiler.Program
   , compileProgram
   , compileProgramSource
   , programDependencies
+  , programIntegerKinds
   , programDocs
   , rootCompileResult
   ) where
@@ -38,7 +39,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree (Import (..), Module (..))
 import Pudu.Semantic.Interface (exportIndex)
-import Pudu.Source (Source, SourceName (..), emptySpan, newSource)
+import Pudu.Source (Source, SourceName (..), Span, emptySpan, newSource)
 import Pudu.Type.Interface (interfaceSkeleton)
 import System.FilePath
   ( (</>)
@@ -85,6 +86,15 @@ programDependencies result =
   , Just compiled <- [Map.lookup name (programModules result)]
   , Just parsed <- [compileModule compiled]
   ]
+
+{-| What inference settled on for every integer literal in the program, its
+    dependencies included.
+
+    Spans carry the source they came from, so one table serves every module and
+    two files holding a literal at the same offsets cannot be confused. -}
+programIntegerKinds :: ProgramResult -> Map.Map Span Text.Text
+programIntegerKinds result =
+  Map.unions [compileIntegerKinds compiled | compiled <- Map.elems (programModules result)]
 
 rootCompileResult :: ProgramResult -> Maybe CompileResult
 rootCompileResult result = programRoot result >>= (`Map.lookup` programModules result)

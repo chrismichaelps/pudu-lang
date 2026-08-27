@@ -111,7 +111,7 @@ callEffect spanValue builtin arguments = do
         _ <- lift refusal (exitWith code)
         pure UnitValue
       _ ->
-        abortAt (Just spanValue) "E7002"
+        abortAt (Just spanValue) "E7012"
           ("wrong arguments for " <> builtinName builtin) Nothing
  where
   refusal = effectRefusal spanValue builtin
