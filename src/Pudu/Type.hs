@@ -44,15 +44,21 @@ checkTypes moduleValue =
 data ModuleTypes = ModuleTypes
   { moduleTypeInfo :: !TypeInfo
   , moduleSchemes :: ![(Text, Scheme)]
+  {-| What inference settled on for each integer literal, by span.
+
+      A literal written without a suffix is not a platform `Int` merely because
+      it was written plainly, and only the checker knows what it became. -}
+  , moduleIntegerKinds :: !(Map.Map Span Text)
   }
   deriving stock (Eq, Show)
 
 checkTypesDetailed :: ImportTypes -> Module -> (ModuleTypes, [Diagnostic])
 checkTypesDetailed imported moduleValue =
-  let (entries, schemes, diagnostics) = Check.checkModuleDetailed imported moduleValue
+  let (entries, schemes, kinds, diagnostics) = Check.checkModuleDetailed imported moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = TypeInfo (Map.fromList entries)
           , moduleSchemes = schemes
+          , moduleIntegerKinds = Map.fromList kinds
           }
       , diagnostics
       )

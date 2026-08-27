@@ -10,6 +10,7 @@ import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   , programDependencies
+  , programIntegerKinds
   , programDocs
   , rootCompileResult
   )
@@ -118,7 +119,11 @@ runProgram style path = do
         exitFailure
       Just parsed -> do
         outcome <-
-          evaluateProgramEntry (programDependencies program) entryPointName parsed
+          evaluateProgramEntry
+            (programIntegerKinds program)
+            (programDependencies program)
+            entryPointName
+            parsed
         mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
         case outcomeValue outcome of
           Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure

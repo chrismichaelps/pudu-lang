@@ -21,6 +21,8 @@ module Pudu.Eval.Env
   , descend
   , effectsAdmitted
   , emptyEnv
+  , integerKindAt
+  , withIntegerKinds
   , recordVariantOwner
   , variantOwner
   , performEffect
@@ -54,6 +56,7 @@ data Env = Env
   { envFrames :: ![Map Text Value]
   , envMethods :: !(Map Text Value)
   , envVariantOwners :: !(Map Text Text)
+  , envIntegerKinds :: !(Map Span Text)
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
@@ -214,6 +217,7 @@ emptyEnv =
     { envFrames = [Map.empty]
     , envMethods = Map.empty
     , envVariantOwners = Map.empty
+    , envIntegerKinds = Map.empty
     , envDepth = 0
     , envScopes = []
     , envEffects = True
@@ -272,6 +276,21 @@ recordVariantOwner :: Text -> Text -> Evaluator ()
 recordVariantOwner variant owner =
   Evaluator $ \env ->
     pure (Done () env{envVariantOwners = Map.insert variant owner (envVariantOwners env)})
+
+{-| What inference settled on for the literal written at this span.
+
+    A literal written without a suffix is not a platform `Int` merely because it
+    was written plainly: `let count: Int8 = 127` makes it an `Int8`, and so does
+    passing it to a parameter declared one. Only the checker knows, so it says
+    here, and building the literal any other way is what let a value outgrow the
+    width its declaration promised without a word. -}
+withIntegerKinds :: Map Span Text -> Evaluator ()
+withIntegerKinds kinds =
+  Evaluator $ \env -> pure (Done () env{envIntegerKinds = kinds})
+
+integerKindAt :: Span -> Evaluator (Maybe Text)
+integerKindAt spanValue =
+  Evaluator $ \env -> pure (Done (Map.lookup spanValue (envIntegerKinds env)) env)
 
 {-| The sum a variant belongs to, when the variant is one. -}
 variantOwner :: Text -> Evaluator (Maybe Text)

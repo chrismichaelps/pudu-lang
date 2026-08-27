@@ -36,6 +36,8 @@ import Pudu.Eval.Builtin
 import Pudu.Eval.Env
   ( Env (..)
   , effectsAdmitted
+  , integerKindAt
+  , withIntegerKinds
   , variantOwner
   , captureEnvironment
   , currentFrame
@@ -63,7 +65,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
-import Pudu.Eval.Match (literalValue, matchPattern)
+import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value
   ( Builtin (..)
@@ -75,7 +77,8 @@ import Pudu.Eval.Value
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Import (..)
+  ( Literal (IntegerValue)
+  , Import (..)
   , Block (..)
   , lambdaName
   , FieldInit (..)
@@ -102,8 +105,8 @@ data EvalOutcome = EvalOutcome
 {-| Evaluate a module and return the value of its entry point. Module constants
     are evaluated in declaration order, so a constant that reads one declared
     later is a runtime diagnostic rather than a silent default. -}
-evaluateEntryPoint :: Text -> Module -> IO EvalOutcome
-evaluateEntryPoint = evaluateProgramEntry []
+evaluateEntryPoint :: Map.Map Span Text -> Text -> Module -> IO EvalOutcome
+evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
 
 {-| Evaluate a module that imports others, with its dependencies linked in.
 
@@ -116,9 +119,20 @@ evaluateEntryPoint = evaluateProgramEntry []
 
     Dependencies arrive in dependency order, so a module's own imports are
     already linked when it loads. -}
-evaluateProgramEntry :: [(Text, Module)] -> Text -> Module -> IO EvalOutcome
-evaluateProgramEntry dependencies entryName moduleValue =
+{-| Every caller says what inference settled on for each integer literal.
+
+    A literal written without a suffix is not a platform `Int` merely because it
+    was written plainly, and only the checker knows what it became. This is an
+    argument rather than a default because a caller that forgets it gets a
+    program whose declared widths are not enforced, and nothing says so — which
+    is what happened to the one caller that was allowed to forget. An empty map
+    is a caller saying it has not checked the program, not a caller that failed
+    to pass what it had. -}
+evaluateProgramEntry
+  :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
+evaluateProgramEntry integerKinds dependencies entryName moduleValue =
   run $ do
+    withIntegerKinds integerKinds
     linkDependencies dependencies
     {-| The root gets a frame of its own so its declarations shadow every
         dependency's rather than sharing a frame with the last one linked. -}
@@ -139,9 +153,18 @@ evaluateProgramEntry dependencies entryName moduleValue =
     This is the compile-time path: [[architecture/SEMANTICS]] makes a
     module-scope `const` a compile-time value, and folding it must not perform
     the effects a run of the program would. -}
-evaluateModule :: Module -> IO EvalOutcome
-evaluateModule moduleValue =
-  runWithEffects False (loadDeclarations evaluate (moduleDeclarations moduleValue) >> pure UnitValue)
+{-| A `const` is folded while the compiler runs, so its literals need their
+    kinds here for the same reason a program's do: a constant declared `Int8`
+    that cannot hold what it computes is a mistake worth naming at compile
+    time. -}
+evaluateModule :: Map.Map Span Text -> Module -> IO EvalOutcome
+evaluateModule integerKinds moduleValue =
+  runWithEffects
+    False
+    ( withIntegerKinds integerKinds
+        >> loadDeclarations evaluate (moduleDeclarations moduleValue)
+        >> pure UnitValue
+    )
 
 {-| Load each dependency in a frame of its own and republish it under its dotted
     path.
@@ -337,7 +360,15 @@ evaluateStatement (Located _ statement) = case statement of
 
 evaluate :: Located Expression -> Evaluator Value
 evaluate (Located spanValue expression) = case expression of
-  LiteralExpression literal -> pure (literalValue literal)
+  {-| A literal is built as the type inference gave it, not as it was spelled.
+      A suffix says the kind outright; without one the checker's answer for this
+      span is the kind, and only where it has none is the platform integer the
+      right default. -}
+  LiteralExpression literal -> case literal of
+    IntegerValue _ -> do
+      selected <- integerKindAt spanValue
+      pure (integerLiteralValue selected literal)
+    _ -> pure (literalValue literal)
   NameExpression names -> readPath spanValue names
   UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
   BinaryExpression left operator right -> applyBinary spanValue left operator right

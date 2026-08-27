@@ -9,6 +9,7 @@ import Pudu.Compiler.Program
   ( ProgramResult (..)
   , compileProgram
   , programDependencies
+  , programIntegerKinds
   , rootCompileResult
   )
 import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
@@ -175,6 +176,7 @@ testProgramEvaluation = do
   longLoops <- runEntry "test-fixtures/stdlib/UsesLongLoops.pudu"
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
+  declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -220,6 +222,8 @@ testProgramEvaluation = do
         (realFormats === Just "16383")
     , counterexample "matching and equality agree about a number's width"
         (widthPatterns === Just "63")
+    , counterexample "a declared width is enforced wherever the value came from"
+        (declaredWidths === Just "63")
     , counterexample "matching and equality agree about a number's width"
         (widthPatterns === Just "63")
     , counterexample "decimal arithmetic is exact and rounds only when told"
@@ -250,7 +254,11 @@ runEntry path = do
   case rootCompileResult program >>= compileModule of
     Nothing -> pure Nothing
     Just parsed -> do
-      outcome <- evaluateProgramEntry (programDependencies program) "main" parsed
+      outcome <- evaluateProgramEntry
+          (programIntegerKinds program)
+          (programDependencies program)
+          "main"
+          parsed
       pure (fmap renderValue (outcomeValue outcome))
 
 moduleNames :: FilePath -> IO [Text]

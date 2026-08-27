@@ -144,7 +144,7 @@ runProgram declarations statements expression = do
   case compileModule result of
     Nothing -> pure ("failed: " <> Text.intercalate "," (codesOf result))
     Just parsed -> do
-      outcome <- evaluateEntryPoint "__entry" parsed
+      outcome <- evaluateEntryPoint (compileIntegerKinds result) "__entry" parsed
       case outcomeValue outcome of
         Nothing -> pure "no value"
         Just value -> pure (renderValue value)

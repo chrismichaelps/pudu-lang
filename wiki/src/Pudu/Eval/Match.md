@@ -38,6 +38,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - **A number is the same number whatever width holds it.** `==` meets the two widths and compares what they hold, and matching says the same thing. Structural equality was what made them disagree — it compares the width tag as though it were part of the value, so `7i8` did not match `case 7` and fell to the wildcard while `a == 7` on the next line was true. Aggregates compare by their parts, so a number nested in a tuple or a variant is judged the same way as one that is not.
 
+- **A literal is built as the kind inference gave it.** A suffix still wins where there is one, since it said the kind outright; where there is neither a suffix nor an answer from the checker, the platform integer is the default the checker itself would have chosen.
+
 ### Linkage
 
 - **Requires:** [[Eval Value]], [[Syntax Tree]], [[Integer Literal]], [[Float Literal]], [[Diagnostic Model]].

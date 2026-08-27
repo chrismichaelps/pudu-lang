@@ -1,6 +1,7 @@
 {-| @Eval.Match.Module — matches values against patterns -}
 module Pudu.Eval.Match
-  ( literalValue
+  ( integerLiteralValue
+  , literalValue
   , matchPattern
   ) where
 
@@ -20,6 +21,7 @@ import Pudu.IntegerLiteral
   , IntegerSuffix (..)
   , ParsedInteger (..)
   , defaultIntegerKind
+  , integerKindOf
   , parseIntegerLiteral
   )
 
@@ -127,6 +129,19 @@ kindOfSuffix suffix = case suffix of
   Just (SignedSuffix width) -> SignedKind width
   Just (UnsignedSuffix width) -> UnsignedKind width
   Nothing -> defaultIntegerKind
+
+{-| A literal built as the kind the checker settled on, when it settled on one.
+
+    The suffix still wins where there is one, because it said the kind outright.
+    Where there is neither a suffix nor an answer, the platform integer is the
+    default the checker itself would have chosen. -}
+integerLiteralValue :: Maybe Text -> Tree.Literal -> Value
+integerLiteralValue selected literal = case (selected, literalValue literal) of
+  (Just name, IntValue kind number)
+    | kind == defaultIntegerKind
+    , Just chosen <- integerKindOf name ->
+        IntValue chosen number
+  (_, value) -> value
 
 literalValue :: Tree.Literal -> Value
 literalValue literal = case literal of
