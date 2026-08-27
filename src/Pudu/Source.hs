@@ -23,6 +23,8 @@ module Pudu.Source
   , zeroOffset
   ) where
 
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Unique (Unique, newUnique)
@@ -55,6 +57,14 @@ data Source = Source
   { sourceIdentity :: !SourceIdentity
   , sourceTextValue :: !Text
   , sourceScalarLength :: !Int
+  {-| Where each line begins, so a position can be found without counting.
+
+      Finding a line by counting from the start of the text costs what it
+      skips, and everything that reports a position asks per token rather than
+      once: formatting a file asked for every token it had, which made laying
+      out a file cost the square of its size. This is built once, in the pass
+      that already reads the text. -}
+  , sourceLineStarts :: !(Map Int Int)
   }
 
 {-| @Source.Text.Span — identifies a half-open range in one snapshot -}
@@ -113,6 +123,7 @@ newSource name textValue = do
       { sourceIdentity = SourceIdentity{identityUnique = unique, identityName = name}
       , sourceTextValue = textValue
       , sourceScalarLength = Text.length textValue
+      , sourceLineStarts = lineStartsOf textValue
       }
 
 sourceName :: Source -> SourceName
@@ -164,13 +175,32 @@ offsetPosition :: Source -> Offset -> Maybe Position
 spanSource :: Span -> SourceName
 spanSource = identityName . spanIdentity
 
-offsetPosition Source{sourceTextValue, sourceScalarLength} (Offset requested)
+offsetPosition Source{sourceLineStarts, sourceScalarLength} (Offset requested)
   | requested < 0 = Nothing
   | requested > sourceScalarLength = Nothing
-  | otherwise =
-      Just
-        ( positionValue
-            (Text.foldl' advancePosition initialPositionFold (Text.take requested sourceTextValue))
+  | otherwise = case Map.lookupLE requested sourceLineStarts of
+      Nothing -> Just (Position 1 (requested + 1))
+      Just (start, line) -> Just (Position line (requested - start + 1))
+
+{-| Every offset at which a column returns to one, and the line it begins.
+
+    Read straight off the same rule a count would follow, so the answers agree
+    with what counting gave: a carriage return begins a line, a newline after
+    one continues it rather than beginning another, and a newline on its own
+    begins one. A carriage-return-newline pair therefore records twice — once
+    after each half — because a position between them is column one as surely
+    as the position after them is. -}
+lineStartsOf :: Text -> Map Int Int
+lineStartsOf textValue = Map.fromDistinctAscList (reverse collected)
+ where
+  (_, _, collected) =
+    Text.foldl' step (0 :: Int, initialPositionFold, [(0 :: Int, 1 :: Int)]) textValue
+  step (index, folded, acc) value =
+    let next = advancePosition folded value
+        after = index + 1
+     in ( after
+        , next
+        , if foldColumn next == 1 then (after, foldLine next) : acc else acc
         )
 
 sourceLength :: Source -> Offset

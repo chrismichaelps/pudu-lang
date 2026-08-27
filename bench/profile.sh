@@ -37,7 +37,16 @@ cabal build exe:pudu \
   exit 1
 }
 
-executable="$(cabal list-bin exe:pudu --builddir="$profiled" --enable-profiling 2>/dev/null || true)"
+# `list-bin` answers for the flags it is given, so it must be given the same
+# ones the build had, or it names a path that was never built.
+executable="$(cabal list-bin exe:pudu \
+  --builddir="$profiled" \
+  --enable-profiling \
+  --profiling-detail=toplevel-functions \
+  --enable-optimization=2 2>/dev/null || true)"
+if [ ! -x "${executable:-}" ]; then
+  executable="$(find "$profiled" -type f -name pudu -perm -u+x 2>/dev/null | head -1)"
+fi
 if [ -z "$executable" ] || [ ! -x "$executable" ]; then
   echo "bench/profile.sh: could not find the profiling executable." >&2
   exit 1
