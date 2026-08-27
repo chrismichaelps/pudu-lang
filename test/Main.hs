@@ -39,8 +39,8 @@ import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, 
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
 import System.Exit (exitFailure)
-import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, forAll, ioProperty, isSuccess,
-  property, quickCheckResult, withMaxSuccess, (===))
+import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
+  isSuccess, listOf, property, quickCheckResult, resize, withMaxSuccess, (===))
 main :: IO ()
 main = do
   sourceOutcomes <-
@@ -56,6 +56,7 @@ main = do
       , check "source accessors preserve input" testSourceAccessors
       , check "cached source length matches text" propertySourceLength
       , check "every in-bounds offset has a position" propertyValidOffsetsHavePositions
+      , check "a looked-up position is the one counting gives" propertyPositionMatchesCounting
       ]
   decimalOutcomes <- traverse (uncurry check) decimalProperties
   diagnosticOutcomes <- traverse (uncurry check) diagnosticProperties
@@ -224,6 +225,47 @@ propertyValidOffsetsHavePositions =
       ioProperty $ do
         source <- newSource (SourceName "property") value
         pure (counterexample (show value) (property (all (hasPosition source) [0 .. Text.length value])))
+
+{-| A position is looked up in an index rather than counted to, and the two
+    must agree everywhere.
+
+    The index exists because counting cost what it skipped, and every caller
+    asks per token. Replacing how every position in every diagnostic is worked
+    out is worth pinning against the answer it replaced, especially at a
+    carriage return followed by a newline, where a line does not begin twice
+    even though a column returns to one twice. -}
+propertyPositionMatchesCounting :: IO Property
+propertyPositionMatchesCounting =
+  pure $
+    forAll lineyText $ \value ->
+      ioProperty $ do
+        source <- newSource (SourceName "counting") value
+        let offsets = [0 .. Text.length value]
+            disagrees offset =
+              positionAt source offset /= Just (countedPosition value offset)
+        pure
+          ( counterexample
+              (show (value, filter disagrees offsets))
+              (property (not (any disagrees offsets)))
+          )
+
+{-| The position an offset has, worked out by walking to it — the rule the index
+    is built from, written the slow and obvious way. -}
+countedPosition :: Text -> Int -> Position
+countedPosition value offset = go 1 1 False (Text.unpack (Text.take offset value))
+ where
+  go line column afterReturn remaining = case remaining of
+    [] -> Position line column
+    '\r' : rest -> go (line + 1) 1 True rest
+    '\n' : rest
+      | afterReturn -> go line 1 False rest
+      | otherwise -> go (line + 1) 1 False rest
+    _ : rest -> go line (column + 1) False rest
+
+{-| Text with the line endings that matter in it, so the property meets them. -}
+lineyText :: Gen Text
+lineyText =
+  Text.pack <$> resize 40 (listOf (elements "ab\n\r\t \1234"))
 
 hasPosition :: Source -> Int -> Bool
 hasPosition source value =

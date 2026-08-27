@@ -12,6 +12,7 @@ codex/
 dist-ir
 dist-newstyle/
 dist-prof
+dist-prof-*
 fmcf.md
 fmfc.md
 goal.md

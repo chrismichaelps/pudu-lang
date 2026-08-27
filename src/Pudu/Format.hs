@@ -82,12 +82,18 @@ data Piece
 
 renderTokens :: Source -> [Token] -> Text
 renderTokens source tokens =
-  Text.unlines (concatMap emitLine (sortImportRuns (layout source tokens)))
+  Text.unlines
+    ( concatMap
+        emitLine
+        ( sortImportRuns (layout source tokens)
+        )
+    )
 
 {-| Lay tokens out on the lines they were written on, with comments taking the
     line they were written on too. -}
 layout :: Source -> [Token] -> [Line]
-layout source tokens = assign (concatMap entries tokens)
+layout source tokens =
+  assign (concatMap entries tokens)
  where
   entries token =
     [ (lineOf (triviaSpan trivia), CommentPiece (Text.strip (triviaText trivia)))

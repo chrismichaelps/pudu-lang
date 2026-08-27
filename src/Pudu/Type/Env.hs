@@ -305,7 +305,7 @@ finalizeIntegerConstraint constraint = do
   let variable = integerConstraintVariable constraint
       value = integerConstraintValue constraint
       spanValue = integerConstraintSpan constraint
-  resolved <- resolveCurrent (VariableType variable)
+  resolved <- resolveRemembering variable
   selected <- case resolved of
     VariableType unresolved -> do
       setVariable unresolved integerType
@@ -371,6 +371,27 @@ createdBetween :: Int -> Int -> IntegerConstraint -> Bool
 createdBetween start end constraint =
   let TypeVar identity = integerConstraintVariable constraint
    in identity >= start && identity < end
+
+{-| What a variable stands for, remembering it for every link on the way.
+
+    The companion to the compression in [[Type Unify]]'s `shallow`, and needed
+    with it rather than instead of it: one walks chains through the checker's
+    state and the other through `resolveFinal`, which is an ordinary function
+    and cannot write anything back. Shortening either alone leaves the other
+    walking the same chains, which is why neither showed a gain on its own. -}
+resolveRemembering :: TypeVar -> Checker Type
+resolveRemembering variable = do
+  solved <- resolveVariable variable
+  case solved of
+    Nothing -> pure (VariableType variable)
+    Just (VariableType next) -> do
+      endpoint <- resolveRemembering next
+      case endpoint of
+        VariableType other | other == variable -> pure endpoint
+        _ -> do
+          setVariable variable endpoint
+          pure endpoint
+    Just found -> pure found
 
 resolveCurrent :: Type -> Checker Type
 resolveCurrent typeValue =

@@ -36,6 +36,9 @@ The exported signatures are the module header's export list.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 - When two unequal nominal identities render with the same short name, the mismatch qualifies both with their declaring modules so the diagnostic never says only `expected Hidden, found Hidden`.
 
+- **A variable solved to another variable is pointed at what the chain ends in.** Solving `a` to `b` and then `b` to `c` leaves a chain, and every reader walked all of it; a variable per literal made the chains grow as a body did. Writing the end back where it was found means each link is followed once however many asks end in it, and the occurs check is what says there is an end to reach.
+- **The same has to be done in [[Type Env]] as well, not instead.** Two things walk these chains — this one, which goes through the checker's state, and `resolveFinal`, which is an ordinary function and cannot write anything back. Shortening either alone leaves the other walking the same chains, which is why neither showed a gain until both were in.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Syntax Tree]], [[Diagnostic Model]].

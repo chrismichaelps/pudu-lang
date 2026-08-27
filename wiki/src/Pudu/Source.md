@@ -72,6 +72,8 @@ offsetPosition :: Source -> Offset -> Maybe Position
 - **A position is found, not counted to.** Where each line begins is built once, in the pass that already reads the text, and `offsetPosition` looks the answer up. Folding over the first *n* characters cost what it skipped, and every caller asks per token rather than once — laying out a file asked for every token it held, which made formatting cost the square of the file's size and checking it nearly as much.
 - The line starts are read straight off the rule a count would follow, so the answers agree with what counting gave: a carriage return begins a line, a newline after one continues it rather than beginning another, and a newline alone begins one. A carriage-return-newline pair records twice, once after each half, because a position between them is column one as surely as the position after them is.
 
+- **The walk that builds the index accumulates into a strict record, not a tuple.** `foldl'` forces what it accumulates only to weak head normal form, and a tuple already is one, so the offset and the running position would each build a chain of unevaluated work as long as the text — paid for at the end, and held in memory the whole way. Formatting sixteen thousand lines went from 12.42s to 0.38s on that alone.
+
 ### Linkage
 
 - **Requires:** [[Source Text]], [[grammar/haskell]].
