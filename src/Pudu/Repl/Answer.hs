@@ -15,18 +15,15 @@ module Pudu.Repl.Answer
   , showType
   ) where
 
-import Control.Monad (unless, when)
-import Control.Monad.IO.Class (liftIO)
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
+import Control.Monad (unless)
+import Data.IORef (IORef, readIORef)
 import Data.Text (Text)
-import GHC.Clock (getMonotonicTime)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Diagnostic (hasErrors)
 import Pudu.Repl.Options (ReplOptions (..), ReplSettings (..))
 import Pudu.Diagnostic.Render
-  ( RenderStyle (..)
-  , defaultRenderConfig
+  (defaultRenderConfig
   , interactiveRenderConfig
   , renderDiagnosticsWith
   , renderSummary
@@ -36,62 +33,25 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
 import Pudu.Frontend.Token (Token (..), TokenKind (..))
-import Pudu.Repl.Input (continuationPrompt, readContinuation, readEntry)
-import Pudu.Repl.Command (Command (..), Entry (..), commandHelp, parseEntry)
-import Pudu.Repl.Complete
-  ( CompletionSource (..)
-  , completionsFor
-  , isNameCharacter
-  , memberContext
-  , wantsFilename
-  )
-import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Doc (entriesFor, renderEntryLinesWith)
-import Pudu.Doc.Search (Match (..), searchText)
+import Pudu.Repl.Command (commandHelp)
 import Pudu.Repl.Describe
   ( declarationSummary
-  , describeInstances
-  , describeKindLines
-  , describeName
   , importSummary
   )
 import Pudu.Repl.Outline (outlineBlock)
 import Pudu.Repl.Session
   ( EntryResult (..)
-  , LoadedModule (..)
   , Session (..)
   , inspectContext
-  , inspectDocs
-  , inspectSession
   , contextSummary
   , emptySession
   , loadModule
-  , sessionDeclaredNames
-  , sessionVisibleNames
   , sessionExports
   , submitEntry
-  , typeOfEntry
   )
 import Pudu.Source (SourceName (SourceName), newSource)
-import Data.List (sort)
-import Pudu.Type (Type (..), renderType)
-import Pudu.Type.Value (nominalName)
+import Pudu.Type (renderType)
 import System.Directory (doesFileExist)
-import System.Console.Haskeline
-  ( Completion (..)
-  , CompletionFunc
-  , InputT
-  , Settings (..)
-  , completeFilename
-  , defaultSettings
-  , handleInterrupt
-  , outputStrLn
-  , runInputT
-  , withInterrupt
-  )
-import System.Directory (getHomeDirectory)
-import System.FilePath ((</>))
-import System.IO (BufferMode (LineBuffering), hSetBuffering, hSetEncoding, stdout, utf8)
 
 showAst :: ReplOptions -> Text -> IO ()
 showAst options text

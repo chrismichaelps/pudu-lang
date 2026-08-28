@@ -61,12 +61,6 @@ import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
 import Pudu.Type.Value
   ( NominalId (..)
   , Scheme
-  , boolType
-  , charType
-  , decimalType
-  , floatType
-  , integerType
-  , stringType
   , Type (..)
   , monotype
   , nominalKey

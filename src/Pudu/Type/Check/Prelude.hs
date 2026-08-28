@@ -9,48 +9,13 @@ module Pudu.Type.Check.Prelude
   , effectSignatures
   ) where
 
-import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
-import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameText)
-import qualified Pudu.Frontend.Syntax.Tree as Tree
-import Pudu.Frontend.Syntax.Tree
-  ( Constraint (..)
-  , Declaration (..)
-  , Function (..)
-  , Impl (..)
-  , Trait (..)
-  , TypeParam (..)
-  )
-import Control.Monad (filterM, unless, when)
-import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
-  , DeclaredTypes (..)
-  , bindImportedMethod
   , bindName
-  , implementsTrait
-  , ambiguousProviders
-  , markAmbiguousMethod
-  , methodProvider
-  , recordMethodProvider
-  , lookupName
-  , isImportedMethod
-  , report
-  , rigidBoundsOf
-  , rigidSatisfies
-  , takeObligations
   )
-import Pudu.Semantic.Prelude (wiredInTypeNames)
-import Pudu.Type.Marker (isMarkerTrait, satisfiesMarker)
-import Pudu.Type.Unify (zonk)
-import Pudu.Type.Formation (declaredParameterType, formOptionalType, formType)
 import Pudu.Type.Value
-  ( NominalId (..)
-  , Scheme
+  ( Scheme
   , boolType
   , charType
   , decimalType
@@ -59,10 +24,7 @@ import Pudu.Type.Value
   , stringType
   , Type (..)
   , monotype
-  , nominalKey
-  , nominalName
   , polytype
-  , renderType
   )
 
 {-| The constructors of the wired-in sums exist without any declaration, so

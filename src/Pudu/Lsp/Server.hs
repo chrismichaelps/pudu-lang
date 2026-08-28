@@ -12,8 +12,6 @@ module Pudu.Lsp.Server
 
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -62,11 +60,11 @@ import Pudu.Lsp.Protocol
   , readMessage
   , response
   )
-import Pudu.Source (Source, SourceName (..), newSource, spanEnd, spanStart, unOffset)
+import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
 import Data.Char (isAlphaNum)
 import Data.List (nub, sort)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), TypeInfo, narrowestAt, renderType)
+import Pudu.Type (Type (..), narrowestAt, renderType)
 import Pudu.Type.Value (nominalName)
 import System.Directory (getCurrentDirectory)
 import System.FilePath (takeDirectory)

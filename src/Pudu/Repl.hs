@@ -13,19 +13,10 @@ import Data.Text (Text)
 import GHC.Clock (getMonotonicTime)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Render
-  ( RenderStyle (..)
-  , defaultRenderConfig
-  , interactiveRenderConfig
-  , renderDiagnosticsWith
-  , renderSummary
+  (renderSummary
   )
-import Pudu.Eval.Value (Value, renderValue, valueKind)
-import Pudu.Frontend.Lexer (LexResult (..), lexSource)
-import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
-import Pudu.Frontend.Parser.State (runParser)
-import Pudu.Frontend.Token (Token (..), TokenKind (..))
 import Pudu.Repl.Input (continuationPrompt, readContinuation, readEntry)
 import Pudu.Repl.Options
   ( ReplOptions (..)
@@ -44,7 +35,7 @@ import Pudu.Repl.Answer
   , showTokens
   , showType
   )
-import Pudu.Repl.Command (Command (..), Entry (..), commandHelp, parseEntry)
+import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
 import Pudu.Repl.Complete
   ( CompletionSource (..)
   , completionsFor
@@ -56,13 +47,10 @@ import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Doc (entriesFor, renderEntryLinesWith)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Repl.Describe
-  ( declarationSummary
-  , describeInstances
+  (describeInstances
   , describeKindLines
   , describeName
-  , importSummary
   )
-import Pudu.Repl.Outline (outlineBlock)
 import Pudu.Repl.Session
   ( EntryResult (..)
   , LoadedModule (..)
@@ -72,18 +60,15 @@ import Pudu.Repl.Session
   , inspectSession
   , contextSummary
   , emptySession
-  , loadModule
   , sessionDeclaredNames
   , sessionVisibleNames
   , sessionExports
   , submitEntry
   , typeOfEntry
   )
-import Pudu.Source (SourceName (SourceName), newSource)
 import Data.List (sort)
-import Pudu.Type (Type (..), renderType)
+import Pudu.Type (Type (..))
 import Pudu.Type.Value (nominalName)
-import System.Directory (doesFileExist)
 import System.Console.Haskeline
   ( Completion (..)
   , CompletionFunc

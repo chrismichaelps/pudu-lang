@@ -11,55 +11,21 @@ module Pudu.Eval
   , scopeTo
   ) where
 
-import Data.Foldable (toList)
-import Data.List (inits)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic)
-import Pudu.Eval.Builtin
-  ( callArrayMethod
-  , callCharFromCode
-  , callCharMethod
-  , callConvertInteger
-  , callDecimal
-  , callDisplay
-  , callEffect
-  , callMapMethod
-  , callMapOf
-  , callPanic
-  , callSetMethod
-  , callSetOf
-  , callShow
-  , callStringMethod
-  , isDecimalBuiltin
-  )
 import Pudu.Eval.Env
   ( Env (..)
-  , effectsAdmitted
   , integerKindAt
   , tally
-  , withIntegerKinds
-  , variantOwner
   , captureEnvironment
-  , currentFrame
-  , withCaptured
-  , pushFrame
-  , replaceFrame
   , Eval (..)
-  , adoptChild
-  , closeScope
-  , openScope
-  , releaseChild
   , Evaluator (..)
   , abortAt
-  , ascend
   , bind
-  , catchUnwind
-  , descend
   , emptyEnv
   , expectBool
   , lookupName
@@ -71,57 +37,38 @@ import Pudu.Eval.Env
   )
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
-  , callClosureValue
   , evaluateFor
   , evaluateLoop
   , evaluateWhile
-  , firstBound
-  , receiverOwner
-  , receiverOwners
-  , sequenceMethods
   )
 import Pudu.Eval.Call
   ( CallNeeds (..)
-  , applyFunction
   , evaluateCall
-  , evaluateCallee
   , evaluateScope
   , lastPathSegment
   , pathValue
   , readPath
-  , runClosure
   )
 import qualified Pudu.Eval.Call as Call
-import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Value
-  ( Builtin (..)
-  , Closure (..)
+  ( Closure (..)
   , Value (..)
   , renderValue
-  , valueKind
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Literal (IntegerValue)
-  , Import (..)
   , Block (..)
   , lambdaName
   , FieldInit (..)
   , Declaration (..)
   , Expression (..)
-  , Function (..)
-  , FunctionBody (..)
   , MatchArm (..)
-  , Module (..)
-  , Parameter (..)
-  , Pattern
   , Statement (..)
-  , TypeSyntax (..)
   )
-import Data.IORef (IORef, newIORef, readIORef)
+import Data.IORef (IORef)
 import Pudu.Source (Span)
 
 {-| @Eval.Outcome — a value or the diagnostic that stopped evaluation -}
@@ -205,7 +152,7 @@ awaitTask :: Span -> Value -> Evaluator Value
 awaitTask = Call.awaitTask callNeeds
 
 scopeTo :: [Map Text Value] -> Value -> Value
-scopeTo = Call.scopeTo callNeeds
+scopeTo = Call.scopeTo
 
 callNeeds :: CallNeeds
 callNeeds = CallNeeds{callEvaluate = evaluate, callBlock = evaluateBlock}
@@ -232,7 +179,7 @@ evaluateHere (Located spanValue expression) = case expression of
       selected <- integerKindAt spanValue
       pure (integerLiteralValue selected literal)
     _ -> pure (literalValue literal)
-  NameExpression names -> readPath callNeeds spanValue names
+  NameExpression names -> readPath spanValue names
   UnaryExpression operator operand -> evaluate operand >>= applyUnary spanValue operator
   BinaryExpression left operator right -> applyBinary spanValue left operator right
   CallExpression callee arguments -> evaluateCall callNeeds spanValue callee arguments

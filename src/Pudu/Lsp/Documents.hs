@@ -14,72 +14,15 @@ module Pudu.Lsp.Documents
   , uriOf
   ) where
 
-import Control.Monad (unless)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
-import qualified Data.Text.IO as TextIO
-import Pudu.Compiler (CompileResult (..))
-import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
-import Pudu.Diagnostic
-  ( Diagnostic
-  , Severity (..)
-  , diagnosticCode
-  , diagnosticCodeText
-  , diagnosticHelp
-  , diagnosticMessage
-  , diagnosticSeverity
-  , diagnosticSpan
-  )
-import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
-import Pudu.Format (FormatResult (..), formatSource)
-import Pudu.Lsp.Feature
-  ( completionItems
-  , documentSymbols
-  , entryAt
-  , hoverContents
-  , locationOf
-  , offsetAt
-  , rangeOfOffsets
-  , wordAt
-  )
-import Pudu.Lsp.Json (Json (..), lookupField, textOf)
-import Pudu.Lsp.Protocol
-  ( Message (..)
-  , errorResponse
-  , frame
-  , notification
-  , positionOf
-  , rangeJson
-  , readMessage
-  , response
-  )
-import Pudu.Source (Source, SourceName (..), newSource, spanEnd, spanStart, unOffset)
-import Data.Char (isAlphaNum)
-import Data.List (nub, sort)
-import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), TypeInfo, narrowestAt, renderType)
-import Pudu.Type.Value (nominalName)
-import System.Directory (getCurrentDirectory)
-import System.FilePath (takeDirectory)
-import System.IO
-  ( BufferMode (NoBuffering)
-  , Handle
-  , hFlush
-  , hSetBinaryMode
-  , hSetBuffering
-  , stdin
-  , stdout
-  )
+import Pudu.Diagnostic (Diagnostic)
+import Pudu.Doc (DocIndex)
+import Pudu.Lsp.Json (Json, lookupField, textOf)
+import Pudu.Source (Source)
+import Pudu.Type (TypeInfo)
 
-{-| @Lsp.Server.Analysis — everything the compiler said about one open file.
-
-    Held rather than recomputed per request because a hover, a definition, and a
-    completion within one keystroke would otherwise compile the program three
-    times. The text is kept beside it so a position can be turned into an offset
-    without asking the editor again. -}
 data Analysis = Analysis
   { analysisText :: !Text
   , analysisSource :: !Source

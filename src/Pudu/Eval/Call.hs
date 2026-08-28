@@ -23,11 +23,8 @@ import Data.Foldable (toList)
 import Data.List (inits)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Builtin
   ( callArrayMethod
   , callCharFromCode
@@ -46,18 +43,8 @@ import Pudu.Eval.Builtin
   , isDecimalBuiltin
   )
 import Pudu.Eval.Env
-  ( Env (..)
-  , effectsAdmitted
-  , integerKindAt
-  , tally
-  , withIntegerKinds
-  , variantOwner
-  , captureEnvironment
-  , currentFrame
+  ( tally
   , withCaptured
-  , pushFrame
-  , replaceFrame
-  , Eval (..)
   , adoptChild
   , closeScope
   , openScope
@@ -65,59 +52,35 @@ import Pudu.Eval.Env
   , Evaluator (..)
   , abortAt
   , ascend
-  , bind
   , catchUnwind
   , descend
-  , emptyEnv
-  , expectBool
   , lookupName
   , unwind
   , Unwind (..)
-  , update
   , withFrame
-  , withNewFrame
   )
 import Pudu.Eval.Loop
-  ( LoopNeeds (..)
-  , callClosureValue
-  , evaluateFor
-  , evaluateLoop
-  , evaluateWhile
-  , firstBound
-  , receiverOwner
+  ( firstBound
   , receiverOwners
-  , sequenceMethods
   )
-import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
-import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Install (lastSegmentOf)
+import Pudu.Eval.Operator (readMember, unwrapTry)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Closure (..)
   , Value (..)
-  , renderValue
   , valueKind
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Literal (IntegerValue)
-  , Import (..)
-  , Block (..)
-  , lambdaName
-  , FieldInit (..)
-  , Declaration (..)
+  ( Block (..)
   , Expression (..)
   , Function (..)
   , FunctionBody (..)
-  , MatchArm (..)
-  , Module (..)
   , Parameter (..)
-  , Pattern
-  , Statement (..)
   , TypeSyntax (..)
   )
-import Data.IORef (IORef, newIORef, readIORef)
 import Pudu.Source (Span)
 
 {-| @Eval.Call.Needs — what a call needs of the evaluator around it.
@@ -150,7 +113,7 @@ evaluateCall needs spanValue callee arguments = do
         BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue names values
         _ -> dispatchCall needs spanValue target values
     Nothing -> do
-      qualified <- qualifiedCallee needs callee values
+      qualified <- qualifiedCallee callee values
       target <- case qualified of
         Just found -> pure found
         Nothing -> evaluateCallee needs callee
@@ -230,8 +193,8 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
     type that implements it, as in `Bot.label(bot)`, or by the trait that
     declares it, as in `A.label(bot)`. The trait form dispatches on the first
     argument's type, which is the receiver the method is being called on. -}
-qualifiedCallee :: CallNeeds -> Located Expression -> [Value] -> Evaluator (Maybe Value)
-qualifiedCallee needs (Located _ expression) values = case qualifiedParts expression of
+qualifiedCallee :: Located Expression -> [Value] -> Evaluator (Maybe Value)
+qualifiedCallee (Located _ expression) values = case qualifiedParts expression of
   Nothing -> pure Nothing
   Just (first, method) -> do
     direct <- lookupName (first <> "." <> method)
@@ -263,8 +226,8 @@ qualifiedParts expression = case expression of
     always fully written and a value's own name never contains a dot — so the
     longer match is the one the reader meant, and preferring it cannot shadow a
     local. -}
-readPath :: CallNeeds -> Span -> NonEmpty Text -> Evaluator Value
-readPath needs spanValue path@(first :| rest) = do
+readPath :: Span -> NonEmpty Text -> Evaluator Value
+readPath spanValue path@(first :| rest) = do
   linked <- longestBinding path
   case linked of
     Just (value, remaining) -> foldMember value remaining
@@ -338,8 +301,8 @@ evaluateScope needs spanValue body = do
 {-| Join one child. A child that already failed propagates its failure, which is
     what keeps a scope from reporting success while a task it owned did not. -}
 
-scopeTo :: CallNeeds -> [Map Text Value] -> Value -> Value
-scopeTo needs environment value = case value of
+scopeTo :: [Map Text Value] -> Value -> Value
+scopeTo environment value = case value of
   FunctionValue closure
     | closureCaptured closure == Nothing ->
         FunctionValue closure{closureCaptured = Just environment}

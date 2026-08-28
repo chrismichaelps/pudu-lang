@@ -15,94 +15,34 @@ module Pudu.Eval.Program
   , evaluateProgramTallied
   ) where
 
-import Data.Foldable (toList)
-import Data.List (inits)
-import Data.List.NonEmpty (NonEmpty (..))
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic)
-import Pudu.Eval.Builtin
-  ( callArrayMethod
-  , callCharFromCode
-  , callCharMethod
-  , callConvertInteger
-  , callDecimal
-  , callDisplay
-  , callEffect
-  , callMapMethod
-  , callMapOf
-  , callPanic
-  , callSetMethod
-  , callSetOf
-  , callShow
-  , callStringMethod
-  , isDecimalBuiltin
-  )
 import Pudu.Eval.Env
   ( Env (..)
-  , effectsAdmitted
-  , integerKindAt
-  , tally
   , withIntegerKinds
-  , variantOwner
   , captureEnvironment
   , currentFrame
-  , withCaptured
   , pushFrame
   , replaceFrame
   , Eval (..)
-  , adoptChild
-  , closeScope
-  , openScope
-  , releaseChild
   , Evaluator (..)
-  , abortAt
-  , ascend
   , bind
-  , catchUnwind
-  , descend
-  , emptyEnv
-  , expectBool
   , lookupName
-  , unwind
-  , Unwind (..)
-  , update
-  , withFrame
-  , withNewFrame
   )
-import Pudu.Eval.Install (lastSegmentOf, loadDeclarations)
-import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
-import Pudu.Eval.Operator (applyUnary, combine, nominalNameOf, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Install (loadDeclarations)
 import Pudu.Eval.Value
-  ( Builtin (..)
-  , Closure (..)
+  ( Closure (..)
   , Value (..)
-  , renderValue
-  , valueKind
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Literal (IntegerValue)
-  , Import (..)
-  , Block (..)
-  , lambdaName
-  , FieldInit (..)
-  , Declaration (..)
-  , Expression (..)
+  ( Import (..)
   , Function (..)
-  , FunctionBody (..)
-  , MatchArm (..)
   , Module (..)
-  , Parameter (..)
-  , Pattern
-  , Statement (..)
-  , TypeSyntax (..)
   )
-import Data.IORef (IORef, newIORef, readIORef)
+import Data.IORef (newIORef, readIORef)
 import Pudu.Source (Span)
 import Pudu.Eval
   ( EvalOutcome (..)

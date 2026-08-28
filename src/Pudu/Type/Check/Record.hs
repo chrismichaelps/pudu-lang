@@ -11,134 +11,35 @@ module Pudu.Type.Check.Record
   , recordType
   ) where
 
-import Control.Monad (foldM, unless, when)
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
-import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
-  ( Block (..)
-  , Declaration (..)
-  , Expression (..)
+  ( Expression (..)
   , FieldInit (..)
-  , Function (..)
-  , FunctionBody (..)
-  , Impl (..)
-  , MatchArm (..)
-  , Module (..)
-  , Parameter
-  , Statement (..)
-  , Trait (..)
-  , TypeParam (..)
-  , Visibility (Exported)
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
-  , CheckerProducts (..)
   , DeclaredTypes (..)
-  , bindName
-  , finalizeIntegerLiterals
-  , finalizeIntegerLiteralsBetween
-  , finalizeIntegerLiteralsSince
-  , freshVariable
-  , inTypeScope
-  , inTypeScopeWith
-  , integerLiteralCheckpoint
-  , LoopFrame (..)
-  , enterLoop
-  , enterUnsafe
-  , leaveLoop
-  , loopTarget
-  , markLoopBroken
-  , withoutLoops
-  , leaveUnsafe
-  , warn
-  , recordUnsafeFunction
-  , recordComptimeFunction
-  , withComptime
   , lookupField
   , lookupVariant
   , lookupVariantFields
   , lookupTypeParams
-  , lookupName
-  , recordExpression
   , report
-  , withRigidBounds
-  , validateIntegerLiteralsSince
-  , runChecker
-  , withDeclared
   )
-import Pudu.Type.Check.Pattern (bindPattern, freshFor, substituteRigid)
-import Pudu.Type.Check.Iteration (iterationElement)
-import Pudu.Type.Check.Safety
-  ( checkComptimeCall
-  , checkUnsafeCall
-  , reportUnusedCapabilities
-  , requireComptimePurity
-  )
-import Pudu.Type.Check.Call
-  ( CheckExpression (..)
-  , checkCallee
-  , throughBorrow
-  , traitQualifiedCall
-  )
-import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Pattern (freshFor, substituteRigid)
 import Pudu.Type.Check.Rule
-  ( awaitType
-  , binaryType
-  , enclosingFunctionType
-  , enclosingReturnType
-  , instantiateWith
-  , callType
-  , elementType
-  , literalType
-  , memberType
-  , nameType
-  , selfName
-  , namedVariantAsValue
-  , qualifiedMemberType
-  , tryType
-  , unaryType
+  ( nameType
   )
-import Pudu.Type.Check.Method
-  ( declareBounds
-  , declareMethods
-  , declareBuiltinConstructors
-  , declareTraitMembers
-  , dischargeObligations
-  , functionRigid
-  , implAliases
-  , implBounds
-  , implRigid
-  , traitBounds
-  , traitRigid
-  , traitTable
-  )
-import Pudu.Type.Exhaust (checkExhaustive)
-import Pudu.Type.Formation
-  ( collectDeclaredFrom
-  , declaredParameterType
-  , formOptionalType
-  , formType
-  )
-import Pudu.Type.Unify (unify, zonk)
+import Pudu.Type.Unify (unify)
 import Pudu.Type.Value
   ( NominalId (..)
-  , Scheme (..)
-  , monotype
-  , polytype
   , Type (..)
-  , boolType
-  , integerType
   )
-import Pudu.Type.Interface (ImportTypes)
-import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| @Check.Record.CheckValue — checking a value, from where a field is checked.
 
