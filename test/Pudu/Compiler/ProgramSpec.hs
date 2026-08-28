@@ -213,7 +213,6 @@ testProgramEvaluation = do
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
-  widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
