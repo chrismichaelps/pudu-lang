@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-27 · [[Evaluator]], [[Eval Call]] · move calling, path reading, and task scopes out of the evaluator. `Eval.hs` is 364 lines, from 991 this morning. Two things arrive as a record — an argument is an expression and a function's body is a block — and calling, awaiting, and scoping keep record-free forms in the evaluator, so a caller that only wants to run something does not have to know there is one · risk MED · depth DEEP→DEEP · issue #115
+
 - 2026-08-27 · [[Evaluator]], [[Eval Loop]] · move the looping forms and the protocol a value is iterated by out of the evaluator, 828 lines to 620. A loop's body is a block and a block holds loops, so three things arrive as a record: a condition is an expression, a body is a block, and a sequence's `advance` is a closure the program supplied · risk MED · depth DEEP→DEEP · issue #115
 
 - 2026-08-27 · [[Evaluator]], [[Eval Program]] · separate running a program from evaluating an expression. The surface a caller reaches — an entry point, a module folded for its constants, and the linking that puts a dependency's declarations where the program can see them — depends on the evaluator rather than the other way round, so it takes no capability at all. Every other split in this codebase separated two halves of a real recursion; this one separates a surface from the thing it sits on, and an ordinary import states that exactly. 991 lines to 828 · risk MED · depth DEEP→DEEP · issue #115
