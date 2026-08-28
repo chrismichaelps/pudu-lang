@@ -24,6 +24,7 @@ const shared = new Map([
   ["E1032", "a function body is missing, from a declaration and from a literal"],
   ["E1044", "an unknown unsafe capability, from a declaration and from an expression"],
   ["E2010", "an unresolved value name, from resolution and from its context"],
+  ["E3010", "a name others can see must state its type: a binding where declarations are checked, a function or parameter where signatures are"],
   ["E3001", "the type mismatch, raised wherever two types are required to agree"],
   ["E3005", "a member the receiver does not have, from field access and from method lookup"],
   ["E3013", "an ambiguous method, from trait dispatch and from coherence"],

@@ -1,0 +1,8 @@
+module RejectsBuiltinThroughModule
+
+import Std.Map as Mp
+
+/// `Map` is built in and belongs to no module. `Std.Map` holds the functions
+/// that work on one, which is what makes reaching for the type through it the
+/// easy mistake.
+export fn run(value: Int) -> Mp.Map[Str, Int] { value }

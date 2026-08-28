@@ -2,6 +2,7 @@ module Pudu.Repl.SessionSpec (replProperties) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText)
 import Pudu.Diagnostic.Render
   ( RenderStyle (PlainStyle)
@@ -17,7 +18,10 @@ import Pudu.Repl.Describe
   , describeKindLines
   , describeName
   )
-import Pudu.Repl.Complete (CompletionSource (..), completionsFor, wantsFilename)
+import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
+import Pudu.Eval.Operator (builtinMethodNamesFor)
+import Pudu.Type (Type (..), renderType)
+import Pudu.Type.Value (nominalName)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -29,6 +33,8 @@ import Pudu.Repl.Session
   , sessionDeclaredNames
   , sessionExports
   , submitEntry
+  , loadModule
+  , typeOfEntry
   )
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -43,6 +49,8 @@ replProperties =
   , ("describing a name reports how the session declared it", testDescribe)
   , ("kinds report declared arity", testKinds)
   , ("completion offers commands paths and session names", testCompletion)
+  , ("completion offers what the value before the dot carries", testMemberCompletion)
+  , ("a loaded file does not shift where the entry sits", testLoadedOffsets)
   , ("loops and iteration evaluate in the interactive session", testIteration)
   , ("trait methods dispatch and inherit in the session", testTraits)
   , ("runtime errors surface and leave the session unchanged", testRuntimeErrors)
@@ -108,6 +116,15 @@ testClassification = do
   binding <- submit emptySession "let value = 1"
   declaration <- submit emptySession "fn run() -> Int { 1 }"
   importEntry <- submit emptySession "import Core.Text {trim}"
+  {-| A function written as a value is an expression, and the name is the only
+      thing that separates it from a declaration. Classified as a declaration,
+      one typed at the prompt was read as a declaration missing its name and
+      answered `E1001: expected identifier` — for an entry that names nothing
+      because it is not naming anything. -}
+  literal <- submit emptySession "fn(x: Int) -> Int => x"
+  blockLiteral <- submit emptySession "fn(x: Int) -> Int { x }"
+  asyncLiteral <- submit emptySession "async fn(x: Int) -> Int => x"
+  asyncDeclaration <- submit emptySession "async fn run() -> Int { 1 }"
   pure $ conjoin
     [ resultKind expression === ExpressionEntry
     , resultKind binding === StatementEntry
@@ -115,7 +132,107 @@ testClassification = do
     , resultKind importEntry === ImportEntry
     , counterexample "an expression reports its value" (valueOf expression === "3")
     , counterexample "a binding reports no value" (valueOf binding === "none")
+    , counterexample "a function written as a value is an expression"
+        (resultKind literal === ExpressionEntry)
+    , counterexample "so is one whose body is a block"
+        (resultKind blockLiteral === ExpressionEntry)
+    , counterexample "and an async one"
+        (resultKind asyncLiteral === ExpressionEntry)
+    , counterexample "while a named async function still declares"
+        (resultKind asyncDeclaration === DeclarationEntry)
+    , counterexample "a function written as a value type checks"
+        (null (resultDiagnostics literal) === True)
     ]
+
+{-| Completion after a dot offers the methods the receiver carries.
+
+    The receiver's type is asked for without running it, so pressing tab after
+    an expression that would do something does not do it. A receiver whose type
+    cannot be worked out offers nothing rather than everything, because a list
+    of names that do not apply costs the reader more than no list. -}
+{-| A loaded file must not move where the entry sits in the assembled buffer.
+
+    The file's text is one element among lines that `Text.unlines` joins, and it
+    carries the newline every file ends with. Left there it became a second one,
+    so the buffer had a blank line that counting the elements' lines did not,
+    and every offset after it was short by one.
+
+    Nothing about the text was wrong, so the buffer compiled and ran correctly
+    the whole time. What broke was every question asked *about a position*:
+    `:type` reported the runtime shape of whatever the misplaced window landed
+    on, so `"hello"` came back as `string` rather than `Str` for the entire
+    session once any file was loaded. -}
+testLoadedOffsets :: IO Property
+testLoadedOffsets = do
+  loaded <- loadFixture
+  textType <- typeOfEntry loaded "\"hello\""
+  arrayType <- typeOfEntry loaded "[1, 2]"
+  functionType <- typeOfEntry loaded "twice"
+  constType <- typeOfEntry loaded "LIMIT"
+  {-| The same answers a session with nothing loaded already gave. -}
+  bareText <- typeOfEntry emptySession "\"hello\""
+  pure $ conjoin
+    [ counterexample "text is text with a file loaded" (fmap headName textType === Just "Str")
+    , counterexample "an array is an array" (fmap headName arrayType === Just "Array")
+    , counterexample "a loaded function keeps its type"
+        (fmap renderType functionType === Just "fn(Int) -> Int")
+    , counterexample "a loaded constant keeps its type"
+        (fmap headName constType === Just "Int")
+    , counterexample "and a loaded file changes none of it"
+        (fmap headName textType === fmap headName bareText)
+    ]
+
+{-| A session with a small file loaded, used to check that loading one moves
+    nothing. -}
+loadFixture :: IO Session
+loadFixture = do
+  let path = "test-fixtures/repl/Tiny.pudu"
+  text <- TextIO.readFile path
+  (apply, _, _) <- loadModule path text
+  pure (apply emptySession)
+
+testMemberCompletion :: IO Property
+testMemberCompletion = do
+  arrayType <- typeOfEntry emptySession "[1, 2]"
+  textType <- typeOfEntry emptySession "\"hello\""
+  mapType <- typeOfEntry emptySession "mapOf([(1, 2)])"
+  {-| A name the session declared is a receiver like any other. -}
+  declared <- submit emptySession "let greeting = \"hi\""
+  declaredType <- typeOfEntry (resultSession declared) "greeting"
+  {-| Nothing is offered for something that does not type. -}
+  brokenType <- typeOfEntry emptySession "nowhere"
+  pure $ conjoin
+    [ counterexample "the text before the dot is the receiver"
+        (memberContext "[1, 2]" "." === Just ("[1, 2]", ""))
+    , counterexample "a partial member name comes back with it"
+        (memberContext "\"hello\"" ".to" === Just ("\"hello\"", "to"))
+    , counterexample "a dotted path is not a member access"
+        (memberContext "" "Std.Text.trimEnd" === Nothing)
+    , counterexample "an array receiver is typed as one"
+        (fmap headName arrayType === Just "Array")
+    , counterexample "a text receiver is typed as one"
+        (fmap headName textType === Just "Str")
+    , counterexample "a map receiver is typed as one"
+        (fmap headName mapType === Just "Map")
+    , counterexample "a declared name is a receiver"
+        (fmap headName declaredType === Just "Str")
+    , counterexample "a receiver that does not type offers nothing"
+        (brokenType === Nothing)
+    , counterexample "an array carries the methods dispatch knows"
+        (all (`elem` builtinMethodNamesFor "Array") ["map", "filter", "push", "length"] === True)
+    , counterexample "text carries its own"
+        (all (`elem` builtinMethodNamesFor "Str") ["toUpper", "trim", "split", "length"] === True)
+    , counterexample "and the two sets are not the same"
+        (("toUpper" `elem` builtinMethodNamesFor "Array") === False)
+    , counterexample "a type with no built-in methods offers none"
+        (builtinMethodNamesFor "Int" === [])
+    ]
+
+{-| The name a type is written under, which is what selects its method set. -}
+headName :: Type -> Text
+headName typeValue = case typeValue of
+  NominalType identity _ -> nominalName identity
+  _ -> "?"
 
 testPersistence :: IO Property
 testPersistence = do

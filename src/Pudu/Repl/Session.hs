@@ -15,6 +15,7 @@ module Pudu.Repl.Session
   , sessionVisibleNames
   , sessionExports
   , submitEntry
+  , typeOfEntry
   ) where
 
 import Data.Text (Text)
@@ -30,7 +31,8 @@ import Pudu.Compiler.Program
 import System.Directory (getCurrentDirectory)
 import Pudu.Diagnostic (Diagnostic, hasErrors)
 import Pudu.Doc (DocIndex)
-import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -107,6 +109,17 @@ classifyEntry tokens = case afterLabel (dropWhile isEndOfFile tokens) of
   token : rest -> case tokenKind token of
     Keyword KwImport -> ImportEntry
     Keyword KwUnsafe -> if declaresFunction rest then DeclarationEntry else ExpressionEntry
+    {-| `fn` declares a function and also opens one written as a value, and the
+        name is the only thing that separates them: `fn double(n: Int)` declares,
+        `fn(n: Int)` is a literal. Classified as a declaration, a literal typed
+        at the prompt was read as a declaration missing its name and answered
+        `E1001: expected identifier` — for an entry that names nothing because
+        it is not naming anything.
+
+        The same holds after `async`, which additionally opens a scope: `async
+        with scope { .. }` is an expression however it ends. -}
+    Keyword KwFn | not (namesFunction rest) -> ExpressionEntry
+    Keyword KwAsync | not (asyncDeclares rest) -> ExpressionEntry
     Keyword keyword | isDeclarationKeyword keyword -> DeclarationEntry
     Keyword keyword | isStatementKeyword keyword -> StatementEntry
     _ -> ExpressionEntry
@@ -119,6 +132,23 @@ afterLabel :: [Token] -> [Token]
 afterLabel tokens = case map tokenKind (take 2 tokens) of
   [labelSigil, Identifier _] | isSymbolKind "@" labelSigil -> drop 2 tokens
   _ -> tokens
+
+{-| Whether what follows `fn` is a name, which is what makes it a declaration
+    rather than a function written as a value. -}
+namesFunction :: [Token] -> Bool
+namesFunction tokens = case map tokenKind (take 1 tokens) of
+  Identifier _ : _ -> True
+  _ -> False
+
+{-| Whether what follows `async` declares something. Only `async fn name`
+    does; `async fn(` is a literal and `async with` opens a scope, and both are
+    expressions. -}
+asyncDeclares :: [Token] -> Bool
+asyncDeclares tokens = case map tokenKind (take 2 tokens) of
+  Keyword KwFn : rest -> case rest of
+    Identifier _ : _ -> True
+    _ -> False
+  _ -> False
 
 {-| `unsafe` opens a region in expression position and modifies a declaration in
     declaration position, so the entry is classified by what follows its
@@ -147,6 +177,36 @@ isDeclarationKeyword keyword =
 isStatementKeyword :: Keyword -> Bool
 isStatementKeyword keyword =
   keyword `elem` [KwLet, KwVar, KwReturn, KwBreak, KwContinue, KwWhile, KwFor, KwLoop]
+
+{-| The type of an expression, worked out without running it.
+
+    Completion asks this to know what a receiver is before offering what it
+    carries. It must not go through `submitEntry`, which evaluates: a reader
+    pressing tab after `removeFile("notes")` has asked what methods a result
+    has, not for the file to be removed. Nothing here reaches the evaluator, so
+    nothing can happen that the reader did not ask for.
+
+    The session is left exactly as it was, whatever the expression turns out to
+    be. -}
+typeOfEntry :: Session -> Text -> IO (Maybe Type)
+typeOfEntry session entry
+  | Text.null (Text.strip entry) = pure Nothing
+  | otherwise = do
+      probe <- newSource interactiveName entry
+      let LexResult{lexTokens} = lexSource probe
+          kind = classifyEntry lexTokens
+      if kind /= ExpressionEntry
+        then pure Nothing
+        else do
+          let candidate = extend session kind entry
+              (buffer, _) = renderBuffer session kind entry
+              entryStart = bufferOffsetOf session kind
+          source <- newSource interactiveName buffer
+          (result, _) <- compileBuffer session candidate source
+          pure $
+            if hasErrors (compileDiagnostics result)
+              then Nothing
+              else compileTypes result >>= entryType entryStart (Text.length entry)
 
 {-| Compile one submission against the current session. The session advances
     only when the entry is accepted, so a failed entry can never corrupt the
@@ -304,7 +364,15 @@ renderBuffer :: Session -> EntryKind -> Text -> (Text, Int)
 renderBuffer session kind entry = (Text.unlines whole, countLines before + 1)
  where
   header = maybe defaultHeader loadedPrefix (sessionLoaded session)
-  loadedBody = maybe [] (pure . loadedRest) (sessionLoaded session)
+  {-| The loaded file's text is one element among lines that `Text.unlines`
+      will join, and it carries the newline every file ends with. Left there, it
+      becomes a second one — a blank line that the assembled buffer has and that
+      counting the elements' lines does not, so every offset after it was short
+      by one. Nothing about the *text* was wrong, which is why the buffer
+      compiled and ran correctly while `:type` reported the runtime shape of
+      whatever the misplaced window happened to land on: `"hello"` came back as
+      `string` rather than `Str` for the whole session once a file was loaded. -}
+  loadedBody = maybe [] (pure . Text.dropWhileEnd (== '\n') . loadedRest) (sessionLoaded session)
   imports = sessionImports session <> [entry | kind == ImportEntry]
   declarations = sessionDeclarations session <> [entry | kind == DeclarationEntry]
   statements = sessionStatements session <> [entry | inFunction kind]

@@ -98,6 +98,12 @@ data DeclaredTypes = DeclaredTypes
   , declaredImpls :: !(Map NominalId [NominalId])
   , declaredAliases :: !(Map Text ([Text], Type))
   , declaredTraitNames :: !(Set NominalId)
+  {-| The module qualifiers whose interface was found.
+
+      A qualified type name is only worth judging when the module it names is
+      one the compiler actually read. Absent from here means nothing could be
+      known about it, and silence is the honest answer. -}
+  , declaredQualifiers :: !(Set Text)
   }
   deriving stock (Eq, Show)
 
@@ -113,6 +119,7 @@ emptyDeclared =
     , declaredImpls = Map.empty
     , declaredAliases = Map.empty
     , declaredTraitNames = Set.empty
+    , declaredQualifiers = Set.empty
     }
 
 {-| @Type.Env.State — the checker's working state.
@@ -393,9 +400,6 @@ resolveRemembering variable = do
           pure endpoint
     Just found -> pure found
 
-resolveCurrent :: Type -> Checker Type
-resolveCurrent typeValue =
-  Checker $ \state -> (resolveFinal (stateSubstitution state) typeValue, state)
 
 negateMatching :: TypeVar -> [IntegerConstraint] -> (Bool, [IntegerConstraint])
 negateMatching variable constraints = case constraints of

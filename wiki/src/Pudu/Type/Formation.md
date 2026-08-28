@@ -50,6 +50,9 @@ The exported signatures are the module header's export list.
 
 - A variant written with field names carries the same positional payload as one written with types alone. The names are collected alongside the payload rather than instead of it, so nothing that reads a variant's shape needs to know which spelling declared it.
 
+- **A module cannot lend its name to a type it does not declare** (`E3035`). Only the head of a type path is resolved, because a later segment selects through a module and that needs types to decide; nothing decided them, so an unfound qualified name became a nominal type of its own named after what was written. `M.Map[Str, Tally]` was then a different type from `Map[Str, Tally]`, and the reader was told "expected M.Map[Str, Tally], found Map[a, b]" — two names that read alike, about a type that never existed, at a line that was not the mistake.
+- **Judged only for a qualifier whose module was read.** A type a module really declares looks exactly like one it does not when its interface was never available, so the qualifiers that were resolved are carried alongside the names and nothing is said about the others.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].

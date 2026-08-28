@@ -1,0 +1,6 @@
+module RejectsUndeclaredType
+
+import Std.Map as Mp
+
+/// A name the module does not have at all.
+export fn run(value: Int) -> Mp.Nowhere { value }

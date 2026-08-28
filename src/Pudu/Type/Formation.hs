@@ -9,6 +9,7 @@ module Pudu.Type.Formation
   ) where
 
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text as Text
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Control.Monad (unless)
@@ -16,7 +17,7 @@ import qualified Data.Set as Set
 import Pudu.Source (Span)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
+import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Impl (..)
@@ -72,7 +73,10 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
     formed <- mapM (formTypeWith valuePosition declared rigid) arguments
     refused <-
       if valuePosition then rejectTraitAsType declared typeSpan path else pure False
-    if refused then pure ErrorType else pure (formNamed declared rigid path formed)
+    unknown <- rejectUnknownQualifiedType declared typeSpan path
+    if refused || unknown
+      then pure ErrorType
+      else pure (formNamed declared rigid path formed)
   ReferenceType mutable target ->
     ReferenceTypeValue mutable <$> formTypeWith valuePosition declared rigid target
   TupleType members ->
@@ -107,6 +111,63 @@ rejectTraitAsType declared typeSpan path = case Map.lookup pathText (declaredNam
   _ -> pure False
  where
   pathText = moduleNameText path
+
+{-| A module cannot lend its name to a type it does not declare.
+
+    Only the head of a type path is resolved, because a later segment selects
+    through a module and that needs types to decide. Nothing decided them: an
+    unfound qualified name became a nominal type of its own, named after what
+    was written, so `M.Map[Str, Tally]` was a different type from
+    `Map[Str, Tally]` and the reader was told "expected M.Map[Str, Tally], found
+    Map[a, b]" — two names that read alike, about a type that never existed, at
+    a line that was not the mistake.
+
+    Judged only for a qualifier whose module was actually read. A qualifier that
+    is not one of those is a module nothing could be known about, and an earlier
+    attempt that skipped this distinction reported correct code — a type a
+    module really declares looks exactly like one it does not when its interface
+    was never available.
+
+    This is the same mistake `E3033` reports for a value, and told apart the
+    same way: a name that stands on its own is one the reader reached for
+    through a module that does not have it — `Map` is built in, so it is written
+    without a qualifier. -}
+rejectUnknownQualifiedType :: DeclaredTypes -> Span -> ModuleName -> Checker Bool
+rejectUnknownQualifiedType declared typeSpan path
+  | unqualified = pure False
+  | not (Set.member owner (declaredQualifiers declared)) = pure False
+  | known pathText = pure False
+  | otherwise = do
+      reportOnce typeSpan "E3035"
+        (owner <> " declares no type " <> name)
+        ( if known name || name `elem` builtinTypeNames
+            then name <> " stands on its own; write it without " <> owner <> "."
+            else "check the spelling against what " <> owner <> " declares"
+        )
+      pure True
+ where
+  segments = NonEmpty.toList (moduleNameSegments path)
+  pathText = moduleNameText path
+  name = NonEmpty.last (moduleNameSegments path)
+  owner = Text.intercalate "." (init segments)
+  unqualified = pathText == name
+  known key =
+    Map.member key (declaredNames declared) || Map.member key (declaredAliases declared)
+
+{-| The types the language itself provides, which belong to no module and are
+    written without a qualifier.
+
+    A reader who writes `M.Map` has reached for one of these through the module
+    whose functions work on it. That is the commonest way to arrive at a
+    qualified name nothing declares, and the one worth answering directly rather
+    than sending them to read what the module exports. -}
+builtinTypeNames :: [Text]
+builtinTypeNames =
+  [ "Array", "Str", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
+  , "Int", "UInt", "BigInt", "Decimal", "Float", "Float32", "Float64"
+  , "Int8", "Int16", "Int32", "Int64", "Int128"
+  , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"
+  ]
 
 {-| Report a formation diagnostic at most once for a given span.
 

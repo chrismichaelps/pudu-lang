@@ -1,6 +1,7 @@
 {-| @Eval.Operator.Module — applies operator and access semantics -}
 module Pudu.Eval.Operator
   ( applyUnary
+  , builtinMethodNamesFor
   , combine
   , nominalNameOf
   , readIndex
@@ -330,6 +331,22 @@ readKeyedMember spanValue receiver member table build described =
   case lookup member table of
     Just method -> pure (build method receiver)
     Nothing -> readMethod spanValue receiver described member
+
+{-| The methods a value of this kind carries, by the name its type is written
+    under.
+
+    Read from the same tables dispatch reads, so what the prompt offers and what
+    a call finds cannot disagree — the reason `effectBuiltins` is one list too.
+    A kind with no built-in methods answers with none rather than with
+    everything. -}
+builtinMethodNamesFor :: Text -> [Text]
+builtinMethodNamesFor owner = case owner of
+  "Array" -> map fst arrayMethods
+  "Str" -> map fst stringMethods
+  "Map" -> map fst mapMethods
+  "Set" -> map fst setMethods
+  "Char" -> ["code", "toText"]
+  _ -> []
 
 mapMethods :: [(Text, MapMethod)]
 mapMethods =

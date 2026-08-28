@@ -13,37 +13,44 @@ import Data.Text (Text)
 import GHC.Clock (getMonotonicTime)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Diagnostic (Diagnostic)
 import Pudu.Diagnostic.Render
-  ( RenderStyle (..)
-  , defaultRenderConfig
-  , interactiveRenderConfig
-  , renderDiagnosticsWith
-  , renderSummary
+  (renderSummary
   )
-import Pudu.Eval.Value (Value, renderValue, valueKind)
-import Pudu.Frontend.Lexer (LexResult (..), lexSource)
-import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
-import Pudu.Frontend.Parser.State (runParser)
-import Pudu.Frontend.Token (Token (..), TokenKind (..))
 import Pudu.Repl.Input (continuationPrompt, readContinuation, readEntry)
-import Pudu.Repl.Command (Command (..), Entry (..), commandHelp, parseEntry)
+import Pudu.Repl.Options
+  ( ReplOptions (..)
+  , ReplSettings (..)
+  , defaultReplOptions
+  , defaultReplSettings
+  )
+import Pudu.Repl.Answer
+  ( emptyAs
+  , performLoad
+  , prompt
+  , reportEntry
+  , showAst
+  , showHelp
+  , showState
+  , showTokens
+  , showType
+  )
+import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
 import Pudu.Repl.Complete
   ( CompletionSource (..)
   , completionsFor
   , isNameCharacter
+  , memberContext
   , wantsFilename
   )
+import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Doc (entriesFor, renderEntryLinesWith)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Repl.Describe
-  ( declarationSummary
-  , describeInstances
+  (describeInstances
   , describeKindLines
   , describeName
-  , importSummary
   )
-import Pudu.Repl.Outline (outlineBlock)
 import Pudu.Repl.Session
   ( EntryResult (..)
   , LoadedModule (..)
@@ -53,15 +60,15 @@ import Pudu.Repl.Session
   , inspectSession
   , contextSummary
   , emptySession
-  , loadModule
   , sessionDeclaredNames
   , sessionVisibleNames
   , sessionExports
   , submitEntry
+  , typeOfEntry
   )
-import Pudu.Source (SourceName (SourceName), newSource)
-import Pudu.Type (renderType)
-import System.Directory (doesFileExist)
+import Data.List (sort)
+import Pudu.Type (Type (..))
+import Pudu.Type.Value (nominalName)
 import System.Console.Haskeline
   ( Completion (..)
   , CompletionFunc
@@ -78,36 +85,17 @@ import System.Directory (getHomeDirectory)
 import System.FilePath ((</>))
 import System.IO (BufferMode (LineBuffering), hSetBuffering, hSetEncoding, stdout, utf8)
 
-{-| @Repl.Options — everything the caller decides before the loop starts -}
-data ReplOptions = ReplOptions
-  { replStyle :: !RenderStyle
-  , replInitialLoad :: !(Maybe FilePath)
-  }
-  deriving stock (Eq, Show)
-
-{-| @Repl.Settings — what the reader turned on for this session.
-
-    Settings are session state, not options the entry point chose, so they live
-    beside the session rather than in the options record. -}
-data ReplSettings = ReplSettings
-  { settingShowTypes :: !Bool
-  , settingShowTiming :: !Bool
-  }
-  deriving stock (Eq, Show)
-
-defaultSettings' :: ReplSettings
-defaultSettings' = ReplSettings{settingShowTypes = False, settingShowTiming = False}
-
 {-| @Repl.Context — what every command needs: the entry point's choices, the
     names completion offers, and the settings the reader turned on. -}
 data ReplContext = ReplContext
   { contextOptions :: !ReplOptions
   , contextVisible :: !(IORef CompletionSource)
   , contextSettings :: !(IORef ReplSettings)
+  {-| The session as completion sees it, so asking what a receiver is uses the
+      declarations the reader has actually made. -}
+  , contextCurrent :: !(IORef Session)
   }
 
-defaultReplOptions :: ReplOptions
-defaultReplOptions = ReplOptions{replStyle = PlainStyle, replInitialLoad = Nothing}
 
 banner :: Text
 banner = "puduci, version " <> versionText <> ": the Pudu interactive session  :? for help"
@@ -115,14 +103,6 @@ banner = "puduci, version " <> versionText <> ": the Pudu interactive session  :
 versionText :: Text
 versionText = "0.1.0.0"
 
-prompt :: Text
-prompt = "puduci> "
-
-{-| Run the session until the reader quits or input ends.
-
-    The session value itself stays pure and is threaded through the loop. A
-    reference to it is kept only so completion can see what the session has
-    declared; completion never writes to it. -}
 runRepl :: ReplOptions -> IO ()
 runRepl options = do
   hSetEncoding stdout utf8
@@ -132,37 +112,77 @@ runRepl options = do
     Nothing -> pure emptySession
     Just path -> performLoad options emptySession path
   visible <- newIORef =<< nameSourceFor session
-  chosen <- newIORef defaultSettings'
-  settings <- sessionSettings visible
-  let context = ReplContext{contextOptions = options, contextVisible = visible, contextSettings = chosen}
+  chosen <- newIORef defaultReplSettings
+  current <- newIORef session
+  settings <- sessionSettings visible current
+  let context =
+        ReplContext
+          { contextOptions = options
+          , contextVisible = visible
+          , contextSettings = chosen
+          , contextCurrent = current
+          }
   runInputT settings (withInterrupt (loop context session))
 
 {-| History lives beside the reader's other tool history, and completion is
     session-aware. -}
-sessionSettings :: IORef CompletionSource -> IO (Settings IO)
-sessionSettings visible = do
+sessionSettings :: IORef CompletionSource -> IORef Session -> IO (Settings IO)
+sessionSettings visible current = do
   home <- getHomeDirectory
   pure
     (defaultSettings :: Settings IO)
       { historyFile = Just (home </> ".puduci_history")
       , autoAddHistory = True
-      , complete = sessionCompletion visible
+      , complete = sessionCompletion visible current
       }
 
 {-| Complete a colon command at the start of a line, a filename after a command
     that takes one, and otherwise a name the session can see. -}
-sessionCompletion :: IORef CompletionSource -> CompletionFunc IO
-sessionCompletion visible (leftReversed, right) = do
+sessionCompletion :: IORef CompletionSource -> IORef Session -> CompletionFunc IO
+sessionCompletion visible current (leftReversed, right) = do
   let before = Text.pack (reverse leftReversed)
       word = Text.takeWhileEnd completionCharacter before
       prefix = Text.dropEnd (Text.length word) before
   if wantsFilename prefix
     then completeFilename (leftReversed, right)
-    else do
-      source <- readIORef visible
-      let matches = completionsFor source prefix word
-          finished = Text.isPrefixOf ":" word
-      pure (drop (Text.length word) leftReversed, map (toCompletion finished) matches)
+    else case memberContext prefix word of
+      Just (receiver, partial) -> do
+        session <- readIORef current
+        offered <- memberCompletions session receiver partial
+        pure (drop (Text.length partial) leftReversed, map (toCompletion False) offered)
+      Nothing -> do
+        source <- readIORef visible
+        let matches = completionsFor source prefix word
+            finished = Text.isPrefixOf ":" word
+        pure (drop (Text.length word) leftReversed, map (toCompletion finished) matches)
+
+{-| What the value in front of the cursor carries.
+
+    The receiver's type is asked for without running it — a reader pressing tab
+    after `removeFile(\"notes\")` has asked what a result carries, not for the
+    file to be removed.
+
+    A receiver whose type cannot be worked out offers nothing rather than
+    everything: a list of names that do not apply is worse than no list, because
+    the reader has to check each one. -}
+memberCompletions :: Session -> Text -> Text -> IO [Text]
+memberCompletions session receiver partial = do
+  found <- typeOfEntry session receiver
+  pure $ case found of
+    Nothing -> []
+    Just typeValue -> sort (filter (Text.isPrefixOf partial) (methodsOf typeValue))
+
+{-| The methods a type carries, read from the tables dispatch reads. -}
+methodsOf :: Type -> [Text]
+methodsOf typeValue = case throughReference typeValue of
+  NominalType identity _ -> builtinMethodNamesFor (nominalName identity)
+  _ -> []
+
+{-| A borrow carries what it refers to, so `&text` offers what text does. -}
+throughReference :: Type -> Type
+throughReference typeValue = case typeValue of
+  ReferenceTypeValue _ target -> throughReference target
+  other -> other
 
 completionCharacter :: Char -> Bool
 completionCharacter character = isNameCharacter character || character == ':'
@@ -212,6 +232,10 @@ interrupted context session = do
 continueWith :: ReplContext -> Session -> InputT IO ()
 continueWith context session = do
   liftIO (writeIORef (contextVisible context) =<< nameSourceFor session)
+  {-| Completion asks the session what a receiver is, so it has to be the
+      session the reader is actually in — a declaration made a moment ago
+      offers its methods on the next line. -}
+  liftIO (writeIORef (contextCurrent context) session)
   loop context session
 
 say :: Text -> InputT IO ()
@@ -251,7 +275,7 @@ runCommand context session command = case command of
   ShowSetting flag -> adjust flag True
   ClearSetting flag -> adjust flag False
   ShowState topic -> do
-    lines' <- liftIO (showState context session (Text.strip topic))
+    lines' <- liftIO (showState (contextSettings context) session (Text.strip topic))
     mapM_ say lines'
     pure (Just session)
   ShowDoc name
@@ -319,50 +343,11 @@ runCommand context session command = case command of
 searchLimit :: Int
 searchLimit = 20
 
-{-| A prompt that says nothing has an answer too; say it rather than fall
-    silent, so the reader knows the command ran. -}
-emptyAs :: Text -> [Text] -> [Text]
-emptyAs message entries = if null entries then [message] else entries
-
-{-| @Repl.Settings — the switches a reader can flip mid-session. Named after the
-    flag they answer to so the help text and the parser cannot drift apart. -}
 settingFor :: Text -> Maybe (Bool -> ReplSettings -> ReplSettings)
 settingFor key = case Text.dropWhile (== '+') key of
   "t" -> Just (\wanted settings -> settings{settingShowTypes = wanted})
   "s" -> Just (\wanted settings -> settings{settingShowTiming = wanted})
   _ -> Nothing
-
-{-| @Repl.State — what the session holds right now, grouped the way a reader
-    asks for it rather than the way the checker stores it. -}
-showState :: ReplContext -> Session -> Text -> IO [Text]
-showState context session topic = case topic of
-  "settings" -> do
-    settings <- readIORef (contextSettings context)
-    pure
-      [ "+t (show types)  " <> onOff (settingShowTypes settings)
-      , "+s (show timing) " <> onOff (settingShowTiming settings)
-      ]
-  "bindings" -> pure (emptyAs "no bindings" (contextSummary session))
-  "declarations" -> do
-    (_, parsed, _) <- inspectContext session
-    pure (emptyAs "no declarations" (foldMap declarationSummary parsed))
-  "imports" -> do
-    (_, parsed, _) <- inspectContext session
-    pure (emptyAs "no imports" (foldMap importSummary parsed))
-  _ -> pure ["usage: :show bindings|declarations|imports|settings"]
- where
-  onOff wanted = if wanted then "on" else "off"
-
-showHelp :: IO ()
-showHelp = do
-  TextIO.putStrLn " Commands available from the prompt:"
-  TextIO.putStrLn ""
-  TextIO.putStrLn "   <statement>                 evaluate or define <statement>"
-  mapM_ line commandHelp
- where
-  line (name, description) =
-    TextIO.putStrLn ("   " <> pad name <> description)
-  pad name = name <> Text.replicate (max 1 (28 - Text.length name)) " "
 
 runSource :: ReplContext -> Session -> Text -> InputT IO Session
 runSource context session text = do
@@ -375,30 +360,6 @@ runSource context session text = do
     say ("(" <> Text.pack (show (finished - started)) <> " secs)")
   pure (resultSession result)
 
-reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
-reportEntry options settings result = do
-  let diagnostics = resultDiagnostics result
-      config =
-        interactiveRenderConfig (replStyle options) "<interactive>" (resultFirstLine result)
-  unless (null diagnostics) $
-    TextIO.putStrLn (renderDiagnosticsWith config (resultSource result) diagnostics)
-  case resultValue result of
-    Just value
-      | resultAccepted result ->
-          TextIO.putStrLn $
-            if settingShowTypes settings
-              then renderValue value <> " :: " <> entryTypeText result value
-              else renderValue value
-    _ -> pure ()
-
-{-| With `:set +t` the prompt reports the checked type when the checker
-    produced one and the value's own kind when it did not, so the answer is
-    never less precise than what the session actually knows. -}
-entryTypeText :: EntryResult -> Value -> Text
-entryTypeText result value = maybe (valueKind value) renderType (resultType result)
-
-{-| `:{` reads until `:}`, so a declaration can be pasted or typed across lines
-    even when its brackets balance on an early line. -}
 readBlock :: ReplContext -> Session -> InputT IO Session
 readBlock context session = collect []
  where
@@ -412,40 +373,6 @@ readBlock context session = collect []
   finish gathered
     | null gathered = pure session
     | otherwise = runSource context session (Text.intercalate "\n" (reverse gathered))
-
-{-| Loading replaces the session context with the file and clears entries typed
-    against the previous context, so nothing survives that the new file cannot
-    explain. -}
-performLoad :: ReplOptions -> Session -> FilePath -> IO Session
-performLoad options session path = do
-  contents <- readSourceFile path
-  case contents of
-    Nothing -> do
-      TextIO.putStrLn ("cannot read " <> Text.pack path)
-      pure session
-    Just text -> do
-      (apply, diagnostics, resolution) <- loadModule path text
-      source <- newSource (SourceName (Text.pack path)) text
-      unless (null diagnostics) $
-        TextIO.putStrLn
-          (renderDiagnosticsWith (defaultRenderConfig (replStyle options)) source diagnostics)
-      if hasErrors diagnostics
-        then do
-          TextIO.putStrLn ("failed, " <> renderSummary diagnostics)
-          pure session
-        else do
-          let loaded = apply emptySession
-              names = maybe [] sessionExports resolution
-          TextIO.putStrLn
-            ( "ok, loaded " <> Text.pack path <> ", "
-                <> Text.pack (show (length names)) <> " exported"
-            )
-          pure loaded
-
-readSourceFile :: FilePath -> IO (Maybe Text)
-readSourceFile path = do
-  present <- doesFileExist path
-  if present then Just <$> TextIO.readFile path else pure Nothing
 
 browseSession :: ReplOptions -> Session -> IO ()
 browseSession options session = do
@@ -464,50 +391,3 @@ browseSession options session = do
 reportContext :: ReplOptions -> [Diagnostic] -> IO ()
 reportContext _ diagnostics =
   TextIO.putStrLn ("session context has " <> renderSummary diagnostics)
-
-{-| Static types arrive with the typing phase. Until then `:type` reports the
-    runtime shape the evaluator produced, and says so. -}
-showType :: ReplOptions -> Session -> Text -> IO ()
-showType options session expression
-  | Text.null (Text.strip expression) = TextIO.putStrLn "usage: :type <expression>"
-  | otherwise = do
-      result <- submitEntry session expression
-      let diagnostics = resultDiagnostics result
-          config =
-            interactiveRenderConfig (replStyle options) "<interactive>" (resultFirstLine result)
-      if not (null diagnostics)
-        then TextIO.putStrLn (renderDiagnosticsWith config (resultSource result) diagnostics)
-        else case resultType result of
-          Just typeValue -> TextIO.putStrLn (Text.strip expression <> " :: " <> renderType typeValue)
-          Nothing -> case resultValue result of
-            Nothing -> TextIO.putStrLn "no type"
-            Just value ->
-              TextIO.putStrLn (Text.strip expression <> " :: " <> valueKind value)
-
-showTokens :: Text -> IO ()
-showTokens text
-  | Text.null (Text.strip text) = TextIO.putStrLn "usage: :tokens <text>"
-  | otherwise = do
-      source <- newSource (SourceName "<interactive>") text
-      let LexResult{lexTokens} = lexSource source
-      mapM_ (TextIO.putStrLn . describeToken) (filter (not . isEnd) lexTokens)
- where
-  isEnd token = tokenKind token == EndOfFile
-
-describeToken :: Token -> Text
-describeToken token =
-  Text.pack (show (tokenKind token)) <> "  " <> tokenLexeme token
-
-showAst :: ReplOptions -> Text -> IO ()
-showAst options text
-  | Text.null (Text.strip text) = TextIO.putStrLn "usage: :ast <text>"
-  | otherwise = do
-      source <- newSource (SourceName "<interactive>") ("{\n" <> text <> "\n}")
-      let LexResult{lexTokens} = lexSource source
-          action = parseBlock
-          (parsed, diagnostics) = runParser source action lexTokens
-      if hasErrors diagnostics
-        then
-          TextIO.putStrLn
-            (renderDiagnosticsWith (defaultRenderConfig (replStyle options)) source diagnostics)
-        else mapM_ TextIO.putStrLn (outlineBlock parsed)

@@ -322,6 +322,10 @@ withTally (Evaluator action) =
     pure $ case outcome of
       Done value next -> Done (value, collected) next{envTally = envTally env}
       Unwound transfer next -> Unwound transfer next{envTally = envTally env}
+      {-| An abort carries a diagnostic and no environment, so there is nothing
+          to restore and nothing to count. Leaving it out made this a crash
+          rather than the diagnostic the reader was owed. -}
+      Aborted reported -> Aborted reported
 
 withIntegerKinds :: Map Span Text -> Evaluator ()
 withIntegerKinds kinds =

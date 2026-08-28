@@ -1,0 +1,8 @@
+module Tiny
+
+/// A small file to load into a session, so that what loading one changes can
+/// be checked. It changed the buffer's line count once, which moved every
+/// offset after it and made `:type` answer with runtime shapes.
+export fn twice(n: Int) -> Int { n * 2 }
+
+export const LIMIT: Int = 10

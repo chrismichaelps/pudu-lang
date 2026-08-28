@@ -12,7 +12,8 @@ import Pudu.Compiler.Program
   , programIntegerKinds
   , rootCompileResult
   )
-import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Value (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
   , diagnosticMessage)
@@ -36,7 +37,43 @@ programProperties =
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
+  , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
   ]
+
+{-| A qualified type name is judged only against a module the compiler read.
+
+    An unfound one used to become a nominal type of its own, named after what
+    was written, so `Mp.Map[Str, Int]` was a different type from `Map[Str, Int]`
+    and the reader was told "expected Mp.Map[Str, Int], found Map[a, b]" — two
+    names that read alike, about a type that never existed, at a line that was
+    not the mistake.
+
+    The cases that must stay silent are the point of the test. A type a module
+    really declares looks exactly like one it does not when the module's
+    interface was never available, and an earlier attempt that could not tell
+    those apart reported correct code in the standard library. That is also why
+    this lives here rather than beside the other type-checking properties: those
+    compile a module on its own, with no interfaces at all, and this rule
+    deliberately says nothing then. -}
+testQualifiedTypeNames :: IO Property
+testQualifiedTypeNames = do
+  builtinThroughModule <- codes "test-fixtures/qualified/RejectsBuiltinThroughModule.pudu"
+  neverDeclared <- codes "test-fixtures/qualified/RejectsUndeclaredType.pudu"
+  wrongModule <- codes "test-fixtures/qualified/RejectsWrongModuleType.pudu"
+  advice <- helps "test-fixtures/qualified/RejectsBuiltinThroughModule.pudu"
+  declared <- runEntry "test-fixtures/qualified/UsesQualifiedTypes.pudu"
+  pure $ conjoin
+    [ counterexample "a built-in reached through a module is reported"
+        (builtinThroughModule === ["E3035"])
+    , counterexample "a name the module never declares is reported"
+        (neverDeclared === ["E3035"])
+    , counterexample "a type asked of the wrong module is reported"
+        (wrongModule === ["E3035"])
+    , counterexample "the advice names the spelling that works"
+        (advice === ["Map stands on its own; write it without Mp."])
+    , counterexample "types the modules do declare are left alone"
+        (declared === Just "3")
+    ]
 
 testImportedMethods :: IO Property
 testImportedMethods = do
@@ -177,7 +214,6 @@ testProgramEvaluation = do
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
-  widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"

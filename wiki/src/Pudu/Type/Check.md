@@ -108,6 +108,8 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 - `ErrorType` is poison: it unifies with everything, so one mistake produces one diagnostic instead of a cascade through every later use.
 - The checker keeps its own name frames rather than reusing the resolver's symbol table. The duplication is deliberate and bounded; a shared resolved representation is the slice that removes it.
 
+- **A name that introduces something carries the type it was given.** Only uses were recorded, so an editor asked about `text` in `let text = "hello"` had nothing to answer with and named the enclosing function instead. A reader points at the place a name is introduced at least as often as at a use of it, and the same holds for a parameter.
+
 ### Linkage
 
 - **Requires:** [[Type Env]], [[Type Interface]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Pattern]], [[Type Check Method]], [[Type Check Coherence]], [[Type Exhaust]], [[Syntax Tree]], [[grammar/pudu]], [[architecture/SEMANTICS]].

@@ -39,6 +39,11 @@ keywordNames :: [Text]
 - The name pool is assembled rather than fixed: the closed keyword vocabulary, [[Semantic Prelude]]'s wired-in types, the implicit prelude names, and whatever the session declared or bound. A declaration made at the prompt is therefore completable on the next line.
 - Results are sorted and duplicate-free, so the same prefix always offers the same list in the same order.
 
+- **After a dot, completion offers what the value carries rather than every name in scope.** The receiver's type decides the list, and the method names come from the tables dispatch reads, so what the prompt offers and what a call finds cannot disagree.
+- **The receiver's type is asked for without running it.** A reader pressing tab after `removeFile("notes")` has asked what a result carries, not for the file to be removed, so completion goes through a path that compiles and stops.
+- A receiver whose type cannot be worked out offers nothing rather than everything. A list of names that do not apply costs the reader more than no list, because each one has to be checked.
+- A dotted path such as `Std.Text.trimEnd` is not a member access and is left to the name pool. The two are told apart by whether anything precedes the dot inside the word: a receiver ending in `]`, `)`, or a quote is not part of it, because those are not name characters.
+
 ### Linkage
 
 - **Requires:** [[Repl Command]], [[Semantic Prelude]], [[Token]].

@@ -22,6 +22,12 @@ jobs:
         with:
           node-version: 22
       - run: cabal update
+      # A fresh checkout has nothing built, so this cannot answer "up to date"
+      # without compiling — which is how a local `-Werror` run passed for a week
+      # while checking nothing, and let an incomplete pattern and three dead
+      # bindings through.
+      - name: Verify the tree compiles with no warnings
+        run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
       - run: cabal build all --enable-optimization=2
       - run: cabal test all --enable-optimization=2 --test-show-details=direct
       - name: Verify every committed Pudu file is formatted

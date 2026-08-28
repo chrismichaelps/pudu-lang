@@ -239,5 +239,3 @@ advancePosition PositionFold{foldLine, foldColumn, foldAfterCarriageReturn} valu
     _ ->
       PositionFold{foldLine, foldColumn = foldColumn + 1, foldAfterCarriageReturn = False}
 
-positionValue :: PositionFold -> Position
-positionValue PositionFold{foldLine, foldColumn} = Position foldLine foldColumn

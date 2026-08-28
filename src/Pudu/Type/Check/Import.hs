@@ -69,6 +69,7 @@ collectImportedDeclared imported = do
   pure collected
     { declaredNames = importedNames imported <> declaredNames collected
     , declaredAliases = aliases <> declaredAliases collected
+    , declaredQualifiers = importedQualifiers imported <> declaredQualifiers collected
     }
  where
   available = Map.fromList [(interfaceModule value, value) | value <- importedInterfaces imported]

@@ -43,6 +43,8 @@ The exported signatures are the module header's export list.
 
 - **What inference settled on for each integer literal is published, keyed by its whole span.** A literal written without a suffix is not a platform `Int` merely because it was written plainly, and only the checker knows what it became; without this the evaluator built every such literal as a platform integer and the width a declaration promised was never enforced on it. The key is the span rather than its offsets, because two files hold a literal at the same offsets all the time and one table serves a program and everything it depends on.
 
+- **This is over the 500-line default deliberately.** It is seventy-three definitions with a median of seven lines, more than fifty of them accessors over one record. Splitting it means either exporting the state's representation so a second module can reach it, or writing the accessors twice — both trade the encapsulation that makes the state safe for a smaller number. The limit is there to stop a module holding several subjects; this one holds exactly one.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].
