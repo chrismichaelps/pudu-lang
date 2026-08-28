@@ -19,7 +19,11 @@ if (!executable) {
 const source = [
   "module Session",
   "fn double(n: Int) -> Int { n * 2 }",
-  "export fn main() -> Str { double(21) }",
+  "export fn main() -> Str {",
+  '  let text = "hi"',
+  "  let size = text.length()",
+  "  double(21)",
+  "}",
   "",
 ].join("\n");
 
@@ -40,9 +44,24 @@ const messages = [
   {
     id: 3,
     method: "textDocument/definition",
-    params: { textDocument: { uri }, position: { line: 2, character: 27 } },
+    params: { textDocument: { uri }, position: { line: 5, character: 4 } },
   },
   { id: 4, method: "textDocument/documentSymbol", params: { textDocument: { uri } } },
+  // Hover over the binding `text`, which is a name a reader points at as often
+  // as a use of one. Asking the documentation index alone could only ever name
+  // the function containing it, which is true everywhere in the body.
+  {
+    id: 6,
+    method: "textDocument/hover",
+    params: { textDocument: { uri }, position: { line: 3, character: 7 } },
+  },
+  // Completion straight after `text.` offers what text carries, not what the
+  // module declares.
+  {
+    id: 7,
+    method: "textDocument/completion",
+    params: { textDocument: { uri }, position: { line: 4, character: 18 } },
+  },
   { id: 5, method: "shutdown", params: null },
   { method: "exit", params: null },
 ];
@@ -128,7 +147,7 @@ assert(published.length > 0, "no diagnostics were published for an open document
 const diagnostics = published.at(-1).params.diagnostics;
 assert(diagnostics.length > 0, "the type error in the document was not reported");
 assert(
-  diagnostics.some(entry => entry.range.start.line === 2),
+  diagnostics.some(entry => entry.range.start.line >= 2),
   "the diagnostic did not point at the line that is wrong",
 );
 
@@ -154,4 +173,30 @@ assert(
   "a symbol was reported without its type",
 );
 
-console.log(JSON.stringify({ frames: frames.length, diagnostics: diagnostics.length }));
+// Hover names the thing under the cursor, not the declaration around it.
+const binding = replyTo(6)?.result;
+assert(binding, "hover returned nothing over a binding");
+const bindingText = JSON.stringify(binding);
+assert(bindingText.includes("text"), "hover did not name the binding");
+assert(bindingText.includes("Str"), "hover did not give the binding's type");
+assert(
+  !bindingText.includes("main"),
+  "hover answered with the enclosing declaration instead of the binding",
+);
+
+// Completion after a dot offers the receiver's methods.
+const offered = replyTo(7)?.result;
+const items = Array.isArray(offered) ? offered : (offered?.items ?? []);
+const labels = items.map(entry => entry.label);
+assert(labels.length > 0, "completion after a dot offered nothing");
+for (const expected of ["length", "toUpper", "trim"]) {
+  assert(labels.includes(expected), `completion after a dot did not offer ${expected}`);
+}
+assert(
+  !labels.includes("double"),
+  "completion after a dot offered a module name rather than what the value carries",
+);
+
+console.log(
+  JSON.stringify({ frames: frames.length, diagnostics: diagnostics.length, methods: labels.length }),
+);

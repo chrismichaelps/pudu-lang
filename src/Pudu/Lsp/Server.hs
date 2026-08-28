@@ -17,7 +17,8 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs)
+import Pudu.Compiler (CompileResult (..))
+import Pudu.Compiler.Program (ProgramResult (..), compileProgramSource, programDocs, rootCompileResult)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (..)
@@ -52,6 +53,11 @@ import Pudu.Lsp.Protocol
   , response
   )
 import Pudu.Source (Source, SourceName (..), newSource, spanEnd, spanStart, unOffset)
+import Data.Char (isAlphaNum)
+import Data.List (sort)
+import Pudu.Eval.Operator (builtinMethodNamesFor)
+import Pudu.Type (Type (..), TypeInfo, narrowestAt, renderType)
+import Pudu.Type.Value (nominalName)
 import System.Directory (getCurrentDirectory)
 import System.FilePath (takeDirectory)
 import System.IO
@@ -75,6 +81,12 @@ data Analysis = Analysis
   , analysisSource :: !Source
   , analysisDiagnostics :: ![Diagnostic]
   , analysisIndex :: !DocIndex
+  {-| What the checker said each expression is, by span.
+
+      The documentation index holds declarations, so it can only ever answer
+      about the function a cursor is inside. A reader hovering a binding is
+      asking about the binding. -}
+  , analysisTypes :: !(Maybe TypeInfo)
   }
 
 {-| @Lsp.Server.Documents — what the editor says each open file contains.
@@ -115,6 +127,7 @@ analyse uri content = do
       , analysisSource = source
       , analysisDiagnostics = programDiagnostics program
       , analysisIndex = programDocs program
+      , analysisTypes = rootCompileResult program >>= compileTypes
       }
 
 {-| A file's own directory is its source root, which is what makes a sibling
@@ -320,16 +333,43 @@ severityCode severity = case severity of
 hover :: Documents -> Json -> Json
 hover documents parameters = case located documents parameters of
   Nothing -> JsonNull
-  Just (value, offset) -> case entryAt (analysisIndex value) offset of
-    Nothing -> JsonNull
-    Just entry ->
+  {-| What the cursor is on comes first, and the declaration containing it only
+      when nothing else answers.
+
+      The documentation index holds declarations, so asking it alone could only
+      ever name the function a cursor was inside: hovering `text` in
+      `text.length()` reported the enclosing `main`, which is true of every
+      position in the body and therefore tells a reader nothing. -}
+  Just (value, offset) -> case analysisTypes value >>= narrowestAt offset of
+    Just typeValue ->
       JsonObject
         [ ( "contents"
           , JsonObject
-              [("kind", JsonText "markdown"), ("value", JsonText (hoverContents entry))]
+              [ ("kind", JsonText "markdown")
+              , ("value", JsonText (fenced (nameAt value offset <> renderType typeValue)))
+              ]
           )
-        , ("range", rangeJson (rangeOfOffsets (analysisText value) (fst (docSpan entry)) (snd (docSpan entry))))
         ]
+    Nothing -> case entryAt (analysisIndex value) offset of
+      Nothing -> JsonNull
+      Just entry ->
+        JsonObject
+          [ ( "contents"
+            , JsonObject
+                [("kind", JsonText "markdown"), ("value", JsonText (hoverContents entry))]
+            )
+          , ("range", rangeJson (rangeOfOffsets (analysisText value) (fst (docSpan entry)) (snd (docSpan entry))))
+          ]
+
+{-| The name the cursor is on, written before its type when there is one, so a
+    hover reads as the reader would say it. -}
+nameAt :: Analysis -> Int -> Text
+nameAt value offset = case wordAt (analysisText value) offset of
+  Just name | not (Text.null name) -> name <> " : "
+  _ -> ""
+
+fenced :: Text -> Text
+fenced body = "```pudu\n" <> body <> "\n```"
 
 {-| Jump to where a name was declared.
 
@@ -360,7 +400,57 @@ symbols documents parameters = case documentOf documents parameters of
 completion :: Documents -> Json -> Json
 completion documents parameters = case documentOf documents parameters of
   Nothing -> JsonArray []
-  Just value -> completionItems (analysisIndex value)
+  Just value -> case located documents parameters of
+    {-| After a dot, offer what the value carries rather than what the module
+        declares. The names come from the tables dispatch reads, so what the
+        editor offers and what a call finds cannot drift apart.
+
+        A request without a position asks about the document rather than a
+        place in it, and is answered as it always was. -}
+    Just (_, offset) -> case memberMethods value offset of
+      names@(_ : _) -> JsonArray (map methodItem names)
+      [] -> completionItems (analysisIndex value)
+    Nothing -> completionItems (analysisIndex value)
+
+{-| The methods the value before the cursor's dot carries, or none.
+
+    The receiver is the expression ending where the dot is, which the checker
+    already recorded a type for. Nothing is offered where the cursor is not
+    after a dot, or where the receiver has no type — a list of names that do not
+    apply costs a reader more than no list. -}
+memberMethods :: Analysis -> Int -> [Text]
+memberMethods value offset = case receiverEnd (analysisText value) offset of
+  Nothing -> []
+  Just dotOffset -> case analysisTypes value >>= narrowestAt (dotOffset - 1) of
+    Nothing -> []
+    Just typeValue -> sort (methodsOfType typeValue)
+
+{-| Where the receiver ends, when the cursor is completing a member of it.
+
+    The cursor may sit straight after the dot or partway through a name, so the
+    name being typed is skipped back over first. -}
+receiverEnd :: Text -> Int -> Maybe Int
+receiverEnd content offset =
+  let before = Text.take offset content
+      typed = Text.takeWhileEnd nameScalar before
+      atDot = Text.dropEnd (Text.length typed) before
+   in if Text.isSuffixOf "." atDot then Just (Text.length atDot - 1) else Nothing
+ where
+  nameScalar scalar = isAlphaNum scalar || scalar == '_'
+
+methodsOfType :: Type -> [Text]
+methodsOfType typeValue = case throughReferenceType typeValue of
+  NominalType identity _ -> builtinMethodNamesFor (nominalName identity)
+  _ -> []
+
+throughReferenceType :: Type -> Type
+throughReferenceType typeValue = case typeValue of
+  ReferenceTypeValue _ target -> throughReferenceType target
+  other -> other
+
+methodItem :: Text -> Json
+methodItem name =
+  JsonObject [("label", JsonText name), ("kind", JsonNumber 2), ("detail", JsonText "method")]
 
 {-| Format the whole document in one edit.
 

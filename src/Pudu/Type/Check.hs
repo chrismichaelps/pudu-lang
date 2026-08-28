@@ -528,6 +528,10 @@ bindParameter declared rigid (Located _ parameter) = do
       actual <- checkExpression declared rigid expression
       _ <- unify (locatedSpan expression) formed actual
       pure ()
+  {-| A parameter's name carries its declared type, for the reason a binding's
+      does: an editor asked about `shape` should answer about `shape` rather
+      than about the function it belongs to. -}
+  recordExpression (locatedSpan (Tree.parameterName parameter)) formed
   bindName (locatedValue (Tree.parameterName parameter)) (monotype formed)
   pure formed
 
@@ -547,6 +551,12 @@ checkStatement declared rigid (Located spanValue statement) = case statement of
       Just _ -> checkAgainst declared rigid expected value
       Nothing -> checkExpression declared rigid value
     unified <- unify (locatedSpan value) expected actual
+    {-| The name a binding introduces carries the type it was given, so an
+        editor asked about `text` in `let text = "hello"` can answer about
+        `text`. Only uses were recorded before, and a reader points at the
+        place a name is introduced at least as often as at a use of it. -}
+    resolved <- zonk unified
+    recordExpression (locatedSpan name) resolved
     bindName (locatedValue name) (monotype unified)
   DeclarationStatement other -> checkDeclaration declared other
   ExpressionStatement expression -> do
