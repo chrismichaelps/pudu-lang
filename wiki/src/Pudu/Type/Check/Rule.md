@@ -64,6 +64,8 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 - **A variant that named its payload is refused where a value was wanted** (`E3034`). Its constructor stays bound so the name still resolves — the reader gets this message rather than `undefined name` — but every use of it as a value is the mistake, whether written bare, written through its type, or stored in a binding and called later.
 - The refusal is asked once, by `namedVariantAsValue`, and applied at the two places an expression names something: a bare name here, and a qualified member in [[Type Check]]. Putting it inside qualified member typing reported a call twice, because a call reaches that typing once for its callee and once for the expression.
 
+- **This is over the 500-line default deliberately.** It is a table of closed rules — the operator types, the built-in method types, the literal types — thirty-seven of them, none over about forty lines, sharing nothing but the shape of the answer. Cutting it in half puts half a table in each of two files, which is harder to read than one table and no easier to change. The limit is there to stop a module holding several subjects; this one holds a list.
+
 ### Linkage
 
 - **Requires:** [[Float Literal]], [[Integer Literal]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
