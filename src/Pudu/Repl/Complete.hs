@@ -2,6 +2,7 @@
 module Pudu.Repl.Complete
   ( CompletionSource (..)
   , completionsFor
+  , memberContext
   , isNameCharacter
   , keywordNames
   , wantsFilename
@@ -37,6 +38,26 @@ completionsFor source before word
 isCommandPosition :: Text -> Text -> Bool
 isCommandPosition before word =
   Text.null (Text.strip before) && Text.isPrefixOf ":" word
+
+{-| Where the cursor is completing a member of something, and what that
+    something is.
+
+    Returns the text of the receiver and the part of the member name already
+    typed. `[1, 2].` gives `("[1, 2]", "")` and `"hello".le` gives
+    `("\"hello\"", "le")`, so the caller can ask what the receiver is and offer
+    the methods that type carries.
+
+    A word made only of name characters and dots — `Std.Text.trimEnd` — is a
+    path rather than a member access, and is left to the name pool. The two are
+    told apart by whether anything precedes the dot in the word itself: a
+    receiver that ends in `]`, `)`, or a quote is not part of the word, because
+    those are not name characters. -}
+memberContext :: Text -> Text -> Maybe (Text, Text)
+memberContext before word
+  | Text.isPrefixOf "." word = case Text.strip before of
+      receiver | not (Text.null receiver) -> Just (receiver, Text.drop 1 word)
+      _ -> Nothing
+  | otherwise = Nothing
 
 {-| A filename is wanted after a command that takes one, once its name is
     complete and a space has been typed. -}

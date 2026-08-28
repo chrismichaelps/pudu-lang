@@ -32,8 +32,10 @@ import Pudu.Repl.Complete
   ( CompletionSource (..)
   , completionsFor
   , isNameCharacter
+  , memberContext
   , wantsFilename
   )
+import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Doc (entriesFor, renderEntryLinesWith)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Repl.Describe
@@ -58,9 +60,12 @@ import Pudu.Repl.Session
   , sessionVisibleNames
   , sessionExports
   , submitEntry
+  , typeOfEntry
   )
 import Pudu.Source (SourceName (SourceName), newSource)
-import Pudu.Type (renderType)
+import Data.List (sort)
+import Pudu.Type (Type (..), renderType)
+import Pudu.Type.Value (nominalName)
 import System.Directory (doesFileExist)
 import System.Console.Haskeline
   ( Completion (..)
@@ -104,6 +109,9 @@ data ReplContext = ReplContext
   { contextOptions :: !ReplOptions
   , contextVisible :: !(IORef CompletionSource)
   , contextSettings :: !(IORef ReplSettings)
+  {-| The session as completion sees it, so asking what a receiver is uses the
+      declarations the reader has actually made. -}
+  , contextCurrent :: !(IORef Session)
   }
 
 defaultReplOptions :: ReplOptions
@@ -133,36 +141,76 @@ runRepl options = do
     Just path -> performLoad options emptySession path
   visible <- newIORef =<< nameSourceFor session
   chosen <- newIORef defaultSettings'
-  settings <- sessionSettings visible
-  let context = ReplContext{contextOptions = options, contextVisible = visible, contextSettings = chosen}
+  current <- newIORef session
+  settings <- sessionSettings visible current
+  let context =
+        ReplContext
+          { contextOptions = options
+          , contextVisible = visible
+          , contextSettings = chosen
+          , contextCurrent = current
+          }
   runInputT settings (withInterrupt (loop context session))
 
 {-| History lives beside the reader's other tool history, and completion is
     session-aware. -}
-sessionSettings :: IORef CompletionSource -> IO (Settings IO)
-sessionSettings visible = do
+sessionSettings :: IORef CompletionSource -> IORef Session -> IO (Settings IO)
+sessionSettings visible current = do
   home <- getHomeDirectory
   pure
     (defaultSettings :: Settings IO)
       { historyFile = Just (home </> ".puduci_history")
       , autoAddHistory = True
-      , complete = sessionCompletion visible
+      , complete = sessionCompletion visible current
       }
 
 {-| Complete a colon command at the start of a line, a filename after a command
     that takes one, and otherwise a name the session can see. -}
-sessionCompletion :: IORef CompletionSource -> CompletionFunc IO
-sessionCompletion visible (leftReversed, right) = do
+sessionCompletion :: IORef CompletionSource -> IORef Session -> CompletionFunc IO
+sessionCompletion visible current (leftReversed, right) = do
   let before = Text.pack (reverse leftReversed)
       word = Text.takeWhileEnd completionCharacter before
       prefix = Text.dropEnd (Text.length word) before
   if wantsFilename prefix
     then completeFilename (leftReversed, right)
-    else do
-      source <- readIORef visible
-      let matches = completionsFor source prefix word
-          finished = Text.isPrefixOf ":" word
-      pure (drop (Text.length word) leftReversed, map (toCompletion finished) matches)
+    else case memberContext prefix word of
+      Just (receiver, partial) -> do
+        session <- readIORef current
+        offered <- memberCompletions session receiver partial
+        pure (drop (Text.length partial) leftReversed, map (toCompletion False) offered)
+      Nothing -> do
+        source <- readIORef visible
+        let matches = completionsFor source prefix word
+            finished = Text.isPrefixOf ":" word
+        pure (drop (Text.length word) leftReversed, map (toCompletion finished) matches)
+
+{-| What the value in front of the cursor carries.
+
+    The receiver's type is asked for without running it — a reader pressing tab
+    after `removeFile(\"notes\")` has asked what a result carries, not for the
+    file to be removed.
+
+    A receiver whose type cannot be worked out offers nothing rather than
+    everything: a list of names that do not apply is worse than no list, because
+    the reader has to check each one. -}
+memberCompletions :: Session -> Text -> Text -> IO [Text]
+memberCompletions session receiver partial = do
+  found <- typeOfEntry session receiver
+  pure $ case found of
+    Nothing -> []
+    Just typeValue -> sort (filter (Text.isPrefixOf partial) (methodsOf typeValue))
+
+{-| The methods a type carries, read from the tables dispatch reads. -}
+methodsOf :: Type -> [Text]
+methodsOf typeValue = case throughReference typeValue of
+  NominalType identity _ -> builtinMethodNamesFor (nominalName identity)
+  _ -> []
+
+{-| A borrow carries what it refers to, so `&text` offers what text does. -}
+throughReference :: Type -> Type
+throughReference typeValue = case typeValue of
+  ReferenceTypeValue _ target -> throughReference target
+  other -> other
 
 completionCharacter :: Char -> Bool
 completionCharacter character = isNameCharacter character || character == ':'
@@ -212,6 +260,10 @@ interrupted context session = do
 continueWith :: ReplContext -> Session -> InputT IO ()
 continueWith context session = do
   liftIO (writeIORef (contextVisible context) =<< nameSourceFor session)
+  {-| Completion asks the session what a receiver is, so it has to be the
+      session the reader is actually in — a declaration made a moment ago
+      offers its methods on the next line. -}
+  liftIO (writeIORef (contextCurrent context) session)
   loop context session
 
 say :: Text -> InputT IO ()

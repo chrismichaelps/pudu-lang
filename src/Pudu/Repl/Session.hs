@@ -15,6 +15,7 @@ module Pudu.Repl.Session
   , sessionVisibleNames
   , sessionExports
   , submitEntry
+  , typeOfEntry
   ) where
 
 import Data.Text (Text)
@@ -175,6 +176,36 @@ isDeclarationKeyword keyword =
 isStatementKeyword :: Keyword -> Bool
 isStatementKeyword keyword =
   keyword `elem` [KwLet, KwVar, KwReturn, KwBreak, KwContinue, KwWhile, KwFor, KwLoop]
+
+{-| The type of an expression, worked out without running it.
+
+    Completion asks this to know what a receiver is before offering what it
+    carries. It must not go through `submitEntry`, which evaluates: a reader
+    pressing tab after `removeFile("notes")` has asked what methods a result
+    has, not for the file to be removed. Nothing here reaches the evaluator, so
+    nothing can happen that the reader did not ask for.
+
+    The session is left exactly as it was, whatever the expression turns out to
+    be. -}
+typeOfEntry :: Session -> Text -> IO (Maybe Type)
+typeOfEntry session entry
+  | Text.null (Text.strip entry) = pure Nothing
+  | otherwise = do
+      probe <- newSource interactiveName entry
+      let LexResult{lexTokens} = lexSource probe
+          kind = classifyEntry lexTokens
+      if kind /= ExpressionEntry
+        then pure Nothing
+        else do
+          let candidate = extend session kind entry
+              (buffer, _) = renderBuffer session kind entry
+              entryStart = bufferOffsetOf session kind
+          source <- newSource interactiveName buffer
+          (result, _) <- compileBuffer session candidate source
+          pure $
+            if hasErrors (compileDiagnostics result)
+              then Nothing
+              else compileTypes result >>= entryType entryStart (Text.length entry)
 
 {-| Compile one submission against the current session. The session advances
     only when the entry is accepted, so a failed entry can never corrupt the

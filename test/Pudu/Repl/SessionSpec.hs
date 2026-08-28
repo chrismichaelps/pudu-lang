@@ -17,7 +17,10 @@ import Pudu.Repl.Describe
   , describeKindLines
   , describeName
   )
-import Pudu.Repl.Complete (CompletionSource (..), completionsFor, wantsFilename)
+import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
+import Pudu.Eval.Operator (builtinMethodNamesFor)
+import Pudu.Type (Type (..))
+import Pudu.Type.Value (nominalName)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -29,6 +32,7 @@ import Pudu.Repl.Session
   , sessionDeclaredNames
   , sessionExports
   , submitEntry
+  , typeOfEntry
   )
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -43,6 +47,7 @@ replProperties =
   , ("describing a name reports how the session declared it", testDescribe)
   , ("kinds report declared arity", testKinds)
   , ("completion offers commands paths and session names", testCompletion)
+  , ("completion offers what the value before the dot carries", testMemberCompletion)
   , ("loops and iteration evaluate in the interactive session", testIteration)
   , ("trait methods dispatch and inherit in the session", testTraits)
   , ("runtime errors surface and leave the session unchanged", testRuntimeErrors)
@@ -135,6 +140,55 @@ testClassification = do
     , counterexample "a function written as a value type checks"
         (null (resultDiagnostics literal) === True)
     ]
+
+{-| Completion after a dot offers the methods the receiver carries.
+
+    The receiver's type is asked for without running it, so pressing tab after
+    an expression that would do something does not do it. A receiver whose type
+    cannot be worked out offers nothing rather than everything, because a list
+    of names that do not apply costs the reader more than no list. -}
+testMemberCompletion :: IO Property
+testMemberCompletion = do
+  arrayType <- typeOfEntry emptySession "[1, 2]"
+  textType <- typeOfEntry emptySession "\"hello\""
+  mapType <- typeOfEntry emptySession "mapOf([(1, 2)])"
+  {-| A name the session declared is a receiver like any other. -}
+  declared <- submit emptySession "let greeting = \"hi\""
+  declaredType <- typeOfEntry (resultSession declared) "greeting"
+  {-| Nothing is offered for something that does not type. -}
+  brokenType <- typeOfEntry emptySession "nowhere"
+  pure $ conjoin
+    [ counterexample "the text before the dot is the receiver"
+        (memberContext "[1, 2]" "." === Just ("[1, 2]", ""))
+    , counterexample "a partial member name comes back with it"
+        (memberContext "\"hello\"" ".to" === Just ("\"hello\"", "to"))
+    , counterexample "a dotted path is not a member access"
+        (memberContext "" "Std.Text.trimEnd" === Nothing)
+    , counterexample "an array receiver is typed as one"
+        (fmap headName arrayType === Just "Array")
+    , counterexample "a text receiver is typed as one"
+        (fmap headName textType === Just "Str")
+    , counterexample "a map receiver is typed as one"
+        (fmap headName mapType === Just "Map")
+    , counterexample "a declared name is a receiver"
+        (fmap headName declaredType === Just "Str")
+    , counterexample "a receiver that does not type offers nothing"
+        (brokenType === Nothing)
+    , counterexample "an array carries the methods dispatch knows"
+        (all (`elem` builtinMethodNamesFor "Array") ["map", "filter", "push", "length"] === True)
+    , counterexample "text carries its own"
+        (all (`elem` builtinMethodNamesFor "Str") ["toUpper", "trim", "split", "length"] === True)
+    , counterexample "and the two sets are not the same"
+        (("toUpper" `elem` builtinMethodNamesFor "Array") === False)
+    , counterexample "a type with no built-in methods offers none"
+        (builtinMethodNamesFor "Int" === [])
+    ]
+
+{-| The name a type is written under, which is what selects its method set. -}
+headName :: Type -> Text
+headName typeValue = case typeValue of
+  NominalType identity _ -> nominalName identity
+  _ -> "?"
 
 testPersistence :: IO Property
 testPersistence = do
