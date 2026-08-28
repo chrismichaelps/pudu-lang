@@ -32,7 +32,9 @@ const source = [
   "",
 ].join("\n");
 
-const uri = "file:///tmp/session.pudu";
+// The server is told what a document contains, never where to find it, so
+// this names a document that need not exist anywhere.
+const uri = "file:///pudu-fixtures/session.pudu";
 
 const messages = [
   { id: 1, method: "initialize", params: { processId: null, rootUri: null, capabilities: {} } },

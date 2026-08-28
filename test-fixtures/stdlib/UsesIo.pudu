@@ -4,7 +4,10 @@ import Std.Env as Env
 import Std.Io as Io
 
 export fn main() -> Int {
-  let target = "/tmp/pudu-fixture-io"
+  // Where this machine puts what a program does not intend to keep, rather than
+  // one machine's spelling of it. A fixture that wrote `/tmp` would not run
+  // where that path does not exist.
+  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-io")
   var total = 0
   match Io.makeDirectory(target) {
     case Ok(_) => { total = total + 1 }

@@ -45,6 +45,10 @@ effectBuiltins =
   , CreateDirectoryBuiltin
   , ArgumentsBuiltin
   , EnvironmentBuiltin
+  , TemporaryDirectoryBuiltin
+  , HomeDirectoryBuiltin
+  , PathSeparatorsBuiltin
+  , SearchSeparatorBuiltin
   , ExitBuiltin
   , ClockBuiltin
   , NowBuiltin
@@ -96,6 +100,11 @@ callEffect spanValue builtin arguments = do
         effectUnit (createDirectoryAt (Text.unpack path))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
+      (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
+      (HomeDirectoryBuiltin, []) -> optionalText <$> lift refusal homeDirectoryPath
+      (PathSeparatorsBuiltin, []) ->
+        ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
+      (SearchSeparatorBuiltin, []) -> StrValue <$> lift refusal (pure searchPathSeparatorText)
       (ClockBuiltin, []) -> intOf <$> lift refusal monotonicMilliseconds
       (NowBuiltin, []) -> intOf <$> lift refusal currentInstant
       (ZoneOffsetBuiltin, []) -> intOf <$> lift refusal timeZoneOffset

@@ -52,7 +52,8 @@ effectValueNames =
   [ "print", "printError", "readLine"
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
   , "listDirectory", "createDirectory"
-  , "arguments", "environment", "exit", "clock"
+  , "arguments", "environment", "temporaryPath", "userHome"
+  , "pathSeparators", "searchSeparator", "exit", "clock"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
   ]
 

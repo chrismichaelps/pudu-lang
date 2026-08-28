@@ -232,8 +232,8 @@ Twenty-eight modules, 818 documented exports, every one written in Pudu.
 | `Std.Order` | 16 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
-| `Std.Io` | 26 | files, directories, standard input and output, path handling |
-| `Std.Env` | 16 | arguments and flags, environment variables, stopping with a status |
+| `Std.Io` | 28 | files, directories, standard input and output, path handling |
+| `Std.Env` | 17 | arguments and flags, environment variables, a place to write, stopping with a status |
 | `Std.Time` | 40 | instants, durations, dates, times of day, formatting and parsing |
 | `Std.Process` | 11 | running a program, its status and streams, availability |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
@@ -359,6 +359,15 @@ unreviewed would be worse than not shipping them.
 arguments and environment, and stops with a status. Every effect answers with `Result[T, Str]`
 carrying what the operating system said, because the language has no exceptions and a missing file
 is an outcome a caller handles.
+
+**Nothing about the machine is written down.** Where a program may put a file it does not intend to
+keep, which directory is the reader's own, and which characters separate the pieces of a path and
+the entries of a search path are all asked of the machine at the moment they are needed. Each of
+those differs between operating systems, and one spelled into the source is a claim about somebody
+else's computer — a program that writes `/tmp` will not run where that path does not exist, and one
+that joins with a slash builds something that is not a path where the separator is a backslash.
+This is why they are effects rather than constants: a folded answer would be the *compiling*
+machine's, which is not the one that runs.
 
 **A constant may not reach the world.** Compile-time folding runs the same evaluator with effects
 denied and reports `E7009`. Compilation that depended on the world the compiler happened to be in

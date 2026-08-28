@@ -49,8 +49,12 @@ broken =
     , "fn wrong() -> Int { \"text\" }"
     ]
 
+{-| The name of the document under test.
+
+    The server is handed the text of a document alongside its name and never
+    opens the name itself, so this points at no file on any machine. -}
 uri :: Text
-uri = "file:///tmp/Demo.pudu"
+uri = "file:///pudu-fixtures/Demo.pudu"
 
 opened :: Text -> IO Documents
 opened content = do

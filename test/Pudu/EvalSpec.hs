@@ -1,6 +1,9 @@
 module Pudu.EvalSpec (evalProperties) where
 
+import Control.Monad (when)
 import Data.Text (Text)
+import System.Directory (doesFileExist, getTemporaryDirectory, removeFile)
+import System.IO (hClose, openTempFile)
 import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
@@ -615,16 +618,30 @@ testBuiltinImpls = do
         (generic === "Some(1)")
     ]
 
+{-| The effects, against a real file this machine is willing to give us.
+
+    The path is asked for rather than written down. `/tmp` is one operating
+    system's answer and not another's, and a fixed name under it is shared by
+    every copy of this suite running on the machine — two developers, or one
+    developer twice, would have raced for the same file. `openTempFile` answers
+    with a name nothing else holds. -}
 testEffects :: IO Property
 testEffects = do
-  written <- evaluate "writeFile(\"/tmp/pudu-effect-test.txt\", \"x\")"
-  readBack <- evaluate "readFile(\"/tmp/pudu-effect-test.txt\")"
-  missing <- evaluate "readFile(\"/tmp/pudu-no-such-file-4c3b2a\")"
-  present <- evaluate "fileExists(\"/tmp/pudu-effect-test.txt\")"
-  absent <- evaluate "fileExists(\"/tmp/pudu-no-such-file-4c3b2a\")"
-  removed <- evaluate "removeFile(\"/tmp/pudu-effect-test.txt\")"
+  directory <- getTemporaryDirectory
+  (path, handle) <- openTempFile directory "pudu-effect-test.txt"
+  hClose handle
+  let quoted = Text.pack (escapeForSource path)
+      absentPath = quoted <> ".absent"
+  written <- evaluate ("writeFile(\"" <> quoted <> "\", \"x\")")
+  readBack <- evaluate ("readFile(\"" <> quoted <> "\")")
+  missing <- evaluate ("readFile(\"" <> absentPath <> "\")")
+  present <- evaluate ("fileExists(\"" <> quoted <> "\")")
+  absent <- evaluate ("fileExists(\"" <> absentPath <> "\")")
+  removed <- evaluate ("removeFile(\"" <> quoted <> "\")")
   ticking <- evaluate "clock() >= 0"
-  atCompileTime <- codesOfConstant "fileExists(\"/etc/hosts\")"
+  atCompileTime <- codesOfConstant ("fileExists(\"" <> quoted <> "\")")
+  stillThere <- doesFileExist path
+  when stillThere (removeFile path)
   pure $ conjoin
     [ counterexample "writing answers with success" (written === "Ok(())")
     , counterexample "reading answers with the contents" (readBack === "Ok(\"x\")")
@@ -636,6 +653,19 @@ testEffects = do
     , counterexample "the clock moves forward" (ticking === "true")
     , counterexample "a constant may not reach the world" (atCompileTime === ["E7009"])
     ]
+
+{-| A path as a Pudu string literal.
+
+    A backslash is a path separator on one operating system and an escape in
+    every string literal, so a path written into source has to say which it
+    means. -}
+escapeForSource :: FilePath -> String
+escapeForSource = concatMap one
+ where
+  one character = case character of
+    '\\' -> "\\\\"
+    '"' -> "\\\""
+    _ -> [character]
 
 {-| The diagnostics a module-scope constant produces, which is the compile-time
     evaluation path. -}

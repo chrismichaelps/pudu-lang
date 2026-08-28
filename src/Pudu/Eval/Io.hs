@@ -5,18 +5,23 @@ module Pudu.Eval.Io
   , createDirectoryAt
   , environmentPairs
   , exitWith
+  , homeDirectoryPath
   , listDirectoryAt
   , monotonicMilliseconds
+  , pathSeparators
   , programArguments
   , readStandardLine
   , readTextFile
   , removeFileAt
+  , searchPathSeparatorText
+  , temporaryDirectoryPath
   , testFileExists
   , writeStandardError
   , writeStandardOutput
   , writeTextFile
   ) where
 
+import Control.Applicative ((<|>))
 import Control.Exception (IOException, try)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -26,10 +31,12 @@ import System.Directory
   ( createDirectoryIfMissing
   , doesDirectoryExist
   , doesFileExist
+  , getTemporaryDirectory
   , listDirectory
   , removeFile
   )
-import System.Environment (getArgs, getEnvironment)
+import System.Environment (getArgs, getEnvironment, lookupEnv)
+import qualified System.FilePath as FilePath
 import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
 import System.IO (hFlush, hIsEOF, hPutStrLn, stderr, stdin, stdout)
@@ -108,6 +115,48 @@ programArguments = map Text.pack <$> getArgs
 
 environmentPairs :: IO [(Text, Text)]
 environmentPairs = map (\(name, value) -> (Text.pack name, Text.pack value)) <$> getEnvironment
+
+{-| Where this machine says a program may put a file it does not intend to keep.
+
+    Asked of the operating system rather than spelled out, because the answer is
+    not the same everywhere and is not the program's to decide: it honours
+    `TMPDIR` where that is set, and answers with the system's own directory on a
+    machine that has no such variable and no `/tmp` at all. A program that wrote
+    `/tmp` directly would be stating one machine's answer as though it were
+    every machine's. -}
+temporaryDirectoryPath :: IO Text
+temporaryDirectoryPath = Text.pack <$> getTemporaryDirectory
+
+{-| The directory this machine calls the reader's own.
+
+    `HOME` where it is set, and `USERPROFILE` where it is not, which is the pair
+    of names the two families of operating system use. Asking for only the first
+    answers `None` on a machine that has a home directory and a different word
+    for it. -}
+homeDirectoryPath :: IO (Maybe Text)
+homeDirectoryPath = do
+  home <- lookupEnv "HOME"
+  profile <- lookupEnv "USERPROFILE"
+  pure (Text.pack <$> (home <|> profile))
+
+{-| The characters this machine accepts between the pieces of a path.
+
+    The first is the one to write when joining; the rest are ones to recognise
+    when taking a path apart. They differ because one family of operating system
+    reads both its own separator and the other's, so a path arriving from
+    elsewhere still has to come apart correctly even though it is not the shape
+    this machine would have written. -}
+pathSeparators :: [Text]
+pathSeparators = map Text.singleton (written : filter (/= written) FilePath.pathSeparators)
+ where
+  written = FilePath.pathSeparator
+
+{-| The character this machine puts between the entries of a search path.
+
+    A colon on one family of operating system and a semicolon on the other,
+    which is why `PATH` cannot be split on a written-down character. -}
+searchPathSeparatorText :: Text
+searchPathSeparatorText = Text.singleton FilePath.searchPathSeparator
 
 {-| Milliseconds on a clock that only moves forward.
 
