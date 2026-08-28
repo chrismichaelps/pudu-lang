@@ -5,7 +5,12 @@ synopsis:           Pudu language compiler and tools
 description:        A statically typed native systems language compiler with explicit safety and performance semantics.
 category:           Language
 maintainer:         chrismichaelps
-license:            BSD-3-Clause
+license:            Apache-2.0 WITH LLVM-exception
+license-file:       LICENSE
+author:             Chris M. Perez Santiago
+copyright:          (c) 2026 Chris M. Perez Santiago
+homepage:           https://github.com/chrismichaelps/pudu-lang
+bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: test-fixtures/program29/*.pudu
 
