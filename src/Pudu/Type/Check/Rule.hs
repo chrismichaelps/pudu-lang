@@ -14,6 +14,7 @@ module Pudu.Type.Check.Rule
   , nameType
   , namedVariantAsValue
   , qualifiedMemberType
+  , selfName
   , tryType
   , unaryType
   ) where
@@ -211,6 +212,13 @@ builtinMethodNames =
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
   , "map", "filter", "reduce"
   ]
+
+{-| The key the enclosing function's return type is filed under.
+
+    Not a name a program can write, which is what keeps a reader's own binding
+    from being mistaken for the return of the function around it. -}
+selfName :: Text
+selfName = "__return"
 
 enclosingReturnType :: Text -> Checker Type
 enclosingReturnType binding = snd <$> enclosingFunctionType binding

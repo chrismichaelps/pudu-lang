@@ -39,7 +39,6 @@ import Pudu.Eval.Env
   , effectsAdmitted
   , integerKindAt
   , tally
-  , withTally
   , withIntegerKinds
   , variantOwner
   , captureEnvironment
@@ -96,7 +95,7 @@ import Pudu.Frontend.Syntax.Tree
   , Statement (..)
   , TypeSyntax (..)
   )
-import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
+import Data.IORef (IORef, newIORef, readIORef)
 import Pudu.Source (Span)
 
 {-| @Eval.Outcome — a value or the diagnostic that stopped evaluation -}
@@ -276,11 +275,6 @@ installImportAliases = mapM_ (installOne . locatedValue)
             Done () env{envFrames = Map.union (Map.fromList published) current : rest}
           [] -> Done () env{envFrames = [Map.fromList published]}
 
-{-| A control transfer that reaches the top has left every construct that could
-    own it, which the entry point reports as a value of unit rather than losing
-    the run. -}
-run :: Evaluator Value -> IO EvalOutcome
-run = runWithEffects True
 
 {-| Run with the world available and the work counted where a counter is given.
     Passing no counter is the ordinary path and costs one comparison per step. -}

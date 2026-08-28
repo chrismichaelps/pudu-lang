@@ -400,9 +400,6 @@ resolveRemembering variable = do
           pure endpoint
     Just found -> pure found
 
-resolveCurrent :: Type -> Checker Type
-resolveCurrent typeValue =
-  Checker $ \state -> (resolveFinal (stateSubstitution state) typeValue, state)
 
 negateMatching :: TypeVar -> [IntegerConstraint] -> (Bool, [IntegerConstraint])
 negateMatching variable constraints = case constraints of

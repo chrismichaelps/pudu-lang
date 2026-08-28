@@ -112,6 +112,7 @@ library
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Rule
+    Pudu.Type.Check.Signature
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation

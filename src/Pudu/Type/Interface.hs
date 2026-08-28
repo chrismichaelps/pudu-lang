@@ -3,7 +3,6 @@ module Pudu.Type.Interface
   ( ImportTypes (..)
   , TypeInterface
   , emptyImportTypes
-  , importedQualifiers
   , importsFor
   , interfaceDeclarations
   , interfaceDefaults
