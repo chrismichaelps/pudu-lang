@@ -115,6 +115,7 @@ library
     Pudu.Type.Check.Record
     Pudu.Type.Check.Rule
     Pudu.Type.Check.Signature
+    Pudu.Type.Check.Statement
     Pudu.Type.Env
     Pudu.Type.Exhaust
     Pudu.Type.Formation
