@@ -19,9 +19,14 @@ if (!executable) {
 const source = [
   "module Session",
   "fn double(n: Int) -> Int { n * 2 }",
+  "trait Sized { fn area(self: &Self) -> Int }",
+  "type Box = { side: Int }",
+  "impl Sized for Box { fn area(self: &Box) -> Int { self.side * self.side } }",
   "export fn main() -> Str {",
   '  let text = "hi"',
   "  let size = text.length()",
+  "  let box = Box{side: 2}",
+  "  let room = box.area()",
   "  double(21)",
   "}",
   "",
@@ -44,7 +49,7 @@ const messages = [
   {
     id: 3,
     method: "textDocument/definition",
-    params: { textDocument: { uri }, position: { line: 5, character: 4 } },
+    params: { textDocument: { uri }, position: { line: 10, character: 4 } },
   },
   { id: 4, method: "textDocument/documentSymbol", params: { textDocument: { uri } } },
   // Hover over the binding `text`, which is a name a reader points at as often
@@ -53,14 +58,20 @@ const messages = [
   {
     id: 6,
     method: "textDocument/hover",
-    params: { textDocument: { uri }, position: { line: 3, character: 7 } },
+    params: { textDocument: { uri }, position: { line: 6, character: 7 } },
   },
   // Completion straight after `text.` offers what text carries, not what the
   // module declares.
   {
     id: 7,
     method: "textDocument/completion",
-    params: { textDocument: { uri }, position: { line: 4, character: 18 } },
+    params: { textDocument: { uri }, position: { line: 7, character: 18 } },
+  },
+  // After `box.`, where `Box` is a type this program declared and implemented.
+  {
+    id: 8,
+    method: "textDocument/completion",
+    params: { textDocument: { uri }, position: { line: 9, character: 17 } },
   },
   { id: 5, method: "shutdown", params: null },
   { method: "exit", params: null },
@@ -195,6 +206,15 @@ for (const expected of ["length", "toUpper", "trim"]) {
 assert(
   !labels.includes("double"),
   "completion after a dot offered a module name rather than what the value carries",
+);
+
+// A type a reader wrote carries what they gave it, not only the built-in sets.
+const written = replyTo(8)?.result;
+const writtenItems = Array.isArray(written) ? written : (written?.items ?? []);
+const writtenLabels = writtenItems.map(entry => entry.label);
+assert(
+  writtenLabels.includes("area"),
+  "completion did not offer a method the program implemented",
 );
 
 console.log(

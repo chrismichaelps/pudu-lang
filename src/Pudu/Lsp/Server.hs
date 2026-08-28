@@ -29,7 +29,7 @@ import Pudu.Diagnostic
   , diagnosticSeverity
   , diagnosticSpan
   )
-import Pudu.Doc (DocEntry (..), DocIndex (..))
+import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Feature
   ( completionItems
@@ -54,7 +54,7 @@ import Pudu.Lsp.Protocol
   )
 import Pudu.Source (Source, SourceName (..), newSource, spanEnd, spanStart, unOffset)
 import Data.Char (isAlphaNum)
-import Data.List (sort)
+import Data.List (nub, sort)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Type (Type (..), TypeInfo, narrowestAt, renderType)
 import Pudu.Type.Value (nominalName)
@@ -423,7 +423,31 @@ memberMethods value offset = case receiverEnd (analysisText value) offset of
   Nothing -> []
   Just dotOffset -> case analysisTypes value >>= narrowestAt (dotOffset - 1) of
     Nothing -> []
-    Just typeValue -> sort (methodsOfType typeValue)
+    Just typeValue ->
+      let owner = ownerNameOf typeValue
+       in sort (nub (methodsOfType typeValue <> implMethodsFor (analysisIndex value) owner))
+
+{-| The methods an `impl` block wrote for this type.
+
+    A type a reader declared carries what they gave it, and offering only the
+    built-in sets would answer for `Str` and `Array` and say nothing about
+    anything they wrote themselves. The index already names the type each
+    method was implemented for. -}
+implMethodsFor :: DocIndex -> Text -> [Text]
+implMethodsFor index owner
+  | Text.null owner = []
+  | otherwise =
+      [ docName entry
+      | entry <- indexEntries index
+      , DocMethod target <- [docKind entry]
+      , target == owner
+      ]
+
+{-| The name a type is written under, which is what selects its methods. -}
+ownerNameOf :: Type -> Text
+ownerNameOf typeValue = case throughReferenceType typeValue of
+  NominalType identity _ -> nominalName identity
+  _ -> ""
 
 {-| Where the receiver ends, when the cursor is completing a member of it.
 

@@ -65,6 +65,7 @@ serverCapabilities :: Json
 
 - **Hover answers about what the cursor is on, and about the declaration containing it only when nothing else answers.** The documentation index holds declarations, so asking it alone could only ever name the function a cursor was inside — hovering `text` in `text.length()` reported the enclosing `main`, which is true of every position in that body and therefore tells a reader nothing.
 - **After a dot, completion offers what the value carries.** The receiver is the expression ending at the dot, which the checker already recorded a type for, and the method names come from the tables dispatch reads. A request carrying no position asks about the document rather than a place in it, and is answered as it always was.
+- **A type the reader wrote carries what they gave it.** The built-in sets answer for `Str` and `Array` and say nothing about anything a program declared, so the methods an `impl` block wrote are offered alongside them — the index already names the type each was implemented for.
 
 ### Linkage
 
