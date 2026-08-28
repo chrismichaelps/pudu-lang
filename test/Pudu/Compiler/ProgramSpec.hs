@@ -215,6 +215,7 @@ testProgramEvaluation = do
   widthPatterns <- runEntry "test-fixtures/stdlib/UsesWidthPatterns.pudu"
   declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
+  structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -222,6 +223,9 @@ testProgramEvaluation = do
         (ran === Just "35")
     , counterexample "generic and text modules link together"
         (everything === Just "8")
+    , counterexample
+        "a sequence that cannot be empty, a queue with two ends, a heap, and a graph"
+        (structures === Just "0")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

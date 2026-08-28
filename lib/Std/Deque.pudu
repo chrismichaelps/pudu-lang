@@ -1,0 +1,168 @@
+module Std.Deque
+
+import Std.List as List
+import Std.Order {Eq}
+
+/// A queue that can be added to and taken from at either end.
+///
+/// An array is cheap at its back and dear at its front: adding or removing a
+/// first element moves every other one. A program that queues work — a
+/// breadth-first walk, a scheduler, a window over a stream — takes from the
+/// front on every step, and pays that cost on every step.
+///
+/// This holds two arrays instead. The front is kept reversed, so taking from
+/// the front and adding to the back are both work at the end of an array,
+/// which is where an array is cheap. When one side runs out, the other is
+/// split across the two. Each element moves a bounded number of times over its
+/// life in the queue, so the cost per operation averages out to a constant
+/// even though a single one occasionally does more.
+export type Deque[T] = { front: Array[T], back: Array[T] }
+
+/// A queue with nothing in it.
+export fn empty[T]() -> Deque[T] { Deque{front: [], back: []} }
+
+/// A queue holding the elements of an array, first at the front.
+export fn fromArray[T](values: &Array[T]) -> Deque[T] {
+  Deque{front: [], back: values.slice(0, values.length())}
+}
+
+/// Every element in order, front first.
+export fn toArray[T](queue: &Deque[T]) -> Array[T] {
+  List.reversed(&queue.front).concat(queue.back)
+}
+
+/// Whether the queue holds nothing.
+export fn isEmpty[T](queue: &Deque[T]) -> Bool {
+  queue.front.length() == 0 && queue.back.length() == 0
+}
+
+/// How many elements the queue holds.
+export fn length[T](queue: &Deque[T]) -> Int {
+  queue.front.length() + queue.back.length()
+}
+
+/// The queue with an element added at the front.
+export fn pushFront[T](queue: &Deque[T], value: T) -> Deque[T] {
+  Deque{front: queue.front.push(value), back: queue.back}
+}
+
+/// The queue with an element added at the back.
+export fn pushBack[T](queue: &Deque[T], value: T) -> Deque[T] {
+  Deque{front: queue.front, back: queue.back.push(value)}
+}
+
+/// The element at the front, or `None` for an empty queue.
+export fn front[T](queue: &Deque[T]) -> Option[T] {
+  if queue.front.length() > 0 {
+    Some(queue.front[queue.front.length() - 1])
+  } else {
+    if queue.back.length() > 0 { Some(queue.back[0]) } else { None }
+  }
+}
+
+/// The element at the back, or `None` for an empty queue.
+export fn back[T](queue: &Deque[T]) -> Option[T] {
+  if queue.back.length() > 0 {
+    Some(queue.back[queue.back.length() - 1])
+  } else {
+    if queue.front.length() > 0 { Some(queue.front[0]) } else { None }
+  }
+}
+
+/// The front element and the queue without it, or `None` when there is none.
+///
+/// Both are answered together because a caller almost always wants both, and
+/// asking twice would walk the same rebalancing twice.
+export fn popFront[T](queue: &Deque[T]) -> Option[(T, Deque[T])] {
+  if queue.front.length() > 0 {
+    let last = queue.front.length() - 1
+    Some((queue.front[last], Deque{front: queue.front.slice(0, last), back: queue.back}))
+  } else {
+    if queue.back.length() == 0 { None } else {
+      // The front is spent, so the back is split: its later half becomes the
+      // new back, and its earlier half, reversed, becomes the new front.
+      let half = queue.back.length() / 2
+      let moved = List.reversed(&queue.back.slice(0, half + 1))
+      let kept = queue.back.slice(half + 1, queue.back.length())
+      let taken = moved[moved.length() - 1]
+      Some((taken, Deque{front: moved.slice(0, moved.length() - 1), back: kept}))
+    }
+  }
+}
+
+/// The back element and the queue without it, or `None` when there is none.
+export fn popBack[T](queue: &Deque[T]) -> Option[(T, Deque[T])] {
+  if queue.back.length() > 0 {
+    let last = queue.back.length() - 1
+    Some((queue.back[last], Deque{front: queue.front, back: queue.back.slice(0, last)}))
+  } else {
+    if queue.front.length() == 0 { None } else {
+      let half = queue.front.length() / 2
+      let moved = List.reversed(&queue.front.slice(0, half + 1))
+      let kept = queue.front.slice(half + 1, queue.front.length())
+      let taken = moved[moved.length() - 1]
+      Some((taken, Deque{front: kept, back: moved.slice(0, moved.length() - 1)}))
+    }
+  }
+}
+
+/// The queue without its front element, unchanged when there is none.
+export fn dropFront[T](queue: &Deque[T]) -> Deque[T] {
+  match popFront(queue) {
+    case Some(pair) => pair[1]
+    case None => empty()
+  }
+}
+
+/// The queue without its back element, unchanged when there is none.
+export fn dropBack[T](queue: &Deque[T]) -> Deque[T] {
+  match popBack(queue) {
+    case Some(pair) => pair[1]
+    case None => empty()
+  }
+}
+
+/// The element at a position counted from the front, or `None`.
+export fn get[T](queue: &Deque[T], position: Int) -> Option[T] {
+  let size = length(queue)
+  if position < 0 || position >= size { None } else {
+    let held = queue.front.length()
+    if position < held {
+      Some(queue.front[held - 1 - position])
+    } else {
+      Some(queue.back[position - held])
+    }
+  }
+}
+
+/// Every element transformed, order kept.
+export fn map[A, B](queue: &Deque[A], transform: fn(A) -> B) -> Deque[B] {
+  Deque{front: queue.front.map(transform), back: queue.back.map(transform)}
+}
+
+/// The elements that satisfy a test, order kept.
+export fn filter[T](queue: &Deque[T], keep: fn(T) -> Bool) -> Deque[T] {
+  Deque{front: queue.front.filter(keep), back: queue.back.filter(keep)}
+}
+
+/// The elements combined from the front.
+export fn fold[T, A](queue: &Deque[T], start: A, combine: fn(A, T) -> A) -> A {
+  var total = start
+  for item in toArray(queue) { total = combine(total, item) }
+  total
+}
+
+/// The queue with its ends exchanged, so what was first is last.
+export fn reversed[T](queue: &Deque[T]) -> Deque[T] {
+  Deque{front: queue.back, back: queue.front}
+}
+
+/// Two queues joined, the left one's elements first.
+export fn concat[T](left: &Deque[T], right: &Deque[T]) -> Deque[T] {
+  Deque{front: left.front, back: left.back.concat(toArray(right))}
+}
+
+/// Whether an element is present.
+export fn contains[T: Eq](queue: &Deque[T], wanted: T) -> Bool {
+  toArray(queue).contains(wanted)
+}

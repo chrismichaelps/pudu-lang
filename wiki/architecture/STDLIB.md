@@ -215,6 +215,10 @@ Twenty-eight modules, 818 documented exports, every one written in Pudu.
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
 | `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
 | `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
+| `Std.NonEmpty` | 28 | a sequence known to hold something, so `first`, `last` and `maximum` answer values |
+| `Std.Deque` | 20 | a queue cheap at both ends, for breadth-first walks and scheduling |
+| `Std.Heap` | 17 | a collection that always knows its smallest element, and the few smallest without a sort |
+| `Std.Graph` | 21 | nodes and directed edges, topological order, cycles, components, shortest path |
 | `Std.Num` | 25 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
@@ -238,6 +242,27 @@ Twenty-eight modules, 818 documented exports, every one written in Pudu.
 | `Std.Process` | 11 | running a program, its status and streams, availability |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
+
+### On structures
+
+`Std.List` and `Std.Map` cover what most programs hold. Four modules exist because the shape of the
+data answers a question those cannot:
+
+- **`Std.NonEmpty`** removes an `Option` that a caller already knew the answer to. `List.maximum`
+  must answer `Option` because an array may be empty; a sequence that states it is not empty in its
+  type pays that cost once, at the boundary, instead of at every call after it.
+- **`Std.Deque`** is for the programs that take from the front. An array is cheap at its back and
+  dear at its front, and a breadth-first walk or a scheduler does the dear thing on every step.
+  Two arrays, the front one held reversed, make both ends cheap.
+- **`Std.Heap`** is for wanting the next thing rather than everything in order. Keeping a whole
+  collection sorted to read one element from it is paying for an answer nobody asked for.
+- **`Std.Graph`** is nodes and directed edges with the questions worth asking of them. Its
+  topological order answers `Option`, and `None` means a cycle — a caller ordering build steps or
+  resolving declarations needs to be told its input is circular rather than handed an order that
+  quietly is not one.
+
+None of them is a primitive. Each is built from what is already here, which is the test of whether
+the existing surface is enough to write against.
 
 ### On numbers
 
