@@ -35,6 +35,10 @@ removeFileAt, createDirectoryAt :: FilePath -> IO (IoOutcome ())
 listDirectoryAt :: FilePath -> IO (IoOutcome [Text])
 programArguments :: IO [Text]
 environmentPairs :: IO [(Text, Text)]
+temporaryDirectoryPath :: IO Text
+homeDirectoryPath :: IO (Maybe Text)
+pathSeparators :: [Text]
+searchPathSeparatorText :: Text
 monotonicMilliseconds :: IO Integer
 exitWith :: Integer -> IO ()
 ```
@@ -56,6 +60,22 @@ exitWith :: Integer -> IO ()
   the prompt; buffering that hid it would be a correctness problem, not a performance one.
 - Creating a directory that exists succeeds. A caller writing into one wants it to be there, and
   making them check first would put a race between the check and the write.
+- **A place to write is asked for, never written down.** A program that needs scratch space wants
+  somewhere this machine is willing to give it, and the answer differs by operating system and by
+  how the machine is configured. `temporaryDirectoryPath` asks; a path spelled into a program is a
+  guess about somebody else's computer.
+- **Home is asked of the operating system by whichever name it uses.** One family of systems names
+  it `HOME` and another `USERPROFILE`, and a program that knows only the first has no home on the
+  second. Asking for both and taking whichever answers costs nothing and works everywhere.
+- **A separator is a fact about the machine, not a character to write down.** A path built with the
+  wrong one is not a path, and a `PATH` split on the wrong one reads as a single entry. Both are
+  asked for here so that nothing above has to know which family of operating system it is on.
+- `pathSeparators` answers with the one to *write* first and the ones to *recognise* after it,
+  because those are different questions: one family of system reads the other's separator as its
+  own, so a path that arrived from elsewhere still has to come apart correctly even though it is
+  not the shape this machine would have written.
+- `homeDirectoryPath` answers `Maybe` rather than inventing a default: a process started with no
+  home really has none, and a made-up path would fail later and further from the cause.
 - `exitWith` is the only effect that does not answer with an outcome: a program that asked to stop
   has nothing left to decide. A status outside the range an operating system carries is clamped
   rather than refused, because refusing would leave the program running.
@@ -91,6 +111,12 @@ DEPTH 0.40 (SHALLOW by intent). It is the boundary, not a policy.
   [[architecture/SEMANTICS]] makes failure a value, and an exception would be a second failure
   mechanism with different rules — the thing `Result` exists to avoid. _Rejected:_ exceptions;
   a panic on any failed effect, which makes a missing file unrecoverable.
+- **Q:** Should `temporaryDirectoryPath` fall back to `/tmp` when the platform gives no answer?
+  **A:** No, and it never has to — the platform always answers, choosing the configured directory
+  when there is one and its own default otherwise. Writing a fallback here would put this module in
+  the business of guessing at operating systems it was written to stop guessing about.
+  _Rejected:_ a hard-coded default; reading `TMPDIR` directly, which knows only one family of
+  systems.
 - **Q:** Should the clock report calendar time? **A:** Not from here. _Rationale:_ a calendar clock
   can move backwards between two reads, so a program timing itself with one can measure a negative
   duration. Calendar time needs a `Std.Time` with zones and a real date type. _Deferred:_ with

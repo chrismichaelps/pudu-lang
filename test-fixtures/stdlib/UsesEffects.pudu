@@ -24,7 +24,9 @@ fn countWords(contents: Str) -> Int {
 export fn main() -> Int {
   var passed = 0
 
-  let path = "/tmp/pudu-effects-probe.txt"
+  // Asked of the machine rather than spelled out; see UsesIo for why.
+  let directory = Env.temporaryDirectory()
+  let path = Io.join(directory, "pudu-effects-probe.txt")
   match writeFile(path, "one two three\nfour five\n") {
     case Ok(_) => { passed = passed + 1 }
     case Err(_) => {}
@@ -42,7 +44,7 @@ export fn main() -> Int {
     case Err(_) => {}
   }
 
-  match readFile("/tmp/pudu-definitely-absent-xyz") {
+  match readFile(Io.join(directory, "pudu-definitely-absent-xyz")) {
     case Ok(_) => {}
     case Err(_) => { passed = passed + 1 }
   }

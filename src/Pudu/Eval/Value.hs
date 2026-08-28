@@ -86,6 +86,10 @@ builtinName value = case value of
   CreateDirectoryBuiltin -> "createDirectory"
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
+  TemporaryDirectoryBuiltin -> "temporaryPath"
+  HomeDirectoryBuiltin -> "userHome"
+  PathSeparatorsBuiltin -> "pathSeparators"
+  SearchSeparatorBuiltin -> "searchSeparator"
   ExitBuiltin -> "exit"
   ClockBuiltin -> "clock"
   NowBuiltin -> "now"
@@ -131,6 +135,10 @@ data Builtin
   | CreateDirectoryBuiltin
   | ArgumentsBuiltin
   | EnvironmentBuiltin
+  | TemporaryDirectoryBuiltin
+  | HomeDirectoryBuiltin
+  | PathSeparatorsBuiltin
+  | SearchSeparatorBuiltin
   | ExitBuiltin
   | ClockBuiltin
   | NowBuiltin

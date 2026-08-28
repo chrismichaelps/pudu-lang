@@ -69,7 +69,7 @@ values = sized (\size -> resize (min size 4) generate)
       , "with \\ backslash"
       , "with\nnewline\ttab"
       , "ünïcode and emoji \128512"
-      , "file:///tmp/a b.pudu"
+      , "file:///pudu-fixtures/a b.pudu"
       ]
 
 {-| The exact shapes the server has to read off the wire. -}

@@ -120,28 +120,64 @@ export fn move(from: Str, to: Str) -> Result[(), Str] {
   }
 }
 
+/// The character this machine writes between the pieces of a path.
+///
+/// Asked of the machine rather than written down. It is a slash on one family
+/// of operating system and a backslash on the other, and a path built with the
+/// wrong one is not a path there.
+export fn separator() -> Str { pathSeparators()[0] }
+
+/// Whether a character ends a piece of a path on this machine.
+///
+/// Every separator this machine accepts, not only the one it writes: a path
+/// that arrived from somewhere else still has to come apart correctly, and one
+/// family of operating system reads the other's separator as its own.
+export fn isSeparator(character: Str) -> Bool {
+  pathSeparators().contains(character)
+}
+
+/// The position of the last separator in a path, or `-1` when it has none.
+fn lastSeparator(path: Str) -> Int {
+  var index = path.length() - 1
+  while index >= 0 {
+    if isSeparator(path.slice(index, index + 1)) { return index }
+    index = index - 1
+  }
+    -1
+}
+
+/// A path with any trailing separator removed, leaving a lone root alone.
+fn withoutTrailingSeparator(path: Str) -> Str {
+  let last = path.length() - 1
+  if last > 0 && isSeparator(path.slice(last, last + 1)) {
+    path.slice(0, last)
+  } else { path }
+}
+
 /// Two path pieces joined with a separator, without doubling one.
 export fn join(left: Str, right: Str) -> Str {
   if left.isEmpty() { right } else {
     if right.isEmpty() { left } else {
-      if left.endsWith("/") { left + right } else { left + "/" + right }
+      let last = left.length() - 1
+      if isSeparator(left.slice(last, last + 1)) { left + right }
+        else { left + separator() + right }
     }
   }
 }
 
 /// A path without its last piece, or `.` when it has only one.
 export fn directoryOf(path: Str) -> Str {
-  let trimmed = if path.endsWith("/") { path.slice(0, path.length() - 1) } else { path }
-  let at = lastIndexOf(trimmed, "/")
+  let trimmed = withoutTrailingSeparator(path)
+  let at = lastSeparator(trimmed)
   if at < 0 { "." } else {
-    if at == 0 { "/" } else { trimmed.slice(0, at) }
+    if at == 0 { trimmed.slice(0, 1) } else { trimmed.slice(0, at) }
   }
 }
 
 /// The last piece of a path.
 export fn nameOf(path: Str) -> Str {
-  let trimmed = if path.endsWith("/") { path.slice(0, path.length() - 1) } else { path }
-  let at = lastIndexOf(trimmed, "/")
+  let trimmed = withoutTrailingSeparator(path)
+  let at = lastSeparator(trimmed)
   if at < 0 { trimmed } else { trimmed.slice(at + 1, trimmed.length()) }
 }
 
