@@ -55,10 +55,31 @@ const encode = message => {
 const server = spawn(executable, ["lsp"], { stdio: ["pipe", "pipe", "inherit"] });
 const chunks = [];
 server.stdout.on("data", chunk => chunks.push(chunk));
-server.stdin.write(Buffer.concat(messages.map(encode)));
-server.stdin.end();
 
-const code = await new Promise(resolve => server.on("close", resolve));
+let closed = null;
+server.on("close", code => {
+  closed = code;
+});
+
+server.stdin.write(Buffer.concat(messages.map(encode)));
+
+// Stdin stays open, as a real client's does. Ending it would let a server that
+// ignores `exit` still stop — on end of input — and the check could not tell
+// the two apart. An editor holds the pipe open and waits, and reports that
+// stopping the server timed out when nothing happens.
+const stoppedWithin = async milliseconds => {
+  const deadline = Date.now() + milliseconds;
+  while (closed === null && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return closed !== null;
+};
+
+const stopped = await stoppedWithin(5000);
+if (!stopped) {
+  server.kill("SIGKILL");
+}
+const code = closed;
 const output = Buffer.concat(chunks);
 
 const assert = (condition, message) => {
@@ -68,6 +89,7 @@ const assert = (condition, message) => {
   }
 };
 
+assert(stopped, "the server did not stop when told to; stdin was still open, as an editor keeps it");
 assert(code === 0, `server exited with ${code}`);
 
 // Framing is checked on raw bytes. A harness reading the stream as text with
