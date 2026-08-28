@@ -83,6 +83,13 @@ import Pudu.Type.Check.Call
   , traitQualifiedCall
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Expression (CheckSurroundings (..))
+import qualified Pudu.Type.Check.Expression as Expression
+import Pudu.Type.Check.Record
+  ( CheckValue (..)
+  , namedVariantShape
+  , recordType
+  )
 import Pudu.Type.Check.Signature
   ( adoptDeclaredSignature
   , nonMutatingMethods
@@ -345,62 +352,6 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
     finalizeIntegerLiterals
     dischargeObligations
 
-literalIndex :: Located Expression -> Maybe Integer
-literalIndex (Located _ expression) = case expression of
-  LiteralExpression (Tree.IntegerValue text) ->
-    parsedIntegerValue <$> parseIntegerLiteral text
-  _ -> Nothing
-
-{-| A chain of names written as a path or as member accesses, joined back into
-    the dotted name it stands for. Anything else is not a name. -}
-dottedName :: Expression -> Maybe Text
-dottedName expression = case expression of
-  NameExpression names -> Just (Text.intercalate "." (NonEmpty.toList names))
-  MemberExpression target member ->
-    (\prefix -> prefix <> "." <> locatedValue member) <$> dottedName (locatedValue target)
-  _ -> Nothing
-
-{-| Type a function literal.
-
-    The literal is checked exactly like a declaration's body — its parameters
-    bound, its result unified with what the body produced — and answers with the
-    function type a caller sees. Sharing the path is what keeps a literal and a
-    declaration from drifting into two dialects of the same thing.
-
-    A literal is not generalised. Its type is fixed at the point it is written,
-    so a literal used at two types is an error the reader can see, rather than a
-    silent second instantiation of something they wrote once. Generalisation
-    belongs to a declaration, which has a name to attach it to. -}
-lambdaType :: DeclaredTypes -> [Text] -> Function -> Checker Type
-lambdaType declared rigid value = withoutLoops $ inTypeScopeWith $ do
-  inputs <- mapM (bindParameter declared rigid) (functionParameters value)
-  result <- formOptionalType declared rigid (functionReturn value)
-  let signature = FunctionTypeValue (functionAsync value) inputs result
-  bindName selfName (monotype signature)
-  case functionBody value of
-    Nothing -> pure ()
-    Just (Located bodySpan body) -> do
-      actual <- case body of
-        BlockBody block -> checkBlock declared rigid block
-        ExpressionBody expression -> checkExpression declared rigid expression
-      _ <- unify bodySpan result actual
-      pure ()
-  zonk signature
-
-{-| Warn when a statement throws away a value that is the whole point of the
-    call that produced it.
-
-    A built-in collection method never mutates its receiver; it returns a new
-    collection. So `items.push(value)` written as a statement does nothing at
-    all, and does it silently — the statement type-checks, the program runs, and
-    the array is unchanged. This is not a style preference: there is no reading
-    of that line under which it is correct.
-
-    The check is deliberately narrow. It fires only for the closed set of
-    built-in methods the compiler already knows the semantics of, on a receiver
-    the checker has confirmed is a collection. A general "unused result" warning
-    would need to know which functions are pure, which Pudu does not track, and
-    guessing would either miss this case or bury it in noise. -}
 reportDiscardedResult :: DeclaredTypes -> [Text] -> Located Expression -> Checker ()
 reportDiscardedResult declared rigid (Located spanValue expression) = case expression of
   CallExpression callee _ -> case locatedValue callee of
@@ -445,6 +396,25 @@ bindParameter declared rigid (Located _ parameter) = do
   pure formed
 
 {-| A block's type is its trailing expression, or unit when it has none. -}
+{-| What an expression needs of the constructs around it, tied once here.
+
+    Checking is one recursion written across four modules, and this is the knot:
+    an expression reaches a block, a pushed-down type, and a parameter binding,
+    each of which reaches expressions again. -}
+surroundings :: CheckSurroundings
+surroundings =
+  CheckSurroundings
+    { aroundBlock = checkBlock
+    , aroundAgainst = checkAgainst
+    , aroundParameter = bindParameter
+    }
+
+{-| The type of an expression, with the surrounding constructs supplied. Every
+    caller here reaches expressions through this rather than through the
+    module, so the knot is tied in exactly one place. -}
+checkExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+checkExpression = Expression.checkExpression surroundings
+
 checkBlock :: DeclaredTypes -> [Text] -> Located Block -> Checker Type
 checkBlock declared rigid (Located _ block) = do
   mapM_ (checkStatement declared rigid) (blockStatements block)
@@ -524,26 +494,6 @@ checkBreak declared rigid spanValue label value = do
                 )
             )
 
-{-| Check a loop body with that loop on the stack, reporting whether any
-    `break` left it. -}
-aroundLoop :: Maybe (Located Text) -> Type -> Bool -> Checker a -> Checker Bool
-aroundLoop label result carries action = do
-  enterLoop (fmap locatedValue label) result carries
-  _ <- action
-  leaveLoop
-
-{-| Check an expression against a type the context already knows.
-
-    Inference alone cannot place a value into a `dynamic`: the branches of an `if`,
-    the arms of a `match`, and the elements of an array literal are unified with
-    *each other* before any declared type is consulted, so two types that widen
-    to the same dynamic type disagree before the widening is ever considered.
-
-    Pushing the expectation inward fixes that at its source. Each branch is
-    checked against what the context wants rather than against its sibling, and
-    a widening happens per branch. Everything else falls through to ordinary
-    inference followed by the same unification as before, so this changes what
-    is accepted only where an expectation genuinely exists. -}
 checkAgainst :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
 checkAgainst declared rigid expected located@(Located spanValue expression) = do
   resolved <- zonk expected
@@ -625,356 +575,3 @@ checkGuard declared rigid guard = do
     A call's arguments are expressions and an expression may be a call, so one
     direction has to be a capability rather than an import. This is that
     direction. -}
-expressionChecker :: CheckExpression
-expressionChecker = CheckExpression checkExpression
-
-checkExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
-checkExpression declared rigid (Located spanValue expression) = do
-  typeValue <- inferExpression declared rigid spanValue expression
-  resolved <- zonk typeValue
-  recordExpression spanValue resolved
-  pure typeValue
-
-inferExpression :: DeclaredTypes -> [Text] -> Span -> Expression -> Checker Type
-inferExpression declared rigid spanValue expression = case expression of
-  LiteralExpression literal -> literalType spanValue literal
-  NameExpression names -> nameType spanValue names
-  UnaryExpression operator operand -> do
-    actual <- checkExpression declared rigid operand
-    unaryType spanValue operator actual
-  BinaryExpression left operator right -> do
-    leftType <- checkExpression declared rigid left
-    rightType <- checkExpression declared rigid right
-    binaryType spanValue operator leftType rightType
-  CallExpression callee arguments -> do
-    checkUnsafeCall spanValue callee
-    checkComptimeCall spanValue callee
-    dispatched <- traitQualifiedCall expressionChecker declared rigid callee arguments
-    case dispatched of
-      Just (calleeType, argumentTypes) -> callType spanValue calleeType argumentTypes
-      Nothing -> do
-        calleeType <- checkCallee expressionChecker declared rigid callee
-        argumentTypes <- mapM (checkExpression declared rigid) arguments
-        callType spanValue calleeType argumentTypes
-  MemberExpression target member -> do
-    {-| A variant that named its payload is refused here rather than inside
-        qualified member typing, which a call reaches twice — once for the
-        callee and once for the expression — and would report twice. -}
-    refused <- namedVariantAsValue spanValue (locatedValue member)
-    qualified <- case refused of
-      Just value -> pure (Just value)
-      Nothing -> qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
-    case qualified of
-      Just value -> pure value
-      Nothing -> do
-        targetType <- checkExpression declared rigid target
-        memberType spanValue targetType (locatedValue member)
-  IndexExpression target index -> do
-    targetType <- checkExpression declared rigid target
-    indexType <- checkExpression declared rigid index
-    _ <- unify (locatedSpan index) integerType indexType
-    elementType spanValue (literalIndex index) targetType
-  TryExpression target -> do
-    checkpoint <- integerLiteralCheckpoint
-    targetType <- checkExpression declared rigid target
-    finalizeIntegerLiteralsSince checkpoint
-    resolvedTarget <- zonk targetType
-    declaredResult <- enclosingReturnType selfName
-    tryType spanValue resolvedTarget declaredResult
-  AwaitExpression target -> do
-    checkpoint <- integerLiteralCheckpoint
-    targetType <- checkExpression declared rigid target
-    finalizeIntegerLiteralsSince checkpoint
-    resolvedTarget <- zonk targetType
-    (asynchronous, declaredResult) <- enclosingFunctionType selfName
-    awaitType spanValue asynchronous resolvedTarget declaredResult
-  {-| An empty tuple is the unit *value*, not a tuple of nothing. The evaluator
-      already produces `UnitValue` for it, and typing it as an empty tuple made
-      `()` fail against the `()` type it was annotated with. -}
-  TupleExpression [] -> pure UnitTypeValue
-  TupleExpression members -> TupleTypeValue <$> mapM (checkExpression declared rigid) members
-  ArrayExpression members -> do
-    elementTypes <- mapM (checkExpression declared rigid) members
-    inferredElementType <- case elementTypes of
-      [] -> freshVariable
-      first : rest -> foldM (unify spanValue) first rest
-    pure (NominalType "Array" [inferredElementType])
-  MacroCall _ _ -> pure ErrorType
-  LambdaExpression value -> lambdaType declared rigid value
-  ScopeExpression body -> do
-    (asynchronous, _) <- enclosingFunctionType selfName
-    unless asynchronous $
-      report "E3026" spanValue "a structured scope needs an async function"
-        (Just "declare the enclosing function async; a scope joins the tasks it starts")
-    checkBlock declared rigid body
-  UnsafeExpression capabilities body -> do
-    enterUnsafe (map locatedValue capabilities)
-    bodyType <- checkBlock declared rigid body
-    reportUnusedCapabilities spanValue
-    pure bodyType
-  RecordExpression path fields -> recordType declared rigid spanValue path fields
-  BlockExpression block -> checkBlock declared rigid block
-  IfExpression condition thenBlock elseBranch -> do
-    conditionCheckpoint <- integerLiteralCheckpoint
-    conditionType <- checkExpression declared rigid condition
-    _ <- unify (locatedSpan condition) boolType conditionType
-    validateIntegerLiteralsSince conditionCheckpoint
-    branchCheckpoint <- integerLiteralCheckpoint
-    thenType <- checkBlock declared rigid thenBlock
-    case elseBranch of
-      Nothing -> do
-        finalizeIntegerLiteralsSince branchCheckpoint
-        pure UnitTypeValue
-      Just branch -> do
-        elseType <- checkExpression declared rigid branch
-        unified <- unify spanValue thenType elseType
-        validateIntegerLiteralsSince branchCheckpoint
-        resolvedThen <- zonk thenType
-        resolvedElse <- zonk elseType
-        case (resolvedThen, resolvedElse) of
-          (ErrorType, _) -> pure ErrorType
-          (_, ErrorType) -> pure ErrorType
-          _ -> zonk unified
-  MatchExpression scrutinee arms -> do
-    subjectCheckpoint <- integerLiteralCheckpoint
-    borrowed <- checkExpression declared rigid scrutinee
-    {-| A match reads its subject; it does not consume it. Looking through a
-        borrow is what lets a function take `&Option[T]` and still match on it,
-        and every language with both references and patterns does the same. A
-        pattern that binds by value from a borrowed subject is an ownership
-        question, and ownership checking is where it belongs — not here, where
-        the only available answer would be to refuse the match entirely. -}
-    subjectType <- throughBorrow borrowed
-    subjectEnd <- integerLiteralCheckpoint
-    result <- checkArms declared rigid spanValue subjectType arms
-    finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
-    resolvedSubject <- zonk subjectType
-    checkExhaustive spanValue resolvedSubject arms
-    zonk result
-  WhileExpression label condition body -> do
-    conditionCheckpoint <- integerLiteralCheckpoint
-    conditionType <- checkExpression declared rigid condition
-    _ <- unify (locatedSpan condition) boolType conditionType
-    validateIntegerLiteralsSince conditionCheckpoint
-    _ <- aroundLoop label UnitTypeValue False (checkBlock declared rigid body)
-    pure UnitTypeValue
-  {-| A `loop` has the type its `break` statements carry.
-
-      One that never breaks does not finish, so its type is `Never` and it may
-      stand where any type is wanted. That is not a special case bolted on: a
-      loop with no exit genuinely produces no value, and `Never` is the type of
-      an expression that produces none. -}
-  LoopExpression label body -> do
-    result <- freshVariable
-    broken <- aroundLoop label result True (checkBlock declared rigid body)
-    if broken then zonk result else pure NeverType
-  ForExpression label binder iterated body -> do
-    {-| The iterated expression's integer literals are settled before its
-        element type is read.
-
-        A literal defers its type until inference has seen enough to choose
-        one, which is right nearly everywhere and wrong here: the binder's type
-        comes from this expression and nothing else, so leaving it a variable
-        meant the loop body could ask it for any method at all. `for x in
-        [1, 2, 3] { x.length() }` passed because `x` had no type yet, not
-        because whole numbers have a length. -}
-    iteratedCheckpoint <- integerLiteralCheckpoint
-    iteratedType <- checkExpression declared rigid iterated
-    finalizeIntegerLiteralsSince iteratedCheckpoint
-    resolved <- zonk iteratedType
-    element <- iterationElement spanValue resolved
-    _ <- inTypeScope $ do
-      bindPattern declared rigid binder element
-      aroundLoop label UnitTypeValue False (checkBlock declared rigid body)
-    pure UnitTypeValue
-  {-| A type application pins what inference could not settle.
-
-      Only a name can carry one: a scheme belongs to a declaration, and an
-      arbitrary expression has already been instantiated by the time it is an
-      expression. That is a real restriction and it is reported rather than
-      worked around. -}
-  TypeApplication target arguments -> do
-    formed <- mapM (formType declared rigid) arguments
-    {-| A qualified name carries type arguments as readily as a bare one:
-        `Num.small[UInt16](...)` is the same call as `small[UInt16](...)` from
-        inside the module, and a caller should not have to import a name
-        unqualified to pin its type. A qualifier is written as a member access,
-        so the chain is flattened back into the dotted name it stands for. -}
-    case dottedName (locatedValue target) of
-      Just name -> do
-        found <- lookupName name
-        case found of
-          Just scheme -> do
-            applied <- instantiateWith spanValue scheme formed
-            recordExpression (locatedSpan target) applied
-            pure applied
-          Nothing -> do
-            report "E2010" spanValue ("unresolved value name " <> name)
-              (Just "declare the name, import it, or check the spelling")
-            pure ErrorType
-      Nothing -> do
-        report "E3028" spanValue "only a name may carry type arguments"
-          ( Just
-              ( "write the type arguments on the function's own name; an "
-                  <> "expression has already been given its types"
-              )
-          )
-        _ <- checkExpression declared rigid target
-        pure ErrorType
-  InvalidExpression -> pure ErrorType
-
-{-| A record construction is checked field by field against its declaration,
-    and every declared field must be supplied. -}
-recordType
-  :: DeclaredTypes -> [Text] -> Span -> ModuleName -> [Located FieldInit] -> Checker Type
-recordType declared rigid spanValue path fields = do
-  let name = NonEmpty.last (moduleNameSegments path)
-      identity = Map.findWithDefault (NominalId Nothing (moduleNameText path))
-        (moduleNameText path) (declaredNames declared)
-  declaredFieldTypes <- lookupField identity
-  case declaredFieldTypes of
-    Nothing -> do
-      variantShape <- namedVariantShape name
-      case variantShape of
-        Just (owner, ownerParams, expected) ->
-          variantRecordType declared rigid spanValue name owner ownerParams expected fields
-        Nothing -> do
-          positional <- lookupVariant name
-          report "E3007" spanValue (name <> " is not a record type")
-            ( Just $ case positional of
-                Just (_, _, payload) | not (null payload) ->
-                  name <> " carries a positional payload; write "
-                    <> name <> "(...) with one argument per element"
-                Just _ -> name <> " carries no payload; write " <> name <> " on its own"
-                Nothing -> "construct a record whose type declares fields"
-            )
-          mapM_ (checkFieldInit declared rigid) fields
-          pure ErrorType
-    Just declaredFields' -> do
-      {-| A generic record is instantiated at every construction, exactly as a
-          generic sum already was. `Boxed{value: 7}` is a `Boxed[Int]`, and the
-          field is checked against `Int` rather than against the declaration's
-          rigid parameter — which nothing could ever satisfy. -}
-      parameters <- maybe [] id <$> lookupTypeParams identity
-      replacements <- freshFor parameters
-      let expected =
-            [ (fieldName, substituteRigid replacements fieldType)
-            | (fieldName, fieldType) <- declaredFields'
-            ]
-      mapM_ (checkField declared rigid expected) fields
-      let supplied = map (locatedValue . fieldInitName . locatedValue) fields
-          missing = [fieldName | (fieldName, _) <- expected, fieldName `notElem` supplied]
-      case missing of
-        [] -> pure ()
-        _ ->
-          report "E3008" spanValue
-            (name <> " construction is missing " <> Text.intercalate ", " missing)
-            (Just "supply every declared field")
-      pure (NominalType identity (map snd replacements))
-
-{-| A variant's payload paired with the names it declared for it.
-
-    A variant is present here only when its declaration gave names. The names
-    sit over the same positional payload a bare `Circle(Int)` would carry, so
-    nothing downstream needs to know which spelling was used. -}
-namedVariantShape :: Text -> Checker (Maybe (NominalId, [Text], [(Text, Type)]))
-namedVariantShape name = do
-  fieldNames <- lookupVariantFields name
-  variant <- lookupVariant name
-  pure $ case (fieldNames, variant) of
-    (Just names, Just (owner, ownerParams, payload))
-      | length names == length payload -> Just (owner, ownerParams, zip names payload)
-    _ -> Nothing
-
-{-| Construct a variant by naming its payload elements.
-
-    The variant's own type is instantiated at the construction, exactly as a
-    record's is, so `Wrap{value: 7}` is a `Wrap[Int]` and the field is checked
-    against `Int` rather than against the declaration's rigid parameter. -}
-variantRecordType
-  :: DeclaredTypes
-  -> [Text]
-  -> Span
-  -> Text
-  -> NominalId
-  -> [Text]
-  -> [(Text, Type)]
-  -> [Located FieldInit]
-  -> Checker Type
-variantRecordType declared rigid spanValue name owner ownerParams declaredShape fields = do
-  replacements <- freshFor ownerParams
-  let expected =
-        [ (fieldName, substituteRigid replacements fieldType)
-        | (fieldName, fieldType) <- declaredShape
-        ]
-  mapM_ (checkField declared rigid expected) fields
-  let supplied = map (locatedValue . fieldInitName . locatedValue) fields
-      missing = [fieldName | (fieldName, _) <- expected, fieldName `notElem` supplied]
-  case missing of
-    [] -> pure ()
-    _ ->
-      report "E3008" spanValue
-        (name <> " construction is missing " <> Text.intercalate ", " missing)
-        (Just "supply every declared field")
-  pure (NominalType owner (map snd replacements))
-
-checkField
-  :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldInit -> Checker ()
-checkField declared rigid expected located@(Located fieldSpan field) = do
-  let name = locatedValue (fieldInitName field)
-  case lookup name expected of
-    Nothing -> do
-      _ <- checkFieldInit declared rigid located
-      report "E3005" fieldSpan ("no declared field " <> name)
-        (Just "check the field name against the type declaration")
-    {-| The declared field type is an expectation, so it reaches the value the
-        same way a binding's annotation does. A field declared
-        `Array[dynamic Node]` accepts a literal of mixed implementations; before
-        this the literal was inferred on its own and its elements disagreed
-        before the field's type was ever consulted. -}
-    Just declaredType -> case fieldInitValue field of
-      Just value -> do
-        _ <- checkAgainst declared rigid declaredType value
-        pure ()
-      Nothing -> do
-        actual <- checkFieldInit declared rigid located
-        _ <- unify fieldSpan declaredType actual
-        pure ()
-
-checkFieldInit :: DeclaredTypes -> [Text] -> Located FieldInit -> Checker Type
-checkFieldInit declared rigid (Located fieldSpan field) = case fieldInitValue field of
-  Just value -> checkExpression declared rigid value
-  Nothing -> nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])
-
-checkArms :: DeclaredTypes -> [Text] -> Span -> Type -> [Located MatchArm] -> Checker Type
-checkArms declared rigid spanValue subjectType arms = case arms of
-  [] -> pure ErrorType
-  _ -> do
-    checkpoint <- integerLiteralCheckpoint
-    types <- mapM checkArm arms
-    unified <- case types of
-      [] -> pure ErrorType
-      first : rest -> foldUnify first rest
-    validateIntegerLiteralsSince checkpoint
-    resolved <- mapM zonk types
-    if ErrorType `elem` resolved then pure ErrorType else zonk unified
- where
-  checkArm (Located _ arm) = do
-    result <- freshVariable
-    inTypeScope $ do
-      bindPattern declared rigid (armPattern arm) subjectType
-      case armGuard arm of
-        Nothing -> pure ()
-        Just guard -> do
-          guardType <- checkExpression declared rigid guard
-          _ <- unify (locatedSpan guard) boolType guardType
-          pure ()
-      bodyType <- checkExpression declared rigid (armBody arm)
-      _ <- unify (locatedSpan (armBody arm)) result bodyType
-      pure ()
-    pure result
-  foldUnify current rest = case rest of
-    [] -> pure current
-    next : remaining -> do
-      unified <- unify spanValue current next
-      foldUnify unified remaining

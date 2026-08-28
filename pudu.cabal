@@ -111,6 +111,8 @@ library
     Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
+    Pudu.Type.Check.Expression
+    Pudu.Type.Check.Record
     Pudu.Type.Check.Rule
     Pudu.Type.Check.Signature
     Pudu.Type.Env
