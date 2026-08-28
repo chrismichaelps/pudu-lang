@@ -60,6 +60,8 @@ importsFor
 - Every interface-carried function, exported trait member, and implementation method must annotate every parameter and its return type. `E3010` rejects an incomplete ABI signature, and the incomplete member is omitted from the body-free interface so consumer inference cannot invent a context-dependent replacement.
 - Private nominal declarations are retained only as non-importable formation shells. They canonicalize private identities mentioned behind public signatures without entering the export or value namespaces.
 
+- **The qualifiers whose module was found are recorded, not only the names it carried.** A table of names cannot tell "that module has no such type" from "that module was not available", and the two want opposite answers: the first is a mistake worth reporting, the second is a thing nothing can be known about.
+
 ### Linkage
 
 - **Requires:** [[Syntax Tree]], [[Syntax Name]], [[Type Value]], [[Type Env]], [[Type Formation]], [[Type Check Method]], [[Diagnostic Model]], [[architecture/SEMANTICS]].

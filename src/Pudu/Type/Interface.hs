@@ -3,6 +3,7 @@ module Pudu.Type.Interface
   ( ImportTypes (..)
   , TypeInterface
   , emptyImportTypes
+  , importedQualifiers
   , importsFor
   , interfaceDeclarations
   , interfaceDefaults
@@ -52,11 +53,18 @@ data ImportTypes = ImportTypes
   , importedNames :: !(Map Text NominalId)
   , importedValues :: !(Map Text Text)
   , importedTraits :: !(Set NominalId)
+  {-| The qualifiers whose module was actually found.
+
+      A name this qualifier does not carry is a mistake worth reporting, and a
+      qualifier that is missing from here is a module nothing could be known
+      about — the difference between "that module has no such type" and "that
+      module was not available", which look identical in a table of names. -}
+  , importedQualifiers :: !(Set Text)
   }
   deriving stock (Eq, Show)
 
 emptyImportTypes :: ImportTypes
-emptyImportTypes = ImportTypes [] Map.empty Map.empty Set.empty
+emptyImportTypes = ImportTypes [] Map.empty Map.empty Set.empty Set.empty
 
 interfaceSkeleton :: Module -> TypeInterface
 interfaceSkeleton value =
@@ -157,6 +165,7 @@ instance Semigroup ImportTypes where
       , importedNames = importedNames left <> importedNames right
       , importedValues = importedValues left <> importedValues right
       , importedTraits = importedTraits left <> importedTraits right
+      , importedQualifiers = importedQualifiers left <> importedQualifiers right
       }
 
 instance Monoid ImportTypes where
@@ -169,6 +178,10 @@ importOne value found =
     , importedNames = Map.fromList (concatMap namesFor exported)
     , importedValues = Map.fromList (concatMap valuesFor exportedValues)
     , importedTraits = Set.fromList [identity | (name, identity, True) <- exported, visible name]
+    {-| Only a whole-module import lends its name to what it carries. A
+        selective one brings its names in unqualified, so nothing is written
+        `qualifier.name` and there is no qualifier to judge against. -}
+    , importedQualifiers = if null selected then Set.singleton qualifier else Set.empty
     }
  where
   selected = map locatedValue (importItems value)

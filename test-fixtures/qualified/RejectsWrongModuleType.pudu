@@ -1,0 +1,6 @@
+module RejectsWrongModuleType
+
+import Std.Time as T
+
+/// A real type asked of a module that does not declare it.
+export fn run(value: Int) -> T.Map[Str, Int] { value }
