@@ -12,7 +12,8 @@ import Pudu.Compiler.Program
   , programIntegerKinds
   , rootCompileResult
   )
-import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry)
+import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Value (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
   , diagnosticMessage)

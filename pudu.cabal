@@ -45,6 +45,7 @@ library
     Pudu.Eval.Keyed
     Pudu.Eval.Match
     Pudu.Eval.Operator
+    Pudu.Eval.Program
     Pudu.Eval.Order
     Pudu.Eval.Value
     Pudu.Frontend.Expand

@@ -16,7 +16,8 @@ import Pudu.Compiler.Program
   , programDocs
   , rootCompileResult
   )
-import Pudu.Eval (EvalOutcome (..), evaluateProgramEntry, evaluateProgramTallied)
+import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Program (evaluateProgramEntry, evaluateProgramTallied)
 import Pudu.Eval.Value (Value (..), renderValue)
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Format (FormatResult (..), formatSource)
