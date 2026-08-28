@@ -1,0 +1,265 @@
+module UsesStructures
+
+import Std.Deque as Deque
+import Std.Graph as Graph
+import Std.Heap as Heap
+import Std.List as List
+import Std.NonEmpty as NonEmpty
+
+/// Every check that must hold. `main` answers how many failed, so a passing
+/// run exits with nought and a failing one names how much broke.
+export fn main() -> Int {
+  var failures = 0
+
+  let single = NonEmpty.one(7)
+  if NonEmpty.length(&single) != 1 { failures = failures + 1 }
+  if NonEmpty.first(&single) != 7 { failures = failures + 1 }
+  if NonEmpty.last(&single) != 7 { failures = failures + 1 }
+
+  let several = NonEmpty.make(1, [2, 3, 4])
+  if NonEmpty.length(&several) != 4 { failures = failures + 1 }
+  if NonEmpty.last(&several) != 4 { failures = failures + 1 }
+  if NonEmpty.minimum(&several) != 1 { failures = failures + 1 }
+  if NonEmpty.maximum(&several) != 4 { failures = failures + 1 }
+  if NonEmpty.reduce(&several, fn(a: Int, b: Int) -> Int => a + b) != 10 {
+    failures = failures + 1
+  }
+  if NonEmpty.toArray(&NonEmpty.reversed(&several)) != [4, 3, 2, 1] {
+    failures = failures + 1
+  }
+  let doubled = NonEmpty.map(&several, fn(n: Int) -> Int => n * 2)
+  if NonEmpty.toArray(&doubled) != [2, 4, 6, 8] { failures = failures + 1 }
+  if NonEmpty.toArray(&NonEmpty.append(&single, 9)) != [7, 9] {
+    failures = failures + 1
+  }
+  if NonEmpty.toArray(&NonEmpty.prepend(&single, 9)) != [9, 7] {
+    failures = failures + 1
+  }
+  if NonEmpty.toArray(&NonEmpty.sorted(&NonEmpty.make(3, [1, 2]))) != [1, 2, 3] {
+    failures = failures + 1
+  }
+
+  // The empty array is the one case that has no answer, and says so.
+  match NonEmpty.fromArray(&[]) {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+  match NonEmpty.fromArray(&[5, 6]) {
+    case Some(found) => if NonEmpty.first(&found) != 5 { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+
+  // Grouping answers runs that cannot be empty, which is the point.
+  let runs = NonEmpty.group(&[1, 1, 2, 3, 3, 3])
+  if runs.length() != 3 { failures = failures + 1 }
+  if NonEmpty.length(&runs[2]) != 3 { failures = failures + 1 }
+
+  let start: Deque.Deque[Int] = Deque.empty()
+  if !Deque.isEmpty(&start) { failures = failures + 1 }
+  match Deque.popFront(&start) {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+
+  // Built from both ends, it still reads front to back in order.
+  var queue = Deque.fromArray(&[2, 3])
+  queue = Deque.pushFront(&queue, 1)
+  queue = Deque.pushBack(&queue, 4)
+  if Deque.toArray(&queue) != [1, 2, 3, 4] { failures = failures + 1 }
+  if Deque.length(&queue) != 4 { failures = failures + 1 }
+
+  match Deque.front(&queue) {
+    case Some(value) => if value != 1 { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+  match Deque.back(&queue) {
+    case Some(value) => if value != 4 { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+
+  // Position counts from the front regardless of which side holds it.
+  var index = 0
+  for expected in [1, 2, 3, 4] {
+    match Deque.get(&queue, index) {
+      case Some(value) => if value != expected { failures = failures + 1 }
+      case None => failures = failures + 1
+    }
+    index = index + 1
+  }
+  match Deque.get(&queue, 4) {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+
+  // Draining from the front must give the elements back in order, including
+  // across the rebalance that happens when the front side runs out.
+  var drained = []
+  var remaining = queue
+  var guard = 0
+  while !Deque.isEmpty(&remaining) && guard < 100 {
+    match Deque.popFront(&remaining) {
+      case Some(step) => {
+        drained = drained.push(step[0])
+        remaining = step[1]
+      }
+      case None => guard = 100
+    }
+    guard = guard + 1
+  }
+  if drained != [1, 2, 3, 4] { failures = failures + 1 }
+
+  // And from the back, in the opposite order.
+  var backwards = []
+  var rest = Deque.fromArray(&[1, 2, 3, 4, 5])
+  guard = 0
+  while !Deque.isEmpty(&rest) && guard < 100 {
+    match Deque.popBack(&rest) {
+      case Some(step) => {
+        backwards = backwards.push(step[0])
+        rest = step[1]
+      }
+      case None => guard = 100
+    }
+    guard = guard + 1
+  }
+  if backwards != [5, 4, 3, 2, 1] { failures = failures + 1 }
+
+  if Deque.toArray(&Deque.reversed(&queue)) != [4, 3, 2, 1] {
+    failures = failures + 1
+  }
+  let raised = Deque.map(&queue, fn(n: Int) -> Int => n + 1)
+  if Deque.toArray(&raised) != [2, 3, 4, 5] { failures = failures + 1 }
+  let evens = Deque.filter(&queue, fn(n: Int) -> Bool => n % 2 == 0)
+  if Deque.toArray(&evens) != [2, 4] { failures = failures + 1 }
+  if Deque.fold(&queue, 0, fn(a: Int, b: Int) -> Int => a + b) != 10 {
+    failures = failures + 1
+  }
+  if !Deque.contains(&queue, 3) { failures = failures + 1 }
+  if Deque.contains(&queue, 99) { failures = failures + 1 }
+
+  let joined = Deque.concat(&Deque.fromArray(&[1, 2]), &Deque.fromArray(&[3]))
+  if Deque.toArray(&joined) != [1, 2, 3] { failures = failures + 1 }
+
+  let none: Heap.Heap[Int] = Heap.empty()
+  if !Heap.isEmpty(&none) { failures = failures + 1 }
+  match Heap.pop(&none) {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+
+  // Fed in a jumble, it still gives them back in order.
+  let jumbled = Heap.fromArray(&[5, 3, 9, 1, 7, 1, 8, 2])
+  if Heap.size(&jumbled) != 8 { failures = failures + 1 }
+  match Heap.peek(&jumbled) {
+    case Some(value) => if value != 1 { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+  if Heap.toSortedArray(&jumbled) != [1, 1, 2, 3, 5, 7, 8, 9] {
+    failures = failures + 1
+  }
+
+  // The reason to use one: the few smallest without ordering the rest.
+  if Heap.smallest(&jumbled, 3) != [1, 1, 2] { failures = failures + 1 }
+  if Heap.smallest(&jumbled, 100).length() != 8 { failures = failures + 1 }
+  if Heap.smallest(&none, 3) != [] { failures = failures + 1 }
+
+  let joinedHeap = Heap.union(&Heap.fromArray(&[4, 6]), &Heap.fromArray(&[1, 5]))
+  if Heap.toSortedArray(&joinedHeap) != [1, 4, 5, 6] { failures = failures + 1 }
+  if !Heap.contains(&jumbled, 7) { failures = failures + 1 }
+  if Heap.contains(&jumbled, 99) { failures = failures + 1 }
+
+  let bigOnes = Heap.filter(&jumbled, fn(n: Int) -> Bool => n > 4)
+  if Heap.toSortedArray(&bigOnes) != [5, 7, 8, 9] { failures = failures + 1 }
+
+  if Heap.toSortedArray(&Heap.dropMin(&Heap.fromArray(&[3, 1, 2]))) != [2, 3] {
+    failures = failures + 1
+  }
+
+  // A small dependency graph: a -> b -> d, a -> c -> d, d -> e
+  let dag = Graph.fromEdges(&[
+      ("a", "b"), ("a", "c"), ("b", "d"), ("c", "d"), ("d", "e")
+    ])
+  if Graph.order(&dag) != 5 { failures = failures + 1 }
+  if !Graph.hasEdge(&dag, "a", "b") { failures = failures + 1 }
+  if Graph.hasEdge(&dag, "b", "a") { failures = failures + 1 }
+  if !Graph.hasNode(&dag, "e") { failures = failures + 1 }
+  if Graph.outDegree(&dag, "a") != 2 { failures = failures + 1 }
+  if Graph.inDegree(&dag, "d") != 2 { failures = failures + 1 }
+  if Graph.roots(&dag) != ["a"] { failures = failures + 1 }
+  if Graph.leaves(&dag) != ["e"] { failures = failures + 1 }
+
+  // Every node is listed, and each one after everything pointing at it.
+  match Graph.topologicalOrder(&dag) {
+    case Some(ordering) => {
+      if ordering.length() != 5 { failures = failures + 1 }
+      if ordering[0] != "a" { failures = failures + 1 }
+      if ordering[4] != "e" { failures = failures + 1 }
+      // The defining property, checked rather than assumed.
+      var position = 0
+      for node in ordering {
+        for next in Graph.neighbours(&dag, node) {
+          match List.indexOf(&ordering, next) {
+            case Some(there) => if there <= position { failures = failures + 1 }
+            case None => failures = failures + 1
+          }
+        }
+        position = position + 1
+      }
+    }
+    case None => failures = failures + 1
+  }
+  if Graph.hasCycle(&dag) { failures = failures + 1 }
+
+  // Reachability follows direction, and only forwards.
+  if !Graph.reaches(&dag, "a", "e") { failures = failures + 1 }
+  if Graph.reaches(&dag, "e", "a") { failures = failures + 1 }
+  if Graph.reachableFrom(&dag, "a").length() != 5 { failures = failures + 1 }
+  if Graph.reachableFrom(&dag, "e") != ["e"] { failures = failures + 1 }
+
+  // The shortest way through, in edges, not merely a way through.
+  match Graph.shortestPath(&dag, "a", "e") {
+    case Some(path) => if path.length() != 4 { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+  match Graph.shortestPath(&dag, "e", "a") {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+  match Graph.shortestPath(&dag, "a", "a") {
+    case Some(path) => if path != ["a"] { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+
+  // Reversing turns the sinks into the sources.
+  let flipped = Graph.reversed(&dag)
+  if !Graph.hasEdge(&flipped, "b", "a") { failures = failures + 1 }
+  if Graph.roots(&flipped) != ["e"] { failures = failures + 1 }
+
+  // A cycle has no order, and says so rather than inventing one.
+  let circular = Graph.fromEdges(&[("x", "y"), ("y", "z"), ("z", "x")])
+  if !Graph.hasCycle(&circular) { failures = failures + 1 }
+  match Graph.topologicalOrder(&circular) {
+    case Some(_) => failures = failures + 1
+    case None => {}
+  }
+  // And the three nodes are one group that all reach each other.
+  let groups = Graph.stronglyConnected(&circular)
+  if groups.length() != 1 { failures = failures + 1 }
+  if groups[0].length() != 3 { failures = failures + 1 }
+  // Where nothing is circular, every node is its own group.
+  if Graph.stronglyConnected(&dag).length() != 5 { failures = failures + 1 }
+
+  // Two islands are two components even though neither reaches the other.
+  var islands = Graph.fromEdges(&[("p", "q"), ("r", "s")])
+  if Graph.components(&islands).length() != 2 { failures = failures + 1 }
+
+  // A node with no edges at all still belongs to the graph.
+  let lonely = Graph.addNode(&Graph.empty(), "solo")
+  if Graph.order(&lonely) != 1 { failures = failures + 1 }
+  match Graph.topologicalOrder(&lonely) {
+    case Some(ordering) => if ordering != ["solo"] { failures = failures + 1 }
+    case None => failures = failures + 1
+  }
+
+  failures
+}

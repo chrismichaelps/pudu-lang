@@ -1,0 +1,300 @@
+module Std.Graph
+
+import Std.Deque as Deque
+import Std.List as List
+import Std.Map as Map
+import Std.Order {Eq, Ord}
+import Std.Set as Set
+
+/// A directed graph: nodes, and the edges leading out of each one.
+///
+/// Held as a map from a node to the nodes it points at, because that is the
+/// question every walk over a graph asks — given where I am, where may I go.
+/// A node with no outgoing edges still belongs, so membership is kept apart
+/// from the edge map rather than inferred from it; a graph that forgot its
+/// leaves would report a shorter topological order than it has nodes.
+export type Graph[N] = { nodes: Set[N], edges: Map[N, Array[N]] }
+
+/// A graph with nothing in it.
+export fn empty[N: Ord]() -> Graph[N] {
+  Graph{nodes: Set.empty(), edges: Map.empty()}
+}
+
+/// The graph with a node in it, whether or not it has any edges.
+export fn addNode[N: Ord](graph: &Graph[N], node: N) -> Graph[N] {
+  Graph{nodes: Set.insert(&graph.nodes, node), edges: graph.edges}
+}
+
+/// The graph with an edge from one node to another.
+///
+/// Both ends are added as nodes. An edge to a node the caller never mentioned
+/// is still a statement that the node exists, and requiring it to be declared
+/// first would only make callers write it twice.
+export fn addEdge[N: Ord](graph: &Graph[N], from: N, to: N) -> Graph[N] {
+  let known = Set.insert(&Set.insert(&graph.nodes, from), to)
+  let existing = match Map.get(&graph.edges, from) {
+    case Some(found) => found
+    case None => []
+  }
+  Graph{nodes: known, edges: Map.insert(&graph.edges, from, existing.push(to))}
+}
+
+/// A graph built from a list of edges.
+export fn fromEdges[N: Ord](edges: &Array[(N, N)]) -> Graph[N] {
+  var built = empty()
+  for edge in edges { built = addEdge(&built, edge[0], edge[1]) }
+  built
+}
+
+/// Every node.
+export fn nodes[N: Ord](graph: &Graph[N]) -> Array[N] {
+  Set.toArray(&graph.nodes)
+}
+
+/// How many nodes there are.
+export fn order[N: Ord](graph: &Graph[N]) -> Int { Set.size(&graph.nodes) }
+
+/// The nodes an edge leads to from here.
+export fn neighbours[N: Ord](graph: &Graph[N], node: N) -> Array[N] {
+  match Map.get(&graph.edges, node) {
+    case Some(found) => found
+    case None => []
+  }
+}
+
+/// Whether there is an edge from one node to another.
+export fn hasEdge[N: Ord](graph: &Graph[N], from: N, to: N) -> Bool {
+  neighbours(graph, from).contains(to)
+}
+
+/// Whether the node is in the graph.
+export fn hasNode[N: Ord](graph: &Graph[N], node: N) -> Bool {
+  Set.contains(&graph.nodes, node)
+}
+
+/// How many edges lead out of a node.
+export fn outDegree[N: Ord](graph: &Graph[N], node: N) -> Int {
+  neighbours(graph, node).length()
+}
+
+/// How many edges lead into a node.
+export fn inDegree[N: Ord](graph: &Graph[N], node: N) -> Int {
+  var count = 0
+  for from in nodes(graph) {
+    for to in neighbours(graph, from) { if to == node { count = count + 1 } }
+  }
+  count
+}
+
+/// The graph with every edge turned around.
+export fn reversed[N: Ord](graph: &Graph[N]) -> Graph[N] {
+  var flipped = Graph{nodes: graph.nodes, edges: Map.empty()}
+  for from in nodes(graph) {
+    for to in neighbours(graph, from) { flipped = addEdge(&flipped, to, from) }
+  }
+  flipped
+}
+
+/// Every node reachable from a starting node, nearest first.
+///
+/// Breadth first, so the order says something: a node listed earlier is no
+/// further away than one listed later. The queue is a deque because the walk
+/// takes from the front on every step, which is the one thing an array is bad
+/// at.
+export fn reachableFrom[N: Ord](graph: &Graph[N], start: N) -> Array[N] {
+  var seen = Set.insert(&Set.empty(), start)
+  var found = [start]
+  var pending = Deque.pushBack(&Deque.empty(), start)
+  var guard = 0
+  let limit = order(graph) * order(graph) + 8
+  while !Deque.isEmpty(&pending) && guard < limit {
+    match Deque.popFront(&pending) {
+      case Some(step) => {
+        pending = step[1]
+        for next in neighbours(graph, step[0]) {
+          if !Set.contains(&seen, next) {
+            seen = Set.insert(&seen, next)
+            found = found.push(next)
+            pending = Deque.pushBack(&pending, next)
+          }
+        }
+      }
+      case None => guard = limit
+    }
+    guard = guard + 1
+  }
+  found
+}
+
+/// Whether one node can be reached from another by following edges.
+export fn reaches[N: Ord](graph: &Graph[N], from: N, to: N) -> Bool {
+  reachableFrom(graph, from).contains(to)
+}
+
+/// The nodes in an order where every node comes before the ones it points at,
+/// or `None` when there is no such order.
+///
+/// `None` means a cycle. That is the honest answer rather than a partial list
+/// or an arbitrary tie-break: a caller ordering build steps or resolving
+/// declarations needs to know its input is circular, not to receive an order
+/// that quietly is not one.
+///
+/// Nodes with nothing pointing at them are taken first, and removing them
+/// exposes the next such nodes. If nodes remain when none are left exposed,
+/// every remaining node has something pointing at it, which is a cycle.
+export fn topologicalOrder[N: Ord](graph: &Graph[N]) -> Option[Array[N]] {
+  var remaining = Map.empty()
+  for node in nodes(graph) { remaining = Map.insert(&remaining, node, 0) }
+  for from in nodes(graph) {
+    for to in neighbours(graph, from) {
+      let current = match Map.get(&remaining, to) {
+        case Some(found) => found
+        case None => 0
+      }
+      remaining = Map.insert(&remaining, to, current + 1)
+    }
+  }
+
+  var ready = Deque.empty()
+  for node in nodes(graph) {
+    match Map.get(&remaining, node) {
+      case Some(0) => ready = Deque.pushBack(&ready, node)
+      case Some(_) => {}
+      case None => {}
+    }
+  }
+
+  var ordered = []
+  var guard = 0
+  let limit = order(graph) + 1
+  while !Deque.isEmpty(&ready) && guard < limit {
+    match Deque.popFront(&ready) {
+      case Some(step) => {
+        ready = step[1]
+        ordered = ordered.push(step[0])
+        for next in neighbours(graph, step[0]) {
+          let left = match Map.get(&remaining, next) {
+            case Some(found) => found - 1
+            case None => 0
+          }
+          remaining = Map.insert(&remaining, next, left)
+          if left == 0 { ready = Deque.pushBack(&ready, next) }
+        }
+      }
+      case None => guard = limit
+    }
+    guard = guard + 1
+  }
+
+  if ordered.length() == order(graph) { Some(ordered) } else { None }
+}
+
+/// Whether following edges can lead back to where it started.
+export fn hasCycle[N: Ord](graph: &Graph[N]) -> Bool {
+  match topologicalOrder(graph) {
+    case Some(_) => false
+    case None => true
+  }
+}
+
+/// The nodes that nothing points at, which is where a topological walk begins.
+export fn roots[N: Ord](graph: &Graph[N]) -> Array[N] {
+  List.filter(&nodes(graph), fn(node: N) -> Bool => inDegree(graph, node) == 0)
+}
+
+/// The nodes that point at nothing.
+export fn leaves[N: Ord](graph: &Graph[N]) -> Array[N] {
+  List.filter(&nodes(graph), fn(node: N) -> Bool => outDegree(graph, node) == 0)
+}
+
+/// The groups of nodes that can all reach each other.
+///
+/// A node reaches every node in its own group and they all reach it back, so a
+/// group of more than one is a cycle and the groups themselves, taken as
+/// units, have none. This is what turns a circular dependency graph into
+/// something that can be ordered: the cycles become single items.
+export fn stronglyConnected[N: Ord](graph: &Graph[N]) -> Array[Array[N]] {
+  let backwards = reversed(graph)
+  var placed = Set.empty()
+  var groups = []
+  for node in nodes(graph) {
+    if !Set.contains(&placed, node) {
+      let forward = Set.fromArray(&reachableFrom(graph, node))
+      let backward = Set.fromArray(&reachableFrom(&backwards, node))
+      let both = Set.toArray(&Set.intersection(&forward, &backward))
+      for member in both { placed = Set.insert(&placed, member) }
+      groups = groups.push(both)
+    }
+  }
+  groups
+}
+
+/// The groups of nodes joined to each other when direction is ignored.
+export fn components[N: Ord](graph: &Graph[N]) -> Array[Array[N]] {
+  var undirected = Graph{nodes: graph.nodes, edges: Map.empty()}
+  for from in nodes(graph) {
+    for to in neighbours(graph, from) {
+      undirected = addEdge(&undirected, from, to)
+      undirected = addEdge(&undirected, to, from)
+    }
+  }
+  var placed = Set.empty()
+  var groups = []
+  for node in nodes(graph) {
+    if !Set.contains(&placed, node) {
+      let group = reachableFrom(&undirected, node)
+      for member in group { placed = Set.insert(&placed, member) }
+      groups = groups.push(group)
+    }
+  }
+  groups
+}
+
+/// The shortest path from one node to another counted in edges, or `None` when
+/// there is no way through.
+export fn shortestPath[N: Ord](graph: &Graph[N], from: N, to: N) -> Option[Array[N]] {
+  if from == to { Some([from]) } else {
+    var cameFrom = Map.empty()
+    var seen = Set.insert(&Set.empty(), from)
+    var pending = Deque.pushBack(&Deque.empty(), from)
+    var arrived = false
+    var guard = 0
+    let limit = order(graph) * order(graph) + 8
+    while !Deque.isEmpty(&pending) && !arrived && guard < limit {
+      match Deque.popFront(&pending) {
+        case Some(step) => {
+          pending = step[1]
+          for next in neighbours(graph, step[0]) {
+            if !Set.contains(&seen, next) {
+              seen = Set.insert(&seen, next)
+              cameFrom = Map.insert(&cameFrom, next, step[0])
+              if next == to { arrived = true }
+              pending = Deque.pushBack(&pending, next)
+            }
+          }
+        }
+        case None => guard = limit
+      }
+      guard = guard + 1
+    }
+
+    if !arrived { None } else {
+      // Walked back from the far end, then turned around, because the trail
+      // records where each node was reached from and not where it led.
+      var path = [to]
+      var current = to
+      var steps = 0
+      while current != from && steps < order(graph) + 1 {
+        match Map.get(&cameFrom, current) {
+          case Some(previous) => {
+            path = path.push(previous)
+            current = previous
+          }
+          case None => steps = order(graph) + 1
+        }
+        steps = steps + 1
+      }
+      Some(List.reversed(&path))
+    }
+  }
+}

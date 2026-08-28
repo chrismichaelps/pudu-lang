@@ -1,0 +1,209 @@
+module Std.Heap
+
+import Std.List as List
+import Std.Order {Eq, Ord}
+
+/// A collection that always knows its smallest element.
+///
+/// A sorted array knows its smallest too, but paying to keep everything in
+/// order is paying for an answer nobody asked for: a scheduler wants the next
+/// task, not the whole schedule. Sorting the array again after each insertion
+/// costs far more than this, and scanning an unsorted one for the minimum
+/// costs more on every read.
+///
+/// The shape is a tree whose every node is smaller than the nodes beneath it,
+/// so the smallest element is the root and reading it is immediate. Adding is
+/// one comparison. Removing the root leaves its children loose, and they are
+/// rejoined in two passes — pairing them up, then folding the pairs together —
+/// which is what keeps the tree from degenerating into a list under repeated
+/// removal.
+export type Heap[T] = Empty | Node(T, Array[Heap[T]])
+
+/// A heap with nothing in it.
+export fn empty[T]() -> Heap[T] { Empty }
+
+/// A heap of one element.
+export fn one[T](value: T) -> Heap[T] { Node(value, []) }
+
+/// Whether the heap holds nothing.
+export fn isEmpty[T](heap: &Heap[T]) -> Bool {
+  match heap {
+    case Empty => true
+    case Node(_, _) => false
+  }
+}
+
+/// How many elements the heap holds.
+export fn size[T](heap: &Heap[T]) -> Int {
+  match heap {
+    case Empty => 0
+    case Node(_, children) => {
+      var total = 1
+      for child in children { total = total + size(&child) }
+      total
+    }
+  }
+}
+
+/// Two heaps joined into one.
+///
+/// The root of the result is whichever root is smaller; the other heap becomes
+/// its child. This is the single operation the rest is built from — adding is
+/// joining a heap of one, and removing is joining what the root left behind.
+export fn merge[T: Ord](left: &Heap[T], right: &Heap[T]) -> Heap[T] {
+  match left {
+    case Empty => *right
+    case Node(leftRoot, leftChildren) => match right {
+      case Empty => *left
+      case Node(rightRoot, rightChildren) =>
+      if leftRoot.before(&rightRoot) {
+        Node(leftRoot, [*right].concat(leftChildren))
+      } else {
+        Node(rightRoot, [*left].concat(rightChildren))
+      }
+    }
+  }
+}
+
+/// The heap with an element added.
+export fn push[T: Ord](heap: &Heap[T], value: T) -> Heap[T] {
+  merge(heap, &one(value))
+}
+
+/// The smallest element, or `None` for an empty heap.
+export fn peek[T](heap: &Heap[T]) -> Option[T] {
+  match heap {
+    case Empty => None
+    case Node(root, _) => Some(root)
+  }
+}
+
+/// The loose children of a removed root, rejoined.
+///
+/// Two passes rather than one. Folding the children together left to right
+/// would leave a tree as deep as the number of children, and the next removal
+/// would walk all of it. Pairing them first, then folding the pairs, keeps the
+/// depth in hand — this is the step that makes repeated removal affordable.
+fn mergePairs[T: Ord](heaps: &Array[Heap[T]]) -> Heap[T] {
+  let count = heaps.length()
+  if count == 0 { Empty } else {
+    if count == 1 { heaps[0] } else {
+      var paired = []
+      var index = 0
+      while index + 1 < count {
+        paired = paired.push(merge(&heaps[index], &heaps[index + 1]))
+        index = index + 2
+      }
+      if index < count { paired = paired.push(heaps[index]) }
+      var joined = paired[paired.length() - 1]
+      var back = paired.length() - 2
+      while back >= 0 {
+        joined = merge(&paired[back], &joined)
+        back = back - 1
+      }
+      joined
+    }
+  }
+}
+
+/// The smallest element and the heap without it, or `None` when empty.
+///
+/// Both together, because a caller taking the next item almost always wants
+/// the rest as well, and rejoining the children is work worth doing once.
+export fn pop[T: Ord](heap: &Heap[T]) -> Option[(T, Heap[T])] {
+  match heap {
+    case Empty => None
+    case Node(root, children) => Some((root, mergePairs(&children)))
+  }
+}
+
+/// The heap without its smallest element, unchanged when it is empty.
+export fn dropMin[T: Ord](heap: &Heap[T]) -> Heap[T] {
+  match pop(heap) {
+    case Some(step) => step[1]
+    case None => Empty
+  }
+}
+
+/// A heap holding every element of an array.
+export fn fromArray[T: Ord](values: &Array[T]) -> Heap[T] {
+  var built = Empty
+  for value in values { built = push(&built, value) }
+  built
+}
+
+/// Every element, smallest first.
+///
+/// Taking the whole heap apart in order, which is a sort — and a reasonable
+/// one, though `List.sorted` is the better answer when order is all that is
+/// wanted and the heap was built only to get it.
+export fn toSortedArray[T: Ord](heap: &Heap[T]) -> Array[T] {
+  var out = []
+  var rest = *heap
+  while !isEmpty(&rest) {
+    match pop(&rest) {
+      case Some(step) => {
+        out = out.push(step[0])
+        rest = step[1]
+      }
+      case None => rest = Empty
+    }
+  }
+  out
+}
+
+/// The smallest few elements, in order.
+///
+/// The reason to reach for a heap over a sort: finding the ten smallest of a
+/// million does not require putting the million in order.
+export fn smallest[T: Ord](heap: &Heap[T], count: Int) -> Array[T] {
+  var out = []
+  var rest = *heap
+  var taken = 0
+  while taken < count && !isEmpty(&rest) {
+    match pop(&rest) {
+      case Some(step) => {
+        out = out.push(step[0])
+        rest = step[1]
+      }
+      case None => rest = Empty
+    }
+    taken = taken + 1
+  }
+  out
+}
+
+/// Every element, in no particular order beyond the smallest being reachable.
+export fn toArray[T](heap: &Heap[T]) -> Array[T] {
+  match heap {
+    case Empty => []
+    case Node(root, children) => {
+      var out = [root]
+      for child in children { out = out.concat(toArray(&child)) }
+      out
+    }
+  }
+}
+
+/// Whether an element is present.
+export fn contains[T: Eq](heap: &Heap[T], wanted: T) -> Bool {
+  toArray(heap).contains(wanted)
+}
+
+/// Two heaps' elements in one heap.
+export fn union[T: Ord](left: &Heap[T], right: &Heap[T]) -> Heap[T] {
+  merge(left, right)
+}
+
+/// A heap of every element that satisfies a test.
+export fn filter[T: Ord](heap: &Heap[T], keep: fn(T) -> Bool) -> Heap[T] {
+  fromArray(&List.filter(&toArray(heap), keep))
+}
+
+/// A heap of every element transformed.
+///
+/// The order is rebuilt rather than carried over, because a transform may not
+/// respect the ordering the old heap was arranged by.
+export fn map[A, B: Ord](heap: &Heap[A], transform: fn(A) -> B) -> Heap[B] {
+  fromArray(&List.map(&toArray(heap), transform))
+}
