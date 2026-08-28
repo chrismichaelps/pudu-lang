@@ -97,6 +97,8 @@ library
     Pudu.Doc.Signature
     Pudu.Doc.Site
     Pudu.Repl
+    Pudu.Repl.Answer
+    Pudu.Repl.Options
     Pudu.Repl.Command
     Pudu.Repl.Input
     Pudu.Repl.Describe

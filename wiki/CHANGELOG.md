@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-27 · [[Pudu REPL]], [[Repl Answer]], [[Repl Options]] · separate what a colon command puts on screen from the loop that reads one, 565 lines to 408. Every one of those takes a session and answers with text, and none of them changes anything, which is what lets them be a module rather than part of the loop. `showState` takes the settings it reads rather than the whole loop context, because taking the context would have made this module import the loop and the loop import this, for one reference · risk LOW · depth SHALLOW→SHALLOW · issue #115
+
 - 2026-08-27 · [[Evaluator]], [[Eval Call]] · move calling, path reading, and task scopes out of the evaluator. `Eval.hs` is 364 lines, from 991 this morning. Two things arrive as a record — an argument is an expression and a function's body is a block — and calling, awaiting, and scoping keep record-free forms in the evaluator, so a caller that only wants to run something does not have to know there is one · risk MED · depth DEEP→DEEP · issue #115
 
 - 2026-08-27 · [[Evaluator]], [[Eval Loop]] · move the looping forms and the protocol a value is iterated by out of the evaluator, 828 lines to 620. A loop's body is a block and a block holds loops, so three things arrive as a record: a condition is an expression, a body is a block, and a sequence's `advance` is a closure the program supplied · risk MED · depth DEEP→DEEP · issue #115
