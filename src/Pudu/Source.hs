@@ -193,15 +193,27 @@ offsetPosition Source{sourceLineStarts, sourceScalarLength} (Offset requested)
 lineStartsOf :: Text -> Map Int Int
 lineStartsOf textValue = Map.fromDistinctAscList (reverse collected)
  where
-  (_, _, collected) =
-    Text.foldl' step (0 :: Int, initialPositionFold, [(0 :: Int, 1 :: Int)]) textValue
-  step (index, folded, acc) value =
+  collected =
+    scanCollected (Text.foldl' step (LineScan 0 initialPositionFold [(0, 1)]) textValue)
+  {-| The accumulator is a strict record rather than a tuple. `foldl'` forces
+      what it accumulates only to weak head normal form, and a tuple is already
+      in it, so the offset and the running position would each build a chain of
+      unevaluated work as long as the text — paid for at the end, in memory the
+      whole way. -}
+  step (LineScan index folded acc) value =
     let next = advancePosition folded value
         after = index + 1
-     in ( after
-        , next
-        , if foldColumn next == 1 then (after, foldLine next) : acc else acc
-        )
+     in LineScan
+          after
+          next
+          (if foldColumn next == 1 then (after, foldLine next) : acc else acc)
+
+{-| @Source.Text.LineScan — the state of one walk over a text looking for the
+    offsets where a line begins. -}
+data LineScan = LineScan !Int !PositionFold ![(Int, Int)]
+
+scanCollected :: LineScan -> [(Int, Int)]
+scanCollected (LineScan _ _ collected) = collected
 
 sourceLength :: Source -> Offset
 sourceLength = Offset . sourceScalarLength

@@ -175,5 +175,21 @@ shallow typeValue = case typeValue of
     solved <- resolveVariable variable
     case solved of
       Nothing -> pure typeValue
-      Just found -> shallow found
+      Just found@(VariableType _) -> do
+        {-| Point this variable at what the chain ends in.
+
+            Solving `a` to `b` and then `b` to `c` leaves a chain, and every
+            reader walked all of it. A variable per literal made the chains grow
+            as a body did, so following one cost the literals before it: fifteen
+            thousand asks over fifteen hundred statements became a hundred and
+            twenty-eight million steps.
+
+            Writing the end back where it was found means each link is followed
+            once however many asks end in it. It is the same answer — the end of
+            a chain does not change by being reached sooner — and the occurs
+            check below is what says there is an end to reach. -}
+        endpoint <- shallow found
+        setVariable variable endpoint
+        pure endpoint
+      Just found -> pure found
   _ -> pure typeValue

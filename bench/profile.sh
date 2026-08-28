@@ -9,6 +9,12 @@
 # Usage:
 #   bench/profile.sh check some/file.pudu
 #   bench/profile.sh run  some/file.pudu
+#   bench/profile.sh check some/file.pudu all-functions
+#
+# The default detail attributes everything a monadic function does to that
+# monad's bind, which is enough to name a cost centre and not enough to name its
+# caller. `all-functions` costs a slower build and a slower run and says who
+# asked.
 #
 # Writes pudu.prof beside the working directory and prints the heaviest entries.
 
@@ -16,6 +22,7 @@ set -euo pipefail
 
 command="${1:-}"
 target="${2:-}"
+detail="${3:-toplevel-functions}"
 if [ -z "$command" ] || [ -z "$target" ]; then
   sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
@@ -24,13 +31,19 @@ fi
 # A profiling build is a separate build: every dependency needs its profiling
 # way too, so it does not share objects with the ordinary one. The first run
 # builds all of it and takes a while.
-profiled="dist-prof"
+# The default detail keeps its own directory so the common case stays warm; a
+# different detail is a different build and gets its own.
+if [ "$detail" = "toplevel-functions" ]; then
+  profiled="dist-prof"
+else
+  profiled="dist-prof-$detail"
+fi
 
 echo "building a profiling executable into $profiled (the first run takes a while) ..."
 cabal build exe:pudu \
   --builddir="$profiled" \
   --enable-profiling \
-  --profiling-detail=toplevel-functions \
+  --profiling-detail="$detail" \
   --enable-optimization=2 >/dev/null 2>&1 || {
   echo "bench/profile.sh: the profiling build failed." >&2
   echo "Dependencies need their profiling way; 'cabal build --enable-profiling' shows why." >&2
@@ -42,7 +55,7 @@ cabal build exe:pudu \
 executable="$(cabal list-bin exe:pudu \
   --builddir="$profiled" \
   --enable-profiling \
-  --profiling-detail=toplevel-functions \
+  --profiling-detail="$detail" \
   --enable-optimization=2 2>/dev/null || true)"
 if [ ! -x "${executable:-}" ]; then
   executable="$(find "$profiled" -type f -name pudu -perm -u+x 2>/dev/null | head -1)"
