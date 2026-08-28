@@ -108,6 +108,15 @@ testClassification = do
   binding <- submit emptySession "let value = 1"
   declaration <- submit emptySession "fn run() -> Int { 1 }"
   importEntry <- submit emptySession "import Core.Text {trim}"
+  {-| A function written as a value is an expression, and the name is the only
+      thing that separates it from a declaration. Classified as a declaration,
+      one typed at the prompt was read as a declaration missing its name and
+      answered `E1001: expected identifier` — for an entry that names nothing
+      because it is not naming anything. -}
+  literal <- submit emptySession "fn(x: Int) -> Int => x"
+  blockLiteral <- submit emptySession "fn(x: Int) -> Int { x }"
+  asyncLiteral <- submit emptySession "async fn(x: Int) -> Int => x"
+  asyncDeclaration <- submit emptySession "async fn run() -> Int { 1 }"
   pure $ conjoin
     [ resultKind expression === ExpressionEntry
     , resultKind binding === StatementEntry
@@ -115,6 +124,16 @@ testClassification = do
     , resultKind importEntry === ImportEntry
     , counterexample "an expression reports its value" (valueOf expression === "3")
     , counterexample "a binding reports no value" (valueOf binding === "none")
+    , counterexample "a function written as a value is an expression"
+        (resultKind literal === ExpressionEntry)
+    , counterexample "so is one whose body is a block"
+        (resultKind blockLiteral === ExpressionEntry)
+    , counterexample "and an async one"
+        (resultKind asyncLiteral === ExpressionEntry)
+    , counterexample "while a named async function still declares"
+        (resultKind asyncDeclaration === DeclarationEntry)
+    , counterexample "a function written as a value type checks"
+        (null (resultDiagnostics literal) === True)
     ]
 
 testPersistence :: IO Property

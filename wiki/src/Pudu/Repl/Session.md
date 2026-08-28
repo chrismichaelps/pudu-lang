@@ -62,6 +62,8 @@ sessionExports :: Resolution -> [Text]
 - An expression entry also reports its static type, taken as the widest expression the checker typed inside the entry's own region of the buffer.
 - `inspectSession` compiles the session exactly as it stands, so inspecting a session cannot alter it.
 
+- **A function written as a value is an expression; the name is what makes one a declaration.** `fn double(n: Int)` declares and `fn(n: Int)` is a literal, and the same holds after `async`, which additionally opens a scope — `async with scope { .. }` is an expression however it ends. Classified as declarations, all three were read as declarations missing their names and answered `E1001: expected identifier`, for entries that name nothing because they are not naming anything.
+
 ### Linkage
 
 - **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]].

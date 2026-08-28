@@ -107,6 +107,17 @@ classifyEntry tokens = case afterLabel (dropWhile isEndOfFile tokens) of
   token : rest -> case tokenKind token of
     Keyword KwImport -> ImportEntry
     Keyword KwUnsafe -> if declaresFunction rest then DeclarationEntry else ExpressionEntry
+    {-| `fn` declares a function and also opens one written as a value, and the
+        name is the only thing that separates them: `fn double(n: Int)` declares,
+        `fn(n: Int)` is a literal. Classified as a declaration, a literal typed
+        at the prompt was read as a declaration missing its name and answered
+        `E1001: expected identifier` — for an entry that names nothing because
+        it is not naming anything.
+
+        The same holds after `async`, which additionally opens a scope: `async
+        with scope { .. }` is an expression however it ends. -}
+    Keyword KwFn | not (namesFunction rest) -> ExpressionEntry
+    Keyword KwAsync | not (asyncDeclares rest) -> ExpressionEntry
     Keyword keyword | isDeclarationKeyword keyword -> DeclarationEntry
     Keyword keyword | isStatementKeyword keyword -> StatementEntry
     _ -> ExpressionEntry
@@ -119,6 +130,23 @@ afterLabel :: [Token] -> [Token]
 afterLabel tokens = case map tokenKind (take 2 tokens) of
   [labelSigil, Identifier _] | isSymbolKind "@" labelSigil -> drop 2 tokens
   _ -> tokens
+
+{-| Whether what follows `fn` is a name, which is what makes it a declaration
+    rather than a function written as a value. -}
+namesFunction :: [Token] -> Bool
+namesFunction tokens = case map tokenKind (take 1 tokens) of
+  Identifier _ : _ -> True
+  _ -> False
+
+{-| Whether what follows `async` declares something. Only `async fn name`
+    does; `async fn(` is a literal and `async with` opens a scope, and both are
+    expressions. -}
+asyncDeclares :: [Token] -> Bool
+asyncDeclares tokens = case map tokenKind (take 2 tokens) of
+  Keyword KwFn : rest -> case rest of
+    Identifier _ : _ -> True
+    _ -> False
+  _ -> False
 
 {-| `unsafe` opens a region in expression position and modifies a declaration in
     declaration position, so the entry is classified by what follows its
