@@ -64,6 +64,8 @@ sessionExports :: Resolution -> [Text]
 
 - **A function written as a value is an expression; the name is what makes one a declaration.** `fn double(n: Int)` declares and `fn(n: Int)` is a literal, and the same holds after `async`, which additionally opens a scope — `async with scope { .. }` is an expression however it ends. Classified as declarations, all three were read as declarations missing their names and answered `E1001: expected identifier`, for entries that name nothing because they are not naming anything.
 
+- **The assembled buffer is a list of line groups joined once, so no group may carry its own trailing newline.** The loaded file's text arrives with the one every file ends with; left there it became a second, and the buffer held a blank line that counting the groups' lines did not. Every offset after it was short by one, which moved the window each question about a position searches — `:type` reported the runtime shape of whatever the misplaced window landed on, for the whole session, as soon as any file was loaded. Nothing about the text was wrong, which is why the buffer still compiled and ran correctly.
+
 ### Linkage
 
 - **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]].

@@ -363,7 +363,15 @@ renderBuffer :: Session -> EntryKind -> Text -> (Text, Int)
 renderBuffer session kind entry = (Text.unlines whole, countLines before + 1)
  where
   header = maybe defaultHeader loadedPrefix (sessionLoaded session)
-  loadedBody = maybe [] (pure . loadedRest) (sessionLoaded session)
+  {-| The loaded file's text is one element among lines that `Text.unlines`
+      will join, and it carries the newline every file ends with. Left there, it
+      becomes a second one — a blank line that the assembled buffer has and that
+      counting the elements' lines does not, so every offset after it was short
+      by one. Nothing about the *text* was wrong, which is why the buffer
+      compiled and ran correctly while `:type` reported the runtime shape of
+      whatever the misplaced window happened to land on: `"hello"` came back as
+      `string` rather than `Str` for the whole session once a file was loaded. -}
+  loadedBody = maybe [] (pure . Text.dropWhileEnd (== '\n') . loadedRest) (sessionLoaded session)
   imports = sessionImports session <> [entry | kind == ImportEntry]
   declarations = sessionDeclarations session <> [entry | kind == DeclarationEntry]
   statements = sessionStatements session <> [entry | inFunction kind]

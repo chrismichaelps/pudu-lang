@@ -2,6 +2,7 @@ module Pudu.Repl.SessionSpec (replProperties) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
 import Pudu.Diagnostic (Diagnostic, diagnosticCode, diagnosticCodeText)
 import Pudu.Diagnostic.Render
   ( RenderStyle (PlainStyle)
@@ -19,7 +20,7 @@ import Pudu.Repl.Describe
   )
 import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..))
+import Pudu.Type (Type (..), renderType)
 import Pudu.Type.Value (nominalName)
 import Pudu.Repl.Session
   ( EntryKind (..)
@@ -32,6 +33,7 @@ import Pudu.Repl.Session
   , sessionDeclaredNames
   , sessionExports
   , submitEntry
+  , loadModule
   , typeOfEntry
   )
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
@@ -48,6 +50,7 @@ replProperties =
   , ("kinds report declared arity", testKinds)
   , ("completion offers commands paths and session names", testCompletion)
   , ("completion offers what the value before the dot carries", testMemberCompletion)
+  , ("a loaded file does not shift where the entry sits", testLoadedOffsets)
   , ("loops and iteration evaluate in the interactive session", testIteration)
   , ("trait methods dispatch and inherit in the session", testTraits)
   , ("runtime errors surface and leave the session unchanged", testRuntimeErrors)
@@ -147,6 +150,47 @@ testClassification = do
     an expression that would do something does not do it. A receiver whose type
     cannot be worked out offers nothing rather than everything, because a list
     of names that do not apply costs the reader more than no list. -}
+{-| A loaded file must not move where the entry sits in the assembled buffer.
+
+    The file's text is one element among lines that `Text.unlines` joins, and it
+    carries the newline every file ends with. Left there it became a second one,
+    so the buffer had a blank line that counting the elements' lines did not,
+    and every offset after it was short by one.
+
+    Nothing about the text was wrong, so the buffer compiled and ran correctly
+    the whole time. What broke was every question asked *about a position*:
+    `:type` reported the runtime shape of whatever the misplaced window landed
+    on, so `"hello"` came back as `string` rather than `Str` for the entire
+    session once any file was loaded. -}
+testLoadedOffsets :: IO Property
+testLoadedOffsets = do
+  loaded <- loadFixture
+  textType <- typeOfEntry loaded "\"hello\""
+  arrayType <- typeOfEntry loaded "[1, 2]"
+  functionType <- typeOfEntry loaded "twice"
+  constType <- typeOfEntry loaded "LIMIT"
+  {-| The same answers a session with nothing loaded already gave. -}
+  bareText <- typeOfEntry emptySession "\"hello\""
+  pure $ conjoin
+    [ counterexample "text is text with a file loaded" (fmap headName textType === Just "Str")
+    , counterexample "an array is an array" (fmap headName arrayType === Just "Array")
+    , counterexample "a loaded function keeps its type"
+        (fmap renderType functionType === Just "fn(Int) -> Int")
+    , counterexample "a loaded constant keeps its type"
+        (fmap headName constType === Just "Int")
+    , counterexample "and a loaded file changes none of it"
+        (fmap headName textType === fmap headName bareText)
+    ]
+
+{-| A session with a small file loaded, used to check that loading one moves
+    nothing. -}
+loadFixture :: IO Session
+loadFixture = do
+  let path = "test-fixtures/repl/Tiny.pudu"
+  text <- TextIO.readFile path
+  (apply, _, _) <- loadModule path text
+  pure (apply emptySession)
+
 testMemberCompletion :: IO Property
 testMemberCompletion = do
   arrayType <- typeOfEntry emptySession "[1, 2]"

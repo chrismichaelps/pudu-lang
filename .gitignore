@@ -19,3 +19,6 @@ goal.md
 lang_proposal.md
 proposal.md
 pudu.prof
+# Editor client dependencies, fetched rather than committed
+editors/vscode/node_modules/
+editors/vscode/package-lock.json
