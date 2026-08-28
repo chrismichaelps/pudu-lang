@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-08-27 · [[Type Check Method]], [[Type Check Prelude]], [[Lsp Server]], [[Lsp Documents]] · take the last two modules under the governance limit. What a program has without declaring it — the built-in constructors and the effect signatures — is a table rather than a rule, so it depends on nothing in checking and needed no capability at all, which is the only cut here that did not. What the server knows about each open document moves out of the protocol loop: the store is a value the loop threads rather than a mutable cell, so what a reply says and what the server holds cannot disagree part-way through answering · risk LOW · depth SHALLOW→SHALLOW · issue #115
+
 - 2026-08-27 · [[Pudu REPL]], [[Repl Answer]], [[Repl Options]] · separate what a colon command puts on screen from the loop that reads one, 565 lines to 408. Every one of those takes a session and answers with text, and none of them changes anything, which is what lets them be a module rather than part of the loop. `showState` takes the settings it reads rather than the whole loop context, because taking the context would have made this module import the loop and the loop import this, for one reference · risk LOW · depth SHALLOW→SHALLOW · issue #115
 
 - 2026-08-27 · [[Evaluator]], [[Eval Call]] · move calling, path reading, and task scopes out of the evaluator. `Eval.hs` is 364 lines, from 991 this morning. Two things arrive as a record — an argument is an expression and a function's body is a block — and calling, awaiting, and scoping keep record-free forms in the evaluator, so a caller that only wants to run something does not have to know there is one · risk MED · depth DEEP→DEEP · issue #115

@@ -87,6 +87,7 @@ library
     Pudu.Format
     Pudu.Lsp.Feature
     Pudu.Lsp.Json
+    Pudu.Lsp.Documents
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
     Pudu.IntegerLiteral
@@ -117,6 +118,7 @@ library
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
     Pudu.Type.Check.Expression
+    Pudu.Type.Check.Prelude
     Pudu.Type.Check.Record
     Pudu.Type.Check.Rule
     Pudu.Type.Check.Signature
