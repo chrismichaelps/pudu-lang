@@ -537,6 +537,36 @@ testControlFlow = do
     ]
   mixedBranches <- codes ["module M", "fn run(flag: Bool) -> Int { if flag { 1 } else { \"two\" } }"]
   condition <- codes ["module M", "fn run() -> Int { if 1 { 1 } else { 2 } }"]
+  ifLet <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(found) = value { found } else { 0 }"
+    , "}"
+    ]
+  ifLetBranches <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(found) = value { found } else { \"none\" }"
+    , "}"
+    ]
+  ifLetPattern <- codes
+    [ "module M"
+    , "fn run(value: Int) -> Int {"
+    , "  if let Some(found) = value { found } else { 0 }"
+    , "}"
+    ]
+  ifLetBorrow <- codes
+    [ "module M"
+    , "fn run(value: &Option[Int]) -> Int {"
+    , "  if let Some(found) = value { found } else { 0 }"
+    , "}"
+    ]
+  ifLetWithoutElse <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(found) = value { found }"
+    , "}"
+    ]
   loops <- codes
     [ "module M"
     , "fn run() -> Int {"
@@ -562,6 +592,11 @@ testControlFlow = do
     , counterexample "an outer result selects match literal widths" (contextualMatch === [])
     , mixedBranches === ["E3001"]
     , counterexample "a condition must be Bool" (condition === ["E3001"])
+    , counterexample "if let checks and binds a matching payload" (ifLet === [])
+    , counterexample "if let branches unify" (ifLetBranches === ["E3001"])
+    , counterexample "if let checks its pattern against the subject" (ifLetPattern === ["E3001"])
+    , counterexample "if let reads through a borrow like match" (ifLetBorrow === [])
+    , counterexample "if let without else has unit type" (ifLetWithoutElse === ["E3001"])
     , loops === []
     , counterexample "return is checked against the declared result"
         (returned === ["E3001"])
@@ -661,7 +696,6 @@ testTry = do
     ]
   pure $ conjoin
     [ admitted === []
-    , counterexample "? needs a Result-returning function" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
     ]
 

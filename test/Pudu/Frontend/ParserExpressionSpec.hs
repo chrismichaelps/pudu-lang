@@ -13,6 +13,7 @@ import Pudu.Diagnostic
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Expression (parseExpression)
 import Pudu.Frontend.Parser.State (Parser, expectSymbol, peekKind, runParser)
+import Pudu.Repl.Outline (outlineExpression)
 import Pudu.Frontend.Syntax
   ( Block (..)
   , Expression (..)
@@ -39,6 +40,7 @@ parserExpressionProperties =
   , ("type arguments are told from an index", testTypeArguments)
   , ("postfix calls and members bind before binary operators", testPostfix)
   , ("unary borrow and conditional blocks preserve structure", testUnaryIf)
+  , ("if let binds one refutable pattern", testIfLet)
   , ("expression recovery emits exact diagnostics", testRecovery)
   , ("reserved keywords produce E1041 with guidance", testReservedKeywords)
   , ("index failure-propagation and await postfix forms parse", testPostfixForms)
@@ -218,6 +220,45 @@ testUnaryIf = do
   conditional <- parse "if true {} else if false {} else {}"
   pure $ conjoin [validShape unary === "(&mut(-value))", validShape conditional === "if"]
 
+testIfLet :: IO Property
+testIfLet = do
+  present <- parse "if let Some(value) = candidate {} else {}"
+  absentElse <- parse "if let Some(value) = candidate {}"
+  chained <- parse
+    "if let Some(first) = left {} else if let Some(second) = right {} else {}"
+  irrefutable <- traverse parse
+    [ "if let value = candidate {}"
+    , "if let _ = candidate {}"
+    , "if let (first, second) = pair {}"
+    , "if let {value} = record {}"
+    , "if let _ | Some(value) = candidate {}"
+    ]
+  missingPattern <- parse "if let = candidate {}"
+  missingEquals <- parse "if let Some(value) candidate {}"
+  pure $ conjoin
+    [ counterexample "the surface node retains pattern subject and else"
+        (validShape present === "if let Some(value) = candidate else")
+    , counterexample "else remains optional"
+        (validShape absentElse === "if let Some(value) = candidate")
+    , counterexample "else if let nests as a conditional chain"
+        (validShape chained === "if let Some(first) = left else")
+    , counterexample ":ast retains if let rather than inventing match"
+        (outlineExpression (firstOf present) === "if let Some(value) = candidate else ...")
+    , counterexample "syntactically irrefutable patterns are rejected"
+        (map codes irrefutable === replicate 5 ["E1056"])
+    , counterexample "E1056 points at the pattern"
+        (map diagnosticOffsets irrefutable === [[7], [7], [7], [7], [7]])
+    , counterexample "E1056 explains the unconditional form"
+        ( map helps irrefutable
+          === replicate 5
+            ["use let for an unconditional binding, or choose a pattern that can fail"]
+        )
+    , counterexample "a missing pattern preserves the owned equals"
+        (codes missingPattern === ["E1050"])
+    , counterexample "a missing equals is owned once"
+        (codes missingEquals === ["E1001"])
+    ]
+
 testRecovery :: IO Property
 testRecovery = do
   missing <- parse "a +"
@@ -387,8 +428,17 @@ testHostileAmbiguousTails = do
 testHostileConditionals :: IO Property
 testHostileConditionals = do
   let input = "if true {}" <> Text.concat (replicate 519 " else if true {}")
+      patternInput =
+        "if let Some(value) = Some(1) {}"
+          <> Text.concat (replicate 519 " else if let Some(value) = Some(1) {}")
   result <- parse input
-  pure $ conjoin [codes result === ["E1099"], diagnosticOffsets result === [8179]]
+  patternResult <- parse patternInput
+  pure $ conjoin
+    [ codes result === ["E1099"]
+    , diagnosticOffsets result === [8179]
+    , counterexample "if let chains use the same shared budget"
+        (codes patternResult === ["E1099"])
+    ]
 
 {-| Once the budget is gone the parse has given up, and every message after
     that describes the wreckage rather than the mistake.
@@ -497,6 +547,9 @@ shape (Located _ expression) = case expression of
   AwaitExpression target -> shape target <> ".await"
   BlockExpression _ -> "block"
   IfExpression{} -> "if"
+  IfLetExpression pattern' subject _ elseBranch ->
+    "if let " <> patternShape pattern' <> " = " <> shape subject
+      <> maybe Text.empty (const " else") elseBranch
   MatchExpression scrutinee arms ->
     "match(" <> shape scrutinee <> "){"
       <> Text.intercalate ";" (map armShape arms) <> "}"

@@ -17,7 +17,7 @@ aliases: [Parser Pattern]
 
 ## Purpose
 
-Parse the closed pattern vocabulary — wildcard, binding, literal, range, tuple, constructor, record, and alternation — for `match` arms and `for` binders.
+Parse the closed pattern vocabulary — wildcard, binding, literal, range, tuple, constructor, record, and alternation — for `match` arms, `for` binders, and `if let` conditions.
 
 ## Interface
 
@@ -36,12 +36,12 @@ parsePattern :: Parser (Located Pattern)
 - A record pattern may end with `..`, recorded as an explicit rest flag; a field without `:` binds the field to its own name.
 - Alternation with `|` is flat: one alternative is returned unwrapped, and two or more become a single `AlternativePattern`. That alternatives must bind identical names is a semantic rule, not a parsing one.
 - Every recursive descent is charged to [[Parser State]]'s shared budget, and a latched budget suppresses closing-delimiter expectations so hostile nesting reports one `E1099` with no unwinding cascade.
-- An unrecognized pattern start reports `E1050` once and consumes one token unless it sits on a recovery boundary (`,` `)` `]` `}` `=>` `|`), which the enclosing construct owns.
+- An unrecognized pattern start reports `E1050` once and consumes one token unless it sits on a recovery boundary (`,` `)` `]` `}` `=>` `|` `=`), which the enclosing construct owns. `=` belongs to `if let`; preserving it lets one missing pattern remain one diagnostic.
 
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Parser Name]], [[Token]], [[Syntax Tree]], [[grammar/pudu]].
-- **Consumed by:** [[Parser Expression]] for `match` arms and `for` binders.
+- **Consumed by:** [[Parser Expression]] for `match` arms, `for` binders, and `if let` conditions.
 
 ## Algorithm
 

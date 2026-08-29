@@ -47,6 +47,8 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 - Scope layering follows Haskell's shape: wired-in names from [[Semantic Prelude]] occupy the outermost frame, the implicitly imported prelude module the next, and the module's own imports and declarations the innermost. An inner layer shadows an outer one silently, so a program that imports nothing still resolves `Int64` and a module may still define its own `Drop`.
 - `Self` is bound inside a trait or implementation body only.
 - A recovered `InvalidDeclaration`, `InvalidExpression`, or `InvalidPattern` introduces no symbol and no reference, so a parse error never produces a second resolution error for the same defect.
+- An `if let` subject resolves before its pattern binds. The successful bindings occupy one fresh
+  frame around the then block only; the else expression resolves outside that frame.
 
 ### Linkage
 
@@ -66,6 +68,8 @@ Push the builtin frame, collect module declarations and imports into the module 
 - A module whose header failed to parse never reaches resolution; the phase runs only on a module the parser admitted.
 - Default arguments resolve against parameters declared before them, so `fn f(a: Int, b: Int = a)` resolves and `fn f(a: Int = b, b: Int)` reports `E2010`.
 - A pattern binding shadows an outer binding for the arm body only; alternation binds each alternative's names in the same arm frame, and whether the alternatives agree is a typing rule.
+- The same arm-local rule applies to `if let`: its pattern bindings cannot escape into else or the
+  containing block.
 - A generic parameter shadows a module type of the same name for the declaration that introduced it.
 
 ## Depth

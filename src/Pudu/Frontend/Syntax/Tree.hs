@@ -327,6 +327,8 @@ data Expression
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
+  | IfLetExpression !(Located Pattern) !(Located Expression) !(Located Block)
+      !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
   | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
   | LoopExpression !(Maybe (Located Text)) !(Located Block)

@@ -48,6 +48,9 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
 - A literal is given the kind inference settles on rather than the kind it was
   spelled, which is what makes a declared width hold for a value that did not
   come from a suffixed literal.
+- `if let` checks its subject once, looks through a borrow exactly as `match` does, binds the pattern
+  in a fresh then-branch type scope, and unifies its branch values exactly as ordinary `if` does.
+  Without else it has unit type. No separate pattern checker exists for this form.
 
 ### Linkage
 

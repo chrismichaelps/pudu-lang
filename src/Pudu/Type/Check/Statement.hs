@@ -37,6 +37,7 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Call (throughBorrow)
 import Pudu.Type.Check.Signature
   ( nonMutatingMethods
   )
@@ -190,6 +191,16 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
         _ <- unify (locatedSpan condition) boolType conditionType
         _ <- checkBlockAgainst needs declared rigid resolved thenBlock
         mapM_ (checkAgainst needs declared rigid resolved) elseBranch
+        recordExpression spanValue resolved
+        pure resolved
+      IfLetExpression pattern' subject thenBlock (Just elseBranch) -> do
+        borrowed <- statementExpression needs declared rigid subject
+        subjectType <- throughBorrow borrowed
+        inTypeScope $ do
+          bindPattern declared rigid pattern' subjectType
+          _ <- checkBlockAgainst needs declared rigid resolved thenBlock
+          pure ()
+        _ <- checkAgainst needs declared rigid resolved elseBranch
         recordExpression spanValue resolved
         pure resolved
       MatchExpression scrutinee arms -> do

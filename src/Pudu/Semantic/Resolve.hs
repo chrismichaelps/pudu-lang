@@ -331,6 +331,12 @@ walkExpression (Located spanValue expression) = case expression of
     walkExpression condition
     walkBlock thenBlock
     mapM_ walkExpression elseBranch
+  IfLetExpression pattern' subject thenBlock elseBranch -> do
+    walkExpression subject
+    inScope $ do
+      bindPattern pattern'
+      walkBlock thenBlock
+    mapM_ walkExpression elseBranch
   MatchExpression scrutinee arms -> do
     walkExpression scrutinee
     mapM_ walkArm arms

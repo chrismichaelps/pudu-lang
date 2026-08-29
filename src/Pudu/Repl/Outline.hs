@@ -93,6 +93,9 @@ outlineExpression (Located _ expression) = case expression of
   IfExpression condition _ elseBranch ->
     "if " <> outlineExpression condition
       <> maybe Text.empty (const " else ...") elseBranch
+  IfLetExpression pattern' subject _ elseBranch ->
+    "if let " <> outlinePattern pattern' <> " = " <> outlineExpression subject
+      <> maybe Text.empty (const " else ...") elseBranch
   MatchExpression scrutinee arms ->
     "match " <> outlineExpression scrutinee
       <> " { " <> Text.intercalate "; " (map outlineArm arms) <> " }"

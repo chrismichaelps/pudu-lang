@@ -275,7 +275,7 @@ unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
 braceKinds :: [Piece] -> [BraceStyle]
 braceKinds pieces
   | selectsImports = map (const Selection) pieces
-  | otherwise = go [] False (zip [0 ..] pieces)
+  | otherwise = go [] False [] (zip [0 ..] pieces)
  where
   {-| An import's selection list is neither a record nor a body: it takes a
       space before its brace and none inside. -}
@@ -283,24 +283,30 @@ braceKinds pieces
     token : _ -> tokenKind token == Keyword KwImport
     [] -> False
   tokens = [(index, token) | (index, TokenPiece token) <- zip [0 :: Int ..] pieces]
-  go _ _ [] = []
-  go stack inHead ((index, piece) : rest) = case piece of
+  go _ _ _ [] = []
+  go stack inHead heads ((index, piece) : rest) = case piece of
     TokenPiece token -> case tokenKind token of
       Symbol SymLeftBrace ->
         let style = if not inHead && recordAt index then Record else Block
-         in style : go (style : stack) False rest
+         in style : go (style : stack) False heads rest
       Symbol SymRightBrace -> case stack of
-        top : below -> top : go below inHead rest
-        [] -> Block : go [] inHead rest
-      Keyword keyword | keyword `elem` headKeywords -> Block : go stack True rest
+        top : below -> top : go below inHead heads rest
+        [] -> Block : go [] inHead heads rest
+      Keyword keyword | keyword `elem` headKeywords -> Block : go stack True heads rest
       {-| A `{` after a return arrow opens a body, never a record: `-> Int {` is
           a function's result followed by what computes it. -}
-      Symbol SymThinArrow -> Block : go stack True rest
+      Symbol SymThinArrow -> Block : go stack True heads rest
       {-| A parenthesised expression inside a head is not the head's own brace
-          position, so `for x in (Thing{v: 1})` still holds a record. -}
-      Symbol SymLeftParen -> Block : go stack False rest
-      _ -> Block : go stack inHead rest
-    CommentPiece _ -> Block : go stack inHead rest
+          position, so `for x in (Thing{v: 1})` still holds a record. The head
+          resumes at the closing parenthesis rather than ending there: a pattern
+          carries parentheses of its own, and `if let Some(found) = value { … }`
+          opens a body, not a record named `value`. -}
+      Symbol SymLeftParen -> Block : go stack False (inHead : heads) rest
+      Symbol SymRightParen -> case heads of
+        saved : below -> Block : go stack saved below rest
+        [] -> Block : go stack inHead [] rest
+      _ -> Block : go stack inHead heads rest
+    CommentPiece _ -> Block : go stack inHead heads rest
 
   recordAt index = namedBefore index && fieldsAfter index
 

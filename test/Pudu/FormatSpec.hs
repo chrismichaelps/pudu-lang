@@ -16,6 +16,7 @@ formatProperties =
   , ("formatting preserves every comment", testCommentsPreserved)
   , ("indentation follows brace depth", testIndentation)
   , ("spacing is normalised inside a line", testSpacing)
+  , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
   , ("imports sort with the standard library first", testImportOrder)
   , ("input that does not lex is returned untouched", testUnlexable)
@@ -112,6 +113,19 @@ testSpacing = do
     , "fn call() -> Int { add(1, 2) }"
     , "fn reach(xs: Array[Int]) -> Int { xs[0] }"
     ]
+
+testIfLetSpacing :: IO Property
+testIfLetSpacing = do
+  formatted <- formatOf
+    "module M\nfn pick(value: Option[Int])->Int{if let Some(found)=value{found}else if let Some(other)=Some(2){other}else{0}}\n"
+  pure
+    ( counterexample (Text.unpack formatted)
+        ( Text.lines formatted
+          === [ "module M"
+              , "fn pick(value: Option[Int]) -> Int { if let Some(found) = value { found } else if let Some(other) = Some(2) { other } else { 0 } }"
+              ]
+        )
+    )
 
 {-| `User{id: 1}` and `if ready {` look identical at the opening brace, so the
     formatter decides from the shape that follows: a field list means a record
@@ -273,6 +287,12 @@ samples =
       , "    case Some(_) => 0"
       , "    case None => 0 - 1"
       , "  }"
+      , "}"
+      ]
+  , Text.unlines
+      [ "module PatternCondition"
+      , "fn valueOf(value: Option[Int]) -> Int {"
+      , "  if let Some(found) = value { found } else if let Some(other) = Some(2) { other } else { 0 }"
       , "}"
       ]
   , Text.unlines

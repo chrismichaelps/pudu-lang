@@ -272,7 +272,7 @@ invalidPattern token = do
   pure (Located (tokenSpan token) InvalidPattern)
 
 isRecoveryBoundary :: TokenKind -> Bool
-isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}", "=>", "|"]
+isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}", "=>", "|", "="]
 
 mergedOrLeft :: Span -> Span -> Span
 mergedOrLeft left right = maybe left id (mergeSpans left right)
