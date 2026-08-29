@@ -56,6 +56,42 @@ export fn isDisjointFrom[T](left: &Set[T], right: &Set[T]) -> Bool {
   left.intersect(*right).isEmpty()
 }
 
+/// Whether two sets hold the same members.
+/// Sizes are compared first: two sets of different size cannot be equal, and
+/// asking costs nothing next to walking them.
+export fn equals[T](left: &Set[T], right: &Set[T]) -> Bool {
+  left.size() == right.size() && left.difference(*right).isEmpty()
+}
+
+/// Whether the two sets share any member. The complement of `isDisjointFrom`,
+/// named because a reader asking "do these overlap" should not have to negate.
+export fn intersects[T](left: &Set[T], right: &Set[T]) -> Bool {
+  !isDisjointFrom(left, right)
+}
+
+/// Every given member added.
+/// One merge of two ordered runs rather than one insertion per member, which is
+/// the difference between walking the set once and walking it for each item.
+export fn insertAll[T](value: &Set[T], items: &Array[T]) -> Set[T] {
+  value.union(setOf(*items))
+}
+
+/// Every given member taken away, in one pass for the same reason.
+export fn removeAll[T](value: &Set[T], items: &Array[T]) -> Set[T] {
+  value.difference(setOf(*items))
+}
+
+/// Only the members the predicate rejects.
+/// The complement of `filter`, so a caller states the condition the way they
+/// think of it rather than negating a predicate at the call site.
+export fn removeIf[T](value: &Set[T], reject: fn(T) -> Bool) -> Set[T] {
+  var kept = []
+  for member in value {
+    if !reject(member) { kept = kept.push(member) }
+  }
+  setOf(kept)
+}
+
 /// Only the members the predicate accepts.
 export fn filter[T](value: &Set[T], keep: fn(T) -> Bool) -> Set[T] {
   setOf(value.toArray().filter(keep))
@@ -73,13 +109,23 @@ export fn fold[T, A](value: &Set[T], combine: fn(A, T) -> A, start: A) -> A {
 }
 
 /// Whether every member satisfies the predicate. True for an empty set.
+/// Stops at the first member that fails. Counting the members that pass answers
+/// the same question, but it runs the predicate on every one of them and builds
+/// an array to hold the answer — work that cannot change the result.
 export fn all[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
-  value.toArray().filter(holds).length() == value.size()
+  for member in value {
+    if !holds(member) { return false }
+  }
+  true
 }
 
 /// Whether any member satisfies the predicate. False for an empty set.
+/// Stops at the first member that passes, for the same reason.
 export fn any[T](value: &Set[T], holds: fn(T) -> Bool) -> Bool {
-  value.toArray().filter(holds).length() > 0
+  for member in value {
+    if holds(member) { return true }
+  }
+  false
 }
 
 /// Every set combined.
@@ -104,7 +150,7 @@ export fn intersectAll[T](sets: &Array[Set[T]]) -> Set[T] {
 export fn partition[T](value: &Set[T], keep: fn(T) -> Bool) -> (Set[T], Set[T]) {
   var kept = []
   var rejected = []
-  for member in value.toArray() {
+  for member in value {
     if keep(member) { kept = kept.push(member) } else { rejected = rejected.push(member) }
   }
   (setOf(kept), setOf(rejected))
@@ -152,7 +198,7 @@ export fn at[T](value: &Set[T], position: Int) -> Option[T] {
 export fn split[T](value: &Set[T], pivot: T, before: fn(T, T) -> Bool) -> (Set[T], Set[T]) {
   var below = []
   var above = []
-  for member in value.toArray() {
+  for member in value {
     if member == pivot {} else {
       if before(member, pivot) { below = below.push(member) } else { above = above.push(member) }
     }
@@ -171,7 +217,7 @@ export fn cartesian[A, B](left: &Set[A], right: &Set[B]) -> Set[(A, B)] {
 
 /// The first member the predicate accepts, or `None`.
 export fn find[T](value: &Set[T], holds: fn(T) -> Bool) -> Option[T] {
-  for member in value.toArray() {
+  for member in value {
     if holds(member) { return Some(member) }
   }
   None
@@ -180,7 +226,7 @@ export fn find[T](value: &Set[T], holds: fn(T) -> Bool) -> Option[T] {
 /// How many members the predicate accepts.
 export fn count[T](value: &Set[T], holds: fn(T) -> Bool) -> Int {
   var total = 0
-  for member in value.toArray() {
+  for member in value {
     if holds(member) { total = total + 1 }
   }
   total

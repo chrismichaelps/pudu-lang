@@ -545,6 +545,16 @@ testKeyed = do
   shared <- evaluate "setOf([1, 2, 3]).intersect(setOf([2, 3, 4]))"
   removed <- evaluate "setOf([1, 2, 3]).difference(setOf([2]))"
   unorderable <- codesOf "setOf([fn(x) => x])"
+  setLoop <- evaluateStatements
+    [ "var total = 0"
+    , "for member in setOf([1, 2, 3, 4]) { total = total + member }"
+    , "total"
+    ]
+  mapLoop <- evaluateStatements
+    [ "var total = 0"
+    , "for pair in mapOf([(\"a\", 1), (\"b\", 2)]) { total = total + pair[1] }"
+    , "total"
+    ]
   pure $ conjoin
     [ counterexample "entries are kept in key order" (ordered === "{\"a\": 1, \"b\": 2}")
     , counterexample "a later pair replaces an earlier one" (replaced === "{\"a\": 2}")
@@ -558,6 +568,8 @@ testKeyed = do
     , counterexample "intersection keeps what both have" (shared === "#{2, 3}")
     , counterexample "difference removes what the other has" (removed === "#{1, 3}")
     , counterexample "a value with no order cannot be a member" (unorderable === ["E7008"])
+    , counterexample "a set is walked by for, as the grammar says" (setLoop === "10")
+    , counterexample "a map is walked as key and value pairs" (mapLoop === "3")
     ]
 
 {-| An effect answers with a `Result` rather than failing the program: the
