@@ -27,8 +27,9 @@ export fn main() -> Int {
   if NonEmpty.toArray(&NonEmpty.reversed(&several)) != [4, 3, 2, 1] {
     failures = failures + 1
   }
-  let doubled = NonEmpty.map(&several, fn(n: Int) -> Int => n * 2)
-  if NonEmpty.toArray(&doubled) != [2, 4, 6, 8] { failures = failures + 1 }
+  let mapped = NonEmpty.map(&several, fn(n: Int) -> Int => n * 2)
+  if NonEmpty.toArray(&mapped)
+    != [2, 4, 6, 8] { failures = failures + 1 }
   if NonEmpty.toArray(&NonEmpty.append(&single, 9)) != [7, 9] {
     failures = failures + 1
   }
@@ -128,7 +129,8 @@ export fn main() -> Int {
     failures = failures + 1
   }
   let raised = Deque.map(&queue, fn(n: Int) -> Int => n + 1)
-  if Deque.toArray(&raised) != [2, 3, 4, 5] { failures = failures + 1 }
+  if Deque.toArray(&raised)
+    != [2, 3, 4, 5] { failures = failures + 1 }
   let evens = Deque.filter(&queue, fn(n: Int) -> Bool => n % 2 == 0)
   if Deque.toArray(&evens) != [2, 4] { failures = failures + 1 }
   if Deque.fold(&queue, 0, fn(a: Int, b: Int) -> Int => a + b) != 10 {

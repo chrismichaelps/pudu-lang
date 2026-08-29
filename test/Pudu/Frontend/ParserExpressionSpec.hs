@@ -26,7 +26,7 @@ import Pudu.Frontend.Syntax
   , Pattern (..)
   , moduleNameText
   )
-import Pudu.Frontend.Token (Token (tokenSpan), TokenKind (..))
+import Pudu.Frontend.Token (SymbolKind (..), Token (tokenSpan), TokenKind (..))
 import Pudu.Source (SourceName (SourceName), mergeSpans, newSource, spanStart, unOffset)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -43,12 +43,97 @@ parserExpressionProperties =
   , ("reserved keywords produce E1041 with guidance", testReservedKeywords)
   , ("index failure-propagation and await postfix forms parse", testPostfixForms)
   , ("match while loop and for parse as expressions", testControlExpressions)
+  , ("control owners survive mixed-chain recovery", testControlRecovery)
   , ("tuples and record constructions parse", testAggregates)
   , ("hostile postfix and binary chains share the nesting budget", testHostileChains)
+  , ("hostile ambiguous tails share the nesting budget", testHostileAmbiguousTails)
   , ("hostile else-if chains share the nesting budget", testHostileConditionals)
   , ("an exhausted budget reports once and stops", testExhaustedBudgetIsQuiet)
   , ("every precedence band binds as the grammar states", testPrecedenceBands)
+  , ("an operator that cannot begin an expression continues the line above", testLineLeadingOperators)
   ]
+
+{-| An operator written at the start of a line joins the expression above it,
+    except where reading it that way would change a program that already had a
+    meaning.
+
+    Every operator without a prefix form continues: a line starting with one
+    could not have begun a statement, so the only reading it ever had was a
+    parse error. `-`, `&` and `*` do have a prefix form, so a line starting
+    with one still begins a statement — `total\n-1` is a negation on its own
+    line, as it always was, and the subtraction is written by ending the line
+    above with the operator instead. -}
+testLineLeadingOperators :: IO Property
+testLineLeadingOperators = do
+  let continuingOperators =
+        [ "=", "||", "|", "&&", "==", "!=", "<", "<=", ">", ">="
+        , "..", "..=", "^", "<<", ">>", "+", "&+", "&-", "+|", "-|"
+        , "/", "%", "&*", "*|"
+        ]
+  continued <- traverse (\operator -> parse ("a\n" <> operator <> " b")) continuingOperators
+  let expected = map (\operator -> "(a" <> operator <> "b)") continuingOperators
+  -- A trailing operator has always continued, and still does.
+  trailing <- parse "a +\nb"
+  -- These three keep their prefix reading, so the expression ends at `a` and
+  -- the operator is left in the stream for whatever parses next. Reading one
+  -- expression here leaves those tokens over, which is the observable form of
+  -- "this did not join".
+  prefixed <- traverse parse ["a\n- b", "a\n& b", "a\n* b"]
+  mixed <- traverse parse
+    [ "a\n+ b\n- c", "a\n== b\n& c", "a\n/ b\n* c", "a == b\n+ c\n- d" ]
+  delimited <- traverse parse
+    [ "(a\n+ b\n- c)"
+    , "f(a\n+ b\n- c)"
+    , "values[a\n+ b\n- c]"
+    , "[a\n+ b\n- c]"
+    , "(a\n+ b\n- nested(c), d)"
+    , "(a\n+ b\n- c\n& d\n* e)"
+    ]
+  -- Indentation is not what decides it; a continuation may sit anywhere.
+  unindented <- parse "a\n+ b"
+  deeplyIndented <- parse "a\n        + b"
+  pure $ conjoin
+    [ counterexample "operators with no prefix form join the line above"
+        (map validShape continued === expected)
+    , counterexample "a trailing operator still continues"
+        (validShape trailing === "(a+b)")
+    , counterexample "an operator that can begin an expression is left for the next statement"
+        (map (shape . firstOf) prefixed === ["a", "a", "a"])
+    , counterexample "and the operator itself is still waiting in the stream"
+        (map remainingOf prefixed
+          === [Symbol SymMinus, Symbol SymAmpersand, Symbol SymStar])
+    , counterexample "a prefix spelling after a leading-operator chain is refused once"
+        (map codes mixed === replicate 4 ["E1055"])
+    , counterexample "the ambiguous operator remains available to the statement parser"
+        (map remainingOf mixed
+          === [Symbol SymMinus, Symbol SymAmpersand, Symbol SymStar, Symbol SymMinus])
+    , counterexample "delimited ambiguity produces exactly one diagnostic"
+        (map codes delimited === replicate 6 ["E1055"])
+    , counterexample "group, call, index, array, and tuple owners still receive their delimiter"
+        (map remainingOf delimited === replicate 6 EndOfFile)
+    , counterexample "the diagnostic points at the ambiguous operator"
+        (map diagnosticOffsets mixed === [[6], [7], [6], [11]])
+    , counterexample "the diagnostic explains the two explicit spellings"
+        ( map helps mixed
+          === [ ["end the preceding line with - to continue, or wrap this prefix expression in parentheses to start a new statement"]
+              , ["end the preceding line with & to continue, or wrap this prefix expression in parentheses to start a new statement"]
+              , ["end the preceding line with * to continue, or wrap this prefix expression in parentheses to start a new statement"]
+              , ["end the preceding line with - to continue, or wrap this prefix expression in parentheses to start a new statement"]
+              ]
+        )
+    , counterexample "delimited help does not promise an impossible statement"
+        ( map helps delimited
+          === [ ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              , ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              , ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              , ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              , ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              , ["end the preceding line with - to continue, or rewrite the enclosing expression so this prefix expression is not adjacent to the chain"]
+              ]
+        )
+    , counterexample "indentation does not decide it"
+        (validShape unindented === validShape deeplyIndented)
+    ]
 
 testPrecedence :: IO Property
 testPrecedence = do
@@ -218,6 +303,41 @@ testControlExpressions = do
         (codes strayLabel === ["E1053"])
     ]
 
+{-| Recovery consumes the ambiguous prefix expression, not raw punctuation.
+    The grammar therefore leaves each control form's actual owner token even
+    though those owners are `{`, `=>`, `case`, and `}` rather than delimiters
+    used by calls and aggregates. -}
+testControlRecovery :: IO Property
+testControlRecovery = do
+  condition <- parse "if a\n+ b\n- c {} else {}"
+  whileCondition <- parse "while a\n+ b\n- c {}"
+  forIterable <- parse "for x in a\n+ b\n- c {}"
+  matchScrutinee <- parse "match a\n+ b\n- c { case _ => 0 }"
+  matchGuard <- parse
+    "match value {\ncase x if a\n+ b\n- c => 1\ncase _ => 0\n}"
+  matchBody <- parse
+    "match value {\ncase 0 => a\n+ b\n- c\ncase _ => 0\n}"
+  repeated <- parse "if a\n+ b\n- c\n& d\n* e {}"
+  let recovered =
+        [ condition, whileCondition, forIterable, matchScrutinee, matchGuard, matchBody, repeated ]
+  pure $ conjoin
+    [ counterexample "every control ambiguity is diagnosed exactly once"
+        (map codes recovered === replicate 7 ["E1055"])
+    , counterexample "every control owner completes its enclosing expression"
+        (map remainingOf recovered === replicate 7 EndOfFile)
+    , counterexample "if, while, for, and match structure survives recovery"
+        ( map (shape . firstOf) recovered
+          === [ "if"
+              , "while((a+b))"
+              , "for x in (a+b)"
+              , "match((a+b)){_=>0}"
+              , "match(value){x if (a+b)=>1;_=>0}"
+              , "match(value){0=>(a+b);_=>0}"
+              , "if"
+              ]
+        )
+    ]
+
 labelShape :: Maybe (Located Text) -> Text
 labelShape = foldMap (\label -> "@" <> locatedValue label <> " ")
 
@@ -252,6 +372,17 @@ testHostileChains = do
   arguments <- parse ("f(" <> Text.intercalate "," (replicate 520 "a") <> ")")
   pure $ conjoin [codes members === ["E1099"], codes binaries === ["E1099"],
     codes arguments === ["E1099"], diagnosticOffsets arguments === [1022]]
+
+testHostileAmbiguousTails :: IO Property
+testHostileAmbiguousTails = do
+  let tailLines = Text.concat (replicate 520 "\n- c")
+  delimited <- parse ("(a\n+ b" <> tailLines <> ")")
+  pure $ conjoin
+    [ counterexample "the ambiguity is owned once before budget exhaustion"
+        (codes delimited === ["E1055", "E1099"])
+    , counterexample "budget exhaustion suppresses missing-delimiter cascades"
+        (length (codes delimited) === 2)
+    ]
 
 testHostileConditionals :: IO Property
 testHostileConditionals = do
@@ -325,6 +456,12 @@ emptyBlock = do
   closing <- expectSymbol "}" "to close the block"
   let spanValue = maybe (tokenSpan opening) id (mergeSpans (tokenSpan opening) (tokenSpan closing))
   pure (Located spanValue (Block [] Nothing))
+
+firstOf :: (Located Expression, TokenKind, [Diagnostic]) -> Located Expression
+firstOf (expression, _, _) = expression
+
+remainingOf :: (Located Expression, TokenKind, [Diagnostic]) -> TokenKind
+remainingOf (_, remainingKind, _) = remainingKind
 
 validShape :: (Located Expression, TokenKind, [Diagnostic]) -> Text
 validShape (expression, remainingKind, diagnostics)

@@ -27,12 +27,16 @@ import Pudu.Frontend.Parser.Expression.Control
   )
 import Pudu.Frontend.Parser.Expression.Postfix (parsePostfix)
 import Pudu.Frontend.Parser.Expression.Recovery
-  ( invalidAtCurrent
+  ( AmbiguityRecovery (..)
+  , continuesAcrossLineBreak
+  , invalidAtCurrent
   , invalidPrefix
+  , isPrefixCapableBinary
   , mergedOrLeft
   , parseCapabilityAnnotation
   , reservedKeywordGuidance
   , reservedPrefix
+  , reportAmbiguousLineBreak
   , unaryOperators
   )
 import Pudu.Frontend.Parser.State
@@ -48,7 +52,6 @@ import Pudu.Frontend.Parser.State
   , expectKeyword
   , peekKind
   , peekStartsLine
-  , lookaheadKind
   , peekToken
   , withRecords
   , withoutRecords
@@ -86,30 +89,67 @@ import Pudu.Source (Span)
     one direction has to be a capability rather than an import. This is that
     direction, and it is the same trick the block parser already uses. -}
 controlParsers :: ExpressionParsers
-controlParsers = ExpressionParsers parseExpression parseScrutinee parseExpressionAt
+controlParsers =
+  ExpressionParsers parseDelimitedExpression parseDelimitedScrutinee parseDelimitedExpressionAt
 
 parseExpression :: BlockParser -> Parser (Located Expression)
 parseExpression blockParser = parseExpressionAt blockParser 0
+
+parseDelimitedExpression :: BlockParser -> Parser (Located Expression)
+parseDelimitedExpression blockParser = parseDelimitedExpressionAt blockParser 0
 
 {-| Parse the expression that precedes a block: an `if` or `while` condition, a
     `match` scrutinee, or a `for` iterable. A record construction is not
     admitted here, because `if READY { ... }` would otherwise be ambiguous with
     the block that follows. Parentheses reinstate it. -}
 parseScrutinee :: BlockParser -> Parser (Located Expression)
-parseScrutinee blockParser = withoutRecords (parseExpressionAt blockParser 0)
+parseScrutinee = parseDelimitedScrutinee
+
+parseDelimitedScrutinee :: BlockParser -> Parser (Located Expression)
+parseDelimitedScrutinee blockParser =
+  withoutRecords (parseDelimitedExpressionAt blockParser 0)
 
 {-| Records are admitted again inside any bracketed context, so an argument, an
     index, or a parenthesized expression may construct one. -}
 parseExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
-parseExpressionAt blockParser minimumPrecedence = do
-  bounded <- withRecursionBudget $ do
-    prefix <- parsePrefix blockParser
-    postfixed <- parsePostfix controlParsers blockParser prefix
-    parseBinaryTail blockParser minimumPrecedence postfixed
-  maybe invalidAtCurrent pure bounded
+parseExpressionAt = parseExpressionAtWith PreserveStatement
 
-parsePrefix :: BlockParser -> Parser (Located Expression)
-parsePrefix blockParser = do
+parseDelimitedExpressionAt :: BlockParser -> Int -> Parser (Located Expression)
+parseDelimitedExpressionAt = parseExpressionAtWith RecoverOwner
+
+parseExpressionAtWith
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Int
+  -> Parser (Located Expression)
+parseExpressionAtWith recovery blockParser minimumPrecedence =
+  fst <$> parseExpressionTracked recovery blockParser minimumPrecedence True
+
+{-| Parse an expression beside whether its binary chain crossed a line through
+    an operator written at the start of that line.
+
+    Only the public entry for one expression may report the mixed-chain
+    ambiguity. Recursive right operands return the fact to that owner instead,
+    so a precedence descent cannot emit the same diagnostic more than once. -}
+parseExpressionTracked
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Int
+  -> Bool
+  -> Parser (Located Expression, Bool)
+parseExpressionTracked recovery blockParser minimumPrecedence mayReportAmbiguity = do
+  bounded <- withRecursionBudget $ do
+    prefix <- parsePrefix recovery blockParser
+    postfixed <- parsePostfix controlParsers blockParser prefix
+    parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity False postfixed
+  case bounded of
+    Just result -> pure result
+    Nothing -> do
+      invalid <- invalidAtCurrent
+      pure (invalid, False)
+
+parsePrefix :: AmbiguityRecovery -> BlockParser -> Parser (Located Expression)
+parsePrefix recovery blockParser = do
   token <- peekToken
   following <- lookaheadKind 1
   let nextIsFunction = following == Keyword KwFn
@@ -127,9 +167,9 @@ parsePrefix blockParser = do
     Keyword KwMatch -> parseMatch controlParsers blockParser
     Keyword KwWhile -> parseWhile controlParsers blockParser Nothing
     Keyword KwUnsafe -> parseUnsafeBlock blockParser
-    Keyword KwFn -> parseLambda blockParser
+    Keyword KwFn -> parseLambda recovery blockParser
     Keyword KwAsync
-      | nextIsFunction -> parseLambda blockParser
+      | nextIsFunction -> parseLambda recovery blockParser
       | otherwise -> parseScope blockParser
     Keyword KwLoop -> parseLoop controlParsers blockParser Nothing
     Keyword KwFor -> parseFor controlParsers blockParser Nothing
@@ -139,7 +179,7 @@ parsePrefix blockParser = do
       | symbol == SymLeftParen -> withRecords (parseGrouped controlParsers blockParser)
       | symbol == SymLeftBrace -> blockExpression controlParsers blockParser
       | symbol == SymLeftBracket -> parseArrayLiteral controlParsers blockParser
-      | symbol `elem` unaryOperators -> parseUnary blockParser token symbol
+      | symbol `elem` unaryOperators -> parseUnary recovery blockParser token symbol
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
     _ -> invalidPrefix token
@@ -182,7 +222,7 @@ templatePiece blockParser wholeSpan part = case part of
     itself the way any malformed expression does. -}
 parseHole :: BlockParser -> Span -> [Token] -> Parser (Located Expression)
 parseHole blockParser holeSpan tokens =
-  withTokens tokens (parseExpression blockParser)
+  withTokens tokens (parseDelimitedExpression blockParser)
     >>= \parsed -> pure (Located holeSpan (locatedValue parsed))
 
 {-| The name a hole's value is rendered through.
@@ -219,8 +259,8 @@ concatenate wholeSpan pieces = case pieces of
     function's documented interface, and a literal has no name to document; a
     caller looking at a value of type `fn(Int) -> Int` has nowhere to learn that
     one of its arguments was optional. -}
-parseLambda :: BlockParser -> Parser (Located Expression)
-parseLambda blockParser = do
+parseLambda :: AmbiguityRecovery -> BlockParser -> Parser (Located Expression)
+parseLambda recovery blockParser = do
   start <- peekToken
   asyncKeyword <- matchKeyword KwAsync
   _ <- expectKeyword KwFn "to start a function literal"
@@ -228,7 +268,7 @@ parseLambda blockParser = do
   parameters <- parseLambdaParameters []
   _ <- expectSymbol ")" "after the parameter list"
   returnType <- parseLambdaReturn
-  body <- parseLambdaBody blockParser
+  body <- parseLambdaBody recovery blockParser
   let endSpan = maybe (tokenSpan start) locatedSpan body
   pure
     ( Located (mergedOrLeft (tokenSpan start) endSpan)
@@ -287,12 +327,15 @@ parseLambdaReturn = do
 {-| `=>` answers with one expression; `{` opens a block. Anything else is an
     incomplete literal, and saying which two forms exist is more useful than
     naming the token that was found. -}
-parseLambdaBody :: BlockParser -> Parser (Maybe (Located FunctionBody))
-parseLambdaBody blockParser = do
+parseLambdaBody
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Parser (Maybe (Located FunctionBody))
+parseLambdaBody recovery blockParser = do
   arrow <- matchSymbol "=>"
   case arrow of
     Just _ -> do
-      value <- parseExpression blockParser
+      value <- parseExpressionAtWith recovery blockParser 0
       pure (Just (Located (locatedSpan value) (ExpressionBody value)))
     Nothing -> do
       opening <- isSymbol "{" <$> peekKind
@@ -339,8 +382,13 @@ parseUnsafeBlock blockParser = do
         (UnsafeExpression capabilities body)
     )
 
-parseUnary :: BlockParser -> Token -> SymbolKind -> Parser (Located Expression)
-parseUnary blockParser operatorToken operator = do
+parseUnary
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Token
+  -> SymbolKind
+  -> Parser (Located Expression)
+parseUnary recovery blockParser operatorToken operator = do
   _ <- advanceToken
   rendered <- if operator == SymAmpersand
     then maybe "&" (const "&mut") <$> matchKeyword KwMut
@@ -349,7 +397,7 @@ parseUnary blockParser operatorToken operator = do
       parsed above the highest binary precedence. At the multiplying level it
       was inside it, and `*a * *b` parsed as `*(a * (*b))` — a dereference of a
       product rather than a product of two dereferences. -}
-  operand <- parseExpressionAt blockParser (highestBinaryPrecedence + 1)
+  operand <- parseExpressionAtWith recovery blockParser (highestBinaryPrecedence + 1)
   pure (Located (mergedOrLeft (tokenSpan operatorToken) (locatedSpan operand))
     (UnaryExpression rendered operand))
 
@@ -361,23 +409,52 @@ highestBinaryPrecedence :: Int
 highestBinaryPrecedence = 8
 
 
-parseBinaryTail :: BlockParser -> Int -> Located Expression -> Parser (Located Expression)
-parseBinaryTail blockParser minimumPrecedence left = do
+parseBinaryTail
+  :: AmbiguityRecovery
+  -> BlockParser
+  -> Int
+  -> Bool
+  -> Bool
+  -> Located Expression
+  -> Parser (Located Expression, Bool)
+parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity crossedLeading left = do
   kind <- peekKind
   newLine <- peekStartsLine
   case binaryInfo kind of
     Just (operator, precedence, rightAssociative)
       | precedence >= minimumPrecedence
-      , not newLine -> do
+      , not newLine || continuesAcrossLineBreak kind -> do
       bounded <- withRecursionBudget $ do
         _ <- advanceToken
         let rightMinimum = if rightAssociative then precedence else precedence + 1
-        right <- parseExpressionAt blockParser rightMinimum
+        (right, rightCrossedLeading) <-
+          parseExpressionTracked recovery blockParser rightMinimum False
         let combined = Located (mergedOrLeft (locatedSpan left) (locatedSpan right))
               (BinaryExpression left operator right)
-        parseBinaryTail blockParser minimumPrecedence combined
-      pure (maybe left id bounded)
-    _ -> pure left
+            crossed = crossedLeading || newLine || rightCrossedLeading
+        parseBinaryTail recovery blockParser minimumPrecedence mayReportAmbiguity crossed combined
+      pure (maybe (left, crossedLeading) id bounded)
+    Just (_, precedence, _)
+      | precedence >= minimumPrecedence
+      , newLine
+      , crossedLeading -> do
+      if mayReportAmbiguity then reportAmbiguousLineBreak recovery else pure ()
+      case recovery of
+        PreserveStatement -> pure ()
+        RecoverOwner -> recoverOwnerTail blockParser
+      pure (left, crossedLeading)
+    _ -> pure (left, crossedLeading)
+
+recoverOwnerTail :: BlockParser -> Parser ()
+recoverOwnerTail blockParser = do
+  _ <- parseExpressionTracked RecoverOwner blockParser 0 False
+  kind <- peekKind
+  newLine <- peekStartsLine
+  if newLine && isPrefixCapableBinary kind
+    then do
+      bounded <- withRecursionBudget (recoverOwnerTail blockParser)
+      maybe (pure ()) pure bounded
+    else pure ()
 
 binaryInfo :: TokenKind -> Maybe (Text, Int, Bool)
 binaryInfo kind = case kind of
