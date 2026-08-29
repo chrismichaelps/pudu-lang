@@ -94,10 +94,31 @@ testHygiene = do
     , "shadowing!(hidden)"
     , "hidden"
     ]
+  patternBinding <- evaluateStatements
+    [ "macro select(value: expr) = if let Some(hidden) = value { hidden * 10 } else { 0 }"
+    , "let hidden = 1"
+    , "select!(Some(hidden))"
+    ]
+  patternElse <- evaluateStatements
+    [ "macro select(value: expr) = if let Some(hidden) = value { hidden * 10 } else { hidden }"
+    , "let hidden = 3"
+    , "select!(None)"
+    ]
+  patternAfter <- evaluateStatements
+    [ "macro select(value: expr) = { if let Some(hidden) = value { hidden } else { 0 }\n hidden }"
+    , "let hidden = 4"
+    , "select!(None)"
+    ]
   pure $ conjoin
     [ counterexample "the argument is not captured by the body's binding"
         (captured === "10")
     , counterexample "the body's binding does not leak to the caller" (leaked === "1")
+    , counterexample "an if let binding is renamed with its successful uses"
+        (patternBinding === "10")
+    , counterexample "an if let binding does not rename a free else name"
+        (patternElse === "3")
+    , counterexample "an if let binding does not rename a later free name"
+        (patternAfter === "4")
     ]
 
 testFailures :: IO Property

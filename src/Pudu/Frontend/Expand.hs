@@ -22,6 +22,7 @@ import Pudu.Frontend.Syntax.Tree
   , Declaration (..)
   , Expression (..)
   , FieldInit (..)
+  , FieldPattern (..)
   , Function (..)
   , FunctionBody (..)
   , Impl (..)
@@ -31,6 +32,7 @@ import Pudu.Frontend.Syntax.Tree
   , MatchArm (..)
   , Module (..)
   , Parameter (..)
+  , Pattern (..)
   , Statement (..)
   , Trait (..)
   )
@@ -209,6 +211,13 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <*> expandBlock macros depth thenBlock
           <*> mapM (expandExpression macros depth) elseBranch
       )
+  IfLetExpression pattern' subject thenBlock elseBranch ->
+    rebuild
+      ( IfLetExpression pattern'
+          <$> expandExpression macros depth subject
+          <*> expandBlock macros depth thenBlock
+          <*> mapM (expandExpression macros depth) elseBranch
+      )
   MatchExpression scrutinee arms ->
     rebuild
       ( MatchExpression
@@ -286,9 +295,9 @@ expandCall macros depth callSpan name arguments
                         [ (locatedValue (macroParamName (locatedValue parameter)), argument)
                         | (parameter, argument) <- zip parameters arguments
                         ]
-                renames <- hygienicRenames (macroBody macro)
+                identifier <- fresh
                 let substituted =
-                      substituteExpression bindings renames callSpan (macroBody macro)
+                      substituteExpression bindings identifier Map.empty callSpan (macroBody macro)
                 expandExpression macros (depth + 1) substituted
 
 countText :: Int -> Text
@@ -330,57 +339,32 @@ kindHelp kind = case kind of
   IdentifierKind -> "pass a bare name"
   BlockKind -> "pass a block in braces"
 
-{-| Rename every binding the macro body introduces.
-
-    This is the hygiene rule [[grammar/pudu]] states, enforced rather than
-    trusted: a `let` inside a macro body becomes a fresh name at each expansion,
-    so it can neither capture a name at the call site nor be captured by one. -}
-hygienicRenames :: Located Expression -> Expand (Map Text Text)
-hygienicRenames body = do
-  identifier <- fresh
-  pure (Map.fromList [(name, hygienicName name identifier) | name <- introducedNames body])
-
 hygienicName :: Text -> Int -> Text
 hygienicName name identifier = name <> "%" <> Text.pack (show identifier)
 
-{-| Names the body binds, which are the ones expansion must rename. A name the
-    body merely mentions is left alone; resolving those at the definition site
-    needs expansion and resolution to share a representation. -}
-introducedNames :: Located Expression -> [Text]
-introducedNames (Located _ expression) = case expression of
-  BlockExpression block -> blockNames block
-  UnsafeExpression _ block -> blockNames block
-  ScopeExpression block -> blockNames block
-  IfExpression _ thenBlock elseBranch ->
-    blockNames thenBlock <> foldMap introducedNames elseBranch
-  WhileExpression _ _ body -> blockNames body
-  LoopExpression _ body -> blockNames body
-  ForExpression _ _ _ body -> blockNames body
-  MatchExpression _ arms -> concatMap (introducedNames . armBody . locatedValue) arms
+patternNames :: Located Pattern -> [Text]
+patternNames (Located _ pattern') = case pattern' of
+  BindingPattern name -> [locatedValue name]
+  TuplePattern members -> concatMap patternNames members
+  ConstructorPattern _ members -> concatMap patternNames members
+  RecordPattern _ fields _ -> concatMap fieldNames fields
+  AlternativePattern alternatives -> concatMap patternNames alternatives
   _ -> []
-
-blockNames :: Located Block -> [Text]
-blockNames (Located _ block) =
-  concatMap statementNames (blockStatements block)
-    <> foldMap introducedNames (blockResult block)
-
-statementNames :: Located Statement -> [Text]
-statementNames (Located _ statement) = case statement of
-  DeclarationStatement (Located _ (BindingDeclaration _ _ name _ value)) ->
-    locatedValue name : introducedNames value
-  ExpressionStatement expression -> introducedNames expression
-  _ -> []
+ where
+  fieldNames (Located _ field) =
+    maybe [locatedValue (fieldPatternName field)] patternNames (fieldPatternValue field)
 
 {-| Substitute arguments for parameters, apply the hygienic renames, and retag
     every node with the call's span so a diagnostic inside an expansion points
     at the call the reader wrote. -}
 substituteExpression
   :: Map Text (Located Expression)
+  -> Int
   -> Map Text Text
   -> Span
   -> Located Expression
   -> Located Expression
-substituteExpression bindings renames callSpan (Located _ expression) = case expression of
+substituteExpression bindings identifier renames callSpan (Located _ expression) = case expression of
   NameExpression names -> case names of
     single :| [] -> case Map.lookup single bindings of
       Just argument -> retag callSpan argument
@@ -404,6 +388,12 @@ substituteExpression bindings renames callSpan (Located _ expression) = case exp
   ScopeExpression block -> at (ScopeExpression (recurseBlock block))
   IfExpression condition thenBlock elseBranch ->
     at (IfExpression (recurse condition) (recurseBlock thenBlock) (fmap recurse elseBranch))
+  IfLetExpression pattern' subject thenBlock elseBranch ->
+    let locals = Map.fromList
+          [(name, hygienicName name identifier) | name <- patternNames pattern']
+        successRenames = Map.union locals renames
+     in at (IfLetExpression (renamePattern callSpan successRenames pattern')
+          (recurse subject) (recurseBlockWith successRenames thenBlock) (fmap recurse elseBranch))
   MatchExpression scrutinee arms ->
     at (MatchExpression (recurse scrutinee) (map recurseArm arms))
   WhileExpression label condition body ->
@@ -415,34 +405,65 @@ substituteExpression bindings renames callSpan (Located _ expression) = case exp
   other -> at other
  where
   at = Located callSpan
-  recurse = substituteExpression bindings renames callSpan
+  recurse = substituteExpression bindings identifier renames callSpan
   rename name = Map.findWithDefault name name renames
   recurseField (Located _ field) =
     Located callSpan field{fieldInitValue = fmap recurse (fieldInitValue field)}
   recurseArm (Located _ arm) =
     Located callSpan arm{armGuard = fmap recurse (armGuard arm), armBody = recurse (armBody arm)}
-  recurseBlock (Located _ block) =
-    Located callSpan
-      ( Block
-          (map recurseStatement (blockStatements block))
-          (fmap recurse (blockResult block))
-      )
-  recurseStatement (Located _ statement) =
-    Located callSpan $ case statement of
-      DeclarationStatement (Located _ (BindingDeclaration visibility kind name annotation value)) ->
-        DeclarationStatement
-          ( Located callSpan
-              ( BindingDeclaration visibility kind
-                  (Located callSpan (rename (locatedValue name)))
-                  annotation
-                  (recurse value)
-              )
+  recurseBlock = recurseBlockWith renames
+  recurseBlockWith active (Located _ block) =
+    let (statements, resultRenames) = recurseStatements active (blockStatements block)
+     in Located callSpan
+          ( Block statements
+              (fmap (substituteExpression bindings identifier resultRenames callSpan)
+                (blockResult block))
           )
-      ExpressionStatement expression' -> ExpressionStatement (recurse expression')
-      ReturnStatement value -> ReturnStatement (fmap recurse value)
-      other -> other
+  recurseStatements active statements = case statements of
+    [] -> ([], active)
+    statement : rest ->
+      let (statement', next) = recurseStatementWith active statement
+          (rest', final) = recurseStatements next rest
+       in (statement' : rest', final)
+  recurseStatementWith active (Located _ statement) =
+    let recurseActive = substituteExpression bindings identifier active callSpan
+        unchanged value = (Located callSpan value, active)
+     in case statement of
+          DeclarationStatement
+            (Located _ (BindingDeclaration visibility kind name annotation value)) ->
+              let original = locatedValue name
+                  freshName = hygienicName original identifier
+                  declaration = DeclarationStatement
+                    ( Located callSpan
+                        ( BindingDeclaration visibility kind
+                            (Located callSpan freshName)
+                            annotation
+                            (recurseActive value)
+                        )
+                    )
+               in (Located callSpan declaration, Map.insert original freshName active)
+          ExpressionStatement expression' ->
+            unchanged (ExpressionStatement (recurseActive expression'))
+          ReturnStatement value -> unchanged (ReturnStatement (fmap recurseActive value))
+          other -> unchanged other
 
 {-| Give an argument the call's span so its diagnostics stay where it was
     written, not where the macro body placed it. -}
 retag :: Span -> Located Expression -> Located Expression
 retag _ argument = argument
+renamePattern :: Span -> Map Text Text -> Located Pattern -> Located Pattern
+renamePattern callSpan renames (Located _ pattern') = Located callSpan $ case pattern' of
+  BindingPattern name -> BindingPattern (renameLocated name)
+  TuplePattern members -> TuplePattern (map recurse members)
+  ConstructorPattern path members -> ConstructorPattern path (map recurse members)
+  RecordPattern path fields rest -> RecordPattern path (map renameField fields) rest
+  AlternativePattern alternatives -> AlternativePattern (map recurse alternatives)
+  other -> other
+ where
+  recurse = renamePattern callSpan renames
+  renameLocated (Located _ name) = Located callSpan (Map.findWithDefault name name renames)
+  renameField (Located _ field) = Located callSpan field
+    { fieldPatternValue = case fieldPatternValue field of
+        Just nested -> Just (recurse nested)
+        Nothing -> Just (Located callSpan (BindingPattern (renameLocated (fieldPatternName field))))
+    }
