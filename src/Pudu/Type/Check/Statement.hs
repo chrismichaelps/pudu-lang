@@ -82,6 +82,24 @@ checkBlock needs declared rigid (Located _ block) = do
     Nothing -> pure UnitTypeValue
     Just expression -> statementExpression needs declared rigid expression
 
+{-| Whether a block leaves by a control transfer rather than finishing.
+
+    A block's *type* cannot answer this: one that ends in `return` has no result
+    expression, and a block with no result expression is `()` — the same answer
+    a block ending in `0` would give after discarding it. So the question is
+    asked of the block's ending instead. It transfers control when it has no
+    result expression and its last statement is a `return`, `break`, or
+    `continue`. A result expression of type `Never` is handled by the caller,
+    which already has that type in hand. -}
+blockTransfersControl :: Block -> Bool
+blockTransfersControl block = case blockResult block of
+  Just _ -> False
+  Nothing -> case reverse (blockStatements block) of
+    Located _ (ReturnStatement _) : _ -> True
+    Located _ (BreakStatement _ _) : _ -> True
+    Located _ (ContinueStatement _) : _ -> True
+    _ -> False
+
 checkStatement :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Statement -> Checker ()
 checkStatement needs declared rigid (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name annotation value)) -> do
@@ -113,6 +131,31 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
         pure ()
   BreakStatement label value -> checkBreak needs declared rigid spanValue label value
   ContinueStatement _ -> pure ()
+  {-| The subject is checked, the fallback is required not to fall through, and
+      only then does the pattern bind — outside any scope of its own, so the
+      names it introduces belong to the block this statement stands in. That is
+      the whole difference between this form and `if let`, and the fallback's
+      divergence is what pays for it. -}
+  LetElseStatement pattern' subject fallback -> do
+    borrowed <- statementExpression needs declared rigid subject
+    subjectType <- throughBorrow borrowed
+    fallbackType <-
+      statementExpression needs declared rigid
+        (Located (locatedSpan fallback) (BlockExpression fallback))
+    resolvedFallback <- zonk fallbackType
+    case resolvedFallback of
+      NeverType -> pure ()
+      ErrorType -> pure ()
+      _ | blockTransfersControl (locatedValue fallback) -> pure ()
+      _ ->
+        report "E3036" (locatedSpan fallback)
+          "this fallback can carry on past the binding it stands in for"
+          ( Just
+              ( "end it with return, break, or continue; the binding exists "
+                  <> "after this statement only because the fallback cannot reach it"
+              )
+          )
+    bindPattern declared rigid pattern' subjectType
   InvalidStatement -> pure ()
 
 {-| Check a `break`, against the loop it leaves.

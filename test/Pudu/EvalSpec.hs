@@ -270,6 +270,50 @@ testBranching = do
     , "let result = if let Some(value) = { calls = calls + 1\n Some(calls) } { value } else { 0 }"
     , "(calls, result)"
     ]
+  optionTryPresent <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Option[Int] {"
+    , "  let found = value?"
+    , "  Some(found + 1)"
+    , "}"
+    ]
+    "match step(Some(41)) { case Some(n) => n case None => 0 }"
+  optionTryAbsent <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Option[Int] {"
+    , "  let found = value?"
+    , "  Some(found + 1)"
+    , "}"
+    ]
+    "match step(None) { case Some(n) => n case None => 7 }"
+  optionTryStops <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Option[Int] {"
+    , "  let found = value?"
+    , "  show(found)"
+    , "  Some(found)"
+    , "}"
+    ]
+    "match step(None) { case Some(n) => n case None => 7 }"
+  letElseBound <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Int {"
+    , "  let Some(found) = value else { return 0 }"
+    , "  found + 1"
+    , "}"
+    ]
+    "step(Some(41))"
+  letElseTaken <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Int {"
+    , "  let Some(found) = value else { return 7 }"
+    , "  found"
+    , "}"
+    ]
+    "step(None)"
+  letElseOutlives <- evaluateWith
+    [ "fn step(value: Option[Int]) -> Int {"
+    , "  let Some(found) = value else { return 0 }"
+    , "  let doubled = found + found"
+    , "  doubled + found"
+    , "}"
+    ]
+    "step(Some(3))"
   matched <- evaluate "match 3 { case 1 => \"one\" case 3 => \"three\" case _ => \"other\" }"
   guarded <- evaluateWith [] "match 10 { case n if n > 5 => \"big\" case _ => \"small\" }"
   ranged <- evaluate "match 7 { case 1..5 => \"low\" case 6..=9 => \"high\" case _ => \"out\" }"
@@ -290,6 +334,12 @@ testBranching = do
     , counterexample "failure without else yields unit" (ifLetWithoutElse === "()")
     , counterexample "success without else also yields unit" (ifLetSuccessWithoutElse === "()")
     , counterexample "the subject evaluates exactly once" (ifLetOnce === "(1, 1)")
+    , counterexample "? yields a present payload" (optionTryPresent === "42")
+    , counterexample "? returns None from the function" (optionTryAbsent === "7")
+    , counterexample "? runs nothing after an absent value" (optionTryStops === "7")
+    , counterexample "a matched let else binds onward" (letElseBound === "42")
+    , counterexample "an unmatched let else takes the fallback" (letElseTaken === "7")
+    , counterexample "a let else binding outlives its statement" (letElseOutlives === "9")
     , matched === "\"three\""
     , guarded === "\"big\""
     , ranged === "\"high\""

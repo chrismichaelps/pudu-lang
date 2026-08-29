@@ -162,6 +162,12 @@ expandStatement macros depth (Located statementSpan statement) = case statement 
     Located statementSpan . ExpressionStatement <$> expandExpression macros depth expression
   ReturnStatement value ->
     Located statementSpan . ReturnStatement <$> mapM (expandExpression macros depth) value
+  LetElseStatement pattern' subject fallback ->
+    Located statementSpan
+      <$> ( LetElseStatement pattern'
+              <$> expandExpression macros depth subject
+              <*> expandBlock macros depth fallback
+          )
   _ -> pure (Located statementSpan statement)
 
 expandExpression :: Map Text Macro -> Int -> Located Expression -> Expand (Located Expression)
@@ -445,6 +451,20 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
           ExpressionStatement expression' ->
             unchanged (ExpressionStatement (recurseActive expression'))
           ReturnStatement value -> unchanged (ReturnStatement (fmap recurseActive value))
+          {-| A `let … else` binds for the rest of the block, so its pattern's
+              names extend the active map for the statements after it — the same
+              rule an ordinary binding follows. The subject is substituted before
+              they exist, and the fallback is walked without them, because
+              neither can see what the pattern binds. -}
+          LetElseStatement pattern' subject fallback ->
+            let locals = Map.fromList
+                  [(name, hygienicName name identifier) | name <- patternNames pattern']
+                after = Map.union locals active
+                statement' = LetElseStatement
+                  (renamePattern callSpan after pattern')
+                  (recurseActive subject)
+                  (recurseBlockWith active fallback)
+             in (Located callSpan statement', after)
           other -> unchanged other
 
 {-| Give an argument the call's span so its diagnostics stay where it was

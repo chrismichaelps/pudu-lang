@@ -126,6 +126,14 @@ evaluateStatement (Located _ statement) = case statement of
     carried <- maybe (pure UnitValue) evaluate value
     unwind (BreakUnwind (fmap locatedValue label) carried)
   ContinueStatement label -> unwind (ContinueUnwind (fmap locatedValue label))
+  {-| The bindings enter the frame already open rather than a new one, which is
+      what makes them visible to every statement after this. The fallback needs
+      no forcing: typing has already established that it cannot reach them. -}
+  LetElseStatement pattern' subject fallback -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> mapM_ (uncurry bind) bindings
+      Nothing -> evaluateBlock fallback >> pure ()
   InvalidStatement -> pure ()
 
 {-| Evaluation is not counted per expression.

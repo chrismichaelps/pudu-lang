@@ -456,4 +456,6 @@ unwrapTry :: Span -> Value -> Evaluator Value
 unwrapTry spanValue value = case value of
   VariantValue "Ok" [inner] -> pure inner
   VariantValue "Err" _ -> unwind (ReturnUnwind value)
-  _ -> abortAt (Just spanValue) "E7001" "? expects a Result value" Nothing
+  VariantValue "Some" [inner] -> pure inner
+  VariantValue "None" [] -> unwind (ReturnUnwind value)
+  _ -> abortAt (Just spanValue) "E7001" "? expects a Result or Option value" Nothing
