@@ -20,3 +20,4 @@ tags: [moc, adr]
 - [[decisions/ADR-0008-protocol-oriented-typestate|ADR-0008 Protocol Oriented Typestate]] — withdrawn.
 - [[decisions/ADR-0009-effects-in-the-type|ADR-0009 Effects in the Type]] — proposed: one capability set in the signature, replacing `comptime`, `unsafe`, and the runtime effect gate.
 - [[decisions/ADR-0010-refutable-pattern-conditions|ADR-0010 Refutable Pattern Conditions]] — accepted: `if let` binds one successful pattern without introducing a second pattern semantics.
+- [[decisions/ADR-0011-propagation-over-re-matching|ADR-0011 Propagation Over Re-Matching]] — accepted: an arm that rebuilds its own failure is punctuation, not a decision; `?` carries both `Result` and `Option`, and `let … else` binds past a fallback that cannot fall through.
