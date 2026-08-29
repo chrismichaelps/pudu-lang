@@ -155,6 +155,9 @@ tuple_expr       = "(", expression, ",", (expression, (",", expression)*, ","?)?
 array_expr       = "[", (expression, (",", expression)*, ","?)?, "]" ;
 record_expr      = module_path_or_type, "{", field_init, (",", field_init)*, ","?, "}" ;
 field_init       = lower_ident, (":", expression)? ;
+if_expr          = "if", expression, block, ("else", (if_expr | if_let_expr | block))? ;
+if_let_expr      = "if", "let", pattern, "=", expression, block,
+                   ("else", (if_expr | if_let_expr | block))? ;
 match_expr       = "match", expression, "{", match_arm+, "}" ;
 match_arm        = "case", pattern, ("if", expression)?, "=>", (expression | block) ;
 while_expr       = loop_label?, "while", expression, block ;
@@ -167,6 +170,7 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
 - A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.
 - `match` arms are introduced by `case`, may carry an `if` guard, and produce an expression or a block after `=>`. Arms are separated by line breaks like every other construct.
+- `if let PATTERN = EXPRESSION` tests one refutable pattern without spelling a two-arm `match`. The expression evaluates once; bindings exist only in the then block; failure evaluates the optional else branch or yields `()`. `else if let` nests like `else if`. A syntactically irrefutable pattern is `E1056`: use ordinary `let` when matching cannot fail. Pattern bindings are not boolean operands and therefore cannot be inserted into `&&` or `||` chains.
 - A method may be called qualified by the type that implements it or by the trait that declares it: `Bot.label(&bot)` and `Speak.label(&bot)` both select `label`. The trait form is how a program picks one provider when several traits declare the same member for one type.
 - A qualified call passes the receiver as an ordinary first argument, so a method declared with `self: &Self` takes a borrow. Method-call syntax borrows the receiver for you; the qualified form does not, because it is an ordinary call.
 - `dynamic Trait` is a type: some value implementing that trait, whose own type is not named. It is the one place the language admits a value whose concrete type is not known at the use site, and it is what a heterogeneous collection needs — `Array[dynamic Listener]` holds any mix of implementations, and a fourth implementation added elsewhere needs no edit where the array is walked.
