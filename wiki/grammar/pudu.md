@@ -161,6 +161,7 @@ if_let_expr      = "if", "let", pattern, "=", expression, block,
 match_expr       = "match", expression, "{", match_arm+, "}" ;
 match_arm        = "case", pattern, ("if", expression)?, "=>", (expression | block) ;
 while_expr       = loop_label?, "while", expression, block ;
+while_let_expr   = loop_label?, "while", "let", pattern, "=", expression, block ;
 loop_expr        = loop_label?, "loop", block ;
 for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 ```
@@ -268,6 +269,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
   `begin` answers the state to start from and `advance` answers the next item and the state after it, or `None` when the sequence is finished. The state is **passed rather than mutated**, so a sequence is an ordinary value: two walks of the same value see the same items. A type with no such implementation reports `E3030` at the `for` rather than part way through one.
 - The element type a `for` binds over a user type is read from that type's own `advance`, so the type the checker binds is the type the loop actually produces.
 - Iterator adapters are lazy; terminal collection/consumption drives them.
+- `while let PATTERN = EXPRESSION BLOCK` repeats while a refutable pattern matches. The subject is read again before each turn and the loop finishes the first time it does not match; a subject read once would either match forever or never. Bindings exist in the body alone. Its type is `()` for the same reason every `while`'s is: it can finish without the body running, so a value carried out would exist on some runs and not others. It takes a loop label like any other loop. A syntactically irrefutable pattern is `E1058`.
 - `while` reevaluates its condition before each iteration.
 - `loop` takes the type of what its `break` statements carry, so a search with no natural end is still an expression: `let found = loop { ... break value }`. A `loop` no `break` leaves does not finish, and its type is `Never`, which stands wherever any type is wanted. A `break` carrying nothing carries `()`.
 - `break` and `continue` act on the nearest enclosing loop unless a label names another. A labelled `continue` restarts the loop it names, which skips the remainder of every loop body between it and that one.

@@ -258,6 +258,19 @@ inferExpression around declared rigid spanValue expression = case expression of
     declaredResult <- enclosingReturnType selfName >>= zonk
     reportRedundantPropagation spanValue arms declaredResult
     zonk result
+  {-| A `while let` is `()` for the same reason every `while` is: it finishes
+      when its pattern stops matching, so a value carried out would exist on
+      some runs and not others. Bindings live in the body alone. -}
+  WhileLetExpression label pattern' subject body -> do
+    subjectCheckpoint <- integerLiteralCheckpoint
+    borrowed <- checkExpression around declared rigid subject
+    subjectType <- throughBorrow borrowed
+    subjectEnd <- integerLiteralCheckpoint
+    _ <- inTypeScopeWith $ do
+      bindPattern declared rigid pattern' subjectType
+      aroundLoop label UnitTypeValue False (aroundBlock around declared rigid body)
+    finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
+    pure UnitTypeValue
   WhileExpression label condition body -> do
     conditionCheckpoint <- integerLiteralCheckpoint
     conditionType <- checkExpression around declared rigid condition

@@ -56,6 +56,12 @@ Which form a `let` opens is settled by the token after it, since a binding names
 lowercase identifier is always the ordinary binding, and a constructor path, tuple, record,
 literal, or `_` is always the pattern form. One token of lookahead decides it, with no backtracking.
 
+**`while let PATTERN = EXPRESSION BLOCK`** repeats while a refutable pattern matches, for the
+loop-carried search that neither of the other two forms reaches. The subject is read again before
+each turn, which is what lets the loop finish: read once it would either match forever or never.
+Bindings live in the body alone, and the loop is `()` like every other `while`. `E1058` rejects a
+pattern that cannot fail.
+
 **`W3003`** names a `match` whose every failure arm rebuilds what it received, when the enclosing
 return type carries the same shape, and gives the `?` that replaces it. A warning, not an error: it
 names a better spelling of working code rather than condemning it.

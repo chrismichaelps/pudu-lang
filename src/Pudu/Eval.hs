@@ -40,6 +40,7 @@ import Pudu.Eval.Loop
   , evaluateFor
   , evaluateLoop
   , evaluateWhile
+  , evaluateWhileLet
   )
 import Pudu.Eval.Call
   ( CallNeeds (..)
@@ -257,6 +258,8 @@ evaluateHere (Located spanValue expression) = case expression of
     evaluateArms spanValue subject arms
   WhileExpression label condition body ->
     evaluateWhile loopNeeds spanValue (fmap locatedValue label) condition body
+  WhileLetExpression label pattern' subject body ->
+    evaluateWhileLet loopNeeds spanValue (fmap locatedValue label) pattern' subject body
   LoopExpression label body -> evaluateLoop loopNeeds spanValue (fmap locatedValue label) body
   ForExpression label binder iterated body -> do
     sequence' <- evaluate iterated

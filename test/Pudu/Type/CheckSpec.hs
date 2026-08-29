@@ -703,6 +703,32 @@ testControlFlow = do
     , "  }"
     , "}"
     ]
+  whileLetTyped <- codes
+    [ "module M"
+    , "fn run(start: Option[Int]) -> Int {"
+    , "  var cell = start"
+    , "  var total = 0"
+    , "  while let Some(head) = cell {"
+    , "    total = total + head"
+    , "    cell = None"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  whileLetScope <- codes
+    [ "module M"
+    , "fn run(start: Option[Int]) -> Int {"
+    , "  while let Some(head) = start { }"
+    , "  head"
+    , "}"
+    ]
+  whileLetIrrefutable <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  while let found = 1 { }"
+    , "  0"
+    , "}"
+    ]
   loops <- codes
     [ "module M"
     , "fn run() -> Int {"
@@ -754,6 +780,11 @@ testControlFlow = do
     , counterexample "a transformed failure is a decision" (transformingMatch === [])
     , counterexample "a changed carrier is a decision" (crossCarrierMatch === [])
     , counterexample "a match into a plain result is a decision" (plainCarrierMatch === [])
+    , counterexample "while let binds its payload in the body" (whileLetTyped === [])
+    , counterexample "a while let binding does not escape its body"
+        (whileLetScope === ["E2010"])
+    , counterexample "while let rejects a pattern that always matches"
+        (whileLetIrrefutable === ["E1058"])
     , loops === []
     , counterexample "return is checked against the declared result"
         (returned === ["E3001"])

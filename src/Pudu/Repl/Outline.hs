@@ -95,6 +95,8 @@ outlineExpression (Located _ expression) = case expression of
   IfExpression condition _ elseBranch ->
     "if " <> outlineExpression condition
       <> maybe Text.empty (const " else ...") elseBranch
+  WhileLetExpression _ pattern' subject _ ->
+    "while let " <> outlinePattern pattern' <> " = " <> outlineExpression subject
   IfLetExpression pattern' subject _ elseBranch ->
     "if let " <> outlinePattern pattern' <> " = " <> outlineExpression subject
       <> maybe Text.empty (const " else ...") elseBranch

@@ -8,6 +8,7 @@ module Pudu.Eval.Loop
   , evaluateFor
   , evaluateLoop
   , evaluateWhile
+  , evaluateWhileLet
   , firstBound
   , receiverOwner
   , receiverOwners
@@ -70,6 +71,35 @@ evaluateWhile needs spanValue label condition body = loop (0 :: Int)
           then pure UnitValue
           else do
             outcome <- catchUnwind (loopBlock needs body)
+            case transferFor label outcome of
+              Stop _ -> pure UnitValue
+              Again -> loop (iterations + 1)
+              Escape transfer -> unwind transfer
+              Finished -> loop (iterations + 1)
+
+{-| `while let` repeats while its pattern matches.
+
+    The subject is evaluated afresh each turn, exactly as a `while` condition
+    is, and the bindings live in a frame that lasts one turn. A subject read
+    once would either match forever or never, so reading it again is what makes
+    the loop able to finish. -}
+evaluateWhileLet
+  :: LoopNeeds -> Span -> Maybe Text -> Located Pattern -> Located Expression
+  -> Located Block -> Evaluator Value
+evaluateWhileLet needs spanValue label pattern' subject body = loop (0 :: Int)
+ where
+  loop iterations = do
+    stop <- exceededStepLimit iterations
+    if stop
+      then
+        abortAt (Just spanValue) "E7002" "loop exceeded the evaluation step limit"
+          (Just "a constant is folded while the compiler runs; restructure the loop")
+      else do
+        value <- loopEvaluate needs subject
+        case matchPattern pattern' value of
+          Nothing -> pure UnitValue
+          Just bindings -> do
+            outcome <- withFrame bindings (catchUnwind (loopBlock needs body))
             case transferFor label outcome of
               Stop _ -> pure UnitValue
               Again -> loop (iterations + 1)
