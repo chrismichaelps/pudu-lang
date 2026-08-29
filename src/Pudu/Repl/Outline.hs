@@ -45,6 +45,8 @@ outlineStatement (Located _ statement) = case statement of
   BreakStatement label value ->
     "break" <> foldMap outlineLabel label <> foldMap ((" " <>) . outlineExpression) value
   ContinueStatement label -> "continue" <> foldMap outlineLabel label
+  LetElseStatement pattern' subject _ ->
+    "let " <> outlinePattern pattern' <> " = " <> outlineExpression subject <> " else ..."
   InvalidStatement -> "invalid"
 
 outlineDeclaration :: Located Declaration -> Text

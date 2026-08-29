@@ -567,6 +567,87 @@ testControlFlow = do
     , "  if let Some(found) = value { found }"
     , "}"
     ]
+  tryOption <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Option[Int] {"
+    , "  let found = value?"
+    , "  Some(found + 1)"
+    , "}"
+    ]
+  tryOptionInResult <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Result[Int, Str] {"
+    , "  let found = value?"
+    , "  Ok(found)"
+    , "}"
+    ]
+  tryResultInOption <- codes
+    [ "module M"
+    , "fn run(value: Result[Int, Str]) -> Option[Int] {"
+    , "  let found = value?"
+    , "  Some(found)"
+    , "}"
+    ]
+  tryOptionInPlain <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  let found = value?"
+    , "  found"
+    , "}"
+    ]
+  letElseTyped <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  let Some(found) = value else { return 0 }"
+    , "  found + 1"
+    , "}"
+    ]
+  letElseFallsThrough <- codes
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  let Some(found) = value else { 0 }"
+    , "  found"
+    , "}"
+    ]
+  letElseContinues <- codes
+    [ "module M"
+    , "fn run(values: Array[Option[Int]]) -> Int {"
+    , "  var total = 0"
+    , "  for value in values {"
+    , "    let Some(found) = value else { continue }"
+    , "    total = total + found"
+    , "  }"
+    , "  total"
+    , "}"
+    ]
+  letElseMismatch <- codes
+    [ "module M"
+    , "fn run(value: Int) -> Int {"
+    , "  let Some(found) = value else { return 0 }"
+    , "  found"
+    , "}"
+    ]
+  letElseWildcard <- codes
+    [ "module M"
+    , "fn run(value: Int) -> Int {"
+    , "  let _ = value else { return 0 }"
+    , "  value"
+    , "}"
+    ]
+  letElseTuple <- codes
+    [ "module M"
+    , "fn run(pair: (Int, Int)) -> Int {"
+    , "  let (first, second) = pair else { return 0 }"
+    , "  first + second"
+    , "}"
+    ]
+  plainLet <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let found = 1"
+    , "  found"
+    , "}"
+    ]
   loops <- codes
     [ "module M"
     , "fn run() -> Int {"
@@ -597,6 +678,21 @@ testControlFlow = do
     , counterexample "if let checks its pattern against the subject" (ifLetPattern === ["E3001"])
     , counterexample "if let reads through a borrow like match" (ifLetBorrow === [])
     , counterexample "if let without else has unit type" (ifLetWithoutElse === ["E3001"])
+    , counterexample "? unwraps an Option in an Option function" (tryOption === [])
+    , counterexample "? on Option needs an Option function" (tryOptionInResult === ["E3001"])
+    , counterexample "? on Result needs a Result function" (tryResultInOption === ["E3001"])
+    , counterexample "? needs a carrier return type" (tryOptionInPlain === ["E3011"])
+    , counterexample "let else binds for the rest of the block" (letElseTyped === [])
+    , counterexample "a let else fallback must not fall through"
+        (letElseFallsThrough === ["E3036"])
+    , counterexample "continue is a diverging fallback" (letElseContinues === [])
+    , counterexample "a let else subject must match its pattern"
+        (letElseMismatch === ["E3001"])
+    , counterexample "let else rejects a wildcard, which cannot fail"
+        (letElseWildcard === ["E1057"])
+    , counterexample "let else rejects a tuple, which cannot fail"
+        (letElseTuple === ["E1057"])
+    , counterexample "an ordinary let is untouched" (plainLet === [])
     , loops === []
     , counterexample "return is checked against the declared result"
         (returned === ["E3001"])

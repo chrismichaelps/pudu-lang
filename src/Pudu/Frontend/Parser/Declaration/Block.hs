@@ -5,6 +5,8 @@ module Pudu.Frontend.Parser.Declaration.Block
 
 import Pudu.Frontend.Parser.Declaration.Binding (parseLocalBinding)
 import Pudu.Frontend.Parser.Expression (parseExpression)
+import Pudu.Frontend.Parser.Expression.Control (patternCanFail)
+import Pudu.Frontend.Parser.Pattern (parsePattern)
 import Pudu.Frontend.Parser.State
   ( Parser
   , advanceToken
@@ -12,22 +14,26 @@ import Pudu.Frontend.Parser.State
   , emitParseError
   , diagnosticCount
   , expectIdentifier
+  , expectKeyword
   , expectSymbol
   , isSymbol
+  , lookaheadKind
   , peekKind
   , peekStartsLine
   , peekToken
   , withRecursionBudget
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Block (..), Expression, Statement (..))
+import Pudu.Frontend.Syntax.Tree (Block (..), Expression, Pattern (..), Statement (..))
 import Pudu.Frontend.Token
-  ( Keyword (KwBreak, KwConst, KwContinue, KwLet, KwReturn, KwVar)
-  , SymbolKind (SymAt)
+  ( Keyword (KwBreak, KwConst, KwContinue, KwElse, KwLet, KwReturn, KwVar)
+  , SymbolKind (SymAt, SymLeftBrace, SymLeftParen)
   , Token (..)
   , TokenKind (..)
   )
+import Data.Char (isUpper)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Source (Span, mergeSpans)
 
 {-| Parse `{ statement* }`. This module is the fixed point of the
@@ -89,7 +95,9 @@ parseStatement :: Parser (Located Statement)
 parseStatement = do
   kind <- peekKind
   case kind of
-    Keyword KwLet -> declarationStatement
+    Keyword KwLet -> do
+      following <- lookaheadKind 1
+      if beginsPattern following then parseLetElse else declarationStatement
     Keyword KwVar -> declarationStatement
     Keyword KwConst -> declarationStatement
     Keyword KwReturn -> parseReturn
@@ -98,6 +106,54 @@ parseStatement = do
     _ -> do
       expression <- parseExpression parseBlock
       pure (Located (locatedSpan expression) (ExpressionStatement expression))
+
+{-| Whether what follows `let` opens a pattern rather than a binding name.
+
+    A binding names a value, so a lowercase identifier after `let` is always the
+    ordinary form and needs no further lookahead. Everything else that can open a
+    pattern — a constructor path, a tuple, a record, a literal, `_` — cannot
+    spell a binding name, so seeing one settles the question. `_` is admitted
+    here even though it can never fail, because reaching `parseLetElse` is what
+    lets `E1057` say so instead of a parse error saying something else. -}
+beginsPattern :: TokenKind -> Bool
+beginsPattern kind = case kind of
+  Identifier name -> name == "_" || maybe False (isUpper . fst) (Text.uncons name)
+  IntegerLiteral _ -> True
+  FloatLiteral _ -> True
+  DecimalLiteral _ -> True
+  StringLiteral _ -> True
+  CharLiteral _ -> True
+  Symbol symbol -> symbol `elem` [SymLeftParen, SymLeftBrace]
+  _ -> False
+
+{-| `let PATTERN = EXPRESSION else BLOCK`.
+
+    The binding outlives the statement, which is what a fallback that cannot
+    fall through pays for. Whether it can is a typing rule, decided where types
+    are known; here the shape is read and the pattern is required to be one that
+    can fail, since a binding that always matches wants ordinary `let`. -}
+parseLetElse :: Parser (Located Statement)
+parseLetElse = do
+  keyword <- advanceToken
+  pattern' <- parsePattern
+  case locatedValue pattern' of
+    InvalidPattern -> pure ()
+    value | patternCanFail value -> pure ()
+    _ ->
+      emitParseError "E1057" (locatedSpan pattern') "let else pattern always matches"
+        ( Just
+            ( "use let without else for an unconditional binding, or choose a "
+                <> "pattern that can fail"
+            )
+        )
+  _ <- expectSymbol "=" "between the pattern and its value"
+  subject <- parseExpression parseBlock
+  _ <- expectKeyword KwElse "before the fallback block"
+  fallback <- parseBlock
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan fallback))
+        (LetElseStatement pattern' subject fallback)
+    )
 
 {-| Reject a second statement written on the line a first one ended.
 

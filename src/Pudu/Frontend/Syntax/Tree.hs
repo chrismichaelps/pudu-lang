@@ -255,6 +255,10 @@ data Statement
   | ReturnStatement !(Maybe (Located Expression))
   | BreakStatement !(Maybe (Located Text)) !(Maybe (Located Expression))
   | ContinueStatement !(Maybe (Located Text))
+  {-| `let PATTERN = EXPRESSION else BLOCK`. The pattern binds for the rest of
+      the enclosing block, which the fallback pays for by not being able to
+      reach it. -}
+  | LetElseStatement !(Located Pattern) !(Located Expression) !(Located Block)
   | InvalidStatement
   deriving stock (Eq, Show)
 

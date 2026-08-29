@@ -245,25 +245,40 @@ substituteRigidType replacements typeValue = case typeValue of
     ReferenceTypeValue mutable (substituteRigidType replacements target)
   other -> other
 
+{-| `?` yields a carrier's payload and returns that carrier's failure from the
+    enclosing function. Which carrier is meant is read from the function's own
+    declared result, never from the target: that is what lets one operator serve
+    both `Result` and `Option` without a token to tell them apart, and it is why
+    a mismatched target is an ordinary unification failure rather than a rule of
+    its own. An unannotated result is still inferred as `Result`, because the
+    `Ok` and `Err` in such a body are what will decide it. -}
 tryType :: Span -> Type -> Type -> Checker Type
 tryType spanValue targetType declaredResult = do
-  success <- freshVariable
-  failure <- freshVariable
-  _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
   resolvedResult <- zonk declaredResult
   case resolvedResult of
+    NominalType "Option" [_] -> do
+      success <- freshVariable
+      _ <- unify spanValue (NominalType "Option" [success]) targetType
+      pure success
     NominalType "Result" [_, declaredFailure] -> do
+      success <- freshVariable
+      failure <- freshVariable
+      _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
       _ <- unify spanValue declaredFailure failure
       pure success
     VariableType _ -> do
+      success <- freshVariable
+      failure <- freshVariable
+      _ <- unify spanValue (NominalType "Result" [success, failure]) targetType
       resultSuccess <- freshVariable
       _ <- unify spanValue resolvedResult (NominalType "Result" [resultSuccess, failure])
       pure success
     ErrorType -> pure ErrorType
     _ -> do
+      success <- freshVariable
       report "E3011" spanValue
-        ("? needs a function returning Result, found " <> renderType resolvedResult)
-        (Just "declare the function's result as Result, or match the value instead")
+        ("? needs a function returning Result or Option, found " <> renderType resolvedResult)
+        (Just "declare the function's result as Result or Option, or match the value instead")
       pure success
 
 {-| Instantiate a scheme with fresh variables and register the trait

@@ -301,6 +301,14 @@ walkStatement (Located spanValue statement) = case statement of
     resolveLoopTarget "break" spanValue label
     mapM_ walkExpression value
   ContinueStatement label -> resolveLoopTarget "continue" spanValue label
+  {-| The order is the rule. The subject resolves before anything is bound, the
+      fallback is walked while the pattern's names are still absent, and only
+      then do those names enter the current scope — where they stay, which is
+      what separates this form from `if let`. -}
+  LetElseStatement pattern' subject fallback -> do
+    walkExpression subject
+    walkBlock fallback
+    bindPattern pattern'
   InvalidStatement -> pure ()
 
 walkExpression :: Located Expression -> Resolver ()
