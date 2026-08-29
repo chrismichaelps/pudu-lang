@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.1.0-draft"
+semantic_version: "0.2.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -105,6 +105,7 @@ Supporting judgements:
 ## Control-Flow Typing
 
 - `if` conditions have `Bool`; reachable branch values unify to one result type.
+- `if let p = e` evaluates `e` exactly once and tests `p` with the same pattern semantics as a match arm. On success its immutable bindings scope only over the then block; on failure the optional else expression runs, or the form yields unit when absent. Reachable branch values unify as for ordinary `if`. Syntactically irrefutable `p` is `E1056`, because ordinary `let` states an unconditional binding directly.
 - `match` scrutinee evaluates once. Arms are tested top-to-bottom; the first matching pattern with a true guard executes.
 - Closed sum, boolean, tuple/record, and finite literal-domain matches are statically checked for usefulness and exhaustiveness where decidable.
 - `return e` requires `e` compatible with the enclosing function success type and transfers cleanup through every exited scope.
@@ -240,6 +241,7 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **0.2.0-draft · 2026-08-28:** Added refutable `if let` pattern conditions as a backward-compatible surface feature with single subject evaluation, success-branch-local bindings, ordinary branch unification, and `E1056` for syntactically irrefutable patterns. See [[ADR-0010-refutable-pattern-conditions]].
 - **0.1.0-draft · 2026-08-21:** Established evaluation order, local inference boundary, `Result` propagation, ownership transitions, deterministic cleanup, structured concurrency/cancellation, compile-time capability restrictions, unsafe containment, and conformance obligations. See [[ADR-0001-language-purpose-and-v1-scope]], [[ADR-0002-compiler-pipeline]], and [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification · 2026-08-21:** Closed pre-implementation ambiguities in default-argument evaluation, module-scope initialization, and compiler-controlled structural `Copy`. No implementation compatibility exists yet; these rules are part of the initial draft review. See [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification 2 · 2026-08-21:** Defined move reinitialization, replacement drop timing, constant naming, and normalized synchronous/asynchronous failure signatures before implementation. See [[ADR-0003-ownership-and-resource-safety]].
