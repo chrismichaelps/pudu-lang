@@ -125,6 +125,7 @@ library
     Pudu.Type.Check.Expression
     Pudu.Type.Check.Prelude
     Pudu.Type.Check.Record
+    Pudu.Type.Check.Propagation
     Pudu.Type.Check.Rule
     Pudu.Type.Check.Signature
     Pudu.Type.Check.Statement

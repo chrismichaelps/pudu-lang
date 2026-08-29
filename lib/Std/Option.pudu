@@ -65,26 +65,18 @@ export fn unwrapOrElse[T](value: Option[T], fallback: fn() -> T) -> T {
 
 /// The value transformed, if there is one.
 export fn map[A, B](value: Option[A], transform: fn(A) -> B) -> Option[B] {
-  match value {
-    case Some(found) => Some(transform(found))
-    case None => None
-  }
+  Some(transform(value?))
 }
 
 /// The value transformed into another option, flattened.
 export fn andThen[A, B](value: Option[A], transform: fn(A) -> Option[B]) -> Option[B] {
-  match value {
-    case Some(found) => transform(found)
-    case None => None
-  }
+  transform(value?)
 }
 
 /// The value if it is present and the predicate accepts it.
 export fn keepIf[T](value: Option[T], accept: fn(T) -> Bool) -> Option[T] {
-  match value {
-    case Some(found) => if accept(found) { Some(found) } else { None }
-    case None => None
-  }
+  let found = value?
+  if accept(found) { Some(found) } else { None }
 }
 
 /// The result of transforming the value, or a fallback when there is none.
@@ -107,10 +99,7 @@ export fn holds[T](value: &Option[T], predicate: fn(T) -> Bool) -> Bool {
 
 /// A nested option flattened by one level.
 export fn flatten[T](value: Option[Option[T]]) -> Option[T] {
-  match value {
-    case Some(found) => found
-    case None => None
-  }
+  value?
 }
 
 /// Every present value, with the absent ones dropped.
@@ -127,13 +116,7 @@ export fn present[T](values: &Array[Option[T]]) -> Array[T] {
 
 /// Two options paired, present only when both are.
 export fn zip[A, B](left: Option[A], right: Option[B]) -> Option[(A, B)] {
-  match left {
-    case Some(first) => match right {
-      case Some(second) => Some((first, second))
-      case None => None
-    }
-    case None => None
-  }
+  Some((left?, right?))
 }
 
 /// Whether a value is present, as a plain question about an owned value.
@@ -174,23 +157,14 @@ export fn okOrElse[T, E](value: Option[T], failure: fn() -> E) -> Result[T, E] {
 
 /// Both values if both are present, combined.
 export fn map2[A, B, C](left: Option[A], right: Option[B], combine: fn(A, B) -> C) -> Option[C] {
-  match left {
-    case Some(first) => match right {
-      case Some(second) => Some(combine(first, second))
-      case None => None
-    }
-    case None => None
-  }
+  Some(combine(left?, right?))
 }
 
 /// Every value if every one is present, otherwise nothing.
 export fn allPresent[T](values: &Array[Option[T]]) -> Option[Array[T]] {
   var out = []
   for value in values {
-    match value {
-      case Some(found) => { out = out.push(found) }
-      case None => { return None }
-    }
+    out = out.push(value?)
   }
   Some(out)
 }
@@ -209,10 +183,8 @@ export fn firstPresent[T](values: &Array[Option[T]]) -> Option[T] {
 /// The value if it is present, otherwise nothing, with the option discarded.
 /// The counterpart to `keepIf`: it drops a value the predicate accepts.
 export fn dropIf[T](value: Option[T], reject: fn(T) -> Bool) -> Option[T] {
-  match value {
-    case Some(found) => if reject(found) { None } else { Some(found) }
-    case None => None
-  }
+  let found = value?
+  if reject(found) { None } else { Some(found) }
 }
 
 /// A value made present when a condition holds.
