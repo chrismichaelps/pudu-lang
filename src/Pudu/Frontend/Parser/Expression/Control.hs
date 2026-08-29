@@ -236,11 +236,42 @@ parseLabelled parsers blockParser = do
 parseWhile :: ExpressionParsers -> BlockParser -> Maybe (Located Text) -> Parser (Located Expression)
 parseWhile parsers blockParser label = do
   keyword <- advanceToken
+  patternCondition <- matchKeyword KwLet
+  case patternCondition of
+    Just _ -> parseWhileLet parsers blockParser label keyword
+    Nothing -> parseBooleanWhile parsers blockParser label keyword
+
+parseBooleanWhile
+  :: ExpressionParsers -> BlockParser -> Maybe (Located Text) -> Token
+  -> Parser (Located Expression)
+parseBooleanWhile parsers blockParser label keyword = do
   condition <- scrutineeOf parsers blockParser
   body <- blockParser
   pure
     ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
         (WhileExpression label condition body)
+    )
+
+{-| `while let PATTERN = EXPRESSION BLOCK` repeats while a refutable pattern
+    matches. The subject is read again before each turn, which is what makes the
+    loop finish: a subject read once would either match forever or never. -}
+parseWhileLet
+  :: ExpressionParsers -> BlockParser -> Maybe (Located Text) -> Token
+  -> Parser (Located Expression)
+parseWhileLet parsers blockParser label keyword = do
+  pattern' <- parsePattern
+  case locatedValue pattern' of
+    InvalidPattern -> pure ()
+    value | patternCanFail value -> pure ()
+    _ ->
+      emitParseError "E1058" (locatedSpan pattern') "while let pattern always matches"
+        (Just "use while with a condition, or choose a pattern that can fail")
+  _ <- expectSymbol "=" "between the pattern and its value"
+  subject <- scrutineeOf parsers blockParser
+  body <- blockParser
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) (locatedSpan body))
+        (WhileLetExpression label pattern' subject body)
     )
 
 parseLoop :: ExpressionParsers -> BlockParser -> Maybe (Located Text) -> Parser (Located Expression)

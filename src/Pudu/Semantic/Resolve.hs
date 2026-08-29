@@ -351,6 +351,13 @@ walkExpression (Located spanValue expression) = case expression of
   WhileExpression label condition body -> do
     walkExpression condition
     insideLoop label (walkBlock body)
+  {-| The subject is read again before each turn, so it resolves outside the
+      scope the pattern opens; only the body sees what the pattern binds. -}
+  WhileLetExpression label pattern' subject body -> do
+    walkExpression subject
+    insideLoop label $ inScope $ do
+      bindPattern pattern'
+      walkBlock body
   LoopExpression label body -> insideLoop label (walkBlock body)
   ForExpression label binder iterated body -> do
     walkExpression iterated

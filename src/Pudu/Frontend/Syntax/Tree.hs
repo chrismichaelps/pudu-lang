@@ -335,6 +335,13 @@ data Expression
       !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
   | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
+  {-| `while let PATTERN = EXPRESSION BLOCK`. The subject is read again before
+      each turn and the loop ends the first time the pattern does not match. -}
+  | WhileLetExpression
+      !(Maybe (Located Text))
+      !(Located Pattern)
+      !(Located Expression)
+      !(Located Block)
   | LoopExpression !(Maybe (Located Text)) !(Located Block)
   | ForExpression !(Maybe (Located Text)) !(Located Pattern) !(Located Expression) !(Located Block)
   | InvalidExpression

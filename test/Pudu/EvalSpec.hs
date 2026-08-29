@@ -314,6 +314,15 @@ testBranching = do
     , "}"
     ]
     "step(Some(3))"
+  whileLetDrains <- evaluateStatements
+    [ "var countdown = Some(3)"
+    , "var total = 0"
+    , "while let Some(head) = countdown {"
+    , "  total = total + head"
+    , "  countdown = if head > 1 { Some(head - 1) } else { None }"
+    , "}"
+    , "total"
+    ]
   matched <- evaluate "match 3 { case 1 => \"one\" case 3 => \"three\" case _ => \"other\" }"
   guarded <- evaluateWith [] "match 10 { case n if n > 5 => \"big\" case _ => \"small\" }"
   ranged <- evaluate "match 7 { case 1..5 => \"low\" case 6..=9 => \"high\" case _ => \"out\" }"
@@ -340,6 +349,7 @@ testBranching = do
     , counterexample "a matched let else binds onward" (letElseBound === "42")
     , counterexample "an unmatched let else takes the fallback" (letElseTaken === "7")
     , counterexample "a let else binding outlives its statement" (letElseOutlives === "9")
+    , counterexample "while let stops at the first non-match" (whileLetDrains === "6")
     , matched === "\"three\""
     , guarded === "\"big\""
     , ranged === "\"high\""

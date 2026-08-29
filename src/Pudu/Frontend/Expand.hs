@@ -236,6 +236,12 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
           <$> expandExpression macros depth condition
           <*> expandBlock macros depth body
       )
+  WhileLetExpression label pattern' subject body ->
+    rebuild
+      ( WhileLetExpression label pattern'
+          <$> expandExpression macros depth subject
+          <*> expandBlock macros depth body
+      )
   LoopExpression label body -> rebuild (LoopExpression label <$> expandBlock macros depth body)
   ForExpression label binder iterated body ->
     rebuild
@@ -404,6 +410,15 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
     at (MatchExpression (recurse scrutinee) (map recurseArm arms))
   WhileExpression label condition body ->
     at (WhileExpression label (recurse condition) (recurseBlock body))
+  {-| A `while let`'s pattern binds into its body alone, exactly as an `if let`'s
+      binds into its success arm. The subject is read again each turn and never
+      sees them. -}
+  WhileLetExpression label pattern' subject body ->
+    let locals = Map.fromList
+          [(name, hygienicName name identifier) | name <- patternNames pattern']
+        bodyRenames = Map.union locals renames
+     in at (WhileLetExpression label (renamePattern callSpan bodyRenames pattern')
+          (recurse subject) (recurseBlockWith bodyRenames body))
   LoopExpression label body -> at (LoopExpression label (recurseBlock body))
   ForExpression label binder iterated body ->
     at (ForExpression label binder (recurse iterated) (recurseBlock body))
