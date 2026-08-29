@@ -25,13 +25,9 @@ export type JsonError
 export fn decode(source: Str) -> Result[Json, JsonError] {
   if source.trim().isEmpty() { Err(Empty) } else {
     let started = skipSpace(source, 0)
-    match readValue(source, started) {
-      case Ok(pair) => {
-        let after = skipSpace(source, pair[1])
-        if after < source.length() { Err(Trailing(after)) } else { Ok(pair[0]) }
-      }
-      case Err(problem) => Err(problem)
-    }
+    let pair = readValue(source, started)?
+    let after = skipSpace(source, pair[1])
+    if after < source.length() { Err(Trailing(after)) } else { Ok(pair[0]) }
   }
 }
 
@@ -79,10 +75,7 @@ export fn at(value: &Json, index: Int) -> Option[Json] {
 export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
   var current = *value
   for key in steps {
-    match field(&current, key) {
-      case Some(found) => { current = found }
-      case None => { return None }
-    }
+    current = field(&current, key)?
   }
   Some(current)
 }
@@ -440,13 +433,9 @@ fn readList(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   let size = source.length()
   if index < size && source.charAt(index) == ']' { return Ok((List(members), index + 1)) }
   while index < size {
-    match readValue(source, index) {
-      case Ok(pair) => {
-        members = members.push(pair[0])
-        index = skipSpace(source, pair[1])
-      }
-      case Err(problem) => { return Err(problem) }
-    }
+    let pair = readValue(source, index)?
+    members = members.push(pair[0])
+    index = skipSpace(source, pair[1])
     if index >= size { return Err(Unterminated("list")) }
     let character = source.charAt(index)
     if character == ']' { return Ok((List(members), index + 1)) }
@@ -466,27 +455,15 @@ fn readObject(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   }
   while index < size {
     if source.charAt(index) != '"' { return Err(Unexpected(index, "a key")) }
-    match readText(source, index) {
-      case Ok(keyPair) => {
-        match keyPair[0] {
-          case Text(key) => {
-            var afterKey = skipSpace(source, keyPair[1])
-            if afterKey >= size || source.charAt(afterKey) != ':' {
-              return Err(Unexpected(afterKey, "a colon"))
-            }
-            match readValue(source, afterKey + 1) {
-              case Ok(valuePair) => {
-                entries = entries.push((key, valuePair[0]))
-                index = skipSpace(source, valuePair[1])
-              }
-              case Err(problem) => { return Err(problem) }
-            }
-          }
-          case _ => { return Err(Unexpected(index, "a key")) }
-        }
-      }
-      case Err(problem) => { return Err(problem) }
+    let keyPair = readText(source, index)?
+    let Text(key) = keyPair[0] else { return Err(Unexpected(index, "a key")) }
+    let afterKey = skipSpace(source, keyPair[1])
+    if afterKey >= size || source.charAt(afterKey) != ':' {
+      return Err(Unexpected(afterKey, "a colon"))
     }
+    let valuePair = readValue(source, afterKey + 1)?
+    entries = entries.push((key, valuePair[0]))
+    index = skipSpace(source, valuePair[1])
     if index >= size { return Err(Unterminated("object")) }
     let character = source.charAt(index)
     if character.code() == 125 { return Ok((Object(entries), index + 1)) }
