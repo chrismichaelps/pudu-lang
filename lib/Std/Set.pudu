@@ -42,13 +42,26 @@ export fn symmetricDifference[T](left: &Set[T], right: &Set[T]) -> Set[T] {
 }
 
 /// Whether every member of the first set is in the second.
+/// One merge of two ordered runs. A size comparison would reject an oversized
+/// candidate without walking either set, but `size` here counts the members it
+/// walks, so asking costs what it saves; that guard belongs with a set that
+/// carries its own count.
 export fn isSubsetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
   left.difference(*right).isEmpty()
 }
 
 /// Whether every member of the second set is in the first.
+/// Containment read from the other side, which is all a superset is. Stating it
+/// that way keeps one definition of the rule rather than two that must agree.
 export fn isSupersetOf[T](left: &Set[T], right: &Set[T]) -> Bool {
-  right.difference(*left).isEmpty()
+  isSubsetOf(right, left)
+}
+
+/// Whether every given member is in the set.
+/// The question `isSubsetOf` asks, for a caller holding members rather than a
+/// set: one merge of two ordered runs, not one lookup per member.
+export fn containsAll[T](value: &Set[T], items: &Array[T]) -> Bool {
+  isSubsetOf(&setOf(*items), value)
 }
 
 /// Whether the two sets share no members.
@@ -85,11 +98,7 @@ export fn removeAll[T](value: &Set[T], items: &Array[T]) -> Set[T] {
 /// The complement of `filter`, so a caller states the condition the way they
 /// think of it rather than negating a predicate at the call site.
 export fn removeIf[T](value: &Set[T], reject: fn(T) -> Bool) -> Set[T] {
-  var kept = []
-  for member in value {
-    if !reject(member) { kept = kept.push(member) }
-  }
-  setOf(kept)
+  setOf(value.toArray().filter(fn(member: T) -> Bool => !reject(member)))
 }
 
 /// Only the members the predicate accepts.

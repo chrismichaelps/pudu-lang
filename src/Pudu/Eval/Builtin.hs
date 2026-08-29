@@ -266,7 +266,7 @@ callMapMethod spanValue method receiver arguments = case (method, arguments) of
 callSetMethod :: Span -> SetMethod -> Value -> [Value] -> Evaluator Value
 callSetMethod spanValue method receiver arguments = case (method, arguments) of
   (SetSize, []) -> pure (intOf (fromIntegral (setSize receiver)))
-  (SetIsEmpty, []) -> pure (BoolValue (setSize receiver == 0))
+  (SetIsEmpty, []) -> pure (BoolValue (setIsEmpty receiver))
   (SetContains, [value]) -> pure (BoolValue (setContains receiver value))
   (SetInsert, [value])
     | comparableValue value -> pure (setInsert receiver value)

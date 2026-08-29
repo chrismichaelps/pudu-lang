@@ -16,6 +16,7 @@ module Pudu.Eval.Keyed
   , setIntersect
   , setMembers
   , setRemove
+  , setIsEmpty
   , setSize
   , setUnion
   ) where
@@ -96,6 +97,15 @@ insertMember members value = case members of
     LT -> value : current : rest
     EQ -> current : rest
     GT -> current : insertMember rest value
+
+{-| Whether a set holds nothing.
+
+    Asked directly rather than by counting to zero: a count walks every member
+    to learn something the first one already settles, and this is what every
+    yes/no question about two sets ends in. -}
+setIsEmpty :: Value -> Bool
+setIsEmpty (SetValue members) = null members
+setIsEmpty _ = True
 
 setSize :: Value -> Int
 setSize (SetValue members) = length members
