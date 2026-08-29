@@ -23,15 +23,20 @@ it recovers against: unsafe capabilities and unary operators.
 ## Interface
 
 ```haskell
+data AmbiguityRecovery = PreserveStatement | RecoverOwner
+
 parseCapabilityAnnotation :: Parser [Located Capability]
 invalidPrefix             :: Token -> Parser (Located Expression)
 labelWithoutLoop          :: Token -> Parser (Located Expression)
 reservedPrefix            :: Token -> Text -> Parser (Located Expression)
 reservedKeywordGuidance   :: Keyword -> Maybe Text
+reportAmbiguousLineBreak  :: AmbiguityRecovery -> Parser ()
 skipToLineBoundary        :: Parser ()
 invalidAtCurrent          :: Parser (Located Expression)
 isRecoveryBoundary        :: TokenKind -> Bool
 unaryOperators            :: [SymbolKind]
+continuesAcrossLineBreak  :: TokenKind -> Bool
+isPrefixCapableBinary     :: TokenKind -> Bool
 mergedOrLeft              :: Span -> Span -> Span
 ```
 
@@ -54,6 +59,15 @@ mergedOrLeft              :: Span -> Span -> Span
 - The capability vocabulary is closed, and a name outside it is `E1044` where it was written.
 - `unaryOperators` is consulted only where an operand is expected. `&` and `*` are binary operators
   too, and position is the only thing that separates the readings.
+- `continuesAcrossLineBreak` derives continuation from that same closed vocabulary: a binary
+  symbol continues from the next line exactly when it has no prefix reading.
+- `isPrefixCapableBinary` names the three overlapping spellings, `-`, `&`, and `*`, so owner
+  recovery can consume a consecutive ambiguous run without treating prefix-only `!` or `~` as a
+  continuation decision.
+- `reportAmbiguousLineBreak` owns `E1055` at the ambiguous operator. `PreserveStatement` explains
+  that parentheses make a separate prefix statement; `RecoverOwner` instead asks the writer to
+  rewrite the enclosing expression, because calls, groups, collections, conditions, match arms,
+  and lambda bodies have no sibling-statement position at that boundary.
 
 ### Linkage
 
@@ -62,9 +76,9 @@ mergedOrLeft              :: Span -> Span -> Span
 
 ## Algorithm
 
-Direct dispatch on token kind, with one bounded consume loop for the capability list and one for
-line-boundary recovery. Nothing here recurses into expression parsing, which is why it can be a
-separate module at all.
+Direct dispatch on token kind, with bounded consume loops for the capability list and line-boundary
+recovery. Nothing here recurses into expression parsing, which is why this can remain a separate
+module.
 
 ## Negative Logic (Prohibited Paths)
 

@@ -26,7 +26,7 @@ parserBlockProperties :: [(String, IO Property)]
 parserBlockProperties =
   [ ("blocks order statements and promote a trailing expression", testBlockShape)
   , ("line breaks separate statements without punctuation", testStatementBoundaries)
-  , ("trailing operators and leading dots continue one statement", testContinuation)
+  , ("operators and leading dots continue one statement without ambiguity", testContinuation)
   , ("return carries a value only on its own line", testReturnStatements)
   , ("nested blocks resolve the parser recursion", testNesting)
   , ("unclosed and unrecognized statements recover exactly", testRecovery)
@@ -65,12 +65,34 @@ testStatementBoundaries = do
 testContinuation :: IO Property
 testContinuation = do
   trailingOperator <- parse "{\n  let total = base +\n    extra\n}"
+  leadingOperator <- parse "{\n  let total = 1\n    + 2 * 3\n}"
   leadingDot <- parse "{\n  client\n    .connect()\n    .id\n}"
   sameLine <- parse "{\n  a - b\n}"
+  mixedChain <- parse "{\n  let n = 1\n    + 2 * 3\n    - 4\n  n\n}"
+  separatedPrefix <- parse "{\n  let n = 1\n    + 2 * 3\n  (-4)\n  n\n}"
+  afterBrace <- parse "{\n  while ready {}\n  -1\n}"
+  dereference <- parse "{\n  value\n  *borrowed\n}"
   pure $ conjoin
     [ shape trailingOperator === "[let total=(base+extra)]"
+    , counterexample "an operator with no prefix form may lead a continuation"
+        (shape leadingOperator === "[let total=(1+(2*3))]")
     , shape leadingDot === "[]=>client.connect().id"
     , shape sameLine === "[]=>(a-b)"
+    , counterexample "a mixed leading-operator chain cannot silently change value"
+        (codes mixedChain === ["E1055"])
+    , counterexample "recovery preserves the prefix expression and following statement"
+        (shape mixedChain === "[let n=(1+(2*3));(-4)]=>n")
+    , counterexample "parentheses explicitly start a new prefix expression"
+        ((codes separatedPrefix, shape separatedPrefix)
+          === ([], "[let n=(1+(2*3));(-4)]=>n"))
+    , counterexample "a brace-terminated construct may be followed by unary minus"
+        (codes afterBrace === [])
+    , counterexample "an unrelated dereference remains a statement"
+        (codes dereference === [])
+    , counterexample "ordinary prefix statements keep their block shape"
+        ((shape afterBrace, shape dereference)
+          === ("[while]=>(-1)", "[value]=>(*borrowed)"))
+    , codes leadingOperator === []
     , codes leadingDot === []
     ]
 

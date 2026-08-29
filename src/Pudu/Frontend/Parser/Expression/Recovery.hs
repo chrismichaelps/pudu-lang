@@ -1,11 +1,15 @@
 {-| @Program.Parser.Expression.Recovery — bounded recovery for expression starts -}
 module Pudu.Frontend.Parser.Expression.Recovery
-  ( invalidAtCurrent
+  ( AmbiguityRecovery (..)
+  , continuesAcrossLineBreak
+  , invalidAtCurrent
   , invalidPrefix
   , isRecoveryBoundary
+  , isPrefixCapableBinary
   , labelWithoutLoop
   , mergedOrLeft
   , parseCapabilityAnnotation
+  , reportAmbiguousLineBreak
   , reservedKeywordGuidance
   , reservedPrefix
   , skipToLineBoundary
@@ -33,8 +37,13 @@ import Pudu.Frontend.Token
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
+  , symbolText
   )
 import Pudu.Source (Span, mergeSpans)
+
+data AmbiguityRecovery
+  = PreserveStatement
+  | RecoverOwner
 
 {-| Parse the parenthesised capability list an `unsafe` region may carry.
 
@@ -145,6 +154,31 @@ reservedPrefix token guidance = do
   skipToLineBoundary
   pure (Located (tokenSpan token) InvalidExpression)
 
+{-| Diagnose the first prefix-capable spelling that could silently terminate a
+    line-leading binary chain. Its expression owner chooses whether recovery
+    preserves the token as a statement or advances to an enclosing delimiter. -}
+reportAmbiguousLineBreak :: AmbiguityRecovery -> Parser ()
+reportAmbiguousLineBreak recovery = do
+  token <- peekToken
+  emitParseError "E1055" (tokenSpan token)
+    "this line can continue the expression or start a new one"
+    ( Just
+        ( "end the preceding line with "
+            <> tokenText token
+            <> " to continue, or "
+            <> alternative
+        )
+    )
+ where
+  tokenText token = case tokenKind token of
+    Symbol symbol -> symbolText symbol
+    _ -> "the operator"
+  alternative = case recovery of
+    PreserveStatement ->
+      "wrap this prefix expression in parentheses to start a new statement"
+    RecoverOwner ->
+      "rewrite the enclosing expression so this prefix expression is not adjacent to the chain"
+
 {-| Consume the remaining tokens on the reserved keyword's line so a construct
     like `task my_task() -> Int { 42 }` reports one E1041 rather than a cascade
     of downstream parse errors. Recovery stops only at EOF or a line-initial
@@ -170,6 +204,18 @@ invalidAtCurrent = currentSpan >>= \spanValue -> pure (Located spanValue Invalid
     the parser only consults this list where an operand is expected. -}
 unaryOperators :: [SymbolKind]
 unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
+
+{-| A line-leading binary symbol continues exactly when it cannot instead be
+    read as a prefix expression. -}
+continuesAcrossLineBreak :: TokenKind -> Bool
+continuesAcrossLineBreak kind = case kind of
+  Symbol symbol -> symbol `notElem` unaryOperators
+  _ -> False
+
+isPrefixCapableBinary :: TokenKind -> Bool
+isPrefixCapableBinary kind = case kind of
+  Symbol symbol -> symbol `elem` [SymMinus, SymAmpersand, SymStar]
+  _ -> False
 
 isRecoveryBoundary :: TokenKind -> Bool
 isRecoveryBoundary kind = any (`isSymbol` kind) [",", ")", "]", "}"]
