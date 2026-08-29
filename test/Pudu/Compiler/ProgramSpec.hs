@@ -235,7 +235,7 @@ testProgramEvaluation = do
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "the protocol modules parse and render messages"
-        (protocol === Just "247")
+        (protocol === Just "266")
     , counterexample "the effect modules reach the world and report failures"
         (effects === Just "19")
     , counterexample "the time and process modules reach the world"
