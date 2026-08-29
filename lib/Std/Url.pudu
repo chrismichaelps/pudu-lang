@@ -23,28 +23,24 @@ export fn parse(source: Str) -> Result[Url, UrlError] {
     let authority = rest.slice(0, authorityEnd)
     let remainder = rest.slice(authorityEnd, rest.length())
     if authority.isEmpty() { Err(NoHost) } else {
-      match splitPort(authority) {
-        case Err(problem) => Err(problem)
-        case Ok(hostAndPort) => {
-          let afterPath = firstOf(remainder, "?#")
-          let path = remainder.slice(0, afterPath)
-          let tail = remainder.slice(afterPath, remainder.length())
-          let fragmentAt = tail.indexOf("#")
-          let queryText = if fragmentAt < 0 { tail } else { tail.slice(0, fragmentAt) }
-          let fragment =
-          if fragmentAt < 0 { None } else {
-            Some(decodeComponent(tail.slice(fragmentAt + 1, tail.length())))
-          }
-          Ok(Url {
-              scheme: scheme,
-              host: hostAndPort[0],
-              port: hostAndPort[1],
-              path: if path.isEmpty() { "/" } else { decodeComponent(path) },
-              query: parseQuery(queryText),
-              fragment: fragment
-            })
-        }
+      let hostAndPort = splitPort(authority)?
+      let afterPath = firstOf(remainder, "?#")
+      let path = remainder.slice(0, afterPath)
+      let tail = remainder.slice(afterPath, remainder.length())
+      let fragmentAt = tail.indexOf("#")
+      let queryText = if fragmentAt < 0 { tail } else { tail.slice(0, fragmentAt) }
+      let fragment =
+      if fragmentAt < 0 { None } else {
+        Some(decodeComponent(tail.slice(fragmentAt + 1, tail.length())))
       }
+      Ok(Url {
+          scheme: scheme,
+          host: hostAndPort[0],
+          port: hostAndPort[1],
+          path: if path.isEmpty() { "/" } else { decodeComponent(path) },
+          query: parseQuery(queryText),
+          fragment: fragment
+        })
     }
   }
 }

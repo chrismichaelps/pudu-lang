@@ -62,15 +62,9 @@ export fn remainder[T: Rem](value: T, divisor: T) -> Option[T] {
 
 /// The quotient and the remainder together, or `None` for a nought divisor.
 export fn divMod[T: Div + Rem](value: T, divisor: T) -> Option[(T, T)] {
-  match value.dividedBy(&divisor) {
-    case None => None
-    case Some(quotient) => {
-      match value.remainderOf(&divisor) {
-        case Some(rest) => Some((quotient, rest))
-        case None => None
-      }
-    }
-  }
+  let quotient = value.dividedBy(&divisor)?
+  let rest = value.remainderOf(&divisor)?
+  Some((quotient, rest))
 }
 
 /// Whether a value divides another with no remainder. Nought divides nothing.

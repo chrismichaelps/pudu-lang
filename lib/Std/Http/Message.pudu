@@ -18,22 +18,14 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
   let split = splitHead(source)
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoRequestLine) } else {
-    match parseRequestLine(lines[0]) {
-      case Err(problem) => Err(problem)
-      case Ok(parts) => {
-        match parseHeaders(&lines.slice(1, lines.length())) {
-          case Err(problem) => Err(problem)
-          case Ok(headers) => {
-            Ok(Http.Request {
-                method: Http.methodFrom(parts[0]),
-                target: parts[1],
-                headers: headers,
-                body: split[1]
-              })
-          }
-        }
-      }
-    }
+    let parts = parseRequestLine(lines[0])?
+    let headers = parseHeaders(&lines.slice(1, lines.length()))?
+    Ok(Http.Request {
+        method: Http.methodFrom(parts[0]),
+        target: parts[1],
+        headers: headers,
+        body: split[1]
+      })
   }
 }
 
@@ -42,17 +34,9 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   let split = splitHead(source)
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoStatusLine) } else {
-    match parseStatusLine(lines[0]) {
-      case Err(problem) => Err(problem)
-      case Ok(status) => {
-        match parseHeaders(&lines.slice(1, lines.length())) {
-          case Err(problem) => Err(problem)
-          case Ok(headers) => {
-            Ok(Http.Response{status: status, headers: headers, body: split[1]})
-          }
-        }
-      }
-    }
+    let status = parseStatusLine(lines[0])?
+    let headers = parseHeaders(&lines.slice(1, lines.length()))?
+    Ok(Http.Response{status: status, headers: headers, body: split[1]})
   }
 }
 
