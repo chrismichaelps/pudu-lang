@@ -537,6 +537,49 @@ testControlFlow = do
     ]
   mixedBranches <- codes ["module M", "fn run(flag: Bool) -> Int { if flag { 1 } else { \"two\" } }"]
   condition <- codes ["module M", "fn run() -> Int { if 1 { 1 } else { 2 } }"]
+  returningMatchArm <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> Int {"
+    , "  match flag {"
+    , "    case true => { return 1 }"
+    , "    case false => 2"
+    , "  }"
+    , "}"
+    ]
+  returningIfBranch <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> Int {"
+    , "  if flag { return 1 } else { 2 }"
+    , "}"
+    ]
+  breakingIfBranch <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> Int {"
+    , "  loop {"
+    , "    let found = if flag { break 0 } else { 1 }"
+    , "    break found"
+    , "  }"
+    , "}"
+    ]
+  continuingIfBranch <- codes
+    [ "module M"
+    , "fn run(flag: Bool) -> Int {"
+    , "  loop {"
+    , "    let found = if flag { continue } else { 1 }"
+    , "    break found"
+    , "  }"
+    , "}"
+    ]
+  let fallthroughSource = Text.unlines
+        [ "module M"
+        , "fn run(flag: Bool) -> Int {"
+        , "  match flag {"
+        , "    case true => { let found = 1 }"
+        , "    case false => 2"
+        , "  }"
+        , "}"
+        ]
+  fallthroughBlock <- compile fallthroughSource
   ifLet <- codes
     [ "module M"
     , "fn run(value: Option[Int]) -> Int {"
@@ -754,6 +797,14 @@ testControlFlow = do
     , counterexample "an outer result selects match literal widths" (contextualMatch === [])
     , mixedBranches === ["E3001"]
     , counterexample "a condition must be Bool" (condition === ["E3001"])
+    , counterexample "a returning match arm has type Never" (returningMatchArm === [])
+    , counterexample "a returning if branch has type Never" (returningIfBranch === [])
+    , counterexample "a breaking if branch has type Never" (breakingIfBranch === [])
+    , counterexample "a continuing if branch has type Never" (continuingIfBranch === [])
+    , diagnosticContract fallthroughSource "2" "E3001"
+        "expected (), found Int"
+        (Just "change the value, or change the declared type it must match")
+        fallthroughBlock
     , counterexample "if let checks and binds a matching payload" (ifLet === [])
     , counterexample "if let branches unify" (ifLetBranches === ["E3001"])
     , counterexample "if let checks its pattern against the subject" (ifLetPattern === ["E3001"])
@@ -884,6 +935,7 @@ testTry = do
     ]
   pure $ conjoin
     [ admitted === []
+    , counterexample "? needs a carrier return type" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
     ]
 

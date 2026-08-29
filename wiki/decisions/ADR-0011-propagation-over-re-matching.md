@@ -10,6 +10,10 @@ aliases: [ADR-0011, Propagation Over Re-Matching]
 
 **Status: Accepted.**
 
+The resultless-block premise below is superseded by
+[[ADR-0012-diverging-blocks-preserve-never]]. The surface forms and divergence
+requirement remain accepted; only the block type expressing them changes.
+
 ## Context
 
 `match` is the complete branching form, and completeness makes it the default reach. A writer who
@@ -47,9 +51,10 @@ unannotated result is inferred as `Result`, because the `Ok` and `Err` in such a
 
 **`let PATTERN = EXPRESSION else BLOCK`** binds a refutable pattern for the remainder of the
 enclosing block. The `else` block must not fall through; `E3036` says so when it can. That
-divergence is what earns the binding its scope, and it is checked rather than trusted. Divergence
-is asked of the block's ending rather than its type: a block ending in `return` has no result
-expression, and a block without one is `()` — the same answer a block ending in `0` would give.
+divergence is what earns the binding its scope, and it is checked rather than trusted. The first
+implementation inspected the block ending because it collapsed every resultless block to `()`.
+[[ADR-0012-diverging-blocks-preserve-never]] corrects that premise: a direct control-transfer
+ending preserves `Never`, so the ordinary block type now enforces this requirement.
 A syntactically irrefutable pattern is `E1057`.
 
 Which form a `let` opens is settled by the token after it, since a binding names a value: a

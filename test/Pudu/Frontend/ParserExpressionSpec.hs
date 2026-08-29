@@ -554,6 +554,8 @@ shape (Located _ expression) = case expression of
     "match(" <> shape scrutinee <> "){"
       <> Text.intercalate ";" (map armShape arms) <> "}"
   WhileExpression label condition _ -> labelShape label <> "while(" <> shape condition <> ")"
+  WhileLetExpression label pattern' subject _ ->
+    labelShape label <> "while let " <> patternShape pattern' <> "=" <> shape subject
   LoopExpression label _ -> labelShape label <> "loop"
   ForExpression label binder iterated _ ->
     labelShape label <> "for " <> patternShape binder <> " in " <> shape iterated
