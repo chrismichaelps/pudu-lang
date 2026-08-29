@@ -1,5 +1,7 @@
 module Std.Http
 
+import Std.Option as Option
+
 /// A request method.
 /// The closed set the protocol defines, plus `Other` for a method a server
 /// accepts that this list does not name: refusing to represent one would make
@@ -717,17 +719,15 @@ fn formDecode(value: Str) -> Str {
     if character == '+' { out = out + " " }
       else {
       if character == '%' && index + 2 < size {
-        match hexPairOf(value.slice(index + 1, index + 3)) {
-          case Some(code) => {
-            match charFromCode(code) {
-              case Some(found) => {
-                out = out + found.toText()
-                index = index + 2
-              }
-              case None => { out = out + character.toText() }
-            }
-          }
-          case None => { out = out + character.toText() }
+        let decoded = Option.andThen(
+          hexPairOf(value.slice(index + 1, index + 3)),
+          fn(code) => charFromCode(code)
+        )
+        if let Some(found) = decoded {
+          out = out + found.toText()
+          index = index + 2
+        } else {
+          out = out + character.toText()
         }
       } else { out = out + character.toText() }
     }

@@ -33,5 +33,10 @@ export fn main() -> Int {
   total = total + Message.decodeChunked("5\r\nhello\r\n0\r\n\r\n").length()
   total = total + Http.basicAuth("ada", "pw").length()
   total = total + Http.parseCookies("a=1; b=2").length()
+  let form = Http.parseForm("name=Ada+Lovelace&mark=%21&bad=%ZZ")
+  total = total + form.length()
+  total = total + form[0][1].length()
+  total = total + form[1][1].length()
+  total = total + form[2][1].length()
   total
 }

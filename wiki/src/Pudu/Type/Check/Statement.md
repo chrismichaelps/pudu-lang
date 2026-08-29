@@ -45,6 +45,10 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
   of a match, the branches of an `if`, the result of a block — and each of those
   is a statement's business. Only a `dynamic` expectation changes an outcome, so
   anything else is left to inference.
+- A pushed expectation reaches both present `if let` branches. A form without `else` falls back to
+  ordinary inference so its required unit result is still checked. Its subject is read through a borrow as for
+  `match`, while the successful pattern binds only around the then block; this preserves dynamic
+  widening without leaking the binding into else.
 - `checkAgainst` returns what `unify` produced rather than the inferred type, so
   a failure is reported once: the caller unifies again against the same
   expectation and `ErrorType` absorbs there.
@@ -55,7 +59,7 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
 
 ### Linkage
 
-- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]],
+- **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]], [[Type Check Call]],
   [[Type Check Pattern]], [[Type Check Safety]], [[Type Exhaust]].
 - **Consumed by:** [[Type Check]], which ties it together with
   [[Type Check Expression]].

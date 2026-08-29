@@ -7,6 +7,7 @@ module Pudu.Frontend.Parser.Expression.Control
   , parseLoop
   , parseMatch
   , parseWhile
+  , patternCanFail
   ) where
 
 import Data.Text (Text)
@@ -28,9 +29,14 @@ import Pudu.Frontend.Parser.State
   , peekToken
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree (Expression (..), MatchArm (..))
+import Pudu.Frontend.Syntax.Tree
+  ( Expression (..)
+  , FieldPattern (..)
+  , MatchArm (..)
+  , Pattern (..)
+  )
 import Pudu.Frontend.Token
-  ( Keyword (KwCase, KwElse, KwFor, KwIf, KwIn, KwLoop, KwWhile)
+  ( Keyword (KwCase, KwElse, KwFor, KwIf, KwIn, KwLet, KwLoop, KwWhile)
   , Token (..)
   , TokenKind (..)
   )
@@ -62,6 +68,14 @@ blockExpression blockParser = do
 parseIf :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
 parseIf parsers blockParser = do
   keyword <- advanceToken
+  patternCondition <- matchKeyword KwLet
+  case patternCondition of
+    Just _ -> parseIfLet parsers blockParser keyword
+    Nothing -> parseBooleanIf parsers blockParser keyword
+
+parseBooleanIf
+  :: ExpressionParsers -> BlockParser -> Token -> Parser (Located Expression)
+parseBooleanIf parsers blockParser keyword = do
   condition <- scrutineeOf parsers blockParser
   case locatedValue condition of
     InvalidExpression ->
@@ -72,6 +86,42 @@ parseIf parsers blockParser = do
       let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
       pure (Located (mergedOrLeft (tokenSpan keyword) final)
         (IfExpression condition thenBlock elseExpression))
+
+parseIfLet
+  :: ExpressionParsers -> BlockParser -> Token -> Parser (Located Expression)
+parseIfLet parsers blockParser keyword = do
+  pattern' <- parsePattern
+  case locatedValue pattern' of
+    InvalidPattern -> pure ()
+    value | patternCanFail value -> pure ()
+    _ ->
+      emitParseError "E1056" (locatedSpan pattern') "if let pattern always matches"
+        (Just "use let for an unconditional binding, or choose a pattern that can fail")
+  _ <- expectSymbol "=" "between the pattern and its value"
+  subject <- scrutineeOf parsers blockParser
+  thenBlock <- blockParser
+  elseExpression <- parseElse parsers blockParser
+  let final = maybe (locatedSpan thenBlock) locatedSpan elseExpression
+  pure
+    ( Located (mergedOrLeft (tokenSpan keyword) final)
+        (IfLetExpression pattern' subject thenBlock elseExpression)
+    )
+
+patternCanFail :: Pattern -> Bool
+patternCanFail pattern' = case pattern' of
+  WildcardPattern -> False
+  BindingPattern _ -> False
+  LiteralPattern _ -> True
+  RangePattern{} -> True
+  TuplePattern members -> any (patternCanFail . locatedValue) members
+  ConstructorPattern{} -> True
+  RecordPattern path fields _ ->
+    maybe (any fieldCanFail fields) (const True) path
+  AlternativePattern alternatives -> all (patternCanFail . locatedValue) alternatives
+  InvalidPattern -> True
+ where
+  fieldCanFail (Located _ field) =
+    maybe False (patternCanFail . locatedValue) (fieldPatternValue field)
 
 parseElse :: ExpressionParsers -> BlockParser -> Parser (Maybe (Located Expression))
 parseElse parsers blockParser = do

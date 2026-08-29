@@ -245,6 +245,31 @@ testFunctions = do
 testBranching :: IO Property
 testBranching = do
   conditional <- evaluate "if 2 > 1 { \"yes\" } else { \"no\" }"
+  ifLetPresent <- evaluate
+    "if let Some(value) = Some(7) { value * 2 } else { 0 }"
+  ifLetAbsent <- evaluateWith
+    [ "fn pick(value: Option[Int]) -> Int {"
+    , "  if let Some(found) = value { found } else { 0 }"
+    , "}"
+    ]
+    "pick(None)"
+  ifLetWithoutElse <- evaluateWith
+    [ "fn inspect(value: Option[Int]) -> () {"
+    , "  if let Some(found) = value { show(found) }"
+    , "}"
+    ]
+    "inspect(None)"
+  ifLetSuccessWithoutElse <- evaluateWith
+    [ "fn inspect(value: Option[Int]) -> () {"
+    , "  if let Some(found) = value { show(found) }"
+    , "}"
+    ]
+    "inspect(Some(1))"
+  ifLetOnce <- evaluateStatements
+    [ "var calls = 0"
+    , "let result = if let Some(value) = { calls = calls + 1\n Some(calls) } { value } else { 0 }"
+    , "(calls, result)"
+    ]
   matched <- evaluate "match 3 { case 1 => \"one\" case 3 => \"three\" case _ => \"other\" }"
   guarded <- evaluateWith [] "match 10 { case n if n > 5 => \"big\" case _ => \"small\" }"
   ranged <- evaluate "match 7 { case 1..5 => \"low\" case 6..=9 => \"high\" case _ => \"out\" }"
@@ -260,6 +285,11 @@ testBranching = do
     "classify(0 - 4)"
   pure $ conjoin
     [ conditional === "\"yes\""
+    , counterexample "a successful pattern binds its payload" (ifLetPresent === "14")
+    , counterexample "a failed pattern evaluates else" (ifLetAbsent === "0")
+    , counterexample "failure without else yields unit" (ifLetWithoutElse === "()")
+    , counterexample "success without else also yields unit" (ifLetSuccessWithoutElse === "()")
+    , counterexample "the subject evaluates exactly once" (ifLetOnce === "(1, 1)")
     , matched === "\"three\""
     , guarded === "\"big\""
     , ranged === "\"high\""

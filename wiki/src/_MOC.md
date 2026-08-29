@@ -6,6 +6,7 @@ tags: [moc, module]
 # Module Map
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
+- [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
 
 ## Depth Baseline
 

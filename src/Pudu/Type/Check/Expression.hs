@@ -216,6 +216,29 @@ inferExpression around declared rigid spanValue expression = case expression of
           (ErrorType, _) -> pure ErrorType
           (_, ErrorType) -> pure ErrorType
           _ -> zonk unified
+  IfLetExpression pattern' subject thenBlock elseBranch -> do
+    subjectCheckpoint <- integerLiteralCheckpoint
+    borrowed <- checkExpression around declared rigid subject
+    subjectType <- throughBorrow borrowed
+    subjectEnd <- integerLiteralCheckpoint
+    branchCheckpoint <- integerLiteralCheckpoint
+    thenType <- inTypeScopeWith $ do
+      bindPattern declared rigid pattern' subjectType
+      aroundBlock around declared rigid thenBlock
+    result <- case elseBranch of
+      Nothing -> pure UnitTypeValue
+      Just branch -> do
+        elseType <- checkExpression around declared rigid branch
+        unified <- unify spanValue thenType elseType
+        resolvedThen <- zonk thenType
+        resolvedElse <- zonk elseType
+        case (resolvedThen, resolvedElse) of
+          (ErrorType, _) -> pure ErrorType
+          (_, ErrorType) -> pure ErrorType
+          _ -> zonk unified
+    finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
+    validateIntegerLiteralsSince branchCheckpoint
+    pure result
   MatchExpression scrutinee arms -> do
     subjectCheckpoint <- integerLiteralCheckpoint
     borrowed <- checkExpression around declared rigid scrutinee

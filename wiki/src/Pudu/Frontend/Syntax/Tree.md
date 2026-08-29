@@ -115,6 +115,8 @@ data Expression
   | RecordExpression !ModuleName ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
+  | IfLetExpression !(Located Pattern) !(Located Expression) !(Located Block)
+      !(Maybe (Located Expression))
   | MatchExpression !(Located Expression) ![Located MatchArm]
   | WhileExpression !(Maybe (Located Text)) !(Located Expression) !(Located Block)
   | LoopExpression !(Maybe (Located Text)) !(Located Block)
@@ -132,6 +134,7 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 - A declaration form with more than three components is a named record rather than a positional constructor, so adding a field to `Function`, `Trait`, or a type declaration cannot silently reorder existing arguments at a call site.
 - An absent `functionBody` means a trait member declared without a default; it is the one legitimate bodiless function and is never produced at module scope.
 - Patterns are syntax only: alternation is flat, a range keeps two literal endpoints, and a record rest is an explicit flag rather than an implied field list.
+- `IfLetExpression` preserves the pattern condition the reader wrote so diagnostics and `:ast` do not expose an invented match. Its phases reuse ordinary pattern machinery; the tree adds surface identity, not new matching semantics.
 
 ### Linkage
 
@@ -157,6 +160,7 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 ## Grill Log
 
 - **Q:** Split each recursive data type with `hs-boot`? **A:** No; keep the data knot in one behavior-free file. _Rationale:_ cycles add build complexity without modular behavior. _Rejected:_ artificial boot modules; all parser logic in the same file.
+- **Q:** Lower `if let` directly into `MatchExpression` while parsing? **A:** No; preserve a surface node. _Rationale:_ parser lowering makes source tools show syntax the reader did not write and lets synthetic-arm diagnostics leak. _Rejected:_ parser-only desugaring; a second pattern representation.
 
 ## Variants
 

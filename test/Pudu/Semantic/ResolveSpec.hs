@@ -217,10 +217,32 @@ testPatterns = do
     , "  0"
     , "}"
     ]
+  ifLetScoped <- resolve
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(inner) = value { inner } else { 0 }"
+    , "}"
+    ]
+  ifLetLeaked <- resolve
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(inner) = value { inner } else { 0 }"
+    , "  inner"
+    , "}"
+    ]
+  ifLetElseLeak <- resolve
+    [ "module M"
+    , "fn run(value: Option[Int]) -> Int {"
+    , "  if let Some(inner) = value { inner } else { inner }"
+    , "}"
+    ]
   pure $ conjoin
     [ codes armScoped === []
     , counterexample "an arm binding does not escape" (codes leaked === ["E2010"])
     , codes iteration === []
+    , counterexample "if let binds inside its success block" (codes ifLetScoped === [])
+    , counterexample "an if let binding does not escape" (codes ifLetLeaked === ["E2010"])
+    , counterexample "an if let binding is absent from else" (codes ifLetElseLeak === ["E2010"])
     ]
 
 testShadowing :: IO Property

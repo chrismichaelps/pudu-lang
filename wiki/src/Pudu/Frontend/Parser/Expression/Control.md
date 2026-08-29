@@ -48,6 +48,9 @@ parseWhile, parseLoop, parseFor
   record carries both.
 - `expressionAt` exists for `else if`: the branch is parsed at the loosest precedence so a chain
   nests as one construct rather than as an expression statement followed by a stray `if`.
+- After `if`, `let` selects a refutable pattern condition. The parser reads one pattern, `=`, one
+  scrutinee, and the ordinary then/else shape, producing `IfLetExpression`. A syntactically
+  irrefutable pattern reports `E1056` at that pattern; ordinary `let` states that intent directly.
 - A label is `@name` before the loop it names, and only a loop may carry one. A label followed by
   anything else is `E1053`, reported at the label — the part the reader deletes to make the program
   legal again.
@@ -64,9 +67,11 @@ parseWhile, parseLoop, parseFor
 
 ## Algorithm
 
-Dispatch on the leading keyword, read the head through the capability the form needs — a scrutinee
-for `if`, `while`, `match`, and `for`, nothing for `loop` — then a block. Labels are read before the
-keyword and passed down to whichever loop follows.
+Dispatch on the leading keyword. After `if`, distinguish a Boolean condition from `let PATTERN =`
+without speculative parsing; both read their subject through the scrutinee capability and share
+the same block/else parser. Other forms read the head they need — a scrutinee for `while`, `match`,
+and `for`, nothing for `loop` — then a block. Labels are read before the keyword and passed down to
+whichever loop follows.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -85,6 +90,9 @@ keyword and passed down to whichever loop follows.
   _Rationale:_ `while` and `for` read a head and `loop` does not, and giving them different
   signatures would put that difference in the caller as well as here. _Rejected:_ a narrower
   signature for the one form that needs less.
+- **Q:** Why is `if let` not parsed as a two-arm match? **A:** Tooling must retain the source form.
+  _Rationale:_ semantic phases can reuse their pattern primitives without making `:ast` or a
+  diagnostic mention a synthetic arm. _Rejected:_ parser-only lowering; independent match logic.
 
 ## Referenced by
 

@@ -91,6 +91,8 @@ evaluateModule :: Module -> EvalOutcome
 - A structured scope adopts every task started inside it. Awaiting a task joins it there; a child never awaited is joined when the scope exits, in the order the children started, so no task outlives the region that began it and a failure among them is selected by position rather than by a race. A control transfer out of a scope joins its children before continuing.
 
 - Evaluation runs only on a module the earlier phases admitted. It re-checks nothing they proved, and it invents no value for syntax they rejected.
+- `if let` evaluates its subject once and delegates the test to [[Eval Match]]. Successful bindings
+  run the then block in one temporary frame; failure evaluates else or yields unit.
 - Functions and variant constructors are installed before any constant is evaluated, so mutual recursion and forward references behave exactly as resolution promised. Constants then evaluate in declaration order, and one that reads a later constant is a runtime diagnostic rather than a silent default.
 - `return`, `break`, and `continue` travel as an unwind that the owning construct catches: a call catches a return, a loop catches a break or a continue. This is what makes a `return` inside a nested block leave its function instead of becoming that block's value.
 - A break and a continue carry the label they were written with. A loop catches one addressed to it — by name, or by being the innermost when no name was given — and lets every other one keep travelling outward, which is exactly how `break @outer` from a nested loop leaves the outer one rather than the nearest. A break also carries the value its loop will produce; a break naming none carries unit.

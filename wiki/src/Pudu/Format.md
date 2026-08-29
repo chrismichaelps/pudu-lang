@@ -63,6 +63,10 @@ formatText   :: Source -> Text
   A brace closing a control-flow head is never a record, which the grammar already guarantees by
   forbidding a record construction there. An import's selection list is a third case: detached like
   a block, unpadded like a record.
+- A control-flow head may contain parentheses of its own, as in `if let Some(found) = value {`.
+  Brace classification therefore saves whether it was inside a head when `(` opens and restores
+  that state at the matching `)`. Parenthesized record expressions still classify their own braces
+  as records, while the brace after the completed pattern condition remains a block.
 - `!`, `-`, `&`, `~`, and `*` are **prefix or binary** depending only on what precedes them. An
   operator follows an operand; a prefix follows anything else. `a - b` subtracts, `(-b)` negates;
   `a * b` multiplies, `*handle` reads through a borrow. A prefix takes no space after it.
@@ -104,6 +108,10 @@ layout, where a line is already a unit.
 - **Q:** Is a hand-flattened `if/else` chain preserved? **A:** No; it becomes the staircase brace
   depth implies. _Rationale:_ that is the style the file is being formatted *into*, and a formatter
   that honoured every local deviation would not be one. _Rejected:_ a width-driven exception.
+- **Q:** Why track head state through parentheses instead of special-casing `if let`? **A:** The
+  ambiguity belongs to token structure, not one keyword sequence. _Rationale:_ saving and restoring
+  the head state handles nested parentheses and any future parenthesized control head without
+  teaching the formatter grammar productions. _Rejected:_ an `if let` token-pattern exception.
 
 ## Referenced by
 

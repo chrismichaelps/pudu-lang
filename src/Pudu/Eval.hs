@@ -235,6 +235,15 @@ evaluateHere (Located spanValue expression) = case expression of
       else case elseBranch of
         Nothing -> pure UnitValue
         Just branch -> evaluate branch
+  IfLetExpression pattern' subject thenBlock elseBranch -> do
+    value <- evaluate subject
+    case matchPattern pattern' value of
+      Just bindings -> withFrame bindings $ case elseBranch of
+        Nothing -> evaluateBlock thenBlock >> pure UnitValue
+        Just _ -> evaluateBlock thenBlock
+      Nothing -> case elseBranch of
+        Nothing -> pure UnitValue
+        Just branch -> evaluate branch
   MatchExpression scrutinee arms -> do
     subject <- evaluate scrutinee
     evaluateArms spanValue subject arms
