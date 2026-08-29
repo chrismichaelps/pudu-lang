@@ -155,23 +155,19 @@ export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
 /// The sum of a sequence's items, or `None` when it has no first value.
 export fn sum[S, N: Add, Q: Sequence[S, N]](source: &Q) -> Option[N] {
   var state = Sequence.begin(source)
-  match Sequence.advance(source, state) {
-    case None => None
-    case Some(first) => {
-      state = first[0]
-      var total = first[1]
-      loop {
-        match Sequence.advance(source, state) {
-          case Some(pair) => {
-            state = pair[0]
-            total = total.plus(&pair[1])
-          }
-          case None => { break }
-        }
+  let first = Sequence.advance(source, state)?
+  state = first[0]
+  var total = first[1]
+  loop {
+    match Sequence.advance(source, state) {
+      case Some(pair) => {
+        state = pair[0]
+        total = total.plus(&pair[1])
       }
-      Some(total)
+      case None => { break }
     }
   }
+  Some(total)
 }
 
 /// A sequence whose items are another's, transformed.
@@ -191,10 +187,8 @@ impl [S, A, B, Q: Sequence[S, A]] Sequence[S, B] for Mapped[Q, A, B] {
   fn advance(self: &Self, state: S) -> Option[(S, B)] {
     let source = &self.source
     let transform = self.transform
-    match Sequence.advance(source, state) {
-      case Some(pair) => Some((pair[0], transform(pair[1])))
-      case None => None
-    }
+    let pair = Sequence.advance(source, state)?
+    Some((pair[0], transform(pair[1])))
   }
 }
 
@@ -245,10 +239,8 @@ impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), T] for Taken[Q, T] {
     if state[1] >= self.limit {
       None
     } else {
-      match Sequence.advance(&self.source, state[0]) {
-        case Some(pair) => Some(((pair[0], state[1] + 1), pair[1]))
-        case None => None
-      }
+      let pair = Sequence.advance(&self.source, state[0])?
+      Some(((pair[0], state[1] + 1), pair[1]))
     }
   }
 }
@@ -304,15 +296,8 @@ impl [S, U, A, B, P: Sequence[S, A], Q: Sequence[U, B]] Sequence[(S, U), (A, B)]
   fn advance(self: &Self, state: (S, U)) -> Option[((S, U), (A, B))] {
     let left = &self.left
     let right = &self.right
-    match Sequence.advance(left, state[0]) {
-      case Some(leftPair) => {
-        match Sequence.advance(right, state[1]) {
-          case Some(rightPair) =>
-          Some(((leftPair[0], rightPair[0]), (leftPair[1], rightPair[1])))
-          case None => None
-        }
-      }
-      case None => None
-    }
+    let leftPair = Sequence.advance(left, state[0])?
+    let rightPair = Sequence.advance(right, state[1])?
+    Some(((leftPair[0], rightPair[0]), (leftPair[1], rightPair[1])))
   }
 }

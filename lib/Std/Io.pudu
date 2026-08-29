@@ -14,10 +14,7 @@ export fn writeValue[T](value: T) -> Result[(), Str] { print(show(value)) }
 /// Every line written in order, stopping at the first that fails.
 export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
   for line in lines {
-    match print(line) {
-      case Ok(_) => {}
-      case Err(problem) => { return Err(problem) }
-    }
+    print(line)?
   }
   Ok(())
 }
@@ -32,14 +29,9 @@ export fn readAllLines() -> Result[Array[Str], Str] {
   var out = []
   var reading = true
   while reading {
-    match readLine() {
-      case Ok(line) => {
-        match line {
-          case Some(found) => { out = out.push(found) }
-          case None => { reading = false }
-        }
-      }
-      case Err(problem) => { return Err(problem) }
+    match readLine()? {
+      case Some(found) => { out = out.push(found) }
+      case None => { reading = false }
     }
   }
   Ok(out)
@@ -50,10 +42,7 @@ export fn read(path: Str) -> Result[Str, Str] { readFile(path) }
 
 /// A file's contents in lines.
 export fn readLines(path: Str) -> Result[Array[Str], Str] {
-  match readFile(path) {
-    case Ok(contents) => Ok(contents.lines())
-    case Err(problem) => Err(problem)
-  }
+  Ok(readFile(path)?.lines())
 }
 
 /// A file replaced with the given contents.
@@ -91,14 +80,10 @@ export fn list(path: Str) -> Result[Array[Str], Str] { listDirectory(path) }
 
 /// The paths a directory holds, each joined to the directory.
 export fn listPaths(path: Str) -> Result[Array[Str], Str] {
-  match listDirectory(path) {
-    case Ok(names) => {
-      var out = []
-      for name in names { out = out.push(join(path, name)) }
-      Ok(out)
-    }
-    case Err(problem) => Err(problem)
-  }
+  let names = listDirectory(path)?
+  var out = []
+  for name in names { out = out.push(join(path, name)) }
+  Ok(out)
 }
 
 /// A directory created along with every parent it needs.
@@ -106,18 +91,13 @@ export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 
 /// A file copied, or a report of what stopped it.
 export fn copy(from: Str, to: Str) -> Result[(), Str] {
-  match readFile(from) {
-    case Ok(contents) => writeFile(to, contents)
-    case Err(problem) => Err(problem)
-  }
+  writeFile(to, readFile(from)?)
 }
 
 /// A file moved, which is a copy followed by removing the original.
 export fn move(from: Str, to: Str) -> Result[(), Str] {
-  match copy(from, to) {
-    case Ok(_) => removeFile(from)
-    case Err(problem) => Err(problem)
-  }
+  copy(from, to)?
+  removeFile(from)
 }
 
 /// The character this machine writes between the pieces of a path.
