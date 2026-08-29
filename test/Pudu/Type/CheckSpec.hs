@@ -648,6 +648,61 @@ testControlFlow = do
     , "  found"
     , "}"
     ]
+  propagatingMatch <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
+    , "  match value {"
+    , "    case Err(problem) => Err(problem)"
+    , "    case Ok(found) => Ok(found + 1)"
+    , "  }"
+    , "}"
+    ]
+  propagatingReturn <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
+    , "  match value {"
+    , "    case Err(problem) => { return Err(problem) }"
+    , "    case Ok(found) => { return Ok(found + 1) }"
+    , "  }"
+    , "  Err(\"unreachable\")"
+    , "}"
+    ]
+  propagatingOption <- codes
+    [ "module M"
+    , "fn step(value: Option[Int]) -> Option[Int] {"
+    , "  match value {"
+    , "    case None => None"
+    , "    case Some(found) => Some(found + 1)"
+    , "  }"
+    , "}"
+    ]
+  transformingMatch <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Result[Int, Str] {"
+    , "  match value {"
+    , "    case Err(problem) => Err(problem + \"!\")"
+    , "    case Ok(found) => Ok(found + 1)"
+    , "  }"
+    , "}"
+    ]
+  crossCarrierMatch <- codes
+    [ "module M"
+    , "fn step(value: Option[Int]) -> Result[Int, Str] {"
+    , "  match value {"
+    , "    case None => Err(\"absent\")"
+    , "    case Some(found) => Ok(found)"
+    , "  }"
+    , "}"
+    ]
+  plainCarrierMatch <- codes
+    [ "module M"
+    , "fn step(value: Result[Int, Str]) -> Int {"
+    , "  match value {"
+    , "    case Err(_problem) => 0"
+    , "    case Ok(found) => found"
+    , "  }"
+    , "}"
+    ]
   loops <- codes
     [ "module M"
     , "fn run() -> Int {"
@@ -693,6 +748,12 @@ testControlFlow = do
     , counterexample "let else rejects a tuple, which cannot fail"
         (letElseTuple === ["E1057"])
     , counterexample "an ordinary let is untouched" (plainLet === [])
+    , counterexample "a pass-through Err arm is a ?" (propagatingMatch === ["W3003"])
+    , counterexample "a returned pass-through is the same arm" (propagatingReturn === ["W3003"])
+    , counterexample "a pass-through None arm is a ?" (propagatingOption === ["W3003"])
+    , counterexample "a transformed failure is a decision" (transformingMatch === [])
+    , counterexample "a changed carrier is a decision" (crossCarrierMatch === [])
+    , counterexample "a match into a plain result is a decision" (plainCarrierMatch === [])
     , loops === []
     , counterexample "return is checked against the declared result"
         (returned === ["E3001"])

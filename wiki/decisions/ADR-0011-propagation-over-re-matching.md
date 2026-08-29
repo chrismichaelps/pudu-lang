@@ -74,9 +74,13 @@ Each semantic phase gains one shallow dispatch case and delegates the pattern ru
 - `if let` and `let … else` are complementary and neither subsumes the other: the first is for a
   value used once, the second for a value every following step depends on.
 - Three error codes and one warning code are claimed: `E1057`, `E1058`, `E3036`, `W3003`.
-- A definition may not be written in terms of itself. `Std.Option.map2`, `Std.Result.map2`, and
-  their neighbours keep their nested `match`: they are the combinators the rule points callers
-  toward.
+- The rule reaches the combinators themselves. `Std.Option.map` is `Some(transform(value?))` and
+  `Std.Result.flatten` is `value?`. An earlier draft exempted these as definitions that could not be
+  written in terms of themselves; that was wrong, and `W3003` is what said so. `?` is a compiler
+  primitive rather than a `Std` function, so a combinator reaching for it is not circular. `W3003`
+  is now silent over the whole of `lib/`.
+- An arm whose failure branch *transforms* what it received keeps its `match`. `Std.Result.mapErr`
+  and `Std.Text.Parse.orElse` decide something, and that is the line the rule draws.
 
 ## Rejected alternatives
 

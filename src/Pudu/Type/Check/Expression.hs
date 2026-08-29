@@ -78,6 +78,7 @@ import Pudu.Type.Check.Rule
   , tryType
   , unaryType
   )
+import Pudu.Type.Check.Propagation (reportRedundantPropagation)
 import Pudu.Type.Exhaust (checkExhaustive)
 import Pudu.Type.Formation
   ( formOptionalType
@@ -254,6 +255,8 @@ inferExpression around declared rigid spanValue expression = case expression of
     finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
     resolvedSubject <- zonk subjectType
     checkExhaustive spanValue resolvedSubject arms
+    declaredResult <- enclosingReturnType selfName >>= zonk
+    reportRedundantPropagation spanValue arms declaredResult
     zonk result
   WhileExpression label condition body -> do
     conditionCheckpoint <- integerLiteralCheckpoint
