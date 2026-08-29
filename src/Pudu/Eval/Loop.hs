@@ -175,6 +175,12 @@ evaluateFor needs spanValue label binder iterated body = case elements of
     TupleValue members -> Just members
     ArrayValue members -> Just (toList members)
     StrValue text -> Just (map CharValue (Text.unpack text))
+    {-| A set yields its members and a map its pairs, which is what
+        [[grammar/pudu]] already said they do. Both are ordered, so both walk
+        in the order they hold, and neither needs the sequence protocol to say
+        something the evaluator already knows. -}
+    SetValue members -> Just members
+    MapValue entries -> Just [TupleValue [key, value] | (key, value) <- entries]
     _ -> Nothing
 
   variantElements = case iterated of
