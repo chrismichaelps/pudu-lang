@@ -48,7 +48,9 @@ To install or refresh the exact executable used by the shell and editor:
 ```bash
 mkdir -p "$HOME/.local/bin"
 cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
+export PATH="$HOME/.local/bin:$PATH"
 hash -r
+test "$(command -v pudu)" = "$HOME/.local/bin/pudu"
 pudu check test-fixtures/tooling/RecentLanguage.pudu
 node test/lsp-session.mjs "$(command -v pudu)"
 ```

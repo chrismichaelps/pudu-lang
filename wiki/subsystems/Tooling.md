@@ -24,7 +24,8 @@ CLI command model · REPL session model · formatter · lints · project manifes
 - Tool output and exit codes are compatibility-tested public interfaces.
 - A refresh installation replaces the executable the shell and editor actually resolve, then
   drives that installed binary through both `check` and a real LSP session. The package version
-  alone cannot prove freshness while pre-release builds still share `0.1.0.0`.
+  alone cannot prove freshness while pre-release builds still share `0.1.0.0`; the refresh asserts
+  the resolved path first so another earlier `PATH` entry cannot make the proof vacuous.
 - Generated documentation has one canonical [[Doc Index]] and may be projected as terminal text,
   [[Doc Json]], or a self-contained [[Doc Site]]; projections do not re-infer declarations.
 

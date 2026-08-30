@@ -42,7 +42,8 @@ pudu help            print usage
 - A refresh installation must overwrite the selected executable path deliberately. Until the
   binary version advances per build, freshness is proven behaviorally: the installed executable
   checks the recent-language compatibility source without diagnostics and passes the real stdio
-  LSP session against that same surface.
+  LSP session against that same surface. The documented refresh puts that directory first on
+  `PATH` and asserts the resolved path before either behavioral check.
 - `pudu fmt` rewrites files in place, `--check` reports which would change and exits non-zero without touching any, and `--stdout` writes the result for a caller that wants to diff it. The check form is the shape a continuous-integration step needs.
 
 - `main`'s answer decides what the run does. A whole number becomes the exit status, because that is

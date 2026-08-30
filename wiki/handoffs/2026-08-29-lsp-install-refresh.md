@@ -24,6 +24,12 @@ An independent **Forensic Guardian** must verify that the stdio session really r
 diagnostic publication for every recent form, the refresh command replaces the resolved binary,
 the action majors match the official releases, and CI finishes without the Node 20 annotation.
 
+## Active-agent ledger
+
+| Agent | Issue | Role | Config | Worktree | Branch | Ownership | Avoid | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `forensic_review_150` | #150 | Read-only Forensic Guardian | `~/.codex/config.toml` | read-only `/private/tmp/pudu-lsp-install` | none | Independent diff and vault-parity review | All edits, commits, pushes, and unrelated worktrees | Complete — clear, no findings |
+
 ## Grill Log
 
 - **Q:** Should the extension gain its own syntax checker? **A:** No; strengthen the real server
@@ -35,9 +41,24 @@ the action majors match the official releases, and CI finishes without the Node 
 
 ## Exact Next Action
 
-Commit the recent-surface fixture, refresh instructions, and official action upgrades; merge the
-now-landed issue #147 from `dev`; then validate the worktree and installed executable before
-independent review and a PR to `dev`.
+Push `feature/150-sync-lsp-install` and open its PR to `dev`, then require the GitHub run to finish
+green without the retired Node 20 action annotation before merge.
+
+## Validation evidence
+
+- Both unoptimized and optimized full test runners pass after the issue #147 merge; both strict
+  builds compile and link under `-Werror` (the sandbox only denies Cabal's final global build-log
+  write).
+- Every committed Pudu fixture passes `fmt --check`; diagnostic-code integrity and documentation
+  site parity pass, including both documentation CLI failure paths.
+- The optimized worktree binary and refreshed `~/.local/bin/pudu` each check
+  `RecentLanguage.pudu` without diagnostics and complete the real two-document stdio session with
+  `recentDiagnostics: 0`.
+- The refresh instructions put `~/.local/bin` first on `PATH` and assert the resolved executable
+  before either behavioral proof, preventing an older earlier entry from satisfying the checks.
+- Independent Forensic Guardian review cleared the complete 171-addition diff with no findings and
+  confirmed mirror parity, backlinks, resolved Grill decisions, private-boundary compliance, and
+  the sub-400-line review size.
 
 ## Referenced by
 
