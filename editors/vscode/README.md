@@ -16,9 +16,17 @@ written for the editor would drift from the first within a release.
 1. Build the compiler and put it on your `PATH`:
 
    ```bash
-   cabal install pudu
+   mkdir -p "$HOME/.local/bin"
+   cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
+   export PATH="$HOME/.local/bin:$PATH"
+   hash -r
+   test "$(command -v pudu)" = "$HOME/.local/bin/pudu"
+   pudu check test-fixtures/tooling/RecentLanguage.pudu
+   node test/lsp-session.mjs "$(command -v pudu)"
    ```
 
+   Run those commands from the repository root. They replace an older installed binary and prove
+   the resolved executable understands the recent language surface through a real LSP session.
    Or point the extension at a build with the `pudu.serverPath` setting.
 
 2. From this directory:

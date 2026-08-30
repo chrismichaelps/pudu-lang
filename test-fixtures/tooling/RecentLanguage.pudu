@@ -1,0 +1,21 @@
+module RecentLanguage
+
+fn choose(flag: Bool) -> Int {
+  match flag {
+    case true => { return 1 }
+    case false => 2
+  }
+}
+
+fn resolve(current: Option[Int], extra: Result[Int, Str]) -> Result[Int, Str] {
+  let Some(first) = current else { return Err("missing") }
+  let amount = extra ?
+  if let Some(found) = Some(first) {
+    var pending = Some(found + amount)
+    while let Some(value) = pending {
+      pending = None
+      return Ok(choose(true) + value)
+    }
+  }
+  Ok(0)
+}

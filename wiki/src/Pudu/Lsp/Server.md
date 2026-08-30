@@ -62,6 +62,9 @@ serverCapabilities :: Json
   atomically.
 - A file's own directory is its source root, so a sibling module is importable from an editor the
   same way it is from the command line.
+- Every new language surface joins the real stdio-session fixture. The fixture opens a clean
+  compatibility document and requires an empty diagnostic list, so an editor cannot silently keep
+  an older parser or checker contract while command-line-only tests advance.
 
 - **Hover answers about what the cursor is on, and about the declaration containing it only when nothing else answers.** The documentation index holds declarations, so asking it alone could only ever name the function a cursor was inside — hovering `text` in `text.length()` reported the enclosing `main`, which is true of every position in that body and therefore tells a reader nothing.
 - **After a dot, completion offers what the value carries.** The receiver is the expression ending at the dot, which the checker already recorded a type for, and the method names come from the tables dispatch reads. A request carrying no position asks about the document rather than a place in it, and is answered as it always was.
@@ -96,6 +99,11 @@ stored; write the replies. The loop ends when the stream closes or `exit` arrive
   be tested. _Rationale:_ every handler is a function from what was compiled to what the editor
   shows, and the whole suite runs without a client. _Rejected:_ threading IO through the handlers,
   which would have made each one testable only end to end.
+- **Q:** Why test recent syntax through a spawned server when `analyse` already uses the compiler?
+  **A:** To prove the installed command reaches that compiler. _Rationale:_ protocol framing,
+  process selection, and stale binaries sit outside the pure handler and are exactly where an
+  editor installation can drift. _Rejected:_ another editor-specific analyser or a version-only
+  smoke test.
 
 ## Referenced by
 

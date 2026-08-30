@@ -39,6 +39,11 @@ pudu help            print usage
 ### Governance
 
 - `pudu lsp` speaks the language server protocol over stdio. It takes no arguments and reads until the client closes the stream; everything it answers comes from the same compile the other commands run.
+- A refresh installation must overwrite the selected executable path deliberately. Until the
+  binary version advances per build, freshness is proven behaviorally: the installed executable
+  checks the recent-language compatibility source without diagnostics and passes the real stdio
+  LSP session against that same surface. The documented refresh puts that directory first on
+  `PATH` and asserts the resolved path before either behavioral check.
 - `pudu fmt` rewrites files in place, `--check` reports which would change and exits non-zero without touching any, and `--stdout` writes the result for a caller that wants to diff it. The check form is the shape a continuous-integration step needs.
 
 - `main`'s answer decides what the run does. A whole number becomes the exit status, because that is
@@ -103,6 +108,10 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 - **Q:** Should `pudu doc --html` take an output directory? **A:** No. _Rationale:_ the page is one
   artifact and stdout composes with shells, build tools, and release pipelines without defining
   overwrite behaviour in the compiler. _Rejected:_ an output path with implicit replacement.
+- **Q:** Should installation rely on Cabal's default binary directory? **A:** Not for a refresh.
+  _Rationale:_ the shell may resolve an older executable from another directory first, so the
+  documented refresh names `~/.local/bin` and allows overwrite explicitly. _Rejected:_ installing
+  successfully somewhere and assuming the editor found that copy.
 
 ## Referenced by
 
