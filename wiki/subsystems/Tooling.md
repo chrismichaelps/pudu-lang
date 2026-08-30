@@ -22,6 +22,9 @@ CLI command model · REPL session model · formatter · lints · project manifes
 - Reuses structured values and [[Diagnostic]] rendering; it does not reimplement compiler phases.
 - Filesystem, terminal, environment, and process IO remain at Tooling or explicit seams.
 - Tool output and exit codes are compatibility-tested public interfaces.
+- A refresh installation replaces the executable the shell and editor actually resolve, then
+  drives that installed binary through both `check` and a real LSP session. The package version
+  alone cannot prove freshness while pre-release builds still share `0.1.0.0`.
 - Generated documentation has one canonical [[Doc Index]] and may be projected as terminal text,
   [[Doc Json]], or a self-contained [[Doc Site]]; projections do not re-infer declarations.
 
@@ -32,6 +35,10 @@ CLI command model · REPL session model · formatter · lints · project manifes
 - **Q:** Does the documentation website require a hosted service? **A:** No; emit one static page.
   _Rationale:_ the index is immutable compiler output, and offline documentation must remain useful
   in a systems-language toolchain. _Rejected:_ a required server or browser build pipeline.
+- **Q:** Is a successful build enough to call the editor installation current? **A:** No; exercise
+  the installed path. _Rationale:_ an older `pudu` elsewhere on `PATH` can keep serving stale
+  diagnostics even when the worktree build is correct. _Rejected:_ checking only `pudu version`,
+  because pre-release builds currently share one binary version.
 
 ## Referenced by
 

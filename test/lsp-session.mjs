@@ -8,6 +8,7 @@
 // Usage: node test/lsp-session.mjs <path-to-pudu-executable>
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import process from "node:process";
 
 const executable = process.argv[2];
@@ -32,9 +33,15 @@ const source = [
   "",
 ].join("\n");
 
+const recentSource = readFileSync(
+  new URL("../test-fixtures/tooling/RecentLanguage.pudu", import.meta.url),
+  "utf8",
+);
+
 // The server is told what a document contains, never where to find it, so
 // this names a document that need not exist anywhere.
 const uri = "file:///pudu-fixtures/session.pudu";
+const recentUri = "file:///pudu-fixtures/RecentLanguage.pudu";
 
 const messages = [
   { id: 1, method: "initialize", params: { processId: null, rootUri: null, capabilities: {} } },
@@ -42,6 +49,12 @@ const messages = [
   {
     method: "textDocument/didOpen",
     params: { textDocument: { uri, languageId: "pudu", version: 1, text: source } },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: recentUri, languageId: "pudu", version: 1, text: recentSource },
+    },
   },
   {
     id: 2,
@@ -155,13 +168,27 @@ for (const provider of ["hoverProvider", "definitionProvider", "documentSymbolPr
 
 // Diagnostics: the source declares `-> Str` and returns an `Int`, so a working
 // server reports it on the line that is wrong.
-const published = notifications("textDocument/publishDiagnostics");
+const published = notifications("textDocument/publishDiagnostics").filter(
+  frame => frame.params.uri === uri,
+);
 assert(published.length > 0, "no diagnostics were published for an open document");
 const diagnostics = published.at(-1).params.diagnostics;
 assert(diagnostics.length > 0, "the type error in the document was not reported");
 assert(
   diagnostics.some(entry => entry.range.start.line >= 2),
   "the diagnostic did not point at the line that is wrong",
+);
+
+// The editor must accept every recently added control-flow form through the
+// installed server, not merely through parser or checker unit tests.
+const recentPublished = notifications("textDocument/publishDiagnostics").filter(
+  frame => frame.params.uri === recentUri,
+);
+assert(recentPublished.length > 0, "no diagnostics publication arrived for the recent-language document");
+const recentDiagnostics = recentPublished.at(-1).params.diagnostics;
+assert(
+  recentDiagnostics.length === 0,
+  `the installed LSP reported stale diagnostics for recent syntax: ${JSON.stringify(recentDiagnostics)}`,
 );
 
 // Hover: a signature, not just a name.
@@ -220,5 +247,10 @@ assert(
 );
 
 console.log(
-  JSON.stringify({ frames: frames.length, diagnostics: diagnostics.length, methods: labels.length }),
+  JSON.stringify({
+    frames: frames.length,
+    diagnostics: diagnostics.length,
+    recentDiagnostics: recentDiagnostics.length,
+    methods: labels.length,
+  }),
 );

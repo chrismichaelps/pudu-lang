@@ -43,6 +43,19 @@ cabal build all
 
 The binary lands under `dist-newstyle/`; `cabal run pudu -- <args>` invokes it.
 
+To install or refresh the exact executable used by the shell and editor:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
+hash -r
+pudu check test-fixtures/tooling/RecentLanguage.pudu
+node test/lsp-session.mjs "$(command -v pudu)"
+```
+
+The behavioral checks matter while development builds share version `0.1.0.0`:
+version text alone cannot distinguish a current compiler from an older installed copy.
+
 ```bash
 cabal test all --test-show-details=direct
 ```
