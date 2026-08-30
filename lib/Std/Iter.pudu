@@ -155,7 +155,7 @@ export fn isEmpty[S, T, Q: Sequence[S, T]](source: &Q) -> Bool {
 /// The sum of a sequence's items, or `None` when it has no first value.
 export fn sum[S, N: Add, Q: Sequence[S, N]](source: &Q) -> Option[N] {
   var state = Sequence.begin(source)
-  let first = Sequence.advance(source, state)?
+  let first = Sequence.advance(source, state) ?
   state = first[0]
   var total = first[1]
   loop {
@@ -187,7 +187,7 @@ impl [S, A, B, Q: Sequence[S, A]] Sequence[S, B] for Mapped[Q, A, B] {
   fn advance(self: &Self, state: S) -> Option[(S, B)] {
     let source = &self.source
     let transform = self.transform
-    let pair = Sequence.advance(source, state)?
+    let pair = Sequence.advance(source, state) ?
     Some((pair[0], transform(pair[1])))
   }
 }
@@ -239,7 +239,7 @@ impl [S, T, Q: Sequence[S, T]] Sequence[(S, Int), T] for Taken[Q, T] {
     if state[1] >= self.limit {
       None
     } else {
-      let pair = Sequence.advance(&self.source, state[0])?
+      let pair = Sequence.advance(&self.source, state[0]) ?
       Some(((pair[0], state[1] + 1), pair[1]))
     }
   }
@@ -296,8 +296,8 @@ impl [S, U, A, B, P: Sequence[S, A], Q: Sequence[U, B]] Sequence[(S, U), (A, B)]
   fn advance(self: &Self, state: (S, U)) -> Option[((S, U), (A, B))] {
     let left = &self.left
     let right = &self.right
-    let leftPair = Sequence.advance(left, state[0])?
-    let rightPair = Sequence.advance(right, state[1])?
+    let leftPair = Sequence.advance(left, state[0]) ?
+    let rightPair = Sequence.advance(right, state[1]) ?
     Some(((leftPair[0], rightPair[0]), (leftPair[1], rightPair[1])))
   }
 }

@@ -884,6 +884,7 @@ testTry = do
     ]
   pure $ conjoin
     [ admitted === []
+    , counterexample "? needs a carrier return type" (wrongCarrier === ["E3011"])
     , counterexample "the failure types must agree" (wrongFailure === ["E3001"])
     ]
 

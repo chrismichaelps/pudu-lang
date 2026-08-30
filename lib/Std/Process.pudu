@@ -16,7 +16,7 @@ export fn withInput(
   arguments: &Array[Str],
   standardInput: Str
 ) -> Result[Finished, Str] {
-  let triple = runProgram(program, *arguments, standardInput)?
+  let triple = runProgram(program, *arguments, standardInput) ?
   Ok(Finished{status: triple[0], output: triple[1], errors: triple[2]})
 }
 
@@ -24,18 +24,18 @@ export fn withInput(
 /// failure carrying whatever it wrote to its error stream.
 /// The form to reach for when the program is a step that must work.
 export fn output(program: Str, arguments: &Array[Str]) -> Result[Str, Str] {
-  let finished = run(program, arguments)?
+  let finished = run(program, arguments) ?
   if finished.status == 0 { Ok(finished.output) } else { Err(describe(&finished)) }
 }
 
 /// Run a program and answer with its output in lines.
 export fn lines(program: Str, arguments: &Array[Str]) -> Result[Array[Str], Str] {
-  Ok(output(program, arguments)?.lines())
+  Ok(output(program, arguments) ?.lines())
 }
 
 /// Run a program only for its status.
 export fn status(program: Str, arguments: &Array[Str]) -> Result[Int, Str] {
-  Ok(run(program, arguments)?.status)
+  Ok(run(program, arguments) ?.status)
 }
 
 /// Whether a program ran and reported success.

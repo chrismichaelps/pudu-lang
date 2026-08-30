@@ -60,7 +60,7 @@ export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
 
 /// The success transformed, if there was one.
 export fn map[T, E, U](value: Result[T, E], transform: fn(T) -> U) -> Result[U, E] {
-  Ok(transform(value?))
+  Ok(transform(value ?))
 }
 
 /// The failure transformed, if there was one.
@@ -75,7 +75,7 @@ export fn mapErr[T, E, F](value: Result[T, E], transform: fn(E) -> F) -> Result[
 
 /// The success transformed into another result, flattened.
 export fn andThen[T, E, U](value: Result[T, E], transform: fn(T) -> Result[U, E]) -> Result[U, E] {
-  transform(value?)
+  transform(value ?)
 }
 
 /// The success, or a fallback computed from the failure.
@@ -98,7 +98,7 @@ export fn fold[T, E, A](value: Result[T, E], onOk: fn(T) -> A, onErr: fn(E) -> A
 
 /// A nested result flattened by one level.
 export fn flatten[T, E](value: Result[Result[T, E], E]) -> Result[T, E] {
-  value?
+  value ?
 }
 
 /// Every success, with the failures dropped.
@@ -131,7 +131,7 @@ export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
 export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
   var out = []
   for value in values {
-    out = out.push(value?)
+    out = out.push(value ?)
   }
   Ok(out)
 }
@@ -179,7 +179,7 @@ export fn map2[T, U, E, V](
   right: Result[U, E],
   combine: fn(T, U) -> V
 ) -> Result[V, E] {
-  Ok(combine(left?, right?))
+  Ok(combine(left ?, right ?))
 }
 
 /// Whether the operation succeeded and the predicate accepts the value.
@@ -202,7 +202,7 @@ export fn traverse[A, B, E](
 ) -> Result[Array[B], E] {
   var out = []
   for item in items {
-    out = out.push(transform(item)?)
+    out = out.push(transform(item) ?)
   }
   Ok(out)
 }

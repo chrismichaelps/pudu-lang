@@ -62,8 +62,8 @@ export fn remainder[T: Rem](value: T, divisor: T) -> Option[T] {
 
 /// The quotient and the remainder together, or `None` for a nought divisor.
 export fn divMod[T: Div + Rem](value: T, divisor: T) -> Option[(T, T)] {
-  let quotient = value.dividedBy(&divisor)?
-  let rest = value.remainderOf(&divisor)?
+  let quotient = value.dividedBy(&divisor) ?
+  let rest = value.remainderOf(&divisor) ?
   Some((quotient, rest))
 }
 

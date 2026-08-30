@@ -14,7 +14,7 @@ export fn writeValue[T](value: T) -> Result[(), Str] { print(show(value)) }
 /// Every line written in order, stopping at the first that fails.
 export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
   for line in lines {
-    print(line)?
+    print(line) ?
   }
   Ok(())
 }
@@ -29,7 +29,7 @@ export fn readAllLines() -> Result[Array[Str], Str] {
   var out = []
   var reading = true
   while reading {
-    match readLine()? {
+    match readLine() ? {
       case Some(found) => { out = out.push(found) }
       case None => { reading = false }
     }
@@ -42,7 +42,7 @@ export fn read(path: Str) -> Result[Str, Str] { readFile(path) }
 
 /// A file's contents in lines.
 export fn readLines(path: Str) -> Result[Array[Str], Str] {
-  Ok(readFile(path)?.lines())
+  Ok(readFile(path) ?.lines())
 }
 
 /// A file replaced with the given contents.
@@ -80,7 +80,7 @@ export fn list(path: Str) -> Result[Array[Str], Str] { listDirectory(path) }
 
 /// The paths a directory holds, each joined to the directory.
 export fn listPaths(path: Str) -> Result[Array[Str], Str] {
-  let names = listDirectory(path)?
+  let names = listDirectory(path) ?
   var out = []
   for name in names { out = out.push(join(path, name)) }
   Ok(out)
@@ -91,12 +91,12 @@ export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 
 /// A file copied, or a report of what stopped it.
 export fn copy(from: Str, to: Str) -> Result[(), Str] {
-  writeFile(to, readFile(from)?)
+  writeFile(to, readFile(from) ?)
 }
 
 /// A file moved, which is a copy followed by removing the original.
 export fn move(from: Str, to: Str) -> Result[(), Str] {
-  copy(from, to)?
+  copy(from, to) ?
   removeFile(from)
 }
 
