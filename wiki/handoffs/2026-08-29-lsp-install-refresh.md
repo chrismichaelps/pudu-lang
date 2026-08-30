@@ -41,8 +41,8 @@ the action majors match the official releases, and CI finishes without the Node 
 
 ## Exact Next Action
 
-Push `feature/150-sync-lsp-install` and open its PR to `dev`, then require the GitHub run to finish
-green without the retired Node 20 action annotation before merge.
+Merge PR #151 into `dev`, then fast-forward the local `dev` worktree before selecting the next
+ready language issue.
 
 ## Validation evidence
 
@@ -59,6 +59,9 @@ green without the retired Node 20 action annotation before merge.
 - Independent Forensic Guardian review cleared the complete 171-addition diff with no findings and
   confirmed mirror parity, backlinks, resolved Grill decisions, private-boundary compliance, and
   the sub-400-line review size.
+- PR #151 run `33318894570` completed every compiler, test, formatting, diagnostic, LSP, and
+  documentation step successfully in 4m38s. Its compiler check has zero annotations, confirming the
+  retired Node 20 action warning is gone.
 
 ## Referenced by
 
