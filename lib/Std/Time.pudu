@@ -124,19 +124,19 @@ export fn toRfc3339(value: &Instant) -> Result[Str, Str] {
 
 /// An instant read from RFC 3339.
 export fn fromRfc3339(text: Str) -> Result[Instant, Str] {
-  Ok(Instant{millis: parseTime("%Y-%m-%dT%H:%M:%SZ", text)?})
+  Ok(Instant{millis: parseTime("%Y-%m-%dT%H:%M:%SZ", text) ?})
 }
 
 /// An instant read with a pattern.
 export fn parse(pattern: Str, text: Str) -> Result[Instant, Str] {
-  Ok(Instant{millis: parseTime(pattern, text)?})
+  Ok(Instant{millis: parseTime(pattern, text) ?})
 }
 
 /// An instant rendered as a date in UTC.
 export fn toDate(value: &Instant) -> Result[Date, Str] {
-  let year = formatTime("%Y", value.millis, "utc")?
-  let month = formatTime("%m", value.millis, "utc")?
-  let day = formatTime("%d", value.millis, "utc")?
+  let year = formatTime("%Y", value.millis, "utc") ?
+  let month = formatTime("%m", value.millis, "utc") ?
+  let day = formatTime("%d", value.millis, "utc") ?
   Ok(Date {
       year: wholeOr(year, 0),
       month: wholeOr(month, 0),
@@ -146,9 +146,9 @@ export fn toDate(value: &Instant) -> Result[Date, Str] {
 
 /// An instant rendered as a time of day in UTC.
 export fn toTimeOfDay(value: &Instant) -> Result[TimeOfDay, Str] {
-  let hour = formatTime("%H", value.millis, "utc")?
-  let minute = formatTime("%M", value.millis, "utc")?
-  let second = formatTime("%S", value.millis, "utc")?
+  let hour = formatTime("%H", value.millis, "utc") ?
+  let minute = formatTime("%M", value.millis, "utc") ?
+  let second = formatTime("%S", value.millis, "utc") ?
   Ok(TimeOfDay {
       hour: wholeOr(hour, 0),
       minute: wholeOr(minute, 0),
@@ -173,7 +173,7 @@ export fn renderTime(value: &TimeOfDay) -> Str {
 
 /// A date read from `YYYY-MM-DD`.
 export fn parseDate(text: Str) -> Result[Date, Str] {
-  let instant = parse("%Y-%m-%d", text)?
+  let instant = parse("%Y-%m-%d", text) ?
   toDate(&instant)
 }
 

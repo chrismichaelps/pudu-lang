@@ -18,8 +18,8 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
   let split = splitHead(source)
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoRequestLine) } else {
-    let parts = parseRequestLine(lines[0])?
-    let headers = parseHeaders(&lines.slice(1, lines.length()))?
+    let parts = parseRequestLine(lines[0]) ?
+    let headers = parseHeaders(&lines.slice(1, lines.length())) ?
     Ok(Http.Request {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
@@ -34,8 +34,8 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   let split = splitHead(source)
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoStatusLine) } else {
-    let status = parseStatusLine(lines[0])?
-    let headers = parseHeaders(&lines.slice(1, lines.length()))?
+    let status = parseStatusLine(lines[0]) ?
+    let headers = parseHeaders(&lines.slice(1, lines.length())) ?
     Ok(Http.Response{status: status, headers: headers, body: split[1]})
   }
 }

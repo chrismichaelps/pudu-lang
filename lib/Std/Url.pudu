@@ -23,7 +23,7 @@ export fn parse(source: Str) -> Result[Url, UrlError] {
     let authority = rest.slice(0, authorityEnd)
     let remainder = rest.slice(authorityEnd, rest.length())
     if authority.isEmpty() { Err(NoHost) } else {
-      let hostAndPort = splitPort(authority)?
+      let hostAndPort = splitPort(authority) ?
       let afterPath = firstOf(remainder, "?#")
       let path = remainder.slice(0, afterPath)
       let tail = remainder.slice(afterPath, remainder.length())

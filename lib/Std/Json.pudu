@@ -25,7 +25,7 @@ export type JsonError
 export fn decode(source: Str) -> Result[Json, JsonError] {
   if source.trim().isEmpty() { Err(Empty) } else {
     let started = skipSpace(source, 0)
-    let pair = readValue(source, started)?
+    let pair = readValue(source, started) ?
     let after = skipSpace(source, pair[1])
     if after < source.length() { Err(Trailing(after)) } else { Ok(pair[0]) }
   }
@@ -75,7 +75,7 @@ export fn at(value: &Json, index: Int) -> Option[Json] {
 export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
   var current = *value
   for key in steps {
-    current = field(&current, key)?
+    current = field(&current, key) ?
   }
   Some(current)
 }
@@ -433,7 +433,7 @@ fn readList(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   let size = source.length()
   if index < size && source.charAt(index) == ']' { return Ok((List(members), index + 1)) }
   while index < size {
-    let pair = readValue(source, index)?
+    let pair = readValue(source, index) ?
     members = members.push(pair[0])
     index = skipSpace(source, pair[1])
     if index >= size { return Err(Unterminated("list")) }
@@ -455,13 +455,13 @@ fn readObject(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   }
   while index < size {
     if source.charAt(index) != '"' { return Err(Unexpected(index, "a key")) }
-    let keyPair = readText(source, index)?
+    let keyPair = readText(source, index) ?
     let Text(key) = keyPair[0] else { return Err(Unexpected(index, "a key")) }
     let afterKey = skipSpace(source, keyPair[1])
     if afterKey >= size || source.charAt(afterKey) != ':' {
       return Err(Unexpected(afterKey, "a colon"))
     }
-    let valuePair = readValue(source, afterKey + 1)?
+    let valuePair = readValue(source, afterKey + 1) ?
     entries = entries.push((key, valuePair[0]))
     index = skipSpace(source, valuePair[1])
     if index >= size { return Err(Unterminated("object")) }

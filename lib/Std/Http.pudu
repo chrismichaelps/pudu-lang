@@ -212,7 +212,7 @@ export fn setHeader(headers: &Array[(Str, Str)], name: Str, held: Str) -> Array[
 
 /// The media type a `content-type` header names, without its parameters.
 export fn mediaType(headers: &Array[(Str, Str)]) -> Option[Str] {
-  let found = header(headers, "content-type")?
+  let found = header(headers, "content-type") ?
   let semicolon = found.indexOf(";")
   if semicolon < 0 { Some(found.trim().toLower()) }
     else { Some(found.slice(0, semicolon).trim().toLower()) }
@@ -559,7 +559,7 @@ export fn renderContentRange(from: Int, to: Int, total: Int) -> Str {
 
 /// The length a `content-length` header reports, or `None`.
 export fn contentLength(headers: &Array[(Str, Str)]) -> Option[Int] {
-  wholeOf(header(headers, "content-length")?.trim())
+  wholeOf(header(headers, "content-length") ?.trim())
 }
 
 /// Whether a message says its body is sent in chunks.
