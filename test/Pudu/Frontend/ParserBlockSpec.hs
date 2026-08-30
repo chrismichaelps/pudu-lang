@@ -229,6 +229,7 @@ statementShape (Located _ statement) = case statement of
     "break" <> foldMap (\name -> "@" <> locatedValue name) label
       <> foldMap ((" " <>) . expressionShape) value
   ContinueStatement label -> "continue" <> foldMap (\name -> "@" <> locatedValue name) label
+  LetElseStatement _ subject _ -> "let else=" <> expressionShape subject
   InvalidStatement -> "invalid"
 
 declarationShape :: Located Declaration -> Text
