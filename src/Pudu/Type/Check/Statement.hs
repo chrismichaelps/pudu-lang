@@ -79,26 +79,21 @@ checkBlock :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Block -> Chec
 checkBlock needs declared rigid (Located _ block) = do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
-    Nothing -> pure UnitTypeValue
+    Nothing -> pure (resultlessBlockType block)
     Just expression -> statementExpression needs declared rigid expression
 
-{-| Whether a block leaves by a control transfer rather than finishing.
+{-| The type of a block that has no result expression.
 
-    A block's *type* cannot answer this: one that ends in `return` has no result
-    expression, and a block with no result expression is `()` — the same answer
-    a block ending in `0` would give after discarding it. So the question is
-    asked of the block's ending instead. It transfers control when it has no
-    result expression and its last statement is a `return`, `break`, or
-    `continue`. A result expression of type `Never` is handled by the caller,
-    which already has that type in hand. -}
-blockTransfersControl :: Block -> Bool
-blockTransfersControl block = case blockResult block of
-  Just _ -> False
-  Nothing -> case reverse (blockStatements block) of
-    Located _ (ReturnStatement _) : _ -> True
-    Located _ (BreakStatement _ _) : _ -> True
-    Located _ (ContinueStatement _) : _ -> True
-    _ -> False
+    A direct control transfer cannot produce unit at the block boundary, so it
+    preserves the transfer's `Never` type. Every other resultless ending can
+    reach that boundary and therefore produces unit. This deliberately looks
+    only at the final statement: a nested control form may still fall through. -}
+resultlessBlockType :: Block -> Type
+resultlessBlockType block = case reverse (blockStatements block) of
+  Located _ (ReturnStatement _) : _ -> NeverType
+  Located _ (BreakStatement _ _) : _ -> NeverType
+  Located _ (ContinueStatement _) : _ -> NeverType
+  _ -> UnitTypeValue
 
 checkStatement :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Statement -> Checker ()
 checkStatement needs declared rigid (Located spanValue statement) = case statement of
@@ -146,7 +141,6 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
     case resolvedFallback of
       NeverType -> pure ()
       ErrorType -> pure ()
-      _ | blockTransfersControl (locatedValue fallback) -> pure ()
       _ ->
         report "E3036" (locatedSpan fallback)
           "this fallback can carry on past the binding it stands in for"
@@ -292,8 +286,9 @@ checkBlockAgainst needs declared rigid expected (Located blockSpan block) = do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
     Nothing -> do
-      _ <- unify blockSpan expected UnitTypeValue
-      pure UnitTypeValue
+      let actual = resultlessBlockType block
+      _ <- unify blockSpan expected actual
+      pure actual
     Just expression -> checkAgainst needs declared rigid expected expression
 
 checkArmAgainst

@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.2.0-draft"
+semantic_version: "0.4.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -97,7 +97,7 @@ Supporting judgements:
 - In `f(a, b)`, evaluate `f`, then `a`, then `b`, then call.
 - Record and collection elements evaluate in source order.
 - Boolean `&&` and `||` short-circuit.
-- A block evaluates statements sequentially and yields its final expression or unit.
+- A block evaluates statements sequentially and yields its final expression. A resultless block whose final statement directly transfers control with `return`, `break`, or `continue` has type `Never`; every other resultless block yields unit.
 - Assignment evaluates the target place once, then the right side, then stores.
 - Pattern guards evaluate only after structural pattern success.
 - Optimizations must preserve all observable ordering: IO, mutation, panic, failure propagation, destruction, and cancellation points.
@@ -241,6 +241,8 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
+- **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].
 - **0.2.0-draft · 2026-08-28:** Added refutable `if let` pattern conditions as a backward-compatible surface feature with single subject evaluation, success-branch-local bindings, ordinary branch unification, and `E1056` for syntactically irrefutable patterns. See [[ADR-0010-refutable-pattern-conditions]].
 - **0.1.0-draft · 2026-08-21:** Established evaluation order, local inference boundary, `Result` propagation, ownership transitions, deterministic cleanup, structured concurrency/cancellation, compile-time capability restrictions, unsafe containment, and conformance obligations. See [[ADR-0001-language-purpose-and-v1-scope]], [[ADR-0002-compiler-pipeline]], and [[ADR-0003-ownership-and-resource-safety]].
 - **0.1.0-draft clarification · 2026-08-21:** Closed pre-implementation ambiguities in default-argument evaluation, module-scope initialization, and compiler-controlled structural `Copy`. No implementation compatibility exists yet; these rules are part of the initial draft review. See [[ADR-0003-ownership-and-resource-safety]].

@@ -52,7 +52,11 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
 - `checkAgainst` returns what `unify` produced rather than the inferred type, so
   a failure is reported once: the caller unifies again against the same
   expectation and `ErrorType` absorbs there.
-- A block's type is its result expression, or unit when it has none. A statement
+- A block's type is its result expression. When it has none, a final direct
+  `return`, `break`, or `continue` makes the block `Never`; every other ending
+  makes it unit. This is deliberately structural at the block boundary: a
+  nested conditional that can fall through does not make the containing block
+  diverge. A statement
   whose value is discarded is reported (`W3002`) only where discarding it is
   the mistake — a method that answers with a new value rather than changing its
   receiver.
@@ -68,7 +72,11 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
 
 Walk the statements in order, then the result. A binding forms its annotation
 and unifies the value against it; a declaration is handed back through the
-record.
+record. If there is no result, classify the final statement before unifying the
+block with an expected type. A direct control transfer supplies `Never`, while
+an ordinary resultless ending supplies unit. `let … else` consequently asks the
+fallback's inferred type whether it diverges and needs no second structural
+exception.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -83,6 +91,14 @@ record.
   both directions out of a statement are real; an expression only ever reaches
   blocks and bindings. _Rejected:_ handling declarations here, which would put
   the same rule in two modules.
+- **Q:** Why not type every block without a result expression as unit? **A:** A
+  direct control-transfer ending is `Never`, the same type the transfer has at
+  its valid boundary. _Rationale:_ such a block cannot produce unit, and calling
+  it unit rejects valid joins such as a returning match arm beside an `Int` arm.
+  The final statement is inspected only when the parser supplied no result, so
+  a genuinely fallthrough block remains unit. _Rejected:_ special-casing each
+  consumer such as `let … else`, because it leaves `if`, `match`, and contextual
+  checking with contradictory answers. Resolved for issue #146.
 
 ## Referenced by
 
