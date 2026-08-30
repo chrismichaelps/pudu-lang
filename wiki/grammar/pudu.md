@@ -276,19 +276,18 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 
 ## Async and Structured Concurrency
 
-- `async fn` returns a lazy `Task[T, E]`; calling it does not execute until awaited or spawned in a scope. A declared `Result[T, E]` return supplies those task channels and is not nested inside the task.
-- `.await` is legal only inside `async fn` or an async block and is a cancellation point.
+- `async fn` returns a lazy `Task[T, E]`; calling it constructs a cold task value. A declared `Result[T, E]` return supplies those task channels and is not nested inside the task.
+- `.await` is legal only inside `async fn` or an async block. The current interpreter evaluates the awaited task deterministically; it does not implement cancellation points.
 ```ebnf
 scope_expr       = "async", "with", "scope", block ;
 ```
 
-- `async with scope { ... }` creates a structured task scope. Spawned tasks cannot outlive it.
-- A task started inside a scope becomes its child. Awaiting the task joins it there; a child never awaited is joined when the scope exits, in the order the children started. A scope may be opened only inside an `async fn`, because joining is an await.
+- `async with scope { ... }` creates a structured task scope. A task created inside the scope is registered as a child and cannot outlive it.
+- Awaiting a child evaluates and joins it there; a child never awaited is joined when the scope exits, in creation order. A scope may be opened only inside an `async fn`, because joining is an await.
 - Leaving a scope by a control transfer joins its children first, so the transfer continues only after the region it left is empty.
-- Leaving a scope normally awaits children; leaving by failure or cancellation cancels children, runs cleanup, then waits for termination.
-- Cancellation is distinct from domain `Result` failure and cannot be swallowed accidentally.
-- A value crossing into a concurrently executing task must satisfy `Send`; shared cross-task references additionally require `Sync` and cannot outlive the scope.
-- **A program reaches concurrency by declaring `main` itself `async`.** Calling an `async fn` gives a `Task`, `.await` is legal only inside an `async fn`, and a `Task` is not a `Result` — so a synchronous `main` can call an async function but can do nothing with what it gets back. `export async fn main() -> Result[Int, Str]` is the entry point that can, and its whole-number result is still the exit status.
+- Cancellation state, sibling cancellation, scheduling fairness, worker pools, native threads, and parallel evaluation are not implemented.
+- `Send` and `Sync` are checked as structural marker traits, but there is no native concurrent execution boundary yet that can make a full cross-thread safety claim.
+- **A program reaches async evaluation by declaring `main` itself `async`.** Calling an `async fn` gives a `Task`, `.await` is legal only inside an `async fn`, and a `Task` is not a `Result` - so a synchronous `main` can call an async function but can do nothing with what it gets back. `export async fn main() -> Result[Int, Str]` is the entry point that can, and its whole-number result is still the exit status.
 - `.await` on a `Task[T, E]` yields `T`, not `Result[T, E]`. The failure channel belongs to the enclosing scope, which is what makes a child's failure leave the scope rather than something each await has to unwrap. Writing `task.await?` is therefore a type error: there is no `Result` there to propagate.
 - Detached tasks are absent from v1. `task` and bare `spawn` remain reserved.
 
@@ -305,13 +304,13 @@ scope_expr       = "async", "with", "scope", block ;
 - `comptime` marks a function that may run in that evaluator. A body may directly name other compile-time functions and wired-in constructors, and nothing else; it may be neither `async` nor `unsafe`. The current static check recognizes direct unqualified names only because ordinary function types do not retain `comptime` metadata. Aliased and higher-order calls are therefore not checked transitively. Runtime effect denial still prevents an indirect call from successfully reaching IO, environment, time, randomness, unsafe effects, or tasks during constant folding.
 - A compile-time function is an ordinary function too. Runtime code may call it; the marker adds a guarantee rather than restricting where it is usable.
 - A module-scope `const` is evaluated when the module is compiled, so a failure in its initializer — division by zero, an exhausted evaluation budget, a constant reading one declared later — is a compile diagnostic rather than something the program discovers when it runs.
-- Compile-time evaluation has configurable step and memory limits; exceeding them is a diagnostic.
+- Compile-time evaluation has loop-step and call-depth limits; exceeding either is a diagnostic. The current evaluator has no memory budget.
 - v1 macros are hygienic syntax transformers with typed parameters. They cannot access files, network, environment, compiler internals, or arbitrary host code. [[Macro Design]] records why typed parameters were chosen over a token-tree matcher.
 - Each parameter declares the syntax it accepts — `expr`, `ident`, or `block` — so a mismatched argument is reported against the call. Arity is exact.
 - A call is written `name!(...)`, so expansion is visible without knowing which names are macros. Arguments are parsed before substitution, so an expansion cannot change the grouping the caller wrote.
 - Every binding a macro body introduces is renamed at each expansion, so it can neither capture a name at the call site nor be captured by one.
 - Expansion is bounded; a macro that expands into itself reports where the expansion started.
-- Expanded tokens retain call-site and definition-site provenance for diagnostics.
+- Expanded syntax retains the call-site span used for diagnostics. A complete call-site and definition-site provenance chain is not implemented.
 - Macros cannot introduce unhygienic bindings without an explicit future escape hatch.
 
 ## Unsafe Boundary
@@ -350,7 +349,7 @@ function_decl    = "unsafe", capabilities?, ... ;
 
 - No implicit nullability, numeric narrowing, exception leakage, wildcard imports, top-level execution, detached tasks, or ambient global mutation.
 - No parser feature whose static and dynamic semantics are unspecified in [[architecture/SEMANTICS]].
-- No optimization may alter checked overflow, destruction order, left-to-right evaluation, failure propagation, or cancellation behavior.
+- No optimization may alter checked overflow, destruction order, left-to-right evaluation, failure propagation, or structured task joins.
 
 ## Senior Definition Needed
 
