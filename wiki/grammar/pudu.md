@@ -302,7 +302,7 @@ scope_expr       = "async", "with", "scope", block ;
 ## Compile-Time and Macro Semantics
 
 - `const` expressions and `comptime fn` execute in a deterministic, resource-limited evaluator with no IO, environment, time, randomness, unsafe, or task operations.
-- `comptime` marks a function that may run in that evaluator. The guarantee is transitive: a compile-time body may call other compile-time functions and wired-in constructors, and nothing else. It may be neither `async` nor `unsafe`, because both name capabilities the compile-time evaluator does not have.
+- `comptime` marks a function that may run in that evaluator. A body may directly name other compile-time functions and wired-in constructors, and nothing else; it may be neither `async` nor `unsafe`. The current static check recognizes direct unqualified names only because ordinary function types do not retain `comptime` metadata. Aliased and higher-order calls are therefore not checked transitively. Runtime effect denial still prevents an indirect call from successfully reaching IO, environment, time, randomness, unsafe effects, or tasks during constant folding.
 - A compile-time function is an ordinary function too. Runtime code may call it; the marker adds a guarantee rather than restricting where it is usable.
 - A module-scope `const` is evaluated when the module is compiled, so a failure in its initializer — division by zero, an exhausted evaluation budget, a constant reading one declared later — is a compile diagnostic rather than something the program discovers when it runs.
 - Compile-time evaluation has configurable step and memory limits; exceeding them is a diagnostic.
@@ -325,11 +325,11 @@ function_decl    = "unsafe", capabilities?, ... ;
 
 - `unsafe { ... }` is the only construct enabling raw pointers, foreign calls marked unsafe, unchecked indexing, or `null`.
 - A region names the capabilities it grants. `unsafe(raw) { ... }` grants raw pointer work and nothing else; `unsafe { ... }` with no list is the blanket form and grants all four. Naming them is what makes an unsafe region auditable: a reader sees which invariant is in play without reading the body, and tooling can find every region that does raw pointer work without a whole-program analysis.
-- A function may be declared `unsafe`, optionally naming capabilities. Calling it requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them. A call from safe code is rejected.
+- A function may be declared `unsafe`, optionally naming capabilities. A direct unqualified call requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them. Ordinary function types do not retain unsafety or capability metadata, so calls through aliases or higher-order values are not yet rejected.
 - A function's unsafety is a contract its callers uphold, not a claim about its body. A body that needs nothing unchecked is still a legitimate unsafe function, because the invariant may live in its parameters.
 - A region that grants a capability nothing in it used is reported. Unsafe is an audited surface, so a grant that buys nothing is removed rather than kept.
 - Unsafe does not disable type checking, ownership of safe values, or lexical initialization checks.
-- Public safe APIs wrapping unsafe code must state and enforce their invariants; unsafe requirements cannot be hidden in ordinary parameters.
+- Public safe APIs wrapping unsafe code must state and enforce their invariants. The current checker cannot prove this through ordinary function parameters until function types carry unsafe capability metadata.
 - `null` requires the `null` capability. It has no type until raw pointers exist, so writing it reports which slice will give it one rather than admitting an untyped value.
 
 ## Copy Eligibility
@@ -355,6 +355,7 @@ function_decl    = "unsafe", capabilities?, ... ;
 ## Senior Definition Needed
 
 - Stable syntax for unsafe foreign declarations and C ABI layouts will be finalized before the FFI slice.
+- `comptime` and unsafe capability metadata must become part of callable types before the compiler can enforce either restriction through aliases and higher-order calls.
 - Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 
 ## Referenced by

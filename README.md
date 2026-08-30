@@ -1,18 +1,24 @@
 # Pudu
 
-A statically typed, expression-oriented language. Effects return results,
-not exceptions. Pattern matching is exhaustive. Unsafe is an audited region
-with named capabilities, not an escape hatch. The standard library is
-ordinary Pudu source checked by the same compiler.
+Pudu is a statically typed, expression-oriented language. Effects return `Result` values, absence
+is explicit, pattern matching is exhaustive, and unsafe code sits inside named capability regions.
+The standard library is ordinary Pudu source checked by the same compiler.
 
-Pre-release. The compiler type-checks and interprets; native codegen and
-package management are not here yet.
+Pudu is pre-release. The compiler checks, interprets, formats, documents, serves editor requests,
+and runs an interactive session. Native code generation, package management, and a stable 1.0
+compatibility promise are not implemented yet.
 
-**[Wiki](https://github.com/chrismichaelps/pudu-lang/wiki)** · [Reference](https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index) · [Std](https://github.com/chrismichaelps/pudu-lang/wiki/Standard-Library) · [Status](https://github.com/chrismichaelps/pudu-lang/wiki/Implementation-Status)
+Start with the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are
+[language](https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index),
+[standard library](https://github.com/chrismichaelps/pudu-lang/wiki/Standard-Library),
+[tooling](https://github.com/chrismichaelps/pudu-lang/wiki/CLI-REPL-And-Documentation), and
+[status](https://github.com/chrismichaelps/pudu-lang/wiki/Implementation-Status). The versioned
+[`wiki/`](wiki) directory remains the engineering specification for grammar, semantics,
+architecture, module mirrors, and delivery history.
 
 ## Build
 
-GHC ≥ 9.10, Cabal ≥ 3.12. CI uses 9.14.1.
+Pudu requires GHC 9.10 or later and Cabal 3.12 or later. CI uses GHC 9.14.1.
 
 ```bash
 cabal build all
@@ -32,15 +38,14 @@ pudu check test-fixtures/tooling/RecentLanguage.pudu
 node test/lsp-session.mjs "$(command -v pudu)"
 ```
 
-Development builds share version `0.1.0.0`; the behavioral checks above
-confirm the installed binary is current.
+Development builds currently share version `0.1.0.0`, so the checks above prove the installed
+binary by behavior instead of trusting the version string.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). The versioned [`wiki/`](wiki) directory
-is the engineering specification — grammar, semantics, and architectural
-decisions live there with the code they govern.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). Public behavior changes as one unit: specification,
+implementation, diagnostics, examples, and tests must agree.
 
 ## License
 
-Apache 2.0 with the LLVM exception — see [LICENSE](LICENSE).
+Apache License 2.0 with the LLVM exception. See [LICENSE](LICENSE).
