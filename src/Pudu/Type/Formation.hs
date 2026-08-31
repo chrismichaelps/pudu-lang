@@ -74,7 +74,8 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
     refused <-
       if valuePosition then rejectTraitAsType declared typeSpan path else pure False
     unknown <- rejectUnknownQualifiedType declared typeSpan path
-    if refused || unknown
+    applied <- rejectAppliedParameter rigid typeSpan path formed
+    if refused || unknown || applied
       then pure ErrorType
       else pure (formNamed declared rigid path formed)
   ReferenceType mutable target ->
@@ -87,6 +88,35 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
       <*> formTypeWith valuePosition declared rigid result
   UnitType -> pure UnitTypeValue
   InvalidType -> pure ErrorType
+
+{-| A type parameter stands for a type, not for a type constructor, so it
+    cannot be applied to arguments.
+
+    Left unreported, the arguments were formed and then dropped: `F[Int]` and
+    `F[Str]` both became `F`, so a signature could promise one and deliver the
+    other and the two would unify. The reader was told nothing about a type the
+    checker had not understood.
+
+    The help names the two things a reader writing this means. Usually they want
+    a generic type they can name — `Option[Int]` — and sometimes they want the
+    argument to be a parameter of its own, which is a second parameter rather
+    than an application of the first. -}
+rejectAppliedParameter :: [Text] -> Span -> ModuleName -> [Type] -> Checker Bool
+rejectAppliedParameter rigid typeSpan path arguments
+  | null arguments = pure False
+  | not unqualified = pure False
+  | name `notElem` rigid = pure False
+  | otherwise = do
+      reportOnce typeSpan "E3038"
+        (name <> " is a type parameter, so it cannot be given type arguments")
+        ( "name the type you mean, as in Option[Int], or take the argument as its "
+            <> "own parameter — fn f[" <> name <> ", A](value: " <> name <> ")"
+        )
+      pure True
+ where
+  pathText = moduleNameText path
+  name = lastSegment path
+  unqualified = pathText == name
 
 {-| A trait names behaviour, not a value, and cannot stand where a type does.
 
