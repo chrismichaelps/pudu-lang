@@ -24,11 +24,10 @@ import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text)
-import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindName)
+import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Text as Text
-import Pudu.DecimalLiteral (Decimal, decimalCompare, renderDecimal)
+import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
