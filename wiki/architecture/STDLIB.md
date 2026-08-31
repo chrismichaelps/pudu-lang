@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Forty-one modules, 1172 exported declarations, every one written in Pudu.
+Forty-two modules, 1212 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -226,6 +226,7 @@ Forty-one modules, 1172 exported declarations, every one written in Pudu.
 | `Std.Deque` | 21 | a queue cheap at both ends, for breadth-first walks and scheduling |
 | `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
 | `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
+| `Std.Tree` | 40 | a value with trees beneath it: three orders, paths, pruning, grafting, and growing |
 | `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
 | `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
 | `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |
@@ -272,6 +273,12 @@ data answers a question those cannot:
   Two arrays, the front one held reversed, make both ends cheap.
 - **`Std.Heap`** is for wanting the next thing rather than everything in order. Keeping a whole
   collection sorted to read one element from it is paying for an answer nobody asked for.
+- **`Std.Tree`** is one value with a sequence of trees beneath it — an outline, a menu, a syntax
+  tree, a reporting line. Written by hand each time it is a record and a handful of walks that
+  differ subtly between programs: one counts the root and another does not. It settles those once,
+  and a node with no children is not a special case but a node whose sequence is empty, which is the
+  `Option` a hand-written hierarchy carries at every branch. `foldTree` is the general fold the
+  others are special cases of.
 - **`Std.Graph`** is nodes and directed edges with the questions worth asking of them. Its
   topological order answers `Option`, and `None` means a cycle — a caller ordering build steps or
   resolving declarations needs to be told its input is circular rather than handed an order that

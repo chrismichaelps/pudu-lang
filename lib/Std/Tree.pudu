@@ -1,0 +1,461 @@
+module Std.Tree
+
+import Std.List as List
+import Std.Order {Eq}
+
+/// A value with a sequence of trees beneath it.
+///
+/// A syntax tree, an outline, a menu, a reporting line, a dependency view: each
+/// is one thing that holds a number of things of the same kind. Written out
+/// each time, that is a record and a handful of walks, rewritten per program
+/// and subtly different in each — one counts the root, another does not; one
+/// keeps the order children were given, another sorts them.
+///
+/// The shape here settles those questions once. Every node carries a value and
+/// a sequence of children, and a node with no children is not a separate case:
+/// it is a node whose sequence is empty. That is what removes the `Option` a
+/// hand-written hierarchy usually has at every branch.
+///
+/// Children keep the order they were given. A hierarchy where order did not
+/// matter would be a node holding a `Set`, and that is a different structure
+/// with a different type.
+export type Tree[T] = { value: T, children: Array[Tree[T]] }
+
+/// A sequence of trees standing side by side.
+///
+/// The shape a tree's children already have, named so a function that takes or
+/// answers several trees says which it means. There is no distinguished root
+/// among them, which is what separates a forest from a tree.
+export type Forest[T] = Array[Tree[T]]
+
+/// A node with nothing beneath it.
+export fn leaf[T](value: T) -> Tree[T] { Tree{value: value, children: []} }
+
+/// A node with the given children, in the order given.
+export fn node[T](value: T, children: &Array[Tree[T]]) -> Tree[T] {
+  Tree{value: value, children: *children}
+}
+
+/// The value a node carries.
+export fn valueOf[T](tree: &Tree[T]) -> T { tree.value }
+
+/// The children of a node, in order.
+export fn childrenOf[T](tree: &Tree[T]) -> Array[Tree[T]] { tree.children }
+
+/// Whether a node has nothing beneath it.
+export fn isLeaf[T](tree: &Tree[T]) -> Bool { tree.children.length() == 0 }
+
+/// How many children a node has directly.
+export fn degree[T](tree: &Tree[T]) -> Int { tree.children.length() }
+
+/// How many nodes the tree holds, the root included.
+export fn size[T](tree: &Tree[T]) -> Int {
+  var total = 1
+  for child in tree.children { total = total + size(&child) }
+  total
+}
+
+/// How many nodes lie on the longest path from the root, the root included.
+///
+/// A leaf is 1 rather than 0, so height counts nodes exactly as `size` does and
+/// the two never disagree about whether the root is one of them.
+export fn height[T](tree: &Tree[T]) -> Int {
+  var deepest = 0
+  for child in tree.children {
+    let reach = height(&child)
+    if reach > deepest { deepest = reach }
+  }
+  deepest + 1
+}
+
+/// Every value, each node before its children, children in order.
+///
+/// The order a reader gives a hierarchy when they read it aloud: the heading,
+/// then everything under the heading, then the next heading.
+export fn preorder[T](tree: &Tree[T]) -> Array[T] {
+  var out = [tree.value]
+  for child in tree.children { out = out.concat(preorder(&child)) }
+  out
+}
+
+/// Every value, each node after its children, children in order.
+///
+/// The order a hierarchy has to be taken apart in: nothing is visited until
+/// everything beneath it has been, which is what a total, a deletion, or a
+/// dependency build needs.
+export fn postorder[T](tree: &Tree[T]) -> Array[T] {
+  var out = []
+  for child in tree.children { out = out.concat(postorder(&child)) }
+  out.push(tree.value)
+}
+
+/// The values at each depth, nearest the root first.
+///
+/// Held a level at a time rather than a node at a time: the whole of one depth
+/// is gathered, then its children become the next depth. That keeps the walk to
+/// one pass and needs no queue, and the levels are what a caller usually wanted
+/// anyway — a menu's rows, a chart's ranks.
+export fn levels[T](tree: &Tree[T]) -> Array[Array[T]] {
+  var out = []
+  var current = [*tree]
+  while current.length() > 0 {
+    var here = []
+    var next = []
+    for member in current {
+      here = here.push(member.value)
+      next = next.concat(member.children)
+    }
+    out = out.push(here)
+    current = next
+  }
+  out
+}
+
+/// Every value, nearest the root first, level by level.
+export fn breadthFirst[T](tree: &Tree[T]) -> Array[T] {
+  var out = []
+  for level in levels(tree) { out = out.concat(level) }
+  out
+}
+
+/// Every value that has nothing beneath it, in preorder.
+export fn leaves[T](tree: &Tree[T]) -> Array[T] {
+  if isLeaf(tree) { [tree.value] } else {
+    var out = []
+    for child in tree.children { out = out.concat(leaves(&child)) }
+    out
+  }
+}
+
+/// Every value transformed, keeping the shape and the order.
+export fn map[A, B](tree: &Tree[A], transform: fn(A) -> B) -> Tree[B] {
+  var out = []
+  for child in tree.children { out = out.push(map(&child, transform)) }
+  Tree{value: transform(tree.value), children: out}
+}
+
+/// The path from the root to a node: which child was taken at each step.
+///
+/// The root's path is empty, because no step was taken to reach it. A path of
+/// `[0, 2]` means the first child of the root, then that node's third child.
+fn mapAlong[A, B](
+  tree: &Tree[A],
+  here: &Array[Int],
+  transform: fn(Array[Int], A) -> B
+) -> Tree[B] {
+  var out = []
+  var index = 0
+  for child in tree.children {
+    out = out.push(mapAlong(&child, &here.push(index), transform))
+    index = index + 1
+  }
+  Tree{value: transform(*here, tree.value), children: out}
+}
+
+/// Every value transformed, told where in the tree it sits.
+///
+/// The path is the child index taken at each step from the root, so the root is
+/// given an empty path. A transform that needs to know its depth reads the
+/// path's length; one that needs to know it is a first child reads its last
+/// step.
+export fn mapWithPath[A, B](
+  tree: &Tree[A],
+  transform: fn(Array[Int], A) -> B
+) -> Tree[B] {
+  mapAlong(tree, &[], transform)
+}
+
+/// The subtree at a path, or `None` when the path leads nowhere.
+///
+/// The inverse of `pathTo`: a path that search answered with always leads back
+/// to the node it found.
+export fn at[T](tree: &Tree[T], path: &Array[Int]) -> Option[Tree[T]] {
+  var here = *tree
+  for step in path {
+    if step < 0 || step >= here.children.length() { return None }
+    here = here.children[step]
+  }
+  Some(here)
+}
+
+/// The tree with every node the test rejects removed, along with everything
+/// beneath it, or `None` when the root itself is rejected.
+///
+/// A rejected node takes its subtree with it rather than promoting its
+/// children, because a hierarchy whose middle disappeared would put a node
+/// under a parent it never had.
+export fn prune[T](tree: &Tree[T], keep: fn(T) -> Bool) -> Option[Tree[T]] {
+  if !keep(tree.value) { None } else {
+    var out = []
+    for child in tree.children {
+      match prune(&child, keep) {
+        case Some(kept) => { out = out.push(kept) }
+        case None => {}
+      }
+    }
+    Some(Tree{value: tree.value, children: out})
+  }
+}
+
+/// A tree grown from a starting value.
+///
+/// `grow` answers what a node holds and the seeds of its children, and the tree
+/// ends where it answers no seeds. Nothing here bounds the growing: a `grow`
+/// that never answers an empty sequence describes an infinite tree and will not
+/// finish, exactly as a `while` whose condition never fails will not. Use
+/// `unfoldTo` where the depth is not known to be finite.
+export fn unfold[S, T](seed: S, grow: fn(S) -> (T, Array[S])) -> Tree[T] {
+  let step = grow(seed)
+  var out = []
+  for next in step[1] { out = out.push(unfold(next, grow)) }
+  Tree{value: step[0], children: out}
+}
+
+/// A tree grown from a starting value, stopping at a given depth.
+///
+/// The depth counts nodes, so a depth of 1 answers a leaf and a depth of 0 or
+/// less answers a leaf as well: there is always a root, because a tree with no
+/// nodes is not one.
+export fn unfoldTo[S, T](seed: S, grow: fn(S) -> (T, Array[S]), depth: Int) -> Tree[T] {
+  let step = grow(seed)
+  if depth <= 1 { Tree{value: step[0], children: []} } else {
+    var out = []
+    for next in step[1] { out = out.push(unfoldTo(next, grow, depth - 1)) }
+    Tree{value: step[0], children: out}
+  }
+}
+
+/// A forest grown from several starting values.
+///
+/// The same growing as `unfold`, for the case where there is no single root —
+/// a set of top-level items, the entries of a directory, the roots of a
+/// dependency graph.
+export fn unfoldForest[S, T](seeds: &Array[S], grow: fn(S) -> (T, Array[S])) -> Forest[T] {
+  var out = []
+  for seed in seeds { out = out.push(unfold(seed, grow)) }
+  out
+}
+
+/// Every value transformed, keeping the shape, where transforming may fail.
+///
+/// The first failure is the answer and the rest is not attempted, because a
+/// tree half-transformed is not a tree anyone asked for. This is written for
+/// `Result` rather than for whatever a caller's failure happens to be: naming
+/// the carrier would need a type parameter that stands for a type constructor,
+/// which the language does not have.
+export fn mapResult[A, B, E](
+  tree: &Tree[A],
+  transform: fn(A) -> Result[B, E]
+) -> Result[Tree[B], E] {
+  let here = transform(tree.value) ?
+  var out = []
+  for child in tree.children { out = out.push(mapResult(&child, transform) ?) }
+  Ok(Tree{value: here, children: out})
+}
+
+/// Two trees combined node by node, as far as both go.
+///
+/// Where one has more children than the other at some node, the extra ones are
+/// dropped: there is nothing to combine them with, and inventing a value would
+/// be answering a question that was not asked.
+export fn zipWith[A, B, C](
+  left: &Tree[A],
+  right: &Tree[B],
+  combine: fn(A, B) -> C
+) -> Tree[C] {
+  var out = []
+  var index = 0
+  let shared = if left.children.length() < right.children.length() {
+    left.children.length()
+  } else { right.children.length() }
+  while index < shared {
+    out = out.push(zipWith(&left.children[index], &right.children[index], combine))
+    index = index + 1
+  }
+  Tree{value: combine(left.value, right.value), children: out}
+}
+
+/// Each value replaced by a whole tree, grafted where the value stood.
+///
+/// The tree a node produces takes that node's place, and the node's own
+/// children follow the produced tree's children beneath the same root. A
+/// transform that answers `leaf` for every value is `map`; one that answers a
+/// deeper tree expands the hierarchy in place, which is what an outline does
+/// when a heading is replaced by the section it names.
+export fn flatMap[A, B](tree: &Tree[A], grow: fn(A) -> Tree[B]) -> Tree[B] {
+  let grafted = grow(tree.value)
+  var below = grafted.children
+  for child in tree.children { below = below.push(flatMap(&child, grow)) }
+  Tree{value: grafted.value, children: below}
+}
+
+/// Every value transformed, keeping the shape, where transforming may answer
+/// nothing.
+///
+/// The first absence is the answer, for the reason `mapResult` stops at the
+/// first failure: a tree missing a node is not the tree that was asked for.
+export fn mapOption[A, B](tree: &Tree[A], transform: fn(A) -> Option[B]) -> Option[Tree[B]] {
+  let here = transform(tree.value) ?
+  var out = []
+  for child in tree.children { out = out.push(mapOption(&child, transform) ?) }
+  Some(Tree{value: here, children: out})
+}
+
+/// A tree of results turned into a result holding a tree.
+///
+/// Written for `Result` rather than for any carrier, because naming the carrier
+/// once would need a type parameter standing for a type constructor, which the
+/// language does not have.
+export fn sequenceResult[T, E](tree: &Tree[Result[T, E]]) -> Result[Tree[T], E] {
+  mapResult(tree, fn(held: Result[T, E]) -> Result[T, E] => held)
+}
+
+/// A tree of options turned into an option holding a tree.
+export fn sequenceOption[T](tree: &Tree[Option[T]]) -> Option[Tree[T]] {
+  mapOption(tree, fn(held: Option[T]) -> Option[T] => held)
+}
+
+/// A tree grown from a starting value, where growing may fail.
+///
+/// The first failure is the answer and no further seeds are grown. Growing runs
+/// depth first, in the order `unfold` runs, so the failure reported is the one
+/// a reader following the tree downward would meet first. A breadth-first order
+/// would report a different failure for the same input; it is not offered
+/// because there is no way to abstract over the carrier, so each order would be
+/// a separate named function for each carrier.
+export fn unfoldResult[S, T, E](
+  seed: S,
+  grow: fn(S) -> Result[(T, Array[S]), E]
+) -> Result[Tree[T], E] {
+  let step = grow(seed) ?
+  var out = []
+  for next in step[1] { out = out.push(unfoldResult(next, grow) ?) }
+  Ok(Tree{value: step[0], children: out})
+}
+
+/// The first value the test accepts, in preorder, or `None`.
+export fn find[T](tree: &Tree[T], holds: fn(T) -> Bool) -> Option[T] {
+  for found in preorder(tree) {
+    if holds(found) { return Some(found) }
+  }
+  None
+}
+
+/// Whether any node carries this value.
+export fn contains[T: Eq](tree: &Tree[T], wanted: T) -> Bool {
+  preorder(tree).contains(wanted)
+}
+
+/// How many nodes the test accepts.
+export fn count[T](tree: &Tree[T], holds: fn(T) -> Bool) -> Int {
+  List.length(&List.filter(&preorder(tree), holds))
+}
+
+/// The path to the first node the test accepts, in preorder, or `None`.
+///
+/// The root answers an empty path, which is a found node rather than a missing
+/// one — the difference `Option` is carrying here.
+export fn pathTo[T](tree: &Tree[T], holds: fn(T) -> Bool) -> Option[Array[Int]] {
+  pathFrom(tree, &[], holds)
+}
+
+fn pathFrom[T](
+  tree: &Tree[T],
+  here: &Array[Int],
+  holds: fn(T) -> Bool
+) -> Option[Array[Int]] {
+  if holds(tree.value) { return Some(*here) }
+  var index = 0
+  for child in tree.children {
+    match pathFrom(&child, &here.push(index), holds) {
+      case Some(found) => { return Some(found) }
+      case None => {}
+    }
+    index = index + 1
+  }
+  None
+}
+
+/// The values from the root down to the first node the test accepts.
+///
+/// What a breadcrumb trail is: the headings above the thing that was found,
+/// the found one last.
+export fn trailTo[T](tree: &Tree[T], holds: fn(T) -> Bool) -> Option[Array[T]] {
+  let path = pathTo(tree, holds) ?
+  var out = [tree.value]
+  var here = *tree
+  for step in path {
+    here = here.children[step]
+    out = out.push(here.value)
+  }
+  Some(out)
+}
+
+/// Every value combined into one, each node before its children.
+///
+/// The flat reading: the values arrive in preorder and the shape is gone. Use
+/// `foldTree` where what a node answers depends on what its children answered.
+export fn fold[T, A](tree: &Tree[T], combine: fn(A, T) -> A, start: A) -> A {
+  var accumulated = start
+  for found in preorder(tree) { accumulated = combine(accumulated, found) }
+  accumulated
+}
+
+/// Each node combined with what its children answered.
+///
+/// The general fold over this shape, and the one the others are special cases
+/// of: `size` is a fold that adds one to the sum below, `height` is a fold that
+/// adds one to the largest, `preorder` is a fold that prepends. A node is given
+/// its own value and the answers from beneath it, so anything that depends on a
+/// subtree can be written without a second walk.
+export fn foldTree[A, B](tree: &Tree[A], combine: fn(A, Array[B]) -> B) -> B {
+  var below = []
+  for child in tree.children { below = below.push(foldTree(&child, combine)) }
+  combine(tree.value, below)
+}
+
+/// The tree with a child added after the ones already there.
+export fn withChild[T](tree: &Tree[T], child: &Tree[T]) -> Tree[T] {
+  Tree{value: tree.value, children: tree.children.push(*child)}
+}
+
+/// The tree with its children in the reverse of their order, at every depth.
+export fn reversed[T](tree: &Tree[T]) -> Tree[T] {
+  var out = []
+  for child in List.reversed(&tree.children) { out = out.push(reversed(&child)) }
+  Tree{value: tree.value, children: out}
+}
+
+/// Whether two trees hold the same values in the same shape and order.
+export fn sameShape[A, B](left: &Tree[A], right: &Tree[B]) -> Bool {
+  if left.children.length() != right.children.length() { false } else {
+    var index = 0
+    while index < left.children.length() {
+      if !sameShape(&left.children[index], &right.children[index]) { return false }
+      index = index + 1
+    }
+    true
+  }
+}
+
+/// The tree drawn as indented lines, each value shown as the session shows it.
+///
+/// Two spaces per level, deepest last within each branch, which is the shape an
+/// outline already has when a person writes one.
+export fn outline[T](tree: &Tree[T]) -> Array[Str] {
+  var out = []
+  for pair in mapWithPathPairs(tree) {
+    out = out.push(" ".repeat(pair[0] * 2) + show(pair[1]))
+  }
+  out
+}
+
+fn mapWithPathPairs[T](tree: &Tree[T]) -> Array[(Int, T)] {
+  var out = [(0, tree.value)]
+  for child in tree.children {
+    for pair in mapWithPathPairs(&child) {
+      out = out.push((pair[0] + 1, pair[1]))
+    }
+  }
+  out
+}
