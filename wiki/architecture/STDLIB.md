@@ -292,6 +292,33 @@ be asked of its key:
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
 
+### On lookup tables, and why they are `if` ladders
+
+`Http.reasonFor` is thirty-one nested `if`s. `methodFrom`, `versionFrom`, `Url.defaultPort` and
+`isHopByHop` are the same shape smaller. Every one of them reads like a lookup table written as
+control flow, and converting them to `Map` or `Set` lookups is the first thing anyone will want to
+do. It would make them slower.
+
+[[grammar/pudu]] states that a file has no top-level executable statements, so **there are no
+module-level constants**. A table cannot be built once and kept; it has to be built inside the
+function, which means rebuilding it on every call. Measured against the real thirty-one-entry table,
+20000 lookups at `-O0`, process launch and loop overhead subtracted:
+
+| lookup | ladder | table rebuilt per call |
+|---|---|---|
+| code 200, third in the ladder | 307 ms | 1874 ms |
+| code 504, last in the ladder | 2224 ms | 2026 ms |
+| an unnamed code, walking all of it | 2197 ms | 1962 ms |
+
+The ladders are written with the common codes first, so the row that matters is the first one: the
+ladder is **six times faster** on the path programs actually take, and the table only draws level in
+the cases that were already the slowest. A table wins on the second and third rows by a margin small
+enough to be uninteresting.
+
+So the ugliness is not an oversight, and it is not a candidate for cleanup while the language has no
+way to hold a constant. If module-level constant bindings are ever added, all five become correct
+in one change — which is the argument for adding them, not an argument about `Http`.
+
 ### What Pudu should take from Haskell
 
 Haskell is useful here as accumulated library experience, not as a namespace to copy. A Pudu module

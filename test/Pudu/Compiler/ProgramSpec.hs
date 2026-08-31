@@ -218,6 +218,7 @@ testProgramEvaluation = do
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
   relationalMaps <- runEntry "test-fixtures/stdlib/UsesRelationalMaps.pudu"
+  graphEdges <- runEntry "test-fixtures/stdlib/UsesGraphEdges.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -235,6 +236,13 @@ testProgramEvaluation = do
     , counterexample
         "a map read from both sides, a map of many values, and a map keyed by parts"
         (relationalMaps === Just "42")
+    {-| The graph's edge behaviour, checked directly rather than inferred from
+        the walks, because a multi-valued map is a reasonable place to
+        deduplicate and this one deliberately does not. These held before the
+        adjacency became a MultiMap and must hold after. -}
+    , counterexample
+        "graph edges keep their duplicates, their order, and their lone nodes"
+        (graphEdges === Just "15")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"
