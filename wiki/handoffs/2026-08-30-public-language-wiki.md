@@ -70,8 +70,9 @@ shorter, removes its embedded program and Layout section, and points to the publ
 ~~Generate the public wiki pages from Pudu evidence, validate their links and examples, then update
 the repository README and changelog before independent review.~~
 
-Publish the reconstructed and revalidated 27-page wiki book, push the rebased repository branch,
-open the issue #152 PR, wait for CI, merge to `dev`, comment on the issue, and close it.
+The reconstructed and revalidated 27-page book is published at wiki commit `db8bb8a`. Push the
+rebased repository branch, open the issue #152 PR, wait for CI, merge to `dev`, comment on the
+issue, and close it.
 
 Validation already run:
 
