@@ -1,0 +1,191 @@
+module Std.Out
+
+import Std.List as List
+import Std.Text as Text
+
+/// Which of the two streams a printer writes to.
+///
+/// Output is what a program answers with; Errors is what it says about itself.
+/// A program whose diagnostics go to Output cannot have its answer piped
+/// anywhere, which is the reason the two are separate rather than a flag.
+export type Stream = Output | Errors
+
+/// The decisions about how something is written, held as a value.
+///
+/// `print` takes text and ends the line, and every choice beyond that — what
+/// goes between the pieces, what ends the line, whether it is output or errors,
+/// how far it is indented — has to be assembled at the call site. Assembled
+/// there, those choices cannot be named, cannot be passed to a function, and
+/// are rewritten at every call.
+///
+/// Here they are a value. A printer is built once, given a name, and handed to
+/// whatever does the writing, so a function that reports something takes the
+/// printer to report through rather than deciding the shape itself.
+///
+/// The defaults are the familiar ones: a space between pieces and a newline at
+/// the end.
+export type Printer = {
+  stream: Stream,
+  separator: Str,
+  ending: Str,
+  prefix: Str
+}
+
+/// A printer to the output stream: pieces separated by a space, line ended by a
+/// newline.
+export fn stdout() -> Printer {
+  Printer{stream: Output, separator: " ", ending: "\n", prefix: ""}
+}
+
+/// A printer to the error stream, with the same defaults.
+export fn stderr() -> Printer {
+  Printer{stream: Errors, separator: " ", ending: "\n", prefix: ""}
+}
+
+/// The same printer writing to the other stream.
+export fn toStream(printer: &Printer, stream: Stream) -> Printer {
+  Printer {
+    stream: stream,
+    separator: printer.separator,
+    ending: printer.ending,
+    prefix: printer.prefix
+  }
+}
+
+/// The same printer with a different separator between pieces.
+export fn separatedBy(printer: &Printer, separator: Str) -> Printer {
+  Printer {
+    stream: printer.stream,
+    separator: separator,
+    ending: printer.ending,
+    prefix: printer.prefix
+  }
+}
+
+/// The same printer with a different ending after the pieces.
+///
+/// An empty ending leaves the line open, which is what a prompt needs and what
+/// `print` alone cannot do.
+export fn endingWith(printer: &Printer, ending: Str) -> Printer {
+  Printer {
+    stream: printer.stream,
+    separator: printer.separator,
+    ending: ending,
+    prefix: printer.prefix
+  }
+}
+
+/// The same printer with a prefix on every line it writes.
+export fn prefixedWith(printer: &Printer, prefix: Str) -> Printer {
+  Printer {
+    stream: printer.stream,
+    separator: printer.separator,
+    ending: printer.ending,
+    prefix: prefix
+  }
+}
+
+/// The same printer indented by a further number of spaces.
+///
+/// Adds to the prefix rather than replacing it, so indenting an already
+/// indented printer nests. A negative count indents by nothing rather than
+/// removing what is there, because taking a prefix away is what
+/// `prefixedWith` is for and a count that silently undid one would make
+/// nesting depend on arithmetic the caller cannot see.
+export fn indentedBy(printer: &Printer, spaces: Int) -> Printer {
+  let added = if spaces <= 0 { "" } else { " ".repeat(spaces) }
+  prefixedWith(printer, printer.prefix + added)
+}
+
+/// The stream a printer writes to.
+export fn streamOf(printer: &Printer) -> Stream { printer.stream }
+
+/// The separator a printer puts between pieces.
+export fn separatorOf(printer: &Printer) -> Str { printer.separator }
+
+/// The ending a printer puts after the pieces.
+export fn endingOf(printer: &Printer) -> Str { printer.ending }
+
+/// The prefix a printer puts on every line.
+export fn prefixOf(printer: &Printer) -> Str { printer.prefix }
+
+/// The prefix applied to every line of some text.
+///
+/// Every line, not just the first, so a piece that already spans lines is
+/// indented as a block. Without this, indenting a rendered table would move
+/// only its first row.
+fn prefixed(prefix: Str, body: Str) -> Str {
+  if prefix.isEmpty() { body } else {
+    Text.join(&List.map(&body.split("\n"), fn(line: Str) -> Str => prefix + line), "\n")
+  }
+}
+
+/// Exactly the text a write would produce.
+///
+/// Pure, so what a printer does can be checked by comparing values rather than
+/// by capturing output. Every other function here is stated in terms of this
+/// one, which is what makes the configuration testable at all.
+///
+/// With no pieces the answer is the ending alone: a prefix decorates a line's
+/// content, and there is none.
+export fn rendered(printer: &Printer, pieces: &Array[Str]) -> Str {
+  if pieces.length() == 0 { printer.ending } else {
+    prefixed(printer.prefix, Text.join(pieces, printer.separator)) + printer.ending
+  }
+}
+
+/// Write the pieces, and answer what went wrong if anything did.
+///
+/// The ending is written as part of the text rather than by the stream, so a
+/// printer whose ending is empty really does leave the line open.
+export fn write(printer: &Printer, pieces: &Array[Str]) -> Result[(), Str] {
+  let body = rendered(printer, pieces)
+  match printer.stream {
+    case Output => printPart(body)
+    case Errors => printErrorPart(body)
+  }
+}
+
+/// Write one piece of text.
+export fn text(printer: &Printer, body: Str) -> Result[(), Str] {
+  write(printer, &[body])
+}
+
+/// Write the ending alone, which is a blank line for a printer ending in one.
+export fn blank(printer: &Printer) -> Result[(), Str] { write(printer, &[]) }
+
+/// Write any value, rendered the way the session prints it.
+export fn value[T](printer: &Printer, held: T) -> Result[(), Str] {
+  write(printer, &[show(held)])
+}
+
+/// Every value in an array, rendered and separated by the printer's separator.
+export fn values[T](printer: &Printer, held: &Array[T]) -> Result[(), Str] {
+  write(printer, &showing(held))
+}
+
+/// Each value rendered, ready to be handed to `write` beside other pieces.
+///
+/// The bridge for a line built from values of different types: render each one
+/// where its type is known, and write the pieces together.
+export fn showing[T](held: &Array[T]) -> Array[Str] {
+  List.map(held, fn(item: T) -> Str => show(item))
+}
+
+/// Write each piece on its own line, every line carrying the prefix.
+export fn lines(printer: &Printer, rows: &Array[Str]) -> Result[(), Str] {
+  var index = 0
+  while index < rows.length() {
+    text(printer, rows[index]) ?
+    index = index + 1
+  }
+  Ok(())
+}
+
+/// A printer that writes nothing between pieces and nothing at the end.
+///
+/// The starting point for building a line from parts written at different
+/// times, where every separator and ending is the caller's to supply.
+export fn bare() -> Printer {
+  Printer{stream: Output, separator: "", ending: "", prefix: ""}
+}

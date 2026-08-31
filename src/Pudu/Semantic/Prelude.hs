@@ -49,7 +49,7 @@ preludeValueNames =
     a module may shadow one, and an explicit prelude import replaces them all. -}
 effectValueNames :: [Text]
 effectValueNames =
-  [ "print", "printError", "readLine"
+  [ "print", "printError", "printPart", "printErrorPart", "readLine"
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
   , "listDirectory", "createDirectory"
   , "arguments", "environment", "temporaryPath", "userHome"

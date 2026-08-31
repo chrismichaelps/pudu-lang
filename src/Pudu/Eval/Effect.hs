@@ -35,6 +35,8 @@ effectBuiltins :: [Builtin]
 effectBuiltins =
   [ PrintBuiltin
   , PrintErrorBuiltin
+  , PrintPartBuiltin
+  , PrintErrorPartBuiltin
   , ReadLineBuiltin
   , ReadFileBuiltin
   , WriteFileBuiltin
@@ -82,6 +84,8 @@ callEffect spanValue builtin arguments = do
     else case (builtin, arguments) of
       (PrintBuiltin, [value]) -> effectUnit (writeStandardOutput (textOf value))
       (PrintErrorBuiltin, [value]) -> effectUnit (writeStandardError (textOf value))
+      (PrintPartBuiltin, [value]) -> effectUnit (writeStandardOutputPart (textOf value))
+      (PrintErrorPartBuiltin, [value]) -> effectUnit (writeStandardErrorPart (textOf value))
       (ReadLineBuiltin, []) -> do
         outcome <- lift refusal readStandardLine
         pure (resultOf (fmap optionalText outcome))

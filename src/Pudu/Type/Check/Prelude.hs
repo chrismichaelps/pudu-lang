@@ -147,6 +147,8 @@ effectSignatures :: [(Text, Scheme)]
 effectSignatures =
   [ ("print", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("printError", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("printPart", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("printErrorPart", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("readLine", monotype (FunctionTypeValue False [] (resultOf (optionOf stringType))))
   , ("readFile", monotype (FunctionTypeValue False [stringType] (resultOf stringType)))
   , ("writeFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
