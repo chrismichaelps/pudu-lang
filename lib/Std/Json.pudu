@@ -240,24 +240,28 @@ fn indent(depth: Int) -> Str {
 /// Text written as a JSON string, with the escapes the format requires.
 fn quote(content: Str) -> Str {
   var out = "\""
-  for character in content.chars() {
-    if character == '"' { out = out + "\\\"" }
-      else {
-      if character == '\\' { out = out + "\\\\" }
-        else {
-        if character == '\n' { out = out + "\\n" }
-          else {
-          if character == '\r' { out = out + "\\r" }
-            else {
-            if character == '\t' { out = out + "\\t" }
-              else { out = out + character.toText() }
-          }
-        }
-      }
-    }
-  }
+  for character in content.chars() { out = out + quotedCharacter(character) }
   out + "\""
 }
+
+fn quotedCharacter(character: Char) -> Str {
+  let code = character.code()
+  if code == 8 { return "\\b" }
+  if code == 12 { return "\\f" }
+  if code < 32 && code != 9 && code != 10 && code != 13 {
+    return "\\u00" + hexDigit(code / 16) + hexDigit(code % 16)
+  }
+  match character {
+    case '"' => "\\\""
+    case '\\' => "\\\\"
+    case '\n' => "\\n"
+    case '\r' => "\\r"
+    case '\t' => "\\t"
+    case _ => character.toText()
+  }
+}
+
+fn hexDigit(value: Int) -> Str { "0123456789abcdef".charAt(value).toText() }
 
 /// The brace characters, built from their scalar values because a brace inside
 /// a string literal is reserved for interpolation.
@@ -291,34 +295,23 @@ fn isSpace(value: Char) -> Bool {
 /// One value read at a position, with the position just after it.
 fn readValue(source: Str, from: Int) -> Result[(Json, Int), JsonError] {
   let start = skipSpace(source, from)
-  if start >= source.length() { Err(Unexpected(start, "a value")) } else {
-    let character = source.charAt(start)
-    if character == '"' { readText(source, start) }
-      else {
-      if character == '[' { readList(source, start) }
-        else {
-        if character.code() == 123 { readObject(source, start) }
-          else {
-          if character == '-' || isDigitChar(character) { readNumber(source, start) }
-            else { readKeyword(source, start) }
-        }
-      }
-    }
-  }
+  if start >= source.length() { return Err(Unexpected(start, "a value")) }
+  let character = source.charAt(start)
+  if character == '"' { return readText(source, start) }
+  if character == '[' { return readList(source, start) }
+  if character.code() == 123 { return readObject(source, start) }
+  if character == '-' || isDigitChar(character) { return readNumber(source, start) }
+  readKeyword(source, start)
 }
 
 fn isDigitChar(value: Char) -> Bool { value >= '0' && value <= '9' }
 
 /// `true`, `false`, or `null`, whichever begins at the position.
 fn readKeyword(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
-  if startsAt(source, start, "true") { Ok((Boolean(true), start + 4)) }
-    else {
-    if startsAt(source, start, "false") { Ok((Boolean(false), start + 5)) }
-      else {
-      if startsAt(source, start, "null") { Ok((Null, start + 4)) }
-        else { Err(Unexpected(start, "a value")) }
-    }
-  }
+  if startsAt(source, start, "true") { return Ok((Boolean(true), start + 4)) }
+  if startsAt(source, start, "false") { return Ok((Boolean(false), start + 5)) }
+  if startsAt(source, start, "null") { return Ok((Null, start + 4)) }
+  Err(Unexpected(start, "a value"))
 }
 
 fn startsAt(source: Str, start: Int, wanted: Str) -> Bool {
@@ -348,14 +341,10 @@ fn readNumber(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
     while index < size && isDigitChar(source.charAt(index)) { index = index + 1 }
   }
   let written = source.slice(start, index)
-  if written.isEmpty() || written == "-" { Err(Unexpected(start, "a number")) } else {
-    if fractional { Ok((Fractional(written), index)) } else {
-      match wholeOf(written) {
-        case Some(number) => Ok((Number(number), index))
-        case None => Err(Unexpected(start, "a number"))
-      }
-    }
-  }
+  if written.isEmpty() || written == "-" { return Err(Unexpected(start, "a number")) }
+  if fractional { return Ok((Fractional(written), index)) }
+  let Some(number) = wholeOf(written) else { return Err(Unexpected(start, "a number")) }
+  Ok((Number(number), index))
 }
 
 /// Digits read as a whole number, with a leading minus admitted.
@@ -384,36 +373,67 @@ fn readText(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   while index < size {
     let character = source.charAt(index)
     if character == '"' { return Ok((Text(out), index + 1)) }
-    if character == '\\' {
+    if character.code() < 32 { return Err(Unexpected(index, "an escaped control character")) }
+    if character != '\\' {
+      out = out + character.toText()
       index = index + 1
-      if index >= size { return Err(Unterminated("string")) }
-      let escaped = source.charAt(index)
-      if escaped == 'n' { out = out + "\n" }
-        else {
-        if escaped == 't' { out = out + "\t" }
-          else {
-          if escaped == 'r' { out = out + "\r" }
-            else {
-            if escaped == 'u' {
-              if index + 4 >= size { return Err(Unterminated("escape")) }
-              match hexOf(source.slice(index + 1, index + 5)) {
-                case Some(code) => {
-                  match charFromCode(code) {
-                    case Some(found) => { out = out + found.toText() }
-                    case None => { return Err(Unexpected(index, "a scalar value")) }
-                  }
-                  index = index + 4
-                }
-                case None => { return Err(Unexpected(index, "four hex digits")) }
-              }
-            } else { out = out + escaped.toText() }
-          }
-        }
-      }
-    } else { out = out + character.toText() }
-    index = index + 1
+      continue
+    }
+    let escaped = readEscape(source, index) ?
+    out = out + escaped[0]
+    index = escaped[1]
   }
   Err(Unterminated("string"))
+}
+
+fn readEscape(source: Str, slash: Int) -> Result[(Str, Int), JsonError] {
+  let escapedAt = slash + 1
+  if escapedAt >= source.length() { return Err(Unterminated("string")) }
+  match source.charAt(escapedAt) {
+    case '"' => Ok(("\"", escapedAt + 1))
+    case '\\' => Ok(("\\", escapedAt + 1))
+    case '/' => Ok(("/", escapedAt + 1))
+    case 'b' => scalarEscape(8, escapedAt + 1, escapedAt)
+    case 'f' => scalarEscape(12, escapedAt + 1, escapedAt)
+    case 'n' => Ok(("\n", escapedAt + 1))
+    case 'r' => Ok(("\r", escapedAt + 1))
+    case 't' => Ok(("\t", escapedAt + 1))
+    case 'u' => readUnicodeEscape(source, escapedAt)
+    case _ => Err(Unexpected(escapedAt, "a valid escape"))
+  }
+}
+
+fn readUnicodeEscape(source: Str, escapedAt: Int) -> Result[(Str, Int), JsonError] {
+  if escapedAt + 4 >= source.length() { return Err(Unterminated("escape")) }
+  let Some(first) = hexOf(source.slice(escapedAt + 1, escapedAt + 5)) else {
+    return Err(Unexpected(escapedAt, "four hex digits"))
+  }
+  if first >= 56320 && first <= 57343 {
+    return Err(Unexpected(escapedAt, "a scalar value"))
+  }
+  if first < 55296 || first > 56319 {
+    return scalarEscape(first, escapedAt + 5, escapedAt)
+  }
+  let nextSlash = escapedAt + 5
+  if nextSlash + 5 >= source.length()
+    || source.charAt(nextSlash) != '\\'
+    || source.charAt(nextSlash + 1) != 'u' {
+    return Err(Unexpected(escapedAt, "a low surrogate escape"))
+  }
+  let lowAt = nextSlash + 1
+  let Some(second) = hexOf(source.slice(lowAt + 1, lowAt + 5)) else {
+    return Err(Unexpected(lowAt, "four hex digits"))
+  }
+  if second < 56320 || second > 57343 {
+    return Err(Unexpected(lowAt, "a low surrogate"))
+  }
+  let scalar = 65536 + (first - 55296) * 1024 + (second - 56320)
+  scalarEscape(scalar, lowAt + 5, lowAt)
+}
+
+fn scalarEscape(code: Int, next: Int, position: Int) -> Result[(Str, Int), JsonError] {
+  let Some(found) = charFromCode(code) else { return Err(Unexpected(position, "a scalar value")) }
+  Ok((found.toText(), next))
 }
 
 fn hexOf(digits: Str) -> Option[Int] {

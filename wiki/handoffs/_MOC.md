@@ -16,6 +16,7 @@ tags: [moc, handoff]
 - [[2026-08-29-restore-clean-ci]] — tooling handoff for the test-warning and standard-library formatting failures already on `dev`.
 - [[2026-08-29-lsp-install-refresh]] — tooling handoff for recent-language LSP compatibility, deterministic refresh installation, and warning-free CI actions.
 - [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
+- [[2026-08-31-json-string-decoding]] — standard-library handoff for linear, strict JSON string escape decoding and encoding.
 
 ## Referenced by
 

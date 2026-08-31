@@ -192,6 +192,7 @@ testProgramEvaluation = do
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
+  jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   effects <- runEntry "test-fixtures/stdlib/UsesIo.pudu"
   scheduling <- runEntry "test-fixtures/stdlib/UsesTime.pudu"
@@ -234,6 +235,8 @@ testProgramEvaluation = do
         (keyed === Just "30")
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
+    , counterexample "JSON strings decode, encode, and reject malformed escapes"
+        (jsonStrings === Just "0")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "the effect modules reach the world and report failures"
