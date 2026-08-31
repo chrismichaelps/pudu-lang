@@ -1,0 +1,66 @@
+module UsesLookupTables
+
+import Std.Http as Http
+import Std.Url as Url
+
+/// The five lookup tables in `Std`, checked at both ends and past the end.
+///
+/// Each was a nested `if` ladder and is now a flat `match`. The rewrite is
+/// meant to be invisible, so these are the cases where a mistranscribed table
+/// would show: the first entry, the last, one in the middle, and the default
+/// that everything unlisted falls to.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  // First, middle, and last of the status table, and the default past its end.
+  if Http.reasonFor(100) == "Continue" { held = held + 1 }
+  if Http.reasonFor(200) == "OK" { held = held + 1 }
+  if Http.reasonFor(404) == "Not Found" { held = held + 1 }
+  if Http.reasonFor(504) == "Gateway Timeout" { held = held + 1 }
+  if Http.reasonFor(999) == "" { held = held + 1 }
+  // A code between two listed ones is unlisted, not the nearer of the two.
+  if Http.reasonFor(402) == "" { held = held + 1 }
+  // `status` carries the reason its number is given.
+  if Http.status(404).reason == "Not Found" { held = held + 1 }
+
+  // Methods round-trip, and are read without regard to case.
+  if Http.methodName(&Http.methodFrom("GET")) == "GET" { held = held + 1 }
+  if Http.methodName(&Http.methodFrom("get")) == "GET" { held = held + 1 }
+  if Http.methodName(&Http.methodFrom("connect")) == "CONNECT" { held = held + 1 }
+  // An unlisted method keeps its own name rather than becoming a default one.
+  if Http.methodName(&Http.methodFrom("purge")) == "PURGE" { held = held + 1 }
+
+  // Versions, including the one everything unrecognised falls to.
+  if Http.versionFrom("HTTP/1.0") == Http.Http10 { held = held + 1 }
+  if Http.versionFrom("HTTP/3") == Http.Http3 { held = held + 1 }
+  if Http.versionFrom("HTTP/1.1") == Http.Http11 { held = held + 1 }
+  if Http.versionFrom("nonsense") == Http.Http11 { held = held + 1 }
+
+  // Hop-by-hop names, matched without regard to case, and nothing else.
+  if Http.isHopByHop("connection") { held = held + 1 }
+  if Http.isHopByHop("Transfer-Encoding") { held = held + 1 }
+  if Http.isHopByHop("upgrade") { held = held + 1 }
+  if !Http.isHopByHop("content-type") { held = held + 1 }
+
+  // Scheme ports, and a scheme with no default.
+  match Url.defaultPort("http") {
+    case Some(port) => { if port == 80 { held = held + 1 } }
+    case None => {}
+  }
+  match Url.defaultPort("wss") {
+    case Some(port) => { if port == 443 { held = held + 1 } }
+    case None => {}
+  }
+  match Url.defaultPort("ftp") {
+    case Some(port) => { if port == 21 { held = held + 1 } }
+    case None => {}
+  }
+  match Url.defaultPort("gopher") {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  held
+}

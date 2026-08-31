@@ -222,6 +222,7 @@ testProgramEvaluation = do
   relationalMaps <- runEntry "test-fixtures/stdlib/UsesRelationalMaps.pudu"
   cacheAndTrie <- runEntry "test-fixtures/stdlib/UsesCacheAndTrie.pudu"
   graphEdges <- runEntry "test-fixtures/stdlib/UsesGraphEdges.pudu"
+  lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -260,6 +261,12 @@ testProgramEvaluation = do
     , counterexample
         "graph edges keep their duplicates, their order, and their lone nodes"
         (graphEdges === Just "15")
+    {-| The five lookup tables at both ends and past the end, where a
+        mistranscribed table would show. These held as nested if ladders and
+        must hold as flat matches. -}
+    , counterexample
+        "status reasons, methods, versions, hop-by-hop names, and scheme ports"
+        (lookupTables === Just "23")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

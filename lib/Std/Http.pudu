@@ -58,15 +58,18 @@ export fn methodName(value: &Method) -> Str {
 /// A method read from its name, which is matched without regard to case.
 export fn methodFrom(name: Str) -> Method {
   let upper = name.toUpper()
-  if upper == "GET" { Get } else {
-    if upper == "HEAD" { Head } else {
-      if upper == "POST" { Post } else {
-        if upper == "PUT" { Put } else {
-          if upper == "PATCH" { Patch } else {
-            if upper == "DELETE" { Delete } else {
-              if upper == "OPTIONS" { Options } else {
-                if upper == "TRACE" { Trace } else {
-                  if upper == "CONNECT" { Connect } else { Other(upper) } } } } } } } } }
+  match upper {
+    case "GET" => Get
+    case "HEAD" => Head
+    case "POST" => Post
+    case "PUT" => Put
+    case "PATCH" => Patch
+    case "DELETE" => Delete
+    case "OPTIONS" => Options
+    case "TRACE" => Trace
+    case "CONNECT" => Connect
+    case _ => Other(upper)
+  }
 }
 
 /// Whether a method is defined to have no effect on the server.
@@ -114,37 +117,39 @@ export fn isError(value: &Status) -> Bool { value.code >= 400 }
 /// The reason the protocol gives for a status number, or an empty reason for
 /// one it does not name.
 export fn reasonFor(code: Int) -> Str {
-  if code == 100 { "Continue" } else {
-    if code == 101 { "Switching Protocols" } else {
-      if code == 200 { "OK" } else {
-        if code == 201 { "Created" } else {
-          if code == 202 { "Accepted" } else {
-            if code == 204 { "No Content" } else {
-              if code == 206 { "Partial Content" } else {
-                if code == 301 { "Moved Permanently" } else {
-                  if code == 302 { "Found" } else {
-                    if code == 303 { "See Other" } else {
-                      if code == 304 { "Not Modified" } else {
-                        if code == 307 { "Temporary Redirect" } else {
-                          if code == 308 { "Permanent Redirect" } else {
-                            if code == 400 { "Bad Request" } else {
-                              if code == 401 { "Unauthorized" } else {
-                                if code == 403 { "Forbidden" } else {
-                                  if code == 404 { "Not Found" } else {
-                                    if code == 405 { "Method Not Allowed" } else {
-                                      if code == 408 { "Request Timeout" } else {
-                                        if code == 409 { "Conflict" } else {
-                                          if code == 410 { "Gone" } else {
-                                            if code == 413 { "Content Too Large" } else {
-                                              if code == 415 { "Unsupported Media Type" } else {
-                                                if code == 422 { "Unprocessable Content" } else {
-                                                  if code == 429 { "Too Many Requests" } else {
-                                                    if code == 500 { "Internal Server Error" } else {
-                                                      if code == 501 { "Not Implemented" } else {
-                                                        if code == 502 { "Bad Gateway" } else {
-                                                          if code == 503 { "Service Unavailable" } else {
-                                                            if code == 504 { "Gateway Timeout" } else { "" }
-                                                          } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
+  match code {
+    case 100 => "Continue"
+    case 101 => "Switching Protocols"
+    case 200 => "OK"
+    case 201 => "Created"
+    case 202 => "Accepted"
+    case 204 => "No Content"
+    case 206 => "Partial Content"
+    case 301 => "Moved Permanently"
+    case 302 => "Found"
+    case 303 => "See Other"
+    case 304 => "Not Modified"
+    case 307 => "Temporary Redirect"
+    case 308 => "Permanent Redirect"
+    case 400 => "Bad Request"
+    case 401 => "Unauthorized"
+    case 403 => "Forbidden"
+    case 404 => "Not Found"
+    case 405 => "Method Not Allowed"
+    case 408 => "Request Timeout"
+    case 409 => "Conflict"
+    case 410 => "Gone"
+    case 413 => "Content Too Large"
+    case 415 => "Unsupported Media Type"
+    case 422 => "Unprocessable Content"
+    case 429 => "Too Many Requests"
+    case 500 => "Internal Server Error"
+    case 501 => "Not Implemented"
+    case 502 => "Bad Gateway"
+    case 503 => "Service Unavailable"
+    case 504 => "Gateway Timeout"
+    case _ => ""
+  }
 }
 
 /// A request with a method and a target and nothing else.
@@ -246,9 +251,12 @@ export fn versionName(value: &Version) -> Str {
 
 /// A version read from its name, defaulting to 1.1 for anything unrecognised.
 export fn versionFrom(name: Str) -> Version {
-  if name == "HTTP/1.0" { Http10 } else {
-    if name == "HTTP/2" { Http2 } else {
-      if name == "HTTP/3" { Http3 } else { Http11 } } }
+  match name {
+    case "HTTP/1.0" => Http10
+    case "HTTP/2" => Http2
+    case "HTTP/3" => Http3
+    case _ => Http11
+  }
 }
 
 /// Whether a version keeps the connection open unless told otherwise.
@@ -307,10 +315,17 @@ export fn headerWwwAuthenticate() -> Str { "www-authenticate" }
 /// Whether a header may not be forwarded by a proxy, because it describes the
 /// connection rather than the message.
 export fn isHopByHop(name: Str) -> Bool {
-  let lower = name.toLower()
-  lower == "connection" || lower == "keep-alive" || lower == "proxy-authenticate" ||
-  lower == "proxy-authorization" || lower == "te" || lower == "trailer" ||
-  lower == "transfer-encoding" || lower == "upgrade"
+  match name.toLower() {
+    case "connection" => true
+    case "keep-alive" => true
+    case "proxy-authenticate" => true
+    case "proxy-authorization" => true
+    case "te" => true
+    case "trailer" => true
+    case "transfer-encoding" => true
+    case "upgrade" => true
+    case _ => false
+  }
 }
 
 /// The headers a proxy may forward, with the connection's own removed.

@@ -327,50 +327,33 @@ And two whose shape is about what a collection refuses to do rather than what it
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
 
-### On lookup tables, and why they are `if` ladders
+### On lookup tables
 
-`Http.reasonFor` is thirty-one nested `if`s. `methodFrom`, `versionFrom`, `Url.defaultPort` and
-`isHopByHop` are the same shape smaller. Every one of them reads like a lookup table written as
-control flow, and converting them to `Map` or `Set` lookups is the first thing anyone will want to
-do. It would make them slower.
+`Http.reasonFor` maps thirty-one status numbers to their reasons. `methodFrom`, `versionFrom`,
+`Url.defaultPort` and `isHopByHop` do the same for smaller sets. All five are lookup tables, and the
+question is what to write them as.
 
-[[grammar/pudu]] states that a file has no top-level executable statements, so **there are no
-module-level constants**. A table cannot be built once and kept; it has to be built inside the
-function, which means rebuilding it on every call. Measured against the real thirty-one-entry table,
+Not a `Map`. [[grammar/pudu]] states that a file has no top-level executable statements, so there are
+**no module-level constants**: a table has to be built inside the function that reads it, and is
+therefore rebuilt on every call. That is the trap, because a `Map` is otherwise the obvious answer.
+
+A flat `match` on the value is the right form. Measured against the real thirty-one-entry table,
 20000 lookups at `-O0`, process launch and loop overhead subtracted:
 
-| lookup | ladder | table rebuilt per call |
-|---|---|---|
-| code 200, third in the ladder | 307 ms | 1874 ms |
-| code 504, last in the ladder | 2224 ms | 2026 ms |
-| an unnamed code, walking all of it | 2197 ms | 1962 ms |
+| lookup | nested `if` ladder | flat `match` | `Map` rebuilt per call |
+|---|---|---|---|
+| code 200, third in the table | 325 ms | **169 ms** | 1998 ms |
+| code 504, last in the table | 2255 ms | **603 ms** | — |
+| an unnamed code | 2268 ms | **615 ms** | — |
 
-The ladders are written with the common codes first, so the row that matters is the first one: the
-ladder is **six times faster** on the path programs actually take, and the table only draws level in
-the cases that were already the slowest. A table wins on the second and third rows by a margin small
-enough to be uninteresting.
+The `match` is roughly twice as fast as a nested ladder on the common path and nearly four times on
+the rest, and an order of magnitude faster than rebuilding a map. It is also the only one of the
+three that reads as a table: one arm per entry, no nesting, and a `case _` for the default. A
+thirty-one-deep ladder closing `} } } } ...` on a single line is not a style anyone chose; it is
+what the file looked like before this was measured.
 
-So the ugliness is not an oversight, and it is not a candidate for cleanup while the language has no
-way to hold a constant. If module-level constant bindings are ever added, all five become correct
-in one change — which is the argument for adding them, not an argument about `Http`.
-
-### What Pudu should take from Haskell
-
-Haskell is useful here as accumulated library experience, not as a namespace to copy. A Pudu module
-earns a place when it gives a program a data invariant or failure mode that existing types cannot
-state. Three candidates meet that test:
-
-| Candidate | Haskell precedent | Pudu purpose |
-|---|---|---|
-| `Std.Tree` | `Data.Tree` | a rose tree for syntax, menus, outlines, and dependency views, with preorder, levels, pruning, unfolding, and path-aware transforms |
-| `Std.Validation` | accumulating applicative validation | collect independent field problems instead of stopping at the first `Result.Err`; no replacement for fail-fast sequencing |
-| `Std.These` | `Data.These` | represent left-only, right-only, or both when merging partial information, warnings with a value, or asymmetric diffs |
-
-They should arrive as separate features. `Maybe` and `Either` do not: Pudu already calls those
-shapes `Option` and `Result`. Typeclass families such as `Functor`, `Foldable`, `Traversable`, and
-`Applicative` do not map honestly until the type system can abstract over a type constructor. An
-`IntMap` or hash-trie module should wait for a representation that gives it a measurable advantage
-over the ordered `Map`; a familiar name without its performance law is misleading.
+If module-level constant bindings are ever added, a `Map` becomes available for the cases where a
+table is large enough that even the `match` scan matters. Nothing here needs that yet.
 
 ### On numbers
 
