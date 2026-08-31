@@ -125,7 +125,7 @@ constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
 - `Array[T, N]` requires non-negative compile-time `N`.
 - Generic type arguments use square brackets consistently.
 - `()` is unit, `(T)` groups one type without adding structure, and a comma forms a tuple; type lists admit one trailing comma.
-- Generic constraints are nominal trait bounds; v1 has no higher-kinded types, specialization, implicit arguments, or default generic type parameters on functions.
+- Generic constraints are nominal trait bounds; v1 has no higher-kinded types, specialization, implicit arguments, or default generic type parameters on functions. A type parameter therefore stands for a type and never for a type constructor: writing one with arguments, as `F[Int]`, is refused with `E3038` rather than read as an application.
 - A synchronous function type `fn(A) -> T` has no recoverable failure unless `T` is explicitly `Result[S, E]`; its normalized semantic signature is success `S`, failure `E`, capability `Sync`. `fn(A) -> T` otherwise normalizes to failure `Never`.
 - An asynchronous function type is written `async fn(A) -> T`. Calling it produces `Task[T, Never]`; when its declared return is `Result[S, E]`, calling it produces `Task[S, E]`. This spelling preserves async capability and recoverable failure in first-class function types.
 

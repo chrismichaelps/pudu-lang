@@ -436,9 +436,39 @@ testGenerics = do
     , "fn identity[T](value: T) -> T { value }"
     , "fn run() -> Str { identity(1) }"
     ]
+  applied <- codes
+    [ "module M"
+    , "fn swap[F](value: F[Int]) -> F[Str] { value }"
+    ]
+  appliedOnce <- codes
+    [ "module M"
+    , "fn one[F](value: F[Int]) -> Int { 0 }"
+    ]
+  boundStillPlain <- codes
+    [ "module M"
+    , "trait Sized { fn size(self: &Self) -> Int }"
+    , "fn total[T: Sized](value: &T) -> Int { value.size() }"
+    ]
+  nestedArgument <- codes
+    [ "module M"
+    , "fn nested[T](value: Option[T]) -> Option[T] { value }"
+    ]
   pure $ conjoin
     [ counterexample "one generic serves several types" (reused === [])
     , counterexample "instantiation still checks the result" (mismatched === ["E3001"])
+    {-| A parameter stands for a type, not for a type constructor. Applying one
+        used to form its arguments and then drop them, so `F[Int]` and `F[Str]`
+        became the same `F` and a signature could promise one and deliver the
+        other. Both spellings are reported here, and neither cascades into the
+        ordinary mismatch that silence used to hide. -}
+    , counterexample "a parameter given type arguments is refused"
+        (applied === ["E3038", "E3038"])
+    , counterexample "one application reports once and does not cascade"
+        (appliedOnce === ["E3038"])
+    , counterexample "a bounded parameter is still an ordinary parameter"
+        (boundStillPlain === [])
+    , counterexample "a parameter inside a real generic type is untouched"
+        (nestedArgument === [])
     ]
 
 testRecords :: IO Property

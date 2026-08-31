@@ -27,6 +27,7 @@ The exported signatures are the module header's export list.
 
 ### Governance
 
+- A **type parameter is not a type constructor**. Written with arguments — `F[Int]` where `F` is a parameter — it is refused with `E3038` rather than formed and stripped. The arguments are carried as far as the check so there is something to report on; dropping them made `F[Int]` and `F[Str]` the same type, and a signature could promise one and deliver the other.
 - A trait written where a type belongs is `E3030`, reported at the signature rather than at the first call that fails against the phantom type it used to form. Only a trait may follow `dynamic` (`E3031`); a dynamic type over one concrete type would be that type written the long way.
 - Formation diagnostics report once per span and code. A signature is formed both when the module declares it and when its body is checked against it, and one mistake in one signature is one mistake.
 
@@ -76,6 +77,17 @@ Direct structural recursion over the type or syntax shape, with the checker's su
 DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the delivery rules cap at 500 lines.
 
 ## Grill Log
+
+- **Q:** Why refuse an applied parameter rather than ignore the arguments? **A:** Because ignoring
+  them is agreeing to a type that was not understood. _Rationale:_ `F[Int]` and `F[Str]` both became
+  `F`, so they unified, and `fn swap[F](value: F[Int]) -> F[Str] { value }` checked — the signature
+  promised one thing and the body delivered another with nothing reported. _Rejected:_ forming the
+  arguments and discarding them, which is what produced that.
+- **Q:** Should this wait for parameters of higher kind? **A:** No; it is what those need rather than
+  what they replace. _Rationale:_ if a parameter may one day be declared to take an argument, this
+  is exactly the check that reports the case where it was not. The rule stays and only the set of
+  parameters it accepts grows. _Deferred:_ admitting the applied form, which needs kinds and a
+  unifier that can solve a constructor.
 
 - **Q:** Why keep the names at all, when the payload is positional either way? **A:** Because a construction and a pattern say which element they mean by naming it. _Rationale:_ the payload is what the type system needs and the names are what the reader needs; dropping them made `Circle{radius: 2}` compile to a positional constructor and then fail far from the declaration. _Rejected:_ discarding the names as the first version did.
 - **Q:** Why a separate module? **A:** Because the checking walk is already deep, and formation, unification, and state are independently testable concerns. _Rationale:_ the split follows a real seam rather than a line count alone. _Rejected:_ one large checker file.
