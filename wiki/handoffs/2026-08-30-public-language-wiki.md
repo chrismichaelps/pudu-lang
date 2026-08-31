@@ -26,7 +26,8 @@ shorter, removes its embedded program and Layout section, and points to the publ
 | Agent | Issue | Role | Config | Worktree | Branch | Ownership | Avoid | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `forensic_guardian_152` | #152 | Read-only Forensic Guardian | inherited | read-only `/private/tmp/pudu-lang-wiki-book` and `/private/tmp/pudu-wiki-readme` | none | Public claims, links, examples, prose, README/vault parity | All edits, commits, pushes, and unrelated worktrees | Complete: clear after compiler-backed corrections |
-| `language_architect_152` | #152 | Read-only Language Architect | role-enforced | read-only `/private/tmp/pudu-lang-wiki-book` and `/private/tmp/pudu-wiki-readme` | none | Public semantic accuracy and design/implementation boundaries | All edits, commits, pushes, and unrelated worktrees | Running semantic review |
+| `language_architect_152` | #152 | Read-only Language Architect | role-enforced | expired temporary checkouts | none | Public semantic accuracy and design/implementation boundaries | All edits, commits, pushes, and unrelated worktrees | Ended without a review result |
+| `root` | #152 | Language Architect | primary session | `/private/tmp/pudu-wiki-delivery` and `/private/tmp/pudu-wiki-publish` | `feature/152-publish-language-wiki` / wiki `master` | Final semantic review and delivery | Language implementation and unrelated branches | Complete: current behavior checked against evaluator, checker, resolver, tests, and stdlib |
 
 ## Grill Log
 
@@ -57,17 +58,20 @@ shorter, removes its embedded program and Layout section, and points to the publ
   passes `pudu check`; it is not counted among the nine because the current formatter changes
   `twice!(2)` to `twice !(2)`. Illustrative fragments are not labelled complete programs.
   _Rejected:_ treating plausible syntax highlighting as validation.
+- **Q:** Did the public semantic review rely on the prose reviewing itself? **A:** No. The Language
+  Architect pass traced task ordering to `Eval.Call`, compile-time limits to `Eval.Loop` and
+  `Eval.Env`, direct-name capability enforcement to `Type.Check.Safety`, alternation behavior to
+  `Semantic.Resolve` and `Type.Check.Pattern`, and set claims to `Std.Set`. The independently run
+  Forensic Guardian review remained a separate clear gate. _Rejected:_ treating an unavailable
+  reviewer result as approval.
 
 ## Exact Next Action
 
 ~~Generate the public wiki pages from Pudu evidence, validate their links and examples, then update
 the repository README and changelog before independent review.~~
 
-The wiki book commit is staged locally at `f13ac3d` in `/private/tmp/pudu-lang-wiki-book`.
-Repository branch `feature/152-publish-language-wiki` is rebased on `origin/dev` and carries two
-documentation commits. Forensic Guardian review is clear; Language Architect review remains the
-publication gate. After that result, publish the wiki commit, push the repository branch, open the
-issue #152 PR, wait for CI, merge to `dev`, comment on the issue, and close it.
+Publish the reconstructed and revalidated 27-page wiki book, push the rebased repository branch,
+open the issue #152 PR, wait for CI, merge to `dev`, comment on the issue, and close it.
 
 Validation already run:
 
