@@ -13,7 +13,8 @@ import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Eval.Env (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind)
+import Pudu.Eval.Env
+  (Evaluator, Unwind (ReturnUnwind), abortAt, lookupName, unwind, variantOwner)
 import Pudu.DecimalLiteral
   ( Decimal
   , DivisionFailure (DivideByZero, NonTerminating)
@@ -279,9 +280,17 @@ readMember spanValue value member = case value of
   RecordValue owner fields -> case lookup member fields of
     Just found -> pure found
     Nothing -> readMethod spanValue value owner member
+  {-| A member on a variant is looked for on the sum that owns it before the
+      variant itself. An implementation is written for the type — `impl Named
+      for Option[Int]` — and the value in hand is one of its variants, so
+      looking only at the variant found nothing and reported a type the reader
+      never wrote. The variant's own name is still tried, so a member keyed
+      there keeps working. -}
   VariantValue name _
     | name == member -> pure value
-    | otherwise -> readMethod spanValue value name member
+    | otherwise -> do
+        owner <- variantOwner name
+        readMethodAmong spanValue value (maybe [name] (\found -> [found, name]) owner) name member
   {-| A scalar has no fields, but it may have methods: an `impl Ord for Int`
       is a method on every integer. The nominal name a method is keyed by comes
       from the value's own type, which is why an integer had to start carrying
@@ -439,6 +448,20 @@ nominalNameOf value = case value of
   SetValue _ -> Just "Set"
   TupleValue _ -> Nothing
   _ -> Nothing
+
+{-| Look for a member under each name in turn, reporting against the first —
+    the type the reader wrote — rather than against whichever was tried last. -}
+readMethodAmong :: Span -> Value -> [Text] -> Text -> Text -> Evaluator Value
+readMethodAmong spanValue receiver owners reported member = case owners of
+  [] ->
+    abortAt (Just spanValue) "E7001"
+      ("no field or method " <> member <> " on a " <> reported) Nothing
+  owner : rest -> do
+    found <- lookupName (owner <> "." <> member)
+    case found of
+      Just (FunctionValue closure) ->
+        pure (FunctionValue closure{closureSelf = Just receiver})
+      _ -> readMethodAmong spanValue receiver rest reported member
 
 readMethod :: Span -> Value -> Text -> Text -> Evaluator Value
 readMethod spanValue receiver owner member = do

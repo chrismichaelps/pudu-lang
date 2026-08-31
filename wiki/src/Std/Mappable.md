@@ -23,7 +23,7 @@ once rather than once per container.
 ## Interface
 
 3 exports: the `Mappable` trait with its single member `mapped`, and `over` and `filled` written
-against it. Implementations ship for `Array` and [[Std Tree]].
+against it. Implementations ship for `Array`, `Option`, and [[Std Tree]].
 
 ### Governance
 
@@ -48,9 +48,6 @@ it adds the ability to name one.
 
 ## Negative Logic (Prohibited Paths)
 
-- No implementation for a sum type, including `Option`. One is accepted by the checker and cannot be
-  called, because a value of a sum evaluates to one of its variants and the member is looked for on
-  that variant. Tracked separately; until it is fixed such a member would be unreachable.
 - No implementation for a constructor of other than one argument. `Result[T, E]` would need partial
   application, which [[ADR-0014 Parameters of Higher Kind]] deliberately excludes.
 - No law checking. The shape-preserving law is documentation, and saying so is honest where implying
@@ -75,10 +72,11 @@ DEPTH 0.35 (MEDIUM). One member, two implementations, and two definitions writte
   parameters could stand for a constructor, each would have been written per container or not at
   all. _Rejected:_ leaving the per-container names alone, which is what shipped until now and is
   what this is measured against.
-- **Q:** Why is `Option` missing? **A:** Because it would not run. _Rationale:_ a trait implemented
-  for a sum checks and then fails at the call, since the value is a variant and the member is looked
-  for there; shipping a member no caller could reach would be worse than its absence. _Deferred:_ the
-  implementation, as soon as a variant finds what its own sum implements.
+- **Q:** Why was `Option` missing at first? **A:** Because it would not have run. _Rationale:_ a
+  trait implemented for a sum checked and then failed at the call, since the value is a variant and
+  the member was looked for there. The implementation arrived once a variant found what its own sum
+  implements, which is the shape the trait needed to be worth having: `Option` is the container a
+  reader reaches for first.
 - **Q:** Should the shape-preserving law be checked? **A:** It cannot be, and the documentation says
   so rather than implying otherwise. _Rationale:_ the law quantifies over every function a caller
   might pass, which is not something a type states. _Rejected:_ wording that suggests the compiler

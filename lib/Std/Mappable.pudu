@@ -19,12 +19,7 @@ import Std.Tree as Tree
 /// a function that answers what it was given must leave the container as it
 /// was. A `mapped` that reordered, dropped, or duplicated would satisfy the
 /// type and break every caller that relied on the shape surviving.
-///
-/// `Option` is absent, and its absence is not a judgement about it. A trait
-/// implemented for a sum type is accepted by the checker and cannot be called,
-/// because a value of a sum evaluates to one of its variants and the member is
-/// looked for on that. Until a variant finds what its own sum implements, an
-/// `Option` here would be a member no caller could reach.
+
 export trait Mappable[F[_]] {
   fn mapped[A, B](self: &F[A], transform: fn(A) -> B) -> F[B]
 }
@@ -32,6 +27,12 @@ export trait Mappable[F[_]] {
 impl Mappable[Array] for Array {
   fn mapped[A, B](self: &Array[A], transform: fn(A) -> B) -> Array[B] {
     List.map(self, transform)
+  }
+}
+
+impl Mappable[Option] for Option {
+  fn mapped[A, B](self: &Option[A], transform: fn(A) -> B) -> Option[B] {
+    Some(transform((*self) ?))
   }
 }
 

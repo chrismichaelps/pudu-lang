@@ -25,6 +25,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 ### Governance
 
+- A member on a **variant** is looked for on the sum that owns it before the variant itself. An implementation is written for the type — `impl Named for Option[Int]` — and the value in hand is one of its variants, so looking only at the variant found nothing and reported a type the reader never wrote. The variant's own name is still tried after, so a member keyed there keeps working.
 - An integer carries its kind, as a float carries its width. The type says `UInt8` and the value has
   to agree, or the type said nothing: without a width, `~0u8` answers `-1` and `255u8 + 1u8` answers
   `256`, neither of which is a value those types have. See
@@ -81,6 +82,16 @@ Direct structural recursion over the value or syntax shape; no caching, no mutat
 DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would otherwise exceed the size the delivery rules allow.
 
 ## Grill Log
+
+- **Q:** Why look at the owning sum before the variant? **A:** Because that is where an
+  implementation is written. _Rationale:_ `impl Named for Option[Int]` keys under `Option`, and the
+  value reaching dispatch is a `Some`; consulting only the variant made the checker and the
+  evaluator disagree about the same program, and the error named `a Some`, which the reader never
+  wrote. _Rejected:_ refusing the implementation at declaration time, which would close the
+  disagreement by removing a capability rather than by supplying it.
+- **Q:** Why still try the variant afterwards? **A:** So nothing that worked stops working.
+  _Rationale:_ a member keyed on a variant name resolves as it did, and the sum is only preferred
+  where both exist. _Rejected:_ replacing the lookup outright.
 
 - **Q:** Why a separate module rather than more of [[Evaluator]]? **A:** Because the walker would pass 500 lines and stop being reviewable. _Rationale:_ the split follows a real seam — values, environment, matching, and operators are independently testable. _Rejected:_ one large evaluator file.
 - **Q:** Round only `Float32` literals? **A:** No; normalize each arithmetic result too. _Rationale:_ binary32 precision applies to operations, not just source conversion. _Rejected:_ hidden binary64 intermediates; rounding only when a value is printed.

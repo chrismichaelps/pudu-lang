@@ -32,6 +32,7 @@ lastSegmentOf    :: NonEmpty Text -> Text
 
 ### Governance
 
+- The wired-in sums record their variants' owners exactly as a declared sum does. Without it an implementation written for `Option` or `Result` is looked for under `Some` or `Err`, and is never found.
 - **Order is the whole point.** Functions and variant constructors are installed before any constant
   runs, so mutual recursion and forward references work exactly as [[Name Resolution]] promised they
   would. A constant evaluated before its neighbours exist would make declaration order matter in a
