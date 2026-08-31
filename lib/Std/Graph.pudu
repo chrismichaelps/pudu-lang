@@ -3,6 +3,7 @@ module Std.Graph
 import Std.Deque as Deque
 import Std.List as List
 import Std.Map as Map
+import Std.MultiMap as MultiMap
 import Std.Order {Eq, Ord}
 import Std.Set as Set
 
@@ -13,11 +14,16 @@ import Std.Set as Set
 /// A node with no outgoing edges still belongs, so membership is kept apart
 /// from the edge map rather than inferred from it; a graph that forgot its
 /// leaves would report a shorter topological order than it has nodes.
-export type Graph[N] = { nodes: Set[N], edges: Map[N, Array[N]] }
+///
+/// The edges are a `MultiMap`, which is what several values under one key are.
+/// That keeps the rule about a node whose last edge is removed in one place
+/// rather than here, and it fits because membership is already held separately:
+/// such a node leaves the edges and stays a node.
+export type Graph[N] = { nodes: Set[N], edges: MultiMap.MultiMap[N, N] }
 
 /// A graph with nothing in it.
 export fn empty[N: Ord]() -> Graph[N] {
-  Graph{nodes: Set.empty(), edges: Map.empty()}
+  Graph{nodes: Set.empty(), edges: MultiMap.empty()}
 }
 
 /// The graph with a node in it, whether or not it has any edges.
@@ -32,11 +38,7 @@ export fn addNode[N: Ord](graph: &Graph[N], node: N) -> Graph[N] {
 /// first would only make callers write it twice.
 export fn addEdge[N: Ord](graph: &Graph[N], from: N, to: N) -> Graph[N] {
   let known = Set.insert(&Set.insert(&graph.nodes, from), to)
-  let existing = match Map.get(&graph.edges, from) {
-    case Some(found) => found
-    case None => []
-  }
-  Graph{nodes: known, edges: Map.insert(&graph.edges, from, existing.push(to))}
+  Graph{nodes: known, edges: MultiMap.add(&graph.edges, from, to)}
 }
 
 /// A graph built from a list of edges.
@@ -56,10 +58,7 @@ export fn order[N: Ord](graph: &Graph[N]) -> Int { Set.size(&graph.nodes) }
 
 /// The nodes an edge leads to from here.
 export fn neighbours[N: Ord](graph: &Graph[N], node: N) -> Array[N] {
-  match Map.get(&graph.edges, node) {
-    case Some(found) => found
-    case None => []
-  }
+  MultiMap.get(&graph.edges, node)
 }
 
 /// Whether there is an edge from one node to another.
@@ -88,7 +87,7 @@ export fn inDegree[N: Ord](graph: &Graph[N], node: N) -> Int {
 
 /// The graph with every edge turned around.
 export fn reversed[N: Ord](graph: &Graph[N]) -> Graph[N] {
-  var flipped = Graph{nodes: graph.nodes, edges: Map.empty()}
+  var flipped = Graph{nodes: graph.nodes, edges: MultiMap.empty()}
   for from in nodes(graph) {
     for to in neighbours(graph, from) { flipped = addEdge(&flipped, to, from) }
   }
@@ -231,7 +230,7 @@ export fn stronglyConnected[N: Ord](graph: &Graph[N]) -> Array[Array[N]] {
 
 /// The groups of nodes joined to each other when direction is ignored.
 export fn components[N: Ord](graph: &Graph[N]) -> Array[Array[N]] {
-  var undirected = Graph{nodes: graph.nodes, edges: Map.empty()}
+  var undirected = Graph{nodes: graph.nodes, edges: MultiMap.empty()}
   for from in nodes(graph) {
     for to in neighbours(graph, from) {
       undirected = addEdge(&undirected, from, to)

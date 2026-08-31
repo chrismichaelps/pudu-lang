@@ -137,14 +137,13 @@ export fn effectivePort(value: &Url) -> Option[Int] {
 
 /// The port a scheme implies, for the schemes that imply one.
 export fn defaultPort(scheme: Str) -> Option[Int] {
-  if scheme == "http" { Some(80) } else {
-    if scheme == "https" { Some(443) } else {
-      if scheme == "ws" { Some(80) } else {
-        if scheme == "wss" { Some(443) } else {
-          if scheme == "ftp" { Some(21) } else { None }
-        }
-      }
-    }
+  match scheme {
+    case "http" => Some(80)
+    case "https" => Some(443)
+    case "ws" => Some(80)
+    case "wss" => Some(443)
+    case "ftp" => Some(21)
+    case _ => None
   }
 }
 
