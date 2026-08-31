@@ -20,6 +20,8 @@ tags: [moc, module, stdlib]
 - [[Std SortedMap]] — a map ordered by the caller's comparison, with neighbour and range queries.
 - [[Std LinkedMap]] — a map that iterates in the order its keys were first inserted.
 - [[Std EnumMap]] — a total map over a fixed key domain.
+- [[Std LruCache]] — a bounded map that discards what has gone longest unused.
+- [[Std PrefixTrie]] — text keys held by their characters, searchable by prefix.
 
 ## Referenced by
 

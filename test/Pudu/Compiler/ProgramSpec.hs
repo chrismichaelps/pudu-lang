@@ -218,6 +218,7 @@ testProgramEvaluation = do
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
   orderedMaps <- runEntry "test-fixtures/stdlib/UsesOrderedMaps.pudu"
+  cacheAndTrie <- runEntry "test-fixtures/stdlib/UsesCacheAndTrie.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -235,6 +236,13 @@ testProgramEvaluation = do
     , counterexample
         "a map with neighbours, a map that remembers its order, and a total map"
         (orderedMaps === Just "38")
+    {-| The bounded cache and the prefix trie, weighted toward what is easy to
+        get wrong: that a read counts as use and a peek does not, that the
+        capacity holds on every write, and that removing a key gives back the
+        path it did not share. Each check answers 1. -}
+    , counterexample
+        "a cache that discards what is unused, and keys reachable by their prefix"
+        (cacheAndTrie === Just "42")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

@@ -118,7 +118,7 @@ and buy nothing.
 | `Std.List` | the operations `Array[T]` does not already carry |
 | `Std.Map` | ordered maps, by comparison |
 | `Std.Set` | ordered sets |
-| `Std.HashMap` | hash maps, by `Hash` |
+| `Std.HashMap` | hash maps, by `Hash` — blocked, see [[#Deferred, with reasons]] |
 | `Std.Deque` | double-ended queue |
 | `Std.Math` | numerics, saturating and checked arithmetic, constants |
 | `Std.Fmt` | typed formatting, no format-string interpretation at run time |
@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Thirty-five modules, 1025 exported declarations, every one written in Pudu.
+Thirty-seven modules, 1072 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -229,6 +229,8 @@ Thirty-five modules, 1025 exported declarations, every one written in Pudu.
 | `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
 | `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
 | `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |
+| `Std.LruCache` | 22 | a map with a capacity, discarding what has gone longest unused |
+| `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
@@ -286,6 +288,18 @@ the three next-commonest questions asked of a keyed collection:
 - **`Std.EnumMap`** removes an `Option` the caller already knew the answer to, which is the same
   thing `Std.NonEmpty` does for a sequence. Over a fixed domain of keys — the days of a week, the
   levels of a log — every key has a value by construction, so `get` answers `V`.
+- **`Std.LruCache`** is a map with a bound, because a cache without one is a map that only grows.
+  It discards by least recent *use*, so reading keeps an entry alive — which is why its `get`
+  answers a cache alongside the value, since a read that did not record itself would let an entry
+  the program depends on be discarded as unused. It is built on `Std.LinkedMap`'s recency order
+  rather than repeating it.
+- **`Std.PrefixTrie`** holds text keys by their characters, so walking a prefix touches one node per
+  character of the prefix rather than one per entry in the collection, and a stem shared by many
+  keys is stored once. Autocomplete, a routing table's most specific match, and every setting under
+  one section are the questions; `Map` answers them by testing every key.
+
+`Std.HashMap` remains planned rather than shipped, and the reasons are under
+[[#Deferred, with reasons]] — they are about the language rather than about the container.
 
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
@@ -568,6 +582,17 @@ dependencies are its own files plus the compiler it is built with, and that is t
   default.
 - **`Std.Ffi`.** Calling into C requires the `foreign` capability from [[Unsafe Capabilities]] and a
   decision about how a foreign type's ownership is described. Both are open.
+- **`Std.HashMap`.** Three things block it, and none is about the container. There is no hash to
+  build on: `Std.Crypto` offers SHA-256 and nothing else, a cryptographic digest written in Pudu and
+  far too expensive per lookup, and no `Hash` trait exists anywhere. Adding one is a language
+  decision — what it guarantees across the integer family, text, and aggregates, and how every user
+  type implements it — that belongs beside `Std.Order`'s `Eq` and `Ord` rather than inside a
+  container. And it would not win even then: the built-in `Map` is a balanced tree, while a hash map
+  written in Pudu would reach its buckets through a `Map` or an `Array`, neither of which is
+  constant-time here, so the bucket lookup alone would cost what the whole ordered lookup already
+  costs, with hashing and collision handling added on top. Worth revisiting when the runtime has a
+  hashing primitive and a constant-time indexed store; until then it would be a slower `Map` with a
+  name that promises otherwise.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.
