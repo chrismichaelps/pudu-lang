@@ -1,0 +1,236 @@
+module Std.LinkedMap
+
+import Std.List as List
+
+/// A map that also remembers the order its keys were first put in.
+///
+/// `Map` deliberately does not. Two maps with the same entries are the same
+/// map there, however they were built, and that is what makes them compare and
+/// print alike — a promise worth more than insertion order for the map every
+/// program reaches for first.
+///
+/// It is worth less than insertion order for the programs that have to give
+/// something back to a person. Configuration written to a file, a request log,
+/// the columns of a report, the fields of a form: each is read in an order
+/// somebody chose, and handing it back sorted silently discards that choice.
+/// Today those programs keep an array of keys alongside a map and are careful
+/// to update both, which is a bug waiting for the one place they forget.
+///
+/// The order is of *first* insertion. Writing to a key that is already here
+/// changes its value and leaves it where it is. That is what separates this
+/// from a recency order, and it is the one a person means: a setting does not
+/// move to the bottom of the file because it was edited.
+export type LinkedMap[K, V] = { order: Array[K], entries: Map[K, V] }
+
+/// A map with no entries.
+export fn empty[K, V]() -> LinkedMap[K, V] {
+  LinkedMap{order: [], entries: mapOf([])}
+}
+
+/// How many entries the map holds.
+export fn size[K, V](map: &LinkedMap[K, V]) -> Int { map.entries.size() }
+
+/// Whether the map holds nothing.
+export fn isEmpty[K, V](map: &LinkedMap[K, V]) -> Bool { map.entries.isEmpty() }
+
+/// The value stored under a key, or `None`.
+export fn get[K, V](map: &LinkedMap[K, V], key: K) -> Option[V] {
+  map.entries.get(key)
+}
+
+/// The value stored under a key, or a fallback.
+export fn getOr[K, V](map: &LinkedMap[K, V], key: K, fallback: V) -> V {
+  match map.entries.get(key) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// Whether a key has an entry.
+export fn containsKey[K, V](map: &LinkedMap[K, V], key: K) -> Bool {
+  map.entries.containsKey(key)
+}
+
+/// The map with an entry added or replaced.
+///
+/// A key already here keeps its place. Only a key that is new joins the end of
+/// the order, so the order stays a record of when each key first appeared
+/// rather than of when it was last written.
+export fn insert[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
+  if map.entries.containsKey(key) {
+    LinkedMap{order: map.order, entries: map.entries.insert(key, held)}
+  } else {
+    LinkedMap{order: map.order.push(key), entries: map.entries.insert(key, held)}
+  }
+}
+
+/// The map with an entry moved to the end of the order, added if it is new.
+///
+/// The recency order `insert` deliberately does not keep. A cache deciding what
+/// to discard, or a list of recently opened files, wants the key it just
+/// touched to be last; both are asking a different question from "when did this
+/// first appear", so both are spelled differently.
+export fn touch[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
+  let without = List.filter(&map.order, fn(existing: K) -> Bool => existing != key)
+  LinkedMap{order: without.push(key), entries: map.entries.insert(key, held)}
+}
+
+/// The map with a key's entry removed, or unchanged when there is none.
+export fn remove[K, V](map: &LinkedMap[K, V], key: K) -> LinkedMap[K, V] {
+  if !map.entries.containsKey(key) { *map } else {
+    LinkedMap {
+      order: List.filter(&map.order, fn(existing: K) -> Bool => existing != key),
+      entries: map.entries.remove(key)
+    }
+  }
+}
+
+/// Every key, in insertion order.
+export fn keys[K, V](map: &LinkedMap[K, V]) -> Array[K] { map.order }
+
+/// Every value, in the insertion order of its key.
+export fn values[K, V](map: &LinkedMap[K, V]) -> Array[V] {
+  var out = []
+  for key in map.order {
+    match map.entries.get(key) {
+      case Some(found) => { out = out.push(found) }
+      case None => {}
+    }
+  }
+  out
+}
+
+/// Every entry as a pair, in insertion order.
+export fn pairs[K, V](map: &LinkedMap[K, V]) -> Array[(K, V)] {
+  var out = []
+  for key in map.order {
+    match map.entries.get(key) {
+      case Some(found) => { out = out.push((key, found)) }
+      case None => {}
+    }
+  }
+  out
+}
+
+/// The first entry put in that is still here, or `None`.
+export fn oldest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
+  if map.order.length() == 0 { None } else {
+    let key = map.order[0]
+    Some((key, map.entries.get(key) ?))
+  }
+}
+
+/// The most recently added entry, or `None`.
+export fn newest[K, V](map: &LinkedMap[K, V]) -> Option[(K, V)] {
+  let total = map.order.length()
+  if total == 0 { None } else {
+    let key = map.order[total - 1]
+    Some((key, map.entries.get(key) ?))
+  }
+}
+
+/// The map without its oldest entry, unchanged when it is empty.
+export fn removeOldest[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
+  match oldest(map) {
+    case Some(pair) => remove(map, pair[0])
+    case None => *map
+  }
+}
+
+/// A map built from pairs, in the order they are given.
+/// A later pair replaces an earlier one's value and keeps its position.
+export fn fromPairs[K, V](entries: &Array[(K, V)]) -> LinkedMap[K, V] {
+  var out = empty()
+  for pair in entries { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// An entry added only when its key has none.
+export fn insertIfAbsent[K, V](map: &LinkedMap[K, V], key: K, held: V) -> LinkedMap[K, V] {
+  if containsKey(map, key) { *map } else { insert(map, key, held) }
+}
+
+/// An entry's value transformed, inserting a starting value when it is absent.
+export fn upsert[K, V](
+  map: &LinkedMap[K, V],
+  key: K,
+  start: V,
+  transform: fn(V) -> V
+) -> LinkedMap[K, V] {
+  match get(map, key) {
+    case Some(found) => insert(map, key, transform(found))
+    case None => insert(map, key, start)
+  }
+}
+
+/// Every value transformed, keeping the keys and their order.
+export fn mapValues[K, A, B](
+  map: &LinkedMap[K, A],
+  transform: fn(A) -> B
+) -> LinkedMap[K, B] {
+  var out = empty()
+  for pair in pairs(map) { out = insert(&out, pair[0], transform(pair[1])) }
+  out
+}
+
+/// Only the entries the predicate accepts, in the order they were put in.
+export fn filter[K, V](
+  map: &LinkedMap[K, V],
+  keep: fn(K, V) -> Bool
+) -> LinkedMap[K, V] {
+  var out = empty()
+  for pair in pairs(map) {
+    if keep(pair[0], pair[1]) { out = insert(&out, pair[0], pair[1]) }
+  }
+  out
+}
+
+/// Every entry combined into one value, in insertion order.
+export fn fold[K, V, A](
+  map: &LinkedMap[K, V],
+  combine: fn(A, K, V) -> A,
+  start: A
+) -> A {
+  var accumulated = start
+  for pair in pairs(map) { accumulated = combine(accumulated, pair[0], pair[1]) }
+  accumulated
+}
+
+/// Two maps combined, with the second map's entries winning.
+/// Keys the second map introduces join the end of the order in its order.
+export fn merge[K, V](
+  left: &LinkedMap[K, V],
+  right: &LinkedMap[K, V]
+) -> LinkedMap[K, V] {
+  var out = *left
+  for pair in pairs(right) { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// The entries in the reverse of the order they were put in.
+export fn reversed[K, V](map: &LinkedMap[K, V]) -> LinkedMap[K, V] {
+  LinkedMap{order: List.reversed(&map.order), entries: map.entries}
+}
+
+/// The map with its order forgotten, as an ordinary map.
+///
+/// Named rather than automatic, because the entries are the same and only the
+/// promise about their order differs; a conversion a reader cannot see is a
+/// promise dropped silently.
+export fn toMap[K, V](map: &LinkedMap[K, V]) -> Map[K, V] { map.entries }
+
+/// Whether every entry satisfies the predicate. True for an empty map.
+export fn all[K, V](map: &LinkedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if !holds(pair[0], pair[1]) { return false }
+  }
+  true
+}
+
+/// Whether any entry satisfies the predicate. False for an empty map.
+export fn any[K, V](map: &LinkedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in pairs(map) {
+    if holds(pair[0], pair[1]) { return true }
+  }
+  false
+}

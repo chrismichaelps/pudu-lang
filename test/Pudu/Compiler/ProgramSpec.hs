@@ -217,6 +217,7 @@ testProgramEvaluation = do
   declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
+  orderedMaps <- runEntry "test-fixtures/stdlib/UsesOrderedMaps.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -227,6 +228,13 @@ testProgramEvaluation = do
     , counterexample
         "a sequence that cannot be empty, a queue with two ends, a heap, and a graph"
         (structures === Just "0")
+    {-| The three ordered maps, including the cases easiest to get wrong: a
+        boundary landing exactly on an entry, a key that is absent, an empty
+        structure, and a re-insertion that must not move anything. Each check
+        answers 1, so a shortfall names how many failed. -}
+    , counterexample
+        "a map with neighbours, a map that remembers its order, and a total map"
+        (orderedMaps === Just "38")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"
