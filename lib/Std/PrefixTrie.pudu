@@ -1,0 +1,290 @@
+module Std.PrefixTrie
+
+/// Text keys held by their characters, so a prefix can be asked about.
+///
+/// Autocomplete, a routing table, a dictionary, every setting under
+/// `server.tls.`: each of these asks for the entries whose key *starts with*
+/// something. A `Map` can only answer by reading every key and testing it, so
+/// returning five entries costs the whole map. `SortedMap` narrows that to a
+/// range when the keys are text, which is better, and still compares whole keys
+/// at each step.
+///
+/// Here a key is a path through the characters. Walking a prefix touches one
+/// node per character of the prefix — not per entry in the trie — and everything
+/// under that node is the answer. A prefix shared by a thousand keys is walked
+/// once and stored once, which is the other thing this shape buys: the common
+/// stem of `server.tls.cert` and `server.tls.key` exists one time.
+///
+/// The cost is that this holds text keys and nothing else, and that a key with
+/// no shared prefix is a node per character with one child each. It is worth
+/// reaching for when prefixes are asked about and keys overlap, and not
+/// otherwise.
+export type PrefixTrie[V] = {
+  value: Option[V],
+  children: Map[Char, PrefixTrie[V]]
+}
+
+/// A trie with nothing in it.
+export fn empty[V]() -> PrefixTrie[V] {
+  PrefixTrie{value: None, children: mapOf([])}
+}
+
+/// The child under one character, or an empty trie.
+fn childAt[V](trie: &PrefixTrie[V], step: Char) -> PrefixTrie[V] {
+  match trie.children.get(step) {
+    case Some(found) => found
+    case None => empty()
+  }
+}
+
+/// The node a key's characters lead to, or `None` when the path runs out.
+///
+/// The one walk every read is built from. It descends one node per character,
+/// so what it costs is the length of the key rather than the size of the trie.
+fn descend[V](trie: &PrefixTrie[V], key: Str) -> Option[PrefixTrie[V]] {
+  var here = *trie
+  for step in key.chars() { here = here.children.get(step) ? }
+  Some(here)
+}
+
+/// The value stored under a key, or `None`.
+export fn get[V](trie: &PrefixTrie[V], key: Str) -> Option[V] {
+  descend(trie, key) ?.value
+}
+
+/// The value stored under a key, or a fallback.
+export fn getOr[V](trie: &PrefixTrie[V], key: Str, fallback: V) -> V {
+  match get(trie, key) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// Whether a key has a value.
+export fn containsKey[V](trie: &PrefixTrie[V], key: Str) -> Bool {
+  match get(trie, key) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Whether any key begins with this prefix.
+///
+/// Cheaper than asking for the matches and counting them: it walks the prefix
+/// and stops, without collecting anything beneath.
+export fn hasPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Bool {
+  match descend(trie, prefix) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// The trie with a key's value added or replaced.
+///
+/// Rebuilt down the key's path, so the nodes the key does not touch are shared
+/// with the trie it came from rather than copied.
+export fn insert[V](trie: &PrefixTrie[V], key: Str, held: V) -> PrefixTrie[V] {
+  if key.isEmpty() {
+    PrefixTrie{value: Some(held), children: trie.children}
+  } else {
+    let step = key.charAt(0)
+    let rest = key.drop(1)
+    PrefixTrie {
+      value: trie.value,
+      children: trie.children.insert(step, insert(&childAt(trie, step), rest, held))
+    }
+  }
+}
+
+/// Whether a node holds nothing and leads nowhere.
+///
+/// What decides if a node can be dropped after a removal. Without this a trie
+/// that had a long key removed keeps the whole path it used, so a trie that is
+/// filled and emptied never gives the space back.
+fn isBare[V](trie: &PrefixTrie[V]) -> Bool {
+  if trie.children.size() != 0 { false } else {
+    match trie.value {
+      case Some(_) => false
+      case None => true
+    }
+  }
+}
+
+/// The trie with a key's value removed, or unchanged when it has none.
+///
+/// Nodes left holding nothing and leading nowhere are dropped on the way back
+/// up, so removing a key gives back the path it did not share.
+export fn remove[V](trie: &PrefixTrie[V], key: Str) -> PrefixTrie[V] {
+  if key.isEmpty() {
+    PrefixTrie{value: None, children: trie.children}
+  } else {
+    let step = key.charAt(0)
+    match trie.children.get(step) {
+      case Some(below) => {
+        let pruned = remove(&below, key.drop(1))
+        if isBare(&pruned) {
+          PrefixTrie{value: trie.value, children: trie.children.remove(step)}
+        } else {
+          PrefixTrie{value: trie.value, children: trie.children.insert(step, pruned)}
+        }
+      }
+      case None => *trie
+    }
+  }
+}
+
+/// Every key and value beneath a node, with the path taken to reach it.
+///
+/// Depth first through the children in character order, so the answer comes out
+/// sorted by key without anything being sorted.
+fn collect[V](trie: &PrefixTrie[V], sofar: Str) -> Array[(Str, V)] {
+  var out = []
+  match trie.value {
+    case Some(found) => { out = out.push((sofar, found)) }
+    case None => {}
+  }
+  for pair in trie.children.entries() {
+    out = out.concat(collect(&pair[1], sofar + pair[0].toText()))
+  }
+  out
+}
+
+/// Every key and value, in key order.
+export fn pairs[V](trie: &PrefixTrie[V]) -> Array[(Str, V)] { collect(trie, "") }
+
+/// Every key, in order.
+export fn keys[V](trie: &PrefixTrie[V]) -> Array[Str] {
+  var out = []
+  for pair in pairs(trie) { out = out.push(pair[0]) }
+  out
+}
+
+/// Every value, in the order of its key.
+export fn values[V](trie: &PrefixTrie[V]) -> Array[V] {
+  var out = []
+  for pair in pairs(trie) { out = out.push(pair[1]) }
+  out
+}
+
+/// How many keys have values.
+export fn size[V](trie: &PrefixTrie[V]) -> Int { pairs(trie).length() }
+
+/// Whether the trie holds no keys.
+export fn isEmpty[V](trie: &PrefixTrie[V]) -> Bool { isBare(trie) }
+
+/// Every entry whose key begins with the prefix, in key order.
+///
+/// The question the trie exists for. It walks the prefix once and then collects
+/// what is under it, so what it costs follows the prefix and the number of
+/// matches rather than the size of the trie.
+export fn withPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Array[(Str, V)] {
+  match descend(trie, prefix) {
+    case Some(below) => collect(&below, prefix)
+    case None => []
+  }
+}
+
+/// Every key beginning with the prefix, in order.
+export fn keysWithPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Array[Str] {
+  var out = []
+  for pair in withPrefix(trie, prefix) { out = out.push(pair[0]) }
+  out
+}
+
+/// How many keys begin with the prefix.
+export fn countWithPrefix[V](trie: &PrefixTrie[V], prefix: Str) -> Int {
+  withPrefix(trie, prefix).length()
+}
+
+/// The trie of everything under a prefix, with the prefix stripped from the
+/// keys.
+///
+/// The subtree as a trie in its own right, for handing a section of a
+/// configuration or a routing table to something that should not know where it
+/// came from.
+export fn under[V](trie: &PrefixTrie[V], prefix: Str) -> PrefixTrie[V] {
+  match descend(trie, prefix) {
+    case Some(below) => below
+    case None => empty()
+  }
+}
+
+/// The longest key that is a prefix of the given text, and its value.
+///
+/// What a routing table asks: the most specific rule that covers this path.
+/// Every prefix of the text is on one walk, so the last match found on the way
+/// down is the longest, and nothing needs comparing afterwards.
+export fn longestPrefixOf[V](trie: &PrefixTrie[V], text: Str) -> Option[(Str, V)] {
+  var here = *trie
+  var best = None
+  var taken = 0
+  match here.value {
+    case Some(found) => { best = Some(("", found)) }
+    case None => {}
+  }
+  for step in text.chars() {
+    match here.children.get(step) {
+      case Some(below) => {
+        here = below
+        taken = taken + 1
+        match here.value {
+          case Some(found) => { best = Some((text.take(taken), found)) }
+          case None => {}
+        }
+      }
+      case None => { return best }
+    }
+  }
+  best
+}
+
+/// The trie with every key of an array of pairs.
+export fn fromPairs[V](entries: &Array[(Str, V)]) -> PrefixTrie[V] {
+  var out = empty()
+  for pair in entries { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// A trie of every key in an array, each holding the same value.
+export fn fromKeys[V](given: &Array[Str], held: V) -> PrefixTrie[V] {
+  var out = empty()
+  for key in given { out = insert(&out, key, held) }
+  out
+}
+
+/// Every value transformed, keeping the keys.
+export fn mapValues[A, B](trie: &PrefixTrie[A], transform: fn(A) -> B) -> PrefixTrie[B] {
+  var out = empty()
+  for pair in pairs(trie) { out = insert(&out, pair[0], transform(pair[1])) }
+  out
+}
+
+/// Only the entries the predicate accepts.
+export fn filter[V](trie: &PrefixTrie[V], keep: fn(Str, V) -> Bool) -> PrefixTrie[V] {
+  var out = empty()
+  for pair in pairs(trie) {
+    if keep(pair[0], pair[1]) { out = insert(&out, pair[0], pair[1]) }
+  }
+  out
+}
+
+/// Two tries combined, with the second's values winning.
+export fn merge[V](left: &PrefixTrie[V], right: &PrefixTrie[V]) -> PrefixTrie[V] {
+  var out = *left
+  for pair in pairs(right) { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// Every entry combined into one value, in key order.
+export fn fold[V, A](trie: &PrefixTrie[V], combine: fn(A, Str, V) -> A, start: A) -> A {
+  var accumulated = start
+  for pair in pairs(trie) { accumulated = combine(accumulated, pair[0], pair[1]) }
+  accumulated
+}
+
+/// The entries as an ordinary map, losing the ability to ask about prefixes.
+export fn toMap[V](trie: &PrefixTrie[V]) -> Map[Str, V] {
+  var out = mapOf([])
+  for pair in pairs(trie) { out = out.insert(pair[0], pair[1]) }
+  out
+}
