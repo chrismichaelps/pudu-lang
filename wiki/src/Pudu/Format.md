@@ -70,6 +70,13 @@ formatText   :: Source -> Text
 - `!`, `-`, `&`, `~`, and `*` are **prefix or binary** depending only on what precedes them. An
   operator follows an operand; a prefix follows anything else. `a - b` subtracts, `(-b)` negates;
   `a * b` multiplies, `*handle` reads through a borrow. A prefix takes no space after it.
+- `#{` is one attached Set-literal opener for spacing purposes: no space may appear between the two
+  tokens, and its braces are unpadded like a record, yielding `#{1, 2}` and `#{}`. They remain two
+  tokens, preserving the formatter's token-sequence guarantee. A line beginning with `#` begins an
+  expression rather than continuing the statement above it.
+- `#{` is one attached Set-literal opener for spacing purposes: no space may appear between the two
+  tokens, and its braces are unpadded like a record, yielding `#{1, 2}` and `#{}`. They remain two
+  tokens, preserving the formatter's token-sequence guarantee.
 
 Both are decided once per line, before any spacing is, so a closing brace is always spaced like the
 brace it closes rather than like whatever token sits beside it.
@@ -112,6 +119,12 @@ layout, where a line is already a unit.
   ambiguity belongs to token structure, not one keyword sequence. _Rationale:_ saving and restoring
   the head state handles nested parentheses and any future parenthesized control head without
   teaching the formatter grammar productions. _Rejected:_ an `if let` token-pattern exception.
+- **Q:** Treat a Set literal as a block because it uses braces? **A:** No. _Rationale:_ it is a
+  comma-separated value literal and canonical collection spacing is unpadded; the preceding `#`
+  identifies it without parsing. _Rejected:_ `# { 1, 2 }`; parser-dependent formatting.
+- **Q:** Treat a Set literal as a block because it uses braces? **A:** No. _Rationale:_ it is a
+  comma-separated value literal and canonical collection spacing is unpadded; the preceding `#`
+  identifies it without parsing. _Rejected:_ `# { 1, 2 }`; parser-dependent formatting.
 
 ## Referenced by
 

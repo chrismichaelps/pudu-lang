@@ -51,6 +51,8 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
 - `if let` checks its subject once, looks through a borrow exactly as `match` does, binds the pattern
   in a fresh then-branch type scope, and unifies its branch values exactly as ordinary `if` does.
   Without else it has unit type. No separate pattern checker exists for this form.
+- A non-empty `SetExpression` unifies all member types and produces `Set[T]`. The empty form creates
+  one local inference variable; expected-type contexts may determine it before a statement boundary.
 
 ### Linkage
 
@@ -86,6 +88,9 @@ through the record.
   declarations are. _Rationale:_ it is the only part of a lambda that is not an
   expression. _Rejected:_ duplicating the binding here, which would put one rule
   in two places.
+- **Q:** Default an empty Set's element type here? **A:** No. _Rationale:_ expression inference must
+  first let annotations, arguments, and returns constrain it; a boundary diagnostic is more honest
+  than a type chosen without evidence. _Rejected:_ `Int`, unit, or an implicit bottom element.
 
 ## Referenced by
 

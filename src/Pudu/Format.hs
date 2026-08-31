@@ -163,6 +163,7 @@ indentLines = go 0
     TokenPiece token : _ -> case tokenKind token of
       {-| A label opens a loop; it never continues the line above. -}
       Symbol SymAt -> False
+      Symbol SymHash -> False
       Symbol symbol -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
       Keyword KwElse -> True
       _ -> False
@@ -287,7 +288,10 @@ braceKinds pieces
   go stack inHead heads ((index, piece) : rest) = case piece of
     TokenPiece token -> case tokenKind token of
       Symbol SymLeftBrace ->
-        let style = if not inHead && recordAt index then Record else Block
+        let style
+              | setAt index = Record
+              | not inHead && recordAt index = Record
+              | otherwise = Block
          in style : go (style : stack) False heads rest
       Symbol SymRightBrace -> case stack of
         top : below -> top : go below inHead heads rest
@@ -309,6 +313,10 @@ braceKinds pieces
     CommentPiece _ -> Block : go stack inHead heads rest
 
   recordAt index = namedBefore index && fieldsAfter index
+
+  setAt index = case [token | (position, token) <- tokens, position < index] of
+    [] -> False
+    earlier -> tokenKind (last earlier) == Symbol SymHash
 
   namedBefore index = case [token | (position, token) <- tokens, position < index] of
     [] -> False

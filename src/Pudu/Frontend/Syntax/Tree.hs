@@ -323,6 +323,7 @@ data Expression
   | AwaitExpression !(Located Expression)
   | TupleExpression ![Located Expression]
   | ArrayExpression ![Located Expression]
+  | SetExpression ![Located Expression]
   | UnsafeExpression ![Located Capability] !(Located Block)
   | MacroCall !(Located Text) ![Located Expression]
   | ScopeExpression !(Located Block)

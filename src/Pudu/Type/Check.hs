@@ -48,6 +48,7 @@ import Pudu.Type.Check.Safety
   ( requireComptimePurity
   )
 import Pudu.Type.Check.Coherence (checkCoherence)
+import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Expression (CheckSurroundings (..))
 import qualified Pudu.Type.Check.Expression as Expression
 import Pudu.Type.Check.Statement (FunctionRole (..), StatementNeeds (..))
@@ -200,7 +201,8 @@ checkDeclaration declared (Located _ declaration) = case declaration of
         (Just "annotate the exported binding so importers can check it without its body")
     expected <- formOptionalType declared [] annotation
     actual <- checkExpression declared [] value
-    _ <- unify (locatedSpan value) expected actual
+    unified <- unify (locatedSpan value) expected actual
+    requireConcreteSetLiteral (locatedSpan value) (locatedValue value) unified
     bindName (locatedValue name) (monotype expected)
   FunctionDeclaration value -> checkFunctionWith ModuleScopeFunction declared [] [] Nothing value
   TraitDeclaration value ->

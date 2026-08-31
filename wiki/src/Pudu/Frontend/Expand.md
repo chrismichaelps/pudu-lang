@@ -44,6 +44,8 @@ expandModule :: Module -> (Module, [Diagnostic])
   its uses in the success block; record shorthand keeps the field selector and becomes an explicit
   nested binding when its local name must change. The subject and else branch exclude those local
   renames because the successful bindings are not in scope there.
+- A `SetExpression` is traversed member by member in source order in both expansion and hygienic
+  substitution. Its constructor and member order are retained.
 
 - **A macro argument of the wrong kind is `E1054`, not a code beside `E1048`.** `E1049` already belongs to the statement-separator rule [[grammar/pudu]] states, and one code cannot mean two things — a reader looking it up would be told about a macro argument or about a missing line break depending on which answer they found first.
 
@@ -77,6 +79,9 @@ DEPTH 0.78 (DEEP). One entry point hides collection, kind checking, hygiene rena
 - **Q:** What span does expanded syntax carry? **A:** The call's. _Rationale:_ a reader debugging a diagnostic can see the call; they may never have opened the macro. _Rejected:_ the definition's span, which points into code the reader did not write; synthetic spans, which point nowhere.
 - **Q:** Should an unexpandable call be left in the tree? **A:** No; it becomes an invalid node. _Rationale:_ leaving it would make every later phase carry a case for it and risk a second diagnostic for one mistake. _Rejected:_ leaving the call; aborting the compile.
 - **Q:** May `if let` preserve its pattern unchanged through macro substitution? **A:** Not when the pattern binds a name. _Rationale:_ renaming only the success-block use disconnects it from the binder, while renaming neither permits capture at the call site. _Rejected:_ treating pattern bindings as ordinary mentions.
+- **Q:** May duplicate Set members be collapsed while expanding? **A:** No. _Rationale:_ two equal
+  results may contain different macro calls or effects; uniqueness belongs to the evaluated Set,
+  not to syntax. _Rejected:_ syntax-level deduplication.
 
 ## Variants
 

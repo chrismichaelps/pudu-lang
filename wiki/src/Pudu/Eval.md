@@ -91,6 +91,9 @@ evaluateModule :: Module -> EvalOutcome
 - A structured scope adopts every task started inside it. Awaiting a task joins it there; a child never awaited is joined when the scope exits, in the order the children started, so no task outlives the region that began it and a failure among them is selected by position rather than by a race. A control transfer out of a scope joins its children before continuing.
 
 - Evaluation runs only on a module the earlier phases admitted. It re-checks nothing they proved, and it invents no value for syntax they rejected.
+- A Set literal evaluates every member left to right, rejects the first unorderable resulting value
+  with `E7008`, then constructs the existing key-ordered Set. Duplicate results collapse only after
+  their expressions have run. Membership evaluates candidate then Set and performs one keyed lookup.
 - `if let` evaluates its subject once and delegates the test to [[Eval Match]]. Successful bindings
   run the then block in one temporary frame; failure evaluates else or yields unit.
 - Functions and variant constructors are installed before any constant is evaluated, so mutual recursion and forward references behave exactly as resolution promised. Constants then evaluate in declaration order, and one that reads a later constant is a runtime diagnostic rather than a silent default.
@@ -144,6 +147,9 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 - **Q:** What width do fixed-width operators use? **A:** None yet; they compute exactly and are documented as awaiting typing. _Rationale:_ guessing 64 bits would produce wrapping the declared type never asked for, which is worse than exact arithmetic. _Rejected:_ assuming a default width; refusing to evaluate arithmetic at all.
 - **Q:** Should a runaway loop hang the session? **A:** No; iteration and recursion are bounded and report `E7002`. _Rationale:_ an interactive tool must survive its user's mistakes. _Rejected:_ unbounded execution; a wall-clock timeout, which would make results irreproducible.
 - **Q:** Execute an async body when it is called? **A:** No; prepare its argument bindings and return a cold task, then run the body at `.await`. _Rationale:_ this preserves the language's first observable async boundary before scheduling exists. _Rejected:_ eager calls with pass-through await; fake concurrent scheduling in the tree walker.
+- **Q:** Implement membership by iterating the Set? **A:** No. _Rationale:_ [[Eval Keyed]] already
+  owns the balanced-tree lookup and its equality; iteration would discard the data structure's
+  complexity and duplicate comparison policy. _Rejected:_ `any` over rendered members.
 
 ## Variants
 

@@ -30,6 +30,10 @@ checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
 
 ### Governance
 
+- Module bindings apply the same empty-Set boundary check as local statements after annotation
+  unification, so `const EMPTY: Set[Int] = #{}` succeeds and an untyped `const EMPTY = #{}` reports
+  `E3037` rather than publishing an unresolved scheme.
+
 - Checking pushes an expectation inward at an `if`, a `match`, an array literal, a block, and a record field, so branches of different types widen against what the context asked for rather than against each other. It engages only where the expectation actually contains a dynamic type, so ordinary inference is unchanged. A record field's declared type is an expectation for the same reason a binding's annotation is.
 
 - A trait-qualified call is resolved against the type its receiver actually has, not against the trait's declaration. `Speak.label(&bot)` names the trait, but the method it runs is the one `Bot` implements, and only that one knows the concrete types — a generic trait leaves its parameters open in the declaration by design. This is the rule [[Evaluator]] already followed for the same call, so the two phases now agree rather than only appearing to. The receiver is checked once and its type reused, so the call is never walked twice.
@@ -138,6 +142,10 @@ Collect declared shapes and signatures, check trait implementation ownership and
 DEPTH 0.85 (DEEP). One entry point hides signature collection, scope construction, bidirectional inference, and the rules for every construct in the language.
 
 ## Grill Log
+
+- **Q:** Let module inference retain an unresolved Set element? **A:** No. _Rationale:_ module
+  bindings feed tooling and imported interfaces; exporting an unconstrained variable would make
+  their type depend on later consumers. _Rejected:_ generalizing the empty Set at module scope.
 
 - **Q:** Infer exported signatures too? **A:** No; require the annotation. _Rationale:_ an exported signature is what callers compile against, and inferring it would let an unrelated body edit break them silently. _Rejected:_ whole-program inference; inferring and then freezing the first inferred shape.
 - **Q:** Infer a private async signature from its body? **A:** No; require the same complete parameter and return annotations with `E3010`. _Rationale:_ a forward caller must split a surface `Result[S, E]` into task channels before the body is visited, so delayed inference would make task typing declaration-order dependent. _Rejected:_ guessing `Task[T, Never]`; caller-driven inference; a second body-checking pass.

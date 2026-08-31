@@ -37,11 +37,19 @@ testExpansion = do
     , "macro quadruple(value: expr) = twice!(twice!(value))"
     ]
     "quadruple!(5)"
+  setMembers <- evaluateWith
+    [ "macro twice(value: expr) = value + value" ]
+    "#{twice!(2), twice!(1)}"
+  setBody <- evaluateWith
+    [ "macro neighbours(value: expr) = #{value, value + 1}" ]
+    "neighbours!(3)"
   pure $ conjoin
     [ counterexample "an expression argument expands" (expression === "40")
     , counterexample "an identifier argument expands" (identifier === "5")
     , counterexample "a block argument expands" (block === "6")
     , counterexample "a macro may call another" (nested === "20")
+    , counterexample "Set members are expanded" (setMembers === "#{2, 4}")
+    , counterexample "a Set body substitutes every member" (setBody === "#{3, 4}")
     ]
 
 testPrecedence :: IO Property

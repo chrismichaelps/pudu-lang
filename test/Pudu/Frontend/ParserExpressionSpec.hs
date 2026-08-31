@@ -69,6 +69,7 @@ testLineLeadingOperators :: IO Property
 testLineLeadingOperators = do
   let continuingOperators =
         [ "=", "||", "|", "&&", "==", "!=", "<", "<=", ">", ">="
+        , "in"
         , "..", "..=", "^", "<<", ">>", "+", "&+", "&-", "+|", "-|"
         , "/", "%", "&*", "*|"
         ]
@@ -142,12 +143,16 @@ testPrecedence = do
   assignment <- parse "a = b = c"
   subtraction <- parse "a - b - c"
   mixed <- parse "a + b * c"
+  membership <- parse "a in b == c"
+  comparisonMembership <- parse "a < b in c"
   pure $ conjoin [validShape assignment === "(a=(b=c))",
-    validShape subtraction === "((a-b)-c)", validShape mixed === "(a+(b*c))"]
+    validShape subtraction === "((a-b)-c)", validShape mixed === "(a+(b*c))",
+    validShape membership === "((ainb)==c)",
+    validShape comparisonMembership === "((a<b)inc)"]
 
 testBinaryVocabulary :: IO Property
 testBinaryVocabulary = do
-  let operators = ["=", "||", "&&", "==", "!=", "<", "<=", ">", ">=", "..", "..=",
+  let operators = ["=", "||", "&&", "==", "!=", "<", "<=", ">", ">=", "in", "..", "..=",
         "<<", ">>", "^", "|", "+", "-", "&+", "&-", "+|", "-|", "*", "/", "%", "&*", "*|"]
   results <- traverse (\operator -> parse ("a " <> operator <> " b")) operators
   pure (map validShape results === map (\operator -> "(a" <> operator <> "b)") operators)
@@ -392,6 +397,9 @@ testAggregates = do
   nested <- parse "Wrapper{inner: User{id: 2}}"
   blockNotRecord <- parse "if READY {} else {}"
   parenthesized <- parse "if (User{id: 1}).id > 0 {} else {}"
+  setLiteral <- parse "#{3, 1, 2, 1,}"
+  emptySet <- parse "#{}"
+  recordMember <- parse "#{User{id: 1}}"
   pure $ conjoin
     [ validShape tuple === "(1,2,3)"
     , counterexample "one member without a comma groups" (validShape grouped === "(1+2)")
@@ -404,6 +412,14 @@ testAggregates = do
         (validShape blockNotRecord === "if")
     , counterexample "parentheses reinstate a record construction"
         (validShape parenthesized === "if")
+    , counterexample "a Set retains written members and a trailing comma"
+        (validShape setLiteral === "#{3,1,2,1}")
+    , counterexample "the REPL outline retains written Set order"
+        (outlineExpression (firstOf setLiteral) === "#{3, 1, 2, 1}")
+    , counterexample "an empty Set is a distinct aggregate"
+        (validShape emptySet === "#{}")
+    , counterexample "records are admitted inside a Set literal"
+        (validShape recordMember === "#{User{id:1}}")
     ]
 
 testHostileChains :: IO Property
@@ -411,8 +427,10 @@ testHostileChains = do
   members <- parse ("root" <> Text.concat (replicate 520 ".x"))
   binaries <- parse ("a" <> Text.concat (replicate 520 " + a"))
   arguments <- parse ("f(" <> Text.intercalate "," (replicate 520 "a") <> ")")
+  setMembers <- parse ("#{" <> Text.intercalate "," (replicate 520 "a") <> "}")
   pure $ conjoin [codes members === ["E1099"], codes binaries === ["E1099"],
-    codes arguments === ["E1099"], diagnosticOffsets arguments === [1022]]
+    codes arguments === ["E1099"], codes setMembers === ["E1099"],
+    diagnosticOffsets arguments === [1022]]
 
 testHostileAmbiguousTails :: IO Property
 testHostileAmbiguousTails = do
@@ -561,6 +579,7 @@ shape (Located _ expression) = case expression of
     labelShape label <> "for " <> patternShape binder <> " in " <> shape iterated
   TupleExpression members -> "(" <> Text.intercalate "," (map shape members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate "," (map shape members) <> "]"
+  SetExpression members -> "#{" <> Text.intercalate "," (map shape members) <> "}"
   UnsafeExpression _ _ -> "unsafe"
   ScopeExpression _ -> "scope"
   MacroCall name arguments ->

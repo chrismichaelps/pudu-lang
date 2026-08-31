@@ -77,6 +77,7 @@ outlineExpression (Located _ expression) = case expression of
   AwaitExpression target -> outlineExpression target <> ".await"
   TupleExpression members -> "(" <> Text.intercalate ", " (map outlineExpression members) <> ")"
   ArrayExpression members -> "[" <> Text.intercalate ", " (map outlineExpression members) <> "]"
+  SetExpression members -> "#{" <> Text.intercalate ", " (map outlineExpression members) <> "}"
   MacroCall name arguments ->
     locatedValue name <> "!(" <> Text.intercalate ", " (map outlineExpression arguments) <> ")"
   TypeApplication target arguments ->

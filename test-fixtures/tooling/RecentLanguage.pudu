@@ -19,3 +19,7 @@ fn resolve(current: Option[Int], extra: Result[Int, Str]) -> Result[Int, Str] {
   }
   Ok(0)
 }
+
+fn hasTwo() -> Bool {
+  2 in #{1, 2, 3}
+}
