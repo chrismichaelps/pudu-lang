@@ -6,7 +6,7 @@ import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateEntryPoint)
-import Pudu.Eval.Value (renderValue)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 

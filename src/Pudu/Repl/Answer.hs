@@ -28,7 +28,8 @@ import Pudu.Diagnostic.Render
   , renderDiagnosticsWith
   , renderSummary
   )
-import Pudu.Eval.Value (Value, renderValue, valueKind)
+import Pudu.Eval.Render (renderValue, valueKind)
+import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
