@@ -224,6 +224,7 @@ testProgramEvaluation = do
   graphEdges <- runEntry "test-fixtures/stdlib/UsesGraphEdges.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
+  hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -275,6 +276,14 @@ testProgramEvaluation = do
     , counterexample
         "a printer carries its separator, ending, prefix, and stream"
         (printers === Just "35")
+    {-| A hierarchy's counting rules, its three orders, its transformations, and
+        what search answers when there is nothing to find. Weighted toward what
+        a hand-written hierarchy gets wrong: a leaf counted as height zero, a
+        traversal that loses child order, a prune that promotes the children of
+        a node it removed. Each check answers 1. -}
+    , counterexample
+        "a tree counts, walks, transforms, and reports where it looked"
+        (hierarchies === Just "67")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"
