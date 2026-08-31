@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Forty-two modules, 1212 exported declarations, every one written in Pudu.
+Forty-three modules, 1215 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -227,6 +227,7 @@ Forty-two modules, 1212 exported declarations, every one written in Pudu.
 | `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
 | `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
 | `Std.Tree` | 40 | a value with trees beneath it: three orders, paths, pruning, grafting, and growing |
+| `Std.Mappable` | 3 | a trait over the container itself, so one definition serves several |
 | `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
 | `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
 | `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |

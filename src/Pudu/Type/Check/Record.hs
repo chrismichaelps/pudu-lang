@@ -47,8 +47,8 @@ import Pudu.Type.Value
     checked *against* its declared type, so a literal of mixed implementations
     reaches the field's own type rather than being inferred on its own first. -}
 data CheckValue = CheckValue
-  { valueOf :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
-  , valueAgainst :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
+  { valueOf :: DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
+  , valueAgainst :: DeclaredTypes -> [(Text, Int)] -> Type -> Located Expression -> Checker Type
   }
 
 {-| A record construction is checked field by field against its declaration,
@@ -56,7 +56,7 @@ data CheckValue = CheckValue
 recordType
   :: CheckValue
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> Span
   -> ModuleName
   -> [Located FieldInit]
@@ -140,7 +140,7 @@ namedVariantShape name = do
 variantRecordType
   :: CheckValue
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> Span
   -> Text
   -> NominalId
@@ -168,7 +168,7 @@ variantRecordType checking declared rigid spanValue name owner ownerParams decla
 checkField
   :: CheckValue
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> [(Text, Type)]
   -> Located FieldInit
   -> Checker ()
@@ -193,7 +193,7 @@ checkField checking declared rigid expected located@(Located fieldSpan field) = 
         _ <- unify fieldSpan declaredType actual
         pure ()
 
-checkFieldInit :: CheckValue -> DeclaredTypes -> [Text] -> Located FieldInit -> Checker Type
+checkFieldInit :: CheckValue -> DeclaredTypes -> [(Text, Int)] -> Located FieldInit -> Checker Type
 checkFieldInit checking declared rigid (Located fieldSpan field) = case fieldInitValue field of
   Just value -> valueOf checking declared rigid value
   Nothing -> nameType fieldSpan (locatedValue (fieldInitName field) NonEmpty.:| [])

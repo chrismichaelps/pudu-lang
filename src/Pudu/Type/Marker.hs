@@ -54,6 +54,10 @@ decide marker visiting typeValue = case typeValue of
   ErrorType -> pure True
   VariableType _ -> pure False
   RigidType _ -> pure False
+  {-| A parameter of higher kind applied to arguments carries whatever its
+      constructor carries, and the constructor is not known here. Its bounds are
+      what decide it, exactly as for an unapplied parameter. -}
+  AppliedType _ _ -> pure False
   {-| A dynamic value carries whatever its concrete type carries, and that is
       not known here. Only the markers the trait itself guarantees can be
       claimed, and a trait guarantees none of them, so this answers no. -}

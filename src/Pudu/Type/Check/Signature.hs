@@ -130,8 +130,8 @@ selfBoundAsBound traitName = [("Self", [traitName])]
     `RigidType "Self"` rather than `NominalType "Self"`, routing method
     calls through `rigidMethod` and the trait bound installed by
     `selfBoundAsBound`. -}
-selfRigid :: NominalId -> [Text]
-selfRigid _ = ["Self"]
+selfRigid :: NominalId -> [(Text, Int)]
+selfRigid _ = [("Self", 0)]
 
 {-| The built-in methods that answer with a new collection rather than changing
     the one they were given. `length`, `get`, `indexOf`, and `contains` are

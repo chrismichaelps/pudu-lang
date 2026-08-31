@@ -125,7 +125,11 @@ constraint       = upper_ident, ":", type_ref, ("+", type_ref)* ;
 - `Array[T, N]` requires non-negative compile-time `N`.
 - Generic type arguments use square brackets consistently.
 - `()` is unit, `(T)` groups one type without adding structure, and a comma forms a tuple; type lists admit one trailing comma.
-- Generic constraints are nominal trait bounds; v1 has no higher-kinded types, specialization, implicit arguments, or default generic type parameters on functions. A type parameter therefore stands for a type and never for a type constructor: writing one with arguments, as `F[Int]`, is refused with `E3038` rather than read as an application.
+- Generic constraints are nominal trait bounds; v1 has no specialization, implicit arguments, or default generic type parameters on functions.
+- A type parameter states how many type arguments it takes. A bare `T` takes none and stands for a type; `F[_]` takes one and stands for a constructor of one argument; `F[_, _]` takes two. The arity is written in the declaration and never inferred from use, so the declaration says what the parameter is and a wrong application is reported where it is written.
+- A parameter may be applied to exactly the number of arguments its declaration takes, and `E3038` reports every other case — a bare parameter given arguments, and one of higher kind given the wrong number.
+- A trait may take a parameter of higher kind, so `trait Mappable[F[_]]` is admissible and its members may write `F[A]` and `F[B]`. An implementation names a bare constructor: `impl Mappable[Box] for Box`.
+- A constructor is never partially applied and never written as a computation over types. Unification solves a parameter against a constructor of the same arity and its arguments pairwise; anything outside that is a mismatch rather than a search. See [[ADR-0014 Parameters of Higher Kind]].
 - A synchronous function type `fn(A) -> T` has no recoverable failure unless `T` is explicitly `Result[S, E]`; its normalized semantic signature is success `S`, failure `E`, capability `Sync`. `fn(A) -> T` otherwise normalizes to failure `Never`.
 - An asynchronous function type is written `async fn(A) -> T`. Calling it produces `Task[T, Never]`; when its declared return is `Result[S, E]`, calling it produces `Task[S, E]`. This spelling preserves async capability and recoverable failure in first-class function types.
 

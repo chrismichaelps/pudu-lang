@@ -1,0 +1,61 @@
+module Std.Mappable
+
+import Std.List as List
+import Std.Tree as Tree
+
+/// Something that holds values and can have every one of them transformed
+/// without changing its shape.
+///
+/// Every collection here already has a `map`, and until parameters could stand
+/// for a constructor the five of them could not be related: `Array`, `Option`,
+/// `Tree` and the rest each named the same operation and no function could take
+/// "some container" and transform what it held.
+///
+/// `F` stands for the constructor, not for a type. `F[_]` says it takes one
+/// argument, so a member may write `F[A]` and `F[B]` and mean the same
+/// container holding different things.
+///
+/// The law this asks of an implementation, and does not check: transforming by
+/// a function that answers what it was given must leave the container as it
+/// was. A `mapped` that reordered, dropped, or duplicated would satisfy the
+/// type and break every caller that relied on the shape surviving.
+///
+/// `Option` is absent, and its absence is not a judgement about it. A trait
+/// implemented for a sum type is accepted by the checker and cannot be called,
+/// because a value of a sum evaluates to one of its variants and the member is
+/// looked for on that. Until a variant finds what its own sum implements, an
+/// `Option` here would be a member no caller could reach.
+export trait Mappable[F[_]] {
+  fn mapped[A, B](self: &F[A], transform: fn(A) -> B) -> F[B]
+}
+
+impl Mappable[Array] for Array {
+  fn mapped[A, B](self: &Array[A], transform: fn(A) -> B) -> Array[B] {
+    List.map(self, transform)
+  }
+}
+
+impl Mappable[Tree.Tree] for Tree.Tree {
+  fn mapped[A, B](self: &Tree.Tree[A], transform: fn(A) -> B) -> Tree.Tree[B] {
+    Tree.map(self, transform)
+  }
+}
+
+/// Every value in any container transformed.
+///
+/// The function that could not be written before: it takes the container it is
+/// given rather than one container it was written for.
+export fn over[F[_]: Mappable, A, B](
+  values: &F[A],
+  transform: fn(A) -> B
+) -> F[B] {
+  values.mapped(transform)
+}
+
+/// Every value in a container replaced by one value.
+///
+/// Written once against the trait rather than once per container, which is the
+/// whole point of there being a trait.
+export fn filled[F[_]: Mappable, A, B](values: &F[A], held: B) -> F[B] {
+  over(values, fn(_ignored: A) -> B => held)
+}

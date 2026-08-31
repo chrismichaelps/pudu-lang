@@ -100,16 +100,16 @@ import Pudu.Type.Value
     all three are decided where declarations and statements are, and all three
     are reached from inside an expression. -}
 data CheckSurroundings = CheckSurroundings
-  { aroundBlock :: DeclaredTypes -> [Text] -> Located Block -> Checker Type
-  , aroundAgainst :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
-  , aroundParameter :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
+  { aroundBlock :: DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
+  , aroundAgainst :: DeclaredTypes -> [(Text, Int)] -> Type -> Located Expression -> Checker Type
+  , aroundParameter :: DeclaredTypes -> [(Text, Int)] -> Located Parameter -> Checker Type
   }
 
 expressionChecker :: CheckSurroundings -> CheckExpression
 expressionChecker around = CheckExpression (checkExpression around)
 
 checkExpression
-  :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+  :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
 checkExpression around declared rigid (Located spanValue expression) = do
   typeValue <- inferExpression around declared rigid spanValue expression
   resolved <- zonk typeValue
@@ -117,7 +117,7 @@ checkExpression around declared rigid (Located spanValue expression) = do
   pure typeValue
 
 inferExpression
-  :: CheckSurroundings -> DeclaredTypes -> [Text] -> Span -> Expression -> Checker Type
+  :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> Checker Type
 inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
   NameExpression names -> nameType spanValue names
@@ -352,7 +352,7 @@ inferExpression around declared rigid spanValue expression = case expression of
 checkArms
   :: CheckSurroundings
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> Span
   -> Type
   -> [Located MatchArm]
@@ -430,7 +430,7 @@ literalIndex (Located _ expression) = case expression of
     so a literal used at two types is an error the reader can see, rather than a
     silent second instantiation of something they wrote once. Generalisation
     belongs to a declaration, which has a name to attach it to. -}
-lambdaType :: CheckSurroundings -> DeclaredTypes -> [Text] -> Function -> Checker Type
+lambdaType :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Function -> Checker Type
 lambdaType around declared rigid value = withoutLoops $ inTypeScopeWith $ do
   inputs <- mapM (aroundParameter around declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)

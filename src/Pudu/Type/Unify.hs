@@ -31,6 +31,28 @@ unify spanValue expected actual = do
     (NominalType leftName leftArgs, NominalType rightName rightArgs)
       | leftName == rightName && length leftArgs == length rightArgs ->
           NominalType leftName <$> unifyAll spanValue leftArgs rightArgs
+    {-| Two applications agree when their constructors agree and their arguments
+        do, pairwise. Only equal arities are compared: a constructor is never
+        split across an application boundary, which is what keeps solving these
+        terminating and keeps a mismatch about two constructors rather than two
+        unsolved shapes. -}
+    (AppliedType leftHead leftArgs, AppliedType rightHead rightArgs)
+      | length leftArgs == length rightArgs -> do
+          solvedHead <- unify spanValue leftHead rightHead
+          AppliedType solvedHead <$> unifyAll spanValue leftArgs rightArgs
+    {-| A constructor variable meets a named constructor carrying at least as
+        many arguments. The variable takes the constructor with the arguments it
+        does not consume, and the rest are matched pairwise. -}
+    (AppliedType leftHead leftArgs, NominalType rightName rightArgs)
+      | length rightArgs >= length leftArgs -> do
+          let (kept, matched) = splitAt (length rightArgs - length leftArgs) rightArgs
+          _ <- unify spanValue leftHead (NominalType rightName kept)
+          NominalType rightName . (kept <>) <$> unifyAll spanValue leftArgs matched
+    (NominalType leftName leftArgs, AppliedType rightHead rightArgs)
+      | length leftArgs >= length rightArgs -> do
+          let (kept, matched) = splitAt (length leftArgs - length rightArgs) leftArgs
+          _ <- unify spanValue (NominalType leftName kept) rightHead
+          NominalType leftName . (kept <>) <$> unifyAll spanValue matched rightArgs
     (TupleTypeValue leftMembers, TupleTypeValue rightMembers)
       | length leftMembers == length rightMembers ->
           TupleTypeValue <$> unifyAll spanValue leftMembers rightMembers
@@ -108,6 +130,9 @@ occursIn variable candidate = do
   case resolved of
     VariableType other -> pure (other == variable)
     NominalType _ arguments -> anyOccurs arguments
+    AppliedType head' arguments -> do
+      inHead <- occursIn variable head'
+      if inHead then pure True else anyOccurs arguments
     TupleTypeValue members -> anyOccurs members
     FunctionTypeValue _ inputs result -> do
       inInputs <- anyOccurs inputs
@@ -162,6 +187,15 @@ zonk typeValue = do
   resolved <- shallow typeValue
   case resolved of
     NominalType name arguments -> NominalType name <$> mapM zonk arguments
+    {-| An application whose constructor has been solved becomes that
+        constructor carrying the arguments, so what a reader is shown is the
+        type itself rather than the shape it was solved through. -}
+    AppliedType head' arguments -> do
+      solvedHead <- zonk head'
+      solvedArgs <- mapM zonk arguments
+      pure $ case solvedHead of
+        NominalType name existing -> NominalType name (existing <> solvedArgs)
+        _ -> AppliedType solvedHead solvedArgs
     TupleTypeValue members -> TupleTypeValue <$> mapM zonk members
     FunctionTypeValue asynchronous inputs result ->
       FunctionTypeValue asynchronous <$> mapM zonk inputs <*> zonk result

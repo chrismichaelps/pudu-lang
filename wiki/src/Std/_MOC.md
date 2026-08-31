@@ -19,6 +19,7 @@ tags: [moc, module, stdlib]
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Tree]] — a value with trees beneath it, with orders, paths, and pruning.
+- [[Std Mappable]] — a trait over the container, so one definition serves several.
 - [[Std SortedMap]] — a map ordered by the caller's comparison, with neighbour and range queries.
 - [[Std LinkedMap]] — a map that iterates in the order its keys were first inserted.
 - [[Std EnumMap]] — a total map over a fixed key domain.
