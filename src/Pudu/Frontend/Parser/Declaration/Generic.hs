@@ -13,6 +13,7 @@ import Pudu.Frontend.Parser.State
   , matchSymbol
   , peekKind
   , peekToken
+  , advanceToken
   , expectSymbol
   )
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
@@ -54,11 +55,55 @@ parseParamList reversed = do
 parseTypeParam :: Parser (Located TypeParam)
 parseTypeParam = do
   name <- expectUpperIdentifier "for the generic parameter"
+  arity <- parseArity
   bounds <- parseBounds
   pure
     ( Located (spanThrough (locatedSpan name) (map locatedSpan bounds))
-        TypeParam{typeParamName = name, typeParamBounds = bounds}
+        TypeParam
+          { typeParamName = name
+          , typeParamArity = arity
+          , typeParamBounds = bounds
+          }
     )
+
+{-| A parameter that stands for a constructor says how many arguments it takes,
+    by writing that many holes: `F[_]` takes one and `F[_, _]` takes two.
+
+    Holes rather than names, because the arguments have no identity here — the
+    parameter is the subject and its arguments are supplied wherever it is
+    applied. Naming them would suggest they could be referred to. -}
+parseArity :: Parser Int
+parseArity = do
+  opening <- matchSymbol "["
+  case opening of
+    Nothing -> pure 0
+    Just _ -> countHoles 0
+
+countHoles :: Int -> Parser Int
+countHoles seen = do
+  taken <- matchHole
+  if not taken
+    then do
+      _ <- expectSymbol "]" "to close the parameter's arguments"
+      pure seen
+    else do
+      next <- matchSymbol ","
+      case next of
+        Just _ -> countHoles (seen + 1)
+        Nothing -> do
+          _ <- expectSymbol "]" "to close the parameter's arguments"
+          pure (seen + 1)
+
+{-| A hole is the identifier `_`, which the lexer produces as an ordinary name
+    and every other phase treats as a discard. -}
+matchHole :: Parser Bool
+matchHole = do
+  kind <- peekKind
+  case kind of
+    Identifier name | name == "_" -> do
+      _ <- advanceToken
+      pure True
+    _ -> pure False
 
 {-| Bounds are nominal trait references joined by `+`; their meaning is a
     semantic rule, so parsing preserves the spelling only. -}

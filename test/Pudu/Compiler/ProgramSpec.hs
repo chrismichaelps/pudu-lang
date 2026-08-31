@@ -225,6 +225,7 @@ testProgramEvaluation = do
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
+  higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -284,6 +285,13 @@ testProgramEvaluation = do
     , counterexample
         "a tree counts, walks, transforms, and reports where it looked"
         (hierarchies === Just "67")
+    {-| One definition serving several containers, which is the whole reason a
+        parameter may stand for a constructor. Every check goes through a
+        definition that names no container, so a function copied per container
+        would pass none of them. -}
+    , counterexample
+        "a parameter standing for a constructor serves every container"
+        (higherKinds === Just "12")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

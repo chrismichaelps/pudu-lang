@@ -65,6 +65,14 @@ data Type
   | FunctionTypeValue !Bool ![Type] !Type
   | ReferenceTypeValue !Bool !Type
   | RigidType !Text
+  {-| A parameter of higher kind applied to its arguments.
+
+      The head is a `RigidType` inside the body that declared the parameter, and
+      a `VariableType` once a scheme has been instantiated. It is never a named
+      constructor, because one of those already carries its own arguments, and
+      never a computation over types, which is what keeps solving it decidable
+      and a mismatch explainable. -}
+  | AppliedType !Type ![Type]
   | VariableType !TypeVar
   | UnitTypeValue
   | NeverType
@@ -74,7 +82,11 @@ data Type
 {-| @Type.Value.Scheme — a type with the parameters a call instantiates and the
     trait bounds each of them must satisfy -}
 data Scheme = Scheme
-  { schemeParams :: ![Text]
+  {-| Each parameter beside how many type arguments it takes. Zero is the
+      ordinary parameter; a greater number is one standing for a constructor,
+      and instantiation replaces it with a variable that is applied rather than
+      one that stands alone. -}
+  { schemeParams :: ![(Text, Int)]
   , schemeBounds :: ![(Text, [NominalId])]
   , schemeType :: !Type
   }
@@ -85,7 +97,7 @@ monotype :: Type -> Scheme
 monotype typeValue = Scheme{schemeParams = [], schemeBounds = [], schemeType = typeValue}
 
 {-| A scheme over declared parameters carrying their bounds. -}
-polytype :: [Text] -> [(Text, [NominalId])] -> Type -> Scheme
+polytype :: [(Text, Int)] -> [(Text, [NominalId])] -> Type -> Scheme
 polytype params bounds typeValue =
   Scheme{schemeParams = params, schemeBounds = bounds, schemeType = typeValue}
 
@@ -140,6 +152,10 @@ renderType typeValue = case typeValue of
   ReferenceTypeValue mutable target ->
     (if mutable then "&mut " else "&") <> renderType target
   RigidType name -> name
+  AppliedType head' arguments
+    | null arguments -> renderType head'
+    | otherwise ->
+        renderType head' <> "[" <> Text.intercalate ", " (map renderType arguments) <> "]"
   VariableType (TypeVar identifier) -> variableName identifier
   UnitTypeValue -> "()"
   NeverType -> "Never"

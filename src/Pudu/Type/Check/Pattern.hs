@@ -30,7 +30,7 @@ import Pudu.Type.Value (NominalId, Type (..), monotype)
 
 {-| Check a pattern against the type it matches, binding the names it
     introduces at the types their positions imply. -}
-bindPattern :: DeclaredTypes -> [Text] -> Located Pattern -> Type -> Checker ()
+bindPattern :: DeclaredTypes -> [(Text, Int)] -> Located Pattern -> Type -> Checker ()
 bindPattern declared rigid (Located patternSpan pattern') subjectType = case pattern' of
   WildcardPattern -> pure ()
   BindingPattern name -> bindName (locatedValue name) (monotype subjectType)
@@ -169,7 +169,7 @@ throughReferences typeValue = case typeValue of
   other -> other
 
 bindFieldPattern
-  :: DeclaredTypes -> [Text] -> [(Text, Type)] -> Located FieldPattern -> Checker ()
+  :: DeclaredTypes -> [(Text, Int)] -> [(Text, Type)] -> Located FieldPattern -> Checker ()
 bindFieldPattern declared rigid expected (Located fieldSpan field) = do
   let name = locatedValue (fieldPatternName field)
       fieldType = maybe ErrorType id (lookup name expected)

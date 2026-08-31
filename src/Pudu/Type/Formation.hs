@@ -44,15 +44,15 @@ import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal)
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
     transparently as [[architecture/SEMANTICS]] requires. -}
-formType :: DeclaredTypes -> [Text] -> Located TypeSyntax -> Checker Type
+formType :: DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Checker Type
 formType = formTypeWith True
 
 {-| Form a type in a position where a trait name is what is meant: the head of
     an `impl`, or a bound. Nothing is rejected here. -}
-formTraitReference :: DeclaredTypes -> [Text] -> Located TypeSyntax -> Checker Type
+formTraitReference :: DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Checker Type
 formTraitReference = formTypeWith False
 
-formTypeWith :: Bool -> DeclaredTypes -> [Text] -> Located TypeSyntax -> Checker Type
+formTypeWith :: Bool -> DeclaredTypes -> [(Text, Int)] -> Located TypeSyntax -> Checker Type
 formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case syntax of
   {-| `dynamic Shape` is some value implementing `Shape`. Only a trait can stand
       here: `dynamic Circle` would be a dynamic type over a set with one member,
@@ -101,18 +101,27 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
     a generic type they can name — `Option[Int]` — and sometimes they want the
     argument to be a parameter of its own, which is a second parameter rather
     than an application of the first. -}
-rejectAppliedParameter :: [Text] -> Span -> ModuleName -> [Type] -> Checker Bool
+rejectAppliedParameter :: [(Text, Int)] -> Span -> ModuleName -> [Type] -> Checker Bool
 rejectAppliedParameter rigid typeSpan path arguments
-  | null arguments = pure False
   | not unqualified = pure False
-  | name `notElem` rigid = pure False
-  | otherwise = do
-      reportOnce typeSpan "E3038"
-        (name <> " is a type parameter, so it cannot be given type arguments")
-        ( "name the type you mean, as in Option[Int], or take the argument as its "
-            <> "own parameter — fn f[" <> name <> ", A](value: " <> name <> ")"
-        )
-      pure True
+  | otherwise = case lookup name rigid of
+      Nothing -> pure False
+      Just arity
+        | arity == length arguments -> pure False
+        | arity == 0 -> do
+            reportOnce typeSpan "E3038"
+              (name <> " is a type parameter, so it cannot be given type arguments")
+              ( "name the type you mean, as in Option[Int], or declare the parameter to "
+                  <> "take one — fn f[" <> name <> "[_], A](value: " <> name <> "[A])"
+              )
+            pure True
+        | otherwise -> do
+            reportOnce typeSpan "E3038"
+              ( name <> " takes " <> plural arity <> ", and was given "
+                  <> Text.pack (show (length arguments))
+              )
+              "give the parameter exactly the arguments its declaration takes"
+            pure True
  where
   pathText = moduleNameText path
   name = lastSegment path
@@ -208,9 +217,17 @@ reportOnce typeSpan code message help = do
   seen <- reportedAt typeSpan code
   unless seen (report code typeSpan message (Just help))
 
-formNamed :: DeclaredTypes -> [Text] -> ModuleName -> [Type] -> Type
+{-| "1 type argument" rather than "1 type arguments", because a diagnostic a
+    reader trusts does not misspell the thing it is reporting. -}
+plural :: Int -> Text
+plural count
+  | count == 1 = "1 type argument"
+  | otherwise = Text.pack (show count) <> " type arguments"
+
+formNamed :: DeclaredTypes -> [(Text, Int)] -> ModuleName -> [Type] -> Type
 formNamed declared rigid path arguments
-  | unqualified && name `elem` rigid = RigidType name
+  | unqualified, Just arity <- lookup name rigid =
+      if arity == 0 then RigidType name else AppliedType (RigidType name) arguments
   | unqualified && name == "Never" = NeverType
   {-| An alias is a synonym, so writing it is writing what it stands for. A
       generic one substitutes its arguments: `type Boxed[T] = Option[T]` used as
@@ -248,11 +265,11 @@ expandAlias replacements typeValue = case typeValue of
 {-| An absent annotation becomes a fresh inference variable, which is how a
     private binding or parameter participates in local inference. -}
 {-| A parameter's declared type, or a fresh variable when it has none. -}
-declaredParameterType :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
+declaredParameterType :: DeclaredTypes -> [(Text, Int)] -> Located Parameter -> Checker Type
 declaredParameterType declared rigid (Located _ parameter) =
   formOptionalType declared rigid (parameterType parameter)
 
-formOptionalType :: DeclaredTypes -> [Text] -> Maybe (Located TypeSyntax) -> Checker Type
+formOptionalType :: DeclaredTypes -> [(Text, Int)] -> Maybe (Located TypeSyntax) -> Checker Type
 formOptionalType declared rigid annotation = case annotation of
   Nothing -> freshVariable
   Just syntax -> formType declared rigid syntax
@@ -320,8 +337,15 @@ addShell owner (Located _ declaration) declared = case declaration of
   _ -> declared
 
 paramNames :: TypeDeclarationValue -> [Text]
-paramNames value =
-  map (locatedValue . typeParamName . locatedValue) (typeTypeParams value)
+paramNames value = map fst (paramEntries value)
+
+{-| A declaration's parameters beside how many arguments each takes, which is
+    what type formation needs to tell an application from a mistake. -}
+paramEntries :: TypeDeclarationValue -> [(Text, Int)]
+paramEntries value =
+  [ (locatedValue (typeParamName param), typeParamArity param)
+  | Located _ param <- typeTypeParams value
+  ]
 
 foldCollect :: ModuleName -> DeclaredTypes -> [Located Declaration] -> Checker DeclaredTypes
 foldCollect owner declared declarations = case declarations of
@@ -355,7 +379,7 @@ collectOne owner declared (Located _ declaration) = case declaration of
   TypeDeclaration value -> do
     let name = locatedValue (typeName value)
         identity = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
-        rigid = paramNames value
+        rigid = paramEntries value
     case locatedValue (typeDefinition value) of
       RecordDefinition fields -> do
         formed <- mapM (formField declared rigid) fields
@@ -378,8 +402,12 @@ collectOne owner declared (Located _ declaration) = case declaration of
       AliasDefinition aliased -> do
         {-| The alias body is formed with its own parameters rigid, so they can
             be found and replaced when the alias is written with arguments. -}
-        let parameters = map (locatedValue . typeParamName . locatedValue) (typeTypeParams value)
-        formed <- formType declared (parameters <> rigid) aliased
+        let declaredParams =
+              [ (locatedValue (typeParamName param), typeParamArity param)
+              | Located _ param <- typeTypeParams value
+              ]
+            parameters = map fst declaredParams
+        formed <- formType declared (declaredParams <> rigid) aliased
         let entry = (parameters, formed)
         pure
           declared
@@ -390,7 +418,7 @@ collectOne owner declared (Located _ declaration) = case declaration of
       InvalidDefinition -> pure declared
   _ -> pure declared
 
-formField :: DeclaredTypes -> [Text] -> Located FieldDeclaration -> Checker (Text, Type)
+formField :: DeclaredTypes -> [(Text, Int)] -> Located FieldDeclaration -> Checker (Text, Type)
 formField declared rigid (Located _ field) = do
   formed <- formType declared rigid (fieldType field)
   pure (locatedValue (fieldName field), formed)
@@ -403,7 +431,7 @@ formField declared rigid (Located _ field) = do
     construction and a pattern may say which element they mean. -}
 formVariant
   :: DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> NominalId
   -> Located Variant
   -> Checker (Text, (NominalId, [Text], [Type]), Maybe [Text])
@@ -416,7 +444,7 @@ formVariant declared rigid owner (Located _ variant) = do
     RecordPayload fields -> do
       formed <- mapM (formField declared rigid) fields
       pure (map snd formed, Just (map fst formed))
-  pure (locatedValue (variantName variant), (owner, rigid, payload), names)
+  pure (locatedValue (variantName variant), (owner, map fst rigid, payload), names)
 
 insertAll
   :: [(Text, (NominalId, [Text], [Type]))]

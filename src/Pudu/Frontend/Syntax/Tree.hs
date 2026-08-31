@@ -112,6 +112,14 @@ data Function = Function
 {-| @Type.Syntax.TypeParam — one declared generic parameter and its bounds -}
 data TypeParam = TypeParam
   { typeParamName :: !(Located Text)
+  {-| How many type arguments the parameter takes.
+
+      Zero is the ordinary parameter, standing for a type. A parameter written
+      `F[_]` stands for a constructor of one argument, and may be applied to
+      exactly that many. The arity is written rather than read from how the
+      parameter is used, so the declaration says what the parameter is and a
+      wrong application is reported where it is written. -}
+  , typeParamArity :: !Int
   , typeParamBounds :: ![Located TypeSyntax]
   }
   deriving stock (Eq, Show)

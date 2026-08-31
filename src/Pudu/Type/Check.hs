@@ -175,8 +175,10 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
  where
   ownerName = locatedValue (Tree.typeName value)
   owner = Map.findWithDefault (NominalId Nothing ownerName) ownerName (declaredNames declared)
-  rigid = map (locatedValue . typeParamName . locatedValue) (Tree.typeTypeParams value)
-  ownerType = NominalType owner (map RigidType rigid)
+  rigid = map rigidEntry (Tree.typeTypeParams value)
+  rigidEntry (Located _ param) =
+    (locatedValue (typeParamName param), typeParamArity param)
+  ownerType = NominalType owner (map (RigidType . fst) rigid)
   declareVariant (Located _ variant) = do
     payload <- variantPayload declared rigid variant
     let name = locatedValue (Tree.variantName variant)
@@ -185,7 +187,7 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
     bindName name scheme
 
-variantPayload :: DeclaredTypes -> [Text] -> Tree.Variant -> Checker [Type]
+variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of
   Tree.UnitPayload -> pure []
   Tree.TuplePayload members -> mapM (formType declared rigid) members
@@ -225,7 +227,7 @@ checkDeclaration declared (Located _ declaration) = case declaration of
 checkFunctionWith
   :: FunctionRole
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> [(Text, [NominalId])]
   -> Maybe NominalId
   -> Function
@@ -276,7 +278,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
     finalizeIntegerLiterals
     dischargeObligations
 
-bindParameter :: DeclaredTypes -> [Text] -> Located Parameter -> Checker Type
+bindParameter :: DeclaredTypes -> [(Text, Int)] -> Located Parameter -> Checker Type
 bindParameter declared rigid (Located _ parameter) = do
   formed <- formOptionalType declared rigid (Tree.parameterType parameter)
   case Tree.parameterDefault parameter of
@@ -311,22 +313,22 @@ statementNeeds =
     , statementFunction = checkFunctionWith
     }
 
-checkBlock :: DeclaredTypes -> [Text] -> Located Block -> Checker Type
+checkBlock :: DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
 checkBlock = Statement.checkBlock statementNeeds
 
 checkMember
   :: DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> [(Text, [NominalId])]
   -> Maybe NominalId
   -> Located Function
   -> Checker ()
 checkMember = Statement.checkMember statementNeeds
 
-checkAgainst :: DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
+checkAgainst :: DeclaredTypes -> [(Text, Int)] -> Type -> Located Expression -> Checker Type
 checkAgainst = Statement.checkAgainst statementNeeds
 
-checkBlockAgainst :: DeclaredTypes -> [Text] -> Type -> Located Block -> Checker Type
+checkBlockAgainst :: DeclaredTypes -> [(Text, Int)] -> Type -> Located Block -> Checker Type
 checkBlockAgainst = Statement.checkBlockAgainst statementNeeds
 
 surroundings :: CheckSurroundings
@@ -340,5 +342,5 @@ surroundings =
 {-| The type of an expression, with the surrounding constructs supplied. Every
     caller here reaches expressions through this rather than through the
     module, so the knot is tied in exactly one place. -}
-checkExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+checkExpression :: DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
 checkExpression = Expression.checkExpression surroundings

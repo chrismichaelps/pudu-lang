@@ -1,0 +1,65 @@
+module UsesHigherKinds
+
+import Std.Mappable as Mappable
+import Std.Tree as Tree
+
+/// A parameter that stands for a constructor rather than for a type, used both
+/// as a plain generic and through a trait.
+///
+/// The point of each check is that one function serves several containers. A
+/// function written for `Array` and copied for `Tree` would pass all of them
+/// and prove nothing, so every check below goes through a definition that names
+/// no container.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  // A plain generic over any one-argument constructor, solved three ways.
+  if keep(&[1, 2, 3]) == [1, 2, 3] { held = held + 1 }
+  if Tree.size(&keep(&Tree.leaf(9))) == 1 { held = held + 1 }
+
+  // The trait's own operation, dispatched on the container it was given.
+  if Mappable.over(&[1, 2, 3], fn(n: Int) -> Int => n * 2) == [2, 4, 6] {
+    held = held + 1
+  }
+  let tree = Tree.node(1, &[Tree.leaf(2), Tree.leaf(3)])
+  if Tree.preorder(&Mappable.over(&tree, fn(n: Int) -> Int => n * 10)) == [10, 20, 30] {
+    held = held + 1
+  }
+
+  // The transform may change the type it holds, which is what F[A] -> F[B] says.
+  if Mappable.over(&[1, 2], fn(n: Int) -> Str => show(n)) == ["1", "2"] {
+    held = held + 1
+  }
+  if Tree.preorder(&Mappable.over(&tree, fn(n: Int) -> Str => show(n))) == ["1", "2", "3"] {
+    held = held + 1
+  }
+
+  // A second function written once against the trait rather than per container.
+  if Mappable.filled(&[1, 2, 3], "x") == ["x", "x", "x"] { held = held + 1 }
+  if Tree.preorder(&Mappable.filled(&tree, 0)) == [0, 0, 0] { held = held + 1 }
+
+  // Shape survives: an empty container stays empty, a leaf stays a leaf.
+  if Mappable.over(&[], fn(n: Int) -> Int => n) == [] { held = held + 1 }
+  if Tree.height(&Mappable.over(&Tree.leaf(1), fn(n: Int) -> Int => n)) == 1 {
+    held = held + 1
+  }
+
+  // A constructor of two arguments is a parameter of two arguments. Nothing
+  // may be assumed about what it is, so it is given back rather than read.
+  if keepPair(&mapOf([(1, "a")])).size() == 1 { held = held + 1 }
+  if keepPair(&mapOf([(1, "a"), (2, "b")])).size() == 2 { held = held + 1 }
+
+  held
+}
+
+/// Any container of one argument, given back unchanged.
+fn keep[F[_], A](value: &F[A]) -> F[A] { *value }
+
+/// Any container of two arguments, given back unchanged.
+///
+/// Nothing may be read from it: an unbounded parameter says only how many
+/// arguments its constructor takes, never which constructor it is, so a body
+/// that assumed `Map` would be assuming what the caller never promised.
+fn keepPair[F[_, _], A, B](value: &F[A, B]) -> F[A, B] { *value }

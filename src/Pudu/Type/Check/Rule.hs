@@ -234,6 +234,14 @@ enclosingFunctionType binding = do
 substituteRigidType :: [(Text, Type)] -> Type -> Type
 substituteRigidType replacements typeValue = case typeValue of
   RigidType name -> maybe typeValue id (lookup name replacements)
+  {-| A parameter of higher kind is replaced in head position and its arguments
+      are replaced beneath it. When the replacement is a constructor that can
+      take them, the application collapses into that constructor rather than
+      staying an application of something already known. -}
+  AppliedType head' arguments ->
+    applyType
+      (substituteRigidType replacements head')
+      (map (substituteRigidType replacements) arguments)
   NominalType name arguments ->
     NominalType name (map (substituteRigidType replacements) arguments)
   TupleTypeValue members -> TupleTypeValue (map (substituteRigidType replacements) members)
@@ -244,6 +252,19 @@ substituteRigidType replacements typeValue = case typeValue of
   ReferenceTypeValue mutable target ->
     ReferenceTypeValue mutable (substituteRigidType replacements target)
   other -> other
+
+{-| A constructor applied to arguments.
+
+    A named constructor takes them into itself, because that is the type it
+    already is: `F[A]` with `F` solved to `Option` is `Option[A]`, not an
+    application of `Option` to `A`. Anything still unsolved stays an
+    application, which is what a later substitution will collapse. -}
+applyType :: Type -> [Type] -> Type
+applyType head' arguments = case head' of
+  _ | null arguments -> head'
+  NominalType identity existing -> NominalType identity (existing <> arguments)
+  AppliedType inner existing -> applyType inner (existing <> arguments)
+  _ -> AppliedType head' arguments
 
 {-| `?` yields a carrier's payload and returns that carrier's failure from the
     enclosing function. Which carrier is meant is read from the function's own
@@ -288,7 +309,7 @@ instantiate :: Span -> Scheme -> Checker Type
 instantiate spanValue scheme
   | null (schemeParams scheme) = pure (schemeType scheme)
   | otherwise = do
-      replacements <- mapM (\name -> (,) name <$> freshVariable) (schemeParams scheme)
+      replacements <- mapM (\(name, _) -> (,) name <$> freshVariable) (schemeParams scheme)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       pure (substitute replacements (schemeType scheme))
 
@@ -319,7 +340,7 @@ instantiateWith spanValue scheme arguments
           one; making them write the others too would mean writing down what the
           compiler already knows, which is the opposite of why they wrote any. -}
       inferred <- mapM (const freshVariable) (drop (length arguments) (schemeParams scheme))
-      let replacements = zip (schemeParams scheme) (arguments <> inferred)
+      let replacements = zip (map fst (schemeParams scheme)) (arguments <> inferred)
       mapM_ (obligationsFor spanValue replacements) (schemeBounds scheme)
       pure (substitute replacements (schemeType scheme))
 
@@ -332,6 +353,8 @@ obligationsFor spanValue replacements (name, bounds) =
 substitute :: [(Text, Type)] -> Type -> Type
 substitute replacements typeValue = case typeValue of
   RigidType name -> maybe typeValue id (lookup name replacements)
+  AppliedType head' arguments ->
+    applyType (substitute replacements head') (map (substitute replacements) arguments)
   NominalType name arguments -> NominalType name (map (substitute replacements) arguments)
   TupleTypeValue members -> TupleTypeValue (map (substitute replacements) members)
   FunctionTypeValue asynchronous inputs result ->
@@ -516,6 +539,13 @@ memberType spanValue targetType member = do
               else found
         Nothing -> methodType spanValue name member
     RigidType name -> do
+      bounds <- rigidBoundsOf name
+      rigidMethod spanValue name bounds member
+    {-| A parameter of higher kind carries its bounds on the parameter, so a
+        receiver of type `F[A]` finds its members where a receiver of type `F`
+        would. The arguments say what the container holds, never which trait
+        provides a member. -}
+    AppliedType (RigidType name) _ -> do
       bounds <- rigidBoundsOf name
       rigidMethod spanValue name bounds member
     ReferenceTypeValue _ inner -> memberType spanValue inner member

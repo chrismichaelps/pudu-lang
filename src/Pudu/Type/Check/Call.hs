@@ -45,13 +45,13 @@ import Pudu.Type.Value
     of the two directions has to be an argument rather than an import. This is
     that direction, the same shape the parser uses for its own recursion. -}
 newtype CheckExpression = CheckExpression
-  { runCheck :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+  { runCheck :: DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
   }
 
 {-| A member in callee position prefers a method over a field of the same
     name, because `value.name()` reads as a call and a field would have to be
     parenthesized to be called anyway. -}
-checkCallee :: CheckExpression -> DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+checkCallee :: CheckExpression -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
 checkCallee checker declared rigid located@(Located calleeSpan expression) = case expression of
   MemberExpression target member -> do
     {-| A variant that named its payload is refused before the callee is
@@ -133,7 +133,7 @@ qualifiedByName declared spanValue target member = case target of
 traitQualifiedCall
   :: CheckExpression
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> Located Expression
   -> [Located Expression]
   -> Checker (Maybe (Type, [Type]))

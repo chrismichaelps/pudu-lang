@@ -64,19 +64,19 @@ import Pudu.Type.Value
     declared inside one is checked as a function. All three reach statements
     again, which is why they arrive rather than being imported. -}
 data StatementNeeds = StatementNeeds
-  { statementExpression :: DeclaredTypes -> [Text] -> Located Expression -> Checker Type
+  { statementExpression :: DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker Type
   , statementDeclaration :: DeclaredTypes -> Located Declaration -> Checker ()
   , statementFunction ::
       FunctionRole
       -> DeclaredTypes
-      -> [Text]
+      -> [(Text, Int)]
       -> [(Text, [NominalId])]
       -> Maybe NominalId
       -> Function
       -> Checker ()
   }
 
-checkBlock :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Block -> Checker Type
+checkBlock :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Block -> Checker Type
 checkBlock needs declared rigid (Located _ block) = do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
@@ -96,7 +96,7 @@ resultlessBlockType block = case reverse (blockStatements block) of
   Located _ (ContinueStatement _) : _ -> NeverType
   _ -> UnitTypeValue
 
-checkStatement :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Statement -> Checker ()
+checkStatement :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Statement -> Checker ()
 checkStatement needs declared rigid (Located spanValue statement) = case statement of
   DeclarationStatement (Located _ (BindingDeclaration _ _ name annotation value)) -> do
     expected <- formOptionalType declared rigid annotation
@@ -180,7 +180,7 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
 checkBreak
   :: StatementNeeds
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> Span
   -> Maybe (Located Text)
   -> Maybe (Located Expression)
@@ -207,7 +207,7 @@ checkBreak needs declared rigid spanValue label value = do
                 )
             )
 
-checkGuard :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Expression -> Checker ()
+checkGuard :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker ()
 checkGuard needs declared rigid guard = do
   guardType <- statementExpression needs declared rigid guard
   _ <- unify (locatedSpan guard) boolType guardType
@@ -221,7 +221,7 @@ checkGuard needs declared rigid guard = do
     direction has to be a capability rather than an import. This is that
     direction. -}
 
-checkAgainst :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Expression -> Checker Type
+checkAgainst :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Type -> Located Expression -> Checker Type
 checkAgainst needs declared rigid expected located@(Located spanValue expression) = do
   resolved <- zonk expected
   if not (worthPushing resolved)
@@ -287,7 +287,7 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
 
 {-| A block checked against an expectation pushes it to the trailing
     expression, which is the block's value. -}
-checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [Text] -> Type -> Located Block -> Checker Type
+checkBlockAgainst :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Type -> Located Block -> Checker Type
 checkBlockAgainst needs declared rigid expected (Located blockSpan block) = do
   mapM_ (checkStatement needs declared rigid) (blockStatements block)
   case blockResult block of
@@ -299,14 +299,14 @@ checkBlockAgainst needs declared rigid expected (Located blockSpan block) = do
 
 checkArmAgainst
   :: StatementNeeds
-  -> DeclaredTypes -> [Text] -> Type -> Type -> Located MatchArm -> Checker ()
+  -> DeclaredTypes -> [(Text, Int)] -> Type -> Type -> Located MatchArm -> Checker ()
 checkArmAgainst needs declared rigid expected subject (Located _ arm) = inTypeScope $ do
   bindPattern declared rigid (armPattern arm) subject
   mapM_ (checkGuard needs declared rigid) (armGuard arm)
   _ <- checkAgainst needs declared rigid expected (armBody arm)
   pure ()
 
-reportDiscardedResult :: StatementNeeds -> DeclaredTypes -> [Text] -> Located Expression -> Checker ()
+reportDiscardedResult :: StatementNeeds -> DeclaredTypes -> [(Text, Int)] -> Located Expression -> Checker ()
 reportDiscardedResult needs declared rigid (Located spanValue expression) = case expression of
   CallExpression callee _ -> case locatedValue callee of
     MemberExpression receiver member
@@ -338,7 +338,7 @@ reportDiscardedResult needs declared rigid (Located spanValue expression) = case
 checkMember
   :: StatementNeeds
   -> DeclaredTypes
-  -> [Text]
+  -> [(Text, Int)]
   -> [(Text, [NominalId])]
   -> Maybe NominalId
   -> Located Function

@@ -216,8 +216,11 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
  where
   ownerName = locatedValue (Tree.typeName value)
   owner = Map.findWithDefault (NominalId Nothing ownerName) ownerName (declaredNames declared)
-  rigid = map (locatedValue . typeParamName . locatedValue) (Tree.typeTypeParams value)
-  ownerType = NominalType owner (map RigidType rigid)
+  rigid =
+    [ (locatedValue (typeParamName param), typeParamArity param)
+    | Located _ param <- Tree.typeTypeParams value
+    ]
+  ownerType = NominalType owner (map (RigidType . fst) rigid)
   declareVariant (Located _ variant) = do
     payload <- variantPayload declared rigid variant
     let name = locatedValue (Tree.variantName variant)
@@ -226,7 +229,7 @@ declareConstructors declared value = case locatedValue (Tree.typeDefinition valu
           | otherwise = polytype rigid [] (FunctionTypeValue False payload ownerType)
     bindName name scheme
 
-variantPayload :: DeclaredTypes -> [Text] -> Tree.Variant -> Checker [Type]
+variantPayload :: DeclaredTypes -> [(Text, Int)] -> Tree.Variant -> Checker [Type]
 variantPayload declared rigid variant = case Tree.variantPayload variant of
   Tree.UnitPayload -> pure []
   Tree.TuplePayload members -> mapM (formType declared rigid) members

@@ -23,3 +23,4 @@ tags: [moc, adr]
 - [[decisions/ADR-0011-propagation-over-re-matching|ADR-0011 Propagation Over Re-Matching]] — accepted: an arm that rebuilds its own failure is punctuation, not a decision; `?` carries both `Result` and `Option`, and `let … else` binds past a fallback that cannot fall through.
 - [[decisions/ADR-0012-diverging-blocks-preserve-never|ADR-0012 Diverging Blocks Preserve Never]] — accepted: a resultless block ending in a direct control transfer preserves `Never` instead of fabricating unit.
 - [[decisions/ADR-0013-ordered-set-literals-and-membership|ADR-0013 Ordered Set Literals and Membership]] — accepted: `#{...}` constructs the existing ordered Set and `in` performs Set-only membership at comparison precedence.
+- [[decisions/ADR-0014-parameters-of-higher-kind|ADR-0014 Parameters of Higher Kind]] — accepted: a type parameter states its arity and may stand for a constructor, so a trait can abstract over the container.

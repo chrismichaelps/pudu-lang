@@ -440,6 +440,42 @@ testGenerics = do
     [ "module M"
     , "fn swap[F](value: F[Int]) -> F[Str] { value }"
     ]
+  higherKinded <- codes
+    [ "module M"
+    , "fn keep[F[_], A](value: F[A]) -> F[A] { value }"
+    , "fn run() -> Option[Int] { keep(Some(1)) }"
+    ]
+  higherKindedSolves <- codes
+    [ "module M"
+    , "fn keep[F[_], A](value: F[A]) -> F[A] { value }"
+    , "fn run() -> Array[Str] { keep([\"a\"]) }"
+    ]
+  higherKindedMismatch <- codes
+    [ "module M"
+    , "fn keep[F[_], A](value: F[A]) -> F[A] { value }"
+    , "fn run() -> Array[Int] { keep([\"a\"]) }"
+    ]
+  wrongArity <- codes
+    [ "module M"
+    , "fn two[F[_]](value: F[Int, Str]) -> Int { 0 }"
+    ]
+  tooFew <- codes
+    [ "module M"
+    , "fn two[F[_, _]](value: F[Int]) -> Int { 0 }"
+    ]
+  unboundedIsOpaque <- codes
+    [ "module M"
+    , "fn read[F[_], A](value: F[A]) -> Array[A] { value.keys() }"
+    ]
+  traitOverConstructor <- codes
+    [ "module M"
+    , "type Box[T] = { held: T }"
+    , "trait Mappable[F[_]] { fn mapped[A, B](self: &F[A], f: fn(A) -> B) -> F[B] }"
+    , "impl Mappable[Box] for Box {"
+    , "  fn mapped[A, B](self: &Box[A], f: fn(A) -> B) -> Box[B] { Box{held: f(self.held)} }"
+    , "}"
+    , "fn run() -> Box[Str] { Box{held: 1}.mapped(fn(n: Int) -> Str => show(n)) }"
+    ]
   appliedOnce <- codes
     [ "module M"
     , "fn one[F](value: F[Int]) -> Int { 0 }"
@@ -469,6 +505,24 @@ testGenerics = do
         (boundStillPlain === [])
     , counterexample "a parameter inside a real generic type is untouched"
         (nestedArgument === [])
+    {-| A parameter declared to take arguments may be applied, and solves
+        against whatever constructor the caller supplied. -}
+    , counterexample "a parameter of higher kind solves against a constructor"
+        (higherKinded === [])
+    , counterexample "and against a different one at another call"
+        (higherKindedSolves === [])
+    , counterexample "the argument it carries is still checked"
+        (higherKindedMismatch === ["E3001"])
+    , counterexample "an application of the wrong arity is refused"
+        (wrongArity === ["E3038"])
+    , counterexample "too few arguments is refused the same way"
+        (tooFew === ["E3038"])
+    {-| An unbounded parameter says how many arguments its constructor takes and
+        never which constructor it is, so nothing may be read from it. -}
+    , counterexample "an unbounded constructor parameter carries no members"
+        (unboundedIsOpaque === ["E3005"])
+    , counterexample "a trait may abstract over the constructor"
+        (traitOverConstructor === [])
     ]
 
 testRecords :: IO Property

@@ -100,18 +100,18 @@ declareTraitMembers declared value =
     so `trait Holds[T] { fn get(self: &Self) -> T }` gave `get` a result of some
     type literally called `T` that nothing could ever be, and every use reported
     `expected Int, found T`. -}
-traitRigid :: Trait -> [Text]
-traitRigid value = map (locatedValue . typeParamName . locatedValue) (traitTypeParams value)
+traitRigid :: Trait -> [(Text, Int)]
+traitRigid value = map rigidEntry (traitTypeParams value)
 
 declareTraitMember
   :: DeclaredTypes
   -> NominalId
-  -> [Text]
+  -> [(Text, Int)]
   -> [(Text, [NominalId])]
   -> Located Function
   -> Checker ()
 declareTraitMember declared owner traitParams bounds (Located _ method) = do
-  let rigid = "Self" : traitParams <> functionRigid method
+  let rigid = ("Self", 0) : traitParams <> functionRigid method
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters method)
   result <- formOptionalType declared rigid (functionReturn method)
   bindName (methodKey owner (locatedValue (functionName method)))
@@ -229,7 +229,8 @@ implAliases declared value = case implTargetName declared value of
     `impl Sequence[Int, Int] for Range` and the generic form agree. -}
 selfArguments :: Impl -> [Type]
 selfArguments value = case locatedValue (implTarget value) of
-  Tree.NamedType _ arguments -> map (argumentType (implRigid value) . locatedValue) arguments
+  Tree.NamedType _ arguments ->
+    map (argumentType (map fst (implRigid value)) . locatedValue) arguments
   _ -> []
 
 argumentType :: [Text] -> Tree.TypeSyntax -> Type
@@ -261,11 +262,16 @@ implTargetName declared value = case locatedValue (implTarget value) of
             | otherwise -> Nothing
   _ -> Nothing
 
-functionRigid :: Function -> [Text]
-functionRigid value = map (locatedValue . typeParamName . locatedValue) (functionTypeParams value)
+functionRigid :: Function -> [(Text, Int)]
+functionRigid value = map rigidEntry (functionTypeParams value)
 
-implRigid :: Impl -> [Text]
-implRigid value = map (locatedValue . typeParamName . locatedValue) (implTypeParams value)
+implRigid :: Impl -> [(Text, Int)]
+implRigid value = map rigidEntry (implTypeParams value)
+
+{-| A parameter's name beside how many arguments it takes, which is what type
+    formation needs to tell an application apart from a mistake. -}
+rigidEntry :: Located TypeParam -> (Text, Int)
+rigidEntry (Located _ param) = (locatedValue (typeParamName param), typeParamArity param)
 
 targetName :: Type -> Maybe NominalId
 targetName typeValue = case typeValue of
@@ -403,6 +409,11 @@ methodScheme spanValue receiver member = case receiver of
         pure (Just (monotype ErrorType))
    where
     qualifiedForm traitIdentity = nominalName traitIdentity <> "." <> member <> "(value)"
+  {-| A parameter of higher kind carries its bounds on the parameter itself, so
+      a receiver of type `F[A]` finds its members exactly where a receiver of
+      type `F` would. The arguments say what the container holds and never which
+      trait provides a member. -}
+  AppliedType head' _ -> methodScheme spanValue head' member
   RigidType name -> do
     bounds <- rigidBoundsOf name
     providers <- filterM provides bounds

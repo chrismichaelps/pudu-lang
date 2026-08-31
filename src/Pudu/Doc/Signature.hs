@@ -98,6 +98,12 @@ sigTypeFromType typeValue = case typeValue of
   FunctionTypeValue _ inputs result -> SigFun (map sigTypeFromType inputs) (sigTypeFromType result)
   ReferenceTypeValue mutable target -> SigRef mutable (sigTypeFromType target)
   RigidType name -> SigVar name
+  {-| A parameter applied to arguments searches as a constructor named by the
+      parameter, so `F[A]` is found by a reader who asked for a shape with one
+      argument rather than only by its exact spelling. -}
+  AppliedType head' arguments -> case head' of
+    RigidType name -> SigCon name (map sigTypeFromType arguments)
+    _ -> SigCon "_" (map sigTypeFromType arguments)
   VariableType (TypeVar identity) -> SigVar ("_" <> Text.pack (show identity))
   UnitTypeValue -> SigUnit
   NeverType -> SigNever

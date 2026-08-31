@@ -33,12 +33,12 @@ import Pudu.Type.Value
 declareBuiltinConstructors :: Checker ()
 declareBuiltinConstructors = do
   bindName "Some"
-    (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] optionOf))
-  bindName "None" (polytype ["T"] [] optionOf)
+    (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] optionOf))
+  bindName "None" (polytype [("T", 0)] [] optionOf)
   bindName "Ok"
-    (polytype ["T", "E"] [] (FunctionTypeValue False [RigidType "T"] resultOf))
+    (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "T"] resultOf))
   bindName "Err"
-    (polytype ["T", "E"] [] (FunctionTypeValue False [RigidType "E"] resultOf))
+    (polytype [("T", 0), ("E", 0)] [] (FunctionTypeValue False [RigidType "E"] resultOf))
   {-| The one conversion that cannot be written in the language: a scalar value
       is an integer, and a character is not a one-element string, so nothing in
       the language relates them. It answers with `Option` because not every
@@ -49,7 +49,7 @@ declareBuiltinConstructors = do
       literal syntax for either would need a decision about how it reads beside
       the block and record forms that already use braces. -}
   bindName "mapOf"
-    ( polytype ["K", "V"] []
+    ( polytype [("K", 0), ("V", 0)] []
         ( FunctionTypeValue False
             [NominalType "Array" [TupleTypeValue [RigidType "K", RigidType "V"]]]
             (NominalType "Map" [RigidType "K", RigidType "V"])
@@ -60,19 +60,19 @@ declareBuiltinConstructors = do
       including the ones no module declared, and a trait would have to be
       implemented for each. -}
   bindName "show"
-    (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+    (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] stringType))
   {-| What an interpolated string renders each hole through. Separate from
       `show` because a message wants a string's content and an inspection wants
       its quotes. -}
   bindName "display"
-    (polytype ["T"] [] (FunctionTypeValue False [RigidType "T"] stringType))
+    (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] stringType))
   {-| The conversion between integer types, which nothing in the language can
       express: every other integer operation works within one type, and this one
       crosses. The target is the first type parameter so a caller writes only
       it — `convertInteger[UInt8](300)` — and inference settles the source from
       the argument. -}
   bindName "convertInteger"
-    ( polytype ["T", "S"] []
+    ( polytype [("T", 0), ("S", 0)] []
         ( FunctionTypeValue False
             [RigidType "S"]
             (NominalType "Option" [RigidType "T"])
@@ -124,7 +124,7 @@ declareBuiltinConstructors = do
       program's own user than a message this compiler invented. -}
   mapM_ (uncurry bindName) effectSignatures
   bindName "setOf"
-    ( polytype ["T"] []
+    ( polytype [("T", 0)] []
         ( FunctionTypeValue False
             [NominalType "Array" [RigidType "T"]]
             (NominalType "Set" [RigidType "T"])
