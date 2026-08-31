@@ -96,6 +96,8 @@ Supporting judgements:
 - Evaluation is strict and left-to-right.
 - In `f(a, b)`, evaluate `f`, then `a`, then `b`, then call.
 - Record and collection elements evaluate in source order.
+- A set literal evaluates every written member in source order, then constructs the existing ordered `Set` value. Duplicate members collapse only after their expressions have run, so duplication never removes an effect or changes failure order. Iteration and rendering remain key-ordered.
+- Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
 - A block evaluates statements sequentially and yields its final expression. A resultless block whose final statement directly transfers control with `return`, `break`, or `continue` has type `Never`; every other resultless block yields unit.
 - Assignment evaluates the target place once, then the right side, then stores.
@@ -241,6 +243,7 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **0.5.0-draft · 2026-08-31:** Added ordered Set literals and Set-only membership expressions, preserving source-order evaluation, key-order identity, contextual typing for the empty literal, and the existing `E7008` key-order boundary. See [[ADR-0013-ordered-set-literals-and-membership]].
 - **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
 - **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].
 - **0.2.0-draft · 2026-08-28:** Added refutable `if let` pattern conditions as a backward-compatible surface feature with single subject evaluation, success-branch-local bindings, ordinary branch unification, and `E1056` for syntactically irrefutable patterns. See [[ADR-0010-refutable-pattern-conditions]].

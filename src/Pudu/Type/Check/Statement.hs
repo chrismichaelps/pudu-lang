@@ -37,6 +37,7 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Call (throughBorrow)
 import Pudu.Type.Check.Signature
   ( nonMutatingMethods
@@ -108,11 +109,13 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
         `text`. Only uses were recorded before, and a reader points at the
         place a name is introduced at least as often as at a use of it. -}
     resolved <- zonk unified
+    requireConcreteSetLiteral (locatedSpan value) (locatedValue value) resolved
     recordExpression (locatedSpan name) resolved
     bindName (locatedValue name) (monotype unified)
   DeclarationStatement other -> statementDeclaration needs declared other
   ExpressionStatement expression -> do
-    _ <- statementExpression needs declared rigid expression
+    inferred <- statementExpression needs declared rigid expression
+    requireConcreteSetLiteral (locatedSpan expression) (locatedValue expression) inferred
     reportDiscardedResult needs declared rigid expression
   ReturnStatement value -> do
     actual <- case value of
@@ -122,7 +125,8 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
     case value of
       Nothing -> pure ()
       Just expression -> do
-        _ <- unify (locatedSpan expression) expected actual
+        unified <- unify (locatedSpan expression) expected actual
+        requireConcreteSetLiteral (locatedSpan expression) (locatedValue expression) unified
         pure ()
   BreakStatement label value -> checkBreak needs declared rigid spanValue label value
   ContinueStatement _ -> pure ()
@@ -264,7 +268,9 @@ checkAgainst needs declared rigid expected located@(Located spanValue expression
       against the same expectation, and `ErrorType` absorbs there. -}
   fallback = do
     actual <- statementExpression needs declared rigid located
-    unify spanValue expected actual
+    unified <- unify spanValue expected actual
+    requireConcreteSetLiteral spanValue expression unified
+    pure unified
 
   {-| Only a dynamic expectation changes an outcome, and pushing one inward
       costs a walk. Anything else is left to inference, which already handles

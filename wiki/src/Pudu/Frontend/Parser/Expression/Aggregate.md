@@ -55,8 +55,9 @@ parseArrayLiteral :: ExpressionParsers -> BlockParser -> Parser (Located Express
 
 Dispatch on the leading token. A name checks for a following `{` or `!` before committing to a plain
 reference; a `(` reads a group and promotes it to a tuple on the first top-level comma; a `[` reads
-elements until the closing bracket. Every list is read through the capability record's expression
-parser.
+array elements until its closing bracket; and `#{` reads Set members until `}`. Array and Set lists
+share the same empty, comma, trailing-comma, progress, record-admission, and recursion-budget laws.
+Every list is read through the capability record's expression parser.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -64,6 +65,7 @@ parser.
   reported with the fields the reader wrote, not a parse failure that discards them.
 - No importing [[Parser Expression]]; the capability record is the path back.
 - No unbounded element iteration.
+- No deduplication or Set construction. The parser retains written members and their order.
 
 ## Grill Log
 
@@ -75,6 +77,10 @@ parser.
   them. _Rationale:_ `Name { x: 1 }` and `Name { statement }` differ only in what follows, and
   guessing from the brace alone would misparse one of the two. _Rejected:_ requiring a sigil on
   record construction.
+- **Q:** Share one collection-tail parser? **A:** Share its bounded algorithm, not a delimiter-blind
+  grammar. _Rationale:_ arrays and Sets produce distinct AST nodes and close with different tokens;
+  one helper parameterized by the closer keeps their recovery laws identical without erasing that
+  distinction. _Rejected:_ copy-pasted recursive tails; a generic collection AST node.
 
 ## Referenced by
 

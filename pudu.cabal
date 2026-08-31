@@ -118,6 +118,7 @@ library
     Pudu.Type.Check
     Pudu.Type.Check.Import
     Pudu.Type.Check.Call
+    Pudu.Type.Check.Collection
     Pudu.Type.Check.Coherence
     Pudu.Type.Check.Iteration
     Pudu.Type.Check.Safety

@@ -204,6 +204,8 @@ expandExpression macros depth located@(Located expressionSpan expression) = case
     rebuild (TupleExpression <$> mapM (expandExpression macros depth) members)
   ArrayExpression members ->
     rebuild (ArrayExpression <$> mapM (expandExpression macros depth) members)
+  SetExpression members ->
+    rebuild (SetExpression <$> mapM (expandExpression macros depth) members)
   RecordExpression path fields ->
     rebuild (RecordExpression path <$> mapM (expandFieldInit macros depth) fields)
   BlockExpression block -> rebuild (BlockExpression <$> expandBlock macros depth block)
@@ -393,6 +395,7 @@ substituteExpression bindings identifier renames callSpan (Located _ expression)
   AwaitExpression target -> at (AwaitExpression (recurse target))
   TupleExpression members -> at (TupleExpression (map recurse members))
   ArrayExpression members -> at (ArrayExpression (map recurse members))
+  SetExpression members -> at (SetExpression (map recurse members))
   RecordExpression path fields -> at (RecordExpression path (map recurseField fields))
   BlockExpression block -> at (BlockExpression (recurseBlock block))
   UnsafeExpression capabilities block ->

@@ -57,7 +57,7 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 
 ## Algorithm
 
-Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic. An `ArrayExpression` walks each element expression so names inside array literals resolve like any other expression context. State threading, scope management, and conflict classification are delegated to [[Resolve Context]]; the facade owns walk order and the policy for what each declaration form binds.
+Push the builtin frame, collect module declarations and imports into the module frame reporting conflicts, then walk each declaration: functions push a frame with type parameters and parameters bound left to right, type declarations push their parameters, traits and implementations bind `Self`. Blocks push a frame and bind each local after its initializer is resolved. Every resolved name appends a `Reference`; every unresolved name appends a diagnostic. Array and Set expressions walk each written member in source order so names inside collection literals resolve like any other expression context. State threading, scope management, and conflict classification are delegated to [[Resolve Context]]; the facade owns walk order and the policy for what each declaration form binds.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -84,6 +84,9 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 - **Q:** Error or warning for shadowing? **A:** Warning `W2001` for the origins [[architecture/SEMANTICS]] lists, silence otherwise. _Rationale:_ the rule is stated as a lint that may harden later, and hardening it now would reject valid programs. _Rejected:_ hard error; unconditional warning on every shadow.
 - **Q:** Do imports resolve to real symbols? **A:** They become opaque external symbols in both namespaces. _Rationale:_ no cross-module loading exists yet, and treating an imported name as unresolved would flood every real program with errors. _Rejected:_ resolving imports against the filesystem; ignoring imports entirely.
 - **Q:** What changes once a program export index exists? **A:** Imports bind authoritative exported namespaces and module qualifiers; the opaque behavior remains only for isolated `runCompile`. _Rationale:_ loaded interfaces make privacy decidable without IO. _Rejected:_ continuing to guess both namespaces; filesystem lookup in resolution.
+- **Q:** Does resolution interpret duplicate Set members? **A:** No. _Rationale:_ equality and
+  ordering require values and types; resolution only walks every expression the writer supplied.
+  _Rejected:_ syntactic duplicate detection.
 
 ## Variants
 

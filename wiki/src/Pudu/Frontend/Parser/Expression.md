@@ -33,6 +33,12 @@ parseScrutinee :: BlockParser -> Parser (Located Expression)
 
 ### Governance
 
+- `#{` is a prefix expression routed to [[Parser Expression Aggregate]]. A bare `#` is not an
+  expression and reports the missing `{` at the parser boundary.
+- Keyword `in` enters the binary table at comparison precedence. The `for` parser consumes its own
+  separator before parsing the iterable, so the two readings do not compete. `in` does not create a
+  line-leading continuation rule.
+
 - A type-argument list and an index both open with `[`, and two things tell them apart: the closing
   bracket is followed by `(`, and the first token inside could begin a **type** — which for an
   identifier means it is capitalised, as [[grammar/pudu]] requires of every type name and forbids of
@@ -96,6 +102,14 @@ Use budgeted precedence climbing: parse prefix, apply postfix, then consume clos
 DEPTH 0.82 (DEEP). It hides precedence, postfix chaining, recursion safety, span construction, and expression recovery behind two operations.
 
 ## Grill Log
+
+- **Q:** Give membership its own precedence band? **A:** No. _Rationale:_ membership is a predicate
+  beside ordering predicates; placing it in the comparison band makes `x in values == expected`
+  group like every other comparison followed by equality. _Rejected:_ equality precedence; a new
+  otherwise-empty band.
+- **Q:** Can `in` at the start of a line continue an expression? **A:** No. _Rationale:_ it is also
+  structural vocabulary in loop heads, and Pudu's line-continuation policy is intentionally based
+  on symbolic operators. _Rejected:_ a keyword-only line-leading exception.
 
 - **Q:** Avoid module cycle how? **A:** Accept block parsing as an explicit capability parameter. _Rationale:_ Expression owns expression mechanics while Declaration owns recursive block statements. _Rejected:_ `hs-boot`; monolithic parser file.
 - **Q:** Pratt or precedence climbing? **A:** Precedence climbing with explicit prefix/postfix functions. _Rationale:_ small operator grammar and direct diagnostics. _Rejected:_ scattered precedence functions.

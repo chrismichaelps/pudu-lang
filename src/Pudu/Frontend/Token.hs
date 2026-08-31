@@ -67,6 +67,7 @@ data SymbolKind
   | SymRightBracket
   | SymLeftBrace
   | SymRightBrace
+  | SymHash
   | SymComma
   | SymDot
   | SymColon
@@ -215,6 +216,7 @@ symbolText symbol =
     SymRightBracket -> "]"
     SymLeftBrace -> "{"
     SymRightBrace -> "}"
+    SymHash -> "#"
     SymComma -> ","
     SymDot -> "."
     SymColon -> ":"

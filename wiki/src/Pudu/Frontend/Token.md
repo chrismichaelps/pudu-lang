@@ -91,6 +91,9 @@ symbolText :: SymbolKind -> Text
 
 ### Governance
 
+- `#` is the dedicated `SymHash` token. It has no prefix or binary meaning by itself; the parser
+  admits it only when immediately followed by `{` to open an ordered Set literal.
+
 - `Keyword` exactly matches the reserved ASCII words in [[grammar/pudu]]; matching is case-sensitive and performs no normalization.
 - `SymbolKind` exactly matches punctuation and operators admitted by the v0.1 grammar. Unknown punctuation is not a symbol and is handled later as invalid input.
 - Literal payloads preserve decoded or category-specific data only where later scanners define it; `tokenLexeme` always preserves exact source spelling.
@@ -132,6 +135,11 @@ symbolText :: SymbolKind -> Text
 DEPTH 0.58 (MEDIUM). A compact closed interface centralizes the language's lexical vocabulary and lossless representation. Deleting it would scatter keyword/operator spellings and trivia ownership across scanners, parser, and formatter.
 
 ## Grill Log
+
+- **Q:** Reuse `{` alone for a Set? **A:** No. _Rationale:_ braces already open blocks, records,
+  patterns, and import selections; `#{` is lexically explicit without context-sensitive scanning.
+  _Rejected:_ guessing Set from brace contents; treating `#{` as one compound token, which would
+  make ordinary symbol composition exceptional.
 
 - **Q:** Textual symbols or one constructor per admitted symbol? **A:** Use closed `SymbolKind` constructors. _Rationale:_ the v0.1 grammar is fixed, exhaustive matching prevents parser spelling drift, and compact constructors avoid repeated text comparison after lexing. _Rejected:_ free-form `Symbol Text`; dozens of unrelated `TokenKind` constructors with no symbol subdomain.
 - **Q:** Duplicate mapping tables for both directions? **A:** Make constructor-to-text exhaustive and derive bounded reverse lookup from the constructor range. _Rationale:_ a new constructor cannot silently acquire an empty spelling, and properties prove uniqueness/round-trip. _Rejected:_ two independently maintained maps; partial array indexing.

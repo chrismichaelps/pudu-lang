@@ -324,6 +324,7 @@ walkExpression (Located spanValue expression) = case expression of
   AwaitExpression target -> walkExpression target
   TupleExpression members -> mapM_ walkExpression members
   ArrayExpression members -> mapM_ walkExpression members
+  SetExpression members -> mapM_ walkExpression members
   UnsafeExpression _ body -> walkBlock body
   MacroCall _ arguments -> mapM_ walkExpression arguments
   ScopeExpression body -> walkBlock body

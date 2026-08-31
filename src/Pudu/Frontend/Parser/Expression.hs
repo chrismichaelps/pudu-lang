@@ -13,6 +13,7 @@ import Pudu.Frontend.Parser.Expression.Aggregate
   ( blockExpression
   , literal
   , parseArrayLiteral
+  , parseSetLiteral
   , parseGrouped
   , parseNameOrRecord
   )
@@ -72,7 +73,7 @@ import Pudu.Frontend.Syntax.Tree
   , lambdaName
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwAsync, KwFalse, KwFn, KwFor, KwIf, KwLoop
+  ( Keyword (KwAsync, KwFalse, KwFn, KwFor, KwIf, KwIn, KwLoop
     , KwMatch, KwMut, KwNull, KwScope, KwTrue, KwUnsafe, KwWhile, KwWith)
   , TemplatePart (..)
   , SymbolKind (..)
@@ -179,6 +180,7 @@ parsePrefix recovery blockParser = do
       | symbol == SymLeftParen -> withRecords (parseGrouped controlParsers blockParser)
       | symbol == SymLeftBrace -> blockExpression controlParsers blockParser
       | symbol == SymLeftBracket -> parseArrayLiteral controlParsers blockParser
+      | symbol == SymHash -> parseSetLiteral controlParsers blockParser
       | symbol `elem` unaryOperators -> parseUnary recovery blockParser token symbol
     Keyword keyword | Just guidance <- reservedKeywordGuidance keyword ->
       reservedPrefix token guidance
@@ -459,6 +461,7 @@ recoverOwnerTail blockParser = do
 binaryInfo :: TokenKind -> Maybe (Text, Int, Bool)
 binaryInfo kind = case kind of
   Symbol symbol -> operatorInfo symbol
+  Keyword KwIn -> Just ("in", 4, False)
   _ -> Nothing
 
 operatorInfo :: SymbolKind -> Maybe (Text, Int, Bool)

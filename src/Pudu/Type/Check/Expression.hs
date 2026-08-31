@@ -181,6 +181,12 @@ inferExpression around declared rigid spanValue expression = case expression of
       [] -> freshVariable
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Array" [inferredElementType])
+  SetExpression members -> do
+    elementTypes <- mapM (checkExpression around declared rigid) members
+    inferredElementType <- case elementTypes of
+      [] -> freshVariable
+      first : rest -> foldM (unify spanValue) first rest
+    pure (NominalType "Set" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
   LambdaExpression value -> lambdaType around declared rigid value
   ScopeExpression body -> do
