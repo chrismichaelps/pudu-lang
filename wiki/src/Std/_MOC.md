@@ -12,6 +12,7 @@ tags: [moc, module, stdlib]
 - [[Std Option]] — optional-value combinators, conversions, and collection helpers.
 - [[Std Text Parse]] — positioned parser combinators and numeric/text readers.
 - [[Std Io]] — portable console, filesystem, directory, and path operations.
+- [[Std Out]] — a printer as a value, carrying how output is written.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.

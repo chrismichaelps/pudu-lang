@@ -17,7 +17,9 @@ module Pudu.Eval.Io
   , temporaryDirectoryPath
   , testFileExists
   , writeStandardError
+  , writeStandardErrorPart
   , writeStandardOutput
+  , writeStandardOutputPart
   , writeTextFile
   ) where
 
@@ -66,6 +68,21 @@ writeStandardOutput text = attempt $ do
 
 writeStandardError :: Text -> IO (IoOutcome ())
 writeStandardError text = attempt (hPutStrLn stderr (Text.unpack text))
+
+{-| Write text and leave the line open, so a prompt, a progress report, or a
+    line assembled from several writes is possible at all. Flushed for the same
+    reason the line-ending writers are: text still sitting in a buffer has not
+    been shown, and a prompt nobody can see is a program that appears to have
+    stopped. -}
+writeStandardOutputPart :: Text -> IO (IoOutcome ())
+writeStandardOutputPart text = attempt $ do
+  TextIO.hPutStr stdout text
+  hFlush stdout
+
+writeStandardErrorPart :: Text -> IO (IoOutcome ())
+writeStandardErrorPart text = attempt $ do
+  TextIO.hPutStr stderr text
+  hFlush stderr
 
 {-| One line of the program's input, or nothing at the end of it.
 

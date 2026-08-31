@@ -223,6 +223,7 @@ testProgramEvaluation = do
   cacheAndTrie <- runEntry "test-fixtures/stdlib/UsesCacheAndTrie.pudu"
   graphEdges <- runEntry "test-fixtures/stdlib/UsesGraphEdges.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
+  printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -267,6 +268,13 @@ testProgramEvaluation = do
     , counterexample
         "status reasons, methods, versions, hop-by-hop names, and scheme ports"
         (lookupTables === Just "23")
+    {-| A printer's configuration, checked through its pure rendering rather
+        than by capturing output: nothing to print, a piece that already spans
+        lines, an indent on top of an indent, and an ending left empty so the
+        line stays open. Each check answers 1. -}
+    , counterexample
+        "a printer carries its separator, ending, prefix, and stream"
+        (printers === Just "35")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

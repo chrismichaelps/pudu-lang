@@ -79,6 +79,8 @@ builtinName value = case value of
   DisplayBuiltin -> "display"
   PrintBuiltin -> "print"
   PrintErrorBuiltin -> "printError"
+  PrintPartBuiltin -> "printPart"
+  PrintErrorPartBuiltin -> "printErrorPart"
   ReadLineBuiltin -> "readLine"
   ReadFileBuiltin -> "readFile"
   WriteFileBuiltin -> "writeFile"
@@ -128,6 +130,8 @@ data Builtin
   | DisplayBuiltin
   | PrintBuiltin
   | PrintErrorBuiltin
+  | PrintPartBuiltin
+  | PrintErrorPartBuiltin
   | ReadLineBuiltin
   | ReadFileBuiltin
   | WriteFileBuiltin
