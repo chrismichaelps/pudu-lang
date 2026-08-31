@@ -30,12 +30,13 @@ import Pudu.Eval.Env
   , Unwind (..)
   , withFrame
   )
+import Pudu.Eval.Keyed (mapEntries, setMembers)
 import Pudu.Eval.Match (matchPattern)
 import Pudu.Eval.Operator (nominalNameOf)
+import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
-  , valueKind
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -209,8 +210,8 @@ evaluateFor needs spanValue label binder iterated body = case elements of
         [[grammar/pudu]] already said they do. Both are ordered, so both walk
         in the order they hold, and neither needs the sequence protocol to say
         something the evaluator already knows. -}
-    SetValue members -> Just members
-    MapValue entries -> Just [TupleValue [key, value] | (key, value) <- entries]
+    SetValue _ -> Just (setMembers iterated)
+    MapValue _ -> Just [TupleValue [key, value] | (key, value) <- mapEntries iterated]
     _ -> Nothing
 
   variantElements = case iterated of

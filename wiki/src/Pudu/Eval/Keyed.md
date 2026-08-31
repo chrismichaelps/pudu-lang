@@ -51,9 +51,20 @@ setUnion, setIntersect, setDifference
 
 ## Algorithm
 
-Ordered association lists with merge-style traversal. The representation is a list rather than a
-balanced tree because the invariant — sorted, unique — is what the semantics need, and the tree is a
-performance change that can be made behind this interface without any caller noticing.
+Balanced search trees keyed by [[Eval Order]]'s `OrdValue`, whose `Ord` instance is the runtime's
+total order on values. The sorted-and-unique invariant the semantics rest on is held by the
+structure's own construction rather than re-established by every operation, so the invariant is
+stated once instead of in each traversal.
+
+A key already present keeps the key it was first stored under and takes the new value. That is
+`insertWith const` rather than `insert`, which would replace the key as well: two keys can be equal
+to the order and still be distinguishable values — `1` and `1.0` compare equal — and a map whose
+keys silently changed shape on an overwrite would render differently after a write that a reader
+was told only replaced a value.
+
+The three set operations remain single-pass merges of two ordered runs, which is what the ordering
+buys; they are now the structure's own union, intersection, and difference rather than hand-written
+list merges.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -75,7 +86,18 @@ DEPTH 0.50 (MEDIUM). One invariant, maintained by every operation.
   semantics and the structure is not. Every operation here states its behaviour in terms of key
   order; swapping in a tree changes the cost and nothing else, and doing it now would add code
   before there is a measurement asking for it. _Deferred:_ revisit when a benchmark shows a keyed
-  collection on a hot path.
+  collection on a hot path. **Resolved (#157):** the measurement arrived. Building n entries and
+  reading them back grew at x3.55, x3.92, x4.12 across doublings to 16000, where `bench/README.md`
+  reads x2 as linear and sustained x2.4 as not; 16000 entries cost three and a half seconds. The
+  tree is now in place and, as the deferral predicted, no caller changed.
+- **Q:** Does the tree weaken the equality the list gave? **A:** No. _Rationale:_ equality was never
+  the list's to give — it comes from entries being sorted and unique, which the tree holds by
+  construction. Two maps with the same entries still compare equal however they were built, and a
+  key that the order cannot distinguish still collapses to one entry exactly as before.
+- **Q:** Why keep the first key on an overwrite rather than the last? **A:** Because a value that
+  compares equal is not a value that is identical, and the write said it was replacing a value.
+  _Rejected:_ plain `insert`, which replaces the key too and would let `m.insert(1, a)` followed by
+  `m.insert(1.0, b)` change how the map renders.
 - **Q:** Should a map be iterable in insertion order? **A:** No. _Rationale:_ then two maps with the
   same entries would render differently and compare unequal, and a reader would have to know how a
   map was built to know what it is. _Rejected:_ an insertion-ordered map as the default; a separate

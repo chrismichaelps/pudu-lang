@@ -65,11 +65,11 @@ import Pudu.Eval.Loop
   )
 import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Operator (readMember, unwrapTry)
+import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Closure (..)
   , Value (..)
-  , valueKind
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)

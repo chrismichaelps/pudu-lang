@@ -14,7 +14,7 @@ import Pudu.Compiler.Program
   )
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
-import Pudu.Eval.Value (renderValue)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
   , diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
@@ -191,6 +191,7 @@ testProgramEvaluation = do
   collections <- runEntry "test-fixtures/stdlib/UsesList.pudu"
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
+  keyedInvariants <- runEntry "test-fixtures/stdlib/KeyedInvariants.pudu"
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
@@ -233,6 +234,12 @@ testProgramEvaluation = do
         (wide === Just "64")
     , counterexample "maps, sets, and bit work link together"
         (keyed === Just "30")
+    {-| Every promise the keyed runtime makes about order, duplication, and
+        absence, so a change to how entries are stored cannot quietly change
+        what a map is. Each check answers 1, so a shortfall names how many
+        failed. -}
+    , counterexample "keyed collections keep their order, uniqueness, and overrides"
+        (keyedInvariants === Just "18")
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"
