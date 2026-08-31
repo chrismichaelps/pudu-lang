@@ -23,7 +23,8 @@ import Pudu.DecimalLiteral
   , decimalMultiply
   , decimalSubtract
   )
-import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..), valueKind)
+import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..))
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
   ( IntegerKind (..)

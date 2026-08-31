@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Thirty-seven modules, 1072 exported declarations, every one written in Pudu.
+Forty modules, 1150 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -229,6 +229,9 @@ Thirty-seven modules, 1072 exported declarations, every one written in Pudu.
 | `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
 | `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
 | `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |
+| `Std.BiMap` | 24 | a pairing read from either side, kept a bijection through every write |
+| `Std.MultiMap` | 30 | many values under one key, where a key with no values does not exist |
+| `Std.MultiKeyMap` | 24 | a two-part key with lookup by the whole key or by either part alone |
 | `Std.LruCache` | 22 | a map with a capacity, discarding what has gone longest unused |
 | `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
@@ -288,6 +291,26 @@ the three next-commonest questions asked of a keyed collection:
 - **`Std.EnumMap`** removes an `Option` the caller already knew the answer to, which is the same
   thing `Std.NonEmpty` does for a sequence. Over a fixed domain of keys — the days of a week, the
   levels of a log — every key has a value by construction, so `get` answers `V`.
+Three more again, because `Map` is one-directional and single-valued, and because questions may
+only be asked of its key:
+
+- **`Std.BiMap`** is a pairing rather than a mapping — a currency code and its symbol, a user and
+  their session — where which side is the key depends on which way the program is going. It also has
+  to answer what `Map` never does: a value can collide the way a key can, so `insert` displaces the
+  earlier binding to keep both directions total, and `insertChecked` reports instead for callers
+  whose input was meant to be a bijection already.
+- **`Std.MultiMap`** keeps a grouping rather than building one, which is the half `Map.groupBy` does
+  not do. Its rule is that a key with no values does not exist: the bookkeeping people write by hand
+  usually forgets to remove the key when its last value goes, leaving a key `containsKey` answers
+  true for and `get` answers nothing for.
+- **`Std.MultiKeyMap`** is justified only by *partial* lookup. Composite keys already work —
+  `Map[(A, B), V]` is valid, since the runtime's order handles tuples — so a caller who only wants
+  the value under a whole pair should write that. What a pair-keyed `Map` cannot do is answer about
+  one part of the key without reading every entry, and that is what the two indexes here buy, at the
+  price of maintaining them on every write.
+
+And two whose shape is about what a collection refuses to do rather than what it holds:
+
 - **`Std.LruCache`** is a map with a bound, because a cache without one is a map that only grows.
   It discards by least recent *use*, so reading keeps an entry alive — which is why its `get`
   answers a cache alongside the value, since a read that did not record itself would let an entry

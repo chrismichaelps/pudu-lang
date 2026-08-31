@@ -70,6 +70,39 @@ const cases = [
       ].join("\n"),
   },
   {
+    // Building a map and reading it back was quadratic while the runtime kept
+    // entries in an association list: every lookup walked it. The lookups are
+    // the point of the case — a map that is only built and discarded never
+    // forces the walk, and measured that way the old list looked linear.
+    name: "build and read back a map",
+    module: "Keyed",
+    unit: "entries",
+    scale: 4,
+    command: "run",
+    build: n =>
+      [
+        "module Keyed",
+        "export fn main() -> Int {",
+        "  var m = mapOf([])",
+        "  var i = 0",
+        `  while i < ${n} {`,
+        "    m = m.insert(i, i)",
+        "    i = i + 1",
+        "  }",
+        "  var hits = 0",
+        "  var j = 0",
+        `  while j < ${n} {`,
+        "    match m.get(j) {",
+        "      case Some(v) => { hits = hits + v }",
+        "      case None => {}",
+        "    }",
+        "    j = j + 1",
+        "  }",
+        "  hits % 7",
+        "}",
+      ].join("\n"),
+  },
+  {
     name: "scan text through a cursor",
     module: "Scan",
     unit: "characters",

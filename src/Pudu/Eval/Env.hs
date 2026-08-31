@@ -50,7 +50,8 @@ import Pudu.Diagnostic
   , mkDiagnosticCode
   , withHelp
   )
-import Pudu.Eval.Value (Value (..), valueKind)
+import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.Value (Value (..))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
 
