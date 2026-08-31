@@ -59,6 +59,7 @@ import Pudu.DecimalLiteral
   , decimalToInteger
   , parseDecimalText
   )
+import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
   ( ArrayMethod (..)
   , Builtin (..)
@@ -71,9 +72,7 @@ import Pudu.Eval.Value
   , setMethodName
   , StringMethod (..)
   , Value (..)
-  , renderValue
   , stringMethodName
-  , valueKind
   )
 
 {-| @Eval.Builtin.Apply — applying a value as a function.
