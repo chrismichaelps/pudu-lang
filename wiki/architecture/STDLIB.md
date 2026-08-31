@@ -163,6 +163,13 @@ would build itself forever at the moment it was defined.
 
 A regex module remains open — see the deferred list.
 
+`Std.Json` keeps format mechanics behind one typed boundary. Its quoted-string loop does not know
+the width or meaning of an escape: a private decoder returns the decoded scalar text and the first
+unread source position. The admitted vocabulary is JSON's exact escape set, and UTF-16 surrogate
+pairs are composed before entering Pudu's scalar strings. Unknown escapes, isolated surrogates, and
+unescaped controls below U+0020 are `JsonError` values rather than permissive substitutions.
+Encoding uses named escapes where JSON has them and `\u00XX` for the remaining controls.
+
 ### System
 
 | Module | Provides |
@@ -206,34 +213,34 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Twenty-eight modules, 818 documented exports, every one written in Pudu.
+Thirty-two modules, 945 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
-| `Std.List` | 95 | folds, scans, slicing, searching, set operations, zipping, sorting, subsequences, permutations, windows |
+| `Std.List` | 97 | folds, scans, slicing, searching, set operations, zipping, sorting, subsequences, permutations, windows |
 | `Std.Text` | 64 | slicing, splitting, padding, per-character work, prefixes, comparison, case |
 | `Std.Map` | 47 | lookup, insertion, merging with rules, grouping, tallying, inversion |
-| `Std.Set` | 33 | membership, set operations, subset tests, splitting, products |
-| `Std.Bits` | 27 | the `Bits` trait and everything over it, each type answering for its own width |
-| `Std.NonEmpty` | 28 | a sequence known to hold something, so `first`, `last` and `maximum` answer values |
-| `Std.Deque` | 20 | a queue cheap at both ends, for breadth-first walks and scheduling |
-| `Std.Heap` | 17 | a collection that always knows its smallest element, and the few smallest without a sort |
-| `Std.Graph` | 21 | nodes and directed edges, topological order, cycles, components, shortest path |
-| `Std.Num` | 25 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
+| `Std.Set` | 39 | membership, set operations, subset tests, splitting, products |
+| `Std.Bits` | 29 | the `Bits` trait and everything over it, each type answering for its own width |
+| `Std.NonEmpty` | 29 | a sequence known to hold something, so `first`, `last` and `maximum` answer values |
+| `Std.Deque` | 21 | a queue cheap at both ends, for breadth-first walks and scheduling |
+| `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
+| `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
+| `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
 | `Std.Crypto` | 8 | SHA-256, UTF-8 encoding, constant-time comparison |
 | `Std.Random` | 14 | a reproducible generator, ranges, shuffling, sampling |
-| `Std.Text.Parse` | 41 | parser combinators with positions in their errors |
+| `Std.Text.Parse` | 69 | parser combinators with positions in their errors |
 | `Std.Char` | 29 | ASCII classification, case folding, scalar conversion both ways |
 | `Std.Math` | 27 | arithmetic, divisibility, roots, primality, checked partial operators — all bounded, none `Int`-only |
-| `Std.Http` | 74 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
-| `Std.Http.Message` | 12 | the wire format: parsing and rendering requests and responses, chunked bodies |
+| `Std.Http` | 99 | methods, statuses, the standard header set, cookies, auth, negotiation, forms, ranges |
+| `Std.Http.Message` | 11 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
 | `Std.Json` | 19 | a `Json` value, a decoder with positions in its errors, compact and pretty encoding |
 | `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
-| `Std.Order` | 16 | the `Ordering` type and comparisons built from it |
+| `Std.Order` | 27 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
 | `Std.Io` | 28 | files, directories, standard input and output, path handling |
@@ -263,6 +270,24 @@ data answers a question those cannot:
 
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
+
+### What Pudu should take from Haskell
+
+Haskell is useful here as accumulated library experience, not as a namespace to copy. A Pudu module
+earns a place when it gives a program a data invariant or failure mode that existing types cannot
+state. Three candidates meet that test:
+
+| Candidate | Haskell precedent | Pudu purpose |
+|---|---|---|
+| `Std.Tree` | `Data.Tree` | a rose tree for syntax, menus, outlines, and dependency views, with preorder, levels, pruning, unfolding, and path-aware transforms |
+| `Std.Validation` | accumulating applicative validation | collect independent field problems instead of stopping at the first `Result.Err`; no replacement for fail-fast sequencing |
+| `Std.These` | `Data.These` | represent left-only, right-only, or both when merging partial information, warnings with a value, or asymmetric diffs |
+
+They should arrive as separate features. `Maybe` and `Either` do not: Pudu already calls those
+shapes `Option` and `Result`. Typeclass families such as `Functor`, `Foldable`, `Traversable`, and
+`Applicative` do not map honestly until the type system can abstract over a type constructor. An
+`IntMap` or hash-trie module should wait for a representation that gives it a measurable advantage
+over the ordered `Map`; a familiar name without its performance law is misleading.
 
 ### On numbers
 

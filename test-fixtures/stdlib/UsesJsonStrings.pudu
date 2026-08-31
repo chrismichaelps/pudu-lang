@@ -1,0 +1,54 @@
+module UsesJsonStrings
+
+import Std.Json as Json
+
+fn decodesTo(source: Str, expected: Str) -> Bool {
+  let Ok(value) = Json.decode(source) else { return false }
+  let Some(actual) = Json.asText(&value) else { return false }
+  actual == expected
+}
+
+fn rejects(source: Str) -> Bool {
+  let Err(_) = Json.decode(source) else { return false }
+  true
+}
+
+fn rejectsAt(source: Str, expected: Int) -> Bool {
+  let Err(problem) = Json.decode(source) else { return false }
+  match problem {
+    case Json.Unexpected(position, _) => position == expected
+    case _ => false
+  }
+}
+
+fn scalarText(code: Int) -> Str {
+  let Some(character) = charFromCode(code) else { return "" }
+  character.toText()
+}
+
+export fn main() -> Int {
+  if !decodesTo("\"plain\"", "plain") { return 1 }
+  if !decodesTo("\"\\\"\\\\\\/\"", "\"\\/") { return 2 }
+  if !decodesTo("\"\\b\\f\\n\\r\\t\"", scalarText(8) + scalarText(12) + "\n\r\t") { return 3 }
+  if !decodesTo("\"\\u0041\"", "A") { return 4 }
+  if !decodesTo("\"\\uD83D\\uDE00\"", scalarText(128512)) { return 5 }
+
+  let Ok(controlValue) = Json.decode("\"\\b\\f\\n\\r\\t\"") else { return 6 }
+  if Json.encode(&controlValue) != "\"\\b\\f\\n\\r\\t\"" { return 7 }
+  if !decodesTo(Json.encode(&controlValue), scalarText(8) + scalarText(12) + "\n\r\t") {
+    return 8
+  }
+
+  let zero = Json.Text(scalarText(0))
+  if Json.encode(&zero) != "\"\\u0000\"" { return 9 }
+  if !rejects("\"" + scalarText(0) + "\"") { return 10 }
+
+  if !rejectsAt("\"\\q\"", 2) { return 11 }
+  if !rejectsAt("\"\\u12xz\"", 2) { return 12 }
+  if !rejectsAt("\"\\uDE00\"", 2) { return 13 }
+  if !rejectsAt("\"\\uD83Dplain\"", 2) { return 14 }
+  if !rejectsAt("\"\\uD83D\\u0041\"", 8) { return 15 }
+  if !rejects("\"\\u12") { return 16 }
+  if !rejects("\"plain") { return 17 }
+  0
+}
