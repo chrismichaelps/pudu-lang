@@ -10,6 +10,7 @@ module Pudu.Lsp.Server
   , serverCapabilities
   ) where
 
+import Control.Exception (SomeException, evaluate, displayException, try)
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Text (Text)
@@ -51,7 +52,8 @@ import Pudu.Lsp.Documents
   , uriOf
   )
 import Pudu.Lsp.Protocol
-  ( Message (..)
+  ( Incoming (..)
+  , Message (..)
   , errorResponse
   , frame
   , notification
@@ -67,6 +69,7 @@ import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Type (Type (..), narrowestAt, renderType)
 import Pudu.Type.Value (nominalName)
 import System.Directory (getCurrentDirectory)
+import System.Exit (ExitCode (ExitFailure), exitWith)
 import System.FilePath (takeDirectory)
 import System.IO
   ( BufferMode (NoBuffering)
@@ -74,6 +77,7 @@ import System.IO
   , hFlush
   , hSetBinaryMode
   , hSetBuffering
+  , stderr
   , stdin
   , stdout
   )
@@ -149,18 +153,71 @@ runServer = do
   store <- newIORef emptyDocuments
   loop store
 
+{-| Read a message, answer it, and go round again.
+
+    Only the stream ending stops the loop. A frame the server cannot decode
+    costs that frame and nothing else, which is what the protocol asks of a
+    server, and a client's own reply carries no method and needs no answer. -}
 loop :: IORef Documents -> IO ()
 loop store = do
   incoming <- readMessage stdin
   case incoming of
-    Nothing -> pure ()
-    Just message -> do
+    EndOfStream -> pure ()
+    NotForServer -> loop store
+    Unreadable reason -> do
+      TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
+      hFlush stderr
+      loop store
+    {-| A framing fault cannot be recovered from: there is no marker in the
+        protocol to resynchronise on, so every later read would be guesswork.
+        It leaves with a failing status, because an editor that saw success
+        would report a clean shutdown for a session that actually broke. -}
+    Unframed reason -> do
+      TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
+      hFlush stderr
+      exitWith (ExitFailure 1)
+    Received message -> do
       documents <- readIORef store
-      documents' <- refresh documents message
-      let (documents'', replies) = answer documents' message
-      writeIORef store documents''
-      mapM_ (emit stdout) replies
+      outcome <- try (prepare documents message)
+      case outcome of
+        Right (documents', replies) -> do
+          writeIORef store documents'
+          mapM_ (emit stdout) replies
+        Left failure -> mapM_ (emit stdout) =<< excuse message failure
       unless (isExit message) (loop store)
+
+{-| Work out the answer to one message, with its replies forced.
+
+    `answer` is pure and its replies are built lazily, so a failure inside one
+    would otherwise surface where it is written to the handle rather than where
+    it can be caught. Forcing them here puts the whole of the work inside the
+    same guarded region. -}
+prepare :: Documents -> Message -> IO (Documents, [Text])
+prepare documents message = do
+  documents' <- refresh documents message
+  let (documents'', replies) = answer documents' message
+  mapM_ (evaluate . Text.length) replies
+  pure (documents'', replies)
+
+{-| Report a failure without ending the session.
+
+    A request is answered, because a client that receives nothing waits for it
+    for as long as the session lasts. A notification has no reply to carry the
+    news, so it goes to the error stream, which is where an editor collects a
+    server's output. The document store keeps whatever it last held, since what
+    a failed analysis would have stored is unknown. -}
+excuse :: Message -> SomeException -> IO [Text]
+excuse message failure = do
+  TextIO.hPutStrLn stderr ("pudu lsp: " <> subject <> " failed; " <> detail)
+  hFlush stderr
+  pure $ case message of
+    Request identity _ _ -> [errorResponse identity internalError detail]
+    Notification _ _ -> []
+ where
+  subject = case message of
+    Request _ method _ -> method
+    Notification method _ -> method
+  detail = Text.strip (Text.pack (displayException failure))
 
 {-| Recompile before answering, when the message carried new text. This is the
     only place the server does IO on a document's behalf, which is what keeps
@@ -230,6 +287,9 @@ handler method = case method of
 
 methodNotFound :: Int
 methodNotFound = -32601
+
+internalError :: Int
+internalError = -32603
 
 {-| What this server can do, answered once at startup.
 
