@@ -10,7 +10,7 @@ import Pudu.Diagnostic
   , diagnosticMessage
   , diagnosticSpan
   )
-import Pudu.Source (SourceName (SourceName), newSource, spanStart, unOffset)
+import Pudu.Source (SourceName (SourceName), newSource, spanEnd, spanStart, unOffset)
 import Pudu.Type (renderType, widestWithin)
 import Test.QuickCheck (Property, conjoin, counterexample, (===))
 
@@ -2070,6 +2070,62 @@ testKeyedTypes = do
   unknownMap <- codesOfExpression "mapOf([(\"a\", 1)]).shout()"
   unknownSet <- codesOfExpression "setOf([1]).shout()"
   badKey <- codesOfExpression "mapOf([(\"a\", 1)]).get(1)"
+  literalSetType <- typeOf "#{3, 1, 2}"
+  membershipType <- typeOf "2 in #{1, 2, 3}"
+  absentType <- typeOf "4 in #{1, 2, 3}"
+  wrongMember <- codesOfExpression "1 in #{\"one\", \"two\"}"
+  wrongContainer <- codesOfExpression "2 in [1, 2, 3]"
+  contextualEmpty <- codes
+    [ "module M"
+    , "fn run() -> Set[Int] { #{} }"
+    ]
+  let ambiguousSource = Text.unlines
+        [ "module M"
+        , "fn run() -> Int {"
+        , "  let values = #{}"
+        , "  0"
+        , "}"
+        ]
+  ambiguousResult <- compile ambiguousSource
+  let ambiguousEmpty = codesOf ambiguousResult
+      emptyStart = Text.length (fst (Text.breakOn "#{}" ambiguousSource))
+      emptySetContract = case compileDiagnostics ambiguousResult of
+        [diagnostic] -> conjoin
+          [ diagnosticMessage diagnostic === "an empty Set needs an element type"
+          , diagnosticHelp diagnostic
+              === Just "annotate it, for example: let values: Set[Int] = #{}"
+          , unOffset (spanStart (diagnosticSpan diagnostic)) === emptyStart
+          , unOffset (spanEnd (diagnosticSpan diagnostic)) === emptyStart + 3
+          ]
+        diagnostics ->
+          counterexample ("expected one E3037, found " <> show diagnostics) False
+  nestedArray <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let values = [#{}]"
+    , "  0"
+    , "}"
+    ]
+  nestedConstructor <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let values = Some(#{})"
+    , "  0"
+    , "}"
+    ]
+  contextualNested <- codes
+    [ "module M"
+    , "fn take(values: Set[Int]) -> Int { values.size() }"
+    , "fn run() -> Int { take(#{}) }"
+    ]
+  iteratedLiteral <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  var total = 0"
+    , "  for value in #{1, 2, 3} { total = total + value }"
+    , "  total"
+    , "}"
+    ]
   pure $ conjoin
     [ counterexample "a map is typed by key and value" (mapType === "Map[Str, Int]")
     , counterexample "a set is typed by its member" (setType === "Set[Int]")
@@ -2080,6 +2136,18 @@ testKeyedTypes = do
     , counterexample "an unknown map method is E3005" (unknownMap === ["E3005"])
     , counterexample "an unknown set method is E3005" (unknownSet === ["E3005"])
     , counterexample "a key of the wrong type is E3001" (badKey === ["E3001"])
+    , counterexample "a Set literal is typed by its members" (literalSetType === "Set[Int]")
+    , counterexample "membership answers Bool" (membershipType === "Bool")
+    , counterexample "membership type does not depend on presence" (absentType === "Bool")
+    , counterexample "membership checks its candidate" (wrongMember === ["E3001"])
+    , counterexample "membership is Set-only" (wrongContainer === ["E3001"])
+    , counterexample "context determines an empty Set" (contextualEmpty === [])
+    , counterexample "an unconstrained empty Set is E3037" (ambiguousEmpty === ["E3037"])
+    , counterexample "E3037 explains and spans the literal exactly" emptySetContract
+    , counterexample "a nested array cannot leak an empty Set variable" (nestedArray === ["E3037"])
+    , counterexample "a constructor cannot leak an empty Set variable" (nestedConstructor === ["E3037"])
+    , counterexample "a surrounding call may determine a nested empty Set" (contextualNested === [])
+    , counterexample "for still consumes its own in separator" (iteratedLiteral === [])
     ]
 
 testTupleIndex :: IO Property

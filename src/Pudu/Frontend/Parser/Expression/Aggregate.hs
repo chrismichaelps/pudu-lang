@@ -3,6 +3,7 @@ module Pudu.Frontend.Parser.Expression.Aggregate
   ( blockExpression
   , literal
   , parseArrayLiteral
+  , parseSetLiteral
   , parseGrouped
   , parseNameOrRecord
   ) where
@@ -261,5 +262,49 @@ parseArrayTail parsers blockParser reversed = do
               then pure (reverse reversed, True)
               else do
                 rest <- parseArrayTail parsers blockParser (next : reversed)
+                pure (rest, False)
+          pure (maybe (reverse reversed) fst bounded)
+
+{-| A Set literal `#{a, b, c}` retains every member expression in source
+    order. The evaluator, not the parser, collapses duplicate values after all
+    of those expressions have run. -}
+parseSetLiteral :: ExpressionParsers -> BlockParser -> Parser (Located Expression)
+parseSetLiteral parsers blockParser = do
+  hash <- expectSymbol "#" "to start the Set literal"
+  _ <- expectSymbol "{" "after # in the Set literal"
+  empty <- matchSymbol "}"
+  case empty of
+    Just closing ->
+      pure
+        ( Located (mergedOrLeft (tokenSpan hash) (tokenSpan closing))
+            (SetExpression [])
+        )
+    Nothing -> do
+      first <- withRecords (expressionOf parsers blockParser)
+      rest <- parseSetTail parsers blockParser []
+      closing <- expectSymbol "}" "to close the Set literal"
+      pure
+        ( Located (mergedOrLeft (tokenSpan hash) (tokenSpan closing))
+            (SetExpression (first : rest))
+        )
+
+parseSetTail :: ExpressionParsers -> BlockParser -> [Located Expression] -> Parser [Located Expression]
+parseSetTail parsers blockParser reversed = do
+  comma <- matchSymbol ","
+  case comma of
+    Nothing -> pure (reverse reversed)
+    Just _ -> do
+      kind <- peekKind
+      if isSymbol "}" kind
+        then pure (reverse reversed)
+        else do
+          bounded <- withRecursionBudget $ do
+            before <- peekToken
+            next <- withRecords (expressionOf parsers blockParser)
+            after <- peekToken
+            if before == after
+              then pure (reverse reversed, True)
+              else do
+                rest <- parseSetTail parsers blockParser (next : reversed)
                 pure (rest, False)
           pure (maybe (reverse reversed) fst bounded)

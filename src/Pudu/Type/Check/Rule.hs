@@ -389,6 +389,9 @@ binaryType spanValue operator left right
   | operator `elem` ["<", "<=", ">", ">="] = do
       _ <- unify spanValue left right
       pure boolType
+  | operator == "in" = do
+      _ <- unify spanValue (NominalType "Set" [left]) right
+      pure boolType
   | operator `elem` ["..", "..="] = do
       unified <- unify spanValue left right
       pure (NominalType "Range" [unified])

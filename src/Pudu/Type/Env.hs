@@ -40,6 +40,7 @@ module Pudu.Type.Env
   , isImportedMethod
   , lookupVariant
   , lookupVariantFields
+  , lookupRecordedExpression
   , recordExpression
   , report
   , reportedAt
@@ -538,6 +539,13 @@ recordExpression :: Span -> Type -> Checker ()
 recordExpression spanValue typeValue =
   Checker $ \state ->
     ((), state{stateTypes = (keyOf spanValue, typeValue) : stateTypes state})
+
+{-| Read the type recorded for an expression while inference is still live.
+    Deferred collection checks use the original type variable here, then
+    `zonk` it after the surrounding expression has supplied its context. -}
+lookupRecordedExpression :: Span -> Checker (Maybe Type)
+lookupRecordedExpression spanValue =
+  Checker $ \state -> (lookup (keyOf spanValue) (stateTypes state), state)
 
 keyOf :: Span -> SpanKey
 keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))

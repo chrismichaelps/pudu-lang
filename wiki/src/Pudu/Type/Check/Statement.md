@@ -37,6 +37,10 @@ checkMember       :: StatementNeeds -> DeclaredTypes -> [Text] -> [(Text, [Nomin
 
 ### Governance
 
+- A direct empty Set literal is inspected after its binding or expression statement has received
+  all available local constraints. If its element variable remains unresolved, `E3037` asks for an
+  explicit `Set[T]`; a contextual literal is left alone.
+
 - A statement holds expressions, may declare something, and a function declared
   inside one is checked as a function. All three reach statements again, which
   is why they **arrive as a record rather than being imported**.
@@ -84,6 +88,11 @@ exception.
   path back, and importing either would make the cycle real.
 
 ## Grill Log
+
+- **Q:** Diagnose `#{}` while first inferring it? **A:** No. _Rationale:_ inference has not yet seen
+  the annotation or surrounding call/return constraint. The statement boundary is the earliest
+  point that can distinguish missing context from context not yet applied. _Rejected:_ eager
+  expression-level failure.
 
 - **Q:** Why does this need three things rather than the two an expression
   needs? **A:** Because a statement can declare. _Rationale:_ a `let` is a

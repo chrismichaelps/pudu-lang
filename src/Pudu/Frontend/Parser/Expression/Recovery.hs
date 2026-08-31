@@ -210,6 +210,7 @@ unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
 continuesAcrossLineBreak :: TokenKind -> Bool
 continuesAcrossLineBreak kind = case kind of
   Symbol symbol -> symbol `notElem` unaryOperators
+  Keyword KwIn -> True
   _ -> False
 
 isPrefixCapableBinary :: TokenKind -> Bool

@@ -153,6 +153,7 @@ field_pattern    = lower_ident, (":", pattern)? ;
 ```ebnf
 tuple_expr       = "(", expression, ",", (expression, (",", expression)*, ","?)?, ")" ;
 array_expr       = "[", (expression, (",", expression)*, ","?)?, "]" ;
+set_expr         = "#", "{", (expression, (",", expression)*, ","?)?, "}" ;
 record_expr      = module_path_or_type, "{", field_init, (",", field_init)*, ","?, "}" ;
 field_init       = lower_ident, (":", expression)? ;
 if_expr          = "if", expression, block, ("else", (if_expr | if_let_expr | block))? ;
@@ -167,6 +168,7 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 ```
 
 - An array literal `[a, b, c]` builds an `Array[T]` value. `[]` is the empty array. Arrays are immutable persistent sequences backed by a fingertree: `push`, `insert`, and `remove` return new arrays with structural sharing, so no update copies the entire collection. Built-in methods: `length()`, `get(i)`, `indexOf(x)`, `contains(x)`, `push(x)`, `pop()`, `insert(i, x)`, `remove(i)`, `slice(i, j)`, `reverse()`, `map(f)`, `filter(f)`, `reduce(f, init)`. Indexing an array with `arr[i]` reads the element; out-of-bounds is `E7004`. `for x in arr` iterates elements.
+- A set literal `#{a, b, c}` builds the same ordered persistent `Set[T]` value as `setOf([a, b, c])`. Members evaluate from left to right, duplicate values collapse under the Set's existing key equality, and iteration and rendering follow key order rather than source order. A trailing comma is admitted. `#{}` needs a contextual `Set[T]`; if no statement-boundary context determines `T`, `E3037` asks for an annotation. A member the language cannot order is refused with `E7008`, exactly as by `setOf`.
 - Record fields are immutable unless explicitly marked `mut` in the type declaration.
 - A pattern alternation binds with `|`; a range pattern joins two literals with `..` or `..=`. `_` never binds, a bare lowercase identifier always binds, and an uppercase path is a constructor even with no payload.
 - A record pattern may end with `..` to ignore the remaining fields; a field pattern without `:` binds the field to its own name.
@@ -205,7 +207,7 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 
 ## Expression Grammar and Precedence
 
-From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut ~ *`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; shift and bitwise AND `<< >> &`; range and bitwise XOR `.. ..= ^`; comparison `< <= > >=`; equality `== !=`; boolean `&&`; boolean `||` and bitwise OR `|`; assignment; control expressions.
+From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & &mut ~ *`; multiplicative `* / % &* *|`; additive `+ - &+ &- +| -|`; shift and bitwise AND `<< >> &`; range and bitwise XOR `.. ..= ^`; comparison `< <= > >= in`; equality `== !=`; boolean `&&`; boolean `||` and bitwise OR `|`; assignment; control expressions.
 
 - Assignment is right-associative. Every other admitted binary band is left-associative; semantic typing rejects operator chains whose intermediate result cannot serve as the next operand.
 - Assignment is a statement-like expression of type `()` and requires a mutable place.
@@ -215,6 +217,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - `return`, `break`, and `continue` have type `Never` at their valid control boundary.
 - Every `break` leaving the same `loop` must carry the same type, which is that loop's type. A `break` carrying a value may leave only a `loop`: `while` and `for` finish when their own condition does, so a value carried out of one would exist on some runs and not others, and that is `E3029`.
 - A range endpoint is evaluated exactly once.
+- `value in set` evaluates `value` first and `set` second, requires the right operand to be `Set[T]` and the left operand to be `T`, and answers `Bool`. In v1 this operator is deliberately Set-only; arrays, maps, strings, ranges, and user types do not acquire an implicit membership protocol. The keyword remains the separator in `for pattern in expression`, where the parser is already inside the loop head rather than an expression binary tail.
 
 ## Numeric Semantics
 

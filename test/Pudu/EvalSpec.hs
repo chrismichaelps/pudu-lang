@@ -555,6 +555,20 @@ testKeyed = do
   shared <- evaluate "setOf([1, 2, 3]).intersect(setOf([2, 3, 4]))"
   removed <- evaluate "setOf([1, 2, 3]).difference(setOf([2]))"
   unorderable <- codesOf "setOf([fn(x) => x])"
+  literal <- evaluate "#{3, 1, 2, 1}"
+  present <- evaluate "2 in #{1, 2, 3}"
+  missing <- evaluate "4 in #{1, 2, 3}"
+  literalUnorderable <- codesOf "#{fn(x) => x}"
+  duplicatesEvaluate <- runProgram []
+    [ "var order = 0"
+    , "let values = #{{ order = order * 10 + 1\n1 }, { order = order * 10 + 2\n1 }}"
+    ]
+    "(order, values)"
+  membershipOrder <- runProgram []
+    [ "var order = 0"
+    , "let found = { order = order * 10 + 1\n2 } in { order = order * 10 + 2\n#{2} }"
+    ]
+    "(order, found)"
   setLoop <- evaluateStatements
     [ "var total = 0"
     , "for member in setOf([1, 2, 3, 4]) { total = total + member }"
@@ -578,6 +592,15 @@ testKeyed = do
     , counterexample "intersection keeps what both have" (shared === "#{2, 3}")
     , counterexample "difference removes what the other has" (removed === "#{1, 3}")
     , counterexample "a value with no order cannot be a member" (unorderable === ["E7008"])
+    , counterexample "literal members collapse into key order" (literal === "#{1, 2, 3}")
+    , counterexample "membership finds a present value" (present === "true")
+    , counterexample "membership rejects an absent value" (missing === "false")
+    , counterexample "a literal keeps the existing order boundary"
+        (literalUnorderable === ["E7008"])
+    , counterexample "duplicate members still evaluate left to right"
+        (duplicatesEvaluate === "(12, #{1})")
+    , counterexample "membership evaluates candidate before Set"
+        (membershipOrder === "(12, true)")
     , counterexample "a set is walked by for, as the grammar says" (setLoop === "10")
     , counterexample "a map is walked as key and value pairs" (mapLoop === "3")
     ]

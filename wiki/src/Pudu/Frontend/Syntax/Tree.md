@@ -128,6 +128,10 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 
 ### Governance
 
+- `SetExpression` retains every written member in source order. It does not deduplicate in the
+  frontend: duplicate expressions must still resolve, type-check, expand, and evaluate before the
+  runtime Set collapses equal values.
+
 - Data only: no parsing, desugaring, type logic, traversal framework, or evaluator behavior.
 - Invalid nodes are explicit poison and never lower.
 - Mutually recursive types remain co-located to avoid `hs-boot` cycles.
@@ -158,6 +162,10 @@ No algorithm; strict algebraic representation with derived equality/show for tes
 DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is deliberate data recursion, not monolithic logic.
 
 ## Grill Log
+
+- **Q:** Elaborate a Set literal into `setOf([..])` during parsing? **A:** No. _Rationale:_ that
+  would fabricate source structure and spans, obscure the literal from formatting and tooling, and
+  make empty-literal inference depend on a synthetic call. _Rejected:_ parser desugaring.
 
 - **Q:** Split each recursive data type with `hs-boot`? **A:** No; keep the data knot in one behavior-free file. _Rationale:_ cycles add build complexity without modular behavior. _Rejected:_ artificial boot modules; all parser logic in the same file.
 - **Q:** Lower `if let` directly into `MatchExpression` while parsing? **A:** No; preserve a surface node. _Rationale:_ parser lowering makes source tools show syntax the reader did not write and lets synthetic-arm diagnostics leak. _Rejected:_ parser-only desugaring; a second pattern representation.

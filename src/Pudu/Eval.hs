@@ -52,8 +52,10 @@ import Pudu.Eval.Call
   )
 import qualified Pudu.Eval.Call as Call
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
+import Pudu.Eval.Keyed (setContains, setFromMembers)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
-import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Order (comparableValue)
+import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
@@ -217,6 +219,14 @@ evaluateHere (Located spanValue expression) = case expression of
     [] -> pure UnitValue
     _ -> TupleValue <$> mapM evaluate members
   ArrayExpression members -> ArrayValue . Seq.fromList <$> mapM evaluate members
+  SetExpression members -> do
+    values <- mapM evaluate members
+    case filter (not . comparableValue) values of
+      offender : _ ->
+        abortAt (Just spanValue) "E7008"
+          ("a " <> valueKind offender <> " cannot be a set member")
+          (Just "use a value the language can order, such as text, a number, or a tuple of those")
+      [] -> pure (setFromMembers values)
   UnsafeExpression _ body -> evaluateBlock body
   MacroCall _ _ ->
     abortAt (Just spanValue) "E7001" "macro call reached evaluation unexpanded" Nothing
@@ -313,6 +323,13 @@ applyBinary spanValue left operator right = case operator of
     leftValue <- evaluate left
     truth <- expectBool spanValue leftValue
     if truth then pure (BoolValue True) else evaluate right >>= expectBoolValue spanValue
+  "in" -> do
+    candidate <- evaluate left
+    container <- evaluate right
+    case container of
+      SetValue _ -> pure (BoolValue (setContains container candidate))
+      _ -> abortAt (Just spanValue) "E7001"
+        ("membership needs a Set, found a " <> valueKind container) Nothing
   _ -> do
     leftValue <- evaluate left
     rightValue <- evaluate right

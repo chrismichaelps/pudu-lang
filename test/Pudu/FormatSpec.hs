@@ -18,6 +18,7 @@ formatProperties =
   , ("spacing is normalised inside a line", testSpacing)
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
+  , ("a Set literal keeps its sigil and braces tight", testSetLiteral)
   , ("imports sort with the standard library first", testImportOrder)
   , ("input that does not lex is returned untouched", testUnlexable)
   , ("blank-line runs collapse to one", testBlankLines)
@@ -155,6 +156,26 @@ testBraces = do
     , "fn empty() -> Int { 0 }"
     ]
 
+testSetLiteral :: IO Property
+testSetLiteral = do
+  formatted <- formatOf
+    (Text.unlines
+      [ "module M"
+      , "fn values() -> Set[Int] { # { 3,1, 2,} }"
+      , "fn empty() -> Set[Int] { # { } }"
+      , "fn contains() -> Bool {2 in# {1,2}}"
+      ])
+  pure
+    ( counterexample (Text.unpack formatted)
+        ( Text.lines formatted
+          === [ "module M"
+              , "fn values() -> Set[Int] { #{3, 1, 2, } }"
+              , "fn empty() -> Set[Int] { #{} }"
+              , "fn contains() -> Bool { 2 in #{1, 2} }"
+              ]
+        )
+    )
+
 testImportOrder :: IO Property
 testImportOrder = do
   formatted <- formatOf source
@@ -265,6 +286,11 @@ samples =
       , "type Point = { x: Int, y: Int }"
       , "fn make() -> Point { Point{x: 1, y: 2} }"
       , "fn sum(p: &Point) -> Int { p.x + p.y }"
+      ]
+  , Text.unlines
+      [ "module Sets"
+      , "fn values() -> Set[Int] { #{3, 1, 2, 1} }"
+      , "fn hasTwo() -> Bool { 2 in #{1, 2, 3} }"
       ]
   , Text.unlines
       [ "module Loops"

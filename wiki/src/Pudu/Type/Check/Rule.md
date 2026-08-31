@@ -21,6 +21,9 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Governance
 
+- Binary `in` requires `left : T` and `right : Set[T]`, returning `Bool`. This closed operator rule
+  deliberately does not search methods or trait implementations.
+
 - A shift's count is a **position, not a second operand of the same type**. It answers "how far",
   which is the same question whatever the value's width is; requiring the two to match would mean
   writing `1u8 << 3u8` and would make a generic shift over the integer family impossible to write.
@@ -92,6 +95,11 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies them.
 
 ## Grill Log
+
+- **Q:** Type membership by calling `Set.contains`? **A:** No. _Rationale:_ surface operators are
+  typed in the closed operator table, and a synthetic method call would give different spans and
+  accidentally invite general method-based overloading. _Rejected:_ desugaring through member
+  lookup.
 
 - **Q:** Why does the constructor stay bound when it can never be used? **A:** So the diagnostic can say what is wrong. _Rationale:_ unbinding it makes `Circle(2)` an undefined name, which is true and tells the reader nothing about the spelling that would work. _Rejected:_ removing the binding; binding it to the owner type.
 - **Q:** Why not inline these into the walk? **A:** The walk would exceed the reviewable size, and these rules are the part a reader checks against the grammar. _Rationale:_ they are a table, and a table is easier to audit alone. _Rejected:_ inlining; a generic operator-table abstraction.

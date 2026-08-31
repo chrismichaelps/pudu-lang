@@ -34,6 +34,10 @@ outlinePattern :: Located Pattern -> Text
 - The rendering is structural, not a formatter: it parenthesizes every binary and unary grouping so precedence is visible, which is the question `:ast` is asked.
 - Spans and trivia are omitted; a reader debugging grouping does not want offsets, and the source line is already in front of them.
 - Every syntax node has a rendering, so a new construct cannot silently render as nothing. A missing case is not cosmetic here: an unrendered node ends the session with an incomplete-pattern failure rather than an answer.
+- `SetExpression` renders as `#{member, ...}` in written member order. The outline exposes parsed
+  structure, not the runtime's sorted and deduplicated value.
+- `SetExpression` renders as `#{member, ...}` in written member order. The outline exposes parsed
+  structure, not the runtime's sorted and deduplicated value.
 - `IfLetExpression` renders as `if let PATTERN = EXPRESSION`, retaining the surface distinction
   from an exhaustive `match` while omitting branch bodies like ordinary `if`.
 
@@ -61,6 +65,12 @@ DEPTH 0.30 (SHALLOW by intent). It is a projection of the tree for one command.
 ## Grill Log
 
 - **Q:** Should `:ast` print the derived `Show` output? **A:** No. _Rationale:_ span-laden `Show` output buries the structure the command exists to reveal. _Rejected:_ deriving-based dumping; a full pretty-printer, which is the formatter's job.
+- **Q:** Sort or deduplicate Set members in the outline? **A:** No. _Rationale:_ `:ast` answers how
+  source grouped; value ordering belongs to evaluation. _Rejected:_ rendering the anticipated
+  runtime value.
+- **Q:** Sort or deduplicate Set members in the outline? **A:** No. _Rationale:_ `:ast` answers how
+  source grouped; value ordering belongs to evaluation. _Rejected:_ rendering the anticipated
+  runtime value.
 
 ## Referenced by
 
