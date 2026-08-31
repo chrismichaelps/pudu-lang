@@ -19,12 +19,12 @@ import Pudu.Eval.Env
   , abortAt
   )
 import Pudu.Source (Span)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value
   ( Builtin (..)
   , builtinName
   , intOf
   , Value (..)
-  , renderValue
   )
 
 {-| The built-ins that reach the world.

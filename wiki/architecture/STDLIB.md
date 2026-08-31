@@ -118,7 +118,7 @@ and buy nothing.
 | `Std.List` | the operations `Array[T]` does not already carry |
 | `Std.Map` | ordered maps, by comparison |
 | `Std.Set` | ordered sets |
-| `Std.HashMap` | hash maps, by `Hash` |
+| `Std.HashMap` | hash maps, by `Hash` — blocked, see [[#Deferred, with reasons]] |
 | `Std.Deque` | double-ended queue |
 | `Std.Math` | numerics, saturating and checked arithmetic, constants |
 | `Std.Fmt` | typed formatting, no format-string interpretation at run time |
@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Thirty-five modules, 1023 exported declarations, every one written in Pudu.
+Forty modules, 1150 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -226,9 +226,14 @@ Thirty-five modules, 1023 exported declarations, every one written in Pudu.
 | `Std.Deque` | 21 | a queue cheap at both ends, for breadth-first walks and scheduling |
 | `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
 | `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
+| `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
+| `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
+| `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |
 | `Std.BiMap` | 24 | a pairing read from either side, kept a bijection through every write |
 | `Std.MultiMap` | 30 | many values under one key, where a key with no values does not exist |
 | `Std.MultiKeyMap` | 24 | a two-part key with lookup by the whole key or by either part alone |
+| `Std.LruCache` | 22 | a map with a capacity, discarding what has gone longest unused |
+| `Std.PrefixTrie` | 25 | text keys held by their characters, so a prefix can be asked about |
 | `Std.Num` | 15 | `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, `Div`, `Rem` and the aggregates over them |
 | `Std.Iter` | 25 | `Sequence`, ranges and collection walks, plus lazy map/filter/take/drop/zip adapters |
 | `Std.Decimal` | 30 | exact base-ten arithmetic, the seven rounding modes, scale control, the conversion path |
@@ -271,8 +276,23 @@ data answers a question those cannot:
   resolving declarations needs to be told its input is circular rather than handed an order that
   quietly is not one.
 
-Three more exist because `Map` is one-directional and single-valued, and because questions may only
-be asked of its key:
+Three more exist because `Map` answers one question — what is under this exact key — and these are
+the three next-commonest questions asked of a keyed collection:
+
+- **`Std.SortedMap`** answers about a key's *neighbours*: the largest key not greater than this one,
+  the entries between two bounds, the tenth entry. A rate table, a version range, and a histogram
+  bucket all ask that, and `Map` can only answer by reading every entry out and scanning. It also
+  takes the comparison from the caller, so ordering by a record's field or downwards is expressible
+  at all, which it is not against the runtime's own order on values.
+- **`Std.LinkedMap`** answers *what order were these put in*. [[Eval Keyed]] settled deliberately
+  that the built-in map is not insertion-ordered, because two maps with the same entries must be the
+  same map, and recorded that a separate ordered-map type remained open. This is that type, for the
+  programs that hand something back to a person in the order somebody wrote it.
+- **`Std.EnumMap`** removes an `Option` the caller already knew the answer to, which is the same
+  thing `Std.NonEmpty` does for a sequence. Over a fixed domain of keys — the days of a week, the
+  levels of a log — every key has a value by construction, so `get` answers `V`.
+Three more again, because `Map` is one-directional and single-valued, and because questions may
+only be asked of its key:
 
 - **`Std.BiMap`** is a pairing rather than a mapping — a currency code and its symbol, a user and
   their session — where which side is the key depends on which way the program is going. It also has
@@ -288,6 +308,21 @@ be asked of its key:
   the value under a whole pair should write that. What a pair-keyed `Map` cannot do is answer about
   one part of the key without reading every entry, and that is what the two indexes here buy, at the
   price of maintaining them on every write.
+
+And two whose shape is about what a collection refuses to do rather than what it holds:
+
+- **`Std.LruCache`** is a map with a bound, because a cache without one is a map that only grows.
+  It discards by least recent *use*, so reading keeps an entry alive — which is why its `get`
+  answers a cache alongside the value, since a read that did not record itself would let an entry
+  the program depends on be discarded as unused. It is built on `Std.LinkedMap`'s recency order
+  rather than repeating it.
+- **`Std.PrefixTrie`** holds text keys by their characters, so walking a prefix touches one node per
+  character of the prefix rather than one per entry in the collection, and a stem shared by many
+  keys is stored once. Autocomplete, a routing table's most specific match, and every setting under
+  one section are the questions; `Map` answers them by testing every key.
+
+`Std.HashMap` remains planned rather than shipped, and the reasons are under
+[[#Deferred, with reasons]] — they are about the language rather than about the container.
 
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
@@ -597,6 +632,17 @@ dependencies are its own files plus the compiler it is built with, and that is t
   default.
 - **`Std.Ffi`.** Calling into C requires the `foreign` capability from [[Unsafe Capabilities]] and a
   decision about how a foreign type's ownership is described. Both are open.
+- **`Std.HashMap`.** Three things block it, and none is about the container. There is no hash to
+  build on: `Std.Crypto` offers SHA-256 and nothing else, a cryptographic digest written in Pudu and
+  far too expensive per lookup, and no `Hash` trait exists anywhere. Adding one is a language
+  decision — what it guarantees across the integer family, text, and aggregates, and how every user
+  type implements it — that belongs beside `Std.Order`'s `Eq` and `Ord` rather than inside a
+  container. And it would not win even then: the built-in `Map` is a balanced tree, while a hash map
+  written in Pudu would reach its buckets through a `Map` or an `Array`, neither of which is
+  constant-time here, so the bucket lookup alone would cost what the whole ordered lookup already
+  costs, with hashing and collision handling added on top. Worth revisiting when the runtime has a
+  hashing primitive and a constant-time indexed store; until then it would be a slower `Map` with a
+  name that promises otherwise.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.

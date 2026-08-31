@@ -53,10 +53,10 @@ import Pudu.Eval.Call
 import qualified Pudu.Eval.Call as Call
 import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
-  , renderValue
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
