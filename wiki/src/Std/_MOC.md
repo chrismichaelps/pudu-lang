@@ -17,6 +17,9 @@ tags: [moc, module, stdlib]
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Math]] — generic total numeric algorithms.
+- [[Std BiMap]] — a pairing readable from either side, kept a bijection.
+- [[Std MultiMap]] — many values under one key, with the empty-key bookkeeping done.
+- [[Std MultiKeyMap]] — a two-part key with lookup by the whole key or either part.
 
 ## Referenced by
 
