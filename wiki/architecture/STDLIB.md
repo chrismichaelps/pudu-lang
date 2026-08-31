@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Thirty-five modules, 1023 exported declarations, every one written in Pudu.
+Thirty-eight modules, 1103 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -226,6 +226,9 @@ Thirty-five modules, 1023 exported declarations, every one written in Pudu.
 | `Std.Deque` | 21 | a queue cheap at both ends, for breadth-first walks and scheduling |
 | `Std.Heap` | 18 | a collection that always knows its smallest element, and the few smallest without a sort |
 | `Std.Graph` | 22 | nodes and directed edges, topological order, cycles, components, shortest path |
+| `Std.SortedMap` | 31 | a map ordered by the caller's own comparison, with floor, ceiling, range, and rank |
+| `Std.LinkedMap` | 27 | a map that iterates in the order its keys were first inserted |
+| `Std.EnumMap` | 22 | a total map over a fixed key domain, whose `get` answers a value rather than an `Option` |
 | `Std.BiMap` | 24 | a pairing read from either side, kept a bijection through every write |
 | `Std.MultiMap` | 30 | many values under one key, where a key with no values does not exist |
 | `Std.MultiKeyMap` | 24 | a two-part key with lookup by the whole key or by either part alone |
@@ -271,8 +274,23 @@ data answers a question those cannot:
   resolving declarations needs to be told its input is circular rather than handed an order that
   quietly is not one.
 
-Three more exist because `Map` is one-directional and single-valued, and because questions may only
-be asked of its key:
+Three more exist because `Map` answers one question — what is under this exact key — and these are
+the three next-commonest questions asked of a keyed collection:
+
+- **`Std.SortedMap`** answers about a key's *neighbours*: the largest key not greater than this one,
+  the entries between two bounds, the tenth entry. A rate table, a version range, and a histogram
+  bucket all ask that, and `Map` can only answer by reading every entry out and scanning. It also
+  takes the comparison from the caller, so ordering by a record's field or downwards is expressible
+  at all, which it is not against the runtime's own order on values.
+- **`Std.LinkedMap`** answers *what order were these put in*. [[Eval Keyed]] settled deliberately
+  that the built-in map is not insertion-ordered, because two maps with the same entries must be the
+  same map, and recorded that a separate ordered-map type remained open. This is that type, for the
+  programs that hand something back to a person in the order somebody wrote it.
+- **`Std.EnumMap`** removes an `Option` the caller already knew the answer to, which is the same
+  thing `Std.NonEmpty` does for a sequence. Over a fixed domain of keys — the days of a week, the
+  levels of a log — every key has a value by construction, so `get` answers `V`.
+Three more again, because `Map` is one-directional and single-valued, and because questions may
+only be asked of its key:
 
 - **`Std.BiMap`** is a pairing rather than a mapping — a currency code and its symbol, a user and
   their session — where which side is the key depends on which way the program is going. It also has

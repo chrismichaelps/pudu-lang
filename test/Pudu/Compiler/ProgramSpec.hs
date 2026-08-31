@@ -14,7 +14,7 @@ import Pudu.Compiler.Program
   )
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
-import Pudu.Eval.Value (renderValue)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
   , diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
@@ -191,6 +191,7 @@ testProgramEvaluation = do
   collections <- runEntry "test-fixtures/stdlib/UsesList.pudu"
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
+  keyedInvariants <- runEntry "test-fixtures/stdlib/KeyedInvariants.pudu"
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
@@ -217,6 +218,7 @@ testProgramEvaluation = do
   declaredWidths <- runEntry "test-fixtures/stdlib/UsesWidths.pudu"
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
+  orderedMaps <- runEntry "test-fixtures/stdlib/UsesOrderedMaps.pudu"
   relationalMaps <- runEntry "test-fixtures/stdlib/UsesRelationalMaps.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
@@ -228,6 +230,13 @@ testProgramEvaluation = do
     , counterexample
         "a sequence that cannot be empty, a queue with two ends, a heap, and a graph"
         (structures === Just "0")
+    {-| The three ordered maps, including the cases easiest to get wrong: a
+        boundary landing exactly on an entry, a key that is absent, an empty
+        structure, and a re-insertion that must not move anything. Each check
+        answers 1, so a shortfall names how many failed. -}
+    , counterexample
+        "a map with neighbours, a map that remembers its order, and a total map"
+        (orderedMaps === Just "38")
     {-| The relational maps, weighted toward the invariants that break quietly:
         a two-way map staying a bijection when a value collides, a multi-map
         never reporting a key whose values ran out, and a partial index staying
@@ -241,6 +250,12 @@ testProgramEvaluation = do
         (wide === Just "64")
     , counterexample "maps, sets, and bit work link together"
         (keyed === Just "30")
+    {-| Every promise the keyed runtime makes about order, duplication, and
+        absence, so a change to how entries are stored cannot quietly change
+        what a map is. Each check answers 1, so a shortfall names how many
+        failed. -}
+    , counterexample "keyed collections keep their order, uniqueness, and overrides"
+        (keyedInvariants === Just "18")
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"

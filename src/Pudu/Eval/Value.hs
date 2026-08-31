@@ -14,17 +14,20 @@ module Pudu.Eval.Value
   , stringMethodName
   , Closure (..)
   , Value (..)
-  , renderValue
-  , valueKind
+  , OrdValue (..)
+  , compareValues
+  , arrayMethodName
   ) where
 
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
+import Data.Set (Set)
 import Data.Text (Text)
-import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind, integerKindName)
-import qualified Data.Text as Text
-import Pudu.DecimalLiteral (Decimal, renderDecimal)
+import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
+import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
@@ -51,8 +54,8 @@ data Value
   | UnitValue
   | TupleValue ![Value]
   | ArrayValue !(Seq Value)
-  | MapValue ![(Value, Value)]
-  | SetValue ![Value]
+  | MapValue !(Map OrdValue Value)
+  | SetValue !(Set OrdValue)
   | RecordValue !Text ![(Text, Value)]
   | VariantValue !Text ![Value]
   | FunctionValue !Closure
@@ -293,75 +296,111 @@ data Closure = Closure
   }
   deriving stock (Eq, Show)
 
-{-| Render a value the way the session prints it. Strings and characters show
-    their quotes and escape their control characters, so a printed `"1"` is
-    never mistaken for the integer and a newline never breaks the line. -}
-renderValue :: Value -> Text
-renderValue value = case value of
-  IntValue _ number -> Text.pack (show number)
-  FloatValue _ number -> Text.pack (show number)
-  DecimalValue number -> renderDecimal number
-  StrValue text -> "\"" <> escape text <> "\""
-  CharValue character -> "'" <> escape (Text.singleton character) <> "'"
-  BoolValue flag -> if flag then "true" else "false"
-  NullValue -> "null"
-  UnitValue -> "()"
-  TupleValue members -> "(" <> Text.intercalate ", " (map renderValue members) <> ")"
-  ArrayValue members -> "[" <> Text.intercalate ", " (map renderValue (toList members)) <> "]"
-  RecordValue name fields ->
-    name <> "{" <> Text.intercalate ", " (map renderField fields) <> "}"
-  VariantValue name payload
-    | null payload -> name
-    | otherwise -> name <> "(" <> Text.intercalate ", " (map renderValue payload) <> ")"
-  FunctionValue closure -> "<fn " <> closureName closure <> ">"
-  TaskValue closure _ _ -> "<task " <> closureName closure <> ">"
-  BuiltinValue PanicBuiltin -> "<builtin panic>"
-  BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
-  BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
-  BuiltinValue SetOfBuiltin -> "<builtin setOf>"
-  BuiltinValue ShowBuiltin -> "<builtin show>"
-  BuiltinValue other -> "<builtin " <> builtinName other <> ">"
-  MapValue entries ->
-    "{" <> Text.intercalate ", " [renderValue key <> ": " <> renderValue held | (key, held) <- entries] <> "}"
-  SetValue members -> "#{" <> Text.intercalate ", " (map renderValue members) <> "}"
-  MapMethodValue method _ -> "<map method " <> mapMethodName method <> ">"
-  SetMethodValue method _ -> "<set method " <> setMethodName method <> ">"
-  ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
-  StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
-  CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
- where
-  renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
+{-| @Eval.Value.OrdValue — a value used as a key.
 
-escape :: Text -> Text
-escape =
-  Text.replace "\n" "\\n" . Text.replace "\t" "\\t" . Text.replace "\"" "\\\"" . Text.replace "\\" "\\\\"
+    Keyed collections need a total order on the values they hold, and `Value`
+    deliberately has none: a function is a value, and no order on functions is
+    meaningful. Wrapping the ones that can be ordered keeps that distinction
+    visible at every use rather than hiding it behind an instance that would
+    silently accept a key it cannot compare.
 
-{-| A short type-shaped label for diagnostics; it is a runtime shape, not a
-    static type. -}
-valueKind :: Value -> Text
-valueKind value = case value of
-  IntValue kind _ -> integerKindName kind
-  FloatValue _ _ -> "float"
-  DecimalValue _ -> "decimal"
-  StrValue _ -> "string"
-  CharValue _ -> "char"
-  BoolValue _ -> "bool"
-  NullValue -> "null"
-  UnitValue -> "unit"
-  TupleValue _ -> "tuple"
-  ArrayValue _ -> "array"
-  RecordValue name _ -> name
-  VariantValue name _ -> name
-  FunctionValue _ -> "function"
-  TaskValue _ _ _ -> "task"
-  BuiltinValue _ -> "builtin"
-  MapValue _ -> "map"
-  SetValue _ -> "set"
-  MapMethodValue _ _ -> "map method"
-  SetMethodValue _ _ -> "set method"
-  ArrayMethodValue _ _ -> "array method"
-  StringMethodValue _ _ -> "text method"
-  CharMethodValue _ _ -> "character method"
+    The wrapper and its order live here rather than beside `comparableValue`
+    because the keyed collections are constructors of `Value` itself: a map is
+    keyed by this order, so the type cannot be declared without it. -}
+newtype OrdValue = OrdValue {unOrdValue :: Value}
+  deriving stock (Eq, Show)
+
+instance Ord OrdValue where
+  compare (OrdValue left) (OrdValue right) = compareValues left right
+
+{-| Compare two values.
+
+    Values of different shapes are ordered by shape, so a map may hold keys of
+    more than one type without the comparison becoming partial. Within a shape
+    the order is the obvious one: numeric for numbers, scalar order for text and
+    characters, and lexicographic for every aggregate.
+
+    Two values that cannot be ordered compare equal. That is not a claim that
+    they are: it keeps the order total so a malformed key cannot make the
+    structure inconsistent, and the caller is refused the insertion before it
+    ever gets here. -}
+compareValues :: Value -> Value -> Ordering
+compareValues left right = case (left, right) of
+  (IntValue _ a, IntValue _ b) -> compare a b
+  (FloatValue _ a, FloatValue _ b) -> compare a b
+  (IntValue _ a, FloatValue _ b) -> compare (fromIntegral a) b
+  (FloatValue _ a, IntValue _ b) -> compare a (fromIntegral b)
+  {-| Two decimals compare as the numbers they are, not as the digits they
+      store, so `1.50d` and `1.5d` are equal even though only one of them
+      renders with a trailing zero. A number whose `==` depended on how it was
+      written would fail the one property every reader assumes of one. -}
+  (DecimalValue a, DecimalValue b) -> decimalCompare a b
+  (StrValue a, StrValue b) -> compare a b
+  (CharValue a, CharValue b) -> compare a b
+  (BoolValue a, BoolValue b) -> compare a b
+  (NullValue, NullValue) -> EQ
+  (UnitValue, UnitValue) -> EQ
+  (TupleValue a, TupleValue b) -> compareLists a b
+  (ArrayValue a, ArrayValue b) -> compareLists (toList a) (toList b)
+  {-| Two keyed collections compare entry by entry in key order, which is the
+      order they are held in, so two built differently still compare equal. -}
+  (MapValue a, MapValue b) -> compareEntries (Map.toAscList a) (Map.toAscList b)
+  (SetValue a, SetValue b) -> compareLists (map unOrdValue (Set.toAscList a)) (map unOrdValue (Set.toAscList b))
+  (RecordValue nameA a, RecordValue nameB b) ->
+    compare nameA nameB <> compareFields a b
+  (VariantValue nameA a, VariantValue nameB b) ->
+    compare nameA nameB <> compareLists a b
+  _ -> compare (shapeRank left) (shapeRank right)
+
+compareLists :: [Value] -> [Value] -> Ordering
+compareLists [] [] = EQ
+compareLists [] _ = LT
+compareLists _ [] = GT
+compareLists (a : as) (b : bs) = compareValues a b <> compareLists as bs
+
+compareEntries :: [(OrdValue, Value)] -> [(OrdValue, Value)] -> Ordering
+compareEntries [] [] = EQ
+compareEntries [] _ = LT
+compareEntries _ [] = GT
+compareEntries ((keyA, a) : as) ((keyB, b) : bs) =
+  compare keyA keyB <> compareValues a b <> compareEntries as bs
+
+{-| Records compare field by field in declaration order, which is the order the
+    reader wrote them and therefore the one they can predict. -}
+compareFields :: [(Text, Value)] -> [(Text, Value)] -> Ordering
+compareFields [] [] = EQ
+compareFields [] _ = LT
+compareFields _ [] = GT
+compareFields ((nameA, a) : as) ((nameB, b) : bs) =
+  compare nameA nameB <> compareValues a b <> compareFields as bs
+
+{-| The order between shapes, so values of different kinds still compare. The
+    numbers have no meaning beyond being distinct and stable. -}
+shapeRank :: Value -> Int
+shapeRank value = case value of
+  UnitValue -> 0
+  NullValue -> 1
+  BoolValue _ -> 2
+  IntValue _ _ -> 3
+  FloatValue _ _ -> 3
+  DecimalValue _ -> 18
+  CharValue _ -> 4
+  StrValue _ -> 5
+  TupleValue _ -> 6
+  ArrayValue _ -> 7
+  SetValue _ -> 16
+  MapValue _ -> 17
+  VariantValue _ _ -> 8
+  RecordValue _ _ -> 9
+  FunctionValue _ -> 10
+  TaskValue{} -> 11
+  BuiltinValue _ -> 12
+  ArrayMethodValue _ _ -> 13
+  StringMethodValue _ _ -> 14
+  CharMethodValue _ _ -> 15
+  MapMethodValue _ _ -> 18
+  SetMethodValue _ _ -> 19
+
 
 {-| The name a text method answers to, which is the same spelling the checker
     matches and the diagnostic prints. -}

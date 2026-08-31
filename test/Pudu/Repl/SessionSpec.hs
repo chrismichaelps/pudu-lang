@@ -10,7 +10,7 @@ import Pudu.Diagnostic.Render
   , renderDiagnosticsWith
   , renderSummary
   )
-import Pudu.Eval.Value (renderValue)
+import Pudu.Eval.Render (renderValue)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
 import Pudu.Repl.Describe
   ( declarationSummary

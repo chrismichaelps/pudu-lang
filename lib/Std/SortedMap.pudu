@@ -1,0 +1,297 @@
+module Std.SortedMap
+
+import Std.List as List
+
+/// A map whose keys are kept in an order the caller chose, and which can be
+/// asked about a key's neighbours rather than only about the key itself.
+///
+/// `Map` answers one question well: what is stored under this exact key. A rate
+/// table, a version range, a timeline, and a histogram bucket all ask a
+/// different one — what is stored under the largest key not greater than this
+/// — and `Map` can only answer it by reading every entry out and scanning, which
+/// walks the whole map to find something an ordered structure walks a fraction
+/// of. `Map` also orders by the runtime's own order on values, so sorting by a
+/// record's field, by a case-insensitive spelling, or downwards is not
+/// something a caller can ask for at all.
+///
+/// The entries are held in one array, sorted, and reached by halving the range
+/// each step, so a lookup passes a handful of entries rather than all of them.
+/// Insertion and removal move an element into or out of the middle of that
+/// array, which the runtime's arrays do about as cheaply as they are read, so
+/// keeping the order costs no more than looking through it.
+///
+/// The comparison is carried with the entries rather than passed to each call.
+/// A map compared one way on Monday and another way on Tuesday is not a map,
+/// and the operations below would each need the caller to remember which — so
+/// the order is fixed when the map is created and every later operation reads
+/// it from there.
+export type SortedMap[K, V] = {
+  entries: Array[(K, V)],
+  before: fn(K, K) -> Bool
+}
+
+/// An empty map ordered by the given comparison.
+///
+/// The comparison answers whether its first key comes strictly before its
+/// second. Strictly, because two keys that each come before the other are two
+/// keys the order cannot tell apart, and this treats keys it cannot tell apart
+/// as the same key.
+export fn empty[K, V](before: fn(K, K) -> Bool) -> SortedMap[K, V] {
+  SortedMap{entries: [], before: before}
+}
+
+/// How many entries the map holds.
+export fn size[K, V](map: &SortedMap[K, V]) -> Int { map.entries.length() }
+
+/// Whether the map holds nothing.
+export fn isEmpty[K, V](map: &SortedMap[K, V]) -> Bool { map.entries.length() == 0 }
+
+/// Where a key belongs: the number of entries that come strictly before it.
+///
+/// Every other operation is stated in terms of this one. It is the insertion
+/// point for a key the map lacks and the position of the key itself for one it
+/// has, which is what lets one search serve lookup, insertion, and both
+/// neighbour questions rather than each walking the entries again.
+fn locate[K, V](map: &SortedMap[K, V], key: K) -> Int {
+  var low = 0
+  var high = map.entries.length()
+  while low < high {
+    let middle = low + (high - low) / 2
+    let found = map.entries[middle]
+    if (map.before)(found[0], key) { low = middle + 1 } else { high = middle }
+  }
+  low
+}
+
+/// Whether the entry at a position has exactly this key.
+///
+/// Two keys are the same key when neither comes before the other. Asking the
+/// order rather than asking equality is deliberate: the caller chose what
+/// distinguishes two keys when they chose the comparison, and a map that
+/// located by one rule and matched by another could hold a key it could not
+/// find.
+fn holdsAt[K, V](map: &SortedMap[K, V], at: Int, key: K) -> Bool {
+  if at < 0 || at >= map.entries.length() { false } else {
+    let found = map.entries[at]
+    !(map.before)(found[0], key) && !(map.before)(key, found[0])
+  }
+}
+
+/// The value stored under a key, or `None`.
+export fn get[K, V](map: &SortedMap[K, V], key: K) -> Option[V] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) { Some(map.entries[at][1]) } else { None }
+}
+
+/// The value stored under a key, or a fallback.
+export fn getOr[K, V](map: &SortedMap[K, V], key: K, fallback: V) -> V {
+  match get(map, key) {
+    case Some(found) => found
+    case None => fallback
+  }
+}
+
+/// Whether a key has an entry.
+export fn containsKey[K, V](map: &SortedMap[K, V], key: K) -> Bool {
+  holdsAt(map, locate(map, key), key)
+}
+
+/// The map with an entry added, replacing any entry under the same key.
+export fn insert[K, V](map: &SortedMap[K, V], key: K, held: V) -> SortedMap[K, V] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) {
+    SortedMap {
+      entries: map.entries.remove(at).insert(at, (key, held)),
+      before: map.before
+    }
+  } else {
+    SortedMap{entries: map.entries.insert(at, (key, held)), before: map.before}
+  }
+}
+
+/// The map with a key's entry removed, or unchanged when there is none.
+export fn remove[K, V](map: &SortedMap[K, V], key: K) -> SortedMap[K, V] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) {
+    SortedMap{entries: map.entries.remove(at), before: map.before}
+  } else { *map }
+}
+
+/// Every entry as a pair, in key order.
+export fn pairs[K, V](map: &SortedMap[K, V]) -> Array[(K, V)] { map.entries }
+
+/// Every key, in order.
+export fn keys[K, V](map: &SortedMap[K, V]) -> Array[K] {
+  var out = []
+  for pair in map.entries { out = out.push(pair[0]) }
+  out
+}
+
+/// Every value, in the order of its key.
+export fn values[K, V](map: &SortedMap[K, V]) -> Array[V] {
+  var out = []
+  for pair in map.entries { out = out.push(pair[1]) }
+  out
+}
+
+/// The entry at a position in key order, or `None` when there is none.
+///
+/// An ordered structure knows which entry is the tenth; a map that only answers
+/// about keys does not, and a caller wanting a median, a percentile, or a page
+/// of results has to read everything out to count.
+export fn nth[K, V](map: &SortedMap[K, V], index: Int) -> Option[(K, V)] {
+  if index < 0 || index >= map.entries.length() { None } else { Some(map.entries[index]) }
+}
+
+/// The smallest key and its value, or `None` for an empty map.
+export fn first[K, V](map: &SortedMap[K, V]) -> Option[(K, V)] { nth(map, 0) }
+
+/// The largest key and its value, or `None` for an empty map.
+export fn last[K, V](map: &SortedMap[K, V]) -> Option[(K, V)] {
+  nth(map, map.entries.length() - 1)
+}
+
+/// The largest entry whose key is not greater than the given one.
+///
+/// The question a lookup table asks. A postage rate for a parcel of 900 grams
+/// is the rate for the heaviest bracket at or below 900, and the table has no
+/// entry for 900 itself.
+export fn floor[K, V](map: &SortedMap[K, V], key: K) -> Option[(K, V)] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) { Some(map.entries[at]) } else { nth(map, at - 1) }
+}
+
+/// The smallest entry whose key is not less than the given one.
+export fn ceiling[K, V](map: &SortedMap[K, V], key: K) -> Option[(K, V)] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) { Some(map.entries[at]) } else { nth(map, at) }
+}
+
+/// The largest entry whose key comes strictly before the given one.
+export fn lower[K, V](map: &SortedMap[K, V], key: K) -> Option[(K, V)] {
+  nth(map, locate(map, key) - 1)
+}
+
+/// The smallest entry whose key comes strictly after the given one.
+export fn higher[K, V](map: &SortedMap[K, V], key: K) -> Option[(K, V)] {
+  let at = locate(map, key)
+  if holdsAt(map, at, key) { nth(map, at + 1) } else { nth(map, at) }
+}
+
+/// Every entry whose key is at least `from` and strictly before `until`.
+///
+/// Half-open, so adjacent ranges tile without overlapping and without a gap:
+/// the entries from one boundary to the next, then from that next one onward,
+/// name every entry exactly once.
+export fn range[K, V](map: &SortedMap[K, V], from: K, until: K) -> Array[(K, V)] {
+  let start = locate(map, from)
+  let stop = locate(map, until)
+  if stop <= start { [] } else { map.entries.slice(start, stop) }
+}
+
+/// The map with only the entries in the half-open range kept.
+export fn restrictRange[K, V](map: &SortedMap[K, V], from: K, until: K) -> SortedMap[K, V] {
+  SortedMap{entries: range(map, from, until), before: map.before}
+}
+
+/// A map built from pairs, ordered by the given comparison.
+/// A later pair replaces an earlier one with the same key.
+export fn fromPairs[K, V](
+  entries: &Array[(K, V)],
+  before: fn(K, K) -> Bool
+) -> SortedMap[K, V] {
+  var out = empty(before)
+  for pair in entries { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// An entry added only when its key has none.
+export fn insertIfAbsent[K, V](map: &SortedMap[K, V], key: K, held: V) -> SortedMap[K, V] {
+  if containsKey(map, key) { *map } else { insert(map, key, held) }
+}
+
+/// An entry's value transformed, inserting a starting value when it is absent.
+export fn upsert[K, V](
+  map: &SortedMap[K, V],
+  key: K,
+  start: V,
+  transform: fn(V) -> V
+) -> SortedMap[K, V] {
+  match get(map, key) {
+    case Some(found) => insert(map, key, transform(found))
+    case None => insert(map, key, start)
+  }
+}
+
+/// Every value transformed, keeping the keys and their order.
+export fn mapValues[K, A, B](
+  map: &SortedMap[K, A],
+  transform: fn(A) -> B
+) -> SortedMap[K, B] {
+  var out = []
+  for pair in map.entries { out = out.push((pair[0], transform(pair[1]))) }
+  SortedMap{entries: out, before: map.before}
+}
+
+/// Only the entries the predicate accepts.
+export fn filter[K, V](
+  map: &SortedMap[K, V],
+  keep: fn(K, V) -> Bool
+) -> SortedMap[K, V] {
+  var out = []
+  for pair in map.entries {
+    if keep(pair[0], pair[1]) { out = out.push(pair) }
+  }
+  SortedMap{entries: out, before: map.before}
+}
+
+/// Every entry combined into one value, in key order.
+export fn fold[K, V, A](
+  map: &SortedMap[K, V],
+  combine: fn(A, K, V) -> A,
+  start: A
+) -> A {
+  var accumulated = start
+  for pair in map.entries { accumulated = combine(accumulated, pair[0], pair[1]) }
+  accumulated
+}
+
+/// Two maps combined, with the second map's entries winning.
+/// The result is ordered by the first map's comparison, which is the one the
+/// caller reached for when they wrote the merge.
+export fn merge[K, V](
+  left: &SortedMap[K, V],
+  right: &SortedMap[K, V]
+) -> SortedMap[K, V] {
+  var out = *left
+  for pair in right.entries { out = insert(&out, pair[0], pair[1]) }
+  out
+}
+
+/// The map with its entries in the reverse of its order.
+///
+/// The entries are already sorted, so this reverses them rather than sorting
+/// again, and carries a comparison that agrees with the new arrangement.
+export fn reversed[K, V](map: &SortedMap[K, V]) -> SortedMap[K, V] {
+  let flipped = map.before
+  SortedMap {
+    entries: List.reversed(&map.entries),
+    before: fn(left: K, right: K) -> Bool => flipped(right, left)
+  }
+}
+
+/// Whether every entry satisfies the predicate. True for an empty map.
+export fn all[K, V](map: &SortedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in map.entries {
+    if !holds(pair[0], pair[1]) { return false }
+  }
+  true
+}
+
+/// Whether any entry satisfies the predicate. False for an empty map.
+export fn any[K, V](map: &SortedMap[K, V], holds: fn(K, V) -> Bool) -> Bool {
+  for pair in map.entries {
+    if holds(pair[0], pair[1]) { return true }
+  }
+  false
+}
