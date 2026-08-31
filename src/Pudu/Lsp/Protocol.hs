@@ -1,6 +1,7 @@
 {-| @Program.Lsp.Protocol.Module — frames and shapes the wire carries -}
 module Pudu.Lsp.Protocol
-  ( Message (..)
+  ( Incoming (..)
+  , Message (..)
   , Position (..)
   , Range (..)
   , errorResponse
@@ -82,14 +83,61 @@ positionOf value = do
     that many *characters* instead would desynchronise the stream the first time
     a client sent a non-ASCII identifier — after which every later message is
     read from the wrong offset. -}
-readMessage :: Handle -> IO (Maybe Message)
+{-| @Lsp.Protocol.Incoming — what one read off the wire turned out to be.
+
+    Four outcomes rather than one, because only one of them ends the session. A
+    frame the server cannot decode is not the stream ending, and a client's own
+    reply carries no method and is ordinary traffic with nothing to answer.
+
+    What separates the two that stop from the two that do not is whether the
+    reader still knows where the next frame begins. A body that was not JSON was
+    still exactly `Content-Length` bytes long, so the stream stays aligned and
+    reading can go on. A frame with no length, or one that stopped short, leaves
+    the reader somewhere in the middle of the stream, and the protocol carries no
+    marker to find the next boundary by. -}
+data Incoming
+  = EndOfStream
+  | NotForServer
+  | Unreadable !Text
+  | Unframed !Text
+  | Received !Message
+  deriving stock (Eq, Show)
+
+{-| Read one framed message.
+
+    A body shorter than its `Content-Length` means the client stopped writing
+    part-way through, so the frame it began can never be completed. -}
+readMessage :: Handle -> IO Incoming
 readMessage handle = do
   headers <- readHeaders handle []
-  case headers >>= contentLength of
-    Nothing -> pure Nothing
-    Just size -> do
-      body <- ByteString.hGet handle size
-      pure (parse (Encoding.decodeUtf8Lenient body) >>= decodeMessage)
+  case headers of
+    Nothing -> pure EndOfStream
+    Just carried -> case contentLength carried of
+      Nothing -> pure (Unframed "a frame arrived with no readable Content-Length")
+      Just size -> do
+        body <- ByteString.hGet handle size
+        if ByteString.length body < size
+          then pure (Unframed "the stream ended part-way through a frame")
+          else pure (classify (Encoding.decodeUtf8Lenient body))
+
+{-| A well-formed message with no `method` is the client answering something the
+    server asked. Telling it apart from text that could not be read at all is
+    what keeps a routine reply from looking like a broken frame. -}
+classify :: Text -> Incoming
+classify body = case parse body of
+  Nothing -> Unreadable "a frame arrived whose body was not JSON"
+  Just value -> case decodeMessage value of
+    Just message -> Received message
+    Nothing
+      | isClientReply value -> NotForServer
+      | otherwise -> Unreadable "a frame arrived with no method to dispatch on"
+
+isClientReply :: Json -> Bool
+isClientReply value = case lookupField "id" value of
+  Nothing -> False
+  Just _ -> case (lookupField "result" value, lookupField "error" value) of
+    (Nothing, Nothing) -> False
+    _ -> True
 
 readHeaders :: Handle -> [Text] -> IO (Maybe [Text])
 readHeaders handle accumulated = do

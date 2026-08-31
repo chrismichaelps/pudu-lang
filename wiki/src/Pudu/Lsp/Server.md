@@ -79,12 +79,22 @@ serverCapabilities :: Json
 ## Algorithm
 
 Read a message; if it carried text, compile and store the analysis; answer purely from what is
-stored; write the replies. The loop ends when the stream closes or `exit` arrives.
+stored; write the replies. The loop ends when the stream closes, when `exit` arrives, or when a
+framing fault leaves the reader with no way to find the next message.
+
+Everything a message costs is guarded. A failure while compiling or answering is caught, reported,
+and answered with an error to the request that caused it; the loop then carries on and the document
+store keeps whatever it last held, since what the failed analysis would have stored is unknown. The
+replies are forced inside that guard, because `answer` is pure and builds them lazily, so a failure
+inside one would otherwise surface where it is written to the handle rather than where it can be
+caught.
 
 ## Negative Logic (Prohibited Paths)
 
 - No analysis of its own: nothing here decides what a program means.
-- No reply to a notification, and no silent drop of a request.
+- No reply to a notification, and no silent drop of a request — including when the work for it fails, since a client that receives nothing waits for as long as the session lasts.
+- No end to the session for a message the server could not understand.
+- No success status on a session that ended because the stream broke.
 - No capability announced that is not implemented.
 - No disk read for an open document.
 
@@ -95,6 +105,17 @@ stored; write the replies. The loop ends when the stream closes or `exit` arrive
   cache shows an error that is fixed or hides one that is not, and both destroy trust in the editor
   faster than a slower response does. _Rejected:_ a dependency-tracked rebuild graph, which is most
   of the bulk of every mature server and buys nothing at this size.
+- **Q:** Should a failure while answering end the session? **A:** No. _Rationale:_ the failure is
+  the server's own, and taking the editor's whole session with it turns one unanswerable question
+  into a dead language server that has to be restarted by hand. Answering that one request with an
+  error leaves everything else working. _Rejected:_ letting it propagate, which is what made a
+  single unhandled case cost the session.
+- **Q:** Then why does a framing fault end it? **A:** Because it is the one failure that leaves the
+  reader unable to continue. _Rationale:_ every other failure is contained to a frame whose bounds
+  are known, so the next read starts in the right place; a framing fault has no such boundary and
+  the protocol offers no marker to recover one. It leaves with a failing status, because an editor
+  told a session succeeded reports a clean shutdown for something that broke. _Rejected:_ guessing
+  at where the next frame starts.
 - **Q:** Why is `answer` pure when the protocol is inherently effectful? **A:** So the features can
   be tested. _Rationale:_ every handler is a function from what was compiled to what the editor
   shows, and the whole suite runs without a client. _Rejected:_ threading IO through the handlers,
