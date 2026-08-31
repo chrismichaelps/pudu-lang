@@ -291,7 +291,7 @@ testProgramEvaluation = do
         would pass none of them. -}
     , counterexample
         "a parameter standing for a constructor serves every container"
-        (higherKinds === Just "12")
+        (higherKinds === Just "14")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

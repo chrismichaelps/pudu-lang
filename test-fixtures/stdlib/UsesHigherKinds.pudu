@@ -28,6 +28,16 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // A sum is a container too, now that a variant finds what its sum implements.
+  match Mappable.over(&Some(5), fn(n: Int) -> Int => n + 1) {
+    case Some(n) => { if n == 6 { held = held + 1 } }
+    case None => {}
+  }
+  match Mappable.over(&None, fn(n: Int) -> Int => n + 1) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
   // The transform may change the type it holds, which is what F[A] -> F[B] says.
   if Mappable.over(&[1, 2], fn(n: Int) -> Str => show(n)) == ["1", "2"] {
     held = held + 1

@@ -734,6 +734,27 @@ testBuiltinImpls = do
     , "}"
     ]
     "smallest(&[3, 1, 2])"
+  onOption <- evaluateWith
+    [ "trait Named { fn label(self: &Self) -> Int }"
+    , "impl Named for Option[Int] { fn label(self: &Self) -> Int { 7 } }"
+    ]
+    "Some(1).label()"
+  onAbsent <- evaluateWith
+    [ "trait Named { fn label(self: &Self) -> Int }"
+    , "impl Named for Option[Int] { fn label(self: &Self) -> Int { 7 } }"
+    ]
+    "None.label()"
+  onResult <- evaluateWith
+    [ "trait Named { fn label(self: &Self) -> Int }"
+    , "impl Named for Result[Int, Str] { fn label(self: &Self) -> Int { 9 } }"
+    ]
+    "Err(\"x\").label()"
+  onUserSum <- evaluateWith
+    [ "type Colour = Red | Green"
+    , "trait Named { fn label(self: &Self) -> Int }"
+    , "impl Named for Colour { fn label(self: &Self) -> Int { 5 } }"
+    ]
+    "Green.label()"
   pure $ conjoin
     [ counterexample "an implementation for Int is reachable" (onInteger === "42")
     , counterexample "an implementation for Str is reachable" (onText === "\"hi!\"")
@@ -741,6 +762,15 @@ testBuiltinImpls = do
     , counterexample "a built-in method still wins its own name" (builtinStillWins === "3")
     , counterexample "a bounded generic works over a built-in type"
         (generic === "Some(1)")
+    {-| A value of a sum is one of its variants, and an implementation is
+        written for the sum. Looking only at the variant found nothing and
+        reported a type the reader never wrote. -}
+    , counterexample "an implementation for Option is reachable from a variant"
+        (onOption === "7")
+    , counterexample "and from the variant carrying nothing" (onAbsent === "7")
+    , counterexample "an implementation for Result is reachable" (onResult === "9")
+    , counterexample "a program's own sum is reachable the same way"
+        (onUserSum === "5")
     ]
 
 {-| The effects, against a real file this machine is willing to give us.

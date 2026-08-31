@@ -72,6 +72,11 @@ installBuiltinConstructors :: Evaluator ()
 installBuiltinConstructors = do
   mapM_ (\name -> bind name (VariantValue name []))
     ["Some", "None", "Ok", "Err"]
+  {-| The wired-in sums own their variants the way a declared sum does. Without
+      this an implementation written for `Option` is looked for under `Some`,
+      and the reader is told a type they never wrote has no such member. -}
+  mapM_ (uncurry recordVariantOwner)
+    [("Some", "Option"), ("None", "Option"), ("Ok", "Result"), ("Err", "Result")]
   bind "panic" (BuiltinValue PanicBuiltin)
   bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
   bind "mapOf" (BuiltinValue MapOfBuiltin)
