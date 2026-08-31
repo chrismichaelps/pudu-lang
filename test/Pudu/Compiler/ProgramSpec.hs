@@ -219,6 +219,7 @@ testProgramEvaluation = do
   widths <- runEntry "test-fixtures/stdlib/UsesNumericWidths.pudu"
   structures <- runEntry "test-fixtures/stdlib/UsesStructures.pudu"
   orderedMaps <- runEntry "test-fixtures/stdlib/UsesOrderedMaps.pudu"
+  relationalMaps <- runEntry "test-fixtures/stdlib/UsesRelationalMaps.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -236,6 +237,13 @@ testProgramEvaluation = do
     , counterexample
         "a map with neighbours, a map that remembers its order, and a total map"
         (orderedMaps === Just "38")
+    {-| The relational maps, weighted toward the invariants that break quietly:
+        a two-way map staying a bijection when a value collides, a multi-map
+        never reporting a key whose values ran out, and a partial index staying
+        in step with the entries it indexes. Each check answers 1. -}
+    , counterexample
+        "a map read from both sides, a map of many values, and a map keyed by parts"
+        (relationalMaps === Just "42")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"
