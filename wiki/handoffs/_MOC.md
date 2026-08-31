@@ -15,6 +15,7 @@ tags: [moc, handoff]
 - [[2026-08-29-diverging-block-never]] — language-to-semantics handoff for typing direct control-transfer block endings as `Never`.
 - [[2026-08-29-restore-clean-ci]] — tooling handoff for the test-warning and standard-library formatting failures already on `dev`.
 - [[2026-08-29-lsp-install-refresh]] — tooling handoff for recent-language LSP compatibility, deterministic refresh installation, and warning-free CI actions.
+- [[2026-08-30-public-language-wiki]] — documentation handoff for the reader-facing GitHub wiki and concise repository README.
 
 ## Referenced by
 
