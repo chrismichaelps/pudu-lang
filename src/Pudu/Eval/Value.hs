@@ -102,6 +102,13 @@ builtinName value = case value of
   FileExistsBuiltin -> "fileExists"
   RemoveFileBuiltin -> "removeFile"
   ListDirectoryBuiltin -> "listDirectory"
+  OpenReaderBuiltin -> "openReader"
+  OpenWriterBuiltin -> "openWriter"
+  OpenAppenderBuiltin -> "openAppender"
+  ReadChunkBuiltin -> "readChunk"
+  WriteChunkBuiltin -> "writeChunk"
+  FlushWriterBuiltin -> "flushWriter"
+  CloseHandleBuiltin -> "closeHandle"
   CreateDirectoryBuiltin -> "createDirectory"
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
@@ -154,6 +161,13 @@ data Builtin
   | FileExistsBuiltin
   | RemoveFileBuiltin
   | ListDirectoryBuiltin
+  | OpenReaderBuiltin
+  | OpenWriterBuiltin
+  | OpenAppenderBuiltin
+  | ReadChunkBuiltin
+  | WriteChunkBuiltin
+  | FlushWriterBuiltin
+  | CloseHandleBuiltin
   | CreateDirectoryBuiltin
   | ArgumentsBuiltin
   | EnvironmentBuiltin

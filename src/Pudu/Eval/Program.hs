@@ -18,6 +18,7 @@ module Pudu.Eval.Program
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Eval.Handle (closeAllHandles)
 import Pudu.Eval.Env
   ( Env (..)
   , withIntegerKinds
@@ -134,6 +135,11 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
           then awaitTask (locatedSpan (functionName (closureFunction closure))) result
           else pure result
       _ -> pure UnitValue
+  {-| A program that ended still holding a handle has writes sitting in a
+      buffer that nothing has pushed to the file, and a process exiting does
+      not push them. Closing here is what makes the last bytes a program wrote
+      actually reach the disk. -}
+  closeAllHandles
   collected <- readIORef counters
   pure (outcome, collected)
 

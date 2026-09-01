@@ -11,6 +11,15 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Eval.Clock
+import Pudu.Eval.Handle
+  ( closeHandleAt
+  , flushHandleAt
+  , openAppendHandle
+  , openReadHandle
+  , openWriteHandle
+  , readHandleChunk
+  , writeHandleChunk
+  )
 import Pudu.Eval.Io
 import Pudu.Eval.Env
   ( effectsAdmitted
@@ -58,6 +67,13 @@ effectBuiltins =
   , ParseTimeBuiltin
   , ZoneOffsetBuiltin
   , RunBuiltin
+  , OpenReaderBuiltin
+  , OpenWriterBuiltin
+  , OpenAppenderBuiltin
+  , ReadChunkBuiltin
+  , WriteChunkBuiltin
+  , FlushWriterBuiltin
+  , CloseHandleBuiltin
   ]
 
 {-| Perform one effect.
@@ -102,6 +118,29 @@ callEffect spanValue builtin arguments = do
         resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
       (CreateDirectoryBuiltin, [StrValue path]) ->
         effectUnit (createDirectoryAt (Text.unpack path))
+      {-| A handle is named by a token rather than held as a value, because a
+          value is copied through evaluation and an open file is not: two
+          copies of one file, each thinking it owns the position, would read
+          the same bytes twice. The token means nothing outside the runtime,
+          so a program cannot make one up. -}
+      (OpenReaderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openReadHandle (Text.unpack path))
+      (OpenWriterBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openWriteHandle (Text.unpack path))
+      (OpenAppenderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openAppendHandle (Text.unpack path))
+      {-| Nothing read means the input has ended, which is a different answer
+          from an empty chunk: a reader that could not tell them apart would
+          either stop early or never stop. -}
+      (ReadChunkBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (readHandleChunk (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (WriteChunkBuiltin, [IntValue _ token, BytesValue chunk]) ->
+        effectUnit (writeHandleChunk (fromInteger token) chunk)
+      (FlushWriterBuiltin, [IntValue _ token]) ->
+        effectUnit (flushHandleAt (fromInteger token))
+      (CloseHandleBuiltin, [IntValue _ token]) ->
+        effectUnit (closeHandleAt (fromInteger token))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
@@ -140,6 +179,9 @@ callEffect spanValue builtin arguments = do
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
   optionalText found = case found of
     Just text -> VariantValue "Some" [StrValue text]
+    Nothing -> VariantValue "None" []
+  optionalBytes found = case found of
+    Just chunk -> VariantValue "Some" [BytesValue chunk]
     Nothing -> VariantValue "None" []
 
 {-| Run one effect behind the refusal that applies to it.

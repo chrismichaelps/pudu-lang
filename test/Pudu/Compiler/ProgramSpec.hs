@@ -230,6 +230,7 @@ testProgramEvaluation = do
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
+  streams <- runEntry "test-fixtures/stdlib/UsesStreams.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -329,6 +330,12 @@ testProgramEvaluation = do
     , counterexample
         "bytes slice, search, and carry the published base64 and hex vectors"
         (byteSequences === Just "49")
+    {-| A file is read a chunk at a time, so what the walk costs does not
+        depend on how large the file is, and a line divided by a chunk
+        boundary is still one line. -}
+    , counterexample
+        "a stream reads and writes without holding the whole file"
+        (streams === Just "21")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

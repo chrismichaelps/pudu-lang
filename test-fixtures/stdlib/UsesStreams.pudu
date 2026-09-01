@@ -1,0 +1,104 @@
+module UsesStreams
+
+import Std.Bytes as ByteSeq
+import Std.Env as Env
+import Std.Io as Io
+import Std.Io {IoError, NotFound, Reader, Writer}
+import Std.Result as Result
+
+/// What a stream promises: a file is read a chunk at a time, a bracket closes
+/// what it opened, and what a reader sees does not depend on how the file
+/// happened to be divided. Each check answers 1 when it holds.
+export fn main() -> Int {
+  // Where this machine puts what a program does not intend to keep, rather
+  // than one machine's spelling of it.
+  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-streams")
+  var held = 0
+  held = held + ok(Io.makeDirectory(target))
+
+  let file = Io.join(target, "stream.txt")
+  let body = "alpha\nbeta\ngamma\n"
+  held = held + okIo(Io.writeAllBytes(file, &ByteSeq.fromText(body)))
+
+  // Counting holds one chunk at a time, so what it costs does not depend on
+  // how large the file is.
+  if Result.unwrapOr(Io.countBytes(file), -1) == 17 { held = held + 1 }
+
+  // Reading it all agrees with what was written.
+  let read = Io.readAllBytes(file)
+  if Result.unwrapOr(Result.map(read, fn(bytes: Bytes) -> Int { bytes.length() }), -1) == 17 {
+    held = held + 1
+  }
+  if let Ok(bytes) = Io.readAllBytes(file) {
+    if Result.unwrapOr(ByteSeq.toText(&bytes), "") == body { held = held + 1 }
+  }
+
+  // Every line arrives, and the newline that ended the last one does not make
+  // an extra empty line after it.
+  let lines = Result.unwrapOr(Io.readAllLinesOf(file), [])
+  if lines.length() == 3 { held = held + 1 }
+  if lines == ["alpha", "beta", "gamma"] { held = held + 1 }
+
+  // A last line carrying no newline is still a line.
+  let ragged = Io.join(target, "ragged.txt")
+  held = held + okIo(Io.writeAllBytes(ragged, &ByteSeq.fromText("one\ntwo")))
+  if Result.unwrapOr(Io.readAllLinesOf(ragged), []) == ["one", "two"] { held = held + 1 }
+
+  // A file whose lines are far longer than one read still yields whole lines,
+  // so a line divided by a chunk boundary is one line and not two.
+  let wide = Io.join(target, "wide.txt")
+  let long = "x".repeat(200000)
+  held = held + okIo(Io.writeAllBytes(wide, &ByteSeq.fromText(long + "\n" + long + "\n")))
+  let widths = Result.unwrapOr(
+    Io.foldLines(wide, [], fn(seen: Array[Int], line: Str) -> Array[Int] { seen.push(line.length()) }),
+    []
+  )
+  if widths == [200000, 200000] { held = held + 1 }
+  if Result.unwrapOr(Io.countBytes(wide), -1) == 400002 { held = held + 1 }
+
+  // Appending adds after what the file holds rather than replacing it.
+  held = held + okIo(Io.appendAllBytes(ragged, &ByteSeq.fromText("\nthree")))
+  if Result.unwrapOr(Io.countBytes(ragged), -1) == 13 { held = held + 1 }
+
+  // A bracket over a writer produces the value its action produced.
+  let counted = Io.withWriter(Io.join(target, "written.txt"), fn(writer: Writer) -> Result[Int, IoError] {
+      let wrote = Io.writeTextTo(&writer, "abcd")
+      Result.map(wrote, fn(_done: ()) -> Int { 4 })
+    })
+  if Result.unwrapOr(counted, -1) == 4 { held = held + 1 }
+
+  // A missing file is named as missing rather than reported as a message the
+  // caller would have to read to find out which cause it was.
+  if let Err(NotFound(_)) = Io.readAllBytes(Io.join(target, "absent.txt")) { held = held + 1 }
+
+  // A reader walked to its end answers nothing rather than an empty sequence,
+  // which is what lets a fold know to stop.
+  let ended = Io.withReader(ragged, fn(reader: Reader) -> Result[Bool, IoError] {
+      let first = Io.readFrom(&reader, 4096)
+      let second = Io.readFrom(&reader, 4096)
+      Ok(present(first) && absent(second))
+    })
+  if Result.unwrapOr(ended, false) { held = held + 1 }
+
+  held = held + ok(Io.removeIfPresent(file))
+  held = held + ok(Io.removeIfPresent(ragged))
+  held = held + ok(Io.removeIfPresent(wide))
+  held = held + ok(Io.removeIfPresent(Io.join(target, "written.txt")))
+  held
+}
+
+fn present(chunk: Result[Option[Bytes], IoError]) -> Bool {
+  if let Ok(Some(_)) = chunk { true } else { false }
+}
+
+fn absent(chunk: Result[Option[Bytes], IoError]) -> Bool {
+  if let Ok(None) = chunk { true } else { false }
+}
+
+fn ok[T](outcome: Result[T, Str]) -> Int {
+  if Result.isOk(&outcome) { 1 } else { 0 }
+}
+
+fn okIo[T](outcome: Result[T, IoError]) -> Int {
+  if Result.isOk(&outcome) { 1 } else { 0 }
+}

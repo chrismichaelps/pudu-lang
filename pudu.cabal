@@ -48,6 +48,7 @@ library
     Pudu.Eval.Effect
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Handle
     Pudu.Eval.Io
     Pudu.Eval.Keyed
     Pudu.Eval.Match
