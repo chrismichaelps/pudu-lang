@@ -66,7 +66,7 @@ runRepl :: ReplOptions -> IO ()
 
 ### Linkage
 
-- **Requires:** [[Repl Session]], [[Repl Command]], [[Repl Complete]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]].
+- **Requires:** [[Repl Session]], [[Repl Answer]], [[Repl Command]], [[Repl Complete]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]].
 - **Consumed by:** the `pudu` executable.
 
 ## Algorithm
@@ -106,4 +106,4 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]]
+[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]]

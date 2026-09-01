@@ -58,8 +58,8 @@ regression in the focused Answer test module before the second review pass.
 
 ## Exact Next Action
 
-Push the verified P1/P2 corrections to PR #192, then obtain second
-implementation and Forensic Guardian reviews before merge.
+Obtain final implementation and Forensic Guardian clearance at amended head
+3af58f5, then merge PR #192 after CI passes.
 
 ## Referenced by
 

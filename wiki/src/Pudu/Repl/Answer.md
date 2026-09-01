@@ -73,4 +73,4 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]]
+[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[2026-08-31-static-repl-inspection]]

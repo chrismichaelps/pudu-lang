@@ -124,4 +124,4 @@ DEPTH 0.70 (MEDIUM). It hides classification, buffer assembly, line mapping, acc
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Compiler Pipeline]] · [[Evaluator]]
+[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Compiler Pipeline]] · [[Evaluator]] · [[2026-08-31-static-repl-inspection]]
