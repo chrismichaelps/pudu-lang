@@ -1,0 +1,218 @@
+module UsesTest
+
+import Std.Decimal as Decimal
+import Std.Test.Property as Property
+import Std.Test as Test
+
+/// What a suite promises, checked by comparing reports rather than by reading
+/// output — which is possible only because running a suite is a pure function
+/// from a value to a value.
+///
+/// The cases weighted here are the ones a test framework gets wrong: a failure
+/// that does not say what it expected, a count that loses nested groups, a
+/// pending check quietly counted as a pass, and a property that reports the
+/// value it happened to generate instead of the smallest one that fails.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  // A suite that holds.
+  let good = Test.run(&Test.suite("ok", &[
+        Test.that("true holds", true),
+        Test.equals("values agree", &1, &1)
+      ]))
+  if Test.passed(&good) { held = held + 1 }
+  if Test.passedOf(&good) == 2 { held = held + 1 }
+  if Test.failedOf(&good) == 0 { held = held + 1 }
+  if Test.total(&good) == 2 { held = held + 1 }
+  if Test.status(&good) == 0 { held = held + 1 }
+  if Test.failuresOf(&good) == [] { held = held + 1 }
+
+  // A failure says what it expected and what it found, which is the whole
+  // difference between a suite and a counter.
+  let bad = Test.run(&Test.suite("ordering", &[Test.equals("sorts", &2, &1)]))
+  if !Test.passed(&bad) { held = held + 1 }
+  if Test.status(&bad) == 1 { held = held + 1 }
+  if Test.failuresOf(&bad) == ["ordering / sorts: expected 1, found 2"] {
+    held = held + 1
+  }
+
+  // An empty suite asserted nothing, so nothing it asserted was wrong -- and
+  // the count is what tells a reader no checks ran.
+  let empty = Test.run(&Test.suite("none", &[]))
+  if Test.passed(&empty) { held = held + 1 }
+  if Test.total(&empty) == 0 { held = held + 1 }
+  if Test.summary(&empty) == "no checks ran" { held = held + 1 }
+  if Test.pendingOf(&empty) == 0 { held = held + 1 }
+
+  // Groups nest, and a failure is named by the path that reaches it.
+  let nested = Test.run(&Test.group("outer", &[
+        Test.suite("inner", &[Test.that("holds", true), Test.that("breaks", false)])
+      ]))
+  if Test.total(&nested) == 2 { held = held + 1 }
+  if Test.failedOf(&nested) == 1 { held = held + 1 }
+  if Test.failuresOf(&nested) == ["outer / inner / breaks: expected true, found false"] {
+    held = held + 1
+  }
+
+  // A pending check is neither a pass nor a failure, so a suite cannot shrink
+  // by deleting what has not been done.
+  let waiting = Test.run(&Test.suite("later", &[
+        Test.that("done", true),
+        Test.todo("not yet", "waiting on the parser")
+      ]))
+  if Test.passedOf(&waiting) == 1 { held = held + 1 }
+  if Test.failedOf(&waiting) == 0 { held = held + 1 }
+  if Test.total(&waiting) == 1 { held = held + 1 }
+  if Test.pendingOf(&waiting) == 1 { held = held + 1 }
+  if Test.passed(&waiting) { held = held + 1 }
+  if Test.summary(&waiting) == "1 passed, 1 pending" { held = held + 1 }
+  if Test.pending(&Test.todo("x", "y")) { held = held + 1 }
+  if !Test.held(&Test.todo("x", "y")) { held = held + 1 }
+
+  // The vocabulary each says something the plain condition cannot.
+  if Test.held(&Test.not("false is not true", false)) { held = held + 1 }
+  if Test.held(&Test.differs("values differ", &1, &2)) { held = held + 1 }
+  if Test.held(&Test.present("a value", &Some(1))) { held = held + 1 }
+  if Test.held(&Test.absent("no value", &None)) { held = held + 1 }
+  if !Test.held(&Test.present("a value", &None)) { held = held + 1 }
+  if Test.held(&Test.contains("holds it", &[1, 2, 3], 2)) { held = held + 1 }
+  if !Test.held(&Test.contains("holds it", &[1, 2, 3], 9)) { held = held + 1 }
+  if Test.held(&Test.all("all small", &[1, 2], fn(n: Int) -> Bool => n < 5)) {
+    held = held + 1
+  }
+  // The first value that fails is what is named, not the count of those that do.
+  if Test.failuresOf(&Test.run(&Test.suite("s", &[
+          Test.all("all small", &[1, 9, 8], fn(n: Int) -> Bool => n < 5)
+        ]))) == ["s / all small: expected every value to hold, found 9"] { held = held + 1 }
+
+  // A table of cases becomes one named check per row, so a failure says which
+  // row broke rather than that something did.
+  let table = Test.each(
+      &[1, 2, 3],
+    fn(n: Int) -> Str => "case " + show(n),
+    fn(n: Int) -> Bool => n > 0
+  )
+  if table.length() == 3 { held = held + 1 }
+  if Test.names(&Test.suite("t", &table)) == ["case 1", "case 2", "case 3"] {
+    held = held + 1
+  }
+  if Test.passed(&Test.run(&Test.suite("t", &table))) { held = held + 1 }
+
+  // One failing row is named on its own.
+  let mixedTable = Test.each(
+      &[1, 0, 3],
+    fn(n: Int) -> Str => "case " + show(n),
+    fn(n: Int) -> Bool => n > 0
+  )
+  if Test.failuresOf(&Test.run(&Test.suite("t", &mixedTable)))
+    == ["t / case 0: expected true, found false"] { held = held + 1 }
+
+  // A table whose rows compare two values, so the failure can say both.
+  let pairs = Test.eachOf(
+      &[(1, 1), (2, 3)],
+    fn(pair: (Int, Int)) -> Test.Check =>
+    Test.equals("pair " + show(pair[0]), &pair[0], &pair[1])
+  )
+  if Test.failuresOf(&Test.run(&Test.suite("p", &pairs)))
+    == ["p / pair 2: expected 3, found 2"] { held = held + 1 }
+
+  // An empty table is no checks rather than a failure.
+  if Test.each[Int](&[], fn(n: Int) -> Str => "x", fn(n: Int) -> Bool => true) == [] {
+    held = held + 1
+  }
+
+  // A skipped check is pending, not absent: a suite does not quietly shrink on
+  // the machine where the condition is false.
+  let skipped = Test.run(&Test.suite("s", &[
+        Test.skipIf(true, "not on this platform", &Test.that("a", false)),
+        Test.runIf(false, "needs a network", &Test.that("b", false))
+      ]))
+  if Test.pendingOf(&skipped) == 2 { held = held + 1 }
+  if Test.total(&skipped) == 0 { held = held + 1 }
+  if Test.passed(&skipped) { held = held + 1 }
+  // A condition that holds keeps the check as it was.
+  if !Test.held(&Test.runIf(true, "why", &Test.that("c", false))) { held = held + 1 }
+  if Test.held(&Test.skipIf(false, "why", &Test.that("d", true))) { held = held + 1 }
+
+  // A known failure holds, and reports when it starts passing.
+  if Test.held(&Test.fails("known bug", &Test.that("inner", false))) { held = held + 1 }
+  if !Test.held(&Test.fails("known bug", &Test.that("inner", true))) { held = held + 1 }
+
+  // Focusing is a function over a suite, because a suite is a value.
+  let wide = Test.group("all", &[
+      Test.suite("keep", &[Test.that("wanted", true)]),
+      Test.suite("drop", &[Test.that("unwanted", false)])
+    ])
+  let narrowed = Test.filtered(&wide, fn(name: Str) -> Bool => name == "wanted")
+  if Test.total(&Test.run(&narrowed)) == 1 { held = held + 1 }
+  if Test.passed(&Test.run(&narrowed)) { held = held + 1 }
+  // Filtering everything away leaves a suite that ran nothing.
+  if Test.total(&Test.run(&Test.filtered(&wide, fn(name: Str) -> Bool => false))) == 0 {
+    held = held + 1
+  }
+
+  // Order-independent comparison, with repeats counted on both sides.
+  if Test.held(&Test.sameElements("any order", &[2, 1], &[1, 2])) { held = held + 1 }
+  if !Test.held(&Test.sameElements("repeats count", &[1, 1], &[1])) { held = held + 1 }
+
+  // A tolerance, on the exact type rather than the one that would need it.
+  if Test.held(&Test.closeTo("near", 1.01d, 1.00d, 0.05d)) { held = held + 1 }
+  if !Test.held(&Test.closeTo("far", 1.20d, 1.00d, 0.05d)) { held = held + 1 }
+
+  // Results.
+  let good1: Result[Int, Str] = Ok(1)
+  let bad1: Result[Int, Str] = Err("no")
+  if Test.held(&Test.succeeded("worked", &good1)) { held = held + 1 }
+  if Test.held(&Test.errored("failed", &bad1)) { held = held + 1 }
+  if !Test.held(&Test.succeeded("worked", &bad1)) { held = held + 1 }
+
+  // Reports add together, which is how separate suites become one answer.
+  let joined = Test.combineAll(&[good, bad])
+  if Test.total(&joined) == 3 { held = held + 1 }
+  if Test.failedOf(&joined) == 1 { held = held + 1 }
+
+  // Rendering puts the failures first and the summary last.
+  if Test.lines(&bad).length() == 2 { held = held + 1 }
+  if Test.summary(&good) == "2 passed" { held = held + 1 }
+  if Test.summary(&bad) == "0 passed, 1 failed, of 1" { held = held + 1 }
+
+  // A suite can be read without being run.
+  if Test.names(&Test.suite("s", &[Test.that("a", true), Test.that("b", true)]))
+    == ["a", "b"] { held = held + 1 }
+
+  // A property that holds, over two hundred generated values.
+  if Test.held(&Property.forAllInts("below the bound", 7u64, 200, 50,
+      fn(n: Int) -> Bool => n < 50)) { held = held + 1 }
+
+  // A property that fails reports the smallest failing value, not the one it
+  // happened to generate, and names the seed so the run can be repeated.
+  let failing = Property.forAllInts("below forty", 42u64, 200, 100,
+    fn(n: Int) -> Bool => n < 40)
+  if !Test.held(&failing) { held = held + 1 }
+  if Test.failuresOf(&Test.run(&Test.suite("p", &[failing])))
+    == ["p / below forty: expected the property to hold, found 40 (shrunk in 3 steps, seed 42)"] {
+    held = held + 1
+  }
+  // Running the same property twice answers the same thing, because the seed is
+  // given rather than taken from a clock.
+  let again = Property.forAllInts("below forty", 42u64, 200, 100,
+    fn(n: Int) -> Bool => n < 40)
+  if Test.run(&Test.suite("p", &[failing])).failures
+    == Test.run(&Test.suite("p", &[again])).failures { held = held + 1 }
+
+  // Shrinking a whole number walks toward zero rather than stepping.
+  if Property.shrinkInt(0) == [] { held = held + 1 }
+  if Property.shrinkInt(-8).contains(8) { held = held + 1 }
+  if Property.shrinkInt(100).contains(0) { held = held + 1 }
+  if Property.shrinkInt(100).length() < 10 { held = held + 1 }
+
+  // Shrinking a sequence offers the empty one and shorter ones.
+  if Property.shrinkArray(&[1, 2, 3]).contains([]) { held = held + 1 }
+  if Property.shrinkArray[Int](&[]) == [] { held = held + 1 }
+  if Property.shrinkText("abcd").contains("") { held = held + 1 }
+  if Property.shrinkNothing(5) == [] { held = held + 1 }
+
+  held
+}
