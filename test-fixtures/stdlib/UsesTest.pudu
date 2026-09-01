@@ -87,6 +87,72 @@ export fn main() -> Int {
           Test.all("all small", &[1, 9, 8], fn(n: Int) -> Bool => n < 5)
         ]))) == ["s / all small: expected every value to hold, found 9"] { held = held + 1 }
 
+  // A table of cases becomes one named check per row, so a failure says which
+  // row broke rather than that something did.
+  let table = Test.each(
+      &[1, 2, 3],
+    fn(n: Int) -> Str => "case " + show(n),
+    fn(n: Int) -> Bool => n > 0
+  )
+  if table.length() == 3 { held = held + 1 }
+  if Test.names(&Test.suite("t", &table)) == ["case 1", "case 2", "case 3"] {
+    held = held + 1
+  }
+  if Test.passed(&Test.run(&Test.suite("t", &table))) { held = held + 1 }
+
+  // One failing row is named on its own.
+  let mixedTable = Test.each(
+      &[1, 0, 3],
+    fn(n: Int) -> Str => "case " + show(n),
+    fn(n: Int) -> Bool => n > 0
+  )
+  if Test.failuresOf(&Test.run(&Test.suite("t", &mixedTable)))
+    == ["t / case 0: expected true, found false"] { held = held + 1 }
+
+  // A table whose rows compare two values, so the failure can say both.
+  let pairs = Test.eachOf(
+      &[(1, 1), (2, 3)],
+    fn(pair: (Int, Int)) -> Test.Check =>
+    Test.equals("pair " + show(pair[0]), &pair[0], &pair[1])
+  )
+  if Test.failuresOf(&Test.run(&Test.suite("p", &pairs)))
+    == ["p / pair 2: expected 3, found 2"] { held = held + 1 }
+
+  // An empty table is no checks rather than a failure.
+  if Test.each[Int](&[], fn(n: Int) -> Str => "x", fn(n: Int) -> Bool => true) == [] {
+    held = held + 1
+  }
+
+  // A skipped check is pending, not absent: a suite does not quietly shrink on
+  // the machine where the condition is false.
+  let skipped = Test.run(&Test.suite("s", &[
+        Test.skipIf(true, "not on this platform", &Test.that("a", false)),
+        Test.runIf(false, "needs a network", &Test.that("b", false))
+      ]))
+  if Test.pendingOf(&skipped) == 2 { held = held + 1 }
+  if Test.total(&skipped) == 0 { held = held + 1 }
+  if Test.passed(&skipped) { held = held + 1 }
+  // A condition that holds keeps the check as it was.
+  if !Test.held(&Test.runIf(true, "why", &Test.that("c", false))) { held = held + 1 }
+  if Test.held(&Test.skipIf(false, "why", &Test.that("d", true))) { held = held + 1 }
+
+  // A known failure holds, and reports when it starts passing.
+  if Test.held(&Test.fails("known bug", &Test.that("inner", false))) { held = held + 1 }
+  if !Test.held(&Test.fails("known bug", &Test.that("inner", true))) { held = held + 1 }
+
+  // Focusing is a function over a suite, because a suite is a value.
+  let wide = Test.group("all", &[
+      Test.suite("keep", &[Test.that("wanted", true)]),
+      Test.suite("drop", &[Test.that("unwanted", false)])
+    ])
+  let narrowed = Test.filtered(&wide, fn(name: Str) -> Bool => name == "wanted")
+  if Test.total(&Test.run(&narrowed)) == 1 { held = held + 1 }
+  if Test.passed(&Test.run(&narrowed)) { held = held + 1 }
+  // Filtering everything away leaves a suite that ran nothing.
+  if Test.total(&Test.run(&Test.filtered(&wide, fn(name: Str) -> Bool => false))) == 0 {
+    held = held + 1
+  }
+
   // Order-independent comparison, with repeats counted on both sides.
   if Test.held(&Test.sameElements("any order", &[2, 1], &[1, 2])) { held = held + 1 }
   if !Test.held(&Test.sameElements("repeats count", &[1, 1], &[1])) { held = held + 1 }

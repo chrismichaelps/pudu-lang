@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Forty-six modules, 1285 exported declarations, every one written in Pudu.
+Forty-six modules, 1291 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -256,7 +256,7 @@ Forty-six modules, 1285 exported declarations, every one written in Pudu.
 | `Std.Io` | 28 | files, directories, standard input and output, path handling |
 | `Std.Out` | 22 | a printer as a value: separator, ending, prefix, and stream, with a pure rendering |
 | `Std.Fmt` | 25 | a shaping spec as a value: width, fill, alignment, sign, grouping, radix, and columns |
-| `Std.Test` | 37 | checks and suites as values, and a report that says what failed and why |
+| `Std.Test` | 43 | checks and suites as values, tables, conditions, and a report that says what failed |
 | `Std.Test.Property` | 8 | generated values with shrinking, seeded so a failure repeats exactly |
 | `Std.Env` | 17 | arguments and flags, environment variables, a place to write, stopping with a status |
 | `Std.Time` | 40 | instants, durations, dates, times of day, formatting and parsing |

@@ -294,7 +294,7 @@ testProgramEvaluation = do
         rather than the smallest one that fails. -}
     , counterexample
         "a suite reports what held, what did not, and what is still to write"
-        (checking === Just "58")
+        (checking === Just "74")
     {-| A hierarchy's counting rules, its three orders, its transformations, and
         what search answers when there is nothing to find. Weighted toward what
         a hand-written hierarchy gets wrong: a leaf counted as height zero, a

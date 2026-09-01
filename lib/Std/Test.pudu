@@ -168,6 +168,81 @@ export fn closeTo(name: Str, found: Decimal, expected: Decimal, within: Decimal)
   }
 }
 
+/// The same check over a table of cases.
+///
+/// Each case answers its own name and its own check, so a table of twenty
+/// inputs is twenty named checks rather than one check that stops at the first
+/// input it dislikes. A failure names the case, which is what makes a table
+/// worth having: the reader is told which row broke.
+///
+/// The name comes from a function rather than a template with holes in it.
+/// A template would be a small unchecked language inside a string — the same
+/// thing [[Std Fmt]] refuses — and a function is checked, can say anything about
+/// the case, and cannot disagree with the case's type.
+export fn each[T](cases: &Array[T], name: fn(T) -> Str, holds: fn(T) -> Bool) -> Array[Check] {
+  var out = []
+  for value in cases { out = out.push(that(name(value), holds(value))) }
+  out
+}
+
+/// The same check over a table of cases, where each case builds its own check.
+///
+/// For a table whose rows compare two values rather than answering yes or no,
+/// so the failure can say what it expected and found.
+export fn eachOf[T](cases: &Array[T], build: fn(T) -> Check) -> Array[Check] {
+  var out = []
+  for value in cases { out = out.push(build(value)) }
+  out
+}
+
+/// A check kept only when a condition holds, and left pending otherwise.
+///
+/// Pending rather than dropped, so a suite that skipped something says so. A
+/// check that vanishes on a condition makes a suite quietly smaller on the
+/// machine where the condition is false.
+export fn runIf(condition: Bool, reason: Str, value: &Check) -> Check {
+  if condition { *value } else { Check{name: value.name, outcome: Pending(reason)} }
+}
+
+/// A check left pending when a condition holds, and kept otherwise.
+export fn skipIf(condition: Bool, reason: Str, value: &Check) -> Check {
+  runIf(!condition, reason, value)
+}
+
+/// A check that holds exactly when the one it is given does not.
+///
+/// For a failure that is known and expected — a bug being tracked, a limit
+/// being documented. It reports when the inner check starts holding, which is
+/// what turns a known failure into something that tells you when it is fixed
+/// rather than something that stays red until someone looks.
+export fn fails(name: Str, value: &Check) -> Check {
+  Check {
+    name: name,
+    outcome:
+    if held(value) { Failed("the check to fail", "it held") } else { Held }
+  }
+}
+
+/// Only the checks whose name the test accepts, through the whole tree.
+///
+/// Focusing is a function over a suite here rather than a mark on a check,
+/// because a suite is a value: a caller filters the one they have and runs the
+/// result. Nothing is hidden in the suite that a reader of it cannot see.
+export fn filtered(value: &Suite, keep: fn(Str) -> Bool) -> Suite {
+  var checks = []
+  for check in value.checks {
+    if keep(check.name) { checks = checks.push(check) }
+  }
+  var groups = []
+  for nested in value.groups {
+    let below = filtered(&nested, keep)
+    if below.checks.length() > 0 || below.groups.length() > 0 {
+      groups = groups.push(below)
+    }
+  }
+  Suite{name: value.name, checks: checks, groups: groups}
+}
+
 /// A group of checks under a name.
 export fn suite(name: Str, checks: &Array[Check]) -> Suite {
   Suite{name: name, checks: *checks, groups: []}

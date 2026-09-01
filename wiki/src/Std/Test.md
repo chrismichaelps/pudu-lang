@@ -21,10 +21,11 @@ Checks and suites as values, and a report that says what failed, where, and what
 
 ## Interface
 
-37 exports: the `Outcome`, `Check`, `Suite` and `Report` types; check constructors (`that`, `not`,
+43 exports: the `Outcome`, `Check`, `Suite` and `Report` types; check constructors (`that`, `not`,
 `equals`, `differs`, `present`, `absent`, `succeeded`, `errored`, `contains`, `all`, `sameElements`,
-`closeTo`, `todo`); suite building (`suite`, `group`, `withCheck`, `withGroup`); inspection (`held`,
-`pending`, `names`); running (`run`); and reading a report (`passedOf`, `failedOf`, `pendingOf`,
+`closeTo`, `todo`); tables (`each`, `eachOf`); conditions (`runIf`, `skipIf`, `fails`); suite
+building (`suite`, `group`, `withCheck`, `withGroup`, `filtered`); inspection (`held`, `pending`,
+`names`); running (`run`); and reading a report (`passedOf`, `failedOf`, `pendingOf`,
 `failuresOf`, `total`, `passed`, `status`, `summary`, `lines`, `rendered`, `combine`, `combineAll`).
 
 ### Governance
@@ -46,6 +47,13 @@ Checks and suites as values, and a report that says what failed, where, and what
   count is what tells a reader nothing ran, which is why the count is reported beside the verdict.
 - `status` is zero only when every check held. A runner that always leaves zero is one nothing can
   be built on.
+- A **table** names each row from a function, not from a template with holes in it. A template is a
+  small unchecked language inside a string, which is the thing [[Std Fmt]] refuses; a function is
+  checked and cannot disagree with the row's type.
+- A **skipped** check is pending, never absent. One that vanished on a condition would make a suite
+  quietly smaller on the machine where the condition is false.
+- **Focusing is a function over a suite**, not a mark on a check. A suite is a value, so a caller
+  filters the one they hold; nothing is hidden inside it that a reader of it cannot see.
 
 ### Linkage
 
@@ -94,6 +102,20 @@ DEPTH 0.45 (MEDIUM). One tree walk, three counts, and a vocabulary of checks ove
   work not yet done, and a suite full of failures for unwritten tests trains a reader to ignore
   failures. _Rationale:_ counting it as a *pass* is the worse error, and was a real defect here
   caught by this module's own fixture. _Rejected:_ both, in favour of a third count.
+- **Q:** Why does `each` take a naming function rather than a template? **A:** Because a template
+  with `%s` and `%d` in it is a small language inside a string that nothing checks. _Rationale:_ a
+  function is checked against the row's own type, can say anything about it, and cannot drift from
+  it when the table's shape changes; the cost is a lambda and the gain is that the compiler reads
+  it. _Rejected:_ printf-style placeholders, which is what most frameworks use and what makes a
+  renamed field silently produce the wrong test name.
+- **Q:** Why is focusing a filter rather than a mark like `only`? **A:** Because a mark needs
+  somewhere global to live, and a suite here is an ordinary value. _Rationale:_ `filtered` takes the
+  suite a caller has and answers another; two callers can focus differently on the same suite, and
+  nothing about a suite changes by being read. _Rejected:_ a flag on a check, which is what
+  registration-based frameworks need and which makes a suite's behaviour depend on state outside it.
+- **Q:** Why is a skipped check pending rather than dropped? **A:** So a suite says it skipped
+  something. _Rationale:_ a check that disappears on a condition makes the count differ between
+  machines with no record of why, which is exactly the report a reader would trust and should not.
 - **Q:** Why is property testing a separate module? **A:** Because generation and shrinking are a
   different subject from stating an expectation, and together they pass the size the delivery rules
   set. _Rationale:_ the split follows the same seam [[Std Text Parse]] uses — a submodule extending a
