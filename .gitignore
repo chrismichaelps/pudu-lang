@@ -11,8 +11,10 @@ claude/
 codex/
 dist-ir
 dist-newstyle/
+dist-o2/
 dist-prof
 dist-prof-*
+docs/superpowers/
 fmcf.md
 fmfc.md
 goal.md
