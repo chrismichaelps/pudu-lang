@@ -122,6 +122,9 @@ testArithmetic = do
   bitwiseOr <- evaluate "1 | 2"
   bitwiseAnd <- evaluate "6 & 3"
   bitwiseNot <- evaluate "~0"
+  negatedDecimal <- evaluate "-1.50d"
+  negatedDecimalAgrees <- evaluate "-1.50d == 0.00d - 1.50d"
+  doublyNegatedDecimal <- evaluate "-(-1.50d) == 1.50d"
   suffixedBase <- evaluate "0xffu8"
   signedBoundary <- evaluate "-128i8"
   roundedFloat32Literal <- evaluate "16777217.0f32 == 16777216.0f32"
@@ -153,6 +156,13 @@ testArithmetic = do
     , counterexample "Float32 arithmetic rounds every result" (roundedFloat32Sum === "true")
     , counterexample "Float64 arithmetic retains binary64 precision" (retainedFloat64Sum === "true")
     , counterexample "unary minus preserves negative floating zero" (negativeFloatZero === "-0.0")
+    {-| Decimal is the type meant for figures a float gets wrong, and a debit is
+        the obvious thing to write. Negation reached Int and Float and fell
+        through for Decimal, so the literal checked and then could not run. The
+        scale survives, since a figure shown to two places still is one. -}
+    , counterexample "a decimal literal may be negative" (negatedDecimal === "-1.50")
+    , counterexample "and equals what subtracting it gives" (negatedDecimalAgrees === "true")
+    , counterexample "negating twice answers the original" (doublyNegatedDecimal === "true")
     , counterexample "Float32 range patterns retain their width" (floatRangeMatch === "true")
     ]
 

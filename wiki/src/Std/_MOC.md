@@ -13,6 +13,7 @@ tags: [moc, module, stdlib]
 - [[Std Text Parse]] — positioned parser combinators and numeric/text readers.
 - [[Std Io]] — portable console, filesystem, directory, and path operations.
 - [[Std Out]] — a printer as a value, carrying how output is written.
+- [[Std Fmt]] — a shaping spec as a value, carrying how one is shaped before that.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.

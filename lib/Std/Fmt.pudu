@@ -1,0 +1,285 @@
+module Std.Fmt
+
+import Std.Decimal as Decimal
+import Std.List as List
+import Std.Text as Text
+
+/// Where the content sits when it is narrower than the width asked for.
+export type Align = Left | Right | Centre
+
+/// The decisions about how a value is shaped, held as a value.
+///
+/// `Std.Out` settles how output is written; this settles what it is written
+/// from. The two are the same idea applied twice: the decisions are made once,
+/// given a name, and handed to whatever does the work, rather than assembled at
+/// each call out of padding helpers.
+///
+/// There is no format string here and nothing is parsed at run time. A spec is
+/// a value the checker sees, so a width that is not a number or an alignment
+/// that is not one of the three is a type error rather than a line that comes
+/// out wrong.
+///
+/// The defaults shape nothing: a width of zero, left alignment, a space to fill
+/// with, no forced sign, and no grouping. Every builder answers a new spec and
+/// leaves the one it was given alone.
+export type Spec = {
+  width: Int,
+  fill: Char,
+  align: Align,
+  sign: Bool,
+  group: Str
+}
+
+/// A spec that shapes nothing.
+export fn spec() -> Spec {
+  Spec{width: 0, fill: ' ', align: Left, sign: false, group: ""}
+}
+
+/// The same spec with a least width.
+///
+/// A least width rather than a width: content wider than it is left alone, on
+/// the grounds that losing characters is worse than losing a column. `truncated`
+/// is how a caller asks for the other thing, by name.
+export fn width(value: &Spec, least: Int) -> Spec {
+  Spec {
+    width: if least < 0 { 0 } else { least },
+    fill: value.fill,
+    align: value.align,
+    sign: value.sign,
+    group: value.group
+  }
+}
+
+/// The same spec filling with a different character.
+export fn filledWith(value: &Spec, filler: Char) -> Spec {
+  Spec {
+    width: value.width,
+    fill: filler,
+    align: value.align,
+    sign: value.sign,
+    group: value.group
+  }
+}
+
+/// The same spec with content placed differently within its width.
+export fn aligned(value: &Spec, placement: Align) -> Spec {
+  Spec {
+    width: value.width,
+    fill: value.fill,
+    align: placement,
+    sign: value.sign,
+    group: value.group
+  }
+}
+
+/// The same spec placing content at the left of its width.
+export fn leftAligned(value: &Spec) -> Spec { aligned(value, Left) }
+
+/// The same spec placing content at the right of its width.
+export fn rightAligned(value: &Spec) -> Spec { aligned(value, Right) }
+
+/// The same spec placing content in the middle of its width.
+///
+/// An odd remainder goes to the right, so a column of centred values has a
+/// straight left edge.
+export fn centred(value: &Spec) -> Spec { aligned(value, Centre) }
+
+/// The same spec showing a `+` on a number that is not negative.
+///
+/// For a column where the sign carries meaning and its absence would be read as
+/// a missing value rather than as a positive one.
+export fn withSign(value: &Spec, shown: Bool) -> Spec {
+  Spec {
+    width: value.width,
+    fill: value.fill,
+    align: value.align,
+    sign: shown,
+    group: value.group
+  }
+}
+
+/// The same spec separating a number's digits into groups of three.
+///
+/// The separator is the caller's, because which one reads as a thousands mark
+/// depends on where the reader is and the language has no opinion about that.
+export fn grouped(value: &Spec, separator: Str) -> Spec {
+  Spec {
+    width: value.width,
+    fill: value.fill,
+    align: value.align,
+    sign: value.sign,
+    group: separator
+  }
+}
+
+/// The width a spec asks for.
+export fn widthOf(value: &Spec) -> Int { value.width }
+
+/// The character a spec fills with.
+export fn fillOf(value: &Spec) -> Char { value.fill }
+
+/// Where a spec places its content.
+export fn alignOf(value: &Spec) -> Align { value.align }
+
+/// Text placed within the spec's width.
+///
+/// Content at least as wide as the width is answered unchanged, so shaping a
+/// column never costs a character that was there.
+export fn text(value: &Spec, body: Str) -> Str {
+  let short = value.width - body.length()
+  if short <= 0 { body } else {
+    let filler = value.fill.toText()
+    match value.align {
+      case Left => body + filler.repeat(short)
+      case Right => filler.repeat(short) + body
+      case Centre => {
+        let before = short / 2
+        filler.repeat(before) + body + filler.repeat(short - before)
+      }
+    }
+  }
+}
+
+/// A number's digits split into groups of three from the right.
+fn inGroups(digits: Str, separator: Str) -> Str {
+  if separator.isEmpty() || digits.length() <= 3 { digits } else {
+    var pieces = []
+    var rest = digits
+    while rest.length() > 3 {
+      pieces = pieces.push(Text.takeEnd(rest, 3))
+      rest = rest.take(rest.length() - 3)
+    }
+    pieces = pieces.push(rest)
+    Text.join(&List.reversed(&pieces), separator)
+  }
+}
+
+/// A number's sign and its digits, before any width is applied.
+///
+/// The sign is worked out here rather than read from the rendering, because a
+/// grouped number has to be grouped without its sign — `-1,234` groups three
+/// digits, not the two that would be left after the minus was counted.
+fn signedDigits(value: Int, shape: &Spec) -> Str {
+  let negative = value < 0
+  let bare = if negative { show(0 - value) } else { show(value) }
+  let body = inGroups(bare, shape.group)
+  if negative { "-" + body } else {
+    if shape.sign { "+" + body } else { body }
+  }
+}
+
+/// A whole number shaped by the spec.
+export fn int(value: &Spec, held: Int) -> Str { text(value, signedDigits(held, value)) }
+
+/// A number filled to its width with zeros between the sign and the digits.
+///
+/// Padding with a zero through `filledWith` would put it before the sign and
+/// answer `00-42`, which is not a number. This keeps the sign leading.
+export fn zeroPadded(value: &Spec, held: Int) -> Str {
+  let rendered = signedDigits(held, value)
+  let short = value.width - rendered.length()
+  if short <= 0 { rendered } else {
+    if rendered.startsWith("-") || rendered.startsWith("+") {
+      rendered.take(1) + "0".repeat(short) + rendered.drop(1)
+    } else { "0".repeat(short) + rendered }
+  }
+}
+
+const DIGITS: Str = "0123456789abcdef"
+
+/// A whole number written in a base between two and sixteen.
+///
+/// A base outside that range answers the number in ten, because there is no
+/// honest rendering for a base with no digits and refusing would make every
+/// caller handle a case they cannot reach.
+fn inBase(held: Int, base: Int) -> Str {
+  if base < 2 || base > 16 { show(held) } else {
+    if held == 0 { "0" } else {
+      let negative = held < 0
+      var rest = if negative { 0 - held } else { held }
+      var out = ""
+      while rest > 0 {
+        out = DIGITS.charAt(rest % base).toText() + out
+        rest = rest / base
+      }
+      if negative { "-" + out } else { out }
+    }
+  }
+}
+
+/// A whole number in base sixteen, shaped by the spec.
+export fn hex(value: &Spec, held: Int) -> Str { text(value, inBase(held, 16)) }
+
+/// A whole number in base eight, shaped by the spec.
+export fn octal(value: &Spec, held: Int) -> Str { text(value, inBase(held, 8)) }
+
+/// A whole number in base two, shaped by the spec.
+export fn binary(value: &Spec, held: Int) -> Str { text(value, inBase(held, 2)) }
+
+/// A whole number in a base the caller names, shaped by the spec.
+export fn radix(value: &Spec, held: Int, base: Int) -> Str { text(value, inBase(held, base)) }
+
+/// An exact fraction shaped by the spec, shown to a fixed number of places.
+///
+/// A `Decimal` rather than a `Float`, because a figure shown to two places is
+/// almost always money or a measurement, and a float cannot hold those exactly
+/// — a total that renders as `0.30` after adding `0.10` three times is the
+/// error this avoids by not admitting the type that causes it.
+///
+/// Rounding is half away from zero, which is the rounding a reader does by
+/// hand. Asking for more places than the value carries pads with zeros, so a
+/// column of figures lines up on its point.
+export fn fixed(value: &Spec, held: Decimal, places: Int) -> Str {
+  text(value, show(Decimal.round(held, places, Decimal.HalfUp)))
+}
+
+/// Every value in an array shaped alike and joined.
+export fn list(value: &Spec, held: &Array[Str], separator: Str) -> Str {
+  Text.join(&List.map(held, fn(item: Str) -> Str => text(value, item)), separator)
+}
+
+/// Text cut to a width, ending in a marker when anything was removed.
+///
+/// The marker is counted inside the width, so the answer is never wider than
+/// asked for. A width too small to hold the marker answers the marker cut to
+/// the width, because a caller who asked for three columns gets three.
+export fn truncated(body: Str, limit: Int, marker: Str) -> Str {
+  if limit <= 0 { "" } else {
+    if body.length() <= limit { body } else {
+      if marker.length() >= limit { marker.take(limit) } else {
+        body.take(limit - marker.length()) + marker
+      }
+    }
+  }
+}
+
+/// Rows laid out in columns, each column as wide as its widest entry.
+///
+/// The widths are measured from the rows themselves, so a caller does not
+/// declare what they cannot know until every row is in hand. A short row is
+/// padded with empty cells rather than refused, since a table with a ragged
+/// edge is still a table.
+export fn columns(rows: &Array[Array[Str]], separator: Str) -> Array[Str] {
+  var widest = []
+  for row in rows {
+    var index = 0
+    for cell in row {
+      if index >= widest.length() { widest = widest.push(cell.length()) } else {
+        if cell.length() > widest[index] { widest = List.set(&widest, index, cell.length()) }
+      }
+      index = index + 1
+    }
+  }
+  var out = []
+  for row in rows {
+    var pieces = []
+    var index = 0
+    while index < widest.length() {
+      let cell = if index < row.length() { row[index] } else { "" }
+      pieces = pieces.push(text(&width(&spec(), widest[index]), cell))
+      index = index + 1
+    }
+    out = out.push(Text.join(&pieces, separator).trim())
+  }
+  out
+}

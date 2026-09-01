@@ -224,6 +224,7 @@ testProgramEvaluation = do
   graphEdges <- runEntry "test-fixtures/stdlib/UsesGraphEdges.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
+  shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -277,6 +278,13 @@ testProgramEvaluation = do
     , counterexample
         "a printer carries its separator, ending, prefix, and stream"
         (printers === Just "35")
+    {-| A spec's shaping, checked by comparing values rather than by looking at
+        output. Weighted toward what a padding helper gets wrong: content wider
+        than its width, a sign that must stay in front of zero padding, grouping
+        that must not count the sign, and columns measured from the rows. -}
+    , counterexample
+        "a spec carries its width, fill, alignment, sign, and grouping"
+        (shaping === Just "46")
     {-| A hierarchy's counting rules, its three orders, its transformations, and
         what search answers when there is nothing to find. Weighted toward what
         a hand-written hierarchy gets wrong: a leaf counted as height zero, a
