@@ -232,6 +232,8 @@ testProgramEvaluation = do
   byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
   streams <- runEntry "test-fixtures/stdlib/UsesStreams.pudu"
   paths <- runEntry "test-fixtures/stdlib/UsesPath.pudu"
+  identifiers <- runEntry "test-fixtures/stdlib/UsesUuid.pudu"
+  separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -342,6 +344,18 @@ testProgramEvaluation = do
     , counterexample
         "a path comes apart, normalizes, and says what it is inside"
         (paths === Just "35")
+    {-| An identifier is sixteen bytes rather than the text it is quoted in,
+        and a seeded generator makes the same one twice, so a failure over a
+        particular identifier can be made to happen again. -}
+    , counterexample
+        "an identifier records its scheme and round trips through its text"
+        (identifiers === Just "21")
+    {-| The three things that make a separated file harder than splitting on
+        the separator: a quoted field, a quote inside one, and a separator or
+        newline that a quoted field swallows. -}
+    , counterexample
+        "a separated file survives quotes, newlines, and its own separator"
+        (separated === Just "25")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

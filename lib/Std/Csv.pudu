@@ -1,0 +1,218 @@
+module Std.Csv
+
+import Std.Map as Map
+import Std.Option as Option
+
+/// Why text does not name a table.
+/// A field opened with a quote and never closed is the one failure a reader
+/// cannot recover from by guessing, because everything after it is inside the
+/// field as far as the format is concerned.
+export type CsvError
+  = Unterminated(Int)
+  | Ragged(Int, Int, Int)
+
+/// A table read with its first row taken as the names of its columns.
+export type Table = {
+  headers: Array[Str],
+  rows: Array[Array[Str]]
+}
+
+/// The character that separates fields where nothing else is said.
+const COMMA: Str = ","
+
+/// The character a field is wrapped in when it holds something that would
+/// otherwise end it.
+const QUOTE: Str = "\""
+
+/// Every row of a comma-separated text, fields already unquoted.
+///
+/// A row's fields are not counted against any other row's. A file whose rows
+/// disagree is still read, because a reader that refused it would leave a
+/// caller no way to see what was wrong; `parseTable` is where the count starts
+/// to matter, because a name per column is a promise about every row.
+export fn parse(source: Str) -> Result[Array[Array[Str]], CsvError] {
+  parseWith(source, COMMA)
+}
+
+/// The same, for a text whose fields are separated by something else.
+/// A tab is the other common answer, and a file that chose one is not
+/// improved by a reader that assumes the other.
+export fn parseWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] {
+  if source.isEmpty() {
+    Ok([])
+  } else {
+    var rows: Array[Array[Str]] = []
+    var fields: Array[Str] = []
+    var current = ""
+    var quoted = false
+    var index = 0
+    var started = 0
+    var failure: Option[CsvError] = None
+    var pending = false
+    while index < source.length() && Option.isNone(&failure) {
+      let character = source.slice(index, index + 1)
+      if quoted {
+        if character == QUOTE {
+          // A doubled quote inside a quoted field is one quote, which is how
+          // the format writes a quote that does not end the field.
+          if index + 1 < source.length() && source.slice(index + 1, index + 2) == QUOTE {
+            current = current + QUOTE
+            index = index + 1
+          } else {
+            quoted = false
+          }
+        } else {
+          current = current + character
+        }
+      } else {
+        if character == QUOTE {
+          quoted = true
+          started = index
+          pending = true
+        } else {
+          if character == delimiter {
+            fields = fields.push(current)
+            current = ""
+            pending = true
+          } else {
+            if character == "\n" {
+              fields = fields.push(trimReturn(current))
+              rows = rows.push(fields)
+              fields = []
+              current = ""
+              pending = false
+            } else {
+              current = current + character
+              pending = true
+            }
+          }
+        }
+      }
+      index = index + 1
+    }
+    if quoted { failure = Some(Unterminated(started)) }
+    if pending || current.length() > 0 {
+      fields = fields.push(trimReturn(current))
+      rows = rows.push(fields)
+    }
+    if let Some(reason) = failure { Err(reason) } else { Ok(rows) }
+  }
+}
+
+/// A file written where a carriage return precedes each newline still holds
+/// one row per newline, so the return is not part of the last field.
+fn trimReturn(field: Str) -> Str {
+  if field.endsWith("\r") { field.take(field.length() - 1) } else { field }
+}
+
+/// A table whose first row names its columns.
+///
+/// Every later row is required to hold as many fields as there are names.
+/// This is where a ragged file is refused rather than in `parse`: a name per
+/// column is a promise that a row's third field is the third column, and a row
+/// with a field missing quietly shifts every field after the gap.
+export fn parseTable(source: Str) -> Result[Table, CsvError] {
+  let rows = parse(source) ?
+  if rows.length() == 0 {
+    Ok(Table{headers: [], rows: []})
+  } else {
+    let headers = rows[0]
+    var body: Array[Array[Str]] = []
+    var index = 1
+    var failure: Option[CsvError] = None
+    while index < rows.length() && Option.isNone(&failure) {
+      let row = rows[index]
+      if row.length() == headers.length() {
+        body = body.push(row)
+      } else {
+        failure = Some(Ragged(index, headers.length(), row.length()))
+      }
+      index = index + 1
+    }
+    if let Some(reason) = failure { Err(reason) } else { Ok(Table{headers: headers, rows: body}) }
+  }
+}
+
+/// Where a column sits, or `-1` when the table has no column of that name.
+export fn indexOfColumn(table: &Table, name: Str) -> Int { table.headers.indexOf(name) }
+
+/// Every value in one column, or nothing when the table has no such column.
+export fn column(table: &Table, name: Str) -> Option[Array[Str]] {
+  let at = indexOfColumn(table, name)
+  if at < 0 {
+    None
+  } else {
+    var values: Array[Str] = []
+    for row in table.rows { values = values.push(row[at]) }
+    Some(values)
+  }
+}
+
+/// One row read by column name rather than by position.
+export fn record(table: &Table, index: Int) -> Option[Map[Str, Str]] {
+  if index < 0 || index >= table.rows.length() {
+    None
+  } else {
+    var pairs: Array[(Str, Str)] = []
+    var at = 0
+    let row = table.rows[index]
+    while at < table.headers.length() {
+      pairs = pairs.push((table.headers[at], row[at]))
+      at = at + 1
+    }
+    Some(mapOf(pairs))
+  }
+}
+
+/// Every row read by column name.
+export fn records(table: &Table) -> Array[Map[Str, Str]] {
+  var found: Array[Map[Str, Str]] = []
+  var index = 0
+  while index < table.rows.length() {
+    if let Some(entry) = record(table, index) { found = found.push(entry) }
+    index = index + 1
+  }
+  found
+}
+
+/// Whether a field has to be wrapped in quotes to survive being written.
+/// Only these four characters need it. Quoting a field that does not need it
+/// is legal and makes a file larger and harder to read, so it is not done.
+fn needsQuoting(field: Str, delimiter: Str) -> Bool {
+  field.contains(delimiter) || field.contains(QUOTE) || field.contains("\n") || field.contains("\r")
+}
+
+/// One field written, wrapped and escaped only where it has to be.
+fn renderField(field: Str, delimiter: Str) -> Str {
+  if needsQuoting(field, delimiter) {
+    QUOTE + field.replace(QUOTE, QUOTE + QUOTE) + QUOTE
+  } else {
+    field
+  }
+}
+
+/// Rows written as comma-separated text, ending with a newline.
+export fn render(rows: &Array[Array[Str]]) -> Str { renderWith(rows, COMMA) }
+
+/// The same, separated by something else.
+export fn renderWith(rows: &Array[Array[Str]], delimiter: Str) -> Str {
+  var out = ""
+  for row in rows {
+    var line = ""
+    var index = 0
+    while index < row.length() {
+      if index > 0 { line = line + delimiter }
+      line = line + renderField(row[index], delimiter)
+      index = index + 1
+    }
+    out = out + line + "\n"
+  }
+  out
+}
+
+/// A table written with its column names as the first row.
+export fn renderTable(table: &Table) -> Str {
+  var rows: Array[Array[Str]] = [table.headers]
+  for row in table.rows { rows = rows.push(row) }
+  render(&rows)
+}

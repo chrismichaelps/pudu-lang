@@ -1,0 +1,161 @@
+module Std.Uuid
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Random {Generator}
+import Std.Random as Random
+
+/// A universally unique identifier: sixteen bytes, whatever produced them.
+/// Held as bytes rather than as text because that is what it is. Only
+/// rendering turns it into the hyphenated form a person reads, and two
+/// identifiers compare as the numbers they are rather than as the spelling
+/// somebody happened to write them in.
+export type Uuid = { octets: Bytes }
+
+/// Why text does not name an identifier.
+export type UuidError
+  = WrongLength(Int)
+  | BadDigit(Int)
+
+/// The identifier whose every byte is zero, which names nothing.
+/// Useful as a stated absence where a caller needs a value of the type and an
+/// `Option` would be carried through code that has nothing to do with it.
+export fn nil() -> Uuid { Uuid{octets: ByteSeq.repeat(&ByteSeq.fromArray(&[0u8]), 16)} }
+
+/// Whether an identifier is the one that names nothing.
+export fn isNil(value: &Uuid) -> Bool { value.octets == nil().octets }
+
+/// The sixteen bytes an identifier is.
+export fn toBytes(value: &Uuid) -> Bytes { value.octets }
+
+/// An identifier from sixteen bytes, or the count that was not sixteen.
+/// The version and variant are left as they arrived: bytes that came from
+/// elsewhere describe whatever made them, and rewriting them here would make
+/// this report a version the identifier does not have.
+export fn fromBytes(octets: &Bytes) -> Result[Uuid, UuidError] {
+  if octets.length() == 16 { Ok(Uuid{octets: *octets}) } else { Err(WrongLength(octets.length())) }
+}
+
+/// Which scheme produced an identifier, read from the byte that records it.
+/// An identifier that came from elsewhere may say something this list does not
+/// name, so the number is answered rather than a variant per known version.
+export fn versionOf(value: &Uuid) -> Int {
+  narrow(Option.unwrapOr(value.octets.at(6), 0u8)) / 16
+}
+
+/// A random identifier.
+///
+/// The generator is passed and answered rather than kept, so a program that
+/// seeded it reproduces the same identifiers. That is what makes a test that
+/// failed on one identifier able to fail on it again.
+///
+/// `Std.Random` is reproducible on purpose and seeded from a readable clock,
+/// which makes these fit for a key in a database and unfit for anything a
+/// person must not be able to guess. A session token wants a random source
+/// this project has not yet reviewed.
+export fn version4(source: &Generator) -> (Generator, Uuid) {
+  let drawn = Random.numbers(source, 16, 256)
+  var octets: Array[UInt8] = []
+  for number in drawn[1] { octets = octets.push(narrowByte(number)) }
+  (drawn[0], Uuid{octets: stamped(bytesOf(octets), 4)})
+}
+
+/// An identifier that sorts by when it was made.
+///
+/// The first six bytes are the millisecond the clock read, most significant
+/// first, so identifiers made in order compare in order. That is what a
+/// database index wants: a random identifier scatters writes across the whole
+/// index, while one that increases appends to the end of it.
+///
+/// The remaining bytes are random, so two identifiers made in the same
+/// millisecond are still distinct.
+export fn version7(source: &Generator, millis: Int) -> (Generator, Uuid) {
+  let drawn = Random.numbers(source, 10, 256)
+  var octets: Array[UInt8] = []
+  var step = 0
+  while step < 6 {
+    octets = octets.push(narrowByte(millis / power(256, 5 - step) % 256))
+    step = step + 1
+  }
+  for number in drawn[1] { octets = octets.push(narrowByte(number)) }
+  (drawn[0], Uuid{octets: stamped(bytesOf(octets), 7)})
+}
+
+/// A whole power, built by repeated multiplication rather than through a
+/// floating type that would not hold these exactly.
+fn power(base: Int, exponent: Int) -> Int {
+  var total = 1
+  var step = 0
+  while step < exponent {
+    total = total * base
+    step = step + 1
+  }
+  total
+}
+
+/// The version written into the byte that records it, and the variant into
+/// the byte after the version's group.
+///
+/// Both are written by replacing the high bits rather than by adding to them,
+/// so an identifier built from bytes that already carried a version does not
+/// come out naming a version nothing defines.
+fn stamped(octets: Bytes, version: Int) -> Bytes {
+  var built: Array[UInt8] = []
+  var index = 0
+  for octet in octets.toArray() {
+    if index == 6 {
+      built = built.push(narrowByte(version * 16 + narrow(octet) % 16))
+    } else {
+      if index == 8 {
+        built = built.push(narrowByte(128 + narrow(octet) % 64))
+      } else {
+        built = built.push(octet)
+      }
+    }
+    index = index + 1
+  }
+  bytesOf(built)
+}
+
+fn narrow(octet: UInt8) -> Int { Option.unwrapOr(convertInteger[Int](octet), 0) }
+
+fn narrowByte(value: Int) -> UInt8 { Option.unwrapOr(convertInteger[UInt8](value % 256), 0u8) }
+
+/// The hyphenated lower-case form an identifier is quoted in.
+export fn toText(value: &Uuid) -> Str {
+  let digits = ByteSeq.encodeHex(&value.octets)
+  digits.slice(0, 8) + "-" + digits.slice(8, 12) + "-" + digits.slice(12, 16) + "-"
+    + digits.slice(16, 20) + "-" + digits.slice(20, 32)
+}
+
+/// The identifier text names, hyphenated or not.
+///
+/// The hyphens are dropped before the digits are read rather than checked in
+/// place, so the form a program stored without them parses too. Their
+/// positions carry no information the digits do not.
+export fn fromText(text: Str) -> Result[Uuid, UuidError] {
+  let digits = text.replace("-", "").toLower()
+  if digits.length() != 32 {
+    Err(WrongLength(digits.length()))
+  } else {
+    if let Ok(octets) = ByteSeq.decodeHex(digits) {
+      Ok(Uuid{octets: octets})
+    } else {
+      Err(BadDigit(firstBadDigit(digits)))
+    }
+  }
+}
+
+/// Where the first character that is not a hexadecimal digit sits, so the
+/// report names a position rather than only that something was wrong.
+fn firstBadDigit(digits: Str) -> Int {
+  var index = 0
+  while index < digits.length() {
+    if !"0123456789abcdef".contains(digits.slice(index, index + 1)) { return index }
+    index = index + 1
+  }
+    -1
+}
+
+/// Whether two identifiers are the same, compared as the numbers they are.
+export fn equal(left: &Uuid, right: &Uuid) -> Bool { left.octets == right.octets }
