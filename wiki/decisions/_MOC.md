@@ -5,6 +5,8 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[ADR-0015-hash-contract-and-hash-map]] — coherent equality/hashing and deterministic persistent hash maps.
+
 - [[ADR-0001-language-purpose-and-v1-scope]] — coherent native systems-language purpose and staged feature admission.
 - [[ADR-0002-compiler-pipeline]] — explicit Haskell phases, checked Core IR, interpreter oracle, and C11 backend.
 - [[ADR-0003-ownership-and-resource-safety]] — moves, non-lexical borrows, deterministic destruction, and safe/unsafe boundary.

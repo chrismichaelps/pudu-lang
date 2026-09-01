@@ -5,10 +5,12 @@ module Pudu.Eval.Value
   , builtinName
   , ArrayMethod (..)
   , BytesMethod (..)
+  , BucketsMethod (..)
   , CharMethod (..)
   , MapMethod (..)
   , SetMethod (..)
   , bytesMethodName
+  , bucketsMethodName
   , mapMethodName
   , setMethodName
   , StringMethod (..)
@@ -22,6 +24,8 @@ module Pudu.Eval.Value
   ) where
 
 import Data.ByteString (ByteString)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
@@ -60,6 +64,13 @@ data Value
       fit. One contiguous buffer stores a byte in a byte, and a slice of it
       names a stretch of the same storage rather than copying. -}
   | BytesValue !ByteString
+  {-| An indexed store, reached by a number rather than by comparison.
+
+      It exists for `Std.HashMap`, which cannot reach its buckets through the
+      ordered map without paying an ordered lookup for every hashed one. The
+      store holds no opinion about hashing or equality: those belong to the
+      library, where a type's own `Eq` can be called. -}
+  | BucketsValue !(IntMap Value)
   | CharValue !Char
   | BoolValue !Bool
   | NullValue
@@ -79,6 +90,7 @@ data Value
   | MapMethodValue !MapMethod !Value
   | SetMethodValue !SetMethod !Value
   | BytesMethodValue !BytesMethod !Value
+  | BucketsMethodValue !BucketsMethod !Value
   deriving stock (Eq, Show)
 
 {-| The name a built-in answers to, which is the name it was bound under. -}
@@ -89,6 +101,7 @@ builtinName value = case value of
   MapOfBuiltin -> "mapOf"
   SetOfBuiltin -> "setOf"
   BytesOfBuiltin -> "bytesOf"
+  BucketsOfBuiltin -> "bucketsOf"
   ShowBuiltin -> "show"
   DisplayBuiltin -> "display"
   PrintBuiltin -> "print"
@@ -132,6 +145,12 @@ builtinName value = case value of
   CellOpenBuiltin -> "cellOpen"
   CellGetBuiltin -> "cellGet"
   CellSwapBuiltin -> "cellSwap"
+  SecureBytesBuiltin -> "secureRandomBytes"
+  Sha256Builtin -> "sha256Of"
+  HmacBuiltin -> "hmacSha256Of"
+  DeriveKeyBuiltin -> "deriveKey"
+  HashOfBuiltin -> "hashOf"
+  MixHashBuiltin -> "mixHash"
   CreateDirectoryBuiltin -> "createDirectory"
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
@@ -171,6 +190,7 @@ data Builtin
   | MapOfBuiltin
   | SetOfBuiltin
   | BytesOfBuiltin
+  | BucketsOfBuiltin
   | ShowBuiltin
   | DisplayBuiltin
   | PrintBuiltin
@@ -214,6 +234,12 @@ data Builtin
   | CellOpenBuiltin
   | CellGetBuiltin
   | CellSwapBuiltin
+  | SecureBytesBuiltin
+  | Sha256Builtin
+  | HmacBuiltin
+  | DeriveKeyBuiltin
+  | HashOfBuiltin
+  | MixHashBuiltin
   | CreateDirectoryBuiltin
   | ArgumentsBuiltin
   | EnvironmentBuiltin
@@ -272,6 +298,17 @@ data MapMethod
     is reported rather than dispatched. Everything above this set — base64,
     hex, reading a number of a stated width and endianness — is `Std.Bytes`,
     written in the language. -}
+{-| @Eval.Value.BucketsMethod — one built-in operation on an indexed store. -}
+data BucketsMethod
+  = BucketsSize
+  | BucketsIsEmpty
+  | BucketsGet
+  | BucketsInsert
+  | BucketsRemove
+  | BucketsKeys
+  | BucketsValues
+  deriving stock (Eq, Show)
+
 data BytesMethod
   = BytesLength
   | BytesIsEmpty
@@ -301,6 +338,16 @@ data SetMethod
   | SetIntersect
   | SetDifference
   deriving stock (Eq, Show)
+
+bucketsMethodName :: BucketsMethod -> Text
+bucketsMethodName method = case method of
+  BucketsSize -> "size"
+  BucketsIsEmpty -> "isEmpty"
+  BucketsGet -> "get"
+  BucketsInsert -> "insert"
+  BucketsRemove -> "remove"
+  BucketsKeys -> "keys"
+  BucketsValues -> "values"
 
 bytesMethodName :: BytesMethod -> Text
 bytesMethodName method = case method of
@@ -460,6 +507,10 @@ compareValues left right = case (left, right) of
   {-| Byte sequences order by their contents, which for bytes is both the
       lexicographic order and the numeric one. -}
   (BytesValue a, BytesValue b) -> compare a b
+  {-| Two stores compare entry by entry in key order, so two built by different
+      routes to the same contents compare equal. -}
+  (BucketsValue a, BucketsValue b) ->
+    compareIndexed (IntMap.toAscList a) (IntMap.toAscList b)
   (CharValue a, CharValue b) -> compare a b
   (BoolValue a, BoolValue b) -> compare a b
   (NullValue, NullValue) -> EQ
@@ -475,6 +526,13 @@ compareValues left right = case (left, right) of
   (VariantValue nameA a, VariantValue nameB b) ->
     compare nameA nameB <> compareLists a b
   _ -> compare (shapeRank left) (shapeRank right)
+
+compareIndexed :: [(Int, Value)] -> [(Int, Value)] -> Ordering
+compareIndexed [] [] = EQ
+compareIndexed [] _ = LT
+compareIndexed _ [] = GT
+compareIndexed ((keyA, a) : as) ((keyB, b) : bs) =
+  compare keyA keyB <> compareValues a b <> compareIndexed as bs
 
 compareLists :: [Value] -> [Value] -> Ordering
 compareLists [] [] = EQ
@@ -532,6 +590,8 @@ shapeRank value = case value of
   SetMethodValue _ _ -> 20
   BytesValue _ -> 21
   BytesMethodValue _ _ -> 22
+  BucketsValue _ -> 23
+  BucketsMethodValue _ _ -> 24
 
 
 {-| The name a text method answers to, which is the same spelling the checker

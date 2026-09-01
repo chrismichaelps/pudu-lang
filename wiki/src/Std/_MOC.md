@@ -5,6 +5,26 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Random]] — deterministic generators and OS-backed secure bytes.
+- [[Std Order]] — equality, ordering, and hashing contracts.
+- [[Std HashMap]] — persistent indexed lookup with deterministic insertion order.
+- [[Std Bytes]] — compact byte sequences, binary reads/writes, and text codecs.
+- [[Std Csv]] — quoted separated-row and header-table parsing/rendering.
+- [[Std Toml]] — TOML 1.0 configuration with exact numeric/time spellings.
+- [[Std Toml Read]] — turning configuration text into that model.
+- [[Std Toml Scan]] — the lexical layer beneath the reader.
+- [[Std Path]] — host-aware lexical path construction and decomposition.
+- [[Std Uuid]] — byte-backed deterministic v4/v7 identifiers.
+- [[Std Bench]] — repeated measurement and distribution summaries.
+- [[Std Time Format]] — civil arithmetic and RFC/protocol time codecs.
+- [[Std Time Format Civil]] — proleptic Gregorian day arithmetic.
+- [[Std Concurrent]] — joinable host-thread work.
+- [[Std Channel]] — bounded typed queues with closure.
+- [[Std Sync]] — runtime mutexes and atomic cells.
+- [[Std Net]] — streaming-first TCP listeners and connections.
+- [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
+- [[Std Db]] — PostgreSQL authentication, binding, transactions, and pools.
+- [[Std Http Server]] — deterministic routing, middleware, and bounded serving.
 - [[Std Http]] — pure HTTP protocol values and transformations.
 - [[Std Http Message]] — HTTP message parsing, rendering, length validation, and chunk decoding.
 - [[Std Result]] — recoverable-result combinators and collection traversal.

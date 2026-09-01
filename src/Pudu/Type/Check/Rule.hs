@@ -524,6 +524,7 @@ memberType spanValue targetType member = do
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
     NominalType "Bytes" [] -> bytesMethodType spanValue member
+    NominalType "Buckets" [held] -> bucketsMethodType spanValue member held
     NominalType "Char" [] -> charMethodType spanValue member
     NominalType "Map" [key, held] -> mapMethodType spanValue member key held
     NominalType "Set" [element] -> setMethodType spanValue member element
@@ -696,6 +697,27 @@ bytesMethodType spanValue member = case member of
  where
   byteType = NominalType "UInt8" []
   optionOf held = NominalType "Option" [held]
+
+{-| Built-in methods of the indexed store.
+
+    Keyed by a plain number, because the store is the layer beneath a hash map
+    rather than one a program keys directly: the library computes the key's
+    hash, mixes it, and hands the number here. -}
+bucketsMethodType :: Span -> Text -> Type -> Checker Type
+bucketsMethodType spanValue member held = case member of
+  "size" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "get" -> pure (FunctionTypeValue False [integerType] (NominalType "Option" [held]))
+  "insert" -> pure (FunctionTypeValue False [integerType, held] storeType)
+  "remove" -> pure (FunctionTypeValue False [integerType] storeType)
+  "keys" -> pure (FunctionTypeValue False [] (NominalType "Array" [integerType]))
+  "values" -> pure (FunctionTypeValue False [] (NominalType "Array" [held]))
+  _ -> do
+    report "E3005" spanValue ("Buckets has no method " <> member)
+      (Just "check the method name against the documented store methods")
+    pure ErrorType
+ where
+  storeType = NominalType "Buckets" [held]
 
 {-| Built-in array methods. Each returns a function type with the receiver
     already bound, matching the evaluator's `ArrayMethodValue` semantics. The

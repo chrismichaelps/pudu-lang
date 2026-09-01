@@ -136,6 +136,19 @@ declareBuiltinConstructors = do
       and adding one would need a decision about how it reads beside the forms
       that already use brackets. Text reaches bytes through its own `toBytes`
       method, which is the commoner direction and needs no array at all. -}
+  {-| Hashing, wired in because the language cannot yet afford to run its own
+      implementation in a loop. `hashOf` is a number for a keyed collection and
+      not a digest; the other three are. -}
+  bindName "sha256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
+  bindName "deriveKey"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  bindName "hashOf" (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
+  bindName "mixHash" (monotype (FunctionTypeValue False [integerType] integerType))
+  {-| The indexed store `Std.HashMap` reaches its buckets through. Built empty
+      and grown by its methods, like a map or a set. -}
+  bindName "bucketsOf"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [] (NominalType "Buckets" [RigidType "V"])))
   bindName "bytesOf"
     (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
  where
@@ -196,6 +209,7 @@ effectSignatures =
   , ("cellOpen", polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   , ("cellGet", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (RigidType "T"))))
   , ("cellSwap", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf (RigidType "T"))))
+  , ("secureRandomBytes", monotype (FunctionTypeValue False [integerType] (resultOf bytesType)))
   , ("arguments", monotype (FunctionTypeValue False [] (arrayOf stringType)))
   , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
   , ("temporaryPath", monotype (FunctionTypeValue False [] stringType))

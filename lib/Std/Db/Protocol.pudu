@@ -1,0 +1,309 @@
+module Std.Db.Protocol
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Result as Result
+
+/// Why bytes on the wire did not make a message.
+export type ProtocolError
+  = Truncated(Int, Int)
+  | UnknownMessage(Str)
+  | BadField(Str)
+
+/// One message, as it travels: the letter naming its kind and the bytes after
+/// the length.
+///
+/// The kind is kept as text rather than as a variant per message, because the
+/// protocol has more kinds than any one client uses and a server is permitted
+/// to send ones this client has never heard of. A variant per kind would make
+/// an unknown message impossible to represent, and the only correct thing to
+/// do with most of them is to read past them.
+export type Message = {
+  kind: Str,
+  payload: Bytes
+}
+
+/// The version this speaks: the third revision of the protocol, written as a
+/// major and minor number packed into one word.
+export const VERSION: Int = 196608
+
+/// A message framed the way the protocol frames one: the letter, then the
+/// length counting itself, then the payload.
+export fn frame(kind: Str, payload: &Bytes) -> Bytes {
+  ByteSeq.join(&[kind.toBytes(), ByteSeq.putU32Be(widen(payload.length() + 4)), *payload])
+}
+
+/// The first message a connection sends, which carries no letter.
+///
+/// It is the one message framed without a kind, because the server does not
+/// yet know what version is speaking to it and so cannot know how to read one.
+export fn startup(pairs: &Array[(Str, Str)]) -> Bytes {
+  var body = ByteSeq.putU32Be(widen(VERSION))
+  for entry in pairs {
+    body = body.concat(cString(entry[0])).concat(cString(entry[1]))
+  }
+  body = body.concat(bytesOf([0u8]))
+  ByteSeq.putU32Be(widen(body.length() + 4)).concat(body)
+}
+
+/// Text with the zero byte the protocol ends a string with.
+export fn cString(text: Str) -> Bytes { text.toBytes().concat(bytesOf([0u8])) }
+
+/// The text at the front of a payload, and what follows it.
+///
+/// A string with no terminator is a truncated message rather than a string
+/// running to the end: reading it as one would let a message cut short look
+/// like a complete one with a shorter field.
+export fn readCString(source: &Bytes) -> Result[(Str, Bytes), ProtocolError] {
+  let stop = source.indexOf(bytesOf([0u8]))
+  if stop < 0 {
+    Err(Truncated(source.length() + 1, source.length()))
+  } else {
+    let text = source.take(stop).toText()
+    if let Some(found) = text {
+      Ok((found, source.drop(stop + 1)))
+    } else {
+      Err(BadField("a string that is not valid text"))
+    }
+  }
+}
+
+/// How many bytes a message needs beyond the five already read, or nothing
+/// when the five are not yet there.
+///
+/// Separated from reading the message so a caller can ask for exactly what is
+/// missing rather than reading a byte at a time.
+export fn bodyLength(head: &Bytes) -> Option[Int] {
+  if head.length() < 5 {
+    None
+  } else {
+    let stated = ByteSeq.getU32Be(&head.drop(1))
+    if let Ok(read) = stated { Some(narrow(read[0]) - 4) } else { None }
+  }
+}
+
+/// A message read from the whole of its bytes.
+export fn readMessage(source: &Bytes) -> Result[(Message, Bytes), ProtocolError] {
+  if source.length() < 5 {
+    Err(Truncated(5, source.length()))
+  } else {
+    let kind = Option.unwrapOr(source.take(1).toText(), "?")
+    let stated = ByteSeq.getU32Be(&source.drop(1))
+    if let Ok(read) = stated {
+      let size = narrow(read[0]) - 4
+      if source.length() < size + 5 {
+        Err(Truncated(size + 5, source.length()))
+      } else {
+        Ok((Message{kind: kind, payload: source.slice(5, size + 5)}, source.drop(size + 5)))
+      }
+    } else {
+      Err(Truncated(5, source.length()))
+    }
+  }
+}
+
+/// A simple query, which asks the server to plan and run text in one step.
+///
+/// This cannot carry parameters, and that is why `bind` exists: text with a
+/// value pasted into it is a query whose shape depends on the value, which is
+/// how a value becomes an instruction.
+export fn query(sql: Str) -> Bytes { frame("Q", &cString(sql)) }
+
+/// A statement given to the server to plan, with the values left as holes.
+export fn parse(name: Str, sql: Str) -> Bytes {
+  frame(
+    "P",
+      &ByteSeq.join(&[cString(name), cString(sql), ByteSeq.putU16Be(widen16(0))])
+  )
+}
+
+/// Values supplied for a planned statement's holes.
+///
+/// Every value is sent as text and every result asked for as text. That is the
+/// slower of the two formats and the one whose meaning does not depend on the
+/// server's word size or byte order, which is the right trade for a client
+/// that must be correct against a server it did not build.
+///
+/// A value that is absent is sent as a length of minus one rather than as
+/// empty, because the protocol distinguishes them and a column that is empty
+/// is not a column that has nothing.
+export fn bind(portal: Str, statement: Str, values: &Array[Option[Str]]) -> Bytes {
+  var body = cString(portal).concat(cString(statement))
+  body = body.concat(ByteSeq.putU16Be(widen16(0)))
+  body = body.concat(ByteSeq.putU16Be(widen16(values.length())))
+  for value in values {
+    if let Some(text) = value {
+      let payload = text.toBytes()
+      body = body.concat(ByteSeq.putU32Be(widen(payload.length()))).concat(payload)
+    } else {
+      body = body.concat(absentValue())
+    }
+  }
+  body = body.concat(ByteSeq.putU16Be(widen16(0)))
+  frame("B", &body)
+}
+
+/// The length the protocol writes for a value that is not there: minus one,
+/// as a four-byte number.
+fn absentValue() -> Bytes { bytesOf([255u8, 255u8, 255u8, 255u8]) }
+
+/// Ask what shape a planned statement produces.
+export fn describeStatement(name: Str) -> Bytes {
+  frame("D", &bytesOf([83u8]).concat(cString(name)))
+}
+
+/// Run a bound statement, with no limit on how many rows come back.
+export fn execute(portal: Str, limit: Int) -> Bytes {
+  frame("E", &cString(portal).concat(ByteSeq.putU32Be(widen(limit))))
+}
+
+/// End the sequence, so the server reports and becomes ready again.
+///
+/// Without this the server holds everything sent since the last one, and a
+/// client that never sends it waits for a reply that is waiting for it.
+export fn sync() -> Bytes { frame("S", &ByteSeq.empty()) }
+
+/// Say the connection is finished.
+export fn terminate() -> Bytes { frame("X", &ByteSeq.empty()) }
+
+/// A password sent as the server asked for it.
+export fn password(secret: Str) -> Bytes { frame("p", &cString(secret)) }
+
+/// The first message of a challenge, naming the mechanism and the opening
+/// text.
+export fn saslInitial(mechanism: Str, first: Str) -> Bytes {
+  let payload = first.toBytes()
+  frame(
+    "p",
+      &ByteSeq.join(&[cString(mechanism), ByteSeq.putU32Be(widen(payload.length())), payload])
+  )
+}
+
+/// A later message of a challenge, which carries only its text.
+export fn saslResponse(text: Str) -> Bytes { frame("p", &text.toBytes()) }
+
+/// What kind of authentication the server asked for, read from the message
+/// that asks.
+export fn authenticationKind(payload: &Bytes) -> Result[Int, ProtocolError] {
+  let read = ByteSeq.getU32Be(payload)
+  if let Ok(pair) = read { Ok(narrow(pair[0])) } else { Err(Truncated(4, payload.length())) }
+}
+
+/// A column the server says a result will have.
+export type Column = {
+  name: Str,
+  oid: Int
+}
+
+/// The columns a row description names.
+export fn readRowDescription(payload: &Bytes) -> Result[Array[Column], ProtocolError] {
+  let counted = countOf(payload) ?
+  var columns: Array[Column] = []
+  var rest = counted[1]
+  var index = 0
+  var failure: Option[ProtocolError] = None
+  while index < narrow16(counted[0]) && Option.isNone(&failure) {
+    let named = readCString(&rest)
+    if let Ok(pair) = named {
+      // Each column carries the table it came from, its position there, its
+      // type, and how wide that type is. Only the name and the type decide
+      // how a value is read, so the rest is stepped over rather than kept.
+      let after = pair[1]
+      if after.length() < 18 {
+        failure = Some(Truncated(18, after.length()))
+      } else {
+        let oid = ByteSeq.getU32Be(&after.drop(6))
+        if let Ok(found) = oid {
+          columns = columns.push(Column{name: pair[0], oid: narrow(found[0])})
+        } else {
+          failure = Some(BadField("a column type that did not read"))
+        }
+        rest = after.drop(18)
+      }
+    } else {
+      failure = Some(BadField("a column name that did not read"))
+    }
+    index = index + 1
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(columns) }
+}
+
+/// The values a data row carries, with absent ones distinguished from empty.
+export fn readDataRow(payload: &Bytes) -> Result[Array[Option[Str]], ProtocolError] {
+  let counted = countOf(payload) ?
+  var values: Array[Option[Str]] = []
+  var rest = counted[1]
+  var index = 0
+  var failure: Option[ProtocolError] = None
+  while index < narrow16(counted[0]) && Option.isNone(&failure) {
+    let sized = ByteSeq.getU32Be(&rest)
+    if let Ok(pair) = sized {
+      let size = narrow(pair[0])
+      // A length the protocol writes as every bit set is minus one, which is
+      // how it says the column has no value at all.
+      if size == 4294967295 {
+        values = values.push(None)
+        rest = pair[1]
+      } else {
+        values = values.push(pair[1].take(size).toText())
+        rest = pair[1].drop(size)
+      }
+    } else {
+      failure = Some(Truncated(4, rest.length()))
+    }
+    index = index + 1
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(values) }
+}
+
+/// The fields an error or notice carries, keyed by the letter naming each.
+///
+/// Kept as the letters the protocol uses rather than as named fields, because
+/// the set grows between server versions and a client that dropped what it did
+/// not recognise would lose exactly the detail a new server added to help.
+export fn readFields(payload: &Bytes) -> Array[(Str, Str)] {
+  var fields: Array[(Str, Str)] = []
+  var rest = *payload
+  var going = true
+  while going {
+    if rest.isEmpty() || Option.unwrapOr(rest.at(0), 0u8) == 0u8 {
+      going = false
+    } else {
+      let letter = Option.unwrapOr(rest.take(1).toText(), "?")
+      let read = readCString(&rest.drop(1))
+      if let Ok(pair) = read {
+        fields = fields.push((letter, pair[0]))
+        rest = pair[1]
+      } else {
+        going = false
+      }
+    }
+  }
+  fields
+}
+
+/// One field of an error, by the letter naming it.
+export fn fieldOf(fields: &Array[(Str, Str)], letter: Str) -> Str {
+  var found = ""
+  for entry in fields {
+    if entry[0] == letter && found.isEmpty() { found = entry[1] }
+  }
+  found
+}
+
+/// The count at the front of a message, with the byte module's own failure
+/// turned into this module's: a caller here is reading a protocol message, not
+/// a number, and the reason it failed is that the message was short.
+fn countOf(payload: &Bytes) -> Result[(UInt16, Bytes), ProtocolError] {
+  Result.mapErr(ByteSeq.getU16Be(payload), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
+      Truncated(2, payload.length())
+    })
+}
+
+fn widen(value: Int) -> UInt32 { Option.unwrapOr(convertInteger[UInt32](value), 0u32) }
+
+fn widen16(value: Int) -> UInt16 { Option.unwrapOr(convertInteger[UInt16](value), 0u16) }
+
+fn narrow(value: UInt32) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }
+
+fn narrow16(value: UInt16) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }

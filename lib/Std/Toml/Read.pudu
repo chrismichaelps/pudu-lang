@@ -1,0 +1,305 @@
+module Std.Toml.Read
+
+import Std.Option as Option
+import Std.Toml {Boolean, Fractional, List, Malformed, Moment, Table, Text, Toml, TomlError, Unexpected, Unterminated, Whole}
+import Std.Toml as Document
+import Std.Toml.Scan as Scan
+
+/// A configuration read from text.
+///
+/// The document is built as it is read rather than collected and assembled
+/// afterwards, because a section header changes where every later key belongs:
+/// a reader that gathered keys first would have to remember which header each
+/// arrived under, which is the same bookkeeping done less directly.
+export fn read(source: Str) -> Result[Toml, TomlError] {
+  var root = Document.table()
+  var section: Array[Str] = []
+  var index = 0
+  var failure: Option[TomlError] = None
+
+  while index < source.length() && Option.isNone(&failure) {
+    index = Scan.skipBlank(source, index)
+    if index >= source.length() {
+      index = source.length()
+    } else {
+      let character = source.slice(index, index + 1)
+      if character == "[" {
+        let header = readHeader(source, index)
+        if let Ok(found) = header {
+          section = found[0]
+          index = found[2]
+          // A repeated section starts a new table at the end of a list; a plain
+          // one names a table that may already exist and is not replaced, so
+          // keys written under it after another section still land in it.
+          if found[1] {
+            root = appendAt(&root, &section, Document.table())
+          } else {
+            if Option.isNone(&pathAt(&root, &section)) {
+              root = setAt(&root, &section, Document.table())
+            }
+          }
+        } else {
+          failure = failureOf(header, index)
+        }
+      } else {
+        let pairing = readPair(source, index)
+        if let Ok(found) = pairing {
+          let whole = joinPath(&section, &found[0])
+          if Option.isSome(&pathAt(&root, &whole)) {
+            failure = Some(Document.Duplicate(dotted(&whole)))
+          } else {
+            root = setAt(&root, &whole, found[1])
+          }
+          index = found[2]
+        } else {
+          failure = failureOf(pairing, index)
+        }
+      }
+    }
+  }
+
+  if let Some(reason) = failure { Err(reason) } else { Ok(root) }
+}
+
+/// The failure a step reported, or a general one when it reported none.
+fn failureOf[T](outcome: Result[T, TomlError], index: Int) -> Option[TomlError] {
+  if let Err(reason) = outcome {
+    Some(reason)
+  } else {
+    Some(Malformed(index, "the document could not be read"))
+  }
+}
+
+/// A section header, whether it repeats, and where it ended.
+fn readHeader(source: Str, start: Int) -> Result[(Array[Str], Bool, Int), TomlError] {
+  let repeated = source.slice(start, start + 2) == "[["
+  var index = if repeated { start + 2 } else { start + 1 }
+  let named = readKeyPath(source, index) ?
+  index = Scan.skipInline(source, named[1])
+  let closing = if repeated { "]]" } else { "]" }
+  if source.slice(index, index + closing.length()) != closing {
+    Err(Unexpected(index, "a section header that was not closed"))
+  } else {
+    Ok((named[0], repeated, index + closing.length()))
+  }
+}
+
+/// A key and its value, and where the line ended.
+fn readPair(source: Str, start: Int) -> Result[(Array[Str], Toml, Int), TomlError] {
+  let named = readKeyPath(source, start) ?
+  var index = Scan.skipInline(source, named[1])
+  if source.slice(index, index + 1) != "=" {
+    Err(Unexpected(index, "a key with no value"))
+  } else {
+    index = Scan.skipInline(source, index + 1)
+    let valued = readValue(source, index) ?
+    Ok((named[0], valued[0], valued[1]))
+  }
+}
+
+/// A dotted key, and where it ended.
+fn readKeyPath(source: Str, start: Int) -> Result[(Array[Str], Int), TomlError] {
+  var pieces: Array[Str] = []
+  var index = Scan.skipInline(source, start)
+  var going = true
+  var failure: Option[TomlError] = None
+  while going && Option.isNone(&failure) {
+    let piece = Scan.readKey(source, index)
+    if let Ok(found) = piece {
+      pieces = pieces.push(found[0])
+      index = Scan.skipInline(source, found[1])
+      if source.slice(index, index + 1) == "." {
+        index = Scan.skipInline(source, index + 1)
+      } else {
+        going = false
+      }
+    } else {
+      failure = Some(Unexpected(index, "a key that could not be read"))
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok((pieces, index)) }
+}
+
+/// A value, and where it ended.
+export fn readValue(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  let index = Scan.skipInline(source, start)
+  let character = source.slice(index, index + 1)
+  if character == "\"" || character == "'" {
+    let quoted = Scan.readQuoted(source, index) ?
+    Ok((Text(quoted[0]), quoted[1]))
+  } else {
+    if character == "[" {
+      readList(source, index)
+    } else {
+      if character == "\{" {
+        readInline(source, index)
+      } else {
+        readBare(source, index)
+      }
+    }
+  }
+}
+
+/// A list of values, which may run over several lines and end with a comma.
+fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  var items: Array[Toml] = []
+  var index = Scan.skipBlank(source, start + 1)
+  var closed = false
+  var failure: Option[TomlError] = None
+  while !closed && Option.isNone(&failure) {
+    if index >= source.length() {
+      failure = Some(Unterminated(start))
+    } else {
+      if source.slice(index, index + 1) == "]" {
+        closed = true
+        index = index + 1
+      } else {
+        let valued = readValue(source, index)
+        if let Ok(found) = valued {
+          items = items.push(found[0])
+          index = Scan.skipBlank(source, found[1])
+          if source.slice(index, index + 1) == "," { index = Scan.skipBlank(source, index + 1) }
+        } else {
+          failure = failureOf(valued, index)
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok((List(items), index)) }
+}
+
+/// A table written between braces on one line.
+fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  var built = Document.table()
+  var index = Scan.skipInline(source, start + 1)
+  var closed = false
+  var failure: Option[TomlError] = None
+  while !closed && Option.isNone(&failure) {
+    if index >= source.length() {
+      failure = Some(Unterminated(start))
+    } else {
+      if source.slice(index, index + 1) == "\}" {
+        closed = true
+        index = index + 1
+      } else {
+        let pairing = readPair(source, index)
+        if let Ok(found) = pairing {
+          built = setAt(&built, &found[0], found[1])
+          index = Scan.skipInline(source, found[2])
+          if source.slice(index, index + 1) == "," { index = Scan.skipInline(source, index + 1) }
+        } else {
+          failure = failureOf(pairing, index)
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok((built, index)) }
+}
+
+/// A value written without quotes: a truth, a number, or a moment.
+fn readBare(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  var index = start
+  while index < source.length() && !"\n\r,]\}#".contains(source.slice(index, index + 1)) {
+    index = index + 1
+  }
+  let word = source.slice(start, index).trim()
+  if word.isEmpty() {
+    Err(Unexpected(start, "a value that is not there"))
+  } else {
+    Ok((Scan.valueOf(word), index))
+  }
+}
+
+/// A section path joined with a key path.
+fn joinPath(section: &Array[Str], key: &Array[Str]) -> Array[Str] {
+  var whole: Array[Str] = []
+  for piece in section { whole = whole.push(piece) }
+  for piece in key { whole = whole.push(piece) }
+  whole
+}
+
+fn dotted(pieces: &Array[Str]) -> Str {
+  var out = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { out = out + "." }
+    out = out + pieces[index]
+    index = index + 1
+  }
+  out
+}
+
+/// The value a path names, walking tables and the last table of a repeated
+/// section.
+fn pathAt(root: &Toml, pieces: &Array[Str]) -> Option[Toml] {
+  var current = Some(*root)
+  for piece in pieces {
+    if let Some(held) = current { current = stepInto(&held, piece) } else { current = None }
+  }
+  current
+}
+
+/// One step of a walk.
+///
+/// A repeated section is a list, and a key written under it belongs to the
+/// last table in that list rather than to the list itself, so a step through
+/// one lands there.
+fn stepInto(value: &Toml, name: Str) -> Option[Toml] {
+  if let Some(found) = Document.field(value, name) {
+    let items = Option.unwrapOr(Document.asList(&found), [])
+    if items.length() > 0 && Option.isSome(&Document.asTable(&items[items.length() - 1])) {
+      Some(items[items.length() - 1])
+    } else {
+      Some(found)
+    }
+  } else {
+    None
+  }
+}
+
+/// A document with a value placed at a path, building the tables above it.
+fn setAt(root: &Toml, pieces: &Array[Str], value: Toml) -> Toml {
+  if pieces.length() == 0 {
+    value
+  } else {
+    let name = pieces[0]
+    let rest = pieces.slice(1, pieces.length())
+    if rest.length() == 0 {
+      placeInto(root, name, value)
+    } else {
+      let below = Option.unwrapOr(stepInto(root, name), Document.table())
+      placeInto(root, name, setAt(&below, &rest, value))
+    }
+  }
+}
+
+/// A document with a table appended at a path, which is what a repeated
+/// section header does.
+fn appendAt(root: &Toml, pieces: &Array[Str], value: Toml) -> Toml {
+  if pieces.length() == 0 {
+    value
+  } else {
+    let name = pieces[0]
+    let rest = pieces.slice(1, pieces.length())
+    if rest.length() == 0 {
+      let held = Option.unwrapOr(Document.field(root, name), List([]))
+      let items = Option.unwrapOr(Document.asList(&held), [])
+      Document.withField(root, name, List(items.push(value)))
+    } else {
+      let below = Option.unwrapOr(stepInto(root, name), Document.table())
+      placeInto(root, name, appendAt(&below, &rest, value))
+    }
+  }
+}
+
+/// Put a value under a name, writing through a repeated section to its last
+/// table rather than over the list.
+fn placeInto(root: &Toml, name: Str, value: Toml) -> Toml {
+  let held = Option.unwrapOr(Document.field(root, name), Document.table())
+  let items = Option.unwrapOr(Document.asList(&held), [])
+  if items.length() > 0 && Option.isSome(&Document.asTable(&items[items.length() - 1])) {
+    Document.withField(root, name, List(items.remove(items.length() - 1).push(value)))
+  } else {
+    Document.withField(root, name, value)
+  }
+}

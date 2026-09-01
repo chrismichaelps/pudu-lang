@@ -238,6 +238,11 @@ testProgramEvaluation = do
   measurements <- runEntry "test-fixtures/stdlib/UsesBench.pudu"
   threads <- runEntry "test-fixtures/stdlib/UsesConcurrent.pudu"
   endpoints <- runEntry "test-fixtures/stdlib/UsesNet.pudu"
+  callbacks <- runEntry "test-fixtures/stdlib/UsesCallbacks.pudu"
+  hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
+  configured <- runEntry "test-fixtures/stdlib/UsesToml.pudu"
+  serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
+  database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -353,7 +358,7 @@ testProgramEvaluation = do
         particular identifier can be made to happen again. -}
     , counterexample
         "an identifier records its scheme and round trips through its text"
-        (identifiers === Just "21")
+        (identifiers === Just "24")
     {-| The three things that make a separated file harder than splitting on
         the separator: a quoted field, a quote inside one, and a separator or
         newline that a quoted field swallows. -}
@@ -378,13 +383,51 @@ testProgramEvaluation = do
         additions only under the load that makes the loss hardest to find. -}
     , counterexample
         "threads share a channel, a lock, and a cell without losing a write"
-        (threads === Just "17")
+        (threads === Just "22")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
         given, so nothing is assumed about what else the machine holds. -}
     , counterexample
         "a connection carries a message and the reply comes back"
         (endpoints === Just "10")
+    {-| A declaration carries no captured environment, so it runs in the frame
+        of whoever called it. A named function handed to another module ran
+        without its own imports and reported them undefined at run time, having
+        type-checked; the root's declarations now carry the root's environment
+        exactly as a dependency's do. -}
+    , counterexample
+        "a declared function works wherever it is called from"
+        (callbacks === Just "8")
+    {-| Routing, the chain of steps, and the method that carries its terms in
+        its own body are checked by calling the handler directly; a request
+        arriving and a reply going back are checked over a real socket. -}
+    , counterexample
+        "a server routes, wraps, and answers over a connection"
+        (serving === Just "35")
+    {-| Checked against a server written in the fixture that speaks the wire
+        protocol, so what the client sends is observable: that a value is sent
+        apart from the statement rather than pasted into it, that the challenge
+        is answered without the password crossing, that a server which cannot
+        prove it knows the password is refused, and that a failed transaction
+        is undone rather than left open. -}
+    , counterexample
+        "a database client binds, authenticates, and rolls back"
+        (database === Just "33")
+    {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
+        hash tells nothing apart is still kept distinct by its equality, a
+        replaced value keeps its position while a re-inserted key takes a new
+        one, the two zeros name one key, and four hundred keys with removals
+        answer exactly what the ordered map answers. -}
+    , counterexample
+        "a hash map settles identity by equality and order by insertion"
+        (hashed === Just "43")
+    {-| A configuration file, in the shapes the format actually holds: every
+        base a whole number is written in, a fractional one kept as its text
+        rather than rounded into a binary float, sections and repeated
+        sections, dotted keys, and a document written and read back. -}
+    , counterexample
+        "a configuration reads back what it was written as"
+        (configured === Just "44")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

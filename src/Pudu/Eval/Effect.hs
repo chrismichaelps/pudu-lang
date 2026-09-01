@@ -47,8 +47,12 @@ import Pudu.Eval.Socket
   , shutdownWriteAt
   )
 import Pudu.Eval.Io
+import Pudu.Eval.Entropy (secureBytes)
 import Pudu.Eval.Env
   ( effectsAdmitted
+  , currentConcurrentStore
+  , currentHandleStore
+  , currentSocketStore
   , performEffect
   , Evaluator (..)
   , abortAt
@@ -123,6 +127,7 @@ effectBuiltins =
   , CellOpenBuiltin
   , CellGetBuiltin
   , CellSwapBuiltin
+  , SecureBytesBuiltin
   ]
 
 {-| Perform one effect.
@@ -137,6 +142,9 @@ effectBuiltins =
 callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
 callEffect spanValue builtin arguments = do
   admitted <- effectsAdmitted
+  handles <- currentHandleStore
+  sockets <- currentSocketStore
+  concurrent <- currentConcurrentStore
   if not admitted
     then
       abortAt (Just spanValue) "E7009"
@@ -173,75 +181,77 @@ callEffect spanValue builtin arguments = do
           the same bytes twice. The token means nothing outside the runtime,
           so a program cannot make one up. -}
       (OpenReaderBuiltin, [StrValue path]) ->
-        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openReadHandle (Text.unpack path))
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openReadHandle handles (Text.unpack path))
       (OpenWriterBuiltin, [StrValue path]) ->
-        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openWriteHandle (Text.unpack path))
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openWriteHandle handles (Text.unpack path))
       (OpenAppenderBuiltin, [StrValue path]) ->
-        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openAppendHandle (Text.unpack path))
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openAppendHandle handles (Text.unpack path))
       {-| Nothing read means the input has ended, which is a different answer
           from an empty chunk: a reader that could not tell them apart would
           either stop early or never stop. -}
       (ReadChunkBuiltin, [IntValue _ token, IntValue _ count]) -> do
-        outcome <- lift refusal (readHandleChunk (fromInteger token) (fromInteger count))
+        outcome <- lift refusal (readHandleChunk handles (fromInteger token) (fromInteger count))
         pure (resultOf (fmap optionalBytes outcome))
       (WriteChunkBuiltin, [IntValue _ token, BytesValue chunk]) ->
-        effectUnit (writeHandleChunk (fromInteger token) chunk)
+        effectUnit (writeHandleChunk handles (fromInteger token) chunk)
       (FlushWriterBuiltin, [IntValue _ token]) ->
-        effectUnit (flushHandleAt (fromInteger token))
+        effectUnit (flushHandleAt handles (fromInteger token))
       (CloseHandleBuiltin, [IntValue _ token]) ->
-        effectUnit (closeHandleAt (fromInteger token))
+        effectUnit (closeHandleAt handles (fromInteger token))
       {-| An endpoint is named by a token for the reason an open file is: it is
           one object with one position in its stream, while a value is copied
           through evaluation. -}
       (TcpListenBuiltin, [StrValue host, IntValue _ port, IntValue _ backlog]) ->
         resultOf . fmap (intOf . fromIntegral)
-          <$> lift refusal (listenOn host (fromInteger port) (fromInteger backlog))
+          <$> lift refusal (listenOn sockets host (fromInteger port) (fromInteger backlog))
       (TcpAcceptBuiltin, [IntValue _ token]) ->
-        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (acceptOn (fromInteger token))
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (acceptOn sockets (fromInteger token))
       (TcpConnectBuiltin, [StrValue host, IntValue _ port]) ->
         resultOf . fmap (intOf . fromIntegral)
-          <$> lift refusal (connectTo host (fromInteger port))
+          <$> lift refusal (connectTo sockets host (fromInteger port))
       (SocketSendBuiltin, [IntValue _ token, BytesValue payload]) ->
-        effectUnit (sendOn (fromInteger token) payload)
+        effectUnit (sendOn sockets (fromInteger token) payload)
       (SocketReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
-        outcome <- lift refusal (receiveFrom (fromInteger token) (fromInteger count))
+        outcome <- lift refusal (receiveFrom sockets (fromInteger token) (fromInteger count))
         pure (resultOf (fmap optionalBytes outcome))
       (SocketCloseBuiltin, [IntValue _ token]) ->
-        effectUnit (closeSocketAt (fromInteger token))
+        effectUnit (closeSocketAt sockets (fromInteger token))
       (SocketFinishBuiltin, [IntValue _ token]) ->
-        effectUnit (shutdownWriteAt (fromInteger token))
+        effectUnit (shutdownWriteAt sockets (fromInteger token))
       (SocketPeerBuiltin, [IntValue _ token]) ->
-        resultOf . fmap StrValue <$> lift refusal (peerOf (fromInteger token))
+        resultOf . fmap StrValue <$> lift refusal (peerOf sockets (fromInteger token))
       (SocketPortBuiltin, [IntValue _ token]) ->
-        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf (fromInteger token))
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf sockets (fromInteger token))
       {-| A thread, a channel, a lock, and a cell are each named by a token for
           the reason a file and a socket are: they are shared objects, while a
           value is copied through evaluation, and two copies of a lock would
           not exclude each other. -}
       (JoinThreadBuiltin, [IntValue _ token]) ->
-        effectUnit (threadJoin (fromInteger token))
+        effectUnit (threadJoin concurrent (fromInteger token))
       (SleepBuiltin, [IntValue _ millis]) -> effectUnit (sleepFor (fromInteger millis))
       (ChannelOpenBuiltin, [IntValue _ limit]) ->
-        intOf . fromIntegral <$> lift refusal (channelNew (fromInteger limit))
+        intOf . fromIntegral <$> lift refusal (channelNew concurrent (fromInteger limit))
       (ChannelPushBuiltin, [IntValue _ token, value]) ->
-        effectUnit (channelSend (fromInteger token) value)
+        effectUnit (channelSend concurrent (fromInteger token) value)
       (ChannelPullBuiltin, [IntValue _ token]) -> do
-        outcome <- lift refusal (channelReceive (fromInteger token))
+        outcome <- lift refusal (channelReceive concurrent (fromInteger token))
         pure (resultOf (fmap optionalValue outcome))
       (ChannelWaitingBuiltin, [IntValue _ token]) ->
-        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending (fromInteger token))
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending concurrent (fromInteger token))
       (ChannelFinishBuiltin, [IntValue _ token]) ->
-        effectUnit (channelClose (fromInteger token))
-      (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal mutexNew
+        effectUnit (channelClose concurrent (fromInteger token))
+      (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal (mutexNew concurrent)
       (MutexAcquireBuiltin, [IntValue _ token]) ->
-        effectUnit (mutexLock (fromInteger token))
+        effectUnit (mutexLock concurrent (fromInteger token))
       (MutexReleaseBuiltin, [IntValue _ token]) ->
-        effectUnit (mutexUnlock (fromInteger token))
-      (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew value)
+        effectUnit (mutexUnlock concurrent (fromInteger token))
+      (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew concurrent value)
       (CellGetBuiltin, [IntValue _ token]) ->
-        resultOf <$> lift refusal (cellRead (fromInteger token))
+        resultOf <$> lift refusal (cellRead concurrent (fromInteger token))
       (CellSwapBuiltin, [IntValue _ token, value]) ->
-        resultOf <$> lift refusal (cellSwap (fromInteger token) value)
+        resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
+      (SecureBytesBuiltin, [IntValue _ count]) ->
+        resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath

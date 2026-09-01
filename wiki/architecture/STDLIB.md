@@ -118,7 +118,7 @@ and buy nothing.
 | `Std.List` | the operations `Array[T]` does not already carry |
 | `Std.Map` | ordered maps, by comparison |
 | `Std.Set` | ordered sets |
-| `Std.HashMap` | hash maps, by `Hash` — blocked, see [[#Deferred, with reasons]] |
+| `Std.HashMap` | hash maps, by `Hash`, in first-insertion order |
 | `Std.Deque` | double-ended queue |
 | `Std.Math` | numerics, saturating and checked arithmetic, constants |
 
@@ -143,7 +143,7 @@ unreportable.
 | `Std.Text.Parse` | parser combinators with position-carrying errors |
 | `Std.Json` | `Json` values, decoding to declared types, streaming encode |
 | `Std.Csv` | row and record decoding |
-| `Std.Toml` | configuration |
+| `Std.Toml` | configuration values and encoding, read by `Std.Toml.Read` |
 
 `Std.Text.Parse` is a combinator library rather than a regular-expression engine, and it now exists.
 A regex is a second language embedded in a string, invisible to the type checker and to `pudu doc`;
@@ -194,13 +194,16 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 
 | Module | Provides |
 |---|---|
-| `Std.Concurrent` | task groups over the language's own `async with scope` |
+| `Std.Concurrent` | joinable host workers for blocking runtime work |
 | `Std.Channel` | bounded and unbounded channels |
 | `Std.Sync` | mutex, semaphore, once, atomic cells |
 
-`Std.Concurrent` is a thin layer over the structured scopes the language already has. It does not
-introduce a second concurrency model: a task started through it is a child of the enclosing scope and
-is joined by the same rules, so the library cannot leak a task the language would have caught.
+`Std.Concurrent` is currently a provisional host-worker layer, distinct from the deterministic cold
+tasks used by `async fn`. Every worker is joinable and is registered for program teardown, but lexical
+scope registration and cancellation are not complete; the module cannot be called stable until a
+worker started inside `async with scope` is owned and joined by that scope rather than only by the
+program. The distinction is explicit because calling raw threads "structured concurrency" would
+claim a lifetime guarantee the evaluator does not yet enforce.
 
 ### Correctness
 
@@ -213,7 +216,10 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Forty-seven modules, 1327 exported declarations, every one written in Pudu.
+Sixty modules and 1622 exported declarations are present in this recovery branch, every public
+surface written in Pudu. Thirteen of those modules are provisional until the focused/full gates,
+resource-lifetime audit, mirror review, and delivery split recorded in
+[[2026-09-01-production-stdlib-recovery]] complete; presence is not a shipping claim.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -264,6 +270,19 @@ Forty-seven modules, 1327 exported declarations, every one written in Pudu.
 | `Std.Process` | 11 | running a program, its status and streams, availability |
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
+| `Std.Bytes` | 45 | compact bytes, binary reads/writes, slicing, hex, and base64 |
+| `Std.Csv` | 12 | quoted separated rows, tables, records, and rendering |
+| `Std.Path` | 23 | host-aware lexical construction, decomposition, and containment |
+| `Std.Uuid` | 12 | byte-backed v4/v7 identifiers with explicit entropy and time |
+| `Std.Bench` | 12 | repeated measurements, summaries, ratios, and rendering |
+| `Std.Time.Format` | 17 | civil arithmetic, RFC 3339, HTTP dates, and patterns |
+| `Std.Concurrent` | 7 | joinable host workers and parallel groups, provisional |
+| `Std.Channel` | 9 | bounded typed queues with explicit closure, provisional |
+| `Std.Sync` | 15 | runtime mutexes, atomic cells, and counters, provisional |
+| `Std.Net` | 21 | TCP listeners/connections and bounded streaming reads, provisional |
+| `Std.Http.Server` | 45 | routing, middleware, limits, and HTTP/1 serving, provisional |
+| `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
+| `Std.Db` | 33 | PostgreSQL connection, SCRAM, queries, transactions, and pools, provisional |
 
 ### On structures
 
@@ -334,8 +353,13 @@ And two whose shape is about what a collection refuses to do rather than what it
   keys is stored once. Autocomplete, a routing table's most specific match, and every setting under
   one section are the questions; `Map` answers them by testing every key.
 
-`Std.HashMap` remains planned rather than shipped, and the reasons are under
-[[#Deferred, with reasons]] — they are about the language rather than about the container.
+**`Std.HashMap`** is the last of them, and it needed a language decision before a
+container: [[ADR-0015]] settles that `Hash` sits beside `Eq` and `Ord`, that equal values must
+hash alike while alike hashes need not be equal, and that identity is always decided by `Eq`.
+The buckets are reached through a runtime store keyed by a number rather than by comparison,
+because buckets held in the ordered `Map` would pay an ordered lookup for every hashed one —
+which is the cost the container exists to remove. Enumeration is first-insertion order, kept by
+the entries themselves, so what a program prints does not depend on where a bucket landed.
 
 None of them is a primitive. Each is built from what is already here, which is the test of whether
 the existing surface is enough to write against.
@@ -368,6 +392,11 @@ two attempts here went the way they did. A module-scope `const` is evaluated onc
 figures above are the evidence of.
 
 ### On numbers
+
+`Std.Order` now carries `Hash` beside `Eq` and `Ord`. The law runs one way: two values that are
+equal must hash alike, and two that hash alike need not be equal. A hash is not a digest and
+promises nothing across runs — `Std.HashMap` mixes it against a value the process chose at startup,
+so a caller who picks keys cannot pick which of them collide.
 
 The numeric surface is **generic, bounded by traits**, not `Int`-only. `Std.Order` carries `Eq` and
 `Ord`, `Std.Num` carries `Integer`, `Zero`, `One`, `Add`, `Sub`, `Mul`, and `Div`, and `Std.Bits` carries
@@ -506,10 +535,11 @@ That distinction is the one date handling gets wrong most often — a birthday i
 while a meeting is an instant — and a library that let them be added together would be inviting the
 mistake rather than preventing it.
 
-What is still blocked is the *foreign* interface — calling into a library this runtime does not
-already contain. That is what `Std.Net`, `Std.Db`, and an HTTP client need, and it needs the
-`foreign` capability from [[Unsafe Capabilities]] plus a decision about how a foreign type's
-ownership is described.
+The interpreter now has narrow host boundaries for file handles, sockets, workers, synchronization,
+and cryptographic primitives. They are not a general foreign interface: Pudu source cannot name a C
+symbol, invent a resource token, or assert host ownership. That restriction lets `Std.Net`,
+`Std.Http.Server`, and the PostgreSQL-specific `Std.Db` exist without prematurely settling
+`Std.Ffi`; every host exception is translated into the library's declared `Result` error.
 
 ### On HTTP
 
@@ -518,13 +548,11 @@ building and inspecting requests, the full status and header vocabulary, cookies
 authorization, content negotiation with weights, form bodies, byte ranges, chunked framing, and
 parsing or rendering a complete message.
 
-**There is no client, and there will not be one until the foreign interface exists.** A `send` that
-could not send would be worse than none: it would make a program compile and fail at run time for a
-reason the type system could have carried. Everything up to the moment of sending is here and
-testable without a network, which is the part a program spends most of its code on anyway.
-
-Everything else in the tables above is designed and unwritten. `Std.Net`, `Std.Process`, `Std.Db`,
-and an HTTP client are blocked on the foreign interface; the rest is library work waiting its turn.
+`Std.Http.Server` now joins that protocol surface to `Std.Net`: handlers remain socket-free values,
+routes are first-match, and the reader enforces explicit head/body limits before materializing a
+request. The HTTP client transport is still absent. A client must add redirects, deadlines, response
+limits, connection reuse, and TLS verification rather than expose a `send` that only works for the
+happy path.
 
 ## What writing it found
 
@@ -582,6 +610,11 @@ operation that must copy is named so the reader can see it.
 **Documented with `///`.** Every exported name carries documentation, so `pudu doc` and `pudu search`
 answer for the standard library as they do for a program. This is checkable and will be checked.
 
+The provisional recovery modules do not yet satisfy every rule above. In particular, opaque handles
+are closed explicitly plus at program teardown rather than by implemented `Drop`, and blocking host
+operations do not yet have scope cancellation/deadlines. They remain implementation candidates, not
+production-ready exceptions to these rules.
+
 ## Import DX
 
 The forms are the ones [[grammar/pudu]] already admits; the standard library adds no syntax.
@@ -616,28 +649,35 @@ able to answer "where did this name come from" from the import list alone.
 There is no third step. No network, no cache, no lock file, no version solving. A Pudu program's
 dependencies are its own files plus the compiler it is built with, and that is the whole answer.
 
+## Active completion queue
+
+- ~~**`Std.HashMap` and `Hash`.**~~ Shipped; see [[ADR-0015]]. The remaining note is kept only as
+  the record of what had to be settled first: equality/hash coherence and a
+  constant-time indexed bucket representation must be specified beside `Eq` and `Ord` before the
+  public map is written. A tree of buckets would still be an ordered map plus hashing and is refused.
+- ~~**`Std.Toml`.**~~ Shipped, split three ways: values and encoding in `Std.Toml`, document
+  structure in `Std.Toml.Read`, and the lexical layer in `Std.Toml.Scan`. Numbers and moments keep
+  their source text rather than being rounded or given a zone. The note below is the record of what
+  it had to preserve: line/column diagnostics, duplicate-key and
+  dotted-table rules, and a deterministic value model. It is library work, not syntax.
+- **`Std.Tls` and HTTP client transport.** TLS needs verified peer names, trust roots, protocol
+  versions, deadlines, close behavior, and a narrow audited host adapter. Disabling verification may
+  exist only behind an explicit unsafe/testing boundary.
+- **Project/package tooling.** A manifest, lockfile, content-addressed cache, deterministic resolver,
+  offline build, checksums, and compatibility rules must precede any registry publication. The
+  standard library remains shipped and cannot be shadowed by dependency resolution.
+- **Large-input evidence.** File, network, CSV/TOML/JSON, HTTP, and database readers need streaming
+  fixtures whose maximum residency is bounded independently of input size; a buffered convenience
+  wrapper never serves as that evidence.
+
 ## Deferred, with reasons
 
-- **A package manager and third-party registry.** The standard library must be complete enough to be
-  worth having before a registry is worth designing; shipping a registry first would make the
-  standard library optional in practice, which is the outcome this design exists to avoid.
 - **`Std.Regex`.** A regular-expression engine is a second language inside a string literal. Before
   admitting one, Pudu needs to decide whether it can be checked at compile time — a literal pattern
   can be, a computed one cannot — and shipping the unchecked form first would settle that question by
   default.
 - **`Std.Ffi`.** Calling into C requires the `foreign` capability from [[Unsafe Capabilities]] and a
   decision about how a foreign type's ownership is described. Both are open.
-- **`Std.HashMap`.** Three things block it, and none is about the container. There is no hash to
-  build on: `Std.Crypto` offers SHA-256 and nothing else, a cryptographic digest written in Pudu and
-  far too expensive per lookup, and no `Hash` trait exists anywhere. Adding one is a language
-  decision — what it guarantees across the integer family, text, and aggregates, and how every user
-  type implements it — that belongs beside `Std.Order`'s `Eq` and `Ord` rather than inside a
-  container. And it would not win even then: the built-in `Map` is a balanced tree, while a hash map
-  written in Pudu would reach its buckets through a `Map` or an `Array`, neither of which is
-  constant-time here, so the bucket lookup alone would cost what the whole ordered lookup already
-  costs, with hashing and collision handling added on top. Worth revisiting when the runtime has a
-  hashing primitive and a constant-time indexed store; until then it would be a slower `Map` with a
-  name that promises otherwise.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.

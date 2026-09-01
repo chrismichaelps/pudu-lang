@@ -5,6 +5,7 @@ module Pudu.Eval.Render
   ) where
 
 import qualified Data.ByteString as ByteString
+import qualified Data.IntMap.Strict as IntMap
 import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -41,6 +42,7 @@ renderValue value = case value of
   BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
   BuiltinValue SetOfBuiltin -> "<builtin setOf>"
   BuiltinValue BytesOfBuiltin -> "<builtin bytesOf>"
+  BuiltinValue BucketsOfBuiltin -> "<builtin bucketsOf>"
   BuiltinValue ShowBuiltin -> "<builtin show>"
   BuiltinValue other -> "<builtin " <> builtinName other <> ">"
   MapValue entries ->
@@ -52,12 +54,20 @@ renderValue value = case value of
   StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
   BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
+  BucketsMethodValue method _ -> "<store method " <> bucketsMethodName method <> ">"
   {-| Bytes print as hexadecimal pairs rather than as the text they might
       decode to. A sequence being inspected is usually one that did not decode,
       and rendering it as text would hide the bytes the reader is looking for
       behind replacement characters. -}
   BytesValue bytes ->
     "0x" <> Text.concat [hexPair byte | byte <- ByteString.unpack bytes]
+  {-| A store prints its entries in key order. It is the buckets underneath a
+      hash map rather than anything a program builds directly, so this is a
+      reader inspecting the machinery rather than a value being shown. -}
+  BucketsValue entries ->
+    "#[" <> Text.intercalate ", "
+      [Text.pack (show key) <> ": " <> renderValue held | (key, held) <- IntMap.toAscList entries]
+      <> "]"
  where
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
 
@@ -80,6 +90,7 @@ valueKind value = case value of
   DecimalValue _ -> "decimal"
   StrValue _ -> "string"
   BytesValue _ -> "bytes"
+  BucketsValue _ -> "store"
   CharValue _ -> "char"
   BoolValue _ -> "bool"
   NullValue -> "null"
@@ -99,3 +110,4 @@ valueKind value = case value of
   StringMethodValue _ _ -> "text method"
   CharMethodValue _ _ -> "character method"
   BytesMethodValue _ _ -> "byte method"
+  BucketsMethodValue _ _ -> "store method"

@@ -124,6 +124,23 @@ export trait Eq { fn equals(self: &Self, other: &Self) -> Bool }
 /// rest follow from it without a type having to keep them in step.
 export trait Ord { fn before(self: &Self, other: &Self) -> Bool }
 
+/// A value's number, for a collection that reaches its entries by one.
+///
+/// The law is one direction only: two values that are equal must hash the
+/// same, and two values that hash the same need not be equal. A collection
+/// built on this settles identity with `Eq` and uses the number only to decide
+/// where to look, so a collision costs a comparison rather than an answer.
+///
+/// This is not a digest. A value hashed here is not hidden, and two runs of a
+/// program are not promised the same number for the same value — a hash map
+/// mixes the result against a value chosen when the process started, so that a
+/// caller who can choose keys cannot choose which of them collide. Anything
+/// that must be secret or repeatable across runs wants `Std.Crypto`.
+export trait Hash { fn hash(self: &Self) -> Int }
+
+/// The number a value hashes to, for a caller writing their own container.
+export fn hashed[T: Hash](value: &T) -> Int { value.hash() }
+
 /// Whether two values are equal under their own rule.
 export fn same[T: Eq](left: &T, right: &T) -> Bool { left.equals(right) }
 
@@ -171,6 +188,34 @@ export fn clamped[T: Ord](value: &T, lower: &T, upper: &T) -> T {
 /// Implementations for every type the language wires in. Written out because
 /// the language has no deriving, and here rather than in each caller because a
 /// bound exists so a caller does not repeat it.
+
+/// Every wired-in type hashes through the runtime, which reads the value
+/// rather than its rendering: a number is mixed from its own bytes, and text
+/// and byte sequences from theirs. Two values that are equal are the same
+/// value here, so the law holds by construction.
+impl Hash for Int { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int8 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int16 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int32 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int64 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Int128 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt8 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt16 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt32 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt64 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for UInt128 { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for BigInt { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Str { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Char { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Bool { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Bytes { fn hash(self: &Self) -> Int { hashOf(*self) } }
+impl Hash for Decimal { fn hash(self: &Self) -> Int { hashOf(*self) } }
+/// A floating value hashes through the number it is, so the two zeros that
+/// compare equal hash the same. Adding zero is what normalizes the sign
+/// without changing any other value.
+impl Hash for Float32 { fn hash(self: &Self) -> Int { hashOf((*self) + 0.0f32) } }
+impl Hash for Float64 { fn hash(self: &Self) -> Int { hashOf((*self) + 0.0) } }
 
 impl Eq for Int { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }
 impl Eq for Int8 { fn equals(self: &Self, other: &Self) -> Bool { (*self) == (*other) } }

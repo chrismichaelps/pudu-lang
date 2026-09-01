@@ -93,6 +93,24 @@ export fn startsWith(source: &Bytes, prefix: &Bytes) -> Bool { source.startsWith
 /// Whether a sequence ends with another.
 export fn endsWith(source: &Bytes, suffix: &Bytes) -> Bool { source.endsWith(*suffix) }
 
+/// Two sequences combined bit by bit, as long as the shorter of them.
+/// The length is the shorter rather than the longer because the operation has
+/// no answer where only one sequence has a byte: padding the shorter with
+/// zeros would quietly copy the longer's tail into the result, which for a
+/// proof carried over a wire is the difference between checking it and not.
+export fn xorWith(left: &Bytes, right: &Bytes) -> Bytes {
+  let size = if left.length() < right.length() { left.length() } else { right.length() }
+  var octets: Array[UInt8] = []
+  var index = 0
+  while index < size {
+    let a = Option.unwrapOr(left.at(index), 0u8)
+    let b = Option.unwrapOr(right.at(index), 0u8)
+    octets = octets.push(a ^ b)
+    index = index + 1
+  }
+  bytesOf(octets)
+}
+
 /// A sequence in reverse. This copies.
 export fn reverse(source: &Bytes) -> Bytes { source.reverse() }
 

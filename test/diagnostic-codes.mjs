@@ -36,6 +36,7 @@ const shared = new Map([
   ["E7003", "a call's arity, from the evaluator and from its builtins"],
   ["E7004", "an operand outside the range its operation allows"],
   ["E7008", "await used where it cannot be, from the evaluator and from its builtins"],
+  ["E7009", "an effect refused while a constant is folded, from the effects and from starting a thread"],
   ["E7012", "a built-in given arguments it does not accept, from the builtins and the effects"],
 ]);
 

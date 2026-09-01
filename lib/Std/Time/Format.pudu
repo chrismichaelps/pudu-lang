@@ -1,6 +1,7 @@
 module Std.Time.Format
 
 import Std.Option as Option
+import Std.Time.Format.Civil as Civil
 
 /// Why text does not name a time.
 export type FormatError
@@ -22,40 +23,12 @@ export type Parts = {
   milli: Int
 }
 
-/// Division that rounds towards negative infinity.
-///
-/// The calendar arithmetic below needs this rather than the truncating kind:
-/// a moment before 1970 has a negative count of milliseconds, and truncation
-/// would move it a day the wrong way on exactly the dates nobody tests.
-fn floorDiv(numerator: Int, denominator: Int) -> Int {
-  let quotient = numerator / denominator
-  if (numerator % denominator != 0) && ((numerator < 0) != (denominator < 0)) {
-    quotient - 1
-  } else {
-    quotient
-  }
-}
-
-/// The remainder that agrees with `floorDiv`, so it is never negative for a
-/// positive divisor.
-fn floorMod(numerator: Int, denominator: Int) -> Int {
-  numerator - floorDiv(numerator, denominator) * denominator
-}
-
 /// Whether a year carries an extra day.
-export fn isLeapYear(year: Int) -> Bool {
-  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
-}
-
-const MONTH_LENGTHS: Array[Int] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+export fn isLeapYear(year: Int) -> Bool { Civil.isLeapYear(year) }
 
 /// How many days a month holds in a given year.
 export fn daysInMonth(year: Int, month: Int) -> Int {
-  if month < 1 || month > 12 {
-    0
-  } else {
-    if month == 2 && isLeapYear(year) { 29 } else { MONTH_LENGTHS[month - 1] }
-  }
+  Civil.daysInMonth(year, month)
 }
 
 /// The day number a civil date stands on, counting from the start of 1970.
@@ -65,36 +38,18 @@ export fn daysInMonth(year: Int, month: Int) -> Int {
 /// makes this arithmetic rather than a table, and what makes it as correct in
 /// the year 3000 as in this one.
 export fn daysFromCivil(year: Int, month: Int, day: Int) -> Int {
-  let shifted = if month <= 2 { year - 1 } else { year }
-  let cycle = floorDiv(shifted, 400)
-  let yearInCycle = shifted - cycle * 400
-  let monthShifted = if month > 2 { month - 3 } else { month + 9 }
-  let dayInYear = (153 * monthShifted + 2) / 5 + day - 1
-  let dayInCycle =
-  yearInCycle * 365 + yearInCycle / 4 - yearInCycle / 100 + dayInYear
-  cycle * 146097 + dayInCycle - 719468
+  Civil.daysFromCivil(year, month, day)
 }
 
 /// The civil date a day number stands on.
 export fn civilFromDays(days: Int) -> (Int, Int, Int) {
-  let shifted = days + 719468
-  let cycle = floorDiv(shifted, 146097)
-  let dayInCycle = shifted - cycle * 146097
-  let yearInCycle =
-  (dayInCycle - dayInCycle / 1460 + dayInCycle / 36524 - dayInCycle / 146096) / 365
-  let dayInYear =
-  dayInCycle - (365 * yearInCycle + yearInCycle / 4 - yearInCycle / 100)
-  let monthShifted = (5 * dayInYear + 2) / 153
-  let day = dayInYear - (153 * monthShifted + 2) / 5 + 1
-  let month = if monthShifted < 10 { monthShifted + 3 } else { monthShifted - 9 }
-  let year = yearInCycle + cycle * 400
-  (if month <= 2 { year + 1 } else { year }, month, day)
+  Civil.civilFromDays(days)
 }
 
 /// A moment taken apart, as the time at zero offset.
 export fn partsOf(millis: Int) -> Parts {
-  let days = floorDiv(millis, 86400000)
-  let inDay = floorMod(millis, 86400000)
+  let days = Civil.floorDiv(millis, 86400000)
+  let inDay = Civil.floorMod(millis, 86400000)
   let date = civilFromDays(days)
   Parts {
     year: date[0],
@@ -112,8 +67,8 @@ export fn partsOf(millis: Int) -> Parts {
 /// month is January of the next year, which is what makes adding a month to
 /// December work without the caller checking first.
 export fn millisOf(parts: &Parts) -> Int {
-  let monthIndex = floorMod(parts.month - 1, 12)
-  let year = parts.year + floorDiv(parts.month - 1, 12)
+  let monthIndex = Civil.floorMod(parts.month - 1, 12)
+  let year = parts.year + Civil.floorDiv(parts.month - 1, 12)
   daysFromCivil(year, monthIndex + 1, parts.day) * 86400000
     + parts.hour * 3600000
     + parts.minute * 60000
@@ -124,7 +79,9 @@ export fn millisOf(parts: &Parts) -> Int {
 /// Which day of the week a moment falls on, counting Sunday as zero.
 /// The first of January 1970 was a Thursday, which is why the count starts
 /// four days along.
-export fn weekdayOf(millis: Int) -> Int { floorMod(floorDiv(millis, 86400000) + 4, 7) }
+export fn weekdayOf(millis: Int) -> Int {
+  Civil.floorMod(Civil.floorDiv(millis, 86400000) + 4, 7)
+}
 
 /// Which day of its year a moment falls on, counting the first as one.
 export fn dayOfYear(millis: Int) -> Int {
@@ -416,7 +373,7 @@ fn directive(name: Str, millis: Int, parts: &Parts) -> Str {
   if name == "p" { return if parts.hour < 12 { "AM" } else { "PM" } }
   if name == "I" { return padded(twelveHour(parts.hour), 2) }
   if name == "e" { return show(parts.day) }
-  if name == "s" { return show(floorDiv(millis, 1000)) }
+  if name == "s" { return show(Civil.floorDiv(millis, 1000)) }
   if name == "z" { return "+0000" }
   if name == "Z" { return "UTC" }
   if name == "%" { return "%" }

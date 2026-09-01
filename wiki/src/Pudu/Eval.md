@@ -52,6 +52,9 @@ evaluateModule :: Module -> EvalOutcome
   compiler happened to be in, and would produce output nobody asked for. `E7009` reports the
   refusal, naming the boundary rather than the operation, because every operation behind it is
   refused for one reason.
+- Every run allocates an isolated resource set and tears down only that set on every exit path.
+  Concurrent evaluations in one host process therefore cannot close one another's files, sockets,
+  or synchronization objects.
 - Every effect answers with `Result[T, Str]`. `exit` is the only one that does not, because a
   program that asked to stop has nothing left to decide.
 
@@ -150,6 +153,9 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 - **Q:** Implement membership by iterating the Set? **A:** No. _Rationale:_ [[Eval Keyed]] already
   owns the balanced-tree lookup and its equality; iteration would discard the data structure's
   complexity and duplicate comparison policy. _Rejected:_ `any` over rendered members.
+- **Q:** Use process-global resource registries? **A:** No. _Rationale:_ teardown belongs to the run
+  that acquired the resource, and global clearing races with other embedded runs. _Rejected:_ a
+  global evaluation mutex, which would make independent programs block one another.
 
 ## Variants
 

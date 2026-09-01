@@ -1,29 +1,28 @@
 {-| @Eval.Concurrent.Module — threads, channels, and the locks between them -}
 module Pudu.Eval.Concurrent
-  ( channelClose
+  ( ConcurrentStore
+  , channelClose
   , channelNew
   , channelPending
   , channelReceive
   , channelSend
-  , closeAllConcurrent
+  , closeConcurrentStore
   , cellNew
   , cellRead
   , cellSwap
   , mutexNew
   , mutexLock
   , mutexUnlock
+  , newConcurrentStore
   , sleepFor
   , threadJoin
   , threadRegister
   ) where
 
-import Control.Concurrent (ThreadId, killThread, threadDelay)
+import Control.Concurrent (ThreadId, killThread, myThreadId, threadDelay)
 import Control.Concurrent.MVar
   ( MVar
-  , newMVar
   , readMVar
-  , takeMVar
-  , tryPutMVar
   )
 import Control.Concurrent.STM
   ( TVar
@@ -38,10 +37,11 @@ import Control.Exception (SomeException, try)
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import Data.Sequence (Seq, ViewL (..), (|>))
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import Pudu.Eval.Io (IoOutcome (..))
 import Pudu.Eval.Value (Value)
-import System.IO.Unsafe (unsafePerformIO)
 
 {-| @Eval.Concurrent.Running — one thread the program started.
 
@@ -66,33 +66,35 @@ data Running = Running
     memory, which is the failure a channel exists to prevent rather than to
     postpone. -}
 data Channel = Channel
-  { channelItems :: !(TVar [Value])
+  { channelItems :: !(TVar (Seq Value))
   , channelLimit :: !Int
   , channelClosed :: !(TVar Bool)
   }
 
-threadTable :: IORef (IntMap Running)
-{-# NOINLINE threadTable #-}
-threadTable = unsafePerformIO (newIORef IntMap.empty)
+newtype Mutex = Mutex
+  { mutexOwner :: TVar (Maybe ThreadId)
+  }
 
-channelTable :: IORef (IntMap Channel)
-{-# NOINLINE channelTable #-}
-channelTable = unsafePerformIO (newIORef IntMap.empty)
+data ConcurrentStore = ConcurrentStore
+  { threadTable :: !(IORef (IntMap Running))
+  , channelTable :: !(IORef (IntMap Channel))
+  , mutexTable :: !(IORef (IntMap Mutex))
+  , cellTable :: !(IORef (IntMap (TVar Value)))
+  , concurrentNextToken :: !(IORef Int)
+  }
 
-mutexTable :: IORef (IntMap (MVar ()))
-{-# NOINLINE mutexTable #-}
-mutexTable = unsafePerformIO (newIORef IntMap.empty)
+newConcurrentStore :: IO ConcurrentStore
+newConcurrentStore =
+  ConcurrentStore
+    <$> newIORef IntMap.empty
+    <*> newIORef IntMap.empty
+    <*> newIORef IntMap.empty
+    <*> newIORef IntMap.empty
+    <*> newIORef 1
 
-cellTable :: IORef (IntMap (TVar Value))
-{-# NOINLINE cellTable #-}
-cellTable = unsafePerformIO (newIORef IntMap.empty)
-
-nextToken :: IORef Int
-{-# NOINLINE nextToken #-}
-nextToken = unsafePerformIO (newIORef 1)
-
-freshToken :: IO Int
-freshToken = atomicModifyIORef' nextToken (\value -> (value + 1, value))
+freshToken :: ConcurrentStore -> IO Int
+freshToken store =
+  atomicModifyIORef' (concurrentNextToken store) (\value -> (value + 1, value))
 
 {-| Record a thread that has already been started, and the slot it will report
     into.
@@ -100,10 +102,10 @@ freshToken = atomicModifyIORef' nextToken (\value -> (value + 1, value))
     Starting the thread is not done here: running a Pudu closure needs the
     evaluator's own apply, which lives where calls are dispatched. This module
     owns what a started thread is afterwards. -}
-threadRegister :: ThreadId -> MVar (Maybe Text) -> IO Int
-threadRegister threadId outcome = do
-  token <- freshToken
-  atomicModifyIORef' threadTable $ \table ->
+threadRegister :: ConcurrentStore -> ThreadId -> MVar (Maybe Text) -> IO Int
+threadRegister store threadId outcome = do
+  token <- freshToken store
+  atomicModifyIORef' (threadTable store) $ \table ->
     (IntMap.insert token (Running{runningThread = threadId, runningOutcome = outcome}) table, ())
   pure token
 
@@ -112,9 +114,9 @@ threadRegister threadId outcome = do
     Joining twice answers the same way both times: the outcome is read rather
     than taken, so a scope that joins its children and a caller that already
     joined one do not race for the only copy of the answer. -}
-threadJoin :: Int -> IO (IoOutcome ())
-threadJoin token = do
-  found <- IntMap.lookup token <$> readIORef threadTable
+threadJoin :: ConcurrentStore -> Int -> IO (IoOutcome ())
+threadJoin store token = do
+  found <- IntMap.lookup token <$> readIORef (threadTable store)
   case found of
     Nothing -> pure (IoFailed "no such thread")
     Just running -> do
@@ -128,18 +130,18 @@ threadJoin token = do
     A bound of zero or less is taken as one rather than as none: a channel with
     no room could never be sent to, and a caller writing zero meant the
     smallest useful channel rather than one that deadlocks. -}
-channelNew :: Int -> IO Int
-channelNew limit = do
-  items <- newTVarIO []
+channelNew :: ConcurrentStore -> Int -> IO Int
+channelNew store limit = do
+  items <- newTVarIO Seq.empty
   closed <- newTVarIO False
-  token <- freshToken
+  token <- freshToken store
   let channel =
         Channel
           { channelItems = items
           , channelLimit = if limit < 1 then 1 else limit
           , channelClosed = closed
           }
-  atomicModifyIORef' channelTable (\table -> (IntMap.insert token channel table, ()))
+  atomicModifyIORef' (channelTable store) (\table -> (IntMap.insert token channel table, ()))
   pure token
 
 {-| Put an item in, waiting while the channel is full.
@@ -147,8 +149,8 @@ channelNew limit = do
     Sending to a closed channel is refused rather than ignored. A sender whose
     items were being dropped would have no way to find out, and a producer that
     kept producing into nothing is exactly the failure worth reporting. -}
-channelSend :: Int -> Value -> IO (IoOutcome ())
-channelSend token value = withChannel token $ \channel ->
+channelSend :: ConcurrentStore -> Int -> Value -> IO (IoOutcome ())
+channelSend store token value = withChannel store token $ \channel ->
   atomically $ do
     closed <- readTVar (channelClosed channel)
     if closed
@@ -158,7 +160,7 @@ channelSend token value = withChannel token $ \channel ->
         if length items >= channelLimit channel
           then retry
           else do
-            writeTVar (channelItems channel) (items <> [value])
+            writeTVar (channelItems channel) (items |> value)
             pure (IoDone ())
 
 {-| Take the next item, waiting while the channel is empty.
@@ -166,63 +168,77 @@ channelSend token value = withChannel token $ \channel ->
     Nothing means the channel is closed and empty, which is what ends a
     receiver's loop. A closed channel still hands out what it already holds:
     closing says no more will arrive, not that what arrived is discarded. -}
-channelReceive :: Int -> IO (IoOutcome (Maybe Value))
-channelReceive token = withChannel token $ \channel ->
+channelReceive :: ConcurrentStore -> Int -> IO (IoOutcome (Maybe Value))
+channelReceive store token = withChannel store token $ \channel ->
   atomically $ do
     items <- readTVar (channelItems channel)
-    case items of
-      (first : rest) -> do
+    case Seq.viewl items of
+      first :< rest -> do
         writeTVar (channelItems channel) rest
         pure (IoDone (Just first))
-      [] -> do
+      EmptyL -> do
         closed <- readTVar (channelClosed channel)
         if closed then pure (IoDone Nothing) else retry
 
 {-| How many items are waiting. -}
-channelPending :: Int -> IO (IoOutcome Int)
-channelPending token = withChannel token $ \channel ->
+channelPending :: ConcurrentStore -> Int -> IO (IoOutcome Int)
+channelPending store token = withChannel store token $ \channel ->
   IoDone . length <$> readTVarIO (channelItems channel)
 
 {-| Say that nothing more will be sent. -}
-channelClose :: Int -> IO (IoOutcome ())
-channelClose token = withChannel token $ \channel -> do
+channelClose :: ConcurrentStore -> Int -> IO (IoOutcome ())
+channelClose store token = withChannel store token $ \channel -> do
   atomically (writeTVar (channelClosed channel) True)
   pure (IoDone ())
 
-withChannel :: Int -> (Channel -> IO (IoOutcome a)) -> IO (IoOutcome a)
-withChannel token action = do
-  found <- IntMap.lookup token <$> readIORef channelTable
+withChannel :: ConcurrentStore -> Int -> (Channel -> IO (IoOutcome a)) -> IO (IoOutcome a)
+withChannel store token action = do
+  found <- IntMap.lookup token <$> readIORef (channelTable store)
   case found of
     Nothing -> pure (IoFailed "no such channel")
     Just channel -> action channel
 
 {-| A lock, held by at most one thread at a time. -}
-mutexNew :: IO Int
-mutexNew = do
-  lock <- newMVar ()
-  token <- freshToken
-  atomicModifyIORef' mutexTable (\table -> (IntMap.insert token lock table, ()))
+mutexNew :: ConcurrentStore -> IO Int
+mutexNew store = do
+  lock <- Mutex <$> newTVarIO Nothing
+  token <- freshToken store
+  atomicModifyIORef' (mutexTable store) (\table -> (IntMap.insert token lock table, ()))
   pure token
 
 {-| Take a lock, waiting until it is free. -}
-mutexLock :: Int -> IO (IoOutcome ())
-mutexLock token = withMutex token $ \lock -> do
-  takeMVar lock
-  pure (IoDone ())
+mutexLock :: ConcurrentStore -> Int -> IO (IoOutcome ())
+mutexLock store token = withMutex store token $ \lock -> do
+  owner <- myThreadId
+  atomically $ do
+    heldBy <- readTVar (mutexOwner lock)
+    case heldBy of
+      Nothing -> do
+        writeTVar (mutexOwner lock) (Just owner)
+        pure (IoDone ())
+      Just _ -> retry
 
-{-| Release a lock.
+{-| Release a lock only from the thread that acquired it.
 
-    Releasing one that is not held is not a failure, so a caller unwinding
-    through more than one path out of a critical section cannot deadlock the
-    program by releasing twice. -}
-mutexUnlock :: Int -> IO (IoOutcome ())
-mutexUnlock token = withMutex token $ \lock -> do
-  _ <- tryPutMVar lock ()
-  pure (IoDone ())
+    An ownerless permit would let a double release admit two callers into the
+    critical section. Reporting foreign and repeated releases keeps mutual
+    exclusion intact and exposes the caller's ownership error. -}
+mutexUnlock :: ConcurrentStore -> Int -> IO (IoOutcome ())
+mutexUnlock store token = withMutex store token $ \lock -> do
+  owner <- myThreadId
+  atomically $ do
+    heldBy <- readTVar (mutexOwner lock)
+    case heldBy of
+      Nothing -> pure (IoFailed "the lock is not held")
+      Just current
+        | current == owner -> do
+            writeTVar (mutexOwner lock) Nothing
+            pure (IoDone ())
+        | otherwise -> pure (IoFailed "the lock is owned by another thread")
 
-withMutex :: Int -> (MVar () -> IO (IoOutcome a)) -> IO (IoOutcome a)
-withMutex token action = do
-  found <- IntMap.lookup token <$> readIORef mutexTable
+withMutex :: ConcurrentStore -> Int -> (Mutex -> IO (IoOutcome a)) -> IO (IoOutcome a)
+withMutex store token action = do
+  found <- IntMap.lookup token <$> readIORef (mutexTable store)
   case found of
     Nothing -> pure (IoFailed "no such lock")
     Just lock -> action lock
@@ -233,28 +249,28 @@ withMutex token action = do
     followed by a write is two operations, and another thread can act between
     them. A counter built that way loses increments, and loses them only under
     the load that makes the loss hardest to reproduce. -}
-cellNew :: Value -> IO Int
-cellNew value = do
+cellNew :: ConcurrentStore -> Value -> IO Int
+cellNew store value = do
   holder <- newTVarIO value
-  token <- freshToken
-  atomicModifyIORef' cellTable (\table -> (IntMap.insert token holder table, ()))
+  token <- freshToken store
+  atomicModifyIORef' (cellTable store) (\table -> (IntMap.insert token holder table, ()))
   pure token
 
-cellRead :: Int -> IO (IoOutcome Value)
-cellRead token = withCell token (fmap IoDone . readTVarIO)
+cellRead :: ConcurrentStore -> Int -> IO (IoOutcome Value)
+cellRead store token = withCell store token (fmap IoDone . readTVarIO)
 
 {-| Replace what a cell holds and answer what it held, in one step nothing can
     come between. -}
-cellSwap :: Int -> Value -> IO (IoOutcome Value)
-cellSwap token value = withCell token $ \holder ->
+cellSwap :: ConcurrentStore -> Int -> Value -> IO (IoOutcome Value)
+cellSwap store token value = withCell store token $ \holder ->
   atomically $ do
     held <- readTVar holder
     writeTVar holder value
     pure (IoDone held)
 
-withCell :: Int -> (TVar Value -> IO (IoOutcome a)) -> IO (IoOutcome a)
-withCell token action = do
-  found <- IntMap.lookup token <$> readIORef cellTable
+withCell :: ConcurrentStore -> Int -> (TVar Value -> IO (IoOutcome a)) -> IO (IoOutcome a)
+withCell store token action = do
+  found <- IntMap.lookup token <$> readIORef (cellTable store)
   case found of
     Nothing -> pure (IoFailed "no such cell")
     Just holder -> action holder
@@ -269,13 +285,13 @@ sleepFor millis
 
 {-| Stop every thread still running, so a program that ended does not wait on
     one that will never finish. -}
-closeAllConcurrent :: IO ()
-closeAllConcurrent = do
-  table <- atomicModifyIORef' threadTable (\current -> (IntMap.empty, current))
+closeConcurrentStore :: ConcurrentStore -> IO ()
+closeConcurrentStore store = do
+  table <- atomicModifyIORef' (threadTable store) (\current -> (IntMap.empty, current))
   mapM_ stopQuietly (IntMap.elems table)
-  atomicModifyIORef' channelTable (\_ -> (IntMap.empty, ()))
-  atomicModifyIORef' mutexTable (\_ -> (IntMap.empty, ()))
-  atomicModifyIORef' cellTable (\_ -> (IntMap.empty, ()))
+  atomicModifyIORef' (channelTable store) (\_ -> (IntMap.empty, ()))
+  atomicModifyIORef' (mutexTable store) (\_ -> (IntMap.empty, ()))
+  atomicModifyIORef' (cellTable store) (\_ -> (IntMap.empty, ()))
  where
   stopQuietly running = do
     _ <- try (killThread (runningThread running)) :: IO (Either SomeException ())

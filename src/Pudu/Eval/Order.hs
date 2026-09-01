@@ -6,6 +6,7 @@ module Pudu.Eval.Order
   ) where
 
 import Data.Foldable (toList)
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.Eval.Value (OrdValue (..), Value (..), compareValues)
@@ -36,11 +37,13 @@ comparableValue value = case value of
   MapMethodValue _ _ -> False
   SetMethodValue _ _ -> False
   BytesMethodValue _ _ -> False
+  BucketsMethodValue _ _ -> False
   MapValue entries ->
     all (\(key, held) -> comparableValue (unOrdValue key) && comparableValue held) (Map.toAscList entries)
   SetValue members -> all (comparableValue . unOrdValue) (Set.toAscList members)
   TupleValue members -> all comparableValue members
   ArrayValue members -> all comparableValue (toList members)
+  BucketsValue entries -> all comparableValue (IntMap.elems entries)
   RecordValue _ fields -> all (comparableValue . snd) fields
   VariantValue _ payload -> all comparableValue payload
   _ -> True

@@ -1,0 +1,278 @@
+module UsesHttpServer
+
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Http as Http
+import Std.Http.Message as Message
+import Std.Http.Server as Server
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a server promises.
+///
+/// Routing and the chain of steps are checked by calling the handler
+/// directly, because a handler is a request in and a response out and needs no
+/// connection to answer. What genuinely needs a socket — a request arriving
+/// and a reply going back — is checked over one, against a listener this
+/// program started on a port the machine chose.
+export fn main() -> Int {
+  var held = 0
+
+  // Routes read down the page in the order they are tried, one to a line, and
+  // each handler is a named function rather than a literal buried in the list.
+  let routed = Server.withFallback(
+      &Server.routing(&[
+        Server.get("/health", health),
+        Server.get("/users/:id", showUser),
+        Server.get("/files/*rest", showFile),
+        Server.post("/users", createUser)
+      ]),
+    nothingHere
+  )
+
+  // A fixed path, a captured piece, and a pattern that takes the rest.
+  if bodyOf(&routed, Http.Get, "/health") == "ok" { held = held + 1 }
+  if bodyOf(&routed, Http.Get, "/users/42") == "user 42" { held = held + 1 }
+  if bodyOf(&routed, Http.Get, "/files/a/b/c.txt") == "file a/b/c.txt" { held = held + 1 }
+
+  // A path nothing matched reaches the fallback rather than a route that
+  // nearly fits.
+  if bodyOf(&routed, Http.Get, "/missing") == "nothing here" { held = held + 1 }
+  if codeOf(&routed, Http.Get, "/missing") == 404 { held = held + 1 }
+
+  // A path that exists for another method says the method is wrong rather than
+  // that the path is not there. To a client those are different: one is a
+  // mistake in the request, the other says the thing does not exist.
+  if codeOf(&routed, Http.Delete, "/health") == 405 { held = held + 1 }
+
+  // A trailing separator names the same place.
+  if bodyOf(&routed, Http.Get, "/health/") == "ok" { held = held + 1 }
+
+  // A query is read once rather than by every handler, and is not part of the
+  // path the router matched against.
+  let asked = requestFor(Http.Get, "/users/7?verbose=true&page=2")
+  if Server.dispatch(&routed, asked).status.code == 200 { held = held + 1 }
+  if Option.unwrapOr(Server.queryParam(&asked, "page"), "") == "2" { held = held + 1 }
+  if asked.path == "/users/7" { held = held + 1 }
+
+  // A step wraps the handler and sees the answer, which is what a hook that
+  // only ran before could not do. The first added is the outermost.
+  let wrapped = Server.using(
+      &Server.using(&Server.server(&routed), stamping("outer")),
+    stamping("inner")
+  )
+  let stamped = Server.handlerOf(&wrapped)(requestFor(Http.Get, "/health"))
+  if headerOf(&stamped, "X-Step-outer") == "yes" { held = held + 1 }
+  if headerOf(&stamped, "X-Step-inner") == "yes" { held = held + 1 }
+
+  // A step may refuse a request outright rather than call on.
+  let guarded = Server.using(&Server.server(&routed), fn(request: Server.Request, next: Server.Handler) -> Http.Response {
+      if Option.isNone(&Server.header(&request, "authorization")) {
+        Server.text(401, "who are you")
+      } else {
+        next(request)
+      }
+    })
+  if Server.handlerOf(&guarded)(requestFor(Http.Get, "/health")).status.code == 401 {
+    held = held + 1
+  }
+
+  // The same request with the header the step wanted reaches the handler.
+  let signed = withHeader(requestFor(Http.Get, "/health"), "Authorization", "Bearer x")
+  if Server.handlerOf(&guarded)(signed).status.code == 200 { held = held + 1 }
+
+  // A request carrying its terms in its own body rather than in its target.
+  // It is safe, idempotent, and cacheable, which is what separates it from a
+  // post: a post says the request changes something, so it may be neither
+  // cached nor retried.
+  if Http.methodName(&Http.Query) == "QUERY" { held = held + 1 }
+  if Http.methodFrom("QUERY") == Http.Query { held = held + 1 }
+  if Http.isSafe(&Http.Query) { held = held + 1 }
+  if Http.isIdempotent(&Http.Query) { held = held + 1 }
+  if Http.isCacheable(&Http.Query) { held = held + 1 }
+  if Http.expectsBody(&Http.Query) { held = held + 1 }
+  if !Http.isCacheable(&Http.Post) { held = held + 1 }
+
+  // A resource refusing a body it cannot read says what it would accept, so a
+  // client told its request was unreadable is not left guessing.
+  let refused = Server.unsupportedMediaType(&["application/json", "application/sql"])
+  if refused.status.code == 415 { held = held + 1 }
+  if headerOf(&refused, "Accept-Query") == "application/json, application/sql" {
+    held = held + 1
+  }
+  if Server.unprocessable("that filter names no column").status.code == 422 { held = held + 1 }
+
+  // And routed like any other method, with the terms read from the body.
+  let searching = Server.routing(&[Server.query("/search", runSearch)])
+  let found = Server.dispatch(&searching, bodied(Http.Query, "/search", "name eq ada"))
+  if found.body == "searched name eq ada" { held = held + 1 }
+
+  // A query sent to a path that only answers another method is told the method
+  // is wrong rather than that the path is missing.
+  if Server.dispatch(&searching, requestFor(Http.Get, "/search")).status.code == 405 {
+    held = held + 1
+  }
+
+  // And now over a real connection.
+  let running = Server.start("127.0.0.1", 0)
+  if Result.isOk(&running) { held = held + 1 }
+
+  if let Ok(live) = running {
+    let port = Server.portOf(&live)
+    if port > 0 { held = held + 1 }
+
+    let listening = Server.server(&routed)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Server.run(&listening, &live, 2)
+        ()
+      })
+    if Result.isOk(&worker) { held = held + 1 }
+
+    // A request the server routes, answered over the socket.
+    let answer = fetch(port, "GET /users/99 HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+    if answer.contains("200") { held = held + 1 }
+    if answer.contains("user 99") { held = held + 1 }
+
+    // The response states its own length, so a client knows where the body
+    // ends without waiting for the connection to close to tell it.
+    if answer.toLower().contains("content-length:") { held = held + 1 }
+
+    // A request carrying a body reaches the handler with the body intact.
+    let posted = fetch(
+      port,
+      "POST /users HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello"
+    )
+    if posted.contains("201") { held = held + 1 }
+    if posted.contains("hello") { held = held + 1 }
+
+    let _stopped = Server.stop(&live)
+    if let Ok(started) = worker {
+      let _joined = Concurrent.join(&started)
+      held = held + 1
+    }
+  }
+
+  held
+}
+
+fn health(_request: Server.Request) -> Http.Response { Server.text(200, "ok") }
+
+fn showUser(request: Server.Request) -> Http.Response {
+  Server.text(200, "user " + Option.unwrapOr(Server.param(&request, "id"), "?"))
+}
+
+fn showFile(request: Server.Request) -> Http.Response {
+  Server.text(200, "file " + Option.unwrapOr(Server.param(&request, "rest"), "?"))
+}
+
+fn createUser(request: Server.Request) -> Http.Response {
+  Server.text(201, Server.body(&request))
+}
+
+fn nothingHere(_request: Server.Request) -> Http.Response { Server.text(404, "nothing here") }
+
+fn runSearch(request: Server.Request) -> Http.Response {
+  Server.text(200, "searched " + Server.body(&request))
+}
+
+/// A request carrying a body, for the methods whose terms live there.
+fn bodied(method: Http.Method, target: Str, content: Str) -> Server.Request {
+  let base = requestFor(method, target)
+  Server.Request {
+    message: Http.Request {
+      method: base.message.method,
+      target: base.message.target,
+      headers: base.message.headers.push(("Content-Type", "application/sql")),
+      body: content
+    },
+    path: base.path,
+    params: base.params,
+    query: base.query,
+    peer: base.peer
+  }
+}
+
+/// A step that records that it ran, so the order of the chain is visible in
+/// the answer rather than only in what was written.
+fn stamping(name: Str) -> Server.Middleware {
+  fn(request: Server.Request, next: Server.Handler) -> Http.Response {
+    let answer = next(request)
+    Http.Response {
+      status: answer.status,
+      headers: answer.headers.push(("X-Step-" + name, "yes")),
+      body: answer.body
+    }
+  }
+}
+
+fn requestFor(method: Http.Method, target: Str) -> Server.Request {
+  let message = Http.Request{method: method, target: target, headers: [], body: ""}
+  Server.Request {
+    message: message,
+    path: pathOf(target),
+    params: mapOf([]),
+    query: mapOf(queryOf(target)),
+    peer: "test"
+  }
+}
+
+fn pathOf(target: Str) -> Str {
+  let mark = target.indexOf("?")
+  if mark < 0 { target } else { target.take(mark) }
+}
+
+fn queryOf(target: Str) -> Array[(Str, Str)] {
+  let mark = target.indexOf("?")
+  if mark < 0 { [] } else { parsePairs(target.drop(mark + 1)) }
+}
+
+fn parsePairs(source: Str) -> Array[(Str, Str)] {
+  var found: Array[(Str, Str)] = []
+  for piece in source.split("&") {
+    let mark = piece.indexOf("=")
+    if mark >= 0 { found = found.push((piece.take(mark), piece.drop(mark + 1))) }
+  }
+  found
+}
+
+fn withHeader(request: Server.Request, name: Str, value: Str) -> Server.Request {
+  Server.Request {
+    message: Http.Request {
+      method: request.message.method,
+      target: request.message.target,
+      headers: request.message.headers.push((name, value)),
+      body: request.message.body
+    },
+    path: request.path,
+    params: request.params,
+    query: request.query,
+    peer: request.peer
+  }
+}
+
+fn bodyOf(target: &Server.Router, method: Http.Method, path: Str) -> Str {
+  Server.dispatch(target, requestFor(method, path)).body
+}
+
+fn codeOf(target: &Server.Router, method: Http.Method, path: Str) -> Int {
+  Server.dispatch(target, requestFor(method, path)).status.code
+}
+
+fn headerOf(answer: &Http.Response, name: Str) -> Str {
+  var found = ""
+  for entry in answer.headers {
+    if entry[0] == name { found = entry[1] }
+  }
+  found
+}
+
+/// Send a raw request and read everything that comes back.
+fn fetch(port: Int, request: Str) -> Str {
+  let outcome = Net.withConnection("127.0.0.1", port, fn(connection: Net.Connection) -> Result[Str, Net.NetError] {
+      Net.sendText(&connection, request) ?
+      let whole = Net.receiveAll(&connection) ?
+      Ok(Result.unwrapOr(ByteSeq.toText(&whole), ""))
+    })
+  Result.unwrapOr(outcome, "")
+}

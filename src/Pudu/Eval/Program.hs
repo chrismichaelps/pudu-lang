@@ -18,9 +18,6 @@ module Pudu.Eval.Program
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Eval.Handle (closeAllHandles)
-import Pudu.Eval.Concurrent (closeAllConcurrent)
-import Pudu.Eval.Socket (closeAllSockets)
 import Pudu.Eval.Env
   ( Env (..)
   , withIntegerKinds
@@ -129,6 +126,17 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
     loadDeclarations evaluate (moduleDeclarations moduleValue)
+    {-| The root's own functions are given its environment, exactly as a
+        dependency's are.
+
+        Without this a function the root declared worked when the root called
+        it and failed when anything else did: a declaration carries no captured
+        environment, so it runs in the frame of whoever called it, and a module
+        that was handed one has no reason to hold the root's imports. Passing a
+        named function to `List.map`, to a route table, or to anything else
+        that calls back reported the function's own imports as undefined —
+        at run time, having type-checked. -}
+    scopeRootDeclarations
     found <- lookupName entryName
     case found of
       Just (FunctionValue closure) -> do
@@ -137,13 +145,6 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
           then awaitTask (locatedSpan (functionName (closureFunction closure))) result
           else pure result
       _ -> pure UnitValue
-  {-| A program that ended still holding a handle has writes sitting in a
-      buffer that nothing has pushed to the file, and a process exiting does
-      not push them. Closing here is what makes the last bytes a program wrote
-      actually reach the disk. -}
-  closeAllHandles
-  closeAllSockets
-  closeAllConcurrent
   collected <- readIORef counters
   pure (outcome, collected)
 
@@ -219,6 +220,17 @@ evaluateModule integerKinds moduleValue =
     too. Visibility is resolution's decision and it has already been made: a
     private name is unreachable because no importer can write it, and
     re-deciding it here would put one rule in two places. -}
+{-| Give every function the root declared the root's own environment.
+
+    The same treatment `linkDependencies` gives a dependency, for the module
+    that has no one to link it. -}
+scopeRootDeclarations :: Evaluator ()
+scopeRootDeclarations = do
+  loaded <- currentFrame
+  outer <- captureEnvironment
+  let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
+  replaceFrame scoped
+
 linkDependencies :: [(Text, Module)] -> Evaluator ()
 linkDependencies = mapM_ linkOne
  where

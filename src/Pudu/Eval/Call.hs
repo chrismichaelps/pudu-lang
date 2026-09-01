@@ -36,6 +36,7 @@ import Pudu.Eval.Builtin
   , callMapMethod
   , callMapOf
   , callPanic
+  , callHashing
   , callSetMethod
   , Apply
   , callSetOf
@@ -48,9 +49,11 @@ import Control.Concurrent.MVar (newEmptyMVar, putMVar)
 import Control.Exception (SomeException, try)
 import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
+import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Env
   ( tally
+  , currentConcurrentStore
   , withCaptured
   , adoptChild
   , closeScope
@@ -142,7 +145,10 @@ dispatchCall needs spanValue target values =
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
     BuiltinValue BytesOfBuiltin -> callBytesOf spanValue values
+    BuiltinValue BucketsOfBuiltin -> callBucketsOf spanValue values
     BuiltinValue SpawnThreadBuiltin -> callSpawnThread (applyFunction needs) spanValue values
+    BuiltinValue hashing
+      | isHashingBuiltin hashing -> callHashing spanValue hashing values
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
@@ -155,6 +161,7 @@ dispatchCall needs spanValue target values =
     SetMethodValue method receiver -> callSetMethod spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
     BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
+    BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -396,6 +403,7 @@ applyFunction needs spanValue function arguments = case function of
   SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
   BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
+  BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.
@@ -471,17 +479,32 @@ callSpawnThread apply spanValue arguments = case arguments of
                   <> "cannot start a thread"
               )
           )
-      else Evaluator $ \env -> do
-        slot <- newEmptyMVar
-        let Evaluator body = apply spanValue action []
-        threadId <- forkIO $ do
-          outcome <- try (body env) :: IO (Either SomeException (Eval Value))
-          putMVar slot (reported outcome)
-        token <- threadRegister threadId slot
-        pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)
+      else do
+        concurrent <- currentConcurrentStore
+        Evaluator $ \env -> do
+          slot <- newEmptyMVar
+          let Evaluator body = apply spanValue action []
+          threadId <- forkIO $ do
+            outcome <- try (body env) :: IO (Either SomeException (Eval Value))
+            putMVar slot (reported outcome)
+          token <- threadRegister concurrent threadId slot
+          pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)
   _ -> abortAt (Just spanValue) "E7012" "spawnThread expects one function" Nothing
  where
   reported outcome = case outcome of
     Left problem -> Just (Text.pack (show problem))
     Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
     Right _ -> Nothing
+
+{-| Whether a built-in is one of the hashing set, which is dispatched before
+    the effects because none of them reaches outside the program: a digest of
+    the same bytes is the same digest wherever it is taken, so a constant may
+    be folded through one. -}
+isHashingBuiltin :: Builtin -> Bool
+isHashingBuiltin builtin = case builtin of
+  Sha256Builtin -> True
+  HmacBuiltin -> True
+  DeriveKeyBuiltin -> True
+  HashOfBuiltin -> True
+  MixHashBuiltin -> True
+  _ -> False

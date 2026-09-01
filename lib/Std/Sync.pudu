@@ -29,19 +29,18 @@ export fn lock(target: &Mutex) -> Result[(), SyncError] {
 }
 
 /// Release a lock.
-/// Releasing one that is not held is not a failure, so a caller leaving a
-/// critical section by more than one path cannot stop the program by releasing
-/// twice.
+/// Only the thread that acquired a lock may release it. Releasing an unlocked
+/// lock or one held by another thread returns an error.
 export fn unlock(target: &Mutex) -> Result[(), SyncError] {
   Result.mapErr(mutexRelease(target.token), causeOf)
 }
 
-/// Run an action with a lock held, and release it however the action ended.
+/// Run an action with a lock held, and release it after the action returns.
 ///
 /// There is no unlock a caller can forget, because there is no unlock. A lock
-/// released only on the path where nothing went wrong is a lock that is held
-/// forever the first time something does, and every thread waiting on it stops
-/// with it.
+/// released only on the normal return path would usually be unsafe. Pudu does
+/// not recover from a runtime abort inside the action; program teardown owns
+/// that path and discards all runtime synchronization resources.
 export fn withLock[T](target: &Mutex, action: fn() -> T) -> Result[T, SyncError] {
   lock(target) ?
   let outcome = action()

@@ -3,9 +3,17 @@ module Std.Http
 import Std.Option as Option
 
 /// A request method.
+///
 /// The closed set the protocol defines, plus `Other` for a method a server
 /// accepts that this list does not name: refusing to represent one would make
 /// the type useless for the servers that have them.
+///
+/// `Query` carries its terms in the request's own body rather than in the
+/// target. A search whose terms do not fit a target — because they are long,
+/// deeply structured, or should not sit in a log or a history — was otherwise
+/// sent as a post, which says the request changes something and so may be
+/// neither cached nor retried. This says what such a request actually is: safe,
+/// idempotent, and cacheable, with the terms in the body.
 export type Method
   = Get
   | Head
@@ -16,6 +24,7 @@ export type Method
   | Options
   | Trace
   | Connect
+  | Query
   | Other(Str)
 
 /// A response status: its number and the reason given with it.
@@ -51,6 +60,7 @@ export fn methodName(value: &Method) -> Str {
     case Options => "OPTIONS"
     case Trace => "TRACE"
     case Connect => "CONNECT"
+    case Query => "QUERY"
     case Other(name) => name
   }
 }
@@ -65,7 +75,8 @@ const METHODS: Map[Str, Method] = mapOf([
     ("DELETE", Delete),
     ("OPTIONS", Options),
     ("TRACE", Trace),
-    ("CONNECT", Connect)
+    ("CONNECT", Connect),
+    ("QUERY", Query)
   ])
 
 export fn methodFrom(name: Str) -> Method {
@@ -84,6 +95,39 @@ export fn isSafe(value: &Method) -> Bool {
     case Head => true
     case Options => true
     case Trace => true
+    case Query => true
+    case _ => false
+  }
+}
+
+/// Whether a response to a method may be kept and used again.
+///
+/// A query is cacheable, which is the reason it exists rather than being a
+/// post with a different name. What a cache stores it under has to take in the
+/// request's body, since that is where the terms are: two queries to one
+/// target asking different things are different requests, and a cache keyed on
+/// the target alone would answer the second with the first's result.
+export fn isCacheable(value: &Method) -> Bool {
+  match value {
+    case Get => true
+    case Head => true
+    case Query => true
+    case _ => false
+  }
+}
+
+/// Whether a method carries a body describing what to do.
+///
+/// A query must carry one and must say what it is: a server is required to
+/// refuse a query whose content type is missing or does not match its body,
+/// because the body is the request and a body it cannot read is a request it
+/// cannot answer.
+export fn expectsBody(value: &Method) -> Bool {
+  match value {
+    case Post => true
+    case Put => true
+    case Patch => true
+    case Query => true
     case _ => false
   }
 }

@@ -1,0 +1,200 @@
+module UsesHashMap
+
+import Std.HashMap as HashMap
+import Std.List as List
+import Std.Map as Map
+import Std.Option as Option
+import Std.Order {Eq, Hash}
+
+/// A key whose hash tells nothing apart.
+///
+/// Every value of it lands in one bucket, so every lookup is a collision. That
+/// is the case a hash map most easily gets wrong — answering from the hash and
+/// never consulting equality — and the only way to check it is to build a type
+/// where the hash cannot possibly decide.
+export type Sticky = { label: Str }
+
+impl Eq for Sticky {
+  fn equals(self: &Self, other: &Self) -> Bool { self.label == other.label }
+}
+
+impl Hash for Sticky {
+  fn hash(self: &Self) -> Int { 7 }
+}
+
+/// A key whose equality is deliberately coarser than its representation.
+///
+/// Two of these are the same when their names match without regard to case, so
+/// the hash has to agree: hashing the folded name is what keeps the law that
+/// equal values hash the same.
+export type Name = { text: Str }
+
+impl Eq for Name {
+  fn equals(self: &Self, other: &Self) -> Bool { self.text.toLower() == other.text.toLower() }
+}
+
+impl Hash for Name {
+  fn hash(self: &Self) -> Int { hashOf(self.text.toLower()) }
+}
+
+/// What a hash map promises. Each check answers 1 when it holds.
+export fn main() -> Int {
+  var held = 0
+
+  // An empty map holds nothing and says so.
+  let blank: HashMap.HashMap[Str, Int] = HashMap.empty()
+  if HashMap.size(&blank) == 0 { held = held + 1 }
+  if HashMap.isEmpty(&blank) { held = held + 1 }
+  let absent = HashMap.get(&blank, &"missing")
+  if Option.isNone(&absent) { held = held + 1 }
+
+  // Insertion, lookup, and a fallback for what is not there.
+  let ages = HashMap.fromArray(&[("ada", 36), ("alan", 41), ("grace", 45)])
+  if HashMap.size(&ages) == 3 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&ages, &"alan"), -1) == 41 { held = held + 1 }
+  if HashMap.getOr(&ages, &"nobody", -1) == -1 { held = held + 1 }
+  if HashMap.containsKey(&ages, &"grace") { held = held + 1 }
+  if !HashMap.containsKey(&ages, &"nobody") { held = held + 1 }
+
+  // Keys come back in the order they were first put in, not sorted and not in
+  // whatever order the buckets happen to hold them.
+  if HashMap.keys(&ages) == ["ada", "alan", "grace"] { held = held + 1 }
+  if HashMap.values(&ages) == [36, 41, 45] { held = held + 1 }
+
+  // Replacing a value keeps the position the key already had.
+  let corrected = HashMap.insert(&ages, "ada", 37)
+  if HashMap.size(&corrected) == 3 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&corrected, &"ada"), -1) == 37 { held = held + 1 }
+  if HashMap.keys(&corrected) == ["ada", "alan", "grace"] { held = held + 1 }
+
+  // Removing and putting back makes a new pairing, which takes a new position.
+  let readded = HashMap.insert(&HashMap.remove(&ages, &"ada"), "ada", 36)
+  if HashMap.keys(&readded) == ["alan", "grace", "ada"] { held = held + 1 }
+
+  // Removing a key the map never held changes nothing.
+  if HashMap.size(&HashMap.remove(&ages, &"nobody")) == 3 { held = held + 1 }
+  if HashMap.size(&HashMap.remove(&ages, &"ada")) == 2 { held = held + 1 }
+
+  // A combining insert is given the value already there first.
+  let tallied = HashMap.insertWith(
+      &HashMap.singleton("a", 1),
+    "a",
+    10,
+    fn(held0: Int, added: Int) -> Int { held0 * 100 + added }
+  )
+  if Option.unwrapOr(HashMap.get(&tallied, &"a"), 0) == 110 { held = held + 1 }
+
+  // Every key of this type collides, so identity can only come from equality.
+  var sticky: HashMap.HashMap[Sticky, Int] = HashMap.empty()
+  sticky = HashMap.insert(&sticky, Sticky{label: "one"}, 1)
+  sticky = HashMap.insert(&sticky, Sticky{label: "two"}, 2)
+  sticky = HashMap.insert(&sticky, Sticky{label: "three"}, 3)
+  if HashMap.size(&sticky) == 3 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&sticky, &Sticky{label: "two"}), -1) == 2 { held = held + 1 }
+  if HashMap.bucketCount(&sticky) == 1 { held = held + 1 }
+
+  // Replacing one of the colliding keys replaces only that one.
+  sticky = HashMap.insert(&sticky, Sticky{label: "two"}, 22)
+  if HashMap.size(&sticky) == 3 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&sticky, &Sticky{label: "two"}), -1) == 22 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&sticky, &Sticky{label: "one"}), -1) == 1 { held = held + 1 }
+
+  // And removing one leaves the rest of the bucket alone.
+  sticky = HashMap.remove(&sticky, &Sticky{label: "one"})
+  if HashMap.size(&sticky) == 2 { held = held + 1 }
+  let goneOne = HashMap.get(&sticky, &Sticky{label: "one"})
+  if Option.isNone(&goneOne) { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&sticky, &Sticky{label: "three"}), -1) == 3 { held = held + 1 }
+
+  // A type whose equality ignores case finds a key written either way, which
+  // holds only because its hash folds the same thing its equality does.
+  var named: HashMap.HashMap[Name, Int] = HashMap.empty()
+  named = HashMap.insert(&named, Name{text: "Ada"}, 1)
+  if Option.unwrapOr(HashMap.get(&named, &Name{text: "ada"}), -1) == 1 { held = held + 1 }
+  named = HashMap.insert(&named, Name{text: "ADA"}, 2)
+  if HashMap.size(&named) == 1 { held = held + 1 }
+
+  // The two zeros compare equal, so they must hash the same and name one key.
+  var zeros: HashMap.HashMap[Float64, Str] = HashMap.empty()
+  zeros = HashMap.insert(&zeros, 0.0, "positive")
+  zeros = HashMap.insert(&zeros, -0.0, "negative")
+  if HashMap.size(&zeros) == 1 { held = held + 1 }
+
+  // Transforming, filtering, and folding keep insertion order.
+  let doubled = HashMap.map(&ages, fn(age: Int) -> Int { age * 2 })
+  if HashMap.values(&doubled) == [72, 82, 90] { held = held + 1 }
+  let older = HashMap.filter(&ages, fn(_name: Str, age: Int) -> Bool { age > 40 })
+  if HashMap.keys(&older) == ["alan", "grace"] { held = held + 1 }
+  let total = HashMap.fold(&ages, 0, fn(sum: Int, _name: Str, age: Int) -> Int { sum + age })
+  if total == 122 { held = held + 1 }
+
+  // Merging, with the later map winning and a rule deciding instead.
+  let extra = HashMap.fromArray(&[("alan", 99), ("linus", 20)])
+  let joined = HashMap.merge(&ages, &extra)
+  if HashMap.size(&joined) == 4 { held = held + 1 }
+  if Option.unwrapOr(HashMap.get(&joined, &"alan"), -1) == 99 { held = held + 1 }
+  let summed = HashMap.mergeWith(&ages, &extra, fn(a: Int, b: Int) -> Int { a + b })
+  if Option.unwrapOr(HashMap.get(&summed, &"alan"), -1) == 140 { held = held + 1 }
+
+  // Equality is about contents, not about the order they arrived in.
+  let forwards = HashMap.fromArray(&[("a", 1), ("b", 2)])
+  let backwards = HashMap.fromArray(&[("b", 2), ("a", 1)])
+  if HashMap.equals(&forwards, &backwards) { held = held + 1 }
+  if !HashMap.equals(&forwards, &HashMap.fromArray(&[("a", 1)])) { held = held + 1 }
+  if !HashMap.equals(&forwards, &HashMap.fromArray(&[("a", 1), ("b", 3)])) { held = held + 1 }
+
+  // Over many keys the map agrees with the ordered map it is an alternative
+  // to, which is the check that the buckets are bookkeeping rather than
+  // meaning.
+  held = held + agreesWithOrderedMap()
+
+  held
+}
+
+/// Build the same pairings both ways and compare what they answer.
+///
+/// Enough keys that they spread over many buckets, so a lookup that consulted
+/// only the hash, or a bucket that dropped an entry on removal, shows up as a
+/// disagreement rather than passing by luck.
+fn agreesWithOrderedMap() -> Int {
+  var hashed: HashMap.HashMap[Int, Int] = HashMap.empty()
+  var ordered: Map[Int, Int] = mapOf([])
+  var index = 0
+  while index < 400 {
+    hashed = HashMap.insert(&hashed, index, index * 3)
+    ordered = ordered.insert(index, index * 3)
+    index = index + 1
+  }
+
+  // Take out every third key from both.
+  var removing = 0
+  while removing < 400 {
+    hashed = HashMap.remove(&hashed, &removing)
+    ordered = ordered.remove(removing)
+    removing = removing + 3
+  }
+
+  var agreed = 0
+  if HashMap.size(&hashed) == ordered.size() { agreed = agreed + 1 }
+
+  var same = true
+  var probe = 0
+  while probe < 400 {
+    if HashMap.get(&hashed, &probe) != ordered.get(probe) { same = false }
+    probe = probe + 1
+  }
+  if same { agreed = agreed + 1 }
+
+  // The keys are the same set, though one comes back sorted and the other in
+  // insertion order.
+  if List.sorted(&HashMap.keys(&hashed)) == ordered.keys() { agreed = agreed + 1 }
+
+  // Insertion order survived four hundred inserts and the removals between.
+  if HashMap.keys(&hashed)[0] == 1 { agreed = agreed + 1 }
+
+  // Many keys reach many buckets: one bucket for four hundred keys would mean
+  // the mixing did nothing.
+  if HashMap.bucketCount(&hashed) > 100 { agreed = agreed + 1 }
+
+  agreed
+}

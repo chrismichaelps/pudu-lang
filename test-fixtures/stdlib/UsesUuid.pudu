@@ -11,6 +11,15 @@ import Std.Uuid as Uuid
 export fn main() -> Int {
   var held = 0
 
+  // Security material comes from the operating system, while seeded UUID
+  // construction below remains reproducible. Invalid allocation requests fail
+  // before reaching the host provider.
+  if Result.unwrapOr(Result.map(Random.secureBytes(32), fn(bytes: Bytes) -> Int { bytes.length() }), -1) == 32 {
+    held = held + 1
+  }
+  if let Err(_) = Random.secureBytes(-1) { held = held + 1 }
+  if let Err(_) = Random.secureBytes(1048577) { held = held + 1 }
+
   // The identifier that names nothing is sixteen zero bytes, and says so.
   let empty = Uuid.nil()
   if Uuid.toBytes(&empty).length() == 16 { held = held + 1 }

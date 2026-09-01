@@ -27,6 +27,7 @@ import Pudu.DecimalLiteral
   )
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Bytes (bytesMethods)
+import Pudu.Eval.HashMap (bucketsMethods)
 import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..))
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
@@ -281,6 +282,7 @@ readMember spanValue value member = case value of
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
   BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"
+  BucketsValue _ -> readKeyedMember spanValue value member bucketsMethods BucketsMethodValue "Buckets"
   CharValue _ -> readCharMember spanValue value member
   MapValue _ -> readKeyedMember spanValue value member mapMethods MapMethodValue "Map"
   SetValue _ -> readKeyedMember spanValue value member setMethods SetMethodValue "Set"
@@ -363,6 +365,7 @@ builtinMethodNamesFor owner = case owner of
   "Map" -> map fst mapMethods
   "Set" -> map fst setMethods
   "Bytes" -> map fst bytesMethods
+  "Buckets" -> map fst bucketsMethods
   "Char" -> ["code", "toText"]
   _ -> []
 
@@ -450,6 +453,7 @@ nominalNameOf value = case value of
   FloatValue Float64Width _ -> Just "Float64"
   StrValue _ -> Just "Str"
   BytesValue _ -> Just "Bytes"
+  BucketsValue _ -> Just "Buckets"
   CharValue _ -> Just "Char"
   BoolValue _ -> Just "Bool"
   UnitValue -> Just "()"

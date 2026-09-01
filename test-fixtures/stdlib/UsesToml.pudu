@@ -1,0 +1,166 @@
+module UsesToml
+
+import Std.Option as Option
+import Std.Result as Result
+import Std.Toml {Boolean, Text, Whole}
+import Std.Toml.Read as Read
+import Std.Toml as Toml
+
+/// What a configuration file promises, checked against the shapes the format
+/// actually holds rather than against the ones easiest to read.
+export fn main() -> Int {
+  var held = 0
+
+  // A key and a value, with comments and blank lines around them.
+  let basic = readOr("# a heading\n\nname = \"pudu\"\n\nyear = 2026 # trailing\n")
+  if Option.unwrapOr(textAt(&basic, "name"), "") == "pudu" { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&fieldOr(&basic, "year")), 0) == 2026 { held = held + 1 }
+  if Toml.keys(&basic) == ["name", "year"] { held = held + 1 }
+
+  // Every way the format writes a whole number.
+  let numbers = readOr("a = 42\nb = -17\nc = 1_000_000\nd = 0xff\ne = 0o755\nf = 0b1011\n")
+  if wholeAt(&numbers, "a") == 42 { held = held + 1 }
+  if wholeAt(&numbers, "b") == -17 { held = held + 1 }
+  if wholeAt(&numbers, "c") == 1000000 { held = held + 1 }
+  if wholeAt(&numbers, "d") == 255 { held = held + 1 }
+  if wholeAt(&numbers, "e") == 493 { held = held + 1 }
+  if wholeAt(&numbers, "f") == 11 { held = held + 1 }
+
+  // A fractional number keeps the text it was written in rather than becoming
+  // a binary float that names a different number.
+  let fractional = readOr("ratio = 0.1\nbig = 1e10\n")
+  if Option.unwrapOr(Toml.asFractional(&fieldOr(&fractional, "ratio")), "") == "0.1" {
+    held = held + 1
+  }
+  if Option.unwrapOr(Toml.asFractional(&fieldOr(&fractional, "big")), "") == "1e10" {
+    held = held + 1
+  }
+
+  // Truths, and a date kept as the text it was written in.
+  let flags = readOr("on = true\noff = false\nwhen = 1979-05-27T07:32:00Z\n")
+  if Option.unwrapOr(Toml.asBoolean(&fieldOr(&flags, "on")), false) { held = held + 1 }
+  if !Option.unwrapOr(Toml.asBoolean(&fieldOr(&flags, "off")), true) { held = held + 1 }
+  if Option.unwrapOr(Toml.asMoment(&fieldOr(&flags, "when")), "") == "1979-05-27T07:32:00Z" {
+    held = held + 1
+  }
+
+  // Strings: escapes in a basic one, none at all in a literal one.
+  let strings = readOr("a = \"line\\nbreak\"\nb = 'C:\\\\path'\nc = \"quote\\\"inside\"\n")
+  if Option.unwrapOr(textAt(&strings, "a"), "") == "line\nbreak" { held = held + 1 }
+  if Option.unwrapOr(textAt(&strings, "b"), "") == "C:\\\\path" { held = held + 1 }
+  if Option.unwrapOr(textAt(&strings, "c"), "") == "quote\"inside" { held = held + 1 }
+
+  // A section, and a nested one named by a dotted header.
+  let sections = readOr("[server]\nhost = \"localhost\"\nport = 8080\n\n[server.tls]\nenabled = false\n")
+  if Option.unwrapOr(pathText(&sections, "server.host"), "") == "localhost" { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&sections, "server.port")), 0) == 8080 {
+    held = held + 1
+  }
+  if !Option.unwrapOr(Toml.asBoolean(&pathOr(&sections, "server.tls.enabled")), true) {
+    held = held + 1
+  }
+
+  // A key written after a later section belongs to that section, not to the
+  // one before it.
+  let ordered = readOr("[a]\nx = 1\n\n[b]\nx = 2\n")
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&ordered, "a.x")), 0) == 1 { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&ordered, "b.x")), 0) == 2 { held = held + 1 }
+
+  // A dotted key writes into a table without a header for it.
+  let dotted = readOr("owner.name = \"ada\"\nowner.age = 36\n")
+  if Option.unwrapOr(pathText(&dotted, "owner.name"), "") == "ada" { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&dotted, "owner.age")), 0) == 36 { held = held + 1 }
+
+  // Lists, including one written across lines with a trailing comma.
+  let lists = readOr("ports = [1, 2, 3]\nnames = [\n  \"a\",\n  \"b\",\n]\nnested = [[1, 2], [3]]\n")
+  if listLength(&lists, "ports") == 3 { held = held + 1 }
+  if listLength(&lists, "names") == 2 { held = held + 1 }
+  if listLength(&lists, "nested") == 2 { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&Option.unwrapOr(Toml.at(&fieldOr(&lists, "ports"), 1), Whole(0))), 0) == 2 {
+    held = held + 1
+  }
+
+  // A table written between braces on one line.
+  let inline = readOr("point = \{ x = 1, y = 2 \}\n")
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&inline, "point.x")), 0) == 1 { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&inline, "point.y")), 0) == 2 { held = held + 1 }
+
+  // A repeated section makes a list of tables, and a key under it belongs to
+  // the newest one rather than to the list.
+  let repeated = readOr("[[fruit]]\nname = \"apple\"\n\n[[fruit]]\nname = \"pear\"\n")
+  if listLength(&repeated, "fruit") == 2 { held = held + 1 }
+  if firstFruit(&repeated, 0) == "apple" { held = held + 1 }
+  if firstFruit(&repeated, 1) == "pear" { held = held + 1 }
+
+  // Text written across lines drops the break that follows the opening marks.
+  let block = readOr("note = \"\"\"\nfirst\nsecond\"\"\"\n")
+  if Option.unwrapOr(textAt(&block, "note"), "") == "first\nsecond" { held = held + 1 }
+
+  // A quoted key holds what a bare one cannot.
+  let quoted = readOr("\"key with spaces\" = 1\n")
+  if Option.unwrapOr(Toml.asWhole(&fieldOr(&quoted, "key with spaces")), 0) == 1 {
+    held = held + 1
+  }
+
+  // A key given twice is refused rather than silently taking the last.
+  if let Err(_) = Read.read("a = 1\na = 2\n") { held = held + 1 }
+
+  // A string never closed is refused rather than running to the end.
+  if let Err(_) = Read.read("a = \"unterminated\n") { held = held + 1 }
+
+  // Writing a document and reading it back gives the same thing.
+  let built = Toml.withField(
+      &Toml.withField(&Toml.table(), "name", Text("pudu")),
+    "server",
+    Toml.withField(&Toml.table(), "port", Whole(8080))
+  )
+  let written = Toml.encode(&built)
+  if written.contains("name = \"pudu\"") { held = held + 1 }
+  if written.contains("[server]") { held = held + 1 }
+  let back = readOr(written)
+  if Option.unwrapOr(textAt(&back, "name"), "") == "pudu" { held = held + 1 }
+  if Option.unwrapOr(Toml.asWhole(&pathOr(&back, "server.port")), 0) == 8080 { held = held + 1 }
+
+  // A plain value is written before any section, because a key written after a
+  // header would belong to that header instead.
+  if written.indexOf("name =") < written.indexOf("[server]") { held = held + 1 }
+
+  // A key needing quotes gets them, so what is written reads back.
+  if Toml.renderKey("key with spaces") == "\"key with spaces\"" { held = held + 1 }
+  if Toml.renderKey("plain_key") == "plain_key" { held = held + 1 }
+
+  held
+}
+
+fn readOr(source: Str) -> Toml.Toml { Result.unwrapOr(Read.read(source), Toml.table()) }
+
+fn fieldOr(value: &Toml.Toml, name: Str) -> Toml.Toml {
+  Option.unwrapOr(Toml.field(value, name), Boolean(false))
+}
+
+fn pathOr(value: &Toml.Toml, dotted: Str) -> Toml.Toml {
+  Option.unwrapOr(Toml.path(value, dotted), Boolean(false))
+}
+
+fn textAt(value: &Toml.Toml, name: Str) -> Option[Str] { Toml.asText(&fieldOr(value, name)) }
+
+fn pathText(value: &Toml.Toml, dotted: Str) -> Option[Str] {
+  Toml.asText(&pathOr(value, dotted))
+}
+
+fn wholeAt(value: &Toml.Toml, name: Str) -> Int {
+  Option.unwrapOr(Toml.asWhole(&fieldOr(value, name)), -1)
+}
+
+fn listLength(value: &Toml.Toml, name: Str) -> Int {
+  Option.unwrapOr(Toml.asList(&fieldOr(value, name)), []).length()
+}
+
+fn firstFruit(value: &Toml.Toml, index: Int) -> Str {
+  let items = Option.unwrapOr(Toml.asList(&fieldOr(value, "fruit")), [])
+  if index >= items.length() {
+    ""
+  } else {
+    Option.unwrapOr(Toml.asText(&fieldOr(&items[index], "name")), "")
+  }
+}

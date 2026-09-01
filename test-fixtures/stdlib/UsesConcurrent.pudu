@@ -75,6 +75,24 @@ export fn main() -> Int {
   if Result.unwrapOr(Sync.withLock(&guard, fn() -> Int { 7 }), 0) == 7 { held = held + 1 }
   if Result.unwrapOr(Sync.withLock(&guard, fn() -> Int { 8 }), 0) == 8 { held = held + 1 }
 
+  // A mutex is owned by the thread that acquired it. A different thread may
+  // not release it, and releasing it twice reports the caller's mistake.
+  let owned = Sync.mutex()
+  let foreignRefused = Sync.cell(false)
+  if Result.isOk(&Sync.lock(&owned)) { held = held + 1 }
+  let foreign = Concurrent.start(fn() -> () {
+      if let Err(_) = Sync.unlock(&owned) {
+        let _recorded = Sync.set(&foreignRefused, true)
+      }
+      ()
+    })
+  if let Ok(worker) = foreign {
+    if Result.isOk(&Concurrent.join(&worker)) { held = held + 1 }
+  }
+  if Result.unwrapOr(Sync.get(&foreignRefused), false) { held = held + 1 }
+  if Result.isOk(&Sync.unlock(&owned)) { held = held + 1 }
+  if let Err(_) = Sync.unlock(&owned) { held = held + 1 }
+
   // Threads are joined in the order they were started, so a failure among
   // several is reported the same way every run rather than by a race.
   var started: Array[Concurrent.Task] = []
