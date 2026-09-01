@@ -339,30 +339,29 @@ the existing surface is enough to write against.
 ### On lookup tables
 
 `Http.reasonFor` maps thirty-one status numbers to their reasons. `methodFrom`, `versionFrom`,
-`Url.defaultPort` and `isHopByHop` do the same for smaller sets. All five are lookup tables, and the
-question is what to write them as.
+`isHopByHop` and `Url.defaultPort` do the same for smaller sets. All five are tables, and all five
+are written as tables: a `const` at module scope, read by a lookup.
 
-Not a `Map`. [[grammar/pudu]] states that a file has no top-level executable statements, so there are
-**no module-level constants**: a table has to be built inside the function that reads it, and is
-therefore rebuilt on every call. That is the trap, because a `Map` is otherwise the obvious answer.
+Getting there took three attempts and two wrong answers, so the measurements are recorded rather
+than the conclusion alone. 20000 lookups at `-O0`, process launch and loop overhead subtracted:
 
-A flat `match` on the value is the right form. Measured against the real thirty-one-entry table,
-20000 lookups at `-O0`, process launch and loop overhead subtracted:
-
-| lookup | nested `if` ladder | flat `match` | `Map` rebuilt per call |
+| lookup | nested `if` ladder | flat `match` | `const` table |
 |---|---|---|---|
-| code 200, third in the table | 325 ms | **169 ms** | 1998 ms |
-| code 504, last in the table | 2255 ms | **603 ms** | — |
-| an unnamed code | 2268 ms | **615 ms** | — |
+| code 200, third in the table | 325 ms | 167 ms | 228 ms |
+| code 404, seventeenth | — | 384 ms | **236 ms** |
+| code 500, twenty-sixth | — | 520 ms | **230 ms** |
+| code 504, last | 2255 ms | 586 ms | **232 ms** |
+| an unnamed code | 2268 ms | 598 ms | **212 ms** |
 
-The `match` is roughly twice as fast as a nested ladder on the common path and nearly four times on
-the rest, and an order of magnitude faster than rebuilding a map. It is also the only one of the
-three that reads as a table: one arm per entry, no nesting, and a `case _` for the default. A
-thirty-one-deep ladder closing `} } } } ...` on a single line is not a style anyone chose; it is
-what the file looked like before this was measured.
+The `const` table is the only one of the three whose cost does not depend on where in the table the
+answer sits. A ladder and a `match` both walk, so both get slower the further down the answer is and
+slower again as the table grows; the table does not. Only the very first entries favour a `match`,
+and a status table is not read at its first entries — `404` and `500` are.
 
-If module-level constant bindings are ever added, a `Map` becomes available for the cases where a
-table is large enough that even the `match` scan matters. Nothing here needs that yet.
+**The `const` is what makes it a table.** A `Map` built inside the function is rebuilt on every
+call, and measured that way it loses to both other forms; that is the trap, and it is why the first
+two attempts here went the way they did. A module-scope `const` is evaluated once, which the flat
+figures above are the evidence of.
 
 ### On numbers
 

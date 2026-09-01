@@ -56,19 +56,23 @@ export fn methodName(value: &Method) -> Str {
 }
 
 /// A method read from its name, which is matched without regard to case.
+const METHODS: Map[Str, Method] = mapOf([
+    ("GET", Get),
+    ("HEAD", Head),
+    ("POST", Post),
+    ("PUT", Put),
+    ("PATCH", Patch),
+    ("DELETE", Delete),
+    ("OPTIONS", Options),
+    ("TRACE", Trace),
+    ("CONNECT", Connect)
+  ])
+
 export fn methodFrom(name: Str) -> Method {
   let upper = name.toUpper()
-  match upper {
-    case "GET" => Get
-    case "HEAD" => Head
-    case "POST" => Post
-    case "PUT" => Put
-    case "PATCH" => Patch
-    case "DELETE" => Delete
-    case "OPTIONS" => Options
-    case "TRACE" => Trace
-    case "CONNECT" => Connect
-    case _ => Other(upper)
+  match METHODS.get(upper) {
+    case Some(found) => found
+    case None => Other(upper)
   }
 }
 
@@ -116,39 +120,48 @@ export fn isError(value: &Status) -> Bool { value.code >= 400 }
 
 /// The reason the protocol gives for a status number, or an empty reason for
 /// one it does not name.
+/// The reason the protocol gives for each status number it names.
+///
+/// A table rather than a run of comparisons, so what a lookup costs does not
+/// depend on where in the list the code happens to sit. Written once at module
+/// scope and read from there, which is what makes it a table at all.
+const REASONS: Map[Int, Str] = mapOf([
+    (100, "Continue"),
+    (101, "Switching Protocols"),
+    (200, "OK"),
+    (201, "Created"),
+    (202, "Accepted"),
+    (204, "No Content"),
+    (206, "Partial Content"),
+    (301, "Moved Permanently"),
+    (302, "Found"),
+    (303, "See Other"),
+    (304, "Not Modified"),
+    (307, "Temporary Redirect"),
+    (308, "Permanent Redirect"),
+    (400, "Bad Request"),
+    (401, "Unauthorized"),
+    (403, "Forbidden"),
+    (404, "Not Found"),
+    (405, "Method Not Allowed"),
+    (408, "Request Timeout"),
+    (409, "Conflict"),
+    (410, "Gone"),
+    (413, "Content Too Large"),
+    (415, "Unsupported Media Type"),
+    (422, "Unprocessable Content"),
+    (429, "Too Many Requests"),
+    (500, "Internal Server Error"),
+    (501, "Not Implemented"),
+    (502, "Bad Gateway"),
+    (503, "Service Unavailable"),
+    (504, "Gateway Timeout")
+  ])
+
 export fn reasonFor(code: Int) -> Str {
-  match code {
-    case 100 => "Continue"
-    case 101 => "Switching Protocols"
-    case 200 => "OK"
-    case 201 => "Created"
-    case 202 => "Accepted"
-    case 204 => "No Content"
-    case 206 => "Partial Content"
-    case 301 => "Moved Permanently"
-    case 302 => "Found"
-    case 303 => "See Other"
-    case 304 => "Not Modified"
-    case 307 => "Temporary Redirect"
-    case 308 => "Permanent Redirect"
-    case 400 => "Bad Request"
-    case 401 => "Unauthorized"
-    case 403 => "Forbidden"
-    case 404 => "Not Found"
-    case 405 => "Method Not Allowed"
-    case 408 => "Request Timeout"
-    case 409 => "Conflict"
-    case 410 => "Gone"
-    case 413 => "Content Too Large"
-    case 415 => "Unsupported Media Type"
-    case 422 => "Unprocessable Content"
-    case 429 => "Too Many Requests"
-    case 500 => "Internal Server Error"
-    case 501 => "Not Implemented"
-    case 502 => "Bad Gateway"
-    case 503 => "Service Unavailable"
-    case 504 => "Gateway Timeout"
-    case _ => ""
+  match REASONS.get(code) {
+    case Some(found) => found
+    case None => ""
   }
 }
 
@@ -250,12 +263,16 @@ export fn versionName(value: &Version) -> Str {
 }
 
 /// A version read from its name, defaulting to 1.1 for anything unrecognised.
+const VERSIONS: Map[Str, Version] = mapOf([
+    ("HTTP/1.0", Http10),
+    ("HTTP/2", Http2),
+    ("HTTP/3", Http3)
+  ])
+
 export fn versionFrom(name: Str) -> Version {
-  match name {
-    case "HTTP/1.0" => Http10
-    case "HTTP/2" => Http2
-    case "HTTP/3" => Http3
-    case _ => Http11
+  match VERSIONS.get(name) {
+    case Some(found) => found
+    case None => Http11
   }
 }
 
@@ -314,19 +331,20 @@ export fn headerWwwAuthenticate() -> Str { "www-authenticate" }
 
 /// Whether a header may not be forwarded by a proxy, because it describes the
 /// connection rather than the message.
-export fn isHopByHop(name: Str) -> Bool {
-  match name.toLower() {
-    case "connection" => true
-    case "keep-alive" => true
-    case "proxy-authenticate" => true
-    case "proxy-authorization" => true
-    case "te" => true
-    case "trailer" => true
-    case "transfer-encoding" => true
-    case "upgrade" => true
-    case _ => false
-  }
+/// The headers a hop may not pass on, as a set rather than a run of
+/// comparisons.
+const HOP_BY_HOP: Set[Str] = #{
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade"
 }
+
+export fn isHopByHop(name: Str) -> Bool { name.toLower() in HOP_BY_HOP }
 
 /// The headers a proxy may forward, with the connection's own removed.
 export fn endToEnd(headers: &Array[(Str, Str)]) -> Array[(Str, Str)] {
