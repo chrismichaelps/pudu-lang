@@ -1,0 +1,324 @@
+module UsesLog
+
+import Std.Log as Log
+import Std.Out as Out
+
+/// What a logger promises, checked through `rendered` and `stamped` so every
+/// configuration is a value comparison rather than captured output.
+///
+/// The cases are the ones a logger gets wrong: a threshold that keeps too much
+/// or too little, a name that is empty and must not leave a separator behind,
+/// fields that must stay in the order they were written, a field added for one
+/// line that must not stay on the logger, a value that would end its own pair
+/// early, and a failure that must come back unchanged after being reported.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  let bare = Log.stdout()
+
+  // Every part of a line is a pair, message included, so nothing has to be
+  // found by counting words from the left.
+  if Log.rendered(&bare, Log.Info, "started") == "level=INFO message=started" {
+    held = held + 1
+  }
+
+  // Parts that are empty are left out rather than written as nothing.
+  if Log.rendered(&bare, Log.Warn, "") == "level=WARN" { held = held + 1 }
+
+  // The name is written as `logger`, between the level and the fields.
+  let named = Log.named(&bare, "checkout")
+  if Log.rendered(&named, Log.Info, "started")
+    == "level=INFO logger=checkout message=started" {
+    held = held + 1
+  }
+  if Log.nameOf(&named) == "checkout" { held = held + 1 }
+
+  // A name beneath a name is joined by a dot; beneath nothing it stands alone.
+  if Log.nameOf(&Log.under(&named, "payment")) == "checkout.payment" { held = held + 1 }
+  if Log.nameOf(&Log.under(&bare, "payment")) == "payment" { held = held + 1 }
+  if Log.nameOf(&Log.under(&Log.under(&named, "payment"), "card"))
+    == "checkout.payment.card" {
+    held = held + 1
+  }
+
+  // Fields are written in the order they were added, not sorted, and sit
+  // between the logger and the message.
+  let paid = Log.carrying(&Log.carrying(&named, "order", "A17"), "amount", "40")
+  if Log.rendered(&paid, Log.Info, "captured")
+    == "level=INFO logger=checkout order=A17 amount=40 message=captured" {
+    held = held + 1
+  }
+  if Log.fieldsOf(&paid).length() == 2 { held = held + 1 }
+  if Log.fieldsOf(&bare).length() == 0 { held = held + 1 }
+
+  // Carrying a field answers a new logger and leaves the old one alone.
+  if Log.fieldsOf(&named).length() == 0 { held = held + 1 }
+
+  // The same key twice keeps both, because a log records what happened rather
+  // than reconciling it.
+  let twice = Log.carrying(&Log.carrying(&bare, "try", "1"), "try", "2")
+  if Log.rendered(&twice, Log.Info, "") == "level=INFO try=1 try=2" { held = held + 1 }
+
+  // A rendered value becomes a field, and text keeps none of the quotes `show`
+  // puts around it, because how a value is delimited is the format's decision.
+  if Log.rendered(&Log.carryingValue(&bare, "count", 7), Log.Info, "")
+    == "level=INFO count=7" {
+    held = held + 1
+  }
+  if Log.rendered(&Log.carryingValue(&bare, "ok", true), Log.Info, "")
+    == "level=INFO ok=true" {
+    held = held + 1
+  }
+  if Log.rendered(&Log.carryingValue(&bare, "cause", "timeout"), Log.Error, "")
+    == "level=ERROR cause=timeout" {
+    held = held + 1
+  }
+
+  // -- Quoting ---------------------------------------------------------------
+
+  // A value with nothing in it to confuse a reader is written bare.
+  if Log.quoted("A17") == "A17" { held = held + 1 }
+  if Log.quoted("7") == "7" { held = held + 1 }
+
+  // A value carrying a space or an equals sign is quoted, so the pair can be
+  // read back rather than splitting into a field and a stray word.
+  if Log.quoted("see below") == "\"see below\"" { held = held + 1 }
+  if Log.quoted("a=b") == "\"a=b\"" { held = held + 1 }
+  if Log.quoted("") == "\"\"" { held = held + 1 }
+  if Log.rendered(&Log.carrying(&bare, "note", "see below"), Log.Info, "")
+    == "level=INFO note=\"see below\"" {
+    held = held + 1
+  }
+
+  // A quote or a backslash inside a value is escaped rather than ending the
+  // value early.
+  if Log.quoted("a\"b") == "\"a\\\"b\"" { held = held + 1 }
+  if Log.quoted("a\\b") == "\"a\\\\b\"" { held = held + 1 }
+
+  // A newline in a message is escaped, so one line of output stays one line.
+  if Log.rendered(&bare, Log.Info, "a\nb") == "level=INFO message=\"a\\nb\"" {
+    held = held + 1
+  }
+
+  // -- Thresholds ------------------------------------------------------------
+
+  // A threshold keeps its own level and everything above it.
+  let quiet = Log.keeping(&bare, Log.Warn)
+  if !Log.keeps(&quiet, Log.Debug) { held = held + 1 }
+  if !Log.keeps(&quiet, Log.Info) { held = held + 1 }
+  if Log.keeps(&quiet, Log.Warn) { held = held + 1 }
+  if Log.keeps(&quiet, Log.Error) { held = held + 1 }
+  if Log.keeps(&quiet, Log.Fatal) { held = held + 1 }
+
+  // The default keeps everything from Info up, so debugging is off until asked
+  // for.
+  if !Log.keeps(&bare, Log.Debug) { held = held + 1 }
+  if Log.keeps(&bare, Log.Info) { held = held + 1 }
+
+  // Turned all the way down, only what is worse than a warning remains; turned
+  // all the way up, everything does.
+  if !Log.keeps(&Log.keeping(&bare, Log.Error), Log.Warn) { held = held + 1 }
+  if Log.keeps(&Log.keeping(&bare, Log.Debug), Log.Debug) { held = held + 1 }
+
+  // Silent keeps nothing, including a line at Silent itself, because it names a
+  // threshold rather than a line.
+  let silent = Log.keeping(&bare, Log.Silent)
+  if !Log.keeps(&silent, Log.Debug) { held = held + 1 }
+  if !Log.keeps(&silent, Log.Fatal) { held = held + 1 }
+  if !Log.keeps(&silent, Log.Silent) { held = held + 1 }
+  if !Log.keeps(&Log.keeping(&bare, Log.Debug), Log.Silent) { held = held + 1 }
+
+  // A threshold changes what is written, not how a line reads, so a filtered
+  // level still renders when asked directly.
+  if Log.rendered(&quiet, Log.Debug, "detail") == "level=DEBUG message=detail" {
+    held = held + 1
+  }
+
+  // The threshold survives naming and carrying.
+  if !Log.keeps(&Log.carrying(&Log.named(&quiet, "n"), "k", "v"), Log.Info) {
+    held = held + 1
+  }
+  match Log.leastOf(&quiet) {
+    case Log.Warn => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Every level is written in full.
+  if Log.levelName(Log.Debug) == "DEBUG" { held = held + 1 }
+  if Log.levelName(Log.Info) == "INFO" { held = held + 1 }
+  if Log.levelName(Log.Warn) == "WARN" { held = held + 1 }
+  if Log.levelName(Log.Error) == "ERROR" { held = held + 1 }
+  if Log.levelName(Log.Fatal) == "FATAL" { held = held + 1 }
+
+  // A level read from a setting is recognised whatever its case, under the
+  // spellings a setting is actually written with, and anything else is absent
+  // rather than a default.
+  match Log.levelFrom("warn") {
+    case Some(Log.Warn) => { held = held + 1 }
+    case _ => {}
+  }
+  match Log.levelFrom("WARNING") {
+    case Some(Log.Warn) => { held = held + 1 }
+    case _ => {}
+  }
+  match Log.levelFrom("off") {
+    case Some(Log.Silent) => { held = held + 1 }
+    case _ => {}
+  }
+  match Log.levelFrom("verbose") {
+    case None => { held = held + 1 }
+    case Some(_) => {}
+  }
+  match Log.levelFrom("") {
+    case None => { held = held + 1 }
+    case Some(_) => {}
+  }
+
+  // -- Timestamps ------------------------------------------------------------
+
+  // A stamp is a pair like everything else, and comes first.
+  if Log.stamped(&named, "2026-08-31T12:00:00Z", Log.Info, "captured")
+    == "timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout message=captured" {
+    held = held + 1
+  }
+  // No stamp leaves the line as it was.
+  if Log.stamped(&bare, "", Log.Info, "x") == Log.rendered(&bare, Log.Info, "x") {
+    held = held + 1
+  }
+
+  // -- Formats ---------------------------------------------------------------
+
+  // The line is held apart from how it reads, so a format is a function on it.
+  let line = Log.lineOf(&paid, "2026-08-31T12:00:00Z", Log.Info, "captured")
+  if Log.logfmt(line)
+    == "timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout"
+    + " order=A17 amount=40 message=captured" {
+    held = held + 1
+  }
+
+  // Read as it happens, the parts a person scans for come first and unlabelled
+  // and the message ends the line.
+  if Log.pretty(line) == "2026-08-31T12:00:00Z INFO checkout order=A17 amount=40 captured" {
+    held = held + 1
+  }
+
+  // As an object, every value is a string, including one that looks like a
+  // number, because a reader that guesses will eventually guess wrong.
+  if Log.json(line)
+    == "\{\"timestamp\":\"2026-08-31T12:00:00Z\",\"level\":\"INFO\""
+    + ",\"logger\":\"checkout\",\"order\":\"A17\",\"amount\":\"40\""
+    + ",\"message\":\"captured\"\}" {
+    held = held + 1
+  }
+
+  // An object always carries a message, even an empty one, so a reader can
+  // take the same shape from every line.
+  if Log.json(Log.lineOf(&bare, "", Log.Warn, ""))
+    == "\{\"level\":\"WARN\",\"message\":\"\"\}" {
+    held = held + 1
+  }
+
+  // A quote in a value is escaped rather than ending the object early.
+  if Log.json(Log.lineOf(&bare, "", Log.Info, "say \"hi\""))
+    == "\{\"level\":\"INFO\",\"message\":\"say \\\"hi\\\"\"\}" {
+    held = held + 1
+  }
+
+  // A key is escaped the same way a value is, because a key comes from the
+  // program but a line has to survive either being wrong.
+  if Log.json(Log.lineOf(&Log.carrying(&bare, "a\"k", "v"), "", Log.Info, "x"))
+    == "\{\"level\":\"INFO\",\"a\\\"k\":\"v\",\"message\":\"x\"\}" {
+    held = held + 1
+  }
+
+  // A backslash and a tab keep their short spellings.
+  if Log.json(Log.lineOf(&Log.carrying(&bare, "path", "a\\b"), "", Log.Error, "a\tb"))
+    == "\{\"level\":\"ERROR\",\"path\":\"a\\\\b\",\"message\":\"a\\tb\"\}" {
+    held = held + 1
+  }
+
+  // Text outside ASCII is written as itself rather than as an escape, which is
+  // what a reader of the object wants and what the format allows.
+  if Log.json(Log.lineOf(&bare, "", Log.Fatal, "\u{e9}t\u{e9} \u{1F418}"))
+    == "\{\"level\":\"FATAL\",\"message\":\"\u{e9}t\u{e9} \u{1F418}\"\}" {
+    held = held + 1
+  }
+
+  // A control character with no short spelling is written as its number, so a
+  // value the program was handed cannot end the line early.
+  if Log.quoted("a\u{1}b") == "\"a\\u0001b\"" { held = held + 1 }
+  if Log.quoted("a\u{1f}b") == "\"a\\u001fb\"" { held = held + 1 }
+  if Log.json(Log.lineOf(&bare, "", Log.Info, "a\u{0}b"))
+    == "\{\"level\":\"INFO\",\"message\":\"a\\u0000b\"\}" {
+    held = held + 1
+  }
+
+  // A logger writes in the format it was given, and everything it carries
+  // survives the change.
+  let shown = Log.shapedBy(&paid, Log.pretty)
+  if Log.rendered(&shown, Log.Info, "captured")
+    == "INFO checkout order=A17 amount=40 captured" {
+    held = held + 1
+  }
+  if Log.fieldsOf(&shown).length() == 2 { held = held + 1 }
+  if Log.nameOf(&shown) == "checkout" { held = held + 1 }
+
+  // A format nobody anticipated is a function a program writes.
+  let terse = Log.shapedBy(&bare, fn(l: Log.Line) -> Str => Log.levelName(l.level))
+  if Log.rendered(&terse, Log.Error, "ignored") == "ERROR" { held = held + 1 }
+
+  // -- Writing ---------------------------------------------------------------
+
+  // A logger can be pointed at another printer without losing what it carries.
+  let redirected = Log.through(&paid, &Out.stderr())
+  if Log.rendered(&redirected, Log.Info, "captured")
+    == "level=INFO logger=checkout order=A17 amount=40 message=captured" {
+    held = held + 1
+  }
+
+  // Text outside ASCII passes through a message and a field unchanged.
+  if Log.rendered(&Log.carrying(&bare, "caf\u{e9}", "\u{1F418}"), Log.Info, "\u{e9}t\u{e9}")
+    == "level=INFO caf\u{e9}=\u{1F418} message=\u{e9}t\u{e9}" {
+    held = held + 1
+  }
+
+  // The writing side answers the outcome rather than swallowing it, and a
+  // filtered line is still a success because nothing went wrong.
+  match Log.debug(&bare, "not written") {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+  match Log.info(&Log.through(&bare, &Out.stderr()), "written") {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+  match Log.fatal(&Log.through(&silent, &Out.stderr()), "not written") {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+  match Log.field(&Log.through(&quiet, &Out.stderr()), Log.Debug, "k", "v", "filtered") {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+  match Log.atMoment(&Log.through(&quiet, &Out.stderr()), "now", Log.Info, "filtered") {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+
+  // A failure reported on the way past comes back unchanged, and a success
+  // passes through untouched.
+  let failed: Result[Int, Str] = Err("timeout")
+  match Log.failure(&Log.through(&named, &Out.stderr()), "capture failed", failed) {
+    case Err(why) => { if why == "timeout" { held = held + 1 } }
+    case Ok(_) => {}
+  }
+  let worked: Result[Int, Str] = Ok(3)
+  match Log.failure(&Log.through(&named, &Out.stderr()), "capture failed", worked) {
+    case Ok(found) => { if found == 3 { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  held
+}

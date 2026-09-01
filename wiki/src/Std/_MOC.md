@@ -16,6 +16,7 @@ tags: [moc, module, stdlib]
 - [[Std Fmt]] — a shaping spec as a value, carrying how one is shaped before that.
 - [[Std Test]] — checks and suites as values, and a report that says what failed.
 - [[Std Test Property]] — generated values with shrinking, seeded so a failure repeats.
+- [[Std Log]] — a logger as a value, carrying a level, a name, fields, and a format.
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.

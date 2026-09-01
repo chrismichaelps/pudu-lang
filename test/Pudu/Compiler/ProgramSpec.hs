@@ -226,6 +226,7 @@ testProgramEvaluation = do
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
   checking <- runEntry "test-fixtures/stdlib/UsesTest.pudu"
+  logging <- runEntry "test-fixtures/stdlib/UsesLog.pudu"
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -295,6 +296,16 @@ testProgramEvaluation = do
     , counterexample
         "a suite reports what held, what did not, and what is still to write"
         (checking === Just "74")
+    {-| A logger's thresholds, the fields it carries, and its three formats,
+        checked by comparing rendered lines, which is possible because making a
+        line is separate from writing it. Weighted toward what a logger gets
+        wrong: a threshold off by one level, a field added for one line that
+        stays on the logger, a value carrying a space or a control character
+        that ends its own pair early, and an object that stops being an object
+        because a key held a quote. -}
+    , counterexample
+        "a logger keeps what it was told to, carries its fields, and reads three ways"
+        (logging === Just "76")
     {-| A hierarchy's counting rules, its three orders, its transformations, and
         what search answers when there is nothing to find. Weighted toward what
         a hand-written hierarchy gets wrong: a leaf counted as height zero, a
