@@ -1,0 +1,480 @@
+module Std.Log
+
+import Std.Out as Out
+import Std.Text as Text
+
+/// How much a line matters, from most detail to least.
+///
+/// Ordered so a threshold is a comparison rather than a set: a logger keeping
+/// `Warn` keeps `Error` too, because a program turned down to its warnings has
+/// not asked to stop hearing about failures.
+///
+/// `Silent` names a threshold rather than a line. Nothing is written at it, so a
+/// logger keeping `Silent` keeps nothing — which is how a program is quietened
+/// without a separate switch to forget to check.
+export type Level = Debug | Info | Warn | Error | Fatal | Silent
+
+/// One named value carried alongside a message.
+export type Field = { key: Str, value: Str }
+
+/// Everything one line knows, before anything decides how it should read.
+///
+/// Held apart from the writing so a format is a function on this rather than a
+/// set of options on the logger. A format nobody anticipated is then a function
+/// a program writes, not a change to this module.
+export type Line = {
+  moment: Str,
+  level: Level,
+  name: Str,
+  fields: Array[Field],
+  message: Str
+}
+
+/// How a line becomes text.
+export type Format = fn(Line) -> Str
+
+/// What a program says, held as a value.
+///
+/// `print` is enough for a script and not enough for anything unattended: no
+/// level, so nothing can be turned down; no name, so nothing can be told apart;
+/// no fields, so nothing can be searched. A logger carries those, and a line
+/// built from it inherits them.
+///
+/// Building a line is separate from writing it, as shaping is separate from
+/// writing in [[Std Fmt]] and [[Std Out]]. A library that logs should be able to
+/// hand a line to whatever its caller chose rather than write to a stream the
+/// caller did not pick.
+export type Logger = {
+  least: Level,
+  name: Str,
+  fields: Array[Field],
+  format: Format,
+  printer: Out.Printer
+}
+
+// -- Reading a value back out of `show` --------------------------------------
+
+/// Text as `show` would have rendered it, with the quotes it adds taken off.
+///
+/// `show` renders text as it would appear in source, in quotes and with escapes,
+/// because it renders a value. A field wants the text itself: what is stored is
+/// the value, and how it is delimited is the format's decision. Anything `show`
+/// did not quote — a number, a list — comes back unchanged.
+fn unshown(value: Str) -> Str {
+  if value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"") {
+    unescapeShown(value.slice(1, value.length() - 1))
+  } else {
+    value
+  }
+}
+
+/// Text with the source escapes produced by `show` read back as characters.
+fn unescapeShown(value: Str) -> Str {
+  var out = ""
+  var index = 0
+  while index < value.length() {
+    let character = value.charAt(index)
+    if character != '\\' || index + 1 >= value.length() {
+      out = out + character.toText()
+      index = index + 1
+    } else {
+      let escapedChar = value.charAt(index + 1)
+      out = out + match escapedChar {
+        case 'n' => "\n"
+        case 't' => "\t"
+        case '"' => "\""
+        case '\\' => "\\"
+        case _ => "\\" + escapedChar.toText()
+      }
+      index = index + 2
+    }
+  }
+  out
+}
+
+// -- Building a logger -------------------------------------------------------
+
+/// A logger to the output stream, keeping everything from `Info` up.
+///
+/// `Info` rather than `Debug`, because a default that says everything trains a
+/// reader to ignore the output, and the one thing a log must not be is ignored.
+export fn stdout() -> Logger {
+  Logger{least: Info, name: "", fields: [], format: logfmt, printer: Out.stdout()}
+}
+
+/// A logger to the error stream, keeping everything from `Info` up.
+///
+/// Where a program's diagnostics belong when its answer goes to output, so the
+/// two can be read apart and piped apart.
+export fn stderr() -> Logger {
+  Logger{least: Info, name: "", fields: [], format: logfmt, printer: Out.stderr()}
+}
+
+/// The same logger with one part replaced, so the rest is written once.
+fn rebuilt(
+  value: &Logger,
+  least: Level,
+  name: Str,
+  fields: Array[Field],
+  format: Format,
+  printer: Out.Printer
+) -> Logger {
+  Logger{least: least, name: name, fields: fields, format: format, printer: printer}
+}
+
+/// The same logger keeping lines from a different level up.
+export fn keeping(value: &Logger, least: Level) -> Logger {
+  rebuilt(value, least, value.name, value.fields, value.format, value.printer)
+}
+
+/// The same logger under a name.
+///
+/// The name says which part of a program spoke, which is the first thing a
+/// reader of a mixed log wants and the thing a timestamp cannot tell them.
+export fn named(value: &Logger, name: Str) -> Logger {
+  rebuilt(value, value.least, name, value.fields, value.format, value.printer)
+}
+
+/// The same logger under a name beneath its own.
+///
+/// Joined by a dot, so `checkout.payment` reads as the part of the part it is.
+export fn under(value: &Logger, name: Str) -> Logger {
+  named(value, if value.name.isEmpty() { name } else { value.name + "." + name })
+}
+
+/// The same logger carrying another field on every line it makes.
+///
+/// Carried rather than passed, so a request identifier is attached once where
+/// the request is known instead of at each line that mentions it — which is the
+/// place it is forgotten.
+export fn carrying(value: &Logger, key: Str, held: Str) -> Logger {
+  let grown = value.fields.push(Field{key: key, value: held})
+  rebuilt(value, value.least, value.name, grown, value.format, value.printer)
+}
+
+/// The same logger carrying a rendered value as a field.
+export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
+  carrying(value, key, unshown(show(held)))
+}
+
+/// The same logger writing its lines in a different format.
+export fn shapedBy(value: &Logger, format: Format) -> Logger {
+  rebuilt(value, value.least, value.name, value.fields, format, value.printer)
+}
+
+/// The same logger writing through a different printer.
+export fn through(value: &Logger, printer: &Out.Printer) -> Logger {
+  rebuilt(value, value.least, value.name, value.fields, value.format, *printer)
+}
+
+// -- Reading a logger back ---------------------------------------------------
+
+/// The level a logger keeps from.
+export fn leastOf(value: &Logger) -> Level { value.least }
+
+/// The name a logger speaks under.
+export fn nameOf(value: &Logger) -> Str { value.name }
+
+/// The fields a logger carries, in the order they were added.
+export fn fieldsOf(value: &Logger) -> Array[Field] { value.fields }
+
+/// How a level is written.
+export fn levelName(value: Level) -> Str {
+  match value {
+    case Debug => "DEBUG"
+    case Info => "INFO"
+    case Warn => "WARN"
+    case Error => "ERROR"
+    case Fatal => "FATAL"
+    case Silent => "SILENT"
+  }
+}
+
+/// A level's place in the order, least important first.
+fn rank(value: Level) -> Int {
+  match value {
+    case Debug => 0
+    case Info => 1
+    case Warn => 2
+    case Error => 3
+    case Fatal => 4
+    case Silent => 5
+  }
+}
+
+/// Whether a logger would keep a line at this level.
+///
+/// Worth asking before building a line whose message is expensive to produce:
+/// the check is a comparison, and the message is not built if it is not kept.
+export fn keeps(value: &Logger, level: Level) -> Bool {
+  match level {
+    case Silent => false
+    case _ => rank(level) >= rank(value.least)
+  }
+}
+
+/// A level read from its name, or `None` for anything else.
+///
+/// For a program taking its level from a setting or an argument, where the text
+/// arrived from outside and being unrecognised is an input rather than a defect.
+export fn levelFrom(name: Str) -> Option[Level] {
+  match name.toUpper() {
+    case "DEBUG" => Some(Debug)
+    case "INFO" => Some(Info)
+    case "WARN" => Some(Warn)
+    case "WARNING" => Some(Warn)
+    case "ERROR" => Some(Error)
+    case "FATAL" => Some(Fatal)
+    case "SILENT" => Some(Silent)
+    case "NONE" => Some(Silent)
+    case "OFF" => Some(Silent)
+    case _ => None
+  }
+}
+
+// -- Formats -----------------------------------------------------------------
+
+/// A field's value written so the pair it belongs to can be read back.
+///
+/// A value with nothing in it to confuse a reader is written bare, which is most
+/// of them and keeps a line short. A value that is empty, or that carries a
+/// space, a quote, or an equals sign, is quoted, because otherwise
+/// `note=see below` reads as a field `note` and a stray word. A value carrying a
+/// line break is quoted and the break written as an escape, so one line of
+/// output stays one line of output.
+export fn quoted(value: Str) -> Str {
+  let plain = !value.isEmpty()
+    && !value.contains(" ")
+    && !value.contains("=")
+    && !Text.anyChar(value, needsEscape)
+  if plain { value } else { "\"" + escaped(value) + "\"" }
+}
+
+/// Text with the characters that would end a quoted value put beyond doubt.
+///
+/// The three breaks a log meets in practice get their short spellings; anything
+/// else below a space gets its number, because a value can hold whatever the
+/// program was handed and a stray control character in the middle of a line is
+/// how a reader ends up parsing something other than what was written.
+///
+/// Text with nothing to escape — nearly all of it — is answered as it arrived,
+/// so the character-by-character pass is only taken by the text that needs it.
+fn escaped(value: Str) -> Str {
+  if !Text.anyChar(value, needsEscape) { value } else {
+    Text.flatMapChars(value, escapedChar)
+  }
+}
+
+/// Whether a character cannot be written into a quoted value as itself.
+fn needsEscape(value: Char) -> Bool {
+  value == '\\' || value == '"' || value.code() < 32
+}
+
+/// One character as it is written inside a quoted value.
+fn escapedChar(value: Char) -> Str {
+  match value {
+    case '\\' => "\\\\"
+    case '"' => "\\\""
+    case '\n' => "\\n"
+    case '\t' => "\\t"
+    case '\r' => "\\r"
+    case _ => if value.code() < 32 { "\\u00" + twoHex(value.code()) } else {
+      value.toText()
+    }
+  }
+}
+
+/// A number below 256 as two hex digits.
+fn twoHex(value: Int) -> Str {
+  hexDigit(value / 16) + hexDigit(value % 16)
+}
+
+/// The hex digits, in order, read by index.
+///
+/// A `const` at module scope is evaluated once, which a table written inside the
+/// function it serves is not — the point [[architecture/STDLIB]] settles for the
+/// lookup tables elsewhere in the library.
+const HEX_DIGITS: Str = "0123456789abcdef"
+
+/// One hex digit.
+fn hexDigit(value: Int) -> Str {
+  HEX_DIGITS.slice(value, value + 1)
+}
+
+/// A `key=value` pair.
+fn pair(key: Str, value: Str) -> Str { key + "=" + quoted(value) }
+
+/// The pairs so far, with one more added when there is a value to write.
+fn withPair(pieces: &Array[Str], key: Str, value: Str) -> Array[Str] {
+  if value.isEmpty() { *pieces } else { pieces.push(pair(key, value)) }
+}
+
+/// Every part of a line written as a `key=value` pair, message included.
+///
+/// The shape a log ends up in whenever anything other than a person reads it. A
+/// message left outside the pairs is the one part a reader has to find by
+/// position, and position is what breaks when a field is added:
+///
+///     timestamp=2026-08-31T12:00:00Z level=INFO logger=checkout order=A17 message=captured
+///
+/// Parts that are empty are left out rather than written as nothing, so a line
+/// with no name carries no `logger=`.
+export fn logfmt(line: Line) -> Str {
+  var pieces = withPair(&[], "timestamp", line.moment)
+  pieces = withPair(&pieces, "level", levelName(line.level))
+  pieces = withPair(&pieces, "logger", line.name)
+  for entry in line.fields { pieces = pieces.push(pair(entry.key, entry.value)) }
+  pieces = withPair(&pieces, "message", line.message)
+  Text.join(&pieces, " ")
+}
+
+/// A line written for someone reading it as it happens.
+///
+/// The parts a person scans for come first and unlabelled — when, how bad, and
+/// who — because at a terminal the position is the label. The message ends the
+/// line so the eye can run down the right of the output and read what happened:
+///
+///     2026-08-31T12:00:00Z INFO checkout order=A17 captured
+export fn pretty(line: Line) -> Str {
+  var pieces = []
+  if !line.moment.isEmpty() { pieces = pieces.push(line.moment) }
+  pieces = pieces.push(levelName(line.level))
+  if !line.name.isEmpty() { pieces = pieces.push(line.name) }
+  for entry in line.fields {
+    pieces = pieces.push(pair(entry.key, entry.value))
+  }
+  if !line.message.isEmpty() { pieces = pieces.push(line.message) }
+  Text.join(&pieces, " ")
+}
+
+/// A line written as a JSON object, for whatever collects it.
+///
+/// Every value is written as a string, including one that looks like a number,
+/// because a field holding `00123` or a version is not a number and a reader
+/// that guesses will eventually guess wrong.
+export fn json(line: Line) -> Str {
+  var pieces = []
+  if !line.moment.isEmpty() { pieces = pieces.push(member("timestamp", line.moment)) }
+  pieces = pieces.push(member("level", levelName(line.level)))
+  if !line.name.isEmpty() { pieces = pieces.push(member("logger", line.name)) }
+  for entry in line.fields { pieces = pieces.push(member(entry.key, entry.value)) }
+  pieces = pieces.push(member("message", line.message))
+  "\{" + Text.join(&pieces, ",") + "\}"
+}
+
+/// One member of a JSON object.
+fn member(key: Str, value: Str) -> Str {
+  "\"" + escaped(key) + "\":\"" + escaped(value) + "\""
+}
+
+// -- Making a line -----------------------------------------------------------
+
+/// The line a logger would make, before anything writes it.
+///
+/// For a program that hands its lines somewhere other than a stream, and for
+/// checking what a logger produces by comparing values rather than by capturing
+/// output — the same reason [[Std Out]] keeps `rendered` apart from `write`.
+export fn lineOf(value: &Logger, moment: Str, level: Level, message: Str) -> Line {
+  Line {
+    moment: moment,
+    level: level,
+    name: value.name,
+    fields: value.fields,
+    message: message
+  }
+}
+
+/// A line as it would be written, without a timestamp.
+export fn rendered(value: &Logger, level: Level, message: Str) -> Str {
+  (value.format)(lineOf(value, "", level, message))
+}
+
+/// A line as it would be written, stamped with a time the caller supplies.
+///
+/// The time is given rather than read from a clock, so a line is a pure function
+/// of what it was told and two runs of the same program can be compared. A caller
+/// wanting the real clock asks `Std.Time` for it and passes the answer, which is
+/// one line at the edge of the program rather than a clock hidden in every line.
+export fn stamped(value: &Logger, moment: Str, level: Level, message: Str) -> Str {
+  (value.format)(lineOf(value, moment, level, message))
+}
+
+// -- Writing a line ----------------------------------------------------------
+
+/// Write a line, or nothing when the level is below what the logger keeps.
+///
+/// Nothing rather than an empty line: a filtered line that still moved the
+/// cursor would make a quiet log look busy.
+export fn at(value: &Logger, level: Level, message: Str) -> Result[(), Str] {
+  if !keeps(value, level) { Ok(()) } else {
+    Out.text(&value.printer, rendered(value, level, message))
+  }
+}
+
+/// Write a stamped line, or nothing when the level is below what is kept.
+export fn atMoment(
+  value: &Logger,
+  moment: Str,
+  level: Level,
+  message: Str
+) -> Result[(), Str] {
+  if !keeps(value, level) { Ok(()) } else {
+    Out.text(&value.printer, stamped(value, moment, level, message))
+  }
+}
+
+/// Write a line at `Debug`.
+export fn debug(value: &Logger, message: Str) -> Result[(), Str] {
+  at(value, Debug, message)
+}
+
+/// Write a line at `Info`.
+export fn info(value: &Logger, message: Str) -> Result[(), Str] {
+  at(value, Info, message)
+}
+
+/// Write a line at `Warn`.
+export fn warn(value: &Logger, message: Str) -> Result[(), Str] {
+  at(value, Warn, message)
+}
+
+/// Write a line at `Error`.
+export fn error(value: &Logger, message: Str) -> Result[(), Str] {
+  at(value, Error, message)
+}
+
+/// Write a line at `Fatal`.
+export fn fatal(value: &Logger, message: Str) -> Result[(), Str] {
+  at(value, Fatal, message)
+}
+
+/// Write a line carrying one further field, without keeping it on the logger.
+///
+/// For the field that belongs to one line rather than to everything after it,
+/// which is most of them.
+export fn field(
+  value: &Logger,
+  level: Level,
+  key: Str,
+  held: Str,
+  message: Str
+) -> Result[(), Str] {
+  at(&carrying(value, key, held), level, message)
+}
+
+/// Write a failure's cause at `Error`, and answer the failure unchanged.
+///
+/// Answering it back means a caller logs on the way past rather than choosing
+/// between reporting a failure and returning it.
+export fn failure[T, E](value: &Logger, message: Str, held: Result[T, E]) -> Result[T, E] {
+  match held {
+    case Ok(found) => Ok(found)
+    case Err(why) => {
+      match at(&carryingValue(value, "cause", why), Error, message) {
+        case Ok(_) => {}
+        case Err(_) => {}
+      }
+      Err(why)
+    }
+  }
+}
