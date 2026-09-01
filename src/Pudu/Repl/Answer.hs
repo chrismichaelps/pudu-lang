@@ -46,9 +46,9 @@ import Pudu.Repl.Session
   , inspectContext
   , contextSummary
   , emptySession
+  , inspectEntryType
   , loadModule
   , sessionExports
-  , submitEntry
   )
 import Pudu.Source (SourceName (SourceName), newSource)
 import Pudu.Type (renderType)
@@ -110,24 +110,21 @@ showTokens text
  where
   isEnd token = tokenKind token == EndOfFile
 
-{-| Static types arrive with the typing phase. Until then `:type` reports the
-    runtime shape the evaluator produced, and says so. -}
+{-| Ask the compiler for an entry's type without entering the evaluator. A
+    command that inspects code must not run it or replay effects accumulated in
+    the session. -}
 showType :: ReplOptions -> Session -> Text -> IO ()
 showType options session expression
   | Text.null (Text.strip expression) = TextIO.putStrLn "usage: :type <expression>"
   | otherwise = do
-      result <- submitEntry session expression
-      let diagnostics = resultDiagnostics result
-          config =
-            interactiveRenderConfig (replStyle options) "<interactive>" (resultFirstLine result)
+      (source, firstLine, diagnostics, found) <- inspectEntryType session expression
+      let config =
+            interactiveRenderConfig (replStyle options) "<interactive>" firstLine
       if not (null diagnostics)
-        then TextIO.putStrLn (renderDiagnosticsWith config (resultSource result) diagnostics)
-        else case resultType result of
+        then TextIO.putStrLn (renderDiagnosticsWith config source diagnostics)
+        else case found of
           Just typeValue -> TextIO.putStrLn (Text.strip expression <> " :: " <> renderType typeValue)
-          Nothing -> case resultValue result of
-            Nothing -> TextIO.putStrLn "no type"
-            Just value ->
-              TextIO.putStrLn (Text.strip expression <> " :: " <> valueKind value)
+          Nothing -> TextIO.putStrLn "no type"
 
 reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 reportEntry options settings result = do

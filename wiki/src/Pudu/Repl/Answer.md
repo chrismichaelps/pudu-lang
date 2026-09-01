@@ -28,7 +28,7 @@ showType   :: ReplOptions -> Session -> Text -> IO ()
 showTokens :: Text -> IO ()
 showAst    :: ReplOptions -> Text -> IO ()
 performLoad :: ReplOptions -> Session -> FilePath -> IO Session
-reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> Int -> IO ()
+reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 ```
 
 ### Governance
@@ -41,13 +41,28 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> Int -> IO ()
 - `showState` takes the settings it reads rather than the whole loop context.
   Taking the context would have made this module import the loop and the loop
   import this, for one `IORef`.
-- `:type` reports the static type when the checker recorded one for the entry
-  and the runtime shape otherwise, which is what `function` means when it
-  appears — a fallback, not an answer.
+- `:type` is a compiler question. It uses [[Repl Session]]'s type probe and
+  never enters the evaluator: a valid expression reports its static type, an
+  invalid expression reports the compiler diagnostics against the submitted
+  source, and an entry with no expression type reports `no type`.
 
 ### Linkage
 
 - **Consumed by:** [[Pudu REPL]].
+
+## Negative Logic (Prohibited Paths)
+
+- An inspection command must not call `submitEntry`. Discarding an evaluated
+  value cannot undo IO, mutation, failure, or any effect replayed from the
+  session buffer.
+
+## Grill Log
+
+- **Q:** Can `:type` reuse ordinary submission and ignore its value? **A:** No.
+  _Rationale:_ evaluation has already happened by the time a value can be
+  ignored, so `:type print("message")` would print and a runtime failure would
+  replace the static answer. _Rejected:_ evaluation followed by value
+  suppression or a runtime-shape fallback.
 
 ## Referenced by
 

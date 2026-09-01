@@ -58,7 +58,10 @@ runRepl :: ReplOptions -> IO ()
 - Ctrl-C abandons the line being typed and returns to the prompt with the session untouched, so an interrupt costs a line rather than a session. End of input leaves cleanly.
 - The session value stays pure and threaded through the loop; a reference to it exists only so completion can read what the session declared, and completion never writes to it.
 - A failed entry changes nothing. The session advances only on acceptance, so a mistake cannot leave a half-defined context behind.
-- `:type` reports the static type the checker gave the submission, falling back to the evaluated value's runtime shape only when the checker recorded nothing for it.
+- `:type` is static inspection only. It reports the type recorded by the
+  checker, preserves compiler diagnostics for invalid input, and says `no type`
+  when the entry has no expression type. It never evaluates the entry and has
+  no runtime-shape fallback.
 
 ### Linkage
 
@@ -72,6 +75,8 @@ Print the banner, optionally load a file, then loop: read a line, continue it wh
 ## Negative Logic (Prohibited Paths)
 
 - No grammar, evaluation, or resolution logic of its own; no global session state; no terminal detection; no silent recovery that hides a diagnostic; and no command that alters the session as a side effect of inspecting it.
+- Static commands never reach the evaluator. In particular, `:type` cannot run
+  the expression it describes or replay effects already present in the session.
 
 ## Edge Cases
 
@@ -89,6 +94,10 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 - **Q:** Where does session state live? **A:** In [[Repl Session]], threaded through the loop. _Rationale:_ pure state makes the session's behaviour testable without a terminal, and it is what lets a rejected entry leave nothing behind. _Rejected:_ a mutable reference; state hidden in the IO loop.
 - **Q:** Where does completion get its names? **A:** From a snapshot refreshed after each accepted entry, not from the compiler on every keystroke. _Rationale:_ Tab must be instant, and the loop has already compiled the session it would otherwise recompile. _Rejected:_ compiling inside the completion callback; a fixed keyword-only list, which would never offer what the reader just defined.
 - **Q:** How does a multi-line form end without lookahead? **A:** At a balancing `}` or a blank line. _Rationale:_ brace-terminated forms end naturally, and the blank line covers the leading-`|` and leading-`.` continuations the language admits. _Rejected:_ peeking the next line, which would print a prompt for input that may not be needed; requiring `:{` for every multi-line form.
+- **Q:** May `:type` evaluate an entry and discard its value? **A:** No.
+  _Rationale:_ effects and runtime failures occur before the value can be
+  discarded, which makes a question about code change the program it is
+  inspecting. _Rejected:_ ordinary submission with hidden output.
 
 ## Variants
 
