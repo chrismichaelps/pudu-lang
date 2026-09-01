@@ -1,0 +1,340 @@
+module Std.Net
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Result as Result
+
+/// Why an operation over the network did not do what it was asked.
+/// One variant per cause a caller acts on differently: a refused connection is
+/// retried, a name that resolves to nothing is a configuration mistake, and a
+/// peer that went away mid-message is neither.
+export type NetError
+  = Refused(Str)
+  | Unresolved(Str)
+  | Closed
+  | AddressInUse(Int)
+  | NotText
+  | Other(Str)
+
+/// An endpoint waiting for connections.
+export type Listener = { token: Int }
+
+/// A connection, open in both directions.
+export type Connection = { token: Int }
+
+/// How much is asked for in one read.
+const CHUNK: Int = 65536
+
+/// How many connections may wait to be accepted before the operating system
+/// starts refusing them. Large enough that a burst does not turn into refused
+/// connections while the program is between accepts.
+const BACKLOG: Int = 128
+
+/// The phrases an operating system uses for the causes worth telling apart.
+/// A module-scope constant, so classifying a failure walks this list rather
+/// than rebuilding it on every failure.
+const CAUSES: Array[(Str, Int)] = [
+  ("Connection refused", 0),
+  ("connect: does not exist", 0),
+  ("does not exist (Connection refused)", 0),
+  ("Name or service not known", 1),
+  ("nodename nor servname", 1),
+  ("no address for", 1),
+  ("Address already in use", 2),
+  ("resource busy", 2),
+  ("the endpoint is closed", 3),
+  ("Broken pipe", 3),
+  ("Connection reset", 3)
+]
+
+fn causeOf(message: Str, port: Int) -> NetError {
+  var found = Other(message)
+  var index = 0
+  var going = true
+  while index < CAUSES.length() && going {
+    let entry = CAUSES[index]
+    if message.contains(entry[0]) {
+      found = namedCause(entry[1], message, port)
+      going = false
+    }
+    index = index + 1
+  }
+  found
+}
+
+fn namedCause(tag: Int, message: Str, port: Int) -> NetError {
+  if tag == 0 { Refused(message) } else {
+    if tag == 1 { Unresolved(message) } else {
+      if tag == 2 { AddressInUse(port) } else {
+        if tag == 3 { Closed } else { Other(message) }
+      }
+    }
+  }
+}
+
+/// Wait for connections on a port.
+///
+/// A port of zero asks the machine to choose one, which `portOf` then answers.
+/// That is how a program starts a listener without picking a number something
+/// else may already hold, and it is what a test wants.
+///
+/// The address is made reusable before it is bound, so a program restarted
+/// straight after stopping can bind the port it just had rather than waiting
+/// out the connections that may still be in flight.
+export fn listen(host: Str, port: Int) -> Result[Listener, NetError] {
+  Result.map(
+    Result.mapErr(tcpListen(host, port, BACKLOG), fn(message: Str) -> NetError {
+        causeOf(message, port)
+      }),
+    fn(token: Int) -> Listener { Listener{token: token} }
+  )
+}
+
+/// Wait for connections reachable only from this machine.
+export fn listenLocal(port: Int) -> Result[Listener, NetError] { listen("127.0.0.1", port) }
+
+/// Which port a listener is actually on.
+export fn portOf(listener: &Listener) -> Result[Int, NetError] {
+  Result.mapErr(socketPort(listener.token), fn(message: Str) -> NetError { causeOf(message, 0) })
+}
+
+/// Wait for the next connection.
+/// This does not answer until one arrives, which is what makes a server a
+/// loop around it rather than a poll.
+export fn accept(listener: &Listener) -> Result[Connection, NetError] {
+  Result.map(
+    Result.mapErr(tcpAccept(listener.token), fn(message: Str) -> NetError { causeOf(message, 0) }),
+    fn(token: Int) -> Connection { Connection{token: token} }
+  )
+}
+
+/// Open a connection to somewhere else.
+export fn connect(host: Str, port: Int) -> Result[Connection, NetError] {
+  Result.map(
+    Result.mapErr(tcpConnect(host, port), fn(message: Str) -> NetError { causeOf(message, port) }),
+    fn(token: Int) -> Connection { Connection{token: token} }
+  )
+}
+
+/// Who is at the other end.
+export fn peerOf(connection: &Connection) -> Result[Str, NetError] {
+  Result.mapErr(socketPeer(connection.token), fn(message: Str) -> NetError { causeOf(message, 0) })
+}
+
+/// Send bytes, and keep sending until every one has gone.
+/// A single write is permitted to take fewer bytes than it was offered, so
+/// this loops underneath rather than writing once: a sender that moved on
+/// would truncate exactly the large messages it most matters not to.
+export fn send(connection: &Connection, payload: &Bytes) -> Result[(), NetError] {
+  Result.mapErr(socketSend(connection.token, *payload), fn(message: Str) -> NetError {
+      causeOf(message, 0)
+    })
+}
+
+/// Send text, as its UTF-8 encoding.
+export fn sendText(connection: &Connection, text: Str) -> Result[(), NetError] {
+  send(connection, &text.toBytes())
+}
+
+/// The next bytes, or nothing when the other end has closed.
+/// Nothing is a different answer from an empty read: a reader that could not
+/// tell them apart would stop on a slow peer or never stop on a finished one.
+export fn receive(connection: &Connection, count: Int) -> Result[Option[Bytes], NetError] {
+  Result.mapErr(socketReceive(connection.token, count), fn(message: Str) -> NetError {
+      causeOf(message, 0)
+    })
+}
+
+/// Say that nothing more will be sent, while still reading what comes back.
+/// This is how a sender marks the end of a message in a protocol that has no
+/// length ahead of the body. Closing outright would discard the reply.
+export fn finish(connection: &Connection) -> Result[(), NetError] {
+  Result.mapErr(socketFinish(connection.token), fn(message: Str) -> NetError {
+      causeOf(message, 0)
+    })
+}
+
+/// Close a connection.
+export fn close(connection: &Connection) -> Result[(), NetError] {
+  Result.mapErr(socketClose(connection.token), fn(message: Str) -> NetError {
+      causeOf(message, 0)
+    })
+}
+
+/// Stop listening.
+export fn closeListener(listener: &Listener) -> Result[(), NetError] {
+  Result.mapErr(socketClose(listener.token), fn(message: Str) -> NetError { causeOf(message, 0) })
+}
+
+/// Combine everything a peer sends into one value, holding one chunk at a
+/// time. What it costs does not depend on how much the peer sends.
+///
+/// The value is threaded rather than gathered by the step function, for the
+/// same reason a sequence passes its state: a function literal carries a copy
+/// of what it captured, so a step assigning to a variable outside itself would
+/// leave that variable as it found it.
+export fn foldChunks[T](
+  connection: &Connection,
+  seed: T,
+  step: fn(T, Bytes) -> T
+) -> Result[T, NetError] {
+  var total = seed
+  var failure: Option[NetError] = None
+  var going = true
+  while going {
+    let chunk = receive(connection, CHUNK)
+    if let Err(reason) = chunk {
+      failure = Some(reason)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(chunk, None)
+      if let Some(bytes) = piece { total = step(total, bytes) } else { going = false }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(total) }
+}
+
+/// Everything a peer sends until it closes, joined once rather than once per
+/// chunk. Named so its cost is visible: this holds the whole message, and
+/// `foldChunks` is the one that does not.
+export fn receiveAll(connection: &Connection) -> Result[Bytes, NetError] {
+  Result.map(
+    foldChunks(connection, [], fn(parts: Array[Bytes], chunk: Bytes) -> Array[Bytes] {
+        parts.push(chunk)
+      }),
+    fn(parts: Array[Bytes]) -> Bytes { ByteSeq.join(&parts) }
+  )
+}
+
+/// Read until a marker has arrived, answering what came before it and what
+/// came after.
+///
+/// This is what a protocol whose messages end with a marker needs, and it is
+/// the operation such a reader most often gets wrong: the marker can arrive
+/// split across two reads, so a reader that looked only at the newest chunk
+/// would miss it. The buffer is searched whole each time.
+///
+/// The remainder is answered rather than dropped because it is the start of
+/// the next message: a reader that discarded it would lose the beginning of
+/// everything that followed.
+export fn receiveUntil(
+  connection: &Connection,
+  marker: &Bytes,
+  limit: Int
+) -> Result[(Bytes, Bytes), NetError] {
+  var buffer = ByteSeq.empty()
+  var failure: Option[NetError] = None
+  var found = -1
+  var going = true
+  while going {
+    found = buffer.indexOf(*marker)
+    if found >= 0 {
+      going = false
+    } else {
+      if buffer.length() > limit {
+        failure = Some(Other("the marker did not arrive within " + show(limit) + " bytes"))
+        going = false
+      } else {
+        let chunk = receive(connection, CHUNK)
+        if let Err(reason) = chunk {
+          failure = Some(reason)
+          going = false
+        } else {
+          let piece = Result.unwrapOr(chunk, None)
+          if let Some(bytes) = piece {
+            buffer = buffer.concat(bytes)
+          } else {
+            failure = Some(Closed)
+            going = false
+          }
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    Err(reason)
+  } else {
+    Ok((buffer.take(found), buffer.drop(found + marker.length())))
+  }
+}
+
+/// Read exactly the requested count of bytes, or report that the peer closed
+/// before they arrived.
+///
+/// A protocol that states a length ahead of its body needs this rather than
+/// `receive`, which is permitted to answer with fewer bytes than it was asked
+/// for whenever that is all that has arrived so far.
+export fn receiveExactly(connection: &Connection, count: Int) -> Result[Bytes, NetError] {
+  var buffer = ByteSeq.empty()
+  var failure: Option[NetError] = None
+  var going = buffer.length() < count
+  while going {
+    let chunk = receive(connection, count - buffer.length())
+    if let Err(reason) = chunk {
+      failure = Some(reason)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(chunk, None)
+      if let Some(bytes) = piece {
+        buffer = buffer.concat(bytes)
+        going = buffer.length() < count
+      } else {
+        failure = Some(Closed)
+        going = false
+      }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(buffer) }
+}
+
+/// Open a connection, hand it to an action, and close it however the action
+/// ended. There is no close a caller can forget, because there is no close.
+export fn withConnection[T](
+  host: Str,
+  port: Int,
+  action: fn(Connection) -> Result[T, NetError]
+) -> Result[T, NetError] {
+  let opened = connect(host, port)
+  if let Err(reason) = opened {
+    Err(reason)
+  } else {
+    let connection = Result.unwrapOr(opened, Connection{token: 0})
+    let outcome = action(connection)
+    let closed = close(&connection)
+    if Result.isErr(&outcome) { outcome } else {
+      if let Err(reason) = closed { Err(reason) } else { outcome }
+    }
+  }
+}
+
+/// Wait for connections, hand each to an action, and close it however the
+/// action ended. The listener is closed when the loop stops.
+///
+/// The action answers whether to keep waiting, so a server stops by saying so
+/// rather than by a flag something else has to set. `count` bounds how many
+/// connections are served before the loop ends whatever the action says, so a
+/// caller that wants one connection does not have to arrange to stop itself.
+export fn serve(
+  listener: &Listener,
+  count: Int,
+  action: fn(Connection) -> Bool
+) -> Result[Int, NetError] {
+  var served = 0
+  var failure: Option[NetError] = None
+  var going = true
+  while going {
+    let accepted = accept(listener)
+    if let Err(reason) = accepted {
+      failure = Some(reason)
+      going = false
+    } else {
+      let connection = Result.unwrapOr(accepted, Connection{token: 0})
+      let keepGoing = action(connection)
+      let closed = close(&connection)
+      if let Err(reason) = closed { failure = Some(reason) }
+      served = served + 1
+      going = keepGoing && Option.isNone(&failure) && (count <= 0 || served < count)
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(served) }
+}

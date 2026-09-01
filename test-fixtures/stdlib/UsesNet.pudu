@@ -1,0 +1,88 @@
+module UsesNet
+
+import Std.Bytes as ByteSeq
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a connection promises, checked by talking to a listener this program
+/// started rather than to anything outside the machine.
+///
+/// The listener binds port zero and asks which port it was given, so the
+/// fixture never picks a number something else may already hold. Everything
+/// runs on the loopback address, so this needs no network and reaches nothing.
+export fn main() -> Int {
+  var held = 0
+
+  let opened = Net.listenLocal(0)
+  if Result.isOk(&opened) { held = held + 1 }
+
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    if port > 0 { held = held + 1 }
+
+    // What the server saw, sent back over a channel: the server runs on
+    // another thread, and a closure cannot report by assigning to a variable
+    // outside itself.
+    let seen: Channel.Channel[Str] = Channel.channel(4)
+
+    let server = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(connection: Net.Connection) -> Bool {
+            // A message ending in a marker, so the reader has to cope with the
+            // marker arriving split across two reads.
+            let request = Net.receiveUntil(&connection, &ByteSeq.fromText("\n"), 65536)
+            if let Ok(pair) = request {
+              let _reported = Channel.send(&seen, textOf(&pair[0]))
+              let _replied = Net.sendText(&connection, "pong " + textOf(&pair[0]) + "\n")
+              ()
+            }
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    if Result.isOk(&server) { held = held + 1 }
+
+    // The client half, on this thread.
+    let answered = Net.withConnection("127.0.0.1", port, fn(connection: Net.Connection) -> Result[Str, Net.NetError] {
+        Net.sendText(&connection, "ping\n") ?
+        let reply = Net.receiveUntil(&connection, &ByteSeq.fromText("\n"), 65536) ?
+        Ok(textOf(&reply[0]))
+      })
+    if Result.unwrapOr(answered, "") == "pong ping" { held = held + 1 }
+
+    // What the server actually read, which says the message crossed rather
+    // than that the client merely believed it did.
+    let reported = Result.unwrapOr(Channel.receive(&seen), None)
+    if Option.unwrapOr(reported, "") == "ping" { held = held + 1 }
+
+    if let Ok(worker) = server {
+      if Result.isOk(&Concurrent.join(&worker)) { held = held + 1 }
+    }
+  }
+
+  // A connection to a port nothing is listening on is refused rather than
+  // waiting, and says so as a cause a caller can act on.
+  let refused = Net.connect("127.0.0.1", 1)
+  if Result.isErr(&refused) { held = held + 1 }
+
+  // A second listener answers with a port of its own, so binding twice does
+  // not silently hand back the same endpoint.
+  let first = Net.listenLocal(0)
+  let second = Net.listenLocal(0)
+  if let Ok(one) = first {
+    if let Ok(two) = second {
+      let portOne = Result.unwrapOr(Net.portOf(&one), 0)
+      let portTwo = Result.unwrapOr(Net.portOf(&two), 0)
+      if portOne != portTwo { held = held + 1 }
+      if Result.isOk(&Net.closeListener(&one)) { held = held + 1 }
+      if Result.isOk(&Net.closeListener(&two)) { held = held + 1 }
+    }
+  }
+
+  held
+}
+
+fn textOf(payload: &Bytes) -> Str { Result.unwrapOr(ByteSeq.toText(payload), "") }

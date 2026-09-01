@@ -20,6 +20,32 @@ import Pudu.Eval.Handle
   , readHandleChunk
   , writeHandleChunk
   )
+import Pudu.Eval.Concurrent
+  ( cellNew
+  , cellRead
+  , cellSwap
+  , channelClose
+  , channelNew
+  , channelPending
+  , channelReceive
+  , channelSend
+  , mutexLock
+  , mutexNew
+  , mutexUnlock
+  , sleepFor
+  , threadJoin
+  )
+import Pudu.Eval.Socket
+  ( acceptOn
+  , closeSocketAt
+  , connectTo
+  , listenOn
+  , localPortOf
+  , peerOf
+  , receiveFrom
+  , sendOn
+  , shutdownWriteAt
+  )
 import Pudu.Eval.Io
 import Pudu.Eval.Env
   ( effectsAdmitted
@@ -74,6 +100,29 @@ effectBuiltins =
   , WriteChunkBuiltin
   , FlushWriterBuiltin
   , CloseHandleBuiltin
+  , TcpListenBuiltin
+  , TcpAcceptBuiltin
+  , TcpConnectBuiltin
+  , SocketSendBuiltin
+  , SocketReceiveBuiltin
+  , SocketCloseBuiltin
+  , SocketPeerBuiltin
+  , SocketPortBuiltin
+  , SocketFinishBuiltin
+  , SpawnThreadBuiltin
+  , JoinThreadBuiltin
+  , SleepBuiltin
+  , ChannelOpenBuiltin
+  , ChannelPushBuiltin
+  , ChannelPullBuiltin
+  , ChannelWaitingBuiltin
+  , ChannelFinishBuiltin
+  , MutexOpenBuiltin
+  , MutexAcquireBuiltin
+  , MutexReleaseBuiltin
+  , CellOpenBuiltin
+  , CellGetBuiltin
+  , CellSwapBuiltin
   ]
 
 {-| Perform one effect.
@@ -141,6 +190,58 @@ callEffect spanValue builtin arguments = do
         effectUnit (flushHandleAt (fromInteger token))
       (CloseHandleBuiltin, [IntValue _ token]) ->
         effectUnit (closeHandleAt (fromInteger token))
+      {-| An endpoint is named by a token for the reason an open file is: it is
+          one object with one position in its stream, while a value is copied
+          through evaluation. -}
+      (TcpListenBuiltin, [StrValue host, IntValue _ port, IntValue _ backlog]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (listenOn host (fromInteger port) (fromInteger backlog))
+      (TcpAcceptBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (acceptOn (fromInteger token))
+      (TcpConnectBuiltin, [StrValue host, IntValue _ port]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (connectTo host (fromInteger port))
+      (SocketSendBuiltin, [IntValue _ token, BytesValue payload]) ->
+        effectUnit (sendOn (fromInteger token) payload)
+      (SocketReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (receiveFrom (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (SocketCloseBuiltin, [IntValue _ token]) ->
+        effectUnit (closeSocketAt (fromInteger token))
+      (SocketFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (shutdownWriteAt (fromInteger token))
+      (SocketPeerBuiltin, [IntValue _ token]) ->
+        resultOf . fmap StrValue <$> lift refusal (peerOf (fromInteger token))
+      (SocketPortBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf (fromInteger token))
+      {-| A thread, a channel, a lock, and a cell are each named by a token for
+          the reason a file and a socket are: they are shared objects, while a
+          value is copied through evaluation, and two copies of a lock would
+          not exclude each other. -}
+      (JoinThreadBuiltin, [IntValue _ token]) ->
+        effectUnit (threadJoin (fromInteger token))
+      (SleepBuiltin, [IntValue _ millis]) -> effectUnit (sleepFor (fromInteger millis))
+      (ChannelOpenBuiltin, [IntValue _ limit]) ->
+        intOf . fromIntegral <$> lift refusal (channelNew (fromInteger limit))
+      (ChannelPushBuiltin, [IntValue _ token, value]) ->
+        effectUnit (channelSend (fromInteger token) value)
+      (ChannelPullBuiltin, [IntValue _ token]) -> do
+        outcome <- lift refusal (channelReceive (fromInteger token))
+        pure (resultOf (fmap optionalValue outcome))
+      (ChannelWaitingBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending (fromInteger token))
+      (ChannelFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (channelClose (fromInteger token))
+      (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal mutexNew
+      (MutexAcquireBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexLock (fromInteger token))
+      (MutexReleaseBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexUnlock (fromInteger token))
+      (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew value)
+      (CellGetBuiltin, [IntValue _ token]) ->
+        resultOf <$> lift refusal (cellRead (fromInteger token))
+      (CellSwapBuiltin, [IntValue _ token, value]) ->
+        resultOf <$> lift refusal (cellSwap (fromInteger token) value)
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
@@ -179,6 +280,9 @@ callEffect spanValue builtin arguments = do
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
   optionalText found = case found of
     Just text -> VariantValue "Some" [StrValue text]
+    Nothing -> VariantValue "None" []
+  optionalValue found = case found of
+    Just value -> VariantValue "Some" [value]
     Nothing -> VariantValue "None" []
   optionalBytes found = case found of
     Just chunk -> VariantValue "Some" [BytesValue chunk]

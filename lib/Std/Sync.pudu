@@ -1,0 +1,98 @@
+module Std.Sync
+
+import Std.Result as Result
+
+/// Why a shared value could not be reached.
+export type SyncError
+  = Missing
+  | Other(Str)
+
+/// A lock, held by at most one thread at a time.
+export type Mutex = { token: Int }
+
+/// A value more than one thread may read and replace.
+///
+/// The type parameter is carried by the cell rather than by what it holds, so
+/// a cell of numbers and a cell of text are different types and putting the
+/// wrong thing in one is a compile error.
+export type Cell[T] = { token: Int }
+
+/// A number more than one thread may add to without losing an addition.
+export type Counter = { lock: Mutex, holder: Cell[Int] }
+
+/// A new lock, not held.
+export fn mutex() -> Mutex { Mutex{token: mutexOpen()} }
+
+/// Take a lock, waiting until it is free.
+export fn lock(target: &Mutex) -> Result[(), SyncError] {
+  Result.mapErr(mutexAcquire(target.token), causeOf)
+}
+
+/// Release a lock.
+/// Releasing one that is not held is not a failure, so a caller leaving a
+/// critical section by more than one path cannot stop the program by releasing
+/// twice.
+export fn unlock(target: &Mutex) -> Result[(), SyncError] {
+  Result.mapErr(mutexRelease(target.token), causeOf)
+}
+
+/// Run an action with a lock held, and release it however the action ended.
+///
+/// There is no unlock a caller can forget, because there is no unlock. A lock
+/// released only on the path where nothing went wrong is a lock that is held
+/// forever the first time something does, and every thread waiting on it stops
+/// with it.
+export fn withLock[T](target: &Mutex, action: fn() -> T) -> Result[T, SyncError] {
+  lock(target) ?
+  let outcome = action()
+  unlock(target) ?
+  Ok(outcome)
+}
+
+/// A cell holding a value.
+export fn cell[T](initial: T) -> Cell[T] { Cell{token: cellOpen(initial)} }
+
+/// What a cell holds.
+export fn get[T](source: &Cell[T]) -> Result[T, SyncError] {
+  Result.mapErr(cellGet(source.token), causeOf)
+}
+
+/// Replace what a cell holds and answer what it held, in one step nothing can
+/// come between.
+///
+/// This is the only write, because it is the only one that composes. A read
+/// followed by a write is two steps, and another thread can act between them:
+/// a counter built that way loses additions, and loses them only under the
+/// load that makes the loss hardest to reproduce. A caller that needs to
+/// decide what to write from what is there wants `Counter` or a lock.
+export fn swap[T](target: &Cell[T], value: T) -> Result[T, SyncError] {
+  Result.mapErr(cellSwap(target.token, value), causeOf)
+}
+
+/// Replace what a cell holds, discarding what it held.
+export fn set[T](target: &Cell[T], value: T) -> Result[(), SyncError] {
+  Result.map(swap(target, value), fn(_previous: T) -> () { () })
+}
+
+/// A counter starting at a value.
+export fn counter(start: Int) -> Counter { Counter{lock: mutex(), holder: cell(start)} }
+
+/// Add to a counter and answer what it then holds.
+/// The lock is what makes this safe: reading and writing a cell are two steps,
+/// and two threads adding at once without one would each read the same number
+/// and write the same number, losing an addition.
+export fn increment(target: &Counter, amount: Int) -> Result[Int, SyncError] {
+  withLock(&target.lock, fn() -> Result[Int, SyncError] {
+      let held = get(&target.holder) ?
+      let next = held + amount
+      set(&target.holder, next) ?
+      Ok(next)
+    }) ?
+}
+
+/// What a counter holds.
+export fn count(target: &Counter) -> Result[Int, SyncError] { get(&target.holder) }
+
+fn causeOf(message: Str) -> SyncError {
+  if message.contains("no such") { Missing } else { Other(message) }
+}

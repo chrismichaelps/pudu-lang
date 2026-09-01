@@ -236,6 +236,8 @@ testProgramEvaluation = do
   separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
   calendars <- runEntry "test-fixtures/stdlib/UsesTimeFormat.pudu"
   measurements <- runEntry "test-fixtures/stdlib/UsesBench.pudu"
+  threads <- runEntry "test-fixtures/stdlib/UsesConcurrent.pudu"
+  endpoints <- runEntry "test-fixtures/stdlib/UsesNet.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -370,6 +372,19 @@ testProgramEvaluation = do
     , counterexample
         "a measurement reports its spread rather than one stopwatch reading"
         (measurements === Just "31")
+    {-| Four threads each adding a thousand times total four thousand. Without
+        the lock underneath, reading and writing a cell are two steps, and two
+        threads read the same number and write the same number — losing
+        additions only under the load that makes the loss hardest to find. -}
+    , counterexample
+        "threads share a channel, a lock, and a cell without losing a write"
+        (threads === Just "17")
+    {-| A listener on the loopback address, a client, and a round trip, all in
+        one program: the listener binds port zero and asks which port it was
+        given, so nothing is assumed about what else the machine holds. -}
+    , counterexample
+        "a connection carries a message and the reply comes back"
+        (endpoints === Just "10")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

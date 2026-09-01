@@ -19,6 +19,8 @@ import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Handle (closeAllHandles)
+import Pudu.Eval.Concurrent (closeAllConcurrent)
+import Pudu.Eval.Socket (closeAllSockets)
 import Pudu.Eval.Env
   ( Env (..)
   , withIntegerKinds
@@ -140,6 +142,8 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
       not push them. Closing here is what makes the last bytes a program wrote
       actually reach the disk. -}
   closeAllHandles
+  closeAllSockets
+  closeAllConcurrent
   collected <- readIORef counters
   pure (outcome, collected)
 

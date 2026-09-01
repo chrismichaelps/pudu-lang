@@ -109,6 +109,29 @@ builtinName value = case value of
   WriteChunkBuiltin -> "writeChunk"
   FlushWriterBuiltin -> "flushWriter"
   CloseHandleBuiltin -> "closeHandle"
+  TcpListenBuiltin -> "tcpListen"
+  TcpAcceptBuiltin -> "tcpAccept"
+  TcpConnectBuiltin -> "tcpConnect"
+  SocketSendBuiltin -> "socketSend"
+  SocketReceiveBuiltin -> "socketReceive"
+  SocketCloseBuiltin -> "socketClose"
+  SocketPeerBuiltin -> "socketPeer"
+  SocketPortBuiltin -> "socketPort"
+  SocketFinishBuiltin -> "socketFinish"
+  SpawnThreadBuiltin -> "spawnThread"
+  JoinThreadBuiltin -> "joinThread"
+  SleepBuiltin -> "sleepMillis"
+  ChannelOpenBuiltin -> "channelOpen"
+  ChannelPushBuiltin -> "channelPush"
+  ChannelPullBuiltin -> "channelPull"
+  ChannelWaitingBuiltin -> "channelWaiting"
+  ChannelFinishBuiltin -> "channelFinish"
+  MutexOpenBuiltin -> "mutexOpen"
+  MutexAcquireBuiltin -> "mutexAcquire"
+  MutexReleaseBuiltin -> "mutexRelease"
+  CellOpenBuiltin -> "cellOpen"
+  CellGetBuiltin -> "cellGet"
+  CellSwapBuiltin -> "cellSwap"
   CreateDirectoryBuiltin -> "createDirectory"
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
@@ -168,6 +191,29 @@ data Builtin
   | WriteChunkBuiltin
   | FlushWriterBuiltin
   | CloseHandleBuiltin
+  | TcpListenBuiltin
+  | TcpAcceptBuiltin
+  | TcpConnectBuiltin
+  | SocketSendBuiltin
+  | SocketReceiveBuiltin
+  | SocketCloseBuiltin
+  | SocketPeerBuiltin
+  | SocketPortBuiltin
+  | SocketFinishBuiltin
+  | SpawnThreadBuiltin
+  | JoinThreadBuiltin
+  | SleepBuiltin
+  | ChannelOpenBuiltin
+  | ChannelPushBuiltin
+  | ChannelPullBuiltin
+  | ChannelWaitingBuiltin
+  | ChannelFinishBuiltin
+  | MutexOpenBuiltin
+  | MutexAcquireBuiltin
+  | MutexReleaseBuiltin
+  | CellOpenBuiltin
+  | CellGetBuiltin
+  | CellSwapBuiltin
   | CreateDirectoryBuiltin
   | ArgumentsBuiltin
   | EnvironmentBuiltin

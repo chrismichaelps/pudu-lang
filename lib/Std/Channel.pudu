@@ -1,0 +1,98 @@
+module Std.Channel
+
+import Std.Result as Result
+
+/// Why a channel operation did not do what it was asked.
+export type ChannelError
+  = Closed
+  | Missing
+  | Other(Str)
+
+/// A queue with a bound, carrying values of one type between threads.
+///
+/// The type parameter is carried by the channel rather than by what it holds,
+/// so a channel of numbers and a channel of text are different types and
+/// sending the wrong thing is a compile error. The token underneath is
+/// untyped, which is why the type is kept here: it is the only place that can
+/// hold it.
+export type Channel[T] = { token: Int }
+
+/// A channel holding at most the given count of items.
+///
+/// The bound is what makes a channel apply back-pressure: a sender waits when
+/// the channel is full, so a fast producer is slowed to the speed of its
+/// consumer rather than turning the difference into memory. A queue without a
+/// bound does not remove that problem, it postpones it until there is no
+/// memory left.
+///
+/// A bound below one is taken as one. A channel with no room could never be
+/// sent to, and a caller writing zero meant the smallest useful channel rather
+/// than one that stops the program.
+export fn channel[T](capacity: Int) -> Channel[T] { Channel{token: channelOpen(capacity)} }
+
+/// Put a value in, waiting while the channel is full.
+///
+/// Sending to a closed channel is refused rather than dropped. A producer
+/// whose values were being discarded would have no way to find out, and that
+/// is the failure most worth reporting.
+export fn send[T](target: &Channel[T], value: T) -> Result[(), ChannelError] {
+  Result.mapErr(channelPush(target.token, value), causeOf)
+}
+
+/// Take the next value, waiting while the channel is empty.
+///
+/// Nothing means the channel is closed and empty, which is what ends a
+/// receiver's loop. A closed channel still hands out what it already holds:
+/// closing says nothing more will arrive, not that what arrived is discarded.
+export fn receive[T](source: &Channel[T]) -> Result[Option[T], ChannelError] {
+  Result.mapErr(channelPull(source.token), causeOf)
+}
+
+/// How many values are waiting.
+///
+/// A number that was true when it was read and may not be by the time it is
+/// used, because another thread may send or receive in between. Right for a
+/// report and wrong as a reason to skip a wait.
+export fn pending[T](source: &Channel[T]) -> Result[Int, ChannelError] {
+  Result.mapErr(channelWaiting(source.token), causeOf)
+}
+
+/// Say that nothing more will be sent, so every receiver's loop can end.
+export fn close[T](target: &Channel[T]) -> Result[(), ChannelError] {
+  Result.mapErr(channelFinish(target.token), causeOf)
+}
+
+/// Take values until the channel closes, combining them into one value.
+///
+/// The value is threaded rather than gathered by the step function, because a
+/// function literal carries a copy of what it captured: a step assigning to a
+/// variable outside itself would leave that variable as it found it.
+export fn fold[T, A](source: &Channel[T], seed: A, step: fn(A, T) -> A) -> Result[A, ChannelError] {
+  var total = seed
+  var failure: Option[ChannelError] = None
+  var going = true
+  while going {
+    let taken = receive(source)
+    if let Err(reason) = taken {
+      failure = Some(reason)
+      going = false
+    } else {
+      let value = Result.unwrapOr(taken, None)
+      if let Some(item) = value { total = step(total, item) } else { going = false }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(total) }
+}
+
+/// Every value still to come, in the order it was sent.
+/// Named so its cost is visible: this holds every value at once, and `fold` is
+/// the one that does not.
+export fn drain[T](source: &Channel[T]) -> Result[Array[T], ChannelError] {
+  fold(source, [], fn(seen: Array[T], value: T) -> Array[T] { seen.push(value) })
+}
+
+fn causeOf(message: Str) -> ChannelError {
+  if message.contains("closed") { Closed } else {
+    if message.contains("no such channel") { Missing } else { Other(message) }
+  }
+}
