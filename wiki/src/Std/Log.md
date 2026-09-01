@@ -93,8 +93,9 @@ character pass is taken only by the text that needs it.
   and the character escaped. Otherwise `note=see below` reads as a field and a stray word.
 - A control character with no short spelling is written as its number, so text the program was handed
   cannot end a line or an object early.
-- `carryingValue` takes the quotes `show` puts around text back off. How a value is delimited is the
-  format's decision, and `show` renders for source rather than for a field.
+- `carryingValue` takes the quotes and source escapes `show` puts around text back off. How a value
+  is delimited is the format's decision, and logging must preserve the held text rather than turn a
+  newline into the two characters `\` and `n`.
 - A line filtered by the threshold is still a success. Nothing went wrong; there was just nothing to
   write.
 - Every builder answers a new logger and leaves the one it was given alone.
@@ -135,6 +136,11 @@ only change how the same parts read.
   every character. _Rationale:_ the scan answers on the first character that needs it, so the common
   line pays a read and no allocation. _Rejected:_ an unconditional rewrite, which charges every line
   for the rare one.
+- **Q:** Why decode the source escapes produced by `show` instead of only removing its quotes?
+  **A:** Because the rendered spelling is not the string value. _Rationale:_ a newline shown as
+  `\n` must become a newline again before the selected log format escapes it; otherwise the logger
+  changes data and emits `\\n`. _Rejected:_ chained text replacements, whose answer depends on
+  replacement order for values that themselves contain backslashes.
 
 ## Referenced by
 

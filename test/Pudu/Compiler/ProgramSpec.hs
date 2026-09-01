@@ -305,7 +305,7 @@ testProgramEvaluation = do
         because a key held a quote. -}
     , counterexample
         "a logger keeps what it was told to, carries its fields, and reads three ways"
-        (logging === Just "76")
+        (logging === Just "77")
     {-| A hierarchy's counting rules, its three orders, its transformations, and
         what search answers when there is nothing to find. Weighted toward what
         a hand-written hierarchy gets wrong: a leaf counted as height zero, a

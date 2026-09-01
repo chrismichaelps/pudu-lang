@@ -62,10 +62,34 @@ export type Logger = {
 /// did not quote — a number, a list — comes back unchanged.
 fn unshown(value: Str) -> Str {
   if value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"") {
-    value.slice(1, value.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+    unescapeShown(value.slice(1, value.length() - 1))
   } else {
     value
   }
+}
+
+/// Text with the source escapes produced by `show` read back as characters.
+fn unescapeShown(value: Str) -> Str {
+  var out = ""
+  var index = 0
+  while index < value.length() {
+    let character = value.charAt(index)
+    if character != '\\' || index + 1 >= value.length() {
+      out = out + character.toText()
+      index = index + 1
+    } else {
+      let escapedChar = value.charAt(index + 1)
+      out = out + match escapedChar {
+        case 'n' => "\n"
+        case 't' => "\t"
+        case '"' => "\""
+        case '\\' => "\\"
+        case _ => "\\" + escapedChar.toText()
+      }
+      index = index + 2
+    }
+  }
+  out
 }
 
 // -- Building a logger -------------------------------------------------------

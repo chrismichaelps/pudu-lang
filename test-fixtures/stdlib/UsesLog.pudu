@@ -75,6 +75,12 @@ export fn main() -> Int {
     == "level=ERROR cause=timeout" {
     held = held + 1
   }
+  // Source escapes added by `show` are read back before the log format applies
+  // its own escaping, so logging a value does not change the held text.
+  if Log.rendered(&Log.carryingValue(&bare, "text", "a\nb"), Log.Info, "")
+    == "level=INFO text=\"a\\nb\"" {
+    held = held + 1
+  }
 
   // -- Quoting ---------------------------------------------------------------
 
