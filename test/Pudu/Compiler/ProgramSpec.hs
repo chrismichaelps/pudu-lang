@@ -231,6 +231,7 @@ testProgramEvaluation = do
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
   streams <- runEntry "test-fixtures/stdlib/UsesStreams.pudu"
+  paths <- runEntry "test-fixtures/stdlib/UsesPath.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -336,6 +337,11 @@ testProgramEvaluation = do
     , counterexample
         "a stream reads and writes without holding the whole file"
         (streams === Just "21")
+    {-| A path is decided by reading it rather than by asking the file system,
+        so it needs nothing to exist and does not follow a link. -}
+    , counterexample
+        "a path comes apart, normalizes, and says what it is inside"
+        (paths === Just "35")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

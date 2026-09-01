@@ -1,6 +1,7 @@
 module Std.Io
 
 import Std.Bytes as ByteSeq
+import Std.Path as Path
 import Std.Result as Result
 
 /// A line written to the program's output.
@@ -103,99 +104,36 @@ export fn move(from: Str, to: Str) -> Result[(), Str] {
   removeFile(from)
 }
 
+/// The path vocabulary, so a program reaching for it through `Std.Io` finds
+/// the same answers `Std.Path` gives. The work is written once, there, and
+/// these carry it: two implementations of `normalize` would eventually
+/// disagree about a path holding a climb, and only one of them would be the
+/// one a caller checked against before writing.
+
 /// The character this machine writes between the pieces of a path.
-///
-/// Asked of the machine rather than written down. It is a slash on one family
-/// of operating system and a backslash on the other, and a path built with the
-/// wrong one is not a path there.
-export fn separator() -> Str { pathSeparators()[0] }
+export fn separator() -> Str { Path.separator() }
 
 /// Whether a character ends a piece of a path on this machine.
-///
-/// Every separator this machine accepts, not only the one it writes: a path
-/// that arrived from somewhere else still has to come apart correctly, and one
-/// family of operating system reads the other's separator as its own.
-export fn isSeparator(character: Str) -> Bool {
-  pathSeparators().contains(character)
-}
-
-/// The position of the last separator in a path, or `-1` when it has none.
-fn lastSeparator(path: Str) -> Int {
-  var index = path.length() - 1
-  while index >= 0 {
-    if isSeparator(path.slice(index, index + 1)) { return index }
-    index = index - 1
-  }
-    -1
-}
-
-/// A path with any trailing separator removed, leaving a lone root alone.
-fn withoutTrailingSeparator(path: Str) -> Str {
-  let last = path.length() - 1
-  if last > 0 && isSeparator(path.slice(last, last + 1)) {
-    path.slice(0, last)
-  } else { path }
-}
+export fn isSeparator(character: Str) -> Bool { Path.isSeparator(character) }
 
 /// Two path pieces joined with a separator, without doubling one.
-export fn join(left: Str, right: Str) -> Str {
-  if left.isEmpty() { right } else {
-    if right.isEmpty() { left } else {
-      let last = left.length() - 1
-      if isSeparator(left.slice(last, last + 1)) { left + right }
-        else { left + separator() + right }
-    }
-  }
-}
+export fn join(left: Str, right: Str) -> Str { Path.join(left, right) }
 
 /// A path without its last piece, or `.` when it has only one.
-export fn directoryOf(path: Str) -> Str {
-  let trimmed = withoutTrailingSeparator(path)
-  let at = lastSeparator(trimmed)
-  if at < 0 { "." } else {
-    if at == 0 { trimmed.slice(0, 1) } else { trimmed.slice(0, at) }
-  }
-}
+export fn directoryOf(path: Str) -> Str { Path.directoryOf(path) }
 
 /// The last piece of a path.
-export fn nameOf(path: Str) -> Str {
-  let trimmed = withoutTrailingSeparator(path)
-  let at = lastSeparator(trimmed)
-  if at < 0 { trimmed } else { trimmed.slice(at + 1, trimmed.length()) }
-}
+export fn nameOf(path: Str) -> Str { Path.nameOf(path) }
 
-/// A file name's extension, without the dot, or `None` when it has none.
-export fn extensionOf(path: Str) -> Option[Str] {
-  let name = nameOf(path)
-  let at = lastIndexOf(name, ".")
-  if at <= 0 { None } else { Some(name.slice(at + 1, name.length())) }
-}
+/// A path's extension, without its dot, or nothing when it has none.
+export fn extensionOf(path: Str) -> Option[Str] { Path.extensionOf(path) }
 
-/// A file name with its extension removed.
-export fn withoutExtension(path: Str) -> Str {
-  let name = nameOf(path)
-  let at = lastIndexOf(name, ".")
-  if at <= 0 { name } else { name.slice(0, at) }
-}
+/// A path with its extension removed.
+export fn withoutExtension(path: Str) -> Str { Path.withoutExtension(path) }
 
-/// A file name with a different extension.
+/// A path carrying the given extension, replacing any it had.
 export fn withExtension(path: Str, extension: Str) -> Str {
-  join(directoryOf(path), withoutExtension(path) + "." + extension)
-}
-
-/// The position of the last occurrence of a needle, or -1.
-fn lastIndexOf(value: Str, needle: Str) -> Int {
-  var found = 0 - 1
-  var index = 0
-  let size = value.length()
-  let width = needle.length()
-  if width == 0 { found } else {
-    while index + width <= size {
-      if value.slice(index, index + width) == needle { found = index }
-      index = index + 1
-    }
-    found
-  }
+  Path.withExtension(path, extension)
 }
 
 /// Why an operation over a file did not do what it was asked.

@@ -1,0 +1,310 @@
+module Std.Path
+
+import Std.Option as Option
+
+/// The character this machine writes between the pieces of a path.
+///
+/// Asked of the machine rather than written down. It is a slash on one family
+/// of operating system and a backslash on the other, and a path built with the
+/// wrong one is not a path there. A separator spelled into the source would be
+/// a claim about somebody else's computer.
+export fn separator() -> Str { pathSeparators()[0] }
+
+/// Whether a character ends a piece of a path on this machine.
+///
+/// Every separator this machine accepts, not only the one it writes: a path
+/// that arrived from somewhere else still has to come apart correctly, and one
+/// family of operating system reads the other's separator as its own.
+export fn isSeparator(character: Str) -> Bool { pathSeparators().contains(character) }
+
+/// The position of the last separator in a path, or `-1` when it has none.
+fn lastSeparator(path: Str) -> Int {
+  var index = path.length() - 1
+  while index >= 0 {
+    if isSeparator(path.slice(index, index + 1)) { return index }
+    index = index - 1
+  }
+    -1
+}
+
+/// A path with any trailing separator removed, leaving a lone root alone.
+/// A root is the one path whose separator is the whole of it, so removing it
+/// would turn a path into no path at all.
+fn withoutTrailingSeparator(path: Str) -> Str {
+  let last = path.length() - 1
+  if last > 0 && isSeparator(path.slice(last, last + 1)) {
+    path.slice(0, last)
+  } else {
+    path
+  }
+}
+
+/// Two path pieces joined with a separator, without doubling one.
+export fn join(left: Str, right: Str) -> Str {
+  if left.isEmpty() {
+    right
+  } else {
+    if right.isEmpty() {
+      left
+    } else {
+      if isAbsolute(right) {
+        right
+      } else {
+        let last = left.length() - 1
+        if isSeparator(left.slice(last, last + 1)) { left + right } else { left + separator() + right }
+      }
+    }
+  }
+}
+
+/// Every piece joined in order, left to right.
+/// A piece that is itself absolute begins the path again, which is what a
+/// caller joining a root onto a relative fragment means.
+export fn joinAll(parts: &Array[Str]) -> Str {
+  var built = ""
+  for part in parts { built = join(built, part) }
+  built
+}
+
+/// A path without its last piece, or `.` when it has only one.
+export fn directoryOf(path: Str) -> Str {
+  let trimmed = withoutTrailingSeparator(path)
+  let at = lastSeparator(trimmed)
+  if at < 0 {
+    "."
+  } else {
+    if at == 0 { trimmed.slice(0, 1) } else { trimmed.slice(0, at) }
+  }
+}
+
+/// The last piece of a path.
+export fn nameOf(path: Str) -> Str {
+  let trimmed = withoutTrailingSeparator(path)
+  let at = lastSeparator(trimmed)
+  if at < 0 { trimmed } else { trimmed.slice(at + 1, trimmed.length()) }
+}
+
+/// The position of the extension's dot in a name, or `-1` when it has none.
+/// A leading dot names a hidden file rather than an extension, so it is not
+/// one: `.gitignore` is a name, not an empty name with a `gitignore` suffix.
+fn extensionDot(name: Str) -> Int {
+  var index = name.length() - 1
+  while index > 0 {
+    if name.slice(index, index + 1) == "." { return index }
+    index = index - 1
+  }
+    -1
+}
+
+/// A path's extension, without its dot, or nothing when it has none.
+export fn extensionOf(path: Str) -> Option[Str] {
+  let name = nameOf(path)
+  let at = extensionDot(name)
+  if at < 0 { None } else { Some(name.slice(at + 1, name.length())) }
+}
+
+/// A path with its extension removed.
+export fn withoutExtension(path: Str) -> Str {
+  let name = nameOf(path)
+  let at = extensionDot(name)
+  if at < 0 {
+    path
+  } else {
+    path.slice(0, path.length() - (name.length() - at))
+  }
+}
+
+/// The last piece of a path with its extension removed.
+export fn stemOf(path: Str) -> Str { nameOf(withoutExtension(path)) }
+
+/// A path carrying the given extension, replacing any it had.
+/// The dot is supplied here, so a caller writes `txt` rather than `.txt` and
+/// the two spellings cannot produce two different names.
+export fn withExtension(path: Str, extension: Str) -> Str {
+  let base = withoutExtension(path)
+  if extension.isEmpty() { base } else { base + "." + extension }
+}
+
+/// A path split into the part before its extension and the extension itself.
+export fn splitExtension(path: Str) -> (Str, Option[Str]) {
+  (withoutExtension(path), extensionOf(path))
+}
+
+/// Whether a path carries the given extension, compared without regard to case.
+/// File systems disagree about whether a name's case matters, and a caller
+/// asking whether something is a text file means the question either way.
+export fn hasExtension(path: Str, extension: Str) -> Bool {
+  Option.unwrapOr(Option.map(extensionOf(path), fn(found: Str) -> Bool {
+        found.toLower() == extension.toLower()
+      }), false)
+}
+
+/// Whether a name is one this machine's shell hides by default.
+export fn isHidden(path: Str) -> Bool { nameOf(path).startsWith(".") }
+
+/// Whether a path names a place from the root rather than from somewhere else.
+///
+/// Two shapes count. One family of operating system writes a leading
+/// separator; the other writes a drive letter, a colon, and a separator, and
+/// also admits the leading separator alone.
+export fn isAbsolute(path: Str) -> Bool {
+  if path.isEmpty() {
+    false
+  } else {
+    if isSeparator(path.slice(0, 1)) {
+      true
+    } else {
+      path.length() >= 3 && path.slice(1, 2) == ":" && isSeparator(path.slice(2, 3))
+    }
+  }
+}
+
+/// Whether a path names a place from wherever the program happens to be.
+export fn isRelative(path: Str) -> Bool { !isAbsolute(path) }
+
+/// The pieces of a path, with the separators removed.
+/// An absolute path keeps its root as its first piece, so the components of a
+/// path and the path itself say the same thing about where it starts.
+export fn components(path: Str) -> Array[Str] {
+  var pieces: Array[Str] = []
+  var current = ""
+  var index = 0
+  if isAbsolute(path) && isSeparator(path.slice(0, 1)) { pieces = pieces.push(path.slice(0, 1)) }
+  while index < path.length() {
+    let character = path.slice(index, index + 1)
+    if isSeparator(character) {
+      if !current.isEmpty() { pieces = pieces.push(current) }
+      current = ""
+    } else {
+      current = current + character
+    }
+    index = index + 1
+  }
+  if !current.isEmpty() { pieces = pieces.push(current) }
+  pieces
+}
+
+/// The path a sequence of pieces names.
+export fn fromComponents(pieces: &Array[Str]) -> Str { joinAll(pieces) }
+
+/// A path with `.` removed and each `..` applied to the piece before it.
+///
+/// This is done by reading the path rather than by asking the file system, so
+/// it does not follow links and does not need the path to exist. Where a link
+/// is involved the two answers differ, and the one that does not touch the
+/// disk is the one a program can rely on before creating anything.
+///
+/// A `..` that would climb past the root stays at the root, because there is
+/// nothing above it; a `..` at the front of a relative path is kept, because
+/// what it climbs to is not known until the path is resolved against
+/// somewhere.
+export fn normalize(path: Str) -> Str {
+  if path.isEmpty() {
+    "."
+  } else {
+    let rooted = isAbsolute(path)
+    var kept: Array[Str] = []
+    for piece in components(path) {
+      if piece == "." {
+        kept = kept
+      } else {
+        if piece == ".." {
+          kept = climb(kept, rooted)
+        } else {
+          kept = kept.push(piece)
+        }
+      }
+    }
+    if kept.length() == 0 { "." } else { joinAll(&kept) }
+  }
+}
+
+/// One step up, or the step kept when there is nothing to climb.
+fn climb(kept: Array[Str], rooted: Bool) -> Array[Str] {
+  if kept.length() == 0 {
+    if rooted { kept } else { kept.push("..") }
+  } else {
+    let last = kept[kept.length() - 1]
+    if last == ".." {
+      kept.push("..")
+    } else {
+      if isSeparator(last) || (rooted && kept.length() == 1) { kept } else { kept.pop() }
+    }
+  }
+}
+
+/// The directory holding a path, or nothing when the path is a root.
+/// Where `directoryOf` answers `.` for a bare name, this answers nothing for a
+/// path that has nowhere above it, so a caller walking upwards is told when to
+/// stop rather than looping on a root that is its own parent.
+export fn parentOf(path: Str) -> Option[Str] {
+  let trimmed = withoutTrailingSeparator(normalize(path))
+  if trimmed == "." || trimmed == ".." {
+    None
+  } else {
+    let above = directoryOf(trimmed)
+    if above == trimmed { None } else { Some(above) }
+  }
+}
+
+/// Every directory above a path, nearest first.
+export fn ancestors(path: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  var current = parentOf(path)
+  var going = true
+  while going {
+    if let Some(above) = current {
+      found = found.push(above)
+      current = parentOf(above)
+    } else {
+      going = false
+    }
+  }
+  found
+}
+
+/// How to reach a path starting from another, or nothing when it cannot be
+/// reached without knowing where the program is.
+///
+/// A relative path and an absolute one have no answer between them: reaching
+/// one from the other depends on where the program happens to be, and that is
+/// not something reading two strings can tell.
+export fn relativeTo(base: Str, path: Str) -> Option[Str] {
+  if isAbsolute(base) != isAbsolute(path) {
+    None
+  } else {
+    let from = components(normalize(base))
+    let to = components(normalize(path))
+    var shared = 0
+    while shared < from.length() && shared < to.length() && from[shared] == to[shared] {
+      shared = shared + 1
+    }
+    var pieces: Array[Str] = []
+    var climbed = shared
+    while climbed < from.length() {
+      pieces = pieces.push("..")
+      climbed = climbed + 1
+    }
+    var descended = shared
+    while descended < to.length() {
+      pieces = pieces.push(to[descended])
+      descended = descended + 1
+    }
+    if pieces.length() == 0 { Some(".") } else { Some(joinAll(&pieces)) }
+  }
+}
+
+/// A path resolved against a directory, and normalized.
+/// An absolute path answers for itself, which is what makes this safe to apply
+/// to a path a caller may already have made absolute.
+export fn resolve(base: Str, path: Str) -> Str { normalize(join(base, path)) }
+
+/// Whether one path is inside another, once both are normalized.
+/// The question a program asks before writing somewhere a caller named: a
+/// relative path holding `..` can leave the directory it looked like it was
+/// under, and reading the text without normalizing first would not notice.
+export fn isInside(base: Str, path: Str) -> Bool {
+  Option.unwrapOr(Option.map(relativeTo(base, path), fn(relative: Str) -> Bool {
+        relative != ".." && !relative.startsWith(".." + separator())
+      }), false)
+}
