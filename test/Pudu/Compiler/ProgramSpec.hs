@@ -229,6 +229,7 @@ testProgramEvaluation = do
   logging <- runEntry "test-fixtures/stdlib/UsesLog.pudu"
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
+  byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -321,6 +322,13 @@ testProgramEvaluation = do
     , counterexample
         "a parameter standing for a constructor serves every container"
         (higherKinds === Just "14")
+    {-| A byte sequence answers for what it holds, and the two formats that
+        travel as text answer against their own published vectors rather than
+        against each other: a round trip through an encoder and its own decoder
+        agrees with itself however wrong both halves are. -}
+    , counterexample
+        "bytes slice, search, and carry the published base64 and hex vectors"
+        (byteSequences === Just "49")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

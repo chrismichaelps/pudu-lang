@@ -4,6 +4,7 @@ module Pudu.Eval.Render
   , valueKind
   ) where
 
+import qualified Data.ByteString as ByteString
 import Data.Foldable (toList)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
@@ -39,6 +40,7 @@ renderValue value = case value of
   BuiltinValue CharFromCodeBuiltin -> "<builtin charFromCode>"
   BuiltinValue MapOfBuiltin -> "<builtin mapOf>"
   BuiltinValue SetOfBuiltin -> "<builtin setOf>"
+  BuiltinValue BytesOfBuiltin -> "<builtin bytesOf>"
   BuiltinValue ShowBuiltin -> "<builtin show>"
   BuiltinValue other -> "<builtin " <> builtinName other <> ">"
   MapValue entries ->
@@ -49,8 +51,21 @@ renderValue value = case value of
   ArrayMethodValue method _ -> "<array method " <> arrayMethodName method <> ">"
   StringMethodValue method _ -> "<text method " <> stringMethodName method <> ">"
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
+  BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
+  {-| Bytes print as hexadecimal pairs rather than as the text they might
+      decode to. A sequence being inspected is usually one that did not decode,
+      and rendering it as text would hide the bytes the reader is looking for
+      behind replacement characters. -}
+  BytesValue bytes ->
+    "0x" <> Text.concat [hexPair byte | byte <- ByteString.unpack bytes]
  where
   renderField (name, fieldValue) = name <> ": " <> renderValue fieldValue
+
+  hexPair byte =
+    let digits = "0123456789abcdef" :: String
+        high = fromIntegral byte `div` (16 :: Int)
+        low = fromIntegral byte `mod` (16 :: Int)
+     in Text.pack [digits !! high, digits !! low]
 
 escape :: Text -> Text
 escape =
@@ -64,6 +79,7 @@ valueKind value = case value of
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"
   StrValue _ -> "string"
+  BytesValue _ -> "bytes"
   CharValue _ -> "char"
   BoolValue _ -> "bool"
   NullValue -> "null"
@@ -82,3 +98,4 @@ valueKind value = case value of
   ArrayMethodValue _ _ -> "array method"
   StringMethodValue _ _ -> "text method"
   CharMethodValue _ _ -> "character method"
+  BytesMethodValue _ _ -> "byte method"

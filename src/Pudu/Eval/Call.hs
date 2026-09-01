@@ -42,6 +42,7 @@ import Pudu.Eval.Builtin
   , callStringMethod
   , isDecimalBuiltin
   )
+import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
 import Pudu.Eval.Env
   ( tally
   , withCaptured
@@ -131,6 +132,7 @@ dispatchCall needs spanValue target values =
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
+    BuiltinValue BytesOfBuiltin -> callBytesOf spanValue values
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
@@ -142,6 +144,7 @@ dispatchCall needs spanValue target values =
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
     SetMethodValue method receiver -> callSetMethod spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
+    BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -382,6 +385,7 @@ applyFunction needs spanValue function arguments = case function of
   MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
   SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
+  BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.

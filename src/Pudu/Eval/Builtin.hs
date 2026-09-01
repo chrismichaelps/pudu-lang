@@ -25,6 +25,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
+import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
@@ -368,6 +369,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringSplit, [StrValue separator])
       | Text.null separator -> pure (textArray (Text.chunksOf 1 text))
       | otherwise -> pure (textArray (Text.splitOn separator text))
+    (StringToBytes, []) -> pure (bytesFromText text)
     (StringChars, []) -> pure (ArrayValue (Seq.fromList (map CharValue (Text.unpack text))))
     (StringLines, []) -> pure (textArray (Text.lines text))
     (StringReverse, []) -> pure (StrValue (Text.reverse text))

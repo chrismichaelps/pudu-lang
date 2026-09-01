@@ -26,6 +26,7 @@ import Pudu.DecimalLiteral
   , decimalSubtract
   )
 import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.Bytes (bytesMethods)
 import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod (..), CharMethod (..), MapMethod (..), SetMethod (..))
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
@@ -279,6 +280,7 @@ readMember :: Span -> Value -> Text -> Evaluator Value
 readMember spanValue value member = case value of
   ArrayValue _ -> readArrayMember spanValue value member
   StrValue _ -> readStringMember spanValue value member
+  BytesValue _ -> readKeyedMember spanValue value member bytesMethods BytesMethodValue "Bytes"
   CharValue _ -> readCharMember spanValue value member
   MapValue _ -> readKeyedMember spanValue value member mapMethods MapMethodValue "Map"
   SetValue _ -> readKeyedMember spanValue value member setMethods SetMethodValue "Set"
@@ -360,6 +362,7 @@ builtinMethodNamesFor owner = case owner of
   "Str" -> map fst stringMethods
   "Map" -> map fst mapMethods
   "Set" -> map fst setMethods
+  "Bytes" -> map fst bytesMethods
   "Char" -> ["code", "toText"]
   _ -> []
 
@@ -410,6 +413,7 @@ stringMethods =
   , ("replace", StringReplace)
   , ("repeat", StringRepeat)
   , ("split", StringSplit)
+  , ("toBytes", StringToBytes)
   , ("chars", StringChars)
   , ("lines", StringLines)
   , ("reverse", StringReverse)
@@ -445,6 +449,7 @@ nominalNameOf value = case value of
   FloatValue Float32Width _ -> Just "Float32"
   FloatValue Float64Width _ -> Just "Float64"
   StrValue _ -> Just "Str"
+  BytesValue _ -> Just "Bytes"
   CharValue _ -> Just "Char"
   BoolValue _ -> Just "Bool"
   UnitValue -> Just "()"

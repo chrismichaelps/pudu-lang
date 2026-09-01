@@ -1,0 +1,146 @@
+module UsesBytes
+
+import Std.Bytes as B
+import Std.Bytes {BadDigit, BadLength, Truncated}
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a byte sequence promises, checked against the published vectors where
+/// a format has them. Each check answers 1 when it holds, so the total names
+/// how many held and a failure says which by how far short it falls.
+export fn main() -> Int {
+  var held = 0
+
+  // Text and bytes round trip, and a length is counted in bytes rather than
+  // in characters: the pound sign encodes as two.
+  let hello = B.fromText("hello")
+  if hello.length() == 5 { held = held + 1 }
+  if B.encodeHex(&hello) == "68656c6c6f" { held = held + 1 }
+  if B.fromText("£").length() == 2 { held = held + 1 }
+  if Result.unwrapOr(B.toText(&hello), "") == "hello" { held = held + 1 }
+
+  // A slice names a stretch of its source and stays within it however the
+  // arithmetic that produced its bounds turned out.
+  if hello.slice(1, 3).length() == 2 { held = held + 1 }
+  if hello.slice(100, 200).isEmpty() { held = held + 1 }
+  if hello.slice(4, 1).isEmpty() { held = held + 1 }
+  if hello.take(99).length() == 5 { held = held + 1 }
+  if hello.drop(99).isEmpty() { held = held + 1 }
+
+  // A position outside the sequence answers nothing rather than stopping.
+  if Option.unwrapOr(hello.at(0), 0u8) == 104u8 { held = held + 1 }
+  let outside = hello.at(99)
+  if Option.isNone(&outside) { held = held + 1 }
+
+  // Searching answers a position, and -1 when there is nothing to find.
+  if hello.indexOf(B.fromText("llo")) == 2 { held = held + 1 }
+  if hello.indexOf(B.fromText("zzz")) == -1 { held = held + 1 }
+  if hello.startsWith(B.fromText("he")) { held = held + 1 }
+  if hello.endsWith(B.fromText("lo")) { held = held + 1 }
+
+  // The base64 vectors from the format's own specification, each length of
+  // remainder covered so both padding cases are exercised.
+  if B.encodeBase64(&B.fromText("")) == "" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("f")) == "Zg==" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("fo")) == "Zm8=" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("foo")) == "Zm9v" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("foob")) == "Zm9vYg==" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("fooba")) == "Zm9vYmE=" { held = held + 1 }
+  if B.encodeBase64(&B.fromText("foobar")) == "Zm9vYmFy" { held = held + 1 }
+
+  // And back, so the two directions agree rather than each being right alone.
+  held = held + decodesTo("Zg==", "f")
+  held = held + decodesTo("Zm8=", "fo")
+  held = held + decodesTo("Zm9v", "foo")
+  held = held + decodesTo("Zm9vYg==", "foob")
+  held = held + decodesTo("Zm9vYmE=", "fooba")
+  held = held + decodesTo("Zm9vYmFy", "foobar")
+
+  // The URL alphabet differs only where a URL would have to escape, and it
+  // carries no padding, so a value decodes without one being put back.
+  let awkward = B.fromArray(&[251u8, 255u8, 190u8])
+  if B.encodeBase64(&awkward) == "+/++" { held = held + 1 }
+  if B.encodeBase64Url(&awkward) == "-_--" { held = held + 1 }
+  held = held + hexOfDecoded(B.decodeBase64Url("-_--"), "fbffbe")
+
+  // Text that is not base64 at all is refused rather than decoded to nonsense.
+  let nonsense = B.decodeBase64("!!!!")
+  if Result.isErr(&nonsense) { held = held + 1 }
+
+  // Hexadecimal round trips, and an odd count of digits is a length problem
+  // rather than a digit problem: every digit may be good and still name no
+  // whole number of bytes.
+  held = held + hexOfDecoded(B.decodeHex("68656C6C6F"), "68656c6c6f")
+  if let Err(BadLength(_)) = B.decodeHex("abc") { held = held + 1 }
+  if let Err(BadDigit(_)) = B.decodeHex("zz") { held = held + 1 }
+
+  // A number written and read back is the number, at every width and both
+  // orders, and the two orders disagree about the same bytes.
+  held = held + readsBack32Be(B.putU32Be(305419896u32), 305419896u32)
+  held = held + readsBack32Le(B.putU32Le(305419896u32), 305419896u32)
+  if B.encodeHex(&B.putU32Be(305419896u32)) == "12345678" { held = held + 1 }
+  if B.encodeHex(&B.putU32Le(305419896u32)) == "78563412" { held = held + 1 }
+  if B.encodeHex(&B.putU16Be(4660u16)) == "1234" { held = held + 1 }
+  if B.encodeHex(&B.putU64Be(1u64)) == "0000000000000001" { held = held + 1 }
+
+  // A reader hands back what it has not read, so a decoder threads the rest
+  // rather than counting how far it has come.
+  let framed = B.join(&[B.putU16Be(2u16), B.fromText("hi")])
+  if let Ok(read) = B.getU16Be(&framed) {
+    if read[0] == 2u16 { held = held + 1 }
+    if textOfRead(B.getText(&read[1], 2)) == "hi" { held = held + 1 }
+  }
+
+  // An input that ends early is reported rather than read past.
+  if let Err(Truncated(_, _)) = B.getU32Be(&B.fromText("ab")) { held = held + 1 }
+
+  // Splitting on a separator keeps the pieces between each appearance, and an
+  // empty separator divides nothing rather than looping.
+  if B.split(&B.fromText("a,b,c"), &B.fromText(",")).length() == 3 { held = held + 1 }
+  if B.split(&B.fromText("abc"), &B.empty()).length() == 1 { held = held + 1 }
+
+  // Joining copies once rather than once per part.
+  if B.join(&[B.fromText("ab"), B.fromText("cd")]).length() == 4 { held = held + 1 }
+  if B.repeat(&B.fromText("ab"), 3).length() == 6 { held = held + 1 }
+  if B.repeat(&B.fromText("ab"), 0).isEmpty() { held = held + 1 }
+
+  held
+}
+
+/// Whether decoded bytes are the ones the hexadecimal names, answering 1 or 0
+/// so a caller adds the outcome rather than branching on it.
+fn hexOfDecoded(decoded: Result[Bytes, B.BytesError], expected: Str) -> Int {
+  if let Ok(back) = decoded {
+    if B.encodeHex(&back) == expected { 1 } else { 0 }
+  } else {
+    0
+  }
+}
+
+fn decodesTo(encoded: Str, expected: Str) -> Int {
+  if let Ok(back) = B.decodeBase64(encoded) {
+    if Result.unwrapOr(B.toText(&back), "") == expected { 1 } else { 0 }
+  } else {
+    0
+  }
+}
+
+fn textOfRead(read: Result[(Str, Bytes), B.BytesError]) -> Str {
+  if let Ok(pair) = read { pair[0] } else { "" }
+}
+
+fn readsBack32Be(written: Bytes, expected: UInt32) -> Int {
+  if let Ok(read) = B.getU32Be(&written) {
+    if read[0] == expected { 1 } else { 0 }
+  } else {
+    0
+  }
+}
+
+fn readsBack32Le(written: Bytes, expected: UInt32) -> Int {
+  if let Ok(read) = B.getU32Le(&written) {
+    if read[0] == expected { 1 } else { 0 }
+  } else {
+    0
+  }
+}

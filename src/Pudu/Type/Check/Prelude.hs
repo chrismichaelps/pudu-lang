@@ -17,6 +17,7 @@ import Pudu.Type.Env
 import Pudu.Type.Value
   ( Scheme
   , boolType
+  , bytesType
   , charType
   , decimalType
   , floatType
@@ -130,7 +131,15 @@ declareBuiltinConstructors = do
             (NominalType "Set" [RigidType "T"])
         )
     )
+  {-| A byte sequence is built from an array of `UInt8` for the same reason a
+      map and a set are built from arrays: there is no literal syntax for one,
+      and adding one would need a decision about how it reads beside the forms
+      that already use brackets. Text reaches bytes through its own `toBytes`
+      method, which is the commoner direction and needs no array at all. -}
+  bindName "bytesOf"
+    (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
  where
+  byteType = NominalType "UInt8" []
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
 

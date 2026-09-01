@@ -81,6 +81,7 @@ installBuiltinConstructors = do
   bind "charFromCode" (BuiltinValue CharFromCodeBuiltin)
   bind "mapOf" (BuiltinValue MapOfBuiltin)
   bind "setOf" (BuiltinValue SetOfBuiltin)
+  bind "bytesOf" (BuiltinValue BytesOfBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)
   bind "display" (BuiltinValue DisplayBuiltin)
   bind "convertInteger" (BuiltinValue ConvertIntegerBuiltin)

@@ -20,7 +20,7 @@ wiredInTypeNames =
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "UInt"
   , "Float32", "Float64", "Float"
   , "Bool", "Char", "Str", "Never", "BigInt", "Decimal"
-  , "Option", "Result", "Array", "Task", "Map", "Set"
+  , "Option", "Result", "Array", "Task", "Map", "Set", "Bytes"
   , "Copy"
   ]
 
@@ -38,7 +38,7 @@ preludeTypeNames =
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
 preludeValueNames =
-  [ "panic", "charFromCode", "mapOf", "setOf", "show", "display", "convertInteger"
+  [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "show", "display", "convertInteger"
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"
