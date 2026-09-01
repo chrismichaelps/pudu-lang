@@ -121,7 +121,7 @@ and buy nothing.
 | `Std.HashMap` | hash maps, by `Hash` — blocked, see [[#Deferred, with reasons]] |
 | `Std.Deque` | double-ended queue |
 | `Std.Math` | numerics, saturating and checked arithmetic, constants |
-| `Std.Fmt` | typed formatting, no format-string interpretation at run time |
+
 | `Std.Uuid` | v4 and v7 identifiers |
 
 ### Time
@@ -213,7 +213,7 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 ## What ships today
 
-Forty-three modules, 1215 exported declarations, every one written in Pudu.
+Forty-four modules, 1240 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -255,6 +255,7 @@ Forty-three modules, 1215 exported declarations, every one written in Pudu.
 | `Std.Show` | 12 | rendering any value, arrays, options, results, and padded tables |
 | `Std.Io` | 28 | files, directories, standard input and output, path handling |
 | `Std.Out` | 22 | a printer as a value: separator, ending, prefix, and stream, with a pure rendering |
+| `Std.Fmt` | 25 | a shaping spec as a value: width, fill, alignment, sign, grouping, radix, and columns |
 | `Std.Env` | 17 | arguments and flags, environment variables, a place to write, stopping with a status |
 | `Std.Time` | 40 | instants, durations, dates, times of day, formatting and parsing |
 | `Std.Process` | 11 | running a program, its status and streams, availability |

@@ -1,0 +1,106 @@
+module UsesFmt
+
+import Std.Decimal as Decimal
+import Std.Fmt as Fmt
+
+/// What a spec promises, checked by comparing values rather than by looking at
+/// output, because shaping is separable from writing.
+///
+/// The cases weighted here are the ones a padding helper gets wrong: content
+/// wider than the width it was given, a negative number that must keep its sign
+/// in front, grouping that must not count the sign as a digit, and a table whose
+/// columns are measured from rows it has not seen yet.
+///
+/// Each check answers 1, so the total names how many held.
+export fn main() -> Int {
+  var held = 0
+
+  let plain = Fmt.spec()
+  let eight = Fmt.width(&plain, 8)
+
+  // A spec that shapes nothing leaves its content alone.
+  if Fmt.text(&plain, "ok") == "ok" { held = held + 1 }
+  if Fmt.int(&plain, 42) == "42" { held = held + 1 }
+
+  // Alignment within a width.
+  if Fmt.text(&Fmt.leftAligned(&eight), "ok") == "ok      " { held = held + 1 }
+  if Fmt.text(&Fmt.rightAligned(&eight), "ok") == "      ok" { held = held + 1 }
+  // An odd remainder goes right, so the left edge stays straight.
+  if Fmt.text(&Fmt.centred(&eight), "ok") == "   ok   " { held = held + 1 }
+  if Fmt.text(&Fmt.centred(&Fmt.width(&plain, 7)), "ok") == "  ok   " { held = held + 1 }
+
+  // Content at least as wide as the width is answered unchanged: shaping a
+  // column never costs a character that was there.
+  if Fmt.text(&Fmt.width(&plain, 2), "wider") == "wider" { held = held + 1 }
+  if Fmt.text(&Fmt.width(&plain, 0), "x") == "x" { held = held + 1 }
+  // A negative width asks for nothing rather than for something impossible.
+  if Fmt.text(&Fmt.width(&plain, -4), "x") == "x" { held = held + 1 }
+
+  // A different fill.
+  if Fmt.text(&Fmt.filledWith(&Fmt.rightAligned(&Fmt.width(&plain, 5)), '.'), "ab") == "...ab" {
+    held = held + 1
+  }
+
+  // Numbers, with and without a forced sign.
+  if Fmt.int(&plain, -42) == "-42" { held = held + 1 }
+  if Fmt.int(&Fmt.withSign(&plain, true), 42) == "+42" { held = held + 1 }
+  if Fmt.int(&Fmt.withSign(&plain, true), -42) == "-42" { held = held + 1 }
+  if Fmt.int(&Fmt.withSign(&plain, true), 0) == "+0" { held = held + 1 }
+
+  // Grouping counts digits, not the sign.
+  let commas = Fmt.grouped(&plain, ",")
+  if Fmt.int(&commas, 1234567) == "1,234,567" { held = held + 1 }
+  if Fmt.int(&commas, -1234) == "-1,234" { held = held + 1 }
+  if Fmt.int(&commas, 999) == "999" { held = held + 1 }
+  if Fmt.int(&commas, 1000) == "1,000" { held = held + 1 }
+  // The separator is the caller's.
+  if Fmt.int(&Fmt.grouped(&plain, " "), 1234567) == "1 234 567" { held = held + 1 }
+
+  // Zero padding keeps the sign in front, where ordinary filling would not.
+  if Fmt.zeroPadded(&Fmt.width(&plain, 5), 42) == "00042" { held = held + 1 }
+  if Fmt.zeroPadded(&Fmt.width(&plain, 5), -42) == "-0042" { held = held + 1 }
+  if Fmt.zeroPadded(&Fmt.width(&plain, 2), 12345) == "12345" { held = held + 1 }
+
+  // Other bases, negatives included.
+  if Fmt.hex(&plain, 255) == "ff" { held = held + 1 }
+  if Fmt.hex(&plain, 0) == "0" { held = held + 1 }
+  if Fmt.hex(&plain, -255) == "-ff" { held = held + 1 }
+  if Fmt.binary(&plain, 5) == "101" { held = held + 1 }
+  if Fmt.octal(&plain, 8) == "10" { held = held + 1 }
+  if Fmt.radix(&plain, 255, 16) == "ff" { held = held + 1 }
+  // A base with no digits answers in ten rather than inventing one.
+  if Fmt.radix(&plain, 42, 99) == "42" { held = held + 1 }
+  if Fmt.radix(&plain, 42, 1) == "42" { held = held + 1 }
+
+  // Exact fractions, rounded rather than cut, padded out to their places.
+  if Fmt.fixed(&plain, Decimal.fromInt(3), 2) == "3.00" { held = held + 1 }
+  if Fmt.fixed(&plain, 1.005d, 2) == "1.01" { held = held + 1 }
+  if Fmt.fixed(&plain, 1.004d, 2) == "1.00" { held = held + 1 }
+  if Fmt.fixed(&plain, -1.005d, 2) == "-1.01" { held = held + 1 }
+  if Fmt.fixed(&plain, 1.5d, 0) == "2" { held = held + 1 }
+
+  // Truncation is asked for by name, and never answers wider than asked.
+  if Fmt.truncated("hello", 10, "...") == "hello" { held = held + 1 }
+  if Fmt.truncated("hello world", 8, "...") == "hello..." { held = held + 1 }
+  if Fmt.truncated("hello", 5, "...") == "hello" { held = held + 1 }
+  // A width too small for the marker still answers that width.
+  if Fmt.truncated("hello", 2, "...") == ".." { held = held + 1 }
+  if Fmt.truncated("hello", 0, "...") == "" { held = held + 1 }
+
+  // A row of values shaped alike.
+  if Fmt.list(&Fmt.width(&plain, 3), &["a", "bb"], "|") == "a  |bb " { held = held + 1 }
+
+  // Columns measured from the rows themselves.
+  let table = Fmt.columns(&[["id", "name"], ["1", "ana"], ["22", "bo"]], " ")
+  if table == ["id name", "1  ana", "22 bo"] { held = held + 1 }
+  // A short row is padded rather than refused.
+  let ragged = Fmt.columns(&[["a", "bb"], ["c"]], " ")
+  if ragged == ["a bb", "c"] { held = held + 1 }
+
+  // Building answers a new spec and leaves the original alone.
+  if Fmt.widthOf(&plain) == 0 { held = held + 1 }
+  if Fmt.widthOf(&eight) == 8 { held = held + 1 }
+  if Fmt.text(&plain, "ok") == "ok" { held = held + 1 }
+
+  held
+}

@@ -19,6 +19,7 @@ import Pudu.DecimalLiteral
   ( Decimal
   , DivisionFailure (DivideByZero, NonTerminating)
   , decimalAdd
+  , decimalNegate
   , decimalCompare
   , decimalDivideExact
   , decimalMultiply
@@ -45,6 +46,10 @@ applyUnary :: Span -> Text -> Value -> Evaluator Value
 applyUnary spanValue operator value = case (operator, value) of
   ("-", IntValue kind number) -> checkedResult spanValue kind "negate" (negate number)
   ("-", FloatValue width number) -> pure (FloatValue width (negate number))
+  {-| A decimal negates as the other numbers do. Without this `-1.50d` checked
+      as an ordinary negation and then refused at run time, which made a
+      negative decimal literal something a reader could write and not use. -}
+  ("-", DecimalValue number) -> pure (DecimalValue (decimalNegate number))
   ("!", BoolValue flag) -> pure (BoolValue (not flag))
   {-| Complement is a bit pattern, so it is taken over the type's own width.
       Without one, `~0u8` answers `-1`, which is not a value `UInt8` has. -}
