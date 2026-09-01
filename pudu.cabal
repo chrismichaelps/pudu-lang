@@ -200,6 +200,7 @@ test-suite pudu-test
     Pudu.Frontend.TokenSpec
     Pudu.EvalSpec
     Pudu.DocSpec
+    Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec

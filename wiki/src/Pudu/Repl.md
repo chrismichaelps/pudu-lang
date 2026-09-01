@@ -61,7 +61,8 @@ runRepl :: ReplOptions -> IO ()
 - `:type` is static inspection only. It reports the type recorded by the
   checker, preserves compiler diagnostics for invalid input, and says `no type`
   when the entry has no expression type. It never evaluates the entry and has
-  no runtime-shape fallback.
+  no runtime-shape fallback. A warning is printed and followed by the valid
+  static type; only errors stop the answer.
 
 ### Linkage
 

@@ -30,6 +30,7 @@ data Session = Session
   , sessionStatements :: ![Text]
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
+  , sessionDependencies :: ![(Text, Module)]
   }
 data EntryKind = ImportEntry | DeclarationEntry | StatementEntry | ExpressionEntry
 data EntryResult
@@ -96,7 +97,9 @@ line the submission starts on, its diagnostics, and its value.
 ## Edge Cases
 
 - The first entry of an empty session compiles a module whose only content is the synthetic function.
-- Re-running accumulated statements on every entry is deterministic because evaluation has no side effects; the slice that introduces them will have to revisit this.
+- Ordinary submission re-runs accumulated statements, including their effects,
+  because the current evaluator rebuilds the complete session buffer. Static
+  inspection is the strict exception: it compiles that buffer but never runs it.
 - A loaded module's own header and imports are preserved exactly, so its diagnostics keep pointing at real lines.
 - Iteration constructs (`while`, `loop`/`break`, `for`, `continue`) are statements when entered alone, so a loop that mutates a binding must be submitted as separate entries: the `var` binding, the loop body, then the result expression. The session replays accumulated statements on each compile, so a loop entered after its accumulator is visible in the synthetic function where the loop runs.
 - A type probe may compile earlier statements to recover the same lexical

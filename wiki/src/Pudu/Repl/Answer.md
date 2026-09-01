@@ -44,7 +44,9 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 - `:type` is a compiler question. It uses [[Repl Session]]'s type probe and
   never enters the evaluator: a valid expression reports its static type, an
   invalid expression reports the compiler diagnostics against the submitted
-  source, and an entry with no expression type reports `no type`.
+  source, and an entry with no expression type reports `no type`. Warnings are
+  rendered before the valid type; only an error makes the type answer
+  unavailable.
 
 ### Linkage
 
@@ -63,6 +65,11 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
   ignored, so `:type print("message")` would print and a runtime failure would
   replace the static answer. _Rejected:_ evaluation followed by value
   suppression or a runtime-shape fallback.
+- **Q:** Should any diagnostic suppress the type? **A:** No; warnings are
+  reported and the valid type follows. _Rationale:_ warnings do not make a
+  program ill-typed, and hiding the type turns successful inspection into a
+  diagnostic-only command. _Rejected:_ treating a non-empty diagnostic list as
+  failure.
 
 ## Referenced by
 

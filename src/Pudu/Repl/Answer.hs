@@ -120,11 +120,11 @@ showType options session expression
       (source, firstLine, diagnostics, found) <- inspectEntryType session expression
       let config =
             interactiveRenderConfig (replStyle options) "<interactive>" firstLine
-      if not (null diagnostics)
-        then TextIO.putStrLn (renderDiagnosticsWith config source diagnostics)
-        else case found of
-          Just typeValue -> TextIO.putStrLn (Text.strip expression <> " :: " <> renderType typeValue)
-          Nothing -> TextIO.putStrLn "no type"
+      unless (null diagnostics) $
+        TextIO.putStrLn (renderDiagnosticsWith config source diagnostics)
+      unless (hasErrors diagnostics) $ case found of
+        Just typeValue -> TextIO.putStrLn (Text.strip expression <> " :: " <> renderType typeValue)
+        Nothing -> TextIO.putStrLn "no type"
 
 reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
 reportEntry options settings result = do

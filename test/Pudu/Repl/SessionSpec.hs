@@ -10,18 +10,16 @@ import Pudu.Diagnostic.Render
   , renderDiagnosticsWith
   , renderSummary
   )
+import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
+import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
 import Pudu.Repl.Describe
   ( declarationSummary
   , describeInstances
   , describeKindLines
   , describeName
   )
-import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
-import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), renderType)
-import Pudu.Type.Value (nominalName)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -31,12 +29,14 @@ import Pudu.Repl.Session
   , inspectContext
   , inspectEntryType
   , inspectSession
+  , loadModule
   , sessionDeclaredNames
   , sessionExports
   , submitEntry
-  , loadModule
   , typeOfEntry
   )
+import Pudu.Type (Type (..), renderType)
+import Pudu.Type.Value (nominalName)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 replProperties :: [(String, IO Property)]
