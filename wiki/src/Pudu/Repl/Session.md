@@ -30,12 +30,15 @@ data Session = Session
   , sessionStatements :: ![Text]
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
+  , sessionDependencies :: ![(Text, Module)]
   }
 data EntryKind = ImportEntry | DeclarationEntry | StatementEntry | ExpressionEntry
 data EntryResult
 emptySession :: Session
 classifyEntry :: [Token] -> EntryKind
 submitEntry :: Session -> Text -> IO EntryResult
+inspectEntryType :: Session -> Text -> IO (Source, Int, [Diagnostic], Maybe Type)
+typeOfEntry :: Session -> Text -> IO (Maybe Type)
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 loadModule :: FilePath -> Text -> IO (Session -> Session, [Diagnostic], Maybe Resolution)
 contextSummary :: Session -> [Text]
@@ -60,6 +63,13 @@ sessionExports :: Resolution -> [Text]
 - Only an expression yields a value to show. A declaration or binding is still evaluated as part of the buffer so its runtime failure surfaces, but it prints nothing when it succeeds.
 - Loading delegates dependency discovery and checking to [[Compiler Program]], retains its pure `CompileContext`, then splits the admitted root text after its last import so session entries remain grammatically placed. Every later submission and inspection uses that context. Loading replaces the prior session entirely: nothing typed against the previous context survives a load it cannot explain.
 - An expression entry also reports its static type, taken as the widest expression the checker typed inside the entry's own region of the buffer.
+- `inspectEntryType` assembles and compiles the same buffer as a submission but
+  stops before evaluation. It returns the real assembled source, the entry's
+  first line, compiler diagnostics, and the inferred expression type so every
+  inspection consumer shares source mapping and typing behavior.
+- Completion uses `typeOfEntry`, the narrow view of that probe: compiler errors
+  and entries without an expression type both become `Nothing` because no
+  completion list is safer than names that do not apply.
 - `inspectSession` compiles the session exactly as it stands, so inspecting a session cannot alter it.
 
 - **A function written as a value is an expression; the name is what makes one a declaration.** `fn double(n: Int)` declares and `fn(n: Int)` is a literal, and the same holds after `async`, which additionally opens a scope — `async with scope { .. }` is an expression however it ends. Classified as declarations, all three were read as declarations missing their names and answered `E1001: expected identifier`, for entries that name nothing because they are not naming anything.
@@ -73,18 +83,28 @@ sessionExports :: Resolution -> [Text]
 
 ## Algorithm
 
-Lex the submission to classify it, assemble the buffer with the submission in its grammatical position, compile and evaluate, and report the buffer, the line the submission starts on, its diagnostics, and its value.
+Lex the submission to classify it and assemble the buffer with the submission
+in its grammatical position. Inspection compiles that buffer and returns.
+Ordinary submission continues into evaluation, then reports the buffer, the
+line the submission starts on, its diagnostics, and its value.
 
 ## Negative Logic (Prohibited Paths)
 
 - No terminal, printing, persistence, independent dependency search, or grammar of its own. File/dependency IO is delegated to [[Compiler Program]].
+- A type probe never calls the evaluator, even when the assembled buffer
+  contains earlier statements or the inspected expression would run cleanly.
 
 ## Edge Cases
 
 - The first entry of an empty session compiles a module whose only content is the synthetic function.
-- Re-running accumulated statements on every entry is deterministic because evaluation has no side effects; the slice that introduces them will have to revisit this.
+- Ordinary submission re-runs accumulated statements, including their effects,
+  because the current evaluator rebuilds the complete session buffer. Static
+  inspection is the strict exception: it compiles that buffer but never runs it.
 - A loaded module's own header and imports are preserved exactly, so its diagnostics keep pointing at real lines.
 - Iteration constructs (`while`, `loop`/`break`, `for`, `continue`) are statements when entered alone, so a loop that mutates a binding must be submitted as separate entries: the `var` binding, the loop body, then the result expression. The session replays accumulated statements on each compile, so a loop entered after its accumulator is visible in the synthetic function where the loop runs.
+- A type probe may compile earlier statements to recover the same lexical
+  context as submission, but it never runs those statements or the current
+  expression.
 
 ## Depth
 
@@ -96,7 +116,12 @@ DEPTH 0.70 (MEDIUM). It hides classification, buffer assembly, line mapping, acc
 - **Q:** Should an expression be remembered? **A:** No. _Rationale:_ it binds nothing, and replaying it would re-run work with no effect on later entries. _Rejected:_ an `it` binding before there is a type to give it.
 - **Q:** What happens to entries when a file is loaded? **A:** They are cleared. _Rationale:_ they were checked against a context that no longer exists, and silently reinterpreting them against a new file would be a different program. _Rejected:_ keeping bindings across a load.
 - **Q:** Should `:load` compile only the named text and leave imports opaque? **A:** No; it uses the same program compiler as file checking. _Rationale:_ interactive and batch typing must agree, and the REPL is the feature gate. _Rejected:_ a REPL-only module lookup heuristic.
+- **Q:** Should completion and `:type` have separate probing paths? **A:** No;
+  both consume one static compile probe. _Rationale:_ source offsets,
+  diagnostics, and inferred types must agree, while the narrower completion
+  view may deliberately hide diagnostics. _Rejected:_ a second partial
+  compiler path or dry-run evaluation.
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Compiler Pipeline]] · [[Evaluator]]
+[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Compiler Pipeline]] · [[Evaluator]] · [[2026-08-31-static-repl-inspection]]

@@ -10,18 +10,16 @@ import Pudu.Diagnostic.Render
   , renderDiagnosticsWith
   , renderSummary
   )
+import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
+import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
 import Pudu.Repl.Describe
   ( declarationSummary
   , describeInstances
   , describeKindLines
   , describeName
   )
-import Pudu.Repl.Complete (CompletionSource (..), completionsFor, memberContext, wantsFilename)
-import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), renderType)
-import Pudu.Type.Value (nominalName)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -29,13 +27,16 @@ import Pudu.Repl.Session
   , contextSummary
   , emptySession
   , inspectContext
+  , inspectEntryType
   , inspectSession
+  , loadModule
   , sessionDeclaredNames
   , sessionExports
   , submitEntry
-  , loadModule
   , typeOfEntry
   )
+import Pudu.Type (Type (..), renderType)
+import Pudu.Type.Value (nominalName)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 replProperties :: [(String, IO Property)]
@@ -50,6 +51,7 @@ replProperties =
   , ("kinds report declared arity", testKinds)
   , ("completion offers commands paths and session names", testCompletion)
   , ("completion offers what the value before the dot carries", testMemberCompletion)
+  , ("type inspection stops before evaluation", testStaticTypeInspection)
   , ("a loaded file does not shift where the entry sits", testLoadedOffsets)
   , ("loops and iteration evaluate in the interactive session", testIteration)
   , ("trait methods dispatch and inherit in the session", testTraits)
@@ -226,6 +228,26 @@ testMemberCompletion = do
         (("toUpper" `elem` builtinMethodNamesFor "Array") === False)
     , counterexample "a type with no built-in methods offers none"
         (builtinMethodNamesFor "Int" === [])
+    ]
+
+{-| A type query ends after compilation. Division by zero is useful evidence:
+    it has static type `Int` and produces E7004 only if the evaluator ran. -}
+testStaticTypeInspection :: IO Property
+testStaticTypeInspection = do
+  (_, _, diagnostics, found) <- inspectEntryType emptySession "1 / 0"
+  (_, _, broken, missing) <- inspectEntryType emptySession "notInScope"
+  (_, _, statementDiagnostics, statementType) <-
+    inspectEntryType emptySession "let held = 1"
+  pure $ conjoin
+    [ counterexample "a runtime failure still has a static type"
+        (diagnostics === [])
+    , fmap renderType found === Just "Int"
+    , counterexample "compiler failures remain visible"
+        (map codeOf broken === ["E2010"])
+    , missing === Nothing
+    , counterexample "a statement type-checks but has no expression type"
+        (statementDiagnostics === [])
+    , statementType === Nothing
     ]
 
 {-| The name a type is written under, which is what selects its method set. -}

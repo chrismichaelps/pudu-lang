@@ -9,6 +9,7 @@ module Pudu.Repl.Session
   , inspectSession
   , inspectContext
   , inspectDocs
+  , inspectEntryType
   , emptySession
   , loadModule
   , sessionDeclaredNames
@@ -192,21 +193,29 @@ typeOfEntry :: Session -> Text -> IO (Maybe Type)
 typeOfEntry session entry
   | Text.null (Text.strip entry) = pure Nothing
   | otherwise = do
-      probe <- newSource interactiveName entry
-      let LexResult{lexTokens} = lexSource probe
-          kind = classifyEntry lexTokens
-      if kind /= ExpressionEntry
-        then pure Nothing
-        else do
-          let candidate = extend session kind entry
-              (buffer, _) = renderBuffer session kind entry
-              entryStart = bufferOffsetOf session kind
-          source <- newSource interactiveName buffer
-          (result, _) <- compileBuffer session candidate source
-          pure $
-            if hasErrors (compileDiagnostics result)
-              then Nothing
-              else compileTypes result >>= entryType entryStart (Text.length entry)
+      (_, _, diagnostics, found) <- inspectEntryType session entry
+      pure (if hasErrors diagnostics then Nothing else found)
+
+{-| Compile one entry for inspection without entering the evaluator. The
+    returned source and first line are the exact assembled window used by an
+    ordinary submission, so commands can render compiler diagnostics against
+    what the reader typed without duplicating offset logic. -}
+inspectEntryType :: Session -> Text -> IO (Source, Int, [Diagnostic], Maybe Type)
+inspectEntryType session entry = do
+  probe <- newSource interactiveName entry
+  let LexResult{lexTokens} = lexSource probe
+      kind = classifyEntry lexTokens
+      candidate = extend session kind entry
+      (buffer, firstLine) = renderBuffer session kind entry
+      entryStart = bufferOffsetOf session kind
+  source <- newSource interactiveName buffer
+  (result, _) <- compileBuffer session candidate source
+  let diagnostics = compileDiagnostics result
+      found =
+        if kind == ExpressionEntry && not (hasErrors diagnostics)
+          then compileTypes result >>= entryType entryStart (Text.length entry)
+          else Nothing
+  pure (source, firstLine, diagnostics, found)
 
 {-| Compile one submission against the current session. The session advances
     only when the entry is accepted, so a failed entry can never corrupt the
