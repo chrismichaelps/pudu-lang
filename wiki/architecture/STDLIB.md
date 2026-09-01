@@ -206,14 +206,14 @@ is joined by the same rules, so the library cannot leak a task the language woul
 
 | Module | Provides |
 |---|---|
-| `Std.Test` | assertions, property generation, shrinking |
+
 | `Std.Bench` | timing with statistics, not one stopwatch reading |
 | `Std.Crypto` | hashes, HMAC, constant-time comparison, secure random |
 | `Std.Db` | typed SQL, parameter binding, connection pooling |
 
 ## What ships today
 
-Forty-four modules, 1240 exported declarations, every one written in Pudu.
+Forty-six modules, 1285 exported declarations, every one written in Pudu.
 
 | Module | Exports | Covers |
 |---|---|---|
@@ -256,6 +256,8 @@ Forty-four modules, 1240 exported declarations, every one written in Pudu.
 | `Std.Io` | 28 | files, directories, standard input and output, path handling |
 | `Std.Out` | 22 | a printer as a value: separator, ending, prefix, and stream, with a pure rendering |
 | `Std.Fmt` | 25 | a shaping spec as a value: width, fill, alignment, sign, grouping, radix, and columns |
+| `Std.Test` | 37 | checks and suites as values, and a report that says what failed and why |
+| `Std.Test.Property` | 8 | generated values with shrinking, seeded so a failure repeats exactly |
 | `Std.Env` | 17 | arguments and flags, environment variables, a place to write, stopping with a status |
 | `Std.Time` | 40 | instants, durations, dates, times of day, formatting and parsing |
 | `Std.Process` | 11 | running a program, its status and streams, availability |

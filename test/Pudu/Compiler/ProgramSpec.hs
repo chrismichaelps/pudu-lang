@@ -225,6 +225,7 @@ testProgramEvaluation = do
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
+  checking <- runEntry "test-fixtures/stdlib/UsesTest.pudu"
   hierarchies <- runEntry "test-fixtures/stdlib/UsesTree.pudu"
   higherKinds <- runEntry "test-fixtures/stdlib/UsesHigherKinds.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -285,6 +286,15 @@ testProgramEvaluation = do
     , counterexample
         "a spec carries its width, fill, alignment, sign, and grouping"
         (shaping === Just "46")
+    {-| A suite's own promises, checked by comparing reports, which is possible
+        because running one is a pure function from a value to a value. Weighted
+        toward what a test framework gets wrong: a failure that does not say
+        what it expected, a count that loses nested groups, a pending check
+        counted as a pass, and a property reporting the value it generated
+        rather than the smallest one that fails. -}
+    , counterexample
+        "a suite reports what held, what did not, and what is still to write"
+        (checking === Just "58")
     {-| A hierarchy's counting rules, its three orders, its transformations, and
         what search answers when there is nothing to find. Weighted toward what
         a hand-written hierarchy gets wrong: a leaf counted as height zero, a

@@ -1,0 +1,346 @@
+module Std.Test
+
+import Std.Decimal as Decimal
+import Std.Fmt as Fmt
+import Std.List as List
+import Std.Order {Ord}
+import Std.Text as Text
+
+/// What one check found.
+///
+/// A check that held carries nothing else; one that did not carries what it
+/// expected and what it found, because that difference is the whole reason to
+/// run a test rather than count one. A suite that answers "thirty-nine of forty"
+/// has told the reader the least useful true thing about their program.
+export type Outcome = Held | Failed(Str, Str) | Pending(Str)
+
+/// One check: what it was called, and what it found.
+export type Check = { name: Str, outcome: Outcome }
+
+/// A named group of checks, and the groups beneath it.
+///
+/// Groups nest because a program's tests do. A report counts through the whole
+/// tree and names a failure by the path that reaches it, so "ordering / sorts"
+/// says where to look without the reader searching for the name.
+export type Suite = { name: Str, checks: Array[Check], groups: Array[Suite] }
+
+/// What running a suite found, counted and with the failures kept.
+///
+/// The failures themselves rather than only their number, so a caller decides
+/// how to present them. Running answers this; nothing here writes anything.
+export type Report = {
+  passed: Int,
+  failed: Int,
+  pending: Int,
+  failures: Array[Str]
+}
+
+/// A check that holds when the condition does.
+///
+/// The plainest form, and the one that cannot say what went wrong: a condition
+/// that is false has no other information in it. Prefer `equals` where there are
+/// two values to compare, because it can say what they were.
+export fn that(name: Str, condition: Bool) -> Check {
+  Check {
+    name: name,
+    outcome: if condition { Held } else { Failed("true", "false") }
+  }
+}
+
+/// A check that holds when the condition does not.
+export fn not(name: Str, condition: Bool) -> Check { that(name, !condition) }
+
+/// A check that holds when two values are the same.
+///
+/// Both values are rendered when it fails, which is what makes a failure
+/// readable: the reader is shown the difference rather than told there was one.
+export fn equals[T](name: Str, found: &T, expected: &T) -> Check {
+  Check {
+    name: name,
+    outcome:
+    if found == expected { Held } else { Failed(show(*expected), show(*found)) }
+  }
+}
+
+/// A check that holds when two values differ.
+export fn differs[T](name: Str, found: &T, unwanted: &T) -> Check {
+  Check {
+    name: name,
+    outcome:
+    if found != unwanted { Held } else {
+      Failed("something other than " + show(*unwanted), show(*found))
+    }
+  }
+}
+
+/// A check that holds when an optional value is present, whatever it holds.
+export fn present[T](name: Str, value: &Option[T]) -> Check {
+  match value {
+    case Some(_) => Check{name: name, outcome: Held}
+    case None => Check{name: name, outcome: Failed("a value", "None")}
+  }
+}
+
+/// A check that holds when an optional value is absent.
+export fn absent[T](name: Str, value: &Option[T]) -> Check {
+  match value {
+    case Some(found) => Check{name: name, outcome: Failed("None", show(found))}
+    case None => Check{name: name, outcome: Held}
+  }
+}
+
+/// A check that holds when a result succeeded.
+export fn succeeded[T, E](name: Str, value: &Result[T, E]) -> Check {
+  match value {
+    case Ok(_) => Check{name: name, outcome: Held}
+    case Err(why) => Check{name: name, outcome: Failed("a success", show(why))}
+  }
+}
+
+/// A check that holds when a result failed.
+export fn errored[T, E](name: Str, value: &Result[T, E]) -> Check {
+  match value {
+    case Ok(found) => Check{name: name, outcome: Failed("a failure", show(found))}
+    case Err(_) => Check{name: name, outcome: Held}
+  }
+}
+
+/// A check that holds when a sequence contains a value.
+export fn contains[T](name: Str, values: &Array[T], wanted: T) -> Check {
+  Check {
+    name: name,
+    outcome:
+    if values.contains(wanted) { Held } else {
+      Failed("a sequence containing " + show(wanted), show(*values))
+    }
+  }
+}
+
+/// A check that holds when every value satisfies the test.
+///
+/// The first value that does not is what the failure names, because the reader
+/// wants the one that broke rather than the count of those that did not.
+export fn all[T](name: Str, values: &Array[T], holds: fn(T) -> Bool) -> Check {
+  for value in values {
+    if !holds(value) {
+      return Check{name: name, outcome: Failed("every value to hold", show(value))}
+    }
+  }
+  Check{name: name, outcome: Held}
+}
+
+/// A check not yet written, carrying why.
+///
+/// Neither a pass nor a failure: it is counted apart so a suite cannot quietly
+/// shrink by deleting what has not been done. A reader is told the number and
+/// the reason rather than being left to notice an absence.
+export fn todo(name: Str, reason: Str) -> Check {
+  Check{name: name, outcome: Pending(reason)}
+}
+
+/// A check that holds when two sequences hold the same values, in any order.
+///
+/// For a result whose order is not part of what was promised. Comparing sorted
+/// copies rather than counting, so a repeated value has to be repeated on both
+/// sides.
+export fn sameElements[T: Ord](name: Str, found: &Array[T], expected: &Array[T]) -> Check {
+  let a = List.sorted(found)
+  let b = List.sorted(expected)
+  Check {
+    name: name,
+    outcome: if a == b { Held } else { Failed(show(b), show(a)) }
+  }
+}
+
+/// A check that holds when two exact numbers differ by no more than a
+/// tolerance.
+///
+/// A `Decimal`, because the reason to compare within a tolerance is almost
+/// always a figure a float would already have got wrong.
+export fn closeTo(name: Str, found: Decimal, expected: Decimal, within: Decimal) -> Check {
+  let gap = if found > expected { found - expected } else { expected - found }
+  Check {
+    name: name,
+    outcome:
+    if gap <= within { Held } else {
+      Failed(show(expected) + " within " + show(within), show(found))
+    }
+  }
+}
+
+/// A group of checks under a name.
+export fn suite(name: Str, checks: &Array[Check]) -> Suite {
+  Suite{name: name, checks: *checks, groups: []}
+}
+
+/// A group of groups under a name.
+export fn group(name: Str, groups: &Array[Suite]) -> Suite {
+  Suite{name: name, checks: [], groups: *groups}
+}
+
+/// The suite with another group beneath it.
+export fn withGroup(value: &Suite, nested: &Suite) -> Suite {
+  Suite{name: value.name, checks: value.checks, groups: value.groups.push(*nested)}
+}
+
+/// The suite with another check in it.
+export fn withCheck(value: &Suite, check: &Check) -> Suite {
+  Suite{name: value.name, checks: value.checks.push(*check), groups: value.groups}
+}
+
+/// Whether a check held.
+export fn held(value: &Check) -> Bool {
+  match value.outcome {
+    case Held => true
+    case Failed(_, _) => false
+    case Pending(_) => false
+  }
+}
+
+/// Whether a check was left to be written.
+export fn pending(value: &Check) -> Bool {
+  match value.outcome {
+    case Pending(_) => true
+    case Held => false
+    case Failed(_, _) => false
+  }
+}
+
+/// What a failing check says, or `None` when it held.
+///
+/// The path is the names of the groups above it joined by a slash, so a failure
+/// says where to look rather than only what it was called.
+fn describe(path: Str, value: &Check) -> Option[Str] {
+  match value.outcome {
+    case Held => None
+    case Pending(_) => None
+    case Failed(expected, found) =>
+    Some(path + value.name + ": expected " + expected + ", found " + found)
+  }
+}
+
+/// The report a suite answers, counted through every group beneath it.
+export fn run(value: &Suite) -> Report { collect(value, "") }
+
+fn collect(value: &Suite, above: Str) -> Report {
+  let path = if value.name.isEmpty() { above } else { above + value.name + " / " }
+  var kept = 0
+  var broke = 0
+  var waiting = 0
+  var failures = []
+  for check in value.checks {
+    match check.outcome {
+      case Held => { kept = kept + 1 }
+      case Pending(_) => { waiting = waiting + 1 }
+      case Failed(_, _) => {
+        broke = broke + 1
+        match describe(path, &check) {
+          case Some(said) => { failures = failures.push(said) }
+          case None => {}
+        }
+      }
+    }
+  }
+  for nested in value.groups {
+    let below = collect(&nested, path)
+    kept = kept + below.passed
+    broke = broke + below.failed
+    waiting = waiting + below.pending
+    failures = failures.concat(below.failures)
+  }
+  Report{passed: kept, failed: broke, pending: waiting, failures: failures}
+}
+
+/// How many checks held.
+export fn passedOf(value: &Report) -> Int { value.passed }
+
+/// How many checks did not.
+export fn failedOf(value: &Report) -> Int { value.failed }
+
+/// What each failing check said.
+export fn failuresOf(value: &Report) -> Array[Str] { value.failures }
+
+/// How many checks were left to be written.
+export fn pendingOf(value: &Report) -> Int { value.pending }
+
+/// How many checks ran.
+///
+/// A pending check is not one of them: it was not run, and counting it here
+/// would let a suite look larger for work that has not been done.
+export fn total(value: &Report) -> Int { value.passed + value.failed }
+
+/// Whether every check held.
+///
+/// A suite with nothing in it holds, because it asserted nothing and nothing it
+/// asserted was wrong. A reader who expected checks to run is told by the count,
+/// which is why the count is reported beside this rather than hidden behind it.
+export fn passed(value: &Report) -> Bool { value.failed == 0 }
+
+/// A report as lines, the failures first and a summary last.
+///
+/// Failures first because they are what a reader opened the output for, and a
+/// summary last because it is what they check when there are none.
+export fn lines(value: &Report) -> Array[Str] {
+  var out = []
+  for failure in value.failures { out = out.push("FAIL  " + failure) }
+  out.push(summary(value))
+}
+
+/// One line saying how many of how many held.
+export fn summary(value: &Report) -> Str {
+  let counted = total(value)
+  if counted == 0 {
+    if value.pending == 0 { "no checks ran" } else {
+      "no checks ran, " + Fmt.int(&Fmt.spec(), value.pending) + " pending"
+    }
+  } else {
+    let waiting =
+    if value.pending == 0 { "" } else {
+      ", " + Fmt.int(&Fmt.spec(), value.pending) + " pending"
+    }
+    if value.failed == 0 { Fmt.int(&Fmt.spec(), counted) + " passed" + waiting } else {
+      Fmt.int(&Fmt.spec(), value.passed) + " passed, "
+        + Fmt.int(&Fmt.spec(), value.failed) + " failed, of "
+        + Fmt.int(&Fmt.spec(), counted) + waiting
+    }
+  }
+}
+
+/// The status a program should leave with, which is zero only when every check
+/// held.
+///
+/// A test runner that always leaves with zero is a test runner nothing can be
+/// built on: the thing reading it cannot tell a pass from a failure.
+export fn status(value: &Report) -> Int { if value.failed == 0 { 0 } else { 1 } }
+
+/// Two reports added together.
+export fn combine(left: &Report, right: &Report) -> Report {
+  Report {
+    passed: left.passed + right.passed,
+    failed: left.failed + right.failed,
+    pending: left.pending + right.pending,
+    failures: left.failures.concat(right.failures)
+  }
+}
+
+/// Every report added together.
+export fn combineAll(reports: &Array[Report]) -> Report {
+  var out = Report{passed: 0, failed: 0, pending: 0, failures: []}
+  for report in reports { out = combine(&out, &report) }
+  out
+}
+
+/// The names of the checks in a suite and every group beneath it.
+///
+/// For a caller listing what a suite covers without running it.
+export fn names(value: &Suite) -> Array[Str] {
+  var out = []
+  for check in value.checks { out = out.push(check.name) }
+  for nested in value.groups {
+    for name in names(&nested) { out = out.push(value.name + " / " + name) }
+  }
+  out
+}
+
+/// The report rendered as one block of text.
+export fn rendered(value: &Report) -> Str { Text.join(&lines(value), "\n") }
