@@ -234,6 +234,8 @@ testProgramEvaluation = do
   paths <- runEntry "test-fixtures/stdlib/UsesPath.pudu"
   identifiers <- runEntry "test-fixtures/stdlib/UsesUuid.pudu"
   separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
+  calendars <- runEntry "test-fixtures/stdlib/UsesTimeFormat.pudu"
+  measurements <- runEntry "test-fixtures/stdlib/UsesBench.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -356,6 +358,18 @@ testProgramEvaluation = do
     , counterexample
         "a separated file survives quotes, newlines, and its own separator"
         (separated === Just "25")
+    {-| The calendar is arithmetic rather than a table, so it answers for a
+        moment before the count of milliseconds starts and for both of the
+        centuries a naive leap-year rule gets wrong. -}
+    , counterexample
+        "a moment written as text reads back as the moment it named"
+        (calendars === Just "50")
+    {-| Readings are built rather than timed: a check against the clock would
+        answer differently on a machine that was busy, and a failure for that
+        reason says nothing about the code. -}
+    , counterexample
+        "a measurement reports its spread rather than one stopwatch reading"
+        (measurements === Just "31")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

@@ -1,0 +1,128 @@
+module UsesTimeFormat
+
+import Std.Result as Result
+import Std.Time.Format as Format
+import Std.Time.Format {Malformed, OutOfRange}
+
+/// What a moment written as text promises. Every check is against a date whose
+/// answer is known independently, including the ones a calendar gets wrong:
+/// a century that is not a leap year, a century that is, and a moment before
+/// the count of milliseconds starts.
+export fn main() -> Int {
+  var held = 0
+
+  // The day count starts where the format says it does.
+  if Format.daysFromCivil(1970, 1, 1) == 0 { held = held + 1 }
+  if Format.daysFromCivil(1970, 1, 2) == 1 { held = held + 1 }
+  if Format.daysFromCivil(1969, 12, 31) == -1 { held = held + 1 }
+  if Format.daysFromCivil(2000, 3, 1) == 11017 { held = held + 1 }
+
+  // A round trip through the calendar, including a date before the epoch.
+  if Format.civilFromDays(0) == (1970, 1, 1) { held = held + 1 }
+  if Format.civilFromDays(-1) == (1969, 12, 31) { held = held + 1 }
+  if Format.civilFromDays(19000) == (2022, 1, 8) { held = held + 1 }
+
+  // The leap year rule, including both centuries that trip a naive one.
+  if Format.isLeapYear(2024) { held = held + 1 }
+  if !Format.isLeapYear(1900) { held = held + 1 }
+  if Format.isLeapYear(2000) { held = held + 1 }
+  if Format.daysInMonth(2024, 2) == 29 { held = held + 1 }
+  if Format.daysInMonth(1900, 2) == 28 { held = held + 1 }
+
+  // A moment comes apart into the fields a person writes, and goes back.
+  let parts = Format.partsOf(1000000000000)
+  if parts.year == 2001 && parts.month == 9 && parts.day == 9 { held = held + 1 }
+  if Format.millisOf(&parts) == 1000000000000 { held = held + 1 }
+
+  // A moment before the epoch has a negative count, and the division that
+  // places it has to round the same way there as after it.
+  let early = Format.partsOf(-1)
+  if early.year == 1969 && early.month == 12 && early.day == 31 { held = held + 1 }
+  if early.hour == 23 && early.minute == 59 && early.second == 59 { held = held + 1 }
+  if early.milli == 999 { held = held + 1 }
+
+  // A field outside its range is carried rather than refused, which is what
+  // makes adding a month to December work without checking first.
+  let rolled = Format.millisOf(&Format.Parts {
+      year: 2023,
+      month: 13,
+      day: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
+      milli: 0
+    })
+  if Format.partsOf(rolled).year == 2024 { held = held + 1 }
+  if Format.partsOf(rolled).month == 1 { held = held + 1 }
+
+  // The first of January 1970 was a Thursday, which the count has to agree on.
+  if Format.weekdayOf(0) == 4 { held = held + 1 }
+  if Format.dayOfYear(0) == 1 { held = held + 1 }
+
+  // The interchange form, both directions.
+  if Format.toRfc3339(0) == "1970-01-01T00:00:00Z" { held = held + 1 }
+  if Format.toRfc3339(1000000000000) == "2001-09-09T01:46:40Z" { held = held + 1 }
+  if Format.toRfc3339(1500) == "1970-01-01T00:00:01.500Z" { held = held + 1 }
+  if Result.unwrapOr(Format.fromRfc3339("1970-01-01T00:00:00Z"), -1) == 0 { held = held + 1 }
+  if Result.unwrapOr(Format.fromRfc3339("2001-09-09T01:46:40Z"), -1) == 1000000000000 {
+    held = held + 1
+  }
+
+  // An offset other than zero is applied, so the value names the moment it
+  // means rather than the digits it was written with.
+  if Result.unwrapOr(Format.fromRfc3339("1970-01-01T01:00:00+01:00"), -1) == 0 { held = held + 1 }
+  if Result.unwrapOr(Format.fromRfc3339("1969-12-31T23:00:00-01:00"), -1) == 0 { held = held + 1 }
+
+  // A fraction is read, and more digits than milliseconds hold are dropped
+  // rather than making well-formed text a failure.
+  if Result.unwrapOr(Format.fromRfc3339("1970-01-01T00:00:01.500Z"), -1) == 1500 { held = held + 1 }
+  if Result.unwrapOr(Format.fromRfc3339("1970-01-01T00:00:01.500999Z"), -1) == 1500 {
+    held = held + 1
+  }
+
+  // Text that names no moment is refused, and says which field was wrong.
+  if let Err(Malformed(_)) = Format.fromRfc3339("nonsense") { held = held + 1 }
+  if let Err(OutOfRange(_, _)) = Format.fromRfc3339("2023-13-01T00:00:00Z") { held = held + 1 }
+  if let Err(OutOfRange(_, _)) = Format.fromRfc3339("2023-02-30T00:00:00Z") { held = held + 1 }
+
+  // The form a message header carries, which is always at zero offset and
+  // always in English because the format says so.
+  if Format.toHttpDate(0) == "Thu, 01 Jan 1970 00:00:00 GMT" { held = held + 1 }
+  if Result.unwrapOr(Format.fromHttpDate("Thu, 01 Jan 1970 00:00:00 GMT"), -1) == 0 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Format.fromHttpDate(Format.toHttpDate(1000000000000)), -1) == 1000000000000 {
+    held = held + 1
+  }
+
+  // A pattern writes what it names, and leaves a directive it does not know
+  // readable rather than silently emptying it.
+  if Format.render(0, "%Y-%m-%d") == "1970-01-01" { held = held + 1 }
+  if Format.render(0, "%H:%M:%S") == "00:00:00" { held = held + 1 }
+  if Format.render(0, "%a %b %e") == "Thu Jan 1" { held = held + 1 }
+  if Format.render(0, "%A %B") == "Thursday January" { held = held + 1 }
+  if Format.render(0, "100%%") == "100%" { held = held + 1 }
+  if Format.render(0, "%Q") == "%Q" { held = held + 1 }
+  if Format.render(43200000, "%I %p") == "12 PM" { held = held + 1 }
+
+  // A pattern reads back what it wrote.
+  if Result.unwrapOr(Format.parse("%Y-%m-%d", "2024-02-29"), -1)
+    == Format.daysFromCivil(2024, 2, 29) * 86400000
+  {
+    held = held + 1
+  }
+  if Result.unwrapOr(Format.parse("%d %b %Y", "09 Sep 2001"), -1)
+    == Format.daysFromCivil(2001, 9, 9) * 86400000
+  {
+    held = held + 1
+  }
+
+  // A length of time written the way the format writes one.
+  if Format.renderDuration(0) == "PT0S" { held = held + 1 }
+  if Format.renderDuration(1000) == "PT1S" { held = held + 1 }
+  if Format.renderDuration(90000) == "PT1M30S" { held = held + 1 }
+  if Format.renderDuration(86400000) == "P1D" { held = held + 1 }
+  if Format.renderDuration(1500) == "PT1.500S" { held = held + 1 }
+
+  held
+}
