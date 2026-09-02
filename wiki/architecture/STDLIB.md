@@ -292,6 +292,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.App.Access` | 20 | requirements as values; every route states one |
 | `Std.App.Metrics` | 22 | counters, gauges, distributions, units, and a series bound |
+| `Std.App.Bind` | 21 | request fields from a stated source, checked and read |
 | `Std.App.Health` | 21 | liveness and readiness as separate types, worst-wins aggregation |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Client` | 13 | bounded requests, verified transport, credential-safe redirects |
@@ -302,6 +303,9 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
 | `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
+| `Std.Db.Schema` | 11 | typed columns and comparisons, completed by the editor |
+| `Std.Db.Store` | 22 | values kept and read back; relations loaded for many parents at once |
+| `Std.Db.Repository` | 17 | typed row reads, row-count contracts, repositories as values |
 | `Std.Db.Query` | 22 | statements built so a value can only ever be a parameter |
 | `Std.Db.Migrate` | 11 | versioned, digested, transactional schema changes, provisional |
 | `Std.Db.Session` | 13 | connecting, SCRAM, and one message at a time, provisional |

@@ -1,0 +1,192 @@
+module UsesRepository
+
+import Std.Db as Db
+import Std.Db.Repository {Absent, ManyRows, NoColumn, NoRow, NotCount, NotTruth, NotWhole}
+import Std.Db.Repository as Repository
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a program keeps about a person.
+type Person = { id: Int, name: Str, active: Bool, nickname: Option[Str] }
+
+/// What row mapping promises.
+///
+/// Every check builds a result and compares values, with no database
+/// involved. That is the point: mapping is where the errors are, and a
+/// database is the slowest way to find them.
+export fn main() -> Int {
+  var held = 0
+
+  let people = rowsOf(
+      &["id", "name", "active", "nickname"],
+      &[
+      [Some("1"), Some("ada"), Some("t"), Some("addie")],
+      [Some("2"), Some("grace"), Some("f"), None]
+    ]
+  )
+
+  // Reading each kind of column.
+  if Result.unwrapOr(Repository.text(&people, 0, "name"), "") == "ada" { held = held + 1 }
+  if Result.unwrapOr(Repository.whole(&people, 0, "id"), 0) == 1 { held = held + 1 }
+  if Result.unwrapOr(Repository.count(&people, 0, "id"), 0) == 1 { held = held + 1 }
+  if Result.unwrapOr(Repository.truth(&people, 0, "active"), false) { held = held + 1 }
+  if !Result.unwrapOr(Repository.truth(&people, 1, "active"), true) { held = held + 1 }
+
+  // A column that is not there and a column that held nothing are different
+  // answers. The layer beneath cannot tell them apart, and inheriting that
+  // turns a mistyped column name into a data condition found later and
+  // somewhere else.
+  if let Err(NoColumn(named)) = Repository.text(&people, 0, "nmae") {
+    if named == "nmae" { held = held + 1 }
+  }
+  if let Err(Absent(named)) = Repository.text(&people, 1, "nickname") {
+    if named == "nickname" { held = held + 1 }
+  }
+  if Repository.hasColumn(&people, "nickname") { held = held + 1 }
+  if !Repository.hasColumn(&people, "nmae") { held = held + 1 }
+
+  // A column that may hold nothing says so without failing, but a column that
+  // is not there still fails.
+  if Option.isSome(&Result.unwrapOr(Repository.optionalText(&people, 0, "nickname"), None)) {
+    held = held + 1
+  }
+  if Option.isNone(&Result.unwrapOr(Repository.optionalText(&people, 1, "nickname"), Some("x"))) {
+    held = held + 1
+  }
+  if let Err(NoColumn(_)) = Repository.optionalText(&people, 0, "nmae") { held = held + 1 }
+
+  // A value that is not the kind asked for names the column rather than
+  // echoing the value, which came from the database and may be anything.
+  let odd = rowsOf(&["n", "flag"], &[[Some("nine"), Some("maybe")]])
+  if let Err(NotWhole(named)) = Repository.whole(&odd, 0, "n") {
+    if named == "n" { held = held + 1 }
+  }
+  if let Err(NotTruth(_)) = Repository.truth(&odd, 0, "flag") { held = held + 1 }
+  if !Repository.explain(&NotWhole("n")).contains("nine") { held = held + 1 }
+
+  // A count may not be below nothing, and a whole number may.
+  let signed = rowsOf(&["balance"], &[[Some("-5")]])
+  if Result.unwrapOr(Repository.whole(&signed, 0, "balance"), 0) == -5 { held = held + 1 }
+  if let Err(NotCount(_)) = Repository.count(&signed, 0, "balance") { held = held + 1 }
+
+  // A column that holds nothing reads as a fallback where the caller has one.
+  if Result.unwrapOr(Repository.wholeOr(&people, 1, "nickname", 7), 0) == 7 { held = held + 1 }
+  if Result.unwrapOr(Repository.wholeOr(&people, 0, "id", 7), 0) == 1 { held = held + 1 }
+
+  // Every row becomes a value.
+  let everyone = Result.unwrapOr(Repository.all(&people, personAt), [])
+  if everyone.length() == 2 { held = held + 1 }
+  if everyone[0].name == "ada" { held = held + 1 }
+  if everyone[0].active { held = held + 1 }
+  if Option.unwrapOr(everyone[0].nickname, "") == "addie" { held = held + 1 }
+  if Option.isNone(&everyone[1].nickname) { held = held + 1 }
+
+  // The first failure stops it: a partial list of what a query returned is a
+  // value a caller cannot act on and cannot tell from a complete one.
+  let broken = rowsOf(
+      &["id", "name", "active", "nickname"],
+      &[[Some("1"), Some("ada"), Some("t"), None], [Some("x"), Some("g"), Some("t"), None]]
+  )
+  if let Err(NotWhole(_)) = Repository.all(&broken, personAt) { held = held + 1 }
+
+  // Exactly one can fail two ways, and both are reported. Answering the first
+  // of several is how a program acts on the wrong record without anything
+  // appearing to go wrong.
+  let single = rowsOf(
+      &["id", "name", "active", "nickname"],
+      &[[Some("1"), Some("ada"), Some("t"), None]]
+  )
+  if Result.unwrapOr(Repository.one(&single, personAt), missing()).name == "ada" { held = held + 1 }
+  if let Err(NoRow) = Repository.one(&rowsOf(&["id"], &[]), personAt) { held = held + 1 }
+  if let Err(ManyRows(found)) = Repository.one(&people, personAt) {
+    if found == 2 { held = held + 1 }
+  }
+
+  // At most one: finding nothing is an ordinary answer, finding several is
+  // still a fault.
+  if Option.isNone(&Result.unwrapOr(Repository.optional(&rowsOf(&["id"], &[]), personAt), Some(missing()))) {
+    held = held + 1
+  }
+  if Option.isSome(&Result.unwrapOr(Repository.optional(&single, personAt), None)) { held = held + 1 }
+  if let Err(ManyRows(_)) = Repository.optional(&people, personAt) { held = held + 1 }
+
+  // The first of several, for a caller who asked for several and means it.
+  if Option.unwrapOr(Result.unwrapOr(Repository.first(&people, personAt), None), missing()).name
+    == "ada"
+  {
+    held = held + 1
+  }
+  if Option.isNone(&Result.unwrapOr(Repository.first(&rowsOf(&["id"], &[]), personAt), Some(missing()))) {
+    held = held + 1
+  }
+
+  // One column of every row.
+  if Result.unwrapOr(Repository.column(&people, "name", asText), []) == ["ada", "grace"] {
+    held = held + 1
+  }
+  if let Err(NoColumn(_)) = Repository.column(&people, "nmae", asText) { held = held + 1 }
+
+  // What a statement that produced no rows reported changing.
+  if Repository.changed(&taggedRows("UPDATE 3")) == 3 { held = held + 1 }
+  if Repository.changed(&taggedRows("DELETE 0")) == 0 { held = held + 1 }
+
+  // A repository is a record of functions, so one over a different backing is
+  // the same record with different functions rather than a mechanism this has
+  // to provide.
+  let inMemory = Repository.repository(
+    "people",
+    fn(key: Int) -> Result[Option[Person], Repository.RowError] {
+      Repository.optional(&rowsFor(key), personAt)
+    },
+    fn() -> Result[Array[Person], Repository.RowError] { Repository.all(&people, personAt) },
+    fn(_who: Person) -> Result[Int, Repository.RowError] { Ok(1) },
+    fn(_key: Int) -> Result[Int, Repository.RowError] { Ok(1) }
+  )
+  if Repository.nameOf(&inMemory) == "people" { held = held + 1 }
+  if Result.unwrapOr((inMemory.every)(), []).length() == 2 { held = held + 1 }
+  if Option.unwrapOr(Result.unwrapOr((inMemory.byKey)(1), None), missing()).name == "ada" {
+    held = held + 1
+  }
+  if Option.isNone(&Result.unwrapOr((inMemory.byKey)(9), Some(missing()))) { held = held + 1 }
+  if Result.unwrapOr((inMemory.add)(missing()), 0) == 1 { held = held + 1 }
+  if Result.unwrapOr((inMemory.removeKey)(1), 0) == 1 { held = held + 1 }
+
+  // A refusal names the column, and says which of the two row faults it was.
+  if Repository.explain(&NoColumn("x")).contains("no column") { held = held + 1 }
+  if Repository.explain(&ManyRows(3)).contains("3") { held = held + 1 }
+  if Repository.explain(&NoRow).contains("no row") { held = held + 1 }
+
+  held
+}
+
+/// One row as a person, which is a pure function of the result and the row.
+fn personAt(result: Db.Rows, row: Int) -> Result[Person, Repository.RowError] {
+  let id = Repository.whole(&result, row, "id") ?
+  let name = Repository.text(&result, row, "name") ?
+  let active = Repository.truth(&result, row, "active") ?
+  let nickname = Repository.optionalText(&result, row, "nickname") ?
+  Ok(Person{id: id, name: name, active: active, nickname: nickname})
+}
+
+fn asText(value: Str) -> Option[Str] { Some(value) }
+
+fn missing() -> Person { Person{id: 0, name: "", active: false, nickname: None} }
+
+fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Db.Rows {
+  var named: Array[Db.Column] = []
+  for column in columns { named = named.push(Db.Column{name: column, oid: 25}) }
+  Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())}
+}
+
+fn taggedRows(tag: Str) -> Db.Rows { Db.Rows{columns: [], rows: [], tag: tag} }
+
+fn rowsFor(key: Int) -> Db.Rows {
+  if key == 1 {
+    rowsOf(
+        &["id", "name", "active", "nickname"],
+        &[[Some("1"), Some("ada"), Some("t"), Some("addie")]]
+    )
+  } else {
+    rowsOf(&["id", "name", "active", "nickname"], &[])
+  }
+}

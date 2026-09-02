@@ -1,0 +1,219 @@
+module Std.Db.Repository
+
+import Std.Db as Db
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text as Text
+
+/// Why a row would not become a value.
+///
+/// The column is named and the value is not. The value came from the database
+/// and may be anything, and a message is a place values end up rendered; the
+/// column is what a caller acts on.
+export type RowError
+  = NoColumn(Str)
+  | Absent(Str)
+  | NotWhole(Str)
+  | NotCount(Str)
+  | NotTruth(Str)
+  | NoRow
+  | ManyRows(Int)
+
+/// How a row becomes a value.
+///
+/// A pure function of a result and a row number, so a program's mapping is
+/// checked by building a result and comparing values. Mapping is where the
+/// errors are, and a database is the slowest way to find them.
+export type Mapper[T] = fn(Db.Rows, Int) -> Result[T, RowError]
+
+/// What a program can do with one kind of thing.
+///
+/// A record of functions. Nothing here proxies an interface into an
+/// implementation or derives a statement from a name — what a repository does
+/// is what somebody wrote in it, which also means a repository over a
+/// different backing is the same record with different functions.
+export type Repository[T, K] = {
+  named: Str,
+  byKey: fn(K) -> Result[Option[T], RowError],
+  every: fn() -> Result[Array[T], RowError],
+  add: fn(T) -> Result[Int, RowError],
+  removeKey: fn(K) -> Result[Int, RowError]
+}
+
+/// The spellings a truth arrives in.
+const TRUE_WORDS: Set[Str] = setOf(["t", "true", "yes", "on", "1"])
+
+const FALSE_WORDS: Set[Str] = setOf(["f", "false", "no", "off", "0"])
+
+/// Whether a result has a column of that name.
+///
+/// Asked before reading, because the layer beneath cannot tell a column that
+/// is not there from one that held nothing, and inheriting that turns a typo
+/// into a data condition found later and somewhere else.
+export fn hasColumn(result: &Db.Rows, named: Str) -> Bool {
+  Db.indexOfColumn(result, named) >= 0
+}
+
+/// One column of one row as text, which must be there and must hold something.
+export fn text(result: &Db.Rows, row: Int, named: Str) -> Result[Str, RowError] {
+  if !hasColumn(result, named) {
+    Err(NoColumn(named))
+  } else {
+    if let Some(held) = Db.value(result, row, named) { Ok(held) } else { Err(Absent(named)) }
+  }
+}
+
+/// One column of one row as text, which must be there and may hold nothing.
+export fn optionalText(
+  result: &Db.Rows,
+  row: Int,
+  named: Str
+) -> Result[Option[Str], RowError] {
+  if hasColumn(result, named) { Ok(Db.value(result, row, named)) } else { Err(NoColumn(named)) }
+}
+
+/// One column as a whole number, which may be below nothing.
+export fn whole(result: &Db.Rows, row: Int, named: Str) -> Result[Int, RowError] {
+  let held = text(result, row, named) ?
+  if let Some(number) = Text.wholeOf(held) { Ok(number) } else { Err(NotWhole(named)) }
+}
+
+/// One column as a count, which may not.
+export fn count(result: &Db.Rows, row: Int, named: Str) -> Result[Int, RowError] {
+  let held = text(result, row, named) ?
+  if let Some(number) = Text.countOf(held) { Ok(number) } else { Err(NotCount(named)) }
+}
+
+/// One column as a truth.
+///
+/// The spellings accepted are the ones a database sends. Anything else is
+/// refused rather than read as false, because a column that silently means the
+/// opposite of what it holds is worse than one that stops the program.
+export fn truth(result: &Db.Rows, row: Int, named: Str) -> Result[Bool, RowError] {
+  let held = text(result, row, named) ?
+  let word = held.trim().toLower()
+  if TRUE_WORDS.contains(word) {
+    Ok(true)
+  } else {
+    if FALSE_WORDS.contains(word) { Ok(false) } else { Err(NotTruth(named)) }
+  }
+}
+
+/// One column as a whole number, or a fallback when it holds nothing.
+export fn wholeOr(result: &Db.Rows, row: Int, named: Str, fallback: Int) -> Result[Int, RowError] {
+  let held = optionalText(result, row, named) ?
+  if let Some(written) = held {
+    if let Some(number) = Text.wholeOf(written) { Ok(number) } else { Err(NotWhole(named)) }
+  } else {
+    Ok(fallback)
+  }
+}
+
+/// Every row as a value.
+///
+/// The first failure stops it, because a partial list of what a query returned
+/// is a value a caller cannot act on and cannot tell from a complete one.
+export fn all[T](result: &Db.Rows, mapper: Mapper[T]) -> Result[Array[T], RowError] {
+  var found: Array[T] = []
+  var index = 0
+  while index < Db.rowCount(result) {
+    let mapped = mapper(*result, index) ?
+    found = found.push(mapped)
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// Exactly one row as a value.
+///
+/// A lookup that found none and one that found several are different, and both
+/// are refused. Answering the first of several is how a program acts on the
+/// wrong record without anything appearing to go wrong.
+export fn one[T](result: &Db.Rows, mapper: Mapper[T]) -> Result[T, RowError] {
+  let rows = Db.rowCount(result)
+  if rows == 0 {
+    Err(NoRow)
+  } else {
+    if rows > 1 { Err(ManyRows(rows)) } else { mapper(*result, 0) }
+  }
+}
+
+/// At most one row as a value.
+///
+/// For a lookup by something unique, where finding nothing is an ordinary
+/// answer and finding several is still a fault.
+export fn optional[T](result: &Db.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
+  let rows = Db.rowCount(result)
+  if rows == 0 {
+    Ok(None)
+  } else {
+    if rows > 1 {
+      Err(ManyRows(rows))
+    } else {
+      let mapped = mapper(*result, 0) ?
+      Ok(Some(mapped))
+    }
+  }
+}
+
+/// The first row as a value, for a caller that asked for several and means it.
+export fn first[T](result: &Db.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
+  if Db.rowCount(result) == 0 {
+    Ok(None)
+  } else {
+    let mapped = mapper(*result, 0) ?
+    Ok(Some(mapped))
+  }
+}
+
+/// One column of every row, mapped.
+export fn column[T](
+  result: &Db.Rows,
+  named: Str,
+  read: fn(Str) -> Option[T]
+) -> Result[Array[T], RowError] {
+  if !hasColumn(result, named) { return Err(NoColumn(named)) }
+  var found: Array[T] = []
+  var index = 0
+  while index < Db.rowCount(result) {
+    let held = text(result, index, named) ?
+    if let Some(mapped) = read(held) {
+      found = found.push(mapped)
+    } else {
+      return Err(NotWhole(named))
+    }
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// How many rows a statement that produced none reported changing.
+export fn changed(result: &Db.Rows) -> Int { Db.affected(result) }
+
+/// A repository from its operations.
+export fn repository[T, K](
+  named: Str,
+  byKey: fn(K) -> Result[Option[T], RowError],
+  every: fn() -> Result[Array[T], RowError],
+  add: fn(T) -> Result[Int, RowError],
+  removeKey: fn(K) -> Result[Int, RowError]
+) -> Repository[T, K] {
+  Repository{named: named, byKey: byKey, every: every, add: add, removeKey: removeKey}
+}
+
+/// What the repository is over.
+export fn nameOf[T, K](held: &Repository[T, K]) -> Str { held.named }
+
+/// What a refusal says.
+export fn explain(problem: &RowError) -> Str {
+  match problem {
+    case NoColumn(named) => "the result has no column called " + named
+    case Absent(named) => named + " held nothing"
+    case NotWhole(named) => named + " is not a whole number"
+    case NotCount(named) => named + " is not a count"
+    case NotTruth(named) => named + " is not true or false"
+    case NoRow => "no row was found where one was expected"
+    case ManyRows(found) =>
+    show(found) + " rows were found where one was expected"
+  }
+}

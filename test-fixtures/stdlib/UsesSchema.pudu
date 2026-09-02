@@ -1,0 +1,122 @@
+module UsesSchema
+
+import Std.Db.Query as Query
+import Std.Db.Schema {AtLeast, Above, Equals, Like}
+import Std.Db.Schema as Schema
+import Std.Result as Result
+
+/// A table, declared once as a module of columns.
+///
+/// This is the shape a program writes, and it is what makes the rest work: the
+/// columns are ordinary module members, so an editor offers them without
+/// anything having to parse a name to guess what was meant, and naming one
+/// that does not exist is refused where it is written.
+const USERS: Str = "users"
+
+fn userId() -> Schema.Column[Int] { Schema.column(USERS, "id") }
+
+fn userName() -> Schema.Column[Str] { Schema.column(USERS, "name") }
+
+fn userAge() -> Schema.Column[Int] { Schema.column(USERS, "age") }
+
+fn userActive() -> Schema.Column[Bool] { Schema.column(USERS, "active") }
+
+/// What a known schema promises.
+///
+/// The claims under test are that a column carries its table and its type,
+/// that a comparison is a value rather than text, and that a statement built
+/// from columns says the same thing as one built from names — while being the
+/// one where a mistake cannot be written.
+export fn main() -> Int {
+  var held = 0
+
+  // A column knows where it lives and what it is called.
+  if Schema.nameOf(&userName()) == "name" { held = held + 1 }
+  if Schema.tableOf(&userName()) == "users" { held = held + 1 }
+  if Schema.qualified(&userName()) == "users.name" { held = held + 1 }
+  if Schema.namesOf(&[userId(), userAge()]) == ["id", "age"] { held = held + 1 }
+
+  // The table a statement reads is taken from the column rather than written
+  // again, so the two cannot disagree.
+  if Query.textOf(&Query.fromTable(&userName())) == "select * from users" { held = held + 1 }
+
+  // A condition names the column through the module, and the comparison is a
+  // value. Neither can arrive misspelled, because neither is text.
+  let byName = Query.on(&Query.fromTable(&userName()), &userName(), Equals, &"ada")
+  if Query.textOf(&byName) == "select * from users where name = $1" { held = held + 1 }
+  if Query.valuesOf(&byName) == [Some("ada")] { held = held + 1 }
+
+  // The value travels as a parameter, so a value that spells a statement is
+  // still just a value.
+  let hostile = Query.on(&Query.fromTable(&userName()), &userName(), Equals, &"'; drop table users; --")
+  if !Query.textOf(&hostile).contains("drop table") { held = held + 1 }
+  if Query.valueCount(&hostile) == 1 { held = held + 1 }
+
+  // Each comparison writes what it means.
+  if Schema.comparisonText(&Equals) == "=" { held = held + 1 }
+  if Schema.comparisonText(&Above) == ">" { held = held + 1 }
+  if Schema.comparisonText(&AtLeast) == ">=" { held = held + 1 }
+  if Schema.comparisonText(&Like) == "like" { held = held + 1 }
+
+  // A value is written for a parameter rather than for a person: showing text
+  // quotes it, and a quoted value in a parameter is a different value.
+  if Schema.boundValue(&"ada") == Some("ada") { held = held + 1 }
+  if Schema.boundValue(&"ada") != Some(show("ada")) { held = held + 1 }
+  if Schema.boundValue(&42) == Some("42") { held = held + 1 }
+  if Schema.boundValue(&true) == Some("true") { held = held + 1 }
+  if Schema.nothing() == None { held = held + 1 }
+
+  // Conditions join, and the placeholders follow one another.
+  let grown = Query.andOn(
+      &Query.on(&Query.fromTable(&userName()), &userActive(), Equals, &true),
+      &userAge(),
+    Above,
+      &18
+  )
+  if Query.textOf(&grown) == "select * from users where active = $1 and age > $2" {
+    held = held + 1
+  }
+  if Query.valuesOf(&grown) == [Some("true"), Some("18")] { held = held + 1 }
+
+  let either = Query.orOn(&byName, &userName(), Equals, &"grace")
+  if Query.textOf(&either).contains("or name = $2") { held = held + 1 }
+  if Query.valueCount(&either) == 2 { held = held + 1 }
+
+  // A column that holds nothing is asked about without a parameter.
+  let absent = Query.missingOn(&Query.fromTable(&userName()), &userName())
+  if Query.textOf(&absent) == "select * from users where name is null" { held = held + 1 }
+  if Query.valueCount(&absent) == 0 { held = held + 1 }
+
+  // Ordering by a column the compiler knows.
+  if Query.textOf(&Query.orderOn(&byName, &userAge(), true)).contains("order by age desc") {
+    held = held + 1
+  }
+  if Query.textOf(&Query.orderOn(&byName, &userAge(), false)).contains("order by age asc") {
+    held = held + 1
+  }
+
+  // A statement built from columns says the same thing as one built from
+  // names. The difference is not what it produces; it is that this one cannot
+  // be written wrong.
+  let byText = Query.matching(
+      &Query.text("select * from users"),
+    "name",
+    "=",
+    Some("ada")
+  )
+  if Query.textOf(&byName) == Query.textOf(&orEmpty(byText)) { held = held + 1 }
+
+  // A column built from text at run time still goes through the name check,
+  // because a program that reads a column choice from a request exists and
+  // should be explicit rather than ordinary.
+  if let Err(_) = Query.name(Schema.nameOf(&Schema.column(USERS, "name; drop table users"))) {
+    held = held + 1
+  }
+  if let Ok(_) = Query.name(Schema.nameOf(&userName())) { held = held + 1 }
+
+  held
+}
+
+fn orEmpty(outcome: Result[Query.Statement, Query.QueryError]) -> Query.Statement {
+  Result.unwrapOr(outcome, Query.empty())
+}

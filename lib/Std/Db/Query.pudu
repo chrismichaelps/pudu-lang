@@ -1,5 +1,6 @@
 module Std.Db.Query
 
+import Std.Db.Schema as Schema
 import Std.Option as Option
 import Std.Set as Set
 import Std.Text as Text
@@ -355,5 +356,81 @@ fn renumbered(source: Str, by: Int) -> Str {
       }
     }
     built
+  }
+}
+
+/// Everything from the table a column belongs to.
+///
+/// Taken from the column rather than written again, so the table a statement
+/// reads and the columns it names cannot disagree.
+export fn fromTable[T](anyColumn: &Schema.Column[T]) -> Statement {
+  text("select * from " + Schema.tableOf(anyColumn))
+}
+
+/// A condition on a column, with the column and the comparison both values.
+///
+/// This is the form worth using. The column is a name the compiler knows, so
+/// the editor offers it and writing one that does not exist is refused where
+/// it is written rather than when the statement runs. The value is checked
+/// against what the column holds, so comparing text to a number does not
+/// compile. And nothing here takes a name or an operator as text, so there is
+/// no spelling for either to arrive wrong in.
+export fn on[T: Schema.Bindable](
+  base: &Statement,
+  column: &Schema.Column[T],
+  comparison: Schema.Comparison,
+  value: &T
+) -> Statement {
+  withValue(
+    base,
+    "where " + Schema.nameOf(column) + " " + Schema.comparisonText(&comparison),
+    Schema.boundValue(value)
+  )
+}
+
+/// A further condition that must also hold.
+export fn andOn[T: Schema.Bindable](
+  base: &Statement,
+  column: &Schema.Column[T],
+  comparison: Schema.Comparison,
+  value: &T
+) -> Statement {
+  withValue(
+    base,
+    "and " + Schema.nameOf(column) + " " + Schema.comparisonText(&comparison),
+    Schema.boundValue(value)
+  )
+}
+
+/// A further condition where either may hold.
+export fn orOn[T: Schema.Bindable](
+  base: &Statement,
+  column: &Schema.Column[T],
+  comparison: Schema.Comparison,
+  value: &T
+) -> Statement {
+  withValue(
+    base,
+    "or " + Schema.nameOf(column) + " " + Schema.comparisonText(&comparison),
+    Schema.boundValue(value)
+  )
+}
+
+/// A condition that a column holds nothing.
+export fn missingOn[T](base: &Statement, column: &Schema.Column[T]) -> Statement {
+  Statement {
+    text: joinedText(base.text, "where " + Schema.nameOf(column) + " is null"),
+    values: base.values
+  }
+}
+
+/// The order rows come back in, by a column the compiler knows.
+export fn orderOn[T](base: &Statement, column: &Schema.Column[T], descending: Bool) -> Statement {
+  Statement {
+    text: joinedText(
+      base.text,
+      "order by " + Schema.nameOf(column) + if descending { " desc" } else { " asc" }
+    ),
+    values: base.values
   }
 }

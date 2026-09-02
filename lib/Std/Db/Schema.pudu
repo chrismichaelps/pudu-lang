@@ -1,0 +1,91 @@
+module Std.Db.Schema
+
+import Std.Decimal as Decimal
+
+/// How a value is written when it travels as a parameter.
+///
+/// Separate from how a value is shown to a person, because showing text quotes
+/// it and a quoted value in a parameter is a different value. That mistake
+/// passes every test written with numbers.
+export trait Bindable {
+  fn bound(self: &Self) -> Option[Str]
+}
+
+impl Bindable for Str {
+  fn bound(self: &Self) -> Option[Str] { Some(*self) }
+}
+
+impl Bindable for Int {
+  fn bound(self: &Self) -> Option[Str] { Some(show(*self)) }
+}
+
+impl Bindable for Bool {
+  fn bound(self: &Self) -> Option[Str] { Some(if *self { "true" } else { "false" }) }
+}
+
+impl Bindable for Decimal {
+  fn bound(self: &Self) -> Option[Str] { Some(Decimal.toText(*self)) }
+}
+
+/// A column: where it lives, what it is called, and what it holds.
+///
+/// The type parameter is what makes comparing a column of text against a
+/// number fail to compile rather than reach the database.
+export type Column[T] = { table: Str, name: Str }
+
+/// The comparisons a condition may use.
+///
+/// Values rather than text, so the editor offers them and a misspelling is a
+/// compile error rather than something to check for at run time.
+export type Comparison
+  = Equals
+  | Differs
+  | Below
+  | AtMost
+  | Above
+  | AtLeast
+  | Like
+  | LikeAnyCase
+
+/// A column of a table.
+///
+/// Declared once, in a module that stands for the table, so every query names
+/// it through that module — which is what makes the editor offer it and a
+/// wrong name refuse to compile.
+export fn column[T](table: Str, name: Str) -> Column[T] { Column{table: table, name: name} }
+
+/// What a column is called.
+export fn nameOf[T](held: &Column[T]) -> Str { held.name }
+
+/// Which table it belongs to.
+export fn tableOf[T](held: &Column[T]) -> Str { held.table }
+
+/// The column named with its table, for a statement over more than one.
+export fn qualified[T](held: &Column[T]) -> Str { held.table + "." + held.name }
+
+/// The names of several columns, for the places a statement lists them.
+export fn namesOf[T](columns: &Array[Column[T]]) -> Array[Str] {
+  var found: Array[Str] = []
+  for held in columns { found = found.push(held.name) }
+  found
+}
+
+/// How a comparison is written.
+export fn comparisonText(held: &Comparison) -> Str {
+  match held {
+    case Equals => "="
+    case Differs => "<>"
+    case Below => "<"
+    case AtMost => "<="
+    case Above => ">"
+    case AtLeast => ">="
+    case Like => "like"
+    case LikeAnyCase => "ilike"
+  }
+}
+
+/// A value as the parameter it becomes.
+export fn boundValue[T: Bindable](value: &T) -> Option[Str] { value.bound() }
+
+/// Nothing, for a column that is being set to hold nothing.
+export fn nothing() -> Option[Str] { None }

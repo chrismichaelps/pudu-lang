@@ -24,6 +24,9 @@ tags: [moc, module, stdlib]
 - [[Std Net]] — streaming-first TCP listeners and connections.
 - [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
+- [[Std Db Schema]] — columns as names the compiler knows, so an editor offers them.
+- [[Std Db Store]] — a program's own values kept and read back, with nothing left unread.
+- [[Std Db Repository]] — rows as the program's own values, naming the column when one is wrong.
 - [[Std Db Query]] — statements in which a value cannot become part of what runs.
 - [[Std Db Migrate]] — bringing a schema to what the program expects, once and never half way.
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
@@ -35,6 +38,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
+- [[Std App Bind]] — what a request carries, as a typed value or a refusal.
 - [[Std App Health]] — restarting and receiving traffic, kept apart by the types.
 - [[Std App Config]] — where a setting comes from when four places could supply it.
 - [[Std Http Client]] — sending a request somewhere and reading what comes back.

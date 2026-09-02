@@ -1,0 +1,159 @@
+module UsesBind
+
+import Std.App.Bind as Bind
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Validate {AtLeast, Between, OneOf, Present, Whole}
+import Std.Validate as Validate
+
+/// What binding a request promises.
+///
+/// The claims under test are that where a value came from is stated rather
+/// than searched for, that every field that was wrong is reported at once, and
+/// that a refusal names no values.
+export fn main() -> Int {
+  var held = 0
+
+  let wanted = [
+    Bind.fromPath("id", &[Present, Whole]),
+    Bind.fromQuery("page", &[Whole, Between(1, 100)]),
+    Bind.fromForm("name", &[Present, AtLeast(2)]),
+    Bind.fromForm("colour", &[OneOf(["red", "green"])])
+  ]
+
+  // A request carrying everything, each value from the place its field named.
+  let good = formRequest(
+      &[("id", "7")],
+      &[("page", "2")],
+    "name=ada&colour=red"
+  )
+  let bound = Bind.bind(&good, &wanted)
+  if Bind.bound(&bound) { held = held + 1 }
+  if Bind.text(&bound, "name") == "ada" { held = held + 1 }
+  if Option.unwrapOr(Bind.whole(&bound, "id"), 0) == 7 { held = held + 1 }
+  if Option.unwrapOr(Bind.count(&bound, "page"), 0) == 2 { held = held + 1 }
+  if Bind.text(&bound, "colour") == "red" { held = held + 1 }
+
+  // Where a value came from is stated. A value in the query does not satisfy a
+  // field that reads from the form, because a binding that searched several
+  // places would let a caller move a value to reach a different path.
+  let misplaced = formRequest(&[("id", "7")], &[("name", "ada"), ("page", "2")], "colour=red")
+  if !Bind.bound(&Bind.bind(&misplaced, &wanted)) { held = held + 1 }
+  if Bind.text(&Bind.bind(&misplaced, &wanted), "name").isEmpty() { held = held + 1 }
+
+  // Every field that was wrong is reported, not the first: a caller correcting
+  // a request wants the whole list.
+  let wrong = formRequest(&[("id", "seven")], &[("page", "0")], "name=a&colour=blue")
+  let refused = Bind.bind(&wrong, &wanted)
+  if !Bind.bound(&refused) { held = held + 1 }
+  if Validate.failureCount(&Bind.reportOf(&refused)) == 4 { held = held + 1 }
+  if Validate.faulty(&Bind.reportOf(&refused), "id") { held = held + 1 }
+  if Validate.faulty(&Bind.reportOf(&refused), "page") { held = held + 1 }
+  if Validate.faulty(&Bind.reportOf(&refused), "name") { held = held + 1 }
+  if Validate.faulty(&Bind.reportOf(&refused), "colour") { held = held + 1 }
+
+  // A refusal says which kind of problem it was and names the fields.
+  let answer = Bind.refusal(&refused)
+  if answer.status.code == 422 { held = held + 1 }
+  if answer.body.contains("id") { held = held + 1 }
+  if answer.body.contains("a whole number") { held = held + 1 }
+
+  // And names no values. The sender knows what they sent, and a response is a
+  // place something they sent would be rendered.
+  let dangerous = formRequest(&[("id", "1")], &[("page", "1")], "name=<script>x</script>&colour=red")
+  let echoed = Bind.refusal(&Bind.bind(&dangerous, &wanted))
+  if !echoed.body.contains("script") { held = held + 1 }
+
+  // A request of the wrong shape entirely is a different problem from one
+  // whose fields were wrong, and gets a different status: no correction to the
+  // fields would help.
+  if Bind.malformed("that is not a shape this reads").status.code == 400 { held = held + 1 }
+
+  // A body is read as what the request says it is. A form body on a request
+  // that states no type is read as nothing rather than guessed at.
+  let untyped = requestOf(&[("id", "7")], &[("page", "1")], "name=ada&colour=red", "")
+  if Bind.text(&Bind.bind(&untyped, &wanted), "name").isEmpty() { held = held + 1 }
+  if !Bind.carriesForm(&untyped) { held = held + 1 }
+  if Bind.carriesForm(&good) { held = held + 1 }
+
+  // A document body is read when the request says it carries one, and its
+  // fields read the same way a form's do.
+  let documentWanted = [
+    Bind.fromDocument("name", &[Present]),
+    Bind.fromDocument("age", &[Whole])
+  ]
+  let carrying = requestOf(&[], &[], "\{\"name\": \"ada\", \"age\": 36\}", "application/json")
+  let read = Bind.bind(&carrying, &documentWanted)
+  if Bind.bound(&read) { held = held + 1 }
+  if Bind.text(&read, "name") == "ada" { held = held + 1 }
+  if Option.unwrapOr(Bind.whole(&read, "age"), 0) == 36 { held = held + 1 }
+  if Bind.carriesDocument(&carrying) { held = held + 1 }
+
+  // A form body on a request that says it carries a document is read as a
+  // document, which it is not, so its fields are absent rather than guessed.
+  let mislabelled = requestOf(&[], &[], "name=ada&age=36", "application/json")
+  if !Bind.bound(&Bind.bind(&mislabelled, &documentWanted)) { held = held + 1 }
+
+  // The type is read without whatever follows it, since a charset is
+  // ordinarily attached and does not change what the body is.
+  let withCharset = requestOf(&[], &[], "\{\"name\": \"ada\", \"age\": 1\}", "application/json; charset=utf-8")
+  if Bind.carriesDocument(&withCharset) { held = held + 1 }
+  if Bind.mediaType(&withCharset) == "application/json" { held = held + 1 }
+
+  // A document value that is not text still reads, so one set of rules covers
+  // every source.
+  if Bind.text(&read, "age") == "36" { held = held + 1 }
+
+  // Reading a bound field in each of the ways a program wants it.
+  let truths = requestOf(&[], &[], "\{\"on\": \"yes\", \"off\": \"no\", \"n\": \"-4\"\}", "application/json")
+  let flags = Bind.bind(&truths, &[
+      Bind.fromDocument("on", &[]),
+      Bind.fromDocument("off", &[]),
+      Bind.fromDocument("n", &[])
+    ])
+  if Bind.truth(&flags, "on") { held = held + 1 }
+  if !Bind.truth(&flags, "off") { held = held + 1 }
+  if Option.unwrapOr(Bind.whole(&flags, "n"), 0) == -4 { held = held + 1 }
+  if Option.isNone(&Bind.count(&flags, "n")) { held = held + 1 }
+  if Option.isSome(&Bind.optional(&flags, "on")) { held = held + 1 }
+  if Option.isNone(&Bind.optional(&flags, "absent")) { held = held + 1 }
+
+  // The one call a handler makes: a value or the refusal to send back.
+  if let Ok(value) = Bind.binding(&good, &wanted) {
+    if Bind.text(&value, "name") == "ada" { held = held + 1 }
+  }
+  if let Err(response) = Bind.binding(&wrong, &wanted) {
+    if response.status.code == 422 { held = held + 1 }
+  }
+
+  // A field nothing wanted is not bound, so a request carrying extra values
+  // does not smuggle them into a handler.
+  if Bind.text(&bound, "role").isEmpty() { held = held + 1 }
+
+  held
+}
+
+fn formRequest(
+  params: &Array[(Str, Str)],
+  query: &Array[(Str, Str)],
+  body: Str
+) -> Route.Request {
+  requestOf(params, query, body, "application/x-www-form-urlencoded")
+}
+
+fn requestOf(
+  params: &Array[(Str, Str)],
+  query: &Array[(Str, Str)],
+  body: Str,
+  mediaType: Str
+) -> Route.Request {
+  let headers = if mediaType.isEmpty() { [] } else { [("Content-Type", mediaType)] }
+  Route.Request {
+    message: Http.Request{method: Http.Post, target: "/x", headers: headers, body: body},
+    path: "/x",
+    params: mapOf(*params),
+    query: mapOf(*query),
+    peer: "test"
+  }
+}

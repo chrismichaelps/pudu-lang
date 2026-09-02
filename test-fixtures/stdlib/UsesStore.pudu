@@ -1,0 +1,176 @@
+module UsesStore
+
+import Std.Db as Db
+import Std.Db.Query as Query
+import Std.Db.Repository as Repository
+import Std.Db.Store as Store
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+
+/// A person the program keeps.
+type Person = { id: Int, name: Str }
+
+/// Something that belongs to a person.
+type Note = { id: Int, personId: Int, body: Str }
+
+/// What keeping a value promises.
+///
+/// The claim under test is that a loaded value is a value — it holds what was
+/// loaded and nothing else — and that what belongs to many parents is read in
+/// one statement, because that is the shape the interface has.
+export fn main() -> Int {
+  var held = 0
+
+  let people = Store.stored("people", "id", &["id", "name"], personRow, personAt)
+  let notes = Store.stored("notes", "id", &["id", "person_id", "body"], noteRow, noteAt)
+
+  // What a kind of value says about itself.
+  if Store.tableOf(&people) == "people" { held = held + 1 }
+  if Store.keyOf(&people) == "id" { held = held + 1 }
+
+  // The statements it produces, with every value a parameter.
+  let adding = orEmpty(Store.insertOf(&people, Person{id: 1, name: "ada"}))
+  if Query.textOf(&adding) == "insert into people (id, name) values ($1, $2)" { held = held + 1 }
+  if Query.valuesOf(&adding) == [Some("1"), Some("ada")] { held = held + 1 }
+
+  let changing = orEmpty(Store.updateOf(&people, Some("1"), Person{id: 1, name: "grace"}))
+  if Query.textOf(&changing) == "update people set id = $1, name = $2 where id = $3" {
+    held = held + 1
+  }
+  if Query.valueCount(&changing) == 3 { held = held + 1 }
+
+  let removing = orEmpty(Store.deleteOf(&people, Some("1")))
+  if Query.textOf(&removing) == "delete from people where id = $1" { held = held + 1 }
+
+  let reading = orEmpty(Store.selectOf(&people, Some("1")))
+  if Query.textOf(&reading) == "select id, name from people where id = $1" { held = held + 1 }
+  if Query.textOf(&orEmpty(Store.selectAllOf(&people))) == "select id, name from people" {
+    held = held + 1
+  }
+
+  // A value that spells a statement is still a value, because it travels as a
+  // parameter like every other.
+  let hostile = orEmpty(Store.insertOf(&people, Person{id: 1, name: "'; drop table people; --"}))
+  if !Query.textOf(&hostile).contains("drop table") { held = held + 1 }
+
+  // Rows become values, and a loaded value holds what was loaded and nothing
+  // else: there is no field left to fetch later, so there is nothing that can
+  // fail once a connection has gone.
+  let rows = rowsOf(&["id", "name"], &[[Some("1"), Some("ada")], [Some("2"), Some("grace")]])
+  let loaded = Result.unwrapOr(Store.readAll(&people, &rows), [])
+  if loaded.length() == 2 { held = held + 1 }
+  if loaded[0].name == "ada" { held = held + 1 }
+  if loaded[1].id == 2 { held = held + 1 }
+
+  // At most one, and nothing when there is nothing.
+  if Option.isSome(&Result.unwrapOr(Store.readOne(&people, &rowsOf(&["id", "name"], &[[Some("1"), Some("ada")]])), None)) {
+    held = held + 1
+  }
+  if Option.isNone(&Result.unwrapOr(Store.readOne(&people, &rowsOf(&["id", "name"], &[])), Some(noPerson()))) {
+    held = held + 1
+  }
+
+  // A row that cannot become a value says which column was wrong rather than
+  // producing a value with a hole in it.
+  if let Err(problem) = Store.readAll(&people, &rowsOf(&["id", "name"], &[[Some("x"), Some("a")]])) {
+    if Store.explain(&problem).contains("id") { held = held + 1 }
+  }
+
+  // What belongs to many parents is read in one statement, with each key its
+  // own parameter so a list of parents cannot become part of the text.
+  let keys = Store.keysOf(&loaded, personKey)
+  if keys == [Some("1"), Some("2")] { held = held + 1 }
+
+  let forMany = orEmpty(Store.forParents(&notes, "person_id", &keys))
+  if Query.textOf(&forMany)
+    == "select id, person_id, body from notes where person_id in ($1, $2)"
+  {
+    held = held + 1
+  }
+  if Query.valueCount(&forMany) == 2 { held = held + 1 }
+
+  // Reading for one parent goes through the same path, so there is one
+  // implementation and the batched shape is what everything uses.
+  let forOne = orEmpty(Store.forParent(&notes, "person_id", Some("1")))
+  if Query.valueCount(&forOne) == 1 { held = held + 1 }
+  if Query.textOf(&forOne).contains("person_id in ($1)") { held = held + 1 }
+
+  // A parent appearing twice is asked about once, because a repeated key is a
+  // repeated parameter and not a repeated question.
+  let repeated = Store.keysOf(
+      &[Person{id: 1, name: "a"}, Person{id: 1, name: "b"}, Person{id: 2, name: "c"}],
+    personKey
+  )
+  if repeated.length() == 2 { held = held + 1 }
+
+  // What came back is grouped by the parent it belongs to, so a program reads
+  // one parent's children out of the one result rather than asking again.
+  let noteRows = rowsOf(
+      &["id", "person_id", "body"],
+      &[
+      [Some("10"), Some("1"), Some("first")],
+      [Some("11"), Some("1"), Some("second")],
+      [Some("12"), Some("2"), Some("third")]
+    ]
+  )
+  let grouped = Result.unwrapOr(Store.groupedBy(&notes, &noteRows, "person_id"), Map.empty())
+  if Map.size(&grouped) == 2 { held = held + 1 }
+  if Store.belongingTo(&grouped, Some("1")).length() == 2 { held = held + 1 }
+  if Store.belongingTo(&grouped, Some("2")).length() == 1 { held = held + 1 }
+  if Store.belongingTo(&grouped, Some("1"))[0].body == "first" { held = held + 1 }
+
+  // A parent with nothing belonging to it has nothing, rather than an absence
+  // a caller has to handle differently.
+  if Store.belongingTo(&grouped, Some("9")).length() == 0 { held = held + 1 }
+
+  // The whole of it: two parents and their children in two statements, which
+  // is what the interface's shape produces. A statement per parent is what
+  // somebody would have to write a loop to get.
+  if Query.valueCount(&forMany) == Store.keysOf(&loaded, personKey).length() { held = held + 1 }
+
+  // A statement over parents also reads the column that says which parent,
+  // because grouping needs it and a caller should not have to remember.
+  if Query.textOf(&forMany).contains("person_id") { held = held + 1 }
+  let alreadyListed = orEmpty(Store.forParents(&notes, "body", &[Some("x")]))
+  if !Query.textOf(&alreadyListed).contains("body, body") { held = held + 1 }
+
+  // A refusal says which layer refused.
+  if Store.explain(&Store.Statement(Query.BadName("a b"))).contains("a b") { held = held + 1 }
+  if Store.explain(&Store.Refused("no connection")).contains("no connection") { held = held + 1 }
+
+  held
+}
+
+fn personRow(who: Person) -> Array[Option[Str]] { [Some(show(who.id)), Some(who.name)] }
+
+fn personAt(result: Db.Rows, row: Int) -> Result[Person, Repository.RowError] {
+  let id = Repository.whole(&result, row, "id") ?
+  let name = Repository.text(&result, row, "name") ?
+  Ok(Person{id: id, name: name})
+}
+
+fn personKey(who: Person) -> Option[Str] { Some(show(who.id)) }
+
+fn noteRow(note: Note) -> Array[Option[Str]] {
+  [Some(show(note.id)), Some(show(note.personId)), Some(note.body)]
+}
+
+fn noteAt(result: Db.Rows, row: Int) -> Result[Note, Repository.RowError] {
+  let id = Repository.whole(&result, row, "id") ?
+  let personId = Repository.whole(&result, row, "person_id") ?
+  let body = Repository.text(&result, row, "body") ?
+  Ok(Note{id: id, personId: personId, body: body})
+}
+
+fn noPerson() -> Person { Person{id: 0, name: ""} }
+
+fn orEmpty(outcome: Result[Query.Statement, Store.StoreError]) -> Query.Statement {
+  Result.unwrapOr(outcome, Query.empty())
+}
+
+fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Db.Rows {
+  var named: Array[Db.Column] = []
+  for column in columns { named = named.push(Db.Column{name: column, oid: 25}) }
+  Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())}
+}

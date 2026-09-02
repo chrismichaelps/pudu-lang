@@ -1,0 +1,269 @@
+module Std.Db.Store
+
+import Std.Db as Db
+import Std.Db.Query as Query
+import Std.Db.Repository as Repository
+import Std.Db.Schema as Schema
+import Std.Db.Session as Session
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+
+/// How a kind of value is kept.
+///
+/// Both directions are stated and neither is derived: a row becomes a value by
+/// a function somebody wrote, and a value becomes a row the same way. Nothing
+/// reads a shape to guess a column, so renaming a field is not a silent change
+/// to a schema, and the mapping is checked by comparing values with no
+/// database present.
+export type Stored[T] = {
+  table: Str,
+  key: Str,
+  columns: Array[Str],
+  toRow: fn(T) -> Array[Option[Str]],
+  fromRow: Repository.Mapper[T]
+}
+
+/// Why a value would not be kept or read back.
+export type StoreError
+  = Mapping(Repository.RowError)
+  | Statement(Query.QueryError)
+  | Refused(Str)
+
+/// A kind of value that is kept, from its parts.
+export fn stored[T](
+  table: Str,
+  key: Str,
+  columns: &Array[Str],
+  toRow: fn(T) -> Array[Option[Str]],
+  fromRow: Repository.Mapper[T]
+) -> Stored[T] {
+  Stored{table: table, key: key, columns: *columns, toRow: toRow, fromRow: fromRow}
+}
+
+/// Which table a kind of value lives in.
+export fn tableOf[T](held: &Stored[T]) -> Str { held.table }
+
+/// Which column identifies one.
+export fn keyOf[T](held: &Stored[T]) -> Str { held.key }
+
+/// The statement that adds one.
+export fn insertOf[T](held: &Stored[T], value: T) -> Result[Query.Statement, StoreError] {
+  written(Query.insert(held.table, &held.columns, &(held.toRow)(value)))
+}
+
+/// The statement that changes the one a key names.
+export fn updateOf[T](
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.update(held.table, &held.columns, &(held.toRow)(value))) ?
+  written(Query.matching(&base, held.key, "=", key))
+}
+
+/// The statement that removes the one a key names.
+export fn deleteOf[T](held: &Stored[T], key: Option[Str]) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.deleteFrom(held.table)) ?
+  written(Query.matching(&base, held.key, "=", key))
+}
+
+/// The statement that reads the one a key names.
+export fn selectOf[T](held: &Stored[T], key: Option[Str]) -> Result[Query.Statement, StoreError] {
+  let base = written(Query.selecting(&held.columns, held.table)) ?
+  written(Query.matching(&base, held.key, "=", key))
+}
+
+/// The statement that reads every one.
+export fn selectAllOf[T](held: &Stored[T]) -> Result[Query.Statement, StoreError] {
+  written(Query.selecting(&held.columns, held.table))
+}
+
+/// Every row of a result as a value.
+export fn readAll[T](held: &Stored[T], result: &Db.Rows) -> Result[Array[T], StoreError] {
+  mapped(Repository.all(result, held.fromRow))
+}
+
+/// At most one row of a result as a value.
+export fn readOne[T](held: &Stored[T], result: &Db.Rows) -> Result[Option[T], StoreError] {
+  mapped(Repository.optional(result, held.fromRow))
+}
+
+/// What belongs to several parents, as a map from each parent's key to what
+/// belongs to it.
+///
+/// This is the shape that matters. Loading what belongs to one parent is
+/// loading for a list of one, so the batched form is the ordinary form and the
+/// form that issues a query per parent is the one somebody has to write a loop
+/// to produce. Offering both as peers is how the slow one becomes the default.
+export fn groupedBy[T](
+  held: &Stored[T],
+  result: &Db.Rows,
+  parentColumn: Str
+) -> Result[Map[Str, Array[T]], StoreError] {
+  var found: Map[Str, Array[T]] = Map.empty()
+  var index = 0
+  while index < Db.rowCount(result) {
+    let value = mapped((held.fromRow)(*result, index)) ?
+    let owner = Option.unwrapOr(Db.value(result, index, parentColumn), "")
+    found = Map.insert(&found, owner, Map.getOr(&found, owner, []).push(value))
+    index = index + 1
+  }
+  Ok(found)
+}
+
+/// The statement that reads everything belonging to any of these parents.
+///
+/// One statement for every parent rather than one for each, with each key its
+/// own parameter so a list of parents cannot become part of the text however
+/// long it is.
+export fn forParents[T](
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[Query.Statement, StoreError] {
+  var columns = held.columns
+  if !columns.contains(parentColumn) { columns = columns.push(parentColumn) }
+  let base = written(Query.selecting(&columns, held.table)) ?
+  written(Query.matchingOneOf(&base, parentColumn, keys))
+}
+
+/// What belongs to one parent, which is what belongs to a list of one.
+export fn forParent[T](
+  held: &Stored[T],
+  parentColumn: Str,
+  key: Option[Str]
+) -> Result[Query.Statement, StoreError] {
+  forParents(held, parentColumn, &[key])
+}
+
+/// The keys of several parents, for the statement that loads their children.
+export fn keysOf[P](parents: &Array[P], identity: fn(P) -> Option[Str]) -> Array[Option[Str]] {
+  var found: Array[Option[Str]] = []
+  for parent in parents {
+    let key = identity(parent)
+    if !found.contains(key) { found = found.push(key) }
+  }
+  found
+}
+
+/// What belongs to one parent, out of what was loaded for many.
+export fn belongingTo[T](
+  grouped: &Map[Str, Array[T]],
+  key: Option[Str]
+) -> Array[T] {
+  Map.getOr(grouped, Option.unwrapOr(key, ""), [])
+}
+
+/// Add one, and say how many rows it changed.
+export fn save[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  value: T
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = insertOf(held, value) ?
+  run(stream, &statement)
+}
+
+/// Change the one a key names.
+export fn change[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = updateOf(held, key, value) ?
+  run(stream, &statement)
+}
+
+/// Remove the one a key names.
+export fn remove[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str]
+) -> Result[(Int, Session.Connection), StoreError] {
+  let statement = deleteOf(held, key) ?
+  run(stream, &statement)
+}
+
+/// Read the one a key names.
+export fn load[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  key: Option[Str]
+) -> Result[(Option[T], Session.Connection), StoreError] {
+  let statement = selectOf(held, key) ?
+  let answered = ask(stream, &statement) ?
+  let value = readOne(held, &answered[0]) ?
+  Ok((value, answered[1]))
+}
+
+/// Read every one.
+export fn loadAll[T](
+  stream: Session.Connection,
+  held: &Stored[T]
+) -> Result[(Array[T], Session.Connection), StoreError] {
+  let statement = selectAllOf(held) ?
+  let answered = ask(stream, &statement) ?
+  let values = readAll(held, &answered[0]) ?
+  Ok((values, answered[1]))
+}
+
+/// Read everything a statement chooses.
+export fn loadWhere[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  statement: &Query.Statement
+) -> Result[(Array[T], Session.Connection), StoreError] {
+  let answered = ask(stream, statement) ?
+  let values = readAll(held, &answered[0]) ?
+  Ok((values, answered[1]))
+}
+
+/// Read everything belonging to any of these parents, in one statement.
+export fn loadForParents[T](
+  stream: Session.Connection,
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[(Map[Str, Array[T]], Session.Connection), StoreError] {
+  let statement = forParents(held, parentColumn, keys) ?
+  let answered = ask(stream, &statement) ?
+  let grouped = groupedBy(held, &answered[0], parentColumn) ?
+  Ok((grouped, answered[1]))
+}
+
+fn run(
+  stream: Session.Connection,
+  statement: &Query.Statement
+) -> Result[(Int, Session.Connection), StoreError] {
+  let answered = ask(stream, statement) ?
+  Ok((Db.affected(&answered[0]), answered[1]))
+}
+
+fn ask(
+  stream: Session.Connection,
+  statement: &Query.Statement
+) -> Result[(Db.Rows, Session.Connection), StoreError] {
+  let outcome = Db.run(stream, Query.textOf(statement), &Query.valuesOf(statement))
+  if let Err(problem) = outcome { Err(Refused(show(problem))) } else { Ok(Result.unwrapOr(outcome, (emptyRows(), stream))) }
+}
+
+fn written(outcome: Result[Query.Statement, Query.QueryError]) -> Result[Query.Statement, StoreError] {
+  Result.mapErr(outcome, fn(problem: Query.QueryError) -> StoreError { Statement(problem) })
+}
+
+fn mapped[T](outcome: Result[T, Repository.RowError]) -> Result[T, StoreError] {
+  Result.mapErr(outcome, fn(problem: Repository.RowError) -> StoreError { Mapping(problem) })
+}
+
+fn emptyRows() -> Db.Rows { Db.Rows{columns: [], rows: [], tag: ""} }
+
+/// What a refusal says.
+export fn explain(problem: &StoreError) -> Str {
+  match problem {
+    case Mapping(held) => Repository.explain(&held)
+    case Statement(held) => Query.explain(&held)
+    case Refused(reason) => reason
+  }
+}

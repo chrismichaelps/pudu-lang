@@ -259,6 +259,10 @@ testProgramEvaluation = do
   scoped2 <- runEntry "test-fixtures/stdlib/UsesVariantScope.pudu"
   statements <- runEntry "test-fixtures/stdlib/UsesQuery.pudu"
   numbers <- runEntry "test-fixtures/stdlib/UsesNumberText.pudu"
+  mapped <- runEntry "test-fixtures/stdlib/UsesRepository.pudu"
+  submitted <- runEntry "test-fixtures/stdlib/UsesBind.pudu"
+  columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
+  kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -563,6 +567,41 @@ testProgramEvaluation = do
     , counterexample
         "a count and a whole number are read differently"
         (numbers === Just "25")
+    {-| That a column which is not there and a column which held nothing are
+        different answers, since the layer beneath cannot tell them apart and
+        inheriting that turns a mistyped name into a data condition found
+        later; and that a lookup expecting one row refuses both none and
+        several, because answering the first of several is how a program acts
+        on the wrong record with nothing appearing to go wrong. -}
+    , counterexample
+        "a missing column and an empty one are different answers"
+        (mapped === Just "46")
+    {-| That where a value came from is stated rather than searched for, since
+        a binding that took the first hit across path, query, and body would
+        let a caller move a value to reach a different path; that every field
+        that was wrong is reported at once; and that a refusal names the fields
+        and never the values, because a response is a place a submitted value
+        would be rendered. -}
+    , counterexample
+        "a request binds from where it said, and refuses without echoing"
+        (submitted === Just "38")
+    {-| That a column is a value carrying its table and the type of what it
+        holds, so naming one that does not exist is refused where it is
+        written rather than when the statement runs, and comparing a column of
+        text against a number does not compile. The established framework
+        derives the query from a method name and finds a wrong property when
+        the method is called. -}
+    , counterexample
+        "a column is a name the compiler knows"
+        (columns === Just "29")
+    {-| That a loaded value holds what was loaded and nothing else — no proxy,
+        no attached session, nothing left to fetch — and that what belongs to
+        many parents is read in one statement, because the interface takes a
+        list of parents and answers a map. Reading for one parent is reading
+        for a list of one, so the batched shape is the ordinary one. -}
+    , counterexample
+        "a loaded value is a value, and children load for many parents at once"
+        (kept === Just "32")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
