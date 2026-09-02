@@ -1,0 +1,407 @@
+module Std.Db.Session
+
+import Std.Bytes as ByteSeq
+import Std.Db.Protocol as Wire
+import Std.Net as Net
+import Std.Option as Option
+import Std.Random as Random
+import Std.Result as Result
+
+/// Opening a connection and keeping it: the handshake, what the server asks
+/// for, and the messages that cross afterwards.
+///
+/// Separated from [[Std Db]] because the two answer different questions. This
+/// one knows how to become a connection and how to read one message; that one
+/// knows what a query is, what a transaction promises, and how a pool hands a
+/// connection round. Authentication in particular is where a mistake is
+/// quietest, and it is easier to read when it is not surrounded by row access.
+
+/// Why a database operation did not do what it was asked.
+///
+/// A failure the server reported is kept apart from every other kind, and
+/// carries the code the server gave it. That code is what a caller acts on: a
+/// unique-key violation is retried differently from a syntax error, and a
+/// caller matching on the text of a message would break when the server was
+/// translated or upgraded.
+export type DbError
+  = Connect(Str)
+  | Auth(Str)
+  | Malformed(Str)
+  | Server(Str, Str, Str)
+  | Closed
+  | Unsupported(Str)
+  | Other(Str)
+
+/// Where a database is and who is asking.
+export type Config = {
+  host: Str,
+  port: Int,
+  database: Str,
+  user: Str,
+  password: Str
+}
+
+/// A connection, and the bytes read from it that have not yet made a message.
+///
+/// The connection is threaded rather than held, like a random generator: every
+/// operation answers the connection to use next. The alternative is a value
+/// that changes when it is read, which is the one thing no other value in the
+/// language does.
+export type Connection = {
+  socket: Net.Connection,
+  buffer: Bytes,
+  parameters: Array[(Str, Str)],
+  status: TransactionStatus
+}
+
+/// Where a connection stands with respect to a transaction.
+///
+/// The server reports this with every message saying it is ready, and it is
+/// worth keeping rather than inferring: after a statement fails inside a
+/// transaction the server refuses everything until the transaction is rolled
+/// back, so a caller that assumed it was still usable would see every later
+/// statement fail for a reason that has nothing to do with it.
+export type TransactionStatus
+  = Idle
+  | Active
+  | Failed
+
+/// A configuration pointing at a database on this machine.
+export fn config(database: Str, user: Str, password: Str) -> Config {
+  Config{host: "127.0.0.1", port: 5432, database: database, user: user, password: password}
+}
+
+/// The same, somewhere else.
+export fn at(base: &Config, host: Str, port: Int) -> Config {
+  Config {
+    host: host,
+    port: port,
+    database: base.database,
+    user: base.user,
+    password: base.password
+  }
+}
+
+/// How much is asked of the socket in one read.
+const CHUNK: Int = 65536
+
+/// Read the next message, taking more from the socket only when what has
+/// arrived does not already hold one.
+///
+/// Reading a message at a time from the socket directly would ask for its five
+/// byte head and then its body as two reads, and a server is free to send
+/// several messages in one packet. Buffering is what makes the reader agree
+/// with what the server actually sends rather than with how it was drawn.
+export fn nextMessage(stream: Connection) -> Result[(Wire.Message, Connection), DbError] {
+  var held = stream
+  var answer: Option[Wire.Message] = None
+  var failure: Option[DbError] = None
+  var going = true
+  while going {
+    let read = Wire.readMessage(&held.buffer)
+    if let Ok(pair) = read {
+      answer = Some(pair[0])
+      held = Connection {
+        socket: held.socket,
+        buffer: pair[1],
+        parameters: held.parameters,
+        status: held.status
+      }
+      going = false
+    } else {
+      let more = Net.receive(&held.socket, CHUNK)
+      if let Err(problem) = more {
+        failure = Some(Other(show(problem)))
+        going = false
+      } else {
+        let piece = Result.unwrapOr(more, None)
+        if let Some(bytes) = piece {
+          held = Connection {
+            socket: held.socket,
+            buffer: held.buffer.concat(bytes),
+            parameters: held.parameters,
+            status: held.status
+          }
+        } else {
+          failure = Some(Closed)
+          going = false
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    Err(reason)
+  } else {
+    if let Some(message) = answer { Ok((message, held)) } else { Err(Closed) }
+  }
+}
+
+export fn write(stream: &Connection, payload: &Bytes) -> Result[(), DbError] {
+  Result.mapErr(Net.send(&stream.socket, payload), fn(problem: Net.NetError) -> DbError {
+      Other(show(problem))
+    })
+}
+
+/// The failure a server-reported error carries.
+export fn serverFailure(payload: &Bytes) -> DbError {
+  let fields = Wire.readFields(payload)
+  Server(
+    Wire.fieldOf(&fields, "S"),
+    Wire.fieldOf(&fields, "C"),
+    Wire.fieldOf(&fields, "M")
+  )
+}
+
+/// Open a connection and take it through to the point it will accept a query.
+export fn connect(settings: &Config) -> Result[Connection, DbError] {
+  let opened = Net.connect(settings.host, settings.port)
+  if let Err(problem) = opened {
+    Err(Connect(show(problem)))
+  } else {
+    let socket = Result.unwrapOr(opened, Net.Connection{token: 0})
+    let stream = Connection {
+      socket: socket,
+      buffer: ByteSeq.empty(),
+      parameters: [],
+      status: Idle
+    }
+    let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
+    let sent = write(&stream, &hello)
+    let outcome = if Result.isErr(&sent) { carryFailure(sent) } else { handshake(stream, settings) }
+    // A handshake that failed leaves a socket nothing will ever read from
+    // again. Closing it here is what stops a refused connection from holding
+    // one open, and it is also what tells the far end to stop waiting: a
+    // server still expecting the next message has no other way to learn the
+    // client has given up.
+    if Result.isErr(&outcome) { let _closed = Net.close(&socket) }
+    outcome
+  }
+}
+
+/// A failure carried from one result to another of a different shape.
+fn carryFailure[T](outcome: Result[(), DbError]) -> Result[T, DbError] {
+  if let Err(reason) = outcome { Err(reason) } else { Err(Other("no failure to carry")) }
+}
+
+/// Read until the server says it is ready, answering whatever it asks on the
+/// way.
+fn handshake(start: Connection, settings: &Config) -> Result[Connection, DbError] {
+  var stream = start
+  var failure: Option[DbError] = None
+  var ready = false
+  while !ready && Option.isNone(&failure) {
+    let read = nextMessage(stream)
+    if let Err(reason) = read {
+      failure = Some(reason)
+    } else {
+      let pair = Result.unwrapOr(read, (emptyMessage(), stream))
+      let message = pair[0]
+      stream = pair[1]
+      if message.kind == "R" {
+        let answered = authenticate(stream, settings, &message.payload)
+        if let Err(reason) = answered { failure = Some(reason) } else {
+          stream = Result.unwrapOr(answered, stream)
+        }
+      } else {
+        if message.kind == "Z" {
+          stream = withStatus(stream, &message.payload)
+          ready = true
+        } else {
+          if message.kind == "E" {
+            failure = Some(serverFailure(&message.payload))
+          } else {
+            if message.kind == "S" {
+              stream = withParameter(stream, &message.payload)
+            }
+          }
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(stream) }
+}
+
+/// The transaction status the server reports with every message saying it is
+/// ready: idle, inside a transaction, or inside one that has failed.
+export fn withStatus(stream: Connection, payload: &Bytes) -> Connection {
+  let letter = Option.unwrapOr(payload.at(0), 73u8)
+  let found = if letter == 84u8 { Active } else {
+    if letter == 69u8 { Failed } else { Idle }
+  }
+  Connection {
+    socket: stream.socket,
+    buffer: stream.buffer,
+    parameters: stream.parameters,
+    status: found
+  }
+}
+
+fn withParameter(stream: Connection, payload: &Bytes) -> Connection {
+  let named = Wire.readCString(payload)
+  if let Ok(first) = named {
+    let valued = Wire.readCString(&first[1])
+    if let Ok(second) = valued {
+      Connection {
+        socket: stream.socket,
+        buffer: stream.buffer,
+        parameters: stream.parameters.push((first[0], second[0])),
+        status: stream.status
+      }
+    } else {
+      stream
+    }
+  } else {
+    stream
+  }
+}
+
+/// Answer whatever the server asked for.
+///
+/// Three are answered. A server wanting nothing is already done. A server
+/// wanting the password as it stands gets it, which is safe only over a
+/// protected transport and is what a local socket usually asks. A server
+/// wanting the challenge is answered by `scram`, which is what a server left
+/// at its own defaults asks for.
+///
+/// The one deliberately refused is the older digest challenge: it is built on
+/// a hash this project does not implement, and answering it would mean adding
+/// a broken one to the standard library to talk to servers that should be
+/// configured not to ask.
+fn authenticate(
+  stream: Connection,
+  settings: &Config,
+  payload: &Bytes
+) -> Result[Connection, DbError] {
+  let kind = Result.mapErr(Wire.authenticationKind(payload), asWire) ?
+  if kind == 0 {
+    Ok(stream)
+  } else {
+    if kind == 3 {
+      write(&stream, &Wire.password(settings.password)) ?
+      Ok(stream)
+    } else {
+      if kind == 10 {
+        scram(stream, settings)
+      } else {
+        if kind == 5 {
+          Err(Unsupported("this server asks for the older digest challenge"))
+        } else {
+          Err(Unsupported("authentication method " + show(kind)))
+        }
+      }
+    }
+  }
+}
+
+/// The challenge a server left at its defaults asks for.
+///
+/// The password never crosses the wire, in any form. What crosses is a proof
+/// that the client could compute a value derived from it, over text both sides
+/// contributed to — which is what stops a listener replaying what it heard.
+///
+/// The server's own signature is checked rather than ignored. Skipping it
+/// would leave a client that authenticated to whoever answered, which is the
+/// half of the exchange that stops something in the middle from impersonating
+/// the server.
+fn scram(start: Connection, settings: &Config) -> Result[Connection, DbError] {
+  var stream = start
+  let clientNonce = nonce() ?
+  let firstBare = "n=,r=" + clientNonce
+  write(&stream, &Wire.saslInitial("SCRAM-SHA-256", "n,," + firstBare)) ?
+
+  let continued = nextMessage(stream) ?
+  stream = continued[1]
+  if continued[0].kind == "E" { return Err(serverFailure(&continued[0].payload)) }
+  if continued[0].kind != "R" { return Err(Auth("the server did not continue the challenge")) }
+  let serverFirst = textOf(&continued[0].payload.drop(4))
+  let salt = fieldIn(serverFirst, "s") ?
+  let rounds = fieldIn(serverFirst, "i") ?
+  let serverNonce = fieldIn(serverFirst, "r") ?
+  if !serverNonce.startsWith(clientNonce) {
+    return Err(Auth("the server's nonce does not extend the one sent"))
+  }
+
+  let saltBytes = Result.mapErr(ByteSeq.decodeBase64(salt), asBytes) ?
+  let iterations = Option.unwrapOr(wholeOf(rounds), 4096)
+  let salted = deriveKey(settings.password.toBytes(), saltBytes, iterations, 32)
+  let clientKey = hmacSha256Of(salted, "Client Key".toBytes())
+  let storedKey = sha256Of(clientKey)
+  let finalBare = "c=biws,r=" + serverNonce
+  let authMessage = (firstBare + "," + serverFirst + "," + finalBare).toBytes()
+  let clientSignature = hmacSha256Of(storedKey, authMessage)
+  let proof = ByteSeq.xorWith(&clientKey, &clientSignature)
+  write(&stream, &Wire.saslResponse(finalBare + ",p=" + ByteSeq.encodeBase64(&proof))) ?
+
+  let finished = nextMessage(stream) ?
+  stream = finished[1]
+  if finished[0].kind == "E" { return Err(serverFailure(&finished[0].payload)) }
+  if finished[0].kind != "R" { return Err(Auth("the server did not finish the challenge")) }
+  let serverFinal = textOf(&finished[0].payload.drop(4))
+  let signature = fieldIn(serverFinal, "v") ?
+  let serverKey = hmacSha256Of(salted, "Server Key".toBytes())
+  let expected = hmacSha256Of(serverKey, authMessage)
+  if ByteSeq.encodeBase64(&expected) != signature {
+    Err(Auth("the server did not prove it knows the password"))
+  } else {
+    Ok(stream)
+  }
+}
+
+/// One field of the challenge's comma-separated text.
+fn fieldIn(source: Str, name: Str) -> Result[Str, DbError] {
+  var found: Option[Str] = None
+  for piece in source.split(",") {
+    if piece.startsWith(name + "=") && Option.isNone(&found) {
+      found = Some(piece.drop(name.length() + 1))
+    }
+  }
+  if let Some(carried) = found {
+    Ok(carried)
+  } else {
+    Err(Auth("the challenge carried no " + name))
+  }
+}
+
+/// Text the client contributes to the challenge, which must differ every time.
+///
+/// Reused or predictable text weakens the challenge binding. Authentication
+/// fails closed when the operating system cannot provide fresh entropy.
+fn nonce() -> Result[Str, DbError] {
+  let bytes = Result.mapErr(Random.secureBytes(24), fn(problem: Str) -> DbError { Auth(problem) }) ?
+  Ok(ByteSeq.encodeBase64(&bytes))
+}
+
+/// Say the connection is finished, and close it.
+export fn close(stream: &Connection) -> Result[(), DbError] {
+  let _said = write(stream, &Wire.terminate())
+  Result.mapErr(Net.close(&stream.socket), fn(problem: Net.NetError) -> DbError {
+      Other(show(problem))
+    })
+}
+
+fn asWire(problem: Wire.ProtocolError) -> DbError { Malformed(show(problem)) }
+
+fn asBytes(problem: ByteSeq.BytesError) -> DbError { Malformed(show(problem)) }
+
+export fn emptyMessage() -> Wire.Message {
+  Wire.Message{kind: "?", payload: ByteSeq.empty()}
+}
+
+fn textOf(payload: &Bytes) -> Str { Option.unwrapOr(payload.toText(), "") }
+
+/// A run of digits as a number, or nothing when it holds something else.
+fn wholeOf(text: Str) -> Option[Int] {
+  if text.isEmpty() {
+    None
+  } else {
+    var total = 0
+    var index = 0
+    var good = true
+    while index < text.length() && good {
+      let digit = "0123456789".indexOf(text.slice(index, index + 1))
+      if digit < 0 { good = false } else { total = total * 10 + digit }
+      index = index + 1
+    }
+    if good { Some(total) } else { None }
+  }
+}

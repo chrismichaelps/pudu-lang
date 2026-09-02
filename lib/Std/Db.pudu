@@ -3,60 +3,11 @@ module Std.Db
 import Std.Bytes as ByteSeq
 import Std.Channel as Channel
 import Std.Db.Protocol as Wire
+import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
+import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
-import Std.Random as Random
 import Std.Result as Result
-
-/// Why a database operation did not do what it was asked.
-///
-/// A failure the server reported is kept apart from every other kind, and
-/// carries the code the server gave it. That code is what a caller acts on: a
-/// unique-key violation is retried differently from a syntax error, and a
-/// caller matching on the text of a message would break when the server was
-/// translated or upgraded.
-export type DbError
-  = Connect(Str)
-  | Auth(Str)
-  | Malformed(Str)
-  | Server(Str, Str, Str)
-  | Closed
-  | Unsupported(Str)
-  | Other(Str)
-
-/// Where a database is and who is asking.
-export type Config = {
-  host: Str,
-  port: Int,
-  database: Str,
-  user: Str,
-  password: Str
-}
-
-/// A connection, and the bytes read from it that have not yet made a message.
-///
-/// The connection is threaded rather than held, like a random generator: every
-/// operation answers the connection to use next. The alternative is a value
-/// that changes when it is read, which is the one thing no other value in the
-/// language does.
-export type Connection = {
-  socket: Net.Connection,
-  buffer: Bytes,
-  parameters: Array[(Str, Str)],
-  status: TransactionStatus
-}
-
-/// Where a connection stands with respect to a transaction.
-///
-/// The server reports this with every message saying it is ready, and it is
-/// worth keeping rather than inferring: after a statement fails inside a
-/// transaction the server refuses everything until the transaction is rolled
-/// back, so a caller that assumed it was still usable would see every later
-/// statement fail for a reason that has nothing to do with it.
-export type TransactionStatus
-  = Idle
-  | Active
-  | Failed
 
 /// A column of a result.
 export type Column = { name: Str, oid: Int }
@@ -74,313 +25,8 @@ export type Rows = {
 
 /// A set of connections shared between threads.
 export type Pool = {
-  ready: Channel.Channel[Connection],
+  ready: Channel.Channel[Session.Connection],
   size: Int
-}
-
-/// A configuration pointing at a database on this machine.
-export fn config(database: Str, user: Str, password: Str) -> Config {
-  Config{host: "127.0.0.1", port: 5432, database: database, user: user, password: password}
-}
-
-/// The same, somewhere else.
-export fn at(base: &Config, host: Str, port: Int) -> Config {
-  Config {
-    host: host,
-    port: port,
-    database: base.database,
-    user: base.user,
-    password: base.password
-  }
-}
-
-/// How much is asked of the socket in one read.
-const CHUNK: Int = 65536
-
-/// Read the next message, taking more from the socket only when what has
-/// arrived does not already hold one.
-///
-/// Reading a message at a time from the socket directly would ask for its five
-/// byte head and then its body as two reads, and a server is free to send
-/// several messages in one packet. Buffering is what makes the reader agree
-/// with what the server actually sends rather than with how it was drawn.
-fn nextMessage(stream: Connection) -> Result[(Wire.Message, Connection), DbError] {
-  var held = stream
-  var answer: Option[Wire.Message] = None
-  var failure: Option[DbError] = None
-  var going = true
-  while going {
-    let read = Wire.readMessage(&held.buffer)
-    if let Ok(pair) = read {
-      answer = Some(pair[0])
-      held = Connection {
-        socket: held.socket,
-        buffer: pair[1],
-        parameters: held.parameters,
-        status: held.status
-      }
-      going = false
-    } else {
-      let more = Net.receive(&held.socket, CHUNK)
-      if let Err(problem) = more {
-        failure = Some(Other(show(problem)))
-        going = false
-      } else {
-        let piece = Result.unwrapOr(more, None)
-        if let Some(bytes) = piece {
-          held = Connection {
-            socket: held.socket,
-            buffer: held.buffer.concat(bytes),
-            parameters: held.parameters,
-            status: held.status
-          }
-        } else {
-          failure = Some(Closed)
-          going = false
-        }
-      }
-    }
-  }
-  if let Some(reason) = failure {
-    Err(reason)
-  } else {
-    if let Some(message) = answer { Ok((message, held)) } else { Err(Closed) }
-  }
-}
-
-fn write(stream: &Connection, payload: &Bytes) -> Result[(), DbError] {
-  Result.mapErr(Net.send(&stream.socket, payload), fn(problem: Net.NetError) -> DbError {
-      Other(show(problem))
-    })
-}
-
-/// The failure a server-reported error carries.
-fn serverFailure(payload: &Bytes) -> DbError {
-  let fields = Wire.readFields(payload)
-  Server(
-    Wire.fieldOf(&fields, "S"),
-    Wire.fieldOf(&fields, "C"),
-    Wire.fieldOf(&fields, "M")
-  )
-}
-
-/// Open a connection and take it through to the point it will accept a query.
-export fn connect(settings: &Config) -> Result[Connection, DbError] {
-  let opened = Net.connect(settings.host, settings.port)
-  if let Err(problem) = opened {
-    Err(Connect(show(problem)))
-  } else {
-    let socket = Result.unwrapOr(opened, Net.Connection{token: 0})
-    let stream = Connection {
-      socket: socket,
-      buffer: ByteSeq.empty(),
-      parameters: [],
-      status: Idle
-    }
-    let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
-    let sent = write(&stream, &hello)
-    let outcome = if Result.isErr(&sent) { carryFailure(sent) } else { handshake(stream, settings) }
-    // A handshake that failed leaves a socket nothing will ever read from
-    // again. Closing it here is what stops a refused connection from holding
-    // one open, and it is also what tells the far end to stop waiting: a
-    // server still expecting the next message has no other way to learn the
-    // client has given up.
-    if Result.isErr(&outcome) { let _closed = Net.close(&socket) }
-    outcome
-  }
-}
-
-/// A failure carried from one result to another of a different shape.
-fn carryFailure[T](outcome: Result[(), DbError]) -> Result[T, DbError] {
-  if let Err(reason) = outcome { Err(reason) } else { Err(Other("no failure to carry")) }
-}
-
-/// Read until the server says it is ready, answering whatever it asks on the
-/// way.
-fn handshake(start: Connection, settings: &Config) -> Result[Connection, DbError] {
-  var stream = start
-  var failure: Option[DbError] = None
-  var ready = false
-  while !ready && Option.isNone(&failure) {
-    let read = nextMessage(stream)
-    if let Err(reason) = read {
-      failure = Some(reason)
-    } else {
-      let pair = Result.unwrapOr(read, (emptyMessage(), stream))
-      let message = pair[0]
-      stream = pair[1]
-      if message.kind == "R" {
-        let answered = authenticate(stream, settings, &message.payload)
-        if let Err(reason) = answered { failure = Some(reason) } else {
-          stream = Result.unwrapOr(answered, stream)
-        }
-      } else {
-        if message.kind == "Z" {
-          stream = withStatus(stream, &message.payload)
-          ready = true
-        } else {
-          if message.kind == "E" {
-            failure = Some(serverFailure(&message.payload))
-          } else {
-            if message.kind == "S" {
-              stream = withParameter(stream, &message.payload)
-            }
-          }
-        }
-      }
-    }
-  }
-  if let Some(reason) = failure { Err(reason) } else { Ok(stream) }
-}
-
-/// The transaction status the server reports with every message saying it is
-/// ready: idle, inside a transaction, or inside one that has failed.
-fn withStatus(stream: Connection, payload: &Bytes) -> Connection {
-  let letter = Option.unwrapOr(payload.at(0), 73u8)
-  let found = if letter == 84u8 { Active } else {
-    if letter == 69u8 { Failed } else { Idle }
-  }
-  Connection {
-    socket: stream.socket,
-    buffer: stream.buffer,
-    parameters: stream.parameters,
-    status: found
-  }
-}
-
-fn withParameter(stream: Connection, payload: &Bytes) -> Connection {
-  let named = Wire.readCString(payload)
-  if let Ok(first) = named {
-    let valued = Wire.readCString(&first[1])
-    if let Ok(second) = valued {
-      Connection {
-        socket: stream.socket,
-        buffer: stream.buffer,
-        parameters: stream.parameters.push((first[0], second[0])),
-        status: stream.status
-      }
-    } else {
-      stream
-    }
-  } else {
-    stream
-  }
-}
-
-/// Answer whatever the server asked for.
-///
-/// Three are answered. A server wanting nothing is already done. A server
-/// wanting the password as it stands gets it, which is safe only over a
-/// protected transport and is what a local socket usually asks. A server
-/// wanting the challenge is answered by `scram`, which is what a server left
-/// at its own defaults asks for.
-///
-/// The one deliberately refused is the older digest challenge: it is built on
-/// a hash this project does not implement, and answering it would mean adding
-/// a broken one to the standard library to talk to servers that should be
-/// configured not to ask.
-fn authenticate(
-  stream: Connection,
-  settings: &Config,
-  payload: &Bytes
-) -> Result[Connection, DbError] {
-  let kind = Result.mapErr(Wire.authenticationKind(payload), asWire) ?
-  if kind == 0 {
-    Ok(stream)
-  } else {
-    if kind == 3 {
-      write(&stream, &Wire.password(settings.password)) ?
-      Ok(stream)
-    } else {
-      if kind == 10 {
-        scram(stream, settings)
-      } else {
-        if kind == 5 {
-          Err(Unsupported("this server asks for the older digest challenge"))
-        } else {
-          Err(Unsupported("authentication method " + show(kind)))
-        }
-      }
-    }
-  }
-}
-
-/// The challenge a server left at its defaults asks for.
-///
-/// The password never crosses the wire, in any form. What crosses is a proof
-/// that the client could compute a value derived from it, over text both sides
-/// contributed to — which is what stops a listener replaying what it heard.
-///
-/// The server's own signature is checked rather than ignored. Skipping it
-/// would leave a client that authenticated to whoever answered, which is the
-/// half of the exchange that stops something in the middle from impersonating
-/// the server.
-fn scram(start: Connection, settings: &Config) -> Result[Connection, DbError] {
-  var stream = start
-  let clientNonce = nonce() ?
-  let firstBare = "n=,r=" + clientNonce
-  write(&stream, &Wire.saslInitial("SCRAM-SHA-256", "n,," + firstBare)) ?
-
-  let continued = nextMessage(stream) ?
-  stream = continued[1]
-  if continued[0].kind == "E" { return Err(serverFailure(&continued[0].payload)) }
-  if continued[0].kind != "R" { return Err(Auth("the server did not continue the challenge")) }
-  let serverFirst = textOf(&continued[0].payload.drop(4))
-  let salt = fieldIn(serverFirst, "s") ?
-  let rounds = fieldIn(serverFirst, "i") ?
-  let serverNonce = fieldIn(serverFirst, "r") ?
-  if !serverNonce.startsWith(clientNonce) {
-    return Err(Auth("the server's nonce does not extend the one sent"))
-  }
-
-  let saltBytes = Result.mapErr(ByteSeq.decodeBase64(salt), asBytes) ?
-  let iterations = Option.unwrapOr(wholeOf(rounds), 4096)
-  let salted = deriveKey(settings.password.toBytes(), saltBytes, iterations, 32)
-  let clientKey = hmacSha256Of(salted, "Client Key".toBytes())
-  let storedKey = sha256Of(clientKey)
-  let finalBare = "c=biws,r=" + serverNonce
-  let authMessage = (firstBare + "," + serverFirst + "," + finalBare).toBytes()
-  let clientSignature = hmacSha256Of(storedKey, authMessage)
-  let proof = ByteSeq.xorWith(&clientKey, &clientSignature)
-  write(&stream, &Wire.saslResponse(finalBare + ",p=" + ByteSeq.encodeBase64(&proof))) ?
-
-  let finished = nextMessage(stream) ?
-  stream = finished[1]
-  if finished[0].kind == "E" { return Err(serverFailure(&finished[0].payload)) }
-  if finished[0].kind != "R" { return Err(Auth("the server did not finish the challenge")) }
-  let serverFinal = textOf(&finished[0].payload.drop(4))
-  let signature = fieldIn(serverFinal, "v") ?
-  let serverKey = hmacSha256Of(salted, "Server Key".toBytes())
-  let expected = hmacSha256Of(serverKey, authMessage)
-  if ByteSeq.encodeBase64(&expected) != signature {
-    Err(Auth("the server did not prove it knows the password"))
-  } else {
-    Ok(stream)
-  }
-}
-
-/// One field of the challenge's comma-separated text.
-fn fieldIn(source: Str, name: Str) -> Result[Str, DbError] {
-  var found: Option[Str] = None
-  for piece in source.split(",") {
-    if piece.startsWith(name + "=") && Option.isNone(&found) {
-      found = Some(piece.drop(name.length() + 1))
-    }
-  }
-  if let Some(carried) = found {
-    Ok(carried)
-  } else {
-    Err(Auth("the challenge carried no " + name))
-  }
-}
-
-/// Text the client contributes to the challenge, which must differ every time.
-///
-/// Reused or predictable text weakens the challenge binding. Authentication
-/// fails closed when the operating system cannot provide fresh entropy.
-fn nonce() -> Result[Str, DbError] {
-  let bytes = Result.mapErr(Random.secureBytes(24), fn(problem: Str) -> DbError { Auth(problem) }) ?
-  Ok(ByteSeq.encodeBase64(&bytes))
 }
 
 /// Run text the server plans and executes in one step.
@@ -389,8 +35,8 @@ fn nonce() -> Result[Str, DbError] {
 /// built by joining text to a value is a query whose shape the value decides,
 /// which is how a value becomes an instruction; `run` is the way to supply
 /// one.
-export fn simple(stream: Connection, sql: Str) -> Result[(Rows, Connection), DbError] {
-  write(&stream, &Wire.query(sql)) ?
+export fn simple(stream: Session.Connection, sql: Str) -> Result[(Rows, Session.Connection), Session.DbError] {
+  Session.write(&stream, &Wire.query(sql)) ?
   collect(stream)
 }
 
@@ -401,10 +47,10 @@ export fn simple(stream: Connection, sql: Str) -> Result[(Rows, Connection), DbE
 /// semicolon, or the whole of another statement is a value in a column and
 /// cannot become part of what runs.
 export fn run(
-  stream: Connection,
+  stream: Session.Connection,
   sql: Str,
   values: &Array[Option[Str]]
-) -> Result[(Rows, Connection), DbError] {
+) -> Result[(Rows, Session.Connection), Session.DbError] {
   let request = ByteSeq.join(&[
       Wire.parse("", sql),
       Wire.bind("", "", values),
@@ -412,24 +58,24 @@ export fn run(
       Wire.execute("", 0),
       Wire.sync()
     ])
-  write(&stream, &request) ?
+  Session.write(&stream, &request) ?
   collect(stream)
 }
 
 /// Read until the server says it is ready again, gathering what it sent.
-fn collect(start: Connection) -> Result[(Rows, Connection), DbError] {
+fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Session.DbError] {
   var stream = start
   var columns: Array[Column] = []
   var rows: Array[Array[Option[Str]]] = []
   var tag = ""
-  var failure: Option[DbError] = None
+  var failure: Option[Session.DbError] = None
   var ready = false
   while !ready && Option.isNone(&failure) {
-    let read = nextMessage(stream)
+    let read = Session.nextMessage(stream)
     if let Err(reason) = read {
       failure = Some(reason)
     } else {
-      let pair = Result.unwrapOr(read, (emptyMessage(), stream))
+      let pair = Result.unwrapOr(read, (Session.emptyMessage(), stream))
       let message = pair[0]
       stream = pair[1]
       if message.kind == "T" {
@@ -455,10 +101,10 @@ fn collect(start: Connection) -> Result[(Rows, Connection), DbError] {
               // unread, and the next query would read this one's ending as its
               // own — which is how one failed query makes every query after it
               // wrong. The loop below ends on that message, not this one.
-              failure = Some(serverFailure(&message.payload))
+              failure = Some(Session.serverFailure(&message.payload))
             } else {
               if message.kind == "Z" {
-                stream = withStatus(stream, &message.payload)
+                stream = Session.withStatus(stream, &message.payload)
                 ready = true
               }
             }
@@ -476,14 +122,6 @@ fn namedColumns(found: &Array[Wire.Column]) -> Array[Column] {
   var columns: Array[Column] = []
   for entry in found { columns = columns.push(Column{name: entry.name, oid: entry.oid}) }
   columns
-}
-
-/// Say the connection is finished, and close it.
-export fn close(stream: &Connection) -> Result[(), DbError] {
-  let _said = write(stream, &Wire.terminate())
-  Result.mapErr(Net.close(&stream.socket), fn(problem: Net.NetError) -> DbError {
-      Other(show(problem))
-    })
 }
 
 /// Where a column sits, or `-1` when the result has no column of that name.
@@ -558,23 +196,23 @@ fn isolationText(level: &Isolation) -> Str {
 }
 
 /// Where a connection stands, so a caller can ask before acting.
-export fn statusOf(stream: &Connection) -> TransactionStatus { stream.status }
+export fn statusOf(stream: &Session.Connection) -> Session.TransactionStatus { stream.status }
 
 /// Whether a connection is inside a transaction, failed or not.
-export fn inTransaction(stream: &Connection) -> Bool { stream.status != Idle }
+export fn inTransaction(stream: &Session.Connection) -> Bool { stream.status != Idle }
 
 /// Begin a transaction.
-export fn begin(stream: Connection) -> Result[Connection, DbError] {
+export fn begin(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "BEGIN")
 }
 
 /// Begin a transaction at a stated level of protection.
-export fn beginWith(stream: Connection, level: &Isolation) -> Result[Connection, DbError] {
+export fn beginWith(stream: Session.Connection, level: &Isolation) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "BEGIN ISOLATION LEVEL " + isolationText(level))
 }
 
 /// Keep everything the transaction did.
-export fn commit(stream: Connection) -> Result[Connection, DbError] {
+export fn commit(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "COMMIT")
 }
 
@@ -582,22 +220,22 @@ export fn commit(stream: Connection) -> Result[Connection, DbError] {
 ///
 /// This is also how a connection whose transaction failed is made usable
 /// again: the server refuses every other statement until it arrives.
-export fn rollback(stream: Connection) -> Result[Connection, DbError] {
+export fn rollback(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "ROLLBACK")
 }
 
 /// Mark a point a transaction can be returned to without undoing all of it.
-export fn savepoint(stream: Connection, name: Str) -> Result[Connection, DbError] {
+export fn savepoint(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "SAVEPOINT " + quoteName(name))
 }
 
 /// Undo back to a marked point, keeping what came before it.
-export fn rollbackTo(stream: Connection, name: Str) -> Result[Connection, DbError] {
+export fn rollbackTo(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "ROLLBACK TO SAVEPOINT " + quoteName(name))
 }
 
 /// Forget a marked point, keeping everything done since.
-export fn release(stream: Connection, name: Str) -> Result[Connection, DbError] {
+export fn release(stream: Session.Connection, name: Str) -> Result[Session.Connection, Session.DbError] {
   statementOnly(stream, "RELEASE SAVEPOINT " + quoteName(name))
 }
 
@@ -611,7 +249,7 @@ fn quoteName(name: Str) -> Str { "\"" + name.replace("\"", "\"\"") + "\"" }
 
 /// Run a statement for its effect, keeping the connection rather than a
 /// result.
-fn statementOnly(stream: Connection, sql: Str) -> Result[Connection, DbError] {
+fn statementOnly(stream: Session.Connection, sql: Str) -> Result[Session.Connection, Session.DbError] {
   let outcome = simple(stream, sql) ?
   Ok(outcome[1])
 }
@@ -627,9 +265,9 @@ fn statementOnly(stream: Connection, sql: Str) -> Result[Connection, DbError] {
 /// a caller told its work was kept, when the server refused to keep it, would
 /// carry on from a state that does not exist.
 export fn withTransaction[T](
-  start: Connection,
-  action: fn(Connection) -> (Result[T, DbError], Connection)
-) -> (Result[T, DbError], Connection) {
+  start: Session.Connection,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> (Result[T, Session.DbError], Session.Connection) {
   let opened = begin(start)
   if let Err(reason) = opened { return (Err(reason), start) }
   let stream = Result.unwrapOr(opened, start)
@@ -655,10 +293,10 @@ export fn withTransaction[T](
 /// what the action did, leaving the transaction around it intact, so one
 /// optional step failing does not throw away the work before it.
 export fn withSavepoint[T](
-  start: Connection,
+  start: Session.Connection,
   name: Str,
-  action: fn(Connection) -> (Result[T, DbError], Connection)
-) -> (Result[T, DbError], Connection) {
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> (Result[T, Session.DbError], Session.Connection) {
   let marked = savepoint(start, name)
   if let Err(reason) = marked { return (Err(reason), start) }
   let stream = Result.unwrapOr(marked, start)
@@ -679,12 +317,12 @@ export fn withSavepoint[T](
 /// blocks until something is there, so the pool needs no waiting of its own.
 /// It also means a pool cannot hand out more connections than it opened, which
 /// is the whole reason a database wants one.
-export fn pool(settings: &Config, size: Int) -> Result[Pool, DbError] {
-  let ready: Channel.Channel[Connection] = Channel.channel(if size < 1 { 1 } else { size })
+export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
+  let ready: Channel.Channel[Session.Connection] = Channel.channel(if size < 1 { 1 } else { size })
   var opened = 0
-  var failure: Option[DbError] = None
+  var failure: Option[Session.DbError] = None
   while opened < size && Option.isNone(&failure) {
-    let made = connect(settings)
+    let made = Session.connect(settings)
     if let Ok(stream) = made {
       let _put = Channel.send(&ready, stream)
       opened = opened + 1
@@ -704,8 +342,8 @@ export fn pool(settings: &Config, size: Int) -> Result[Pool, DbError] {
 /// database being slow.
 export fn withConnection[T](
   target: &Pool,
-  action: fn(Connection) -> (Result[T, DbError], Connection)
-) -> Result[T, DbError] {
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
   let taken = Result.mapErr(Channel.receive(&target.ready), asChannel) ?
   if let Some(stream) = taken {
     let outcome = action(stream)
@@ -724,32 +362,22 @@ export fn withConnection[T](
 /// never asked for, and its failures are somebody else's. A transaction the
 /// borrower did not close is closed here rather than trusted, because the
 /// borrower has already stopped running and cannot be asked.
-fn settled(stream: Connection) -> Connection {
+fn settled(stream: Session.Connection) -> Session.Connection {
   if stream.status == Idle { stream } else { Result.unwrapOr(rollback(stream), stream) }
 }
 
 /// Close every connection a pool holds.
-export fn closePool(target: &Pool) -> Result[(), DbError] {
+export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
   let _finished = Channel.close(&target.ready)
   var going = true
   while going {
     let taken = Channel.receive(&target.ready)
-    if let Ok(Some(stream)) = taken { let _closed = close(&stream) } else { going = false }
+    if let Ok(Some(stream)) = taken { let _closed = Session.close(&stream) } else { going = false }
   }
   Ok(())
 }
 
-fn asWire(problem: Wire.ProtocolError) -> DbError { Malformed(show(problem)) }
-
-fn asBytes(problem: ByteSeq.BytesError) -> DbError { Malformed(show(problem)) }
-
-fn asChannel(problem: Channel.ChannelError) -> DbError { Other(show(problem)) }
-
-fn emptyMessage() -> Wire.Message {
-  Wire.Message{kind: "?", payload: ByteSeq.empty()}
-}
-
-fn textOf(payload: &Bytes) -> Str { Option.unwrapOr(payload.toText(), "") }
+fn asChannel(problem: Channel.ChannelError) -> Session.DbError { Other(show(problem)) }
 
 fn wholeOf(text: Str) -> Option[Int] {
   if text.isEmpty() {

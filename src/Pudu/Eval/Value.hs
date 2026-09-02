@@ -131,6 +131,11 @@ builtinName value = case value of
   SocketPeerBuiltin -> "socketPeer"
   SocketPortBuiltin -> "socketPort"
   SocketFinishBuiltin -> "socketFinish"
+  TlsConnectBuiltin -> "tlsConnect"
+  TlsSendBuiltin -> "tlsSend"
+  TlsReceiveBuiltin -> "tlsReceive"
+  TlsCloseBuiltin -> "tlsClose"
+  TlsPeerBuiltin -> "tlsPeer"
   SpawnThreadBuiltin -> "spawnThread"
   JoinThreadBuiltin -> "joinThread"
   SleepBuiltin -> "sleepMillis"
@@ -220,6 +225,11 @@ data Builtin
   | SocketPeerBuiltin
   | SocketPortBuiltin
   | SocketFinishBuiltin
+  | TlsConnectBuiltin
+  | TlsSendBuiltin
+  | TlsReceiveBuiltin
+  | TlsCloseBuiltin
+  | TlsPeerBuiltin
   | SpawnThreadBuiltin
   | JoinThreadBuiltin
   | SleepBuiltin

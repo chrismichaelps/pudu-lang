@@ -59,12 +59,20 @@ must describe shipped behavior only after its focused and full gates pass.
 - Every one of the fifty-six standard-library fixtures was run individually through the same entry
   path the suite uses, and each answered exactly the count `ProgramSpec` asserts, including the two
   that legitimately answer zero. New: HashMap 43/43 and Toml 44/44.
-- **The unfiltered full suite still cannot be completed on this machine.** It reaches 190 passing
-  QuickCheck groups with no falsification and is then killed. The cause is the host: 8 GB of memory
-  with tens of megabytes free, a volume at 100 percent so swap cannot grow, and the process in
-  uninterruptible wait at ten percent processor. Mark-compact collection cut peak residency from
-  2.3 GB to roughly 700 MB without changing the outcome. This is an environment limit, not a
-  falsified property, and it is the one gate still owed.
+- **The unfiltered full suite completes green: 309 groups, no falsification.** The earlier reading
+  that the host could not finish it was wrong twice over. The run was not killed and was not short
+  of memory; it was spinning. Output was block-buffered, so the last line printed named a group
+  that had already passed rather than the one still running, and every conclusion drawn from that
+  line pointed at the wrong place. Run through a pseudo-terminal the line buffers, and the true
+  position is `structured scopes join every task they start`; a stack sample there shows the main
+  thread inside equality comparison, not inside collection.
+
+  The cause is that releasing a child from its scope removed it by comparing values, and comparing
+  two closures compared the environments they captured. A closure's captured environment reaches
+  its own scope, so that comparison had no end; extending a scope to reach the root module made
+  every release walk the whole program. Closure equality is now identity over name, receiver, and
+  function, which is the question a release is actually asking. Mark-compact collection was never
+  relevant, and requesting it is what caused the second, separate stall.
 
 ## Production Blockers Found During Recovery
 
@@ -76,12 +84,12 @@ must describe shipped behavior only after its focused and full gates pass.
 - Channel enqueue/dequeue/pending now use `Seq` with constant-time queue operations.
 - PostgreSQL SCRAM now obtains its client nonce from bounded operating-system entropy and fails
   closed; deterministic `Std.Random` remains separate for simulation and repeatable tests.
-- `Std.Time.Format` was split into a 494-line codec over a 60-line calendar. `Std.Db` (768) and
-  `Std.Http.Server` (666) still exceed the boundary. Both have real seams, but every split that
-  preserves their public surface needs either a wall of forwarding functions or moving sum
-  constructors out of the module callers import them from — and [[Engineering Delivery]] warns
-  against splitting until responsibilities would otherwise become shallow. Recorded as an open
-  decision rather than forced.
+- `Std.Time.Format` was split into a 494-line codec over a 60-line calendar. `Std.Http.Server` (666)
+  is now a 350-line server over a 279-line router and a 62-line set of replies, and `Std.Db` (768)
+  is a 395-line surface over a 389-line session. Both splits fell along seams that were already
+  there: routing answers what a request means without a connection, and a session is what a
+  connection holds between statements. Callers import the piece they use rather than reaching
+  through a forwarding wall.
 - `Std.Tls` is deliberately not written. A transport-security implementation in Pudu would have to
   be trusted with certificate-chain and hostname verification, and an unreviewed one is worse than
   none because callers would believe it. It waits on a vetted implementation behind a foreign

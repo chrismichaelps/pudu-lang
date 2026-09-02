@@ -29,6 +29,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 - `FloatValue` carries [[Float Literal]]'s `FloatWidth` beside its normalized `Double` storage. The tag is semantic: equality and operators cannot erase whether the admitted value is binary32 or binary64.
+- A closure is equal to another when it is the same closure: same name, same receiver, same function. What it captured is deliberately not compared, because a captured environment reaches the scope the closure was made in, and that scope holds the closure — so a comparison that followed captures would not end. Equality on closures exists to answer identity, which is what removing one from a list of the tasks a scope started is asking.
 - `OrdValue` and `compareValues` are declared here, not in [[Eval Order]], because `MapValue` and `SetValue` are keyed by that order and the value type cannot be declared without it. `Value` itself still has no `Ord` instance: a function is a value and no order on functions is meaningful, so the wrapper keeps every keyed use visible.
 
 ### Linkage

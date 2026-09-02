@@ -1,0 +1,62 @@
+module Std.Http.Server.Reply
+
+import Std.Http as Http
+import Std.Http.Message as Message
+
+/// The answers a handler gives, apart from the routing that chose it and the
+/// connection that carries it.
+///
+/// Separated because a reply is the one part of serving that a program builds
+/// without a request in hand: a test naming an expected response, a middleware
+/// refusing one, and a handler answering one all want these and none of them
+/// wants a server.
+
+/// A response carrying text.
+export fn text(code: Int, content: Str) -> Http.Response {
+  Message.respond(code, "text/plain; charset=utf-8", content)
+}
+
+/// A response carrying HTML.
+export fn html(code: Int, content: Str) -> Http.Response {
+  Message.respond(code, "text/html; charset=utf-8", content)
+}
+
+/// The media types a resource accepts for a request that carries its terms in
+/// its body, as the header that advertises them.
+///
+/// Sent with the refusal a resource gives a body it cannot read, so a client
+/// told its request was unreadable is also told what would be readable. A
+/// refusal that only said no would leave the client guessing.
+export fn acceptQuery(types: &Array[Str]) -> (Str, Str) {
+  var listed = ""
+  var index = 0
+  while index < types.length() {
+    if index > 0 { listed = listed + ", " }
+    listed = listed + types[index]
+    index = index + 1
+  }
+  ("Accept-Query", listed)
+}
+
+/// The refusal a body in a type the resource cannot read receives.
+export fn unsupportedMediaType(accepted: &Array[Str]) -> Http.Response {
+  let answer = text(415, "this resource does not read that media type")
+  Http.Response {
+    status: answer.status,
+    headers: answer.headers.push(acceptQuery(accepted)),
+    body: answer.body
+  }
+}
+
+/// The refusal a body the resource could read but could not act on receives.
+/// Distinct from a body it could not read at all: one says the type was wrong,
+/// the other says the content was, and a client can act on the difference.
+export fn unprocessable(reason: Str) -> Http.Response { text(422, reason) }
+
+/// A response carrying JSON, already encoded.
+export fn json(code: Int, content: Str) -> Http.Response {
+  Message.respond(code, "application/json", content)
+}
+
+/// A response with a status and nothing else.
+export fn empty(code: Int) -> Http.Response { Message.respondEmpty(code) }
