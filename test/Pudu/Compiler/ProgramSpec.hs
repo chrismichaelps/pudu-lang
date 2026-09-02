@@ -248,6 +248,7 @@ testProgramEvaluation = do
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
+  schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -454,6 +455,15 @@ testProgramEvaluation = do
     , counterexample
         "the web layer refuses what it is supposed to refuse"
         (refused === Just "73")
+    {-| That what a schema change should do is decided without a database: a
+        migration edited after it was applied stops everything, because both
+        databases report the same version from then on and nothing later can
+        detect that their schemas differ; a version arriving below one already
+        applied is refused rather than run out of order; and a rename is not an
+        edit, because the digest is over what runs. -}
+    , counterexample
+        "a schema change is planned before a database is reached"
+        (schemas === Just "21")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

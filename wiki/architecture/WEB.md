@@ -105,7 +105,7 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | A real database client? | **Ready** | [[Std Db]] and [[Std Db Session]]: PostgreSQL, authenticated, with transactions, savepoints, and pooling. |
 | Are values ever placed into a statement as text? | **Ready** | No. Values cross as parameters. |
-| Schema migrations? | **Absent** | Slice 8 of the framework work. Versioned, checksummed, transactional. |
+| Schema migrations? | **Ready** | [[Std Db Migrate]]. Versioned, digested, each in its own transaction, locked in the database so two processes do not both migrate. What should run is decided without a database. |
 | Zero-downtime schema change? | **Absent** | Depends on migrations existing first. |
 | Is a failed transaction left open? | **Ready** | A scoped transaction rolls back what failed before the connection is returned. |
 | Connection limits? | **Ready** | Pools bound their count. |
