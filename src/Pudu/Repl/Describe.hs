@@ -49,7 +49,7 @@ describeName moduleValue name =
  where
   wiredInDescription arity =
     [ "type " <> name <> " -- provided by the compiler"
-    , name <> " :: " <> arrowKind arity
+    , name <> " :: " <> arrowKind (firstOrder arity)
     ]
 
 describeDeclaration :: Text -> Located Declaration -> [Text]
@@ -91,24 +91,37 @@ describeInstances = implementationsFor
     Pudu has no kind system, so this reports the shape a type declaration
     promises rather than inventing one. -}
 describeKind :: Module -> Text -> Maybe Text
-describeKind moduleValue name = case declaredArity moduleValue name of
-  Just arity -> Just (name <> " :: " <> arrowKind arity)
-  Nothing -> (\arity -> name <> " :: " <> arrowKind arity) <$> wiredInArity name
+describeKind moduleValue name = case declaredShape moduleValue name of
+  Just shape -> Just (name <> " :: " <> arrowKind shape)
+  Nothing -> (\arity -> name <> " :: " <> arrowKind (firstOrder arity)) <$> wiredInArity name
 
-declaredArity :: Module -> Text -> Maybe Int
-declaredArity moduleValue name =
+{-| What each declared parameter accepts, in the order it was written.
+
+    The shape rather than the count, because two declarations taking one
+    parameter each do not accept the same thing: one takes a type and the other
+    takes something a type is applied to. Counting them reports both the same
+    way and loses exactly what the reader asked about. -}
+declaredShape :: Module -> Text -> Maybe [Int]
+declaredShape moduleValue name =
   case
-    [ length (typeTypeParams value)
+    [ map (typeParamArity . locatedValue) (typeTypeParams value)
     | Located _ (TypeDeclaration value) <- moduleDeclarations moduleValue
     , locatedValue (typeName value) == name
     ]
-      <> [ length (traitTypeParams value)
+      <> [ map (typeParamArity . locatedValue) (traitTypeParams value)
          | Located _ (TraitDeclaration value) <- moduleDeclarations moduleValue
          , locatedValue (traitName value) == name
          ]
     of
-    arity : _ -> Just arity
+    shape : _ -> Just shape
     [] -> Nothing
+
+{-| A count of parameters that each stand for a type.
+
+    The wired-in constructors are all first order, so a count is all their
+    shape is; writing it this way keeps one renderer for both sources. -}
+firstOrder :: Int -> [Int]
+firstOrder arity = replicate arity 0
 
 {-| The arities the compiler wires in. A reader asking about `Option` is asking
     a real question, and answering it from the same list the checker uses keeps
@@ -129,10 +142,19 @@ scalarNames =
   , "Float32", "Float64", "Float", "Bool", "Char", "Str", "Never", "BigInt"
   ]
 
-arrowKind :: Int -> Text
-arrowKind arity
+{-| A declaration's kind: what each parameter accepts, then what it produces.
+
+    A parameter that accepts a constructor is parenthesised, because the arrow
+    inside it is not the arrow between parameters. Without them a declaration
+    taking one unary constructor and one taking two types would both read
+    `type -> type -> type`, which are different declarations. -}
+arrowKind :: [Int] -> Text
+arrowKind shape = Text.intercalate " -> " (map inputKind shape <> ["type"])
+
+inputKind :: Int -> Text
+inputKind arity
   | arity <= 0 = "type"
-  | otherwise = Text.intercalate " -> " (replicate (arity + 1) "type")
+  | otherwise = "(" <> Text.intercalate " -> " (replicate (arity + 1) "type") <> ")"
 
 renderSignature :: Function -> Text
 renderSignature value =
@@ -199,9 +221,22 @@ renderTypeParams params
 
 renderTypeParam :: TypeParam -> Text
 renderTypeParam param =
-  locatedValue (typeParamName param) <> case typeParamBounds param of
+  locatedValue (typeParamName param) <> arityMarker (typeParamArity param) <> bounds
+ where
+  bounds = case typeParamBounds param of
     [] -> Text.empty
-    bounds -> ": " <> Text.intercalate " + " (map renderType bounds)
+    written -> ": " <> Text.intercalate " + " (map renderType written)
+
+{-| The holes a parameter of higher kind is written with.
+
+    A parameter standing for a constructor is declared `F[_]`, and the holes are
+    what say so. Rendering the name alone would describe a different
+    declaration: `F` stands for a type, and `F[_]` stands for something a type
+    is applied to. -}
+arityMarker :: Int -> Text
+arityMarker arity
+  | arity <= 0 = Text.empty
+  | otherwise = "[" <> Text.intercalate ", " (replicate arity "_") <> "]"
 
 renderType :: Located TypeSyntax -> Text
 renderType (Located _ syntax) = case syntax of

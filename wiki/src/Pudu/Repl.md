@@ -63,6 +63,11 @@ runRepl :: ReplOptions -> IO ()
   when the entry has no expression type. It never evaluates the entry and has
   no runtime-shape fallback. A warning is printed and followed by the valid
   static type; only errors stop the answer.
+- `:info` reproduces declared higher-kinded parameter markers rather than
+  flattening them into ordinary parameters. `:kind` reports their stored
+  constructor shapes, so `F[_]` is an input shaped `(type -> type)` rather
+  than an ordinary `type`; both commands remain syntax projections and never
+  evaluate or infer a separate kind system.
 
 ### Linkage
 
@@ -106,4 +111,4 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]]
+[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]] · [[2026-09-01-higher-kinded-repl-inspection]]

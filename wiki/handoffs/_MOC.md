@@ -6,6 +6,7 @@ tags: [moc, handoff]
 # Handoff Map
 
 - [[2026-08-31-static-repl-inspection]] — static `:type` inspection for issue #189.
+- [[2026-09-01-higher-kinded-repl-inspection]] — lossless higher-kinded `:info` and structural `:kind` inspection for issue #190.
 - [[2026-08-31-ordered-set-syntax]] — active implementation and review record for issue #130.
 
 - [[2026-08-31-std-tree]] — Std.Tree, the ordered recursive hierarchy.
