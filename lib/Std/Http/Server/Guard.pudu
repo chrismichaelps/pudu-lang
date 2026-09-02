@@ -1,0 +1,291 @@
+module Std.Http.Server.Guard
+
+import Std.Http as Http
+import Std.Http.Safe as Safe
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+
+/// Which origins a service permits to read its answers.
+///
+/// An allowlist and nothing else. Reflecting back whichever origin asked is
+/// indistinguishable from permitting everything, and is what a
+/// misconfiguration produces; a wildcard alongside credentials is refused by
+/// browsers anyway and states an intention nobody has.
+export type Sharing = { origins: Array[Str], methods: Array[Str], headers: Array[Str], credentials: Bool }
+
+/// The headers a page cannot defend itself without.
+///
+/// In order: do not frame this, do not guess its type, do not send a referrer,
+/// permit only this page's own origin and no objects or frames, isolate it,
+/// and do not store it.
+const PROTECTIVE_HEADERS: Array[(Str, Str)] = [
+  ("X-Frame-Options", "deny"),
+  ("X-Content-Type-Options", "nosniff"),
+  ("Referrer-Policy", "no-referrer"),
+  ("X-Permitted-Cross-Domain-Policies", "none"),
+  (
+    "Content-Security-Policy",
+    "default-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests"
+  ),
+  ("Cross-Origin-Opener-Policy", "same-origin"),
+  ("Cross-Origin-Resource-Policy", "same-origin"),
+  ("Cache-Control", "no-store, max-age=0")
+]
+
+/// The header carried when a connection is known to be secure, which says the
+/// site is only ever reached that way. Sent separately because sending it over
+/// a connection that is not secure states something untrue.
+const TRANSPORT_HEADER: (Str, Str) = ("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+
+/// The header a request carries its identity in, and the one an answer
+/// carries it back in.
+const IDENTITY_HEADER: Str = "X-Request-Id"
+
+/// What a caller is told when something unexpected failed.
+///
+/// A status and a sentence. An error page that explains itself is a
+/// reconnaissance tool, and the detail is more useful in a log than in a
+/// stranger's browser.
+const FAILURE_TEXT: Str = "the request could not be completed"
+
+/// Every protection, in the order they belong.
+///
+/// The outermost is applied first, so the identity is attached before anything
+/// can fail and the headers are added to whatever answer comes back, including
+/// a refusal. A program that needs one of these to differ writes that one step
+/// itself rather than turning this off.
+export fn standard(sharing: &Sharing) -> Array[Route.Middleware] {
+  [identified(), protectedHeaders(), shared(sharing), sameSiteOnly()]
+}
+
+/// Every protection for a service nothing shares with, which is most of them.
+export fn strict() -> Array[Route.Middleware] { standard(&shareNothing()) }
+
+/// A service that permits no other origin to read its answers.
+export fn shareNothing() -> Sharing {
+  Sharing{origins: [], methods: [], headers: [], credentials: false}
+}
+
+/// A service that permits the named origins, and nothing else.
+export fn shareWith(origins: &Array[Str]) -> Sharing {
+  Sharing {
+    origins: *origins,
+    methods: ["GET", "HEAD", "POST"],
+    headers: ["content-type"],
+    credentials: false
+  }
+}
+
+/// The same, for a caller that also sends credentials. A wildcard is not
+/// reachable from here, which is why credentials can be permitted at all.
+export fn withCredentials(base: &Sharing) -> Sharing {
+  Sharing {
+    origins: base.origins,
+    methods: base.methods,
+    headers: base.headers,
+    credentials: true
+  }
+}
+
+/// The same, permitting different methods.
+export fn allowing(base: &Sharing, methods: &Array[Str]) -> Sharing {
+  Sharing {
+    origins: base.origins,
+    methods: *methods,
+    headers: base.headers,
+    credentials: base.credentials
+  }
+}
+
+/// The protective headers, added to whatever the answer was.
+///
+/// Added rather than replaced where a handler already set one, because a
+/// handler that set a policy meant it and this step is a floor rather than a
+/// ceiling.
+export fn protectedHeaders() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    var headers = answer.headers
+    for entry in PROTECTIVE_HEADERS {
+      if !hasHeader(&headers, entry[0]) { headers = headers.push(entry) }
+    }
+    if secureConnection(&request) {
+      if !hasHeader(&headers, TRANSPORT_HEADER[0]) { headers = headers.push(TRANSPORT_HEADER) }
+    }
+    Http.Response{status: answer.status, headers: headers, body: answer.body}
+  }
+}
+
+/// The cross-origin permission, from the allowlist and only from it.
+export fn shared(sharing: &Sharing) -> Route.Middleware {
+  let permitted = *sharing
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    if let Some(origin) = Route.header(&request, "origin") {
+      if listed(&permitted.origins, origin) {
+        Http.Response {
+          status: answer.status,
+          headers: sharingHeaders(&answer.headers, &permitted, origin),
+          body: answer.body
+        }
+      } else {
+        // No permission header at all rather than one permitting nothing: the
+        // absence is what a browser is specified to act on.
+        answer
+      }
+    } else {
+      answer
+    }
+  }
+}
+
+fn sharingHeaders(
+  base: &Array[(Str, Str)],
+  permitted: &Sharing,
+  origin: Str
+) -> Array[(Str, Str)] {
+  var headers = base.push(("Access-Control-Allow-Origin", origin))
+  // The answer differs by who asked, so anything holding it must be told that.
+  headers = headers.push(("Vary", "Origin"))
+  if permitted.methods.length() > 0 {
+    headers = headers.push(("Access-Control-Allow-Methods", joinedBy(&permitted.methods, ", ")))
+  }
+  if permitted.headers.length() > 0 {
+    headers = headers.push(("Access-Control-Allow-Headers", joinedBy(&permitted.headers, ", ")))
+  }
+  if permitted.credentials {
+    headers = headers.push(("Access-Control-Allow-Credentials", "true"))
+  }
+  headers
+}
+
+/// A refusal of state-changing requests that came from another site.
+///
+/// The browser states where a request came from in a header a page cannot
+/// forge, which makes this stronger than a token a page has to carry: it
+/// cannot be forgotten by the author of a form. A token remains available for
+/// what the header does not cover.
+export fn sameSiteOnly() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    if let Err(problem) = Safe.changeAllowed(&request.message.method, &request.message.headers) {
+      Reply.text(403, Safe.explain(&problem))
+    } else {
+      next(request)
+    }
+  }
+}
+
+/// A request identity, carried into the answer.
+///
+/// Taken from the request when it brought one, so a value that entered at a
+/// proxy stays the same value across every service it reaches. Made from what
+/// this program can see when it did not.
+export fn identified() -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let identity = identityOf(&request)
+    let answer = next(request)
+    if hasHeader(&answer.headers, IDENTITY_HEADER) {
+      answer
+    } else {
+      Http.Response {
+        status: answer.status,
+        headers: answer.headers.push((IDENTITY_HEADER, identity)),
+        body: answer.body
+      }
+    }
+  }
+}
+
+/// The identity a request carries, or one made for it.
+export fn identityOf(request: &Route.Request) -> Str {
+  if let Some(carried) = Route.header(request, "x-request-id") {
+    // A value from outside is written into a header, so it is held to what a
+    // header may hold rather than trusted for having arrived.
+    if let Ok(_) = Safe.headerWritable(IDENTITY_HEADER, carried) { carried } else { madeIdentity() }
+  } else {
+    madeIdentity()
+  }
+}
+
+/// An identity for a request that arrived without one.
+fn madeIdentity() -> Str { show(clock()) }
+
+/// A step that answers a refusal the same way whatever caused it.
+///
+/// What crosses the network is a status and a sentence; the identity in the
+/// answer is what ties it to the detail recorded elsewhere. An error that
+/// explains itself tells a stranger about the program.
+export fn quiet(report: fn(Str) -> ()) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let identity = identityOf(&request)
+    let answer = next(request)
+    if answer.status.code >= 500 {
+      report(
+        identity + " " + Http.methodName(&request.message.method) + " " + request.path + " -> "
+          + show(answer.status.code) + ": " + answer.body
+      )
+      Http.Response {
+        status: answer.status,
+        headers: [(IDENTITY_HEADER, identity)],
+        body: FAILURE_TEXT
+      }
+    } else {
+      answer
+    }
+  }
+}
+
+/// A redirect to somewhere the program named, or a refusal.
+///
+/// A target taken from a request and used unchecked is how a trusted name is
+/// borrowed to make a link look real, so the check is here rather than left to
+/// each handler.
+export fn redirect(code: Int, target: Str, permitted: &Array[Str]) -> Http.Response {
+  if let Ok(allowed) = Safe.redirectTarget(target, permitted) {
+    Http.Response {
+      status: Http.Status{code: code, reason: Http.reasonFor(code)},
+      headers: [("Location", allowed)],
+      body: ""
+    }
+  } else {
+    Reply.text(400, "that is not a destination this program redirects to")
+  }
+}
+
+/// Whether the connection this request arrived on is secure.
+///
+/// Read from what a proxy stated, since a service behind one does not see the
+/// connection the client made. A value that is not the affirmative one is
+/// read as not secure, so a missing or unexpected value never states more than
+/// is known.
+fn secureConnection(request: &Route.Request) -> Bool {
+  if let Some(stated) = Route.header(request, "x-forwarded-proto") {
+    stated.trim().toLower() == "https"
+  } else {
+    false
+  }
+}
+
+fn hasHeader(headers: &Array[(Str, Str)], name: Str) -> Bool {
+  var found = false
+  for entry in headers { if entry[0].toLower() == name.toLower() { found = true } }
+  found
+}
+
+fn listed(origins: &Array[Str], origin: Str) -> Bool {
+  var found = false
+  for held in origins { if held.trim().toLower() == origin.trim().toLower() { found = true } }
+  found
+}
+
+fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { built = built + separator }
+    built = built + pieces[index]
+    index = index + 1
+  }
+  built
+}

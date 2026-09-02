@@ -247,6 +247,7 @@ testProgramEvaluation = do
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
+  refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -443,6 +444,16 @@ testProgramEvaluation = do
     , counterexample
         "two screens differ in what their state differs in"
         (screens === Just "37")
+    {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
+        exists for and each paired with the legitimate version of the same
+        thing: a message framed both by a length and by a chunked encoding, two
+        lengths that disagree, a header value carrying a line break, a
+        state-changing request from another site or from one that will not say,
+        a redirect aimed off-site, a path climbing out of its root by an
+        encoded ascent, and an address only the server can reach. -}
+    , counterexample
+        "the web layer refuses what it is supposed to refuse"
+        (refused === Just "73")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

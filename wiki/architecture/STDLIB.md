@@ -289,6 +289,8 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Html` | 33 | a page as a value; escaping by construction, provisional |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
+| `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |
+| `Std.Http.Server.Guard` | 12 | protective headers, sharing, provenance, identity, and quiet failure |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |

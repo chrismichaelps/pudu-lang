@@ -30,7 +30,9 @@ tags: [moc, module, stdlib]
 - [[Std Html]] — a page as a value, so text placed in one cannot become markup.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std App Config]] — where a setting comes from when four places could supply it.
+- [[Std Http Safe]] — the judgements a server makes before it believes a request.
 - [[Std Http Server]] — reading requests off connections and answering them.
+- [[Std Http Server Guard]] — the steps that make a service safe before anyone asks.
 - [[Std Http Server Route]] — which handler answers a request, and what it is given.
 - [[Std Http Server Reply]] — the answers a handler gives.
 - [[Std Http]] — pure HTTP protocol values and transformations.
