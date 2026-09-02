@@ -253,6 +253,7 @@ testProgramEvaluation = do
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
   permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
   fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesValidate.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -504,6 +505,15 @@ testProgramEvaluation = do
     , counterexample
         "a client is bounded in what it will fetch and where"
         (fetched === Just "38")
+    {-| That everything wrong is reported at once rather than the first thing,
+        since a person correcting a form wants the whole list; that a failure
+        says what was expected and never repeats what was submitted, so a
+        message cannot become somewhere a script is rendered; and that nothing
+        repairs its input, because a validator that trims is deciding what the
+        sender meant. -}
+    , counterexample
+        "everything wrong is reported at once"
+        (checked === Just "54")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

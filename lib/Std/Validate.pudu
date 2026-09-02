@@ -1,0 +1,216 @@
+module Std.Validate
+
+import Std.Map as Map
+import Std.Option as Option
+import Std.Set as Set
+
+/// What a value must be, and what to say when it is not.
+///
+/// A value, so a form's rules can be listed, compared, and reused between the
+/// place a value arrives and the place it is stored — which is the only way
+/// those two stay in agreement. A rule written twice diverges.
+export type Rule
+  = Present
+  | AtLeast(Int)
+  | AtMost(Int)
+  | Exactly(Int)
+  | OneOf(Array[Str])
+  | Whole
+  | Between(Int, Int)
+  | Only(Str, Str)
+  | Judged(Str, fn(Str) -> Bool)
+
+/// One field and what was submitted for it.
+export type Field = { name: Str, value: Str }
+
+/// One thing that is wrong.
+///
+/// The field and what was expected. Not what was submitted: the sender knows
+/// what they sent, and echoing it is how a message becomes somewhere a script
+/// gets rendered.
+export type Failure = { field: Str, expected: Str }
+
+/// Everything that is wrong.
+export type Report = { failures: Array[Failure] }
+
+/// The characters a value made only of digits may hold.
+const DIGITS: Set[Str] = setOf(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
+
+/// A field and its value.
+export fn field(name: Str, value: Str) -> Field { Field{name: name, value: value} }
+
+/// Nothing wrong.
+export fn nothingWrong() -> Report { Report{failures: []} }
+
+/// What one field's rules found.
+///
+/// Every rule is applied, not just up to the first that fails: a person
+/// correcting a form wants the whole list, and giving it to them one at a time
+/// turns one correction into as many round trips as there are mistakes.
+export fn checkField(held: &Field, rules: &Array[Rule]) -> Report {
+  var failures: Array[Failure] = []
+  for rule in rules {
+    if !satisfied(held.value, &rule) {
+      failures = failures.push(Failure{field: held.name, expected: describe(&rule)})
+    }
+  }
+  Report{failures: failures}
+}
+
+/// What a whole form's rules found.
+///
+/// Fields are checked in the order they were declared and each field's rules
+/// in the order they were given, so a message assembled from a report reads
+/// the way the form does.
+export fn check(form: &Array[(Field, Array[Rule])]) -> Report {
+  var failures: Array[Failure] = []
+  for entry in form {
+    for held in checkField(&entry[0], &entry[1]).failures { failures = failures.push(held) }
+  }
+  Report{failures: failures}
+}
+
+/// Two reports together, for a program that checked in more than one place.
+export fn also(left: &Report, right: &Report) -> Report {
+  Report{failures: left.failures.concat(right.failures)}
+}
+
+/// A rule over the whole form rather than one field, for a check that needs
+/// more than one value.
+///
+/// Written this way rather than by letting a field's rule name another field:
+/// a reference makes the order fields are checked in significant, and then a
+/// report depends on a declaration order nobody thought was load-bearing.
+export fn about(
+  name: Str,
+  expected: Str,
+  holds: fn(Map[Str, Str]) -> Bool,
+  values: &Map[Str, Str]
+) -> Report {
+  if holds(*values) {
+    nothingWrong()
+  } else {
+    Report{failures: [Failure{field: name, expected: expected}]}
+  }
+}
+
+/// The submitted values, by field, for a rule that needs more than one.
+export fn valuesOf(fields: &Array[Field]) -> Map[Str, Str] {
+  var found: Map[Str, Str] = Map.empty()
+  for held in fields { found = Map.insert(&found, held.name, held.value) }
+  found
+}
+
+/// Whether a report found nothing.
+export fn passed(held: &Report) -> Bool { held.failures.length() == 0 }
+
+/// How many things are wrong.
+export fn failureCount(held: &Report) -> Int { held.failures.length() }
+
+/// What is wrong with one field.
+export fn failuresFor(held: &Report, name: Str) -> Array[Str] {
+  var found: Array[Str] = []
+  for failure in held.failures { if failure.field == name { found = found.push(failure.expected) } }
+  found
+}
+
+/// Whether one field is wrong.
+export fn faulty(held: &Report, name: Str) -> Bool { failuresFor(held, name).length() > 0 }
+
+/// The fields that are wrong, each once, in the order they first appeared.
+export fn faultyFields(held: &Report) -> Array[Str] {
+  var found: Array[Str] = []
+  for failure in held.failures { if !found.contains(failure.field) { found = found.push(failure.field) } }
+  found
+}
+
+/// What a report says, one line per failure.
+export fn render(held: &Report) -> Str {
+  var built = ""
+  var index = 0
+  while index < held.failures.length() {
+    if index > 0 { built = built + "\n" }
+    built = built + held.failures[index].field + ": " + held.failures[index].expected
+    index = index + 1
+  }
+  built
+}
+
+/// A value read as a whole number, once the rules said it is one.
+export fn wholeOf(value: Str) -> Option[Int] {
+  let trimmed = value.trim()
+  let negative = trimmed.startsWith("-")
+  let body = if negative { trimmed.drop(1) } else { trimmed }
+  if body.isEmpty() {
+    None
+  } else {
+    var total = 0
+    var index = 0
+    var good = true
+    while index < body.length() && good {
+      let character = body.slice(index, index + 1)
+      if Set.contains(&DIGITS, character) {
+        total = total * 10 + "0123456789".indexOf(character)
+      } else {
+        good = false
+      }
+      index = index + 1
+    }
+    if good { Some(if negative { 0 - total } else { total }) } else { None }
+  }
+}
+
+/// Whether a value satisfies a rule.
+export fn satisfied(value: Str, rule: &Rule) -> Bool {
+  match rule {
+    case Present => !value.trim().isEmpty()
+    case AtLeast(count) => value.length() >= count
+    case AtMost(count) => value.length() <= count
+    case Exactly(count) => value.length() == count
+    case OneOf(options) => options.contains(value)
+    case Whole => Option.isSome(&wholeOf(value))
+    case Between(low, high) => withinRange(value, low, high)
+    case Only(_named, allowed) => madeOf(value, allowed)
+    case Judged(_named, holds) => holds(value)
+  }
+}
+
+fn withinRange(value: Str, low: Int, high: Int) -> Bool {
+  if let Some(number) = wholeOf(value) { number >= low && number <= high } else { false }
+}
+
+fn madeOf(value: Str, allowed: Str) -> Bool {
+  var good = true
+  var index = 0
+  while index < value.length() && good {
+    if !allowed.contains(value.slice(index, index + 1)) { good = false }
+    index = index + 1
+  }
+  good
+}
+
+/// What a rule expects, as text.
+export fn describe(rule: &Rule) -> Str {
+  match rule {
+    case Present => "a value"
+    case AtLeast(count) => "at least " + show(count) + " characters"
+    case AtMost(count) => "at most " + show(count) + " characters"
+    case Exactly(count) => "exactly " + show(count) + " characters"
+    case OneOf(options) => "one of " + joinedBy(&options, ", ")
+    case Whole => "a whole number"
+    case Between(low, high) => "a number from " + show(low) + " to " + show(high)
+    case Only(named, _allowed) => named
+    case Judged(named, _holds) => named
+  }
+}
+
+fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { built = built + separator }
+    built = built + pieces[index]
+    index = index + 1
+  }
+  built
+}

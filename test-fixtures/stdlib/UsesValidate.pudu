@@ -1,0 +1,152 @@
+module UsesValidate
+
+import Std.Map as Map
+import Std.Option as Option
+import Std.Validate {AtLeast, AtMost, Between, Exactly, Judged, OneOf, Only, Present, Whole}
+import Std.Validate as Validate
+
+/// What validation promises.
+///
+/// The claim under test is that everything wrong is reported at once, and that
+/// a failure says what was expected rather than repeating what was sent.
+export fn main() -> Int {
+  var held = 0
+
+  // A value has to be there, and space is not a value.
+  if Validate.satisfied("ada", &Present) { held = held + 1 }
+  if !Validate.satisfied("", &Present) { held = held + 1 }
+  if !Validate.satisfied("   ", &Present) { held = held + 1 }
+
+  // Length, at each end and exactly.
+  if Validate.satisfied("abcd", &AtLeast(4)) { held = held + 1 }
+  if !Validate.satisfied("abc", &AtLeast(4)) { held = held + 1 }
+  if Validate.satisfied("abc", &AtMost(4)) { held = held + 1 }
+  if !Validate.satisfied("abcde", &AtMost(4)) { held = held + 1 }
+  if Validate.satisfied("abcd", &Exactly(4)) { held = held + 1 }
+  if !Validate.satisfied("abc", &Exactly(4)) { held = held + 1 }
+
+  // A choice among stated options.
+  if Validate.satisfied("red", &OneOf(["red", "green"])) { held = held + 1 }
+  if !Validate.satisfied("blue", &OneOf(["red", "green"])) { held = held + 1 }
+
+  // A whole number, and a range.
+  if Validate.satisfied("42", &Whole) { held = held + 1 }
+  if Validate.satisfied("-7", &Whole) { held = held + 1 }
+  if !Validate.satisfied("4.2", &Whole) { held = held + 1 }
+  if !Validate.satisfied("", &Whole) { held = held + 1 }
+  if !Validate.satisfied("12a", &Whole) { held = held + 1 }
+  if Validate.satisfied("5", &Between(1, 10)) { held = held + 1 }
+  if !Validate.satisfied("11", &Between(1, 10)) { held = held + 1 }
+  if !Validate.satisfied("nine", &Between(1, 10)) { held = held + 1 }
+
+  // A value made only of stated characters.
+  if Validate.satisfied("abc", &Only("letters", "abcdefghijklmnopqrstuvwxyz")) { held = held + 1 }
+  if !Validate.satisfied("ab1", &Only("letters", "abcdefghijklmnopqrstuvwxyz")) { held = held + 1 }
+
+  // A rule the program writes, for what the shapes above do not cover.
+  let hasAt = Judged("an address", fn(value: Str) -> Bool { value.contains("@") })
+  if Validate.satisfied("a@b", &hasAt) { held = held + 1 }
+  if !Validate.satisfied("ab", &hasAt) { held = held + 1 }
+
+  // Everything wrong is reported, not the first thing. A person correcting a
+  // form wants the whole list; one at a time turns one correction into as many
+  // round trips as there are mistakes.
+  let short = Validate.checkField(&Validate.field("name", ""), &[Present, AtLeast(3), Only("letters", "abc")])
+  if Validate.failureCount(&short) == 2 { held = held + 1 }
+  if !Validate.passed(&short) { held = held + 1 }
+
+  // The failures are in the order the rules were given.
+  if Validate.failuresFor(&short, "name")[0] == "a value" { held = held + 1 }
+  if Validate.failuresFor(&short, "name")[1] == "at least 3 characters" { held = held + 1 }
+
+  // A failure says what was expected. It does not repeat what was sent: the
+  // sender knows, and echoing it is how a message becomes somewhere a script
+  // gets rendered.
+  let dangerous = Validate.checkField(
+      &Validate.field("name", "<script>steal()</script>"),
+      &[AtMost(5)]
+  )
+  if !Validate.render(&dangerous).contains("script") { held = held + 1 }
+  if Validate.render(&dangerous).contains("at most 5") { held = held + 1 }
+
+  // A whole form, with fields checked in the order they were declared.
+  let form = [
+    (Validate.field("name", ""), [Present]),
+    (Validate.field("age", "old"), [Present, Whole]),
+    (Validate.field("colour", "red"), [OneOf(["red", "green"])])
+  ]
+  let found = Validate.check(&form)
+  if Validate.failureCount(&found) == 2 { held = held + 1 }
+  if Validate.faultyFields(&found) == ["name", "age"] { held = held + 1 }
+  if Validate.faulty(&found, "name") { held = held + 1 }
+  if Validate.faulty(&found, "age") { held = held + 1 }
+  if !Validate.faulty(&found, "colour") { held = held + 1 }
+
+  // A form with nothing wrong finds nothing.
+  let good = [
+    (Validate.field("name", "ada"), [Present, AtLeast(2)]),
+    (Validate.field("age", "36"), [Whole, Between(0, 150)])
+  ]
+  if Validate.passed(&Validate.check(&good)) { held = held + 1 }
+  if Validate.failureCount(&Validate.check(&good)) == 0 { held = held + 1 }
+  if Validate.render(&Validate.check(&good)).isEmpty() { held = held + 1 }
+
+  // A field with no rules at all passes, rather than being an error: a form
+  // that collects something it does not constrain is ordinary.
+  if Validate.passed(&Validate.checkField(&Validate.field("note", "anything"), &[])) {
+    held = held + 1
+  }
+
+  // A report reads one failure to a line, naming the field.
+  let written = Validate.render(&found)
+  if written.contains("name: a value") { held = held + 1 }
+  if written.contains("age: a whole number") { held = held + 1 }
+  if written.split("\n").length() == 2 { held = held + 1 }
+
+  // Two reports go together, for a program that checked in more than one place.
+  if Validate.failureCount(&Validate.also(&short, &found)) == 4 { held = held + 1 }
+  if Validate.passed(&Validate.also(&Validate.nothingWrong(), &Validate.nothingWrong())) {
+    held = held + 1
+  }
+
+  // A rule over the whole form rather than one field, for a check that needs
+  // more than one value. Written this way so the order fields are checked in
+  // never becomes significant.
+  let entered = Validate.valuesOf(&[
+      Validate.field("password", "abc"),
+      Validate.field("again", "abd")
+    ])
+  let matching = Validate.about("again", "the same password", fn(values: Map[Str, Str]) -> Bool {
+      Map.getOr(&values, "password", "") == Map.getOr(&values, "again", "")
+    }, &entered)
+  if !Validate.passed(&matching) { held = held + 1 }
+  if Validate.failuresFor(&matching, "again") == ["the same password"] { held = held + 1 }
+
+  let agreeing = Validate.valuesOf(&[
+      Validate.field("password", "abc"),
+      Validate.field("again", "abc")
+    ])
+  if Validate.passed(&Validate.about("again", "the same password", fn(values: Map[Str, Str]) -> Bool {
+        Map.getOr(&values, "password", "") == Map.getOr(&values, "again", "")
+      }, &agreeing))
+  {
+    held = held + 1
+  }
+
+  // Nothing here repairs its input. A validator that trims is deciding what the
+  // sender meant, and the sender is the only one who knows.
+  if !Validate.satisfied(" ada ", &Exactly(3)) { held = held + 1 }
+  if Validate.satisfied(" ada ", &Exactly(5)) { held = held + 1 }
+
+  // A value reads out as a number once the rules said it is one.
+  if Option.unwrapOr(Validate.wholeOf("42"), 0) == 42 { held = held + 1 }
+  if Option.unwrapOr(Validate.wholeOf("-7"), 0) == -7 { held = held + 1 }
+  if Option.isNone(&Validate.wholeOf("4.2")) { held = held + 1 }
+
+  // What a rule expects reads back as text, so a form can be described.
+  if Validate.describe(&Between(1, 10)) == "a number from 1 to 10" { held = held + 1 }
+  if Validate.describe(&OneOf(["a", "b"])) == "one of a, b" { held = held + 1 }
+  if Validate.describe(&hasAt) == "an address" { held = held + 1 }
+
+  held
+}

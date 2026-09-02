@@ -29,6 +29,7 @@ tags: [moc, module, stdlib]
 - [[Std Db]] — queries, rows, transactions, and pools over a session.
 - [[Std App]] — the program as a value: what starts it, and what stops it.
 - [[Std Html]] — a page as a value, so text placed in one cannot become markup.
+- [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
