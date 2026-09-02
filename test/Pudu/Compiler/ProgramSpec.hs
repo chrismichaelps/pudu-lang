@@ -244,6 +244,7 @@ testProgramEvaluation = do
   secured <- runEntry "test-fixtures/stdlib/UsesTls.pudu"
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
+  wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -414,6 +415,17 @@ testProgramEvaluation = do
     , counterexample
         "a database client binds, authenticates, and rolls back"
         (database === Just "33")
+    {-| The obligations [[ADR-0016]] places on an application: that a declared
+        default is held like any other setting and can say where it came from,
+        that a later layer wins over an earlier one, that a profile states its
+        differences rather than replacing what it did not mention, that a read
+        says what it expected when the text cannot be that, and — the property
+        that only holds because an application is a value — that stages start
+        in the order written, stop in the reverse of it, and unwind what came
+        up when one of them refuses to. -}
+    , counterexample
+        "an application is a value that starts and stops in a written order"
+        (wired === Just "40")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

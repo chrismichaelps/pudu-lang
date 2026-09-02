@@ -1,0 +1,221 @@
+module Std.App
+
+import Std.App.Config as Config
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Option as Option
+import Std.Result as Result
+
+/// One thing that starts and later stops.
+///
+/// A stage holds both halves because they belong together: the thing that
+/// knows how to open a pool is the thing that knows how to close it, and
+/// separating them into two lists is how the halves come to disagree about
+/// what exists.
+export type Stage = { name: Str, start: fn() -> Result[(), Str], stop: fn() -> Result[(), Str] }
+
+/// The program: what it is called, what it was told, what it serves, and what
+/// has to be running before it serves it.
+export type App = {
+  name: Str,
+  config: Config.Config,
+  router: Route.Router,
+  stages: Array[Stage]
+}
+
+/// What a start or a stop did.
+///
+/// The stages that came up are named, not just counted, because the caller of
+/// a failed start needs to know how far it got, and because a stop reports the
+/// same shape so the two can be compared.
+export type Report = { started: Array[Str], failure: Option[(Str, Str)] }
+
+/// Why a program could not run.
+export type AppError
+  = Configuration(Str)
+  | StageFailed(Str, Str)
+  | Listen(Str)
+
+/// The port a service listens on when nothing said otherwise.
+const DEFAULT_PORT: Int = 8080
+
+/// The address a service binds when nothing said otherwise. Every interface
+/// rather than one, because a service in a container that bound only its own
+/// loopback is unreachable from outside it, which is the common deployment.
+const DEFAULT_HOST: Str = "0.0.0.0"
+
+/// Where a program's own settings are, when it does not say.
+const DEFAULT_CONFIG_PATH: Str = "app.toml"
+
+/// The settings a service has whether or not anyone wrote them down.
+const DEFAULT_SETTINGS: Array[(Str, Str)] = [
+  ("server.host", DEFAULT_HOST),
+  ("server.port", "8080"),
+  ("server.connections", "0")
+]
+
+/// A name and a router, and a service is running.
+///
+/// Configuration is found, the routes are served, and stopping is graceful.
+/// This is the whole of what a first program needs, and it is built from the
+/// public functions below it, so a program that outgrows it adds a stage
+/// rather than starting again.
+export fn serve(name: Str, routes: &Route.Router) -> Result[Int, AppError] {
+  let built = web(name, routes) ?
+  run(&built)
+}
+
+/// The same application, built and not run.
+///
+/// Worth having separately because an application is a value: a test builds
+/// one, reads its routes and its settings, and never binds a port.
+export fn web(name: Str, routes: &Route.Router) -> Result[App, AppError] {
+  let found = Config.discover(&DEFAULT_SETTINGS, DEFAULT_CONFIG_PATH)
+  if let Err(problem) = found {
+    Err(Configuration(Config.explain(&problem)))
+  } else {
+    Ok(
+      App {
+        name: name,
+        config: Result.unwrapOr(found, Config.empty()),
+        router: *routes,
+        stages: []
+      }
+    )
+  }
+}
+
+/// An application over settings the caller already has, for a program whose
+/// configuration comes from somewhere this module does not know about.
+export fn over(name: Str, settings: &Config.Config, routes: &Route.Router) -> App {
+  App{name: name, config: *settings, router: *routes, stages: []}
+}
+
+/// An application with one more thing to start.
+///
+/// Order is the order written. Nothing infers it from what a stage needs,
+/// because an inferred order cannot be read off the page and needs a second
+/// mechanism to correct it in the cases that matter.
+export fn using(base: &App, step: Stage) -> App {
+  App{name: base.name, config: base.config, router: base.router, stages: base.stages.push(step)}
+}
+
+/// An application with different routes.
+export fn serving(base: &App, routes: &Route.Router) -> App {
+  App{name: base.name, config: base.config, router: *routes, stages: base.stages}
+}
+
+/// A stage from its two halves.
+export fn stage(
+  name: Str,
+  opening: fn() -> Result[(), Str],
+  closing: fn() -> Result[(), Str]
+) -> Stage {
+  Stage{name: name, start: opening, stop: closing}
+}
+
+/// A stage that has something to start and nothing to undo.
+export fn once(name: Str, opening: fn() -> Result[(), Str]) -> Stage {
+  Stage{name: name, start: opening, stop: fn() -> Result[(), Str] { Ok(()) }}
+}
+
+/// What the application is called.
+export fn nameOf(target: &App) -> Str { target.name }
+
+/// What the application was told.
+export fn configOf(target: &App) -> Config.Config { target.config }
+
+/// What the application serves.
+export fn routerOf(target: &App) -> Route.Router { target.router }
+
+/// What has to be running before it serves, in the order it starts.
+export fn stagesOf(target: &App) -> Array[Stage] { target.stages }
+
+/// The names of the stages, in start order, for a program reporting itself.
+export fn stageNames(target: &App) -> Array[Str] {
+  var found: Array[Str] = []
+  for held in target.stages { found = found.push(held.name) }
+  found
+}
+
+/// Start every stage in order.
+///
+/// A stage that fails stops every stage already started, in reverse, before
+/// answering. A caller told that a start failed will not then be told to clean
+/// up after it, so the cleanup happens here or it does not happen.
+export fn start(target: &App) -> Report {
+  var started: Array[Str] = []
+  var failure: Option[(Str, Str)] = None
+  var index = 0
+  while index < target.stages.length() && Option.isNone(&failure) {
+    let held = target.stages[index]
+    let attempted = (held.start)()
+    if let Err(reason) = attempted {
+      failure = Some((held.name, reason))
+    } else {
+      started = started.push(held.name)
+    }
+    index = index + 1
+  }
+  if Option.isSome(&failure) { let _unwound = stopThrough(target, started.length()) }
+  Report{started: started, failure: failure}
+}
+
+/// Stop every stage, in reverse.
+///
+/// Every stage is attempted even after one fails: a resource that would not
+/// close is not a reason to leak the next one. The first failure is the one
+/// reported, because it is the one that happened while the most was still
+/// running.
+export fn stop(target: &App) -> Report { stopThrough(target, target.stages.length()) }
+
+/// Stop the first `count` stages, in reverse.
+fn stopThrough(target: &App, count: Int) -> Report {
+  var stopped: Array[Str] = []
+  var failure: Option[(Str, Str)] = None
+  var index = count - 1
+  while index >= 0 {
+    let held = target.stages[index]
+    let attempted = (held.stop)()
+    if let Err(reason) = attempted {
+      if Option.isNone(&failure) { failure = Some((held.name, reason)) }
+    } else {
+      stopped = stopped.push(held.name)
+    }
+    index = index - 1
+  }
+  Report{started: stopped, failure: failure}
+}
+
+/// Whether a report says everything worked.
+export fn succeeded(held: &Report) -> Bool { Option.isNone(&held.failure) }
+
+/// What went wrong, as text.
+export fn explainReport(held: &Report) -> Str {
+  if let Some(problem) = held.failure { problem[0] + ": " + problem[1] } else { "" }
+}
+
+/// Start everything, serve until the work is finished, then stop everything.
+///
+/// Stopping happens whether the serving succeeded or not, because the reason a
+/// program stopped serving is never a reason to leave its pool open.
+export fn run(target: &App) -> Result[Int, AppError] {
+  let coming = start(target)
+  if let Some(problem) = coming.failure { return Err(StageFailed(problem[0], problem[1])) }
+  let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
+  let port = Config.wholeOr(&target.config, "server.port", DEFAULT_PORT)
+  let limit = Config.wholeOr(&target.config, "server.connections", 0)
+  let listening = Server.server(&target.router)
+  let served = Server.listenAndServe(&listening, host, port, limit)
+  let _stopped = stop(target)
+  if let Err(problem) = served { Err(Listen(show(problem))) } else { Ok(Result.unwrapOr(served, 0)) }
+}
+
+/// What a refusal says.
+export fn explain(problem: &AppError) -> Str {
+  match problem {
+    case Configuration(reason) => "configuration: " + reason
+    case StageFailed(named, reason) => named + " did not start: " + reason
+    case Listen(reason) => "could not serve: " + reason
+  }
+}

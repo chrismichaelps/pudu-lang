@@ -185,6 +185,8 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | Module | Provides |
 |---|---|
 | `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
+| `Std.App` | the program itself: configuration, what starts, what stops |
+| `Std.App.Config` | layered settings, typed where they are read |
 | `Std.Http.Server` | server: reading requests off connections and answering them |
 | `Std.Http.Server.Route` | which handler answers a request, and what it is given |
 | `Std.Http.Server.Reply` | the answers a handler gives |
@@ -283,6 +285,8 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Channel` | 9 | bounded typed queues with explicit closure, provisional |
 | `Std.Sync` | 15 | runtime mutexes, atomic cells, and counters, provisional |
 | `Std.Net` | 21 | TCP listeners/connections and bounded streaming reads, provisional |
+| `Std.App` | 20 | the application value, its stages, and running one, provisional |
+| `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
