@@ -286,6 +286,8 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Sync` | 15 | runtime mutexes, atomic cells, and counters, provisional |
 | `Std.Net` | 21 | TCP listeners/connections and bounded streaming reads, provisional |
 | `Std.App` | 20 | the application value, its stages, and running one, provisional |
+| `Std.Html` | 33 | a page as a value; escaping by construction, provisional |
+| `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |

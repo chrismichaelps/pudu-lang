@@ -27,6 +27,8 @@ tags: [moc, module, stdlib]
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
 - [[Std Db]] — queries, rows, transactions, and pools over a session.
 - [[Std App]] — the program as a value: what starts it, and what stops it.
+- [[Std Html]] — a page as a value, so text placed in one cannot become markup.
+- [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std App Config]] — where a setting comes from when four places could supply it.
 - [[Std Http Server]] — reading requests off connections and answering them.
 - [[Std Http Server Route]] — which handler answers a request, and what it is given.

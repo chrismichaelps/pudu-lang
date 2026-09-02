@@ -245,6 +245,8 @@ testProgramEvaluation = do
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
+  markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -426,6 +428,21 @@ testProgramEvaluation = do
     , counterexample
         "an application is a value that starts and stops in a written order"
         (wired === Just "40")
+    {-| That placing text in a page cannot place markup in one: a script
+        written into text renders as that text, a quote inside an attribute
+        does not end the value and start another, and the ampersand is written
+        before the rest so an entity arrives once rather than twice. -}
+    , counterexample
+        "text placed in a page stays text"
+        (markup === Just "34")
+    {-| That a screen is a function from state to view, so the difference
+        between two renders is exactly the difference the state made: an
+        element that became a different element is replaced whole rather than
+        reconciled, a list whose length changed replaces the node holding it,
+        and applying the changes to the earlier screen gives the later one. -}
+    , counterexample
+        "two screens differ in what their state differs in"
+        (screens === Just "37")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

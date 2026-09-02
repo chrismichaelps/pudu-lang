@@ -1,0 +1,252 @@
+module Std.Html
+
+import Std.Set as Set
+
+/// A page, as a value.
+///
+/// Text and markup are different things here, and the only way to obtain the
+/// second is to build a node. A template language solves escaping repeatedly
+/// and gets it wrong at each new context because it lets a string become markup
+/// by being interpolated; a string cannot become markup at all, so the failure
+/// has no way to occur rather than being prevented by a rule to remember.
+///
+/// `Trusted` is the one exception, named so it cannot be reached by accident
+/// and cannot be missed in review. A caller who genuinely holds markup — the
+/// output of a document converter, a fragment from elsewhere — says so, and the
+/// word appears where they said it.
+export type Html
+  = Element(Str, Array[(Str, Str)], Array[Html])
+  | Text(Str)
+  | Fragment(Array[Html])
+  | Trusted(Str)
+
+/// The elements written without a closing tag.
+///
+/// A table rather than a rule, because there is no rule: nothing about the
+/// name of an element says whether it may hold children.
+const VOID_ELEMENTS: Set[Str] = setOf([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr"
+  ])
+
+/// An element with a name, attributes, and children.
+export fn element(name: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element(name, *attributes, *children)
+}
+
+/// An element with children and no attributes, which most elements are.
+export fn tag(name: Str, children: &Array[Html]) -> Html { Element(name, [], *children) }
+
+/// An element with attributes and nothing inside it.
+export fn empty(name: Str, attributes: &Array[(Str, Str)]) -> Html {
+  Element(name, *attributes, [])
+}
+
+/// Text, which is text: whatever it holds, it renders as that and not as
+/// markup.
+export fn text(content: Str) -> Html { Text(content) }
+
+/// Several views with no element around them.
+export fn fragment(children: &Array[Html]) -> Html { Fragment(*children) }
+
+/// Nothing, for a branch that renders no view.
+export fn nothing() -> Html { Fragment([]) }
+
+/// Markup the caller has taken responsibility for.
+///
+/// The only way text becomes markup. Named rather than convenient on purpose:
+/// an escape hatch that is easy to reach is the same as no escaping, while one
+/// that must be named is a decision somebody made and a reviewer can find.
+export fn trusted(markup: Str) -> Html { Trusted(markup) }
+
+/// A view for each item of a list.
+export fn each[T](items: &Array[T], view: fn(T) -> Html) -> Html {
+  var built: Array[Html] = []
+  for item in items { built = built.push(view(item)) }
+  Fragment(built)
+}
+
+/// One view or the other, for a branch that renders either.
+export fn when(condition: Bool, view: Html) -> Html {
+  if condition { view } else { Fragment([]) }
+}
+
+/// The class attribute, from the classes rather than from their spelling, so a
+/// caller adding one does not also maintain the separators.
+export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", joinedBy(names, " ")) }
+
+/// The style attribute, from its declarations.
+export fn style(declarations: &Array[(Str, Str)]) -> (Str, Str) {
+  var built = ""
+  var index = 0
+  while index < declarations.length() {
+    if index > 0 { built = built + "; " }
+    built = built + declarations[index][0] + ": " + declarations[index][1]
+    index = index + 1
+  }
+  ("style", built)
+}
+
+/// An attribute whose presence is its meaning, written as its own name.
+export fn flag(name: Str) -> (Str, Str) { (name, name) }
+
+export fn html(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("html", *attributes, *children)
+}
+
+export fn head(children: &Array[Html]) -> Html { Element("head", [], *children) }
+
+export fn body(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("body", *attributes, *children)
+}
+
+export fn title(content: Str) -> Html { Element("title", [], [Text(content)]) }
+
+export fn meta(attributes: &Array[(Str, Str)]) -> Html { Element("meta", *attributes, []) }
+
+export fn link(attributes: &Array[(Str, Str)]) -> Html { Element("link", *attributes, []) }
+
+export fn div(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("div", *attributes, *children)
+}
+
+export fn span(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("span", *attributes, *children)
+}
+
+export fn paragraph(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("p", *attributes, *children)
+}
+
+export fn heading(level: Int, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  let bounded = if level < 1 { 1 } else { if level > 6 { 6 } else { level } }
+  Element("h" + show(bounded), *attributes, *children)
+}
+
+export fn anchor(href: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("a", attributes.push(("href", href)), *children)
+}
+
+export fn image(src: Str, description: Str, attributes: &Array[(Str, Str)]) -> Html {
+  Element("img", attributes.push(("src", src)).push(("alt", description)), [])
+}
+
+export fn list(ordered: Bool, attributes: &Array[(Str, Str)], items: &Array[Html]) -> Html {
+  var built: Array[Html] = []
+  for item in items { built = built.push(Element("li", [], [item])) }
+  Element(if ordered { "ol" } else { "ul" }, *attributes, built)
+}
+
+export fn form(action: Str, method: Str, children: &Array[Html]) -> Html {
+  Element("form", [("action", action), ("method", method)], *children)
+}
+
+export fn input(attributes: &Array[(Str, Str)]) -> Html { Element("input", *attributes, []) }
+
+export fn button(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("button", *attributes, *children)
+}
+
+export fn table(attributes: &Array[(Str, Str)], rows: &Array[Html]) -> Html {
+  Element("table", *attributes, *rows)
+}
+
+export fn row(cells: &Array[Html]) -> Html { Element("tr", [], *cells) }
+
+export fn cell(heads: Bool, children: &Array[Html]) -> Html {
+  Element(if heads { "th" } else { "td" }, [], *children)
+}
+
+/// A view as markup.
+///
+/// The only thing here that produces text. It reads nothing outside the value
+/// it was given, so two renders of equal views are equal and a page can be
+/// compared in a test rather than matched against a pattern.
+export fn render(view: &Html) -> Str {
+  match view {
+    case Text(content) => escape(content)
+    case Trusted(markup) => markup
+    case Fragment(children) => renderAll(&children)
+    case Element(name, attributes, children) => renderElement(name, &attributes, &children)
+  }
+}
+
+/// A whole document, with the declaration that says which one it is.
+export fn document(view: &Html) -> Str { "<!DOCTYPE html>\n" + render(view) }
+
+/// Text with the characters that would otherwise start markup written as
+/// themselves.
+///
+/// The ampersand goes first: escaping it after the others would escape the
+/// escapes and every entity would arrive doubled.
+export fn escape(content: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < content.length() {
+    let character = content.slice(index, index + 1)
+    built = built + escaped(character)
+    index = index + 1
+  }
+  built
+}
+
+/// An attribute value, which escapes both kinds of quote because which one
+/// surrounds it is not something the value can know.
+export fn escapeAttribute(value: Str) -> Str { escape(value) }
+
+const ESCAPES: Map[Str, Str] = mapOf([
+    ("&", "&amp;"),
+    ("<", "&lt;"),
+    (">", "&gt;"),
+    ("\"", "&quot;"),
+    ("'", "&#39;")
+  ])
+
+fn escaped(character: Str) -> Str {
+  if let Some(written) = ESCAPES.get(character) { written } else { character }
+}
+
+fn renderAll(children: &Array[Html]) -> Str {
+  var built = ""
+  for child in children { built = built + render(&child) }
+  built
+}
+
+fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Str {
+  let opening = "<" + name + renderAttributes(attributes)
+  if VOID_ELEMENTS.contains(name) {
+    opening + " />"
+  } else {
+    opening + ">" + renderAll(children) + "</" + name + ">"
+  }
+}
+
+fn renderAttributes(attributes: &Array[(Str, Str)]) -> Str {
+  var built = ""
+  for entry in attributes {
+    built = built + " " + entry[0] + "=\"" + escapeAttribute(entry[1]) + "\""
+  }
+  built
+}
+
+fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { built = built + separator }
+    built = built + pieces[index]
+    index = index + 1
+  }
+  built
+}
