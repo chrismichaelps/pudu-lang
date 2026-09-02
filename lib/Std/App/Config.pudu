@@ -1,5 +1,6 @@
 module Std.App.Config
 
+import Std.Decimal as Decimal
 import Std.Env as Env
 import Std.Io as Io
 import Std.Map as Map
@@ -37,9 +38,9 @@ export type Config = { settings: Map[Str, Setting], profile: Str }
 /// that a setting was wrong.
 export type ConfigError
   = Missing(Str)
-  | NotWhole(Str, Str)
-  | NotTruth(Str, Str)
-  | NotFractional(Str, Str)
+  | NotWhole(Str, Source, Str)
+  | NotTruth(Str, Source, Str)
+  | NotFractional(Str, Source, Str)
   | Unreadable(Str)
 
 /// The layers, in the order they are applied.
@@ -53,7 +54,7 @@ export fn empty() -> Config { Config{settings: Map.empty(), profile: ""} }
 
 /// The configuration a program gets when it does not say otherwise: its own
 /// declared defaults, the named file, the machine, and this invocation, in
-/// that order, with the profile taken from wherever it was given.
+/// that order, with the profile selected by an argument or the environment.
 ///
 /// This is the whole of what most programs want from configuration, and it is
 /// one call so that they can have it in one call. Everything it does is a
@@ -166,11 +167,8 @@ export fn sourceOf(target: &Config, key: Str) -> Option[Source] {
 
 /// A setting as text.
 export fn text(target: &Config, key: Str) -> Result[Str, ConfigError] {
-  if let Some(setting) = Map.get(&target.settings, key) {
-    Ok(setting.value)
-  } else {
-    Err(Missing(key))
-  }
+  let setting = settingOf(target, key) ?
+  Ok(setting.value)
 }
 
 /// A setting as text, or a fallback when it is absent.
@@ -182,13 +180,27 @@ export fn textOr(target: &Config, key: Str, fallback: Str) -> Str {
 
 /// A setting as a whole number.
 export fn whole(target: &Config, key: Str) -> Result[Int, ConfigError] {
-  let held = text(target, key) ?
-  if let Some(number) = wholeOf(held) { Ok(number) } else { Err(NotWhole(key, held)) }
+  let setting = settingOf(target, key) ?
+  if let Some(number) = wholeOf(setting.value) {
+    Ok(number)
+  } else {
+    Err(NotWhole(key, setting.source, setting.value))
+  }
 }
 
 /// A setting as a whole number, or a fallback.
 export fn wholeOr(target: &Config, key: Str, fallback: Int) -> Int {
   Result.unwrapOr(whole(target, key), fallback)
+}
+
+/// A setting as an exact fractional number.
+export fn fractional(target: &Config, key: Str) -> Result[Decimal, ConfigError] {
+  let setting = settingOf(target, key) ?
+  if let Some(number) = Decimal.parse(setting.value.trim()) {
+    Ok(number)
+  } else {
+    Err(NotFractional(key, setting.source, setting.value))
+  }
 }
 
 /// A setting as a truth.
@@ -198,12 +210,16 @@ export fn wholeOr(target: &Config, key: Str, fallback: Int) -> Int {
 /// because a setting spelled `yes` that silently means no is worse than one
 /// that stops the program.
 export fn truth(target: &Config, key: Str) -> Result[Bool, ConfigError] {
-  let held = text(target, key) ?
-  let word = held.trim().toLower()
+  let setting = settingOf(target, key) ?
+  let word = setting.value.trim().toLower()
   if TRUE_WORDS.contains(word) {
     Ok(true)
   } else {
-    if FALSE_WORDS.contains(word) { Ok(false) } else { Err(NotTruth(key, held)) }
+    if FALSE_WORDS.contains(word) {
+      Ok(false)
+    } else {
+      Err(NotTruth(key, setting.source, setting.value))
+    }
   }
 }
 
@@ -235,9 +251,9 @@ export fn require(target: &Config, key: Str) -> Result[Str, ConfigError] {
 export fn explain(problem: &ConfigError) -> Str {
   match problem {
     case Missing(key) => "no value for " + key
-    case NotWhole(key, held) => key + " is not a whole number: " + held
-    case NotTruth(key, held) => key + " is not true or false: " + held
-    case NotFractional(key, held) => key + " is not a number: " + held
+    case NotWhole(key, layer, held) => malformed(key, &layer, "a whole number", held)
+    case NotTruth(key, layer, held) => malformed(key, &layer, "true or false", held)
+    case NotFractional(key, layer, held) => malformed(key, &layer, "a decimal number", held)
     case Unreadable(what) => "could not read " + what
   }
 }
@@ -259,6 +275,14 @@ const SOURCE_NAMES: Map[Source, Str] = mapOf([
 const TRUE_WORDS: Set[Str] = setOf(["true", "yes", "on", "1"])
 
 const FALSE_WORDS: Set[Str] = setOf(["false", "no", "off", "0"])
+
+fn settingOf(target: &Config, key: Str) -> Result[Setting, ConfigError] {
+  if let Some(setting) = Map.get(&target.settings, key) { Ok(setting) } else { Err(Missing(key)) }
+}
+
+fn malformed(key: Str, layer: &Source, expected: Str, held: Str) -> Str {
+  key + " from " + sourceName(layer) + " is not " + expected + ": " + held
+}
 
 /// Write one layer's settings over what is already held.
 fn layered(base: &Config, found: &Array[(Str, Str)], layer: Source) -> Config {
@@ -293,8 +317,22 @@ fn merged(document: &Toml.Toml, section: &Toml.Toml, named: Str) -> Toml.Toml {
       if let Some(held) = Toml.field(document, key) { built = Toml.withField(&built, key, held) }
     }
   }
-  for key in Toml.keys(section) {
-    if let Some(held) = Toml.field(section, key) { built = Toml.withField(&built, key, held) }
+  overlaid(&built, section)
+}
+
+/// Recursively apply a profile table without discarding sibling settings.
+fn overlaid(base: &Toml.Toml, changes: &Toml.Toml) -> Toml.Toml {
+  var built = *base
+  for key in Toml.keys(changes) {
+    if let Some(replacement) = Toml.field(changes, key) {
+      var selected = replacement
+      if let Some(existing) = Toml.field(&built, key) {
+        if Option.isSome(&Toml.asTable(&existing)) && Option.isSome(&Toml.asTable(&replacement)) {
+          selected = overlaid(&existing, &replacement)
+        }
+      }
+      built = Toml.withField(&built, key, selected)
+    }
   }
   built
 }

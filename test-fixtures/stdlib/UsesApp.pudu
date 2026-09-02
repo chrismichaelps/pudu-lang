@@ -44,9 +44,10 @@ export fn main() -> Int {
   // replacing them, so a profile states only its differences.
   let profiled = readOr(
       &Config.withProfile(&declared, "prod"),
-    "[server]\nport = 9000\n\n[prod]\n[prod.server]\nport = 443\n"
+    "[server]\nport = 9000\nhost = \"127.0.0.1\"\n\n[prod]\n[prod.server]\nport = 443\n"
   )
   if Config.wholeOr(&profiled, "server.port", 0) == 443 { held = held + 1 }
+  if Config.textOr(&profiled, "server.host", "") == "127.0.0.1" { held = held + 1 }
   if Config.profileOf(&profiled) == "prod" { held = held + 1 }
 
   // A profile that is not in the document leaves the document alone rather
@@ -56,13 +57,19 @@ export fn main() -> Int {
 
   // Reading states the type it expects and says what it found when the text
   // cannot be that.
-  let typed = readOr(&Config.empty(), "port = \"nine\"\nready = true\nloud = \"yes\"\nnames = [\"a\", \"b\"]\n")
+  let typed = readOr(
+      &Config.empty(),
+    "port = \"nine\"\nready = true\nloud = \"yes\"\nnames = [\"a\", \"b\"]\nratio = \"1.25\"\n"
+  )
   if let Err(problem) = Config.whole(&typed, "port") {
-    if Config.explain(&problem).contains("nine") { held = held + 1 }
+    let explained = Config.explain(&problem)
+    if explained.contains("nine") && explained.contains("document") { held = held + 1 }
   }
   if Config.truthOr(&typed, "ready", false) { held = held + 1 }
   if Config.truthOr(&typed, "loud", false) { held = held + 1 }
   if Result.unwrapOr(Config.list(&typed, "names"), []) == ["a", "b"] { held = held + 1 }
+  if Result.unwrapOr(Config.fractional(&typed, "ratio"), 0.0d) == 1.25d { held = held + 1 }
+  if let Err(_) = Config.fractional(&typed, "port") { held = held + 1 }
 
   // A truth spelled as something else is refused rather than read as false,
   // because a setting that silently means the opposite is worse than one that

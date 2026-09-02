@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-02 · [[Std App Config]], [[architecture/STDLIB]] · make typed configuration refusals keep
+  their provenance. Whole, truth, and exact-decimal reads now report the key, source layer, and
+  supplied text; the previously documented fractional reader is implemented and malformed decimals
+  remain typed failures. The application fixture grows to forty-two checks · risk MEDIUM · depth
+  MEDIUM→MEDIUM · issue #196
+
 - 2026-09-02 · [[Std Http Client]], [[Std Net]], [[Std Tls]], [[Eval Socket]], [[Eval Tls]],
   [[Eval Effect]], [[Eval Value]], [[Eval Builtin Definition]], [[Semantic Prelude]],
   [[Type Check Prelude]],

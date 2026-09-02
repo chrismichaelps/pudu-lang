@@ -12,12 +12,13 @@ aliases: [Std App Config]
 Settle where a setting comes from when four places could have supplied it.
 ## Interface
 `discover` — declared defaults, a named file, the machine, and this invocation, with the profile
-found wherever it was given. One call, and it is what most programs want.
+selected by an argument or the environment before the document is read. One call, and it is what
+most programs want.
 
 Beneath it, a configuration built from layers, and the layers themselves: declared defaults, a document read as
 [[Std Toml]], the environment, and arguments. Reading a setting as text, a whole number, a truth, a
-fractional number, or a list, each answering a `Result` that says what was expected and what was
-found. Reading with a fallback. Requiring a setting, which fails when it is absent. Selecting a
+exact decimal, or a list, each answering a `Result` that says what was expected and what was found.
+Reading with a fallback. Requiring a setting, which fails when it is absent. Selecting a
 profile, and asking which one is active. Asking which layer an answer came from.
 ## Governance and algorithm
 Layers are consulted last to first, so the later wins: a default is overridden by a file, a file by
@@ -52,6 +53,8 @@ of both spellings: `server.port` is `SERVER_PORT`. A table would be a second pla
 
 A profile selects a section of the document layer and nothing else. The environment and arguments
 are not profiled, because they are already specific to the machine the program is running on.
+Profile tables merge recursively, so overriding `server.port` retains a shared `server.host` rather
+than replacing the whole `server` table.
 ## Grill Log
 - **Q:** Let the layer order be configured? **A:** No. _Rationale:_ the order in which overrides
   apply is the one thing that must not itself be overridable, or reasoning about a value requires
@@ -66,5 +69,9 @@ are not profiled, because they are already specific to the machine the program i
 - **Q:** Profile the environment layer too? **A:** No. _Rationale:_ the environment is already the
   machine's own answer; profiling it would let a machine's setting be ignored because of a value
   written in a file. _Rejected:_ profile-scoped environment lookups.
+- **Q:** Parse fractional settings as binary floating point? **A:** No. _Rationale:_ configuration
+  commonly carries money, ratios, and thresholds written in decimal; preserving the written value
+  exactly avoids introducing a rounding surprise at the configuration boundary. _Rejected:_ a
+  `Float64` parser with binary approximation; silently accepting malformed text.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std App]] · [[Std Toml]] · [[Std Env]] · [[ADR-0016 An Application Is a Value]]
