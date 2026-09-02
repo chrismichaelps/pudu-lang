@@ -2,6 +2,14 @@ module Std.Random
 
 import Std.Num {Integer}
 
+/// Cryptographically strong bytes from the operating system.
+///
+/// This is separate from `Generator`: deterministic sequences are useful for
+/// tests and simulation, while secrets and protocol nonces must not be
+/// reproducible. Failure is returned and never replaced with clock-seeded
+/// output. Requests above one mebibyte are refused at the runtime boundary.
+export fn secureBytes(count: Int) -> Result[Bytes, Str] { secureRandomBytes(count) }
+
 /// A generator's state: one number that carries everything it remembers.
 /// A value rather than something hidden, so a program that generates the same
 /// sequence twice does so because it asked to and not by accident. Every

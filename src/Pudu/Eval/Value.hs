@@ -4,9 +4,13 @@ module Pudu.Eval.Value
   , intOf
   , builtinName
   , ArrayMethod (..)
+  , BytesMethod (..)
+  , BucketsMethod (..)
   , CharMethod (..)
   , MapMethod (..)
   , SetMethod (..)
+  , bytesMethodName
+  , bucketsMethodName
   , mapMethodName
   , setMethodName
   , StringMethod (..)
@@ -19,6 +23,9 @@ module Pudu.Eval.Value
   , arrayMethodName
   ) where
 
+import Data.ByteString (ByteString)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Foldable (toList)
 import Data.Sequence (Seq)
 import Data.Map.Strict (Map)
@@ -48,6 +55,22 @@ data Value
   | FloatValue !FloatWidth !Double
   | DecimalValue !Decimal
   | StrValue !Text
+  {-| A byte sequence is its own value rather than an `Array[UInt8]`.
+
+      An array holds each element as a separate runtime value and reaches the
+      nth of them by descending a tree, so a byte would carry an integer kind
+      and an arbitrary-precision payload of its own and every read would walk.
+      Input measured in gigabytes is not merely slow on that shape; it does not
+      fit. One contiguous buffer stores a byte in a byte, and a slice of it
+      names a stretch of the same storage rather than copying. -}
+  | BytesValue !ByteString
+  {-| An indexed store, reached by a number rather than by comparison.
+
+      It exists for `Std.HashMap`, which cannot reach its buckets through the
+      ordered map without paying an ordered lookup for every hashed one. The
+      store holds no opinion about hashing or equality: those belong to the
+      library, where a type's own `Eq` can be called. -}
+  | BucketsValue !(IntMap Value)
   | CharValue !Char
   | BoolValue !Bool
   | NullValue
@@ -66,6 +89,8 @@ data Value
   | CharMethodValue !CharMethod !Value
   | MapMethodValue !MapMethod !Value
   | SetMethodValue !SetMethod !Value
+  | BytesMethodValue !BytesMethod !Value
+  | BucketsMethodValue !BucketsMethod !Value
   deriving stock (Eq, Show)
 
 {-| The name a built-in answers to, which is the name it was bound under. -}
@@ -75,6 +100,8 @@ builtinName value = case value of
   CharFromCodeBuiltin -> "charFromCode"
   MapOfBuiltin -> "mapOf"
   SetOfBuiltin -> "setOf"
+  BytesOfBuiltin -> "bytesOf"
+  BucketsOfBuiltin -> "bucketsOf"
   ShowBuiltin -> "show"
   DisplayBuiltin -> "display"
   PrintBuiltin -> "print"
@@ -88,6 +115,42 @@ builtinName value = case value of
   FileExistsBuiltin -> "fileExists"
   RemoveFileBuiltin -> "removeFile"
   ListDirectoryBuiltin -> "listDirectory"
+  OpenReaderBuiltin -> "openReader"
+  OpenWriterBuiltin -> "openWriter"
+  OpenAppenderBuiltin -> "openAppender"
+  ReadChunkBuiltin -> "readChunk"
+  WriteChunkBuiltin -> "writeChunk"
+  FlushWriterBuiltin -> "flushWriter"
+  CloseHandleBuiltin -> "closeHandle"
+  TcpListenBuiltin -> "tcpListen"
+  TcpAcceptBuiltin -> "tcpAccept"
+  TcpConnectBuiltin -> "tcpConnect"
+  SocketSendBuiltin -> "socketSend"
+  SocketReceiveBuiltin -> "socketReceive"
+  SocketCloseBuiltin -> "socketClose"
+  SocketPeerBuiltin -> "socketPeer"
+  SocketPortBuiltin -> "socketPort"
+  SocketFinishBuiltin -> "socketFinish"
+  SpawnThreadBuiltin -> "spawnThread"
+  JoinThreadBuiltin -> "joinThread"
+  SleepBuiltin -> "sleepMillis"
+  ChannelOpenBuiltin -> "channelOpen"
+  ChannelPushBuiltin -> "channelPush"
+  ChannelPullBuiltin -> "channelPull"
+  ChannelWaitingBuiltin -> "channelWaiting"
+  ChannelFinishBuiltin -> "channelFinish"
+  MutexOpenBuiltin -> "mutexOpen"
+  MutexAcquireBuiltin -> "mutexAcquire"
+  MutexReleaseBuiltin -> "mutexRelease"
+  CellOpenBuiltin -> "cellOpen"
+  CellGetBuiltin -> "cellGet"
+  CellSwapBuiltin -> "cellSwap"
+  SecureBytesBuiltin -> "secureRandomBytes"
+  Sha256Builtin -> "sha256Of"
+  HmacBuiltin -> "hmacSha256Of"
+  DeriveKeyBuiltin -> "deriveKey"
+  HashOfBuiltin -> "hashOf"
+  MixHashBuiltin -> "mixHash"
   CreateDirectoryBuiltin -> "createDirectory"
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
@@ -126,6 +189,8 @@ data Builtin
   | CharFromCodeBuiltin
   | MapOfBuiltin
   | SetOfBuiltin
+  | BytesOfBuiltin
+  | BucketsOfBuiltin
   | ShowBuiltin
   | DisplayBuiltin
   | PrintBuiltin
@@ -139,6 +204,42 @@ data Builtin
   | FileExistsBuiltin
   | RemoveFileBuiltin
   | ListDirectoryBuiltin
+  | OpenReaderBuiltin
+  | OpenWriterBuiltin
+  | OpenAppenderBuiltin
+  | ReadChunkBuiltin
+  | WriteChunkBuiltin
+  | FlushWriterBuiltin
+  | CloseHandleBuiltin
+  | TcpListenBuiltin
+  | TcpAcceptBuiltin
+  | TcpConnectBuiltin
+  | SocketSendBuiltin
+  | SocketReceiveBuiltin
+  | SocketCloseBuiltin
+  | SocketPeerBuiltin
+  | SocketPortBuiltin
+  | SocketFinishBuiltin
+  | SpawnThreadBuiltin
+  | JoinThreadBuiltin
+  | SleepBuiltin
+  | ChannelOpenBuiltin
+  | ChannelPushBuiltin
+  | ChannelPullBuiltin
+  | ChannelWaitingBuiltin
+  | ChannelFinishBuiltin
+  | MutexOpenBuiltin
+  | MutexAcquireBuiltin
+  | MutexReleaseBuiltin
+  | CellOpenBuiltin
+  | CellGetBuiltin
+  | CellSwapBuiltin
+  | SecureBytesBuiltin
+  | Sha256Builtin
+  | HmacBuiltin
+  | DeriveKeyBuiltin
+  | HashOfBuiltin
+  | MixHashBuiltin
   | CreateDirectoryBuiltin
   | ArgumentsBuiltin
   | EnvironmentBuiltin
@@ -190,6 +291,41 @@ data MapMethod
   | MapMerge
   deriving stock (Eq, Show)
 
+{-| @Eval.Value.BytesMethod — one built-in operation on a byte sequence.
+
+    Closed for the reason the text and array sets are closed: a method whose
+    semantics the compiler knows can be typed exactly, and one it does not know
+    is reported rather than dispatched. Everything above this set — base64,
+    hex, reading a number of a stated width and endianness — is `Std.Bytes`,
+    written in the language. -}
+{-| @Eval.Value.BucketsMethod — one built-in operation on an indexed store. -}
+data BucketsMethod
+  = BucketsSize
+  | BucketsIsEmpty
+  | BucketsGet
+  | BucketsInsert
+  | BucketsRemove
+  | BucketsKeys
+  | BucketsValues
+  deriving stock (Eq, Show)
+
+data BytesMethod
+  = BytesLength
+  | BytesIsEmpty
+  | BytesAt
+  | BytesSlice
+  | BytesTake
+  | BytesDrop
+  | BytesConcat
+  | BytesIndexOf
+  | BytesContains
+  | BytesStartsWith
+  | BytesEndsWith
+  | BytesReverse
+  | BytesToArray
+  | BytesToText
+  deriving stock (Eq, Show)
+
 {-| @Eval.Value.SetMethod — one built-in operation on a set. -}
 data SetMethod
   = SetSize
@@ -202,6 +338,33 @@ data SetMethod
   | SetIntersect
   | SetDifference
   deriving stock (Eq, Show)
+
+bucketsMethodName :: BucketsMethod -> Text
+bucketsMethodName method = case method of
+  BucketsSize -> "size"
+  BucketsIsEmpty -> "isEmpty"
+  BucketsGet -> "get"
+  BucketsInsert -> "insert"
+  BucketsRemove -> "remove"
+  BucketsKeys -> "keys"
+  BucketsValues -> "values"
+
+bytesMethodName :: BytesMethod -> Text
+bytesMethodName method = case method of
+  BytesLength -> "length"
+  BytesIsEmpty -> "isEmpty"
+  BytesAt -> "at"
+  BytesSlice -> "slice"
+  BytesTake -> "take"
+  BytesDrop -> "drop"
+  BytesConcat -> "concat"
+  BytesIndexOf -> "indexOf"
+  BytesContains -> "contains"
+  BytesStartsWith -> "startsWith"
+  BytesEndsWith -> "endsWith"
+  BytesReverse -> "reverse"
+  BytesToArray -> "toArray"
+  BytesToText -> "toText"
 
 mapMethodName :: MapMethod -> Text
 mapMethodName method = case method of
@@ -258,6 +421,7 @@ data StringMethod
   | StringReplace
   | StringRepeat
   | StringSplit
+  | StringToBytes
   | StringChars
   | StringLines
   | StringReverse
@@ -298,7 +462,25 @@ data Closure = Closure
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe [Map Text Value])
   }
-  deriving stock (Eq, Show)
+  deriving stock (Show)
+
+{-| Two closures are the same when they are the same function reached the same
+    way.
+
+    The captured environment is deliberately left out. A module's functions see
+    each other, so the environment a declaration captures holds that declaration
+    among its own bindings, and walking it to compare would not terminate — a
+    scope removing the child it had just awaited would compare one task against
+    itself and never finish.
+
+    Nothing that compares closures is asking about the environment. The question
+    is always which closure this is, and the name, the function, and the
+    receiver it was reached through answer that. -}
+instance Eq Closure where
+  left == right =
+    closureName left == closureName right
+      && closureSelf left == closureSelf right
+      && closureFunction left == closureFunction right
 
 {-| @Eval.Value.OrdValue — a value used as a key.
 
@@ -340,6 +522,13 @@ compareValues left right = case (left, right) of
       written would fail the one property every reader assumes of one. -}
   (DecimalValue a, DecimalValue b) -> decimalCompare a b
   (StrValue a, StrValue b) -> compare a b
+  {-| Byte sequences order by their contents, which for bytes is both the
+      lexicographic order and the numeric one. -}
+  (BytesValue a, BytesValue b) -> compare a b
+  {-| Two stores compare entry by entry in key order, so two built by different
+      routes to the same contents compare equal. -}
+  (BucketsValue a, BucketsValue b) ->
+    compareIndexed (IntMap.toAscList a) (IntMap.toAscList b)
   (CharValue a, CharValue b) -> compare a b
   (BoolValue a, BoolValue b) -> compare a b
   (NullValue, NullValue) -> EQ
@@ -355,6 +544,13 @@ compareValues left right = case (left, right) of
   (VariantValue nameA a, VariantValue nameB b) ->
     compare nameA nameB <> compareLists a b
   _ -> compare (shapeRank left) (shapeRank right)
+
+compareIndexed :: [(Int, Value)] -> [(Int, Value)] -> Ordering
+compareIndexed [] [] = EQ
+compareIndexed [] _ = LT
+compareIndexed _ [] = GT
+compareIndexed ((keyA, a) : as) ((keyB, b) : bs) =
+  compare keyA keyB <> compareValues a b <> compareIndexed as bs
 
 compareLists :: [Value] -> [Value] -> Ordering
 compareLists [] [] = EQ
@@ -379,7 +575,13 @@ compareFields ((nameA, a) : as) ((nameB, b) : bs) =
   compare nameA nameB <> compareValues a b <> compareFields as bs
 
 {-| The order between shapes, so values of different kinds still compare. The
-    numbers have no meaning beyond being distinct and stable. -}
+    numbers have no meaning beyond being distinct and stable.
+
+    Distinct is the property that matters. Two shapes sharing a rank compare
+    equal, which for a keyed collection means two values of different kinds
+    collapsing onto one entry. Integers and floats share rank 3 deliberately,
+    because the case above already compares them against each other and the
+    rank is never reached; every other shape holds a rank of its own. -}
 shapeRank :: Value -> Int
 shapeRank value = case value of
   UnitValue -> 0
@@ -387,13 +589,10 @@ shapeRank value = case value of
   BoolValue _ -> 2
   IntValue _ _ -> 3
   FloatValue _ _ -> 3
-  DecimalValue _ -> 18
   CharValue _ -> 4
   StrValue _ -> 5
   TupleValue _ -> 6
   ArrayValue _ -> 7
-  SetValue _ -> 16
-  MapValue _ -> 17
   VariantValue _ _ -> 8
   RecordValue _ _ -> 9
   FunctionValue _ -> 10
@@ -402,8 +601,15 @@ shapeRank value = case value of
   ArrayMethodValue _ _ -> 13
   StringMethodValue _ _ -> 14
   CharMethodValue _ _ -> 15
-  MapMethodValue _ _ -> 18
-  SetMethodValue _ _ -> 19
+  SetValue _ -> 16
+  MapValue _ -> 17
+  DecimalValue _ -> 18
+  MapMethodValue _ _ -> 19
+  SetMethodValue _ _ -> 20
+  BytesValue _ -> 21
+  BytesMethodValue _ _ -> 22
+  BucketsValue _ -> 23
+  BucketsMethodValue _ _ -> 24
 
 
 {-| The name a text method answers to, which is the same spelling the checker
@@ -433,6 +639,7 @@ stringMethodName method = case method of
   StringReplace -> "replace"
   StringRepeat -> "repeat"
   StringSplit -> "split"
+  StringToBytes -> "toBytes"
   StringChars -> "chars"
   StringLines -> "lines"
   StringReverse -> "reverse"

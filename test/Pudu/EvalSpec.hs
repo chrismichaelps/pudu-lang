@@ -8,8 +8,22 @@ import qualified Data.Text as Text
 import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Concurrent
+  ( cellNew
+  , cellRead
+  , closeConcurrentStore
+  , newConcurrentStore
+  )
+import Pudu.Eval.Handle
+  ( closeHandleStore
+  , flushHandleAt
+  , newHandleStore
+  , openWriteHandle
+  )
+import Pudu.Eval.Io (IoOutcome (..))
 import Pudu.Eval.Program (evaluateEntryPoint)
 import Pudu.Eval.Render (renderValue)
+import Pudu.Eval.Value (Value (UnitValue))
 import Pudu.Source (SourceName (SourceName), newSource)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
@@ -36,7 +50,44 @@ evalProperties =
   , ("calendar time and subprocesses answer with results", testClock)
   , ("fixed-width integers keep their width at run time", testIntegerWidths)
   , ("implementations reach built-in types", testBuiltinImpls)
+  , ("runtime resource stores isolate concurrent evaluations", testResourceIsolation)
   ]
+
+testResourceIsolation :: IO Property
+testResourceIsolation = do
+  temporary <- getTemporaryDirectory
+  (firstPath, firstHostHandle) <- openTempFile temporary "pudu-runtime-first"
+  hClose firstHostHandle
+  (secondPath, secondHostHandle) <- openTempFile temporary "pudu-runtime-second"
+  hClose secondHostHandle
+  firstHandles <- newHandleStore
+  secondHandles <- newHandleStore
+  firstOpened <- openWriteHandle firstHandles firstPath
+  secondOpened <- openWriteHandle secondHandles secondPath
+  closeHandleStore firstHandles
+  secondFlush <- case secondOpened of
+    IoDone token -> flushHandleAt secondHandles token
+    IoFailed problem -> pure (IoFailed problem)
+  closeHandleStore secondHandles
+  firstConcurrent <- newConcurrentStore
+  secondConcurrent <- newConcurrentStore
+  cellToken <- cellNew secondConcurrent UnitValue
+  closeConcurrentStore firstConcurrent
+  secondRead <- cellRead secondConcurrent cellToken
+  closeConcurrentStore secondConcurrent
+  mapM_ removeIfPresent [firstPath, secondPath]
+  pure $ conjoin
+    [ counterexample "each handle store begins its private token space at one"
+        (conjoin [firstOpened === IoDone 1, secondOpened === IoDone 1])
+    , counterexample "closing one handle store leaves the other writable"
+        (secondFlush === IoDone ())
+    , counterexample "closing one concurrency store leaves another store's cell reachable"
+        (secondRead === IoDone UnitValue)
+    ]
+ where
+  removeIfPresent path = do
+    exists <- doesFileExist path
+    when exists (removeFile path)
 
 testScopes :: IO Property
 testScopes = do
@@ -459,6 +510,10 @@ testFailures = do
   mismatch <- codesOf "1 + true"
   noArm <- codesOf "match 9 { case 1 => 1 }"
   panic <- codesOf "panic(\"boom\")"
+  excessiveDerivationRounds <-
+    codesOf "deriveKey(\"p\".toBytes(), \"s\".toBytes(), 10000001, 32)"
+  excessiveDerivedBytes <-
+    codesOf "deriveKey(\"p\".toBytes(), \"s\".toBytes(), 1, 1048577)"
   pure $ conjoin
     [ divisor === ["E7004"]
     , modulo === ["E7004"]
@@ -469,6 +524,10 @@ testFailures = do
         (noArm === ["E5001"])
     , counterexample "panic stops evaluation with E7007"
         (panic === ["E7007"])
+    , counterexample "PBKDF2 bounds hostile iteration counts before host conversion"
+        (excessiveDerivationRounds === ["E7004"])
+    , counterexample "PBKDF2 bounds hostile allocation counts before host conversion"
+        (excessiveDerivedBytes === ["E7004"])
     ]
 
 testAsync :: IO Property

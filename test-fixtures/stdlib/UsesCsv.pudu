@@ -1,0 +1,77 @@
+module UsesCsv
+
+import Std.Csv as Csv
+import Std.Csv {Ragged, Unterminated}
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a comma-separated file promises, including the three things that make
+/// one harder than splitting on commas: a quoted field, a quote inside one,
+/// and a separator or newline that a quoted field swallows.
+export fn main() -> Int {
+  var held = 0
+
+  // The plain case, and a file that ends without a final newline.
+  if rowsOf("a,b\nc,d\n") == [["a", "b"], ["c", "d"]] { held = held + 1 }
+  if rowsOf("a,b\nc,d") == [["a", "b"], ["c", "d"]] { held = held + 1 }
+  if rowsOf("") == [] { held = held + 1 }
+
+  // A file written with a carriage return before each newline holds the same
+  // rows, and the return is not part of the last field.
+  if rowsOf("a,b\r\nc,d\r\n") == [["a", "b"], ["c", "d"]] { held = held + 1 }
+
+  // An empty field is a field, so a row of them keeps its shape rather than
+  // collapsing to nothing.
+  if rowsOf("a,,b\n") == [["a", "", "b"]] { held = held + 1 }
+  if rowsOf(",\n") == [["", ""]] { held = held + 1 }
+
+  // A quoted field is unwrapped, and swallows what would otherwise end it.
+  if rowsOf("\"a,b\",c\n") == [["a,b", "c"]] { held = held + 1 }
+  if rowsOf("\"line\none\",c\n") == [["line\none", "c"]] { held = held + 1 }
+
+  // A doubled quote inside a quoted field is one quote.
+  if rowsOf("\"say \"\"hi\"\"\",b\n") == [["say \"hi\"", "b"]] { held = held + 1 }
+
+  // A field opened and never closed is the one failure a reader cannot guess
+  // its way out of, and it names where the field began.
+  if let Err(Unterminated(_)) = Csv.parse("a,\"b\n") { held = held + 1 }
+
+  // A tab-separated file is read by saying so rather than by hoping.
+  if Result.unwrapOr(Csv.parseWith("a\tb\n", "\t"), []) == [["a", "b"]] { held = held + 1 }
+
+  // A table takes its first row as the names of its columns.
+  if let Ok(table) = Csv.parseTable("name,age\nada,36\nalan,41\n") {
+    if table.headers == ["name", "age"] { held = held + 1 }
+    if table.rows.length() == 2 { held = held + 1 }
+    if Option.unwrapOr(Csv.column(&table, "name"), []) == ["ada", "alan"] { held = held + 1 }
+    let missing = Csv.column(&table, "height")
+    if Option.isNone(&missing) { held = held + 1 }
+    if Csv.indexOfColumn(&table, "age") == 1 { held = held + 1 }
+    if Csv.records(&table).length() == 2 { held = held + 1 }
+    if let Some(first) = Csv.record(&table, 0) {
+      if Option.unwrapOr(first.get("name"), "") == "ada" { held = held + 1 }
+    }
+    // Written back out, a table says what it said.
+    if Csv.renderTable(&table) == "name,age\nada,36\nalan,41\n" { held = held + 1 }
+  }
+
+  // A row with a field missing is refused, because a name per column is a
+  // promise that the third field is the third column, and a gap shifts every
+  // field after it.
+  if let Err(Ragged(_, _, _)) = Csv.parseTable("a,b\n1\n") { held = held + 1 }
+
+  // Writing wraps a field only where it has to, so a file stays readable.
+  if Csv.render(&[["a", "b"]]) == "a,b\n" { held = held + 1 }
+  if Csv.render(&[["a,b", "c"]]) == "\"a,b\",c\n" { held = held + 1 }
+  if Csv.render(&[["say \"hi\""]]) == "\"say \"\"hi\"\"\"\n" { held = held + 1 }
+  if Csv.render(&[["one\ntwo"]]) == "\"one\ntwo\"\n" { held = held + 1 }
+
+  // And what was written reads back as what it was.
+  if rowsOf(Csv.render(&[["a,b", "say \"hi\"", "one\ntwo"]])) == [["a,b", "say \"hi\"", "one\ntwo"]] {
+    held = held + 1
+  }
+
+  held
+}
+
+fn rowsOf(source: Str) -> Array[Array[Str]] { Result.unwrapOr(Csv.parse(source), []) }

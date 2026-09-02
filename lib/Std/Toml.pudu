@@ -1,0 +1,267 @@
+module Std.Toml
+
+import Std.Option as Option
+
+/// A configuration value.
+///
+/// Numbers are kept apart the way the format keeps them: a whole number is
+/// `Whole`, and anything with a fractional part or an exponent stays as the
+/// text it was written in. A reader that turned `1` into a floating value
+/// would lose the distinction a caller cares about, and one that turned
+/// `0.1` into a binary float would answer with a number nobody wrote.
+///
+/// A date or time is `Moment`, holding the text unchanged. The format has four
+/// of them and they differ in what they leave unsaid — a local time names no
+/// day, a local date names no instant — so deciding which is which belongs to
+/// the caller, who can hand the text to `Std.Time.Format`.
+export type Toml
+  = Text(Str)
+  | Whole(Int)
+  | Fractional(Str)
+  | Boolean(Bool)
+  | Moment(Str)
+  | List(Array[Toml])
+  | Table(Array[(Str, Toml)])
+
+/// Why text does not name a configuration.
+export type TomlError
+  = Unexpected(Int, Str)
+  | Unterminated(Int)
+  | Duplicate(Str)
+  | Malformed(Int, Str)
+
+/// The value under a key of a table, or nothing when there is none.
+export fn field(value: &Toml, name: Str) -> Option[Toml] {
+  var found: Option[Toml] = None
+  for entry in Option.unwrapOr(asTable(value), []) {
+    if entry[0] == name && Option.isNone(&found) { found = Some(entry[1]) }
+  }
+  found
+}
+
+/// The value at a position of a list, or nothing when there is none.
+export fn at(value: &Toml, index: Int) -> Option[Toml] {
+  let items = Option.unwrapOr(asList(value), [])
+  if index < 0 || index >= items.length() { None } else { Some(items[index]) }
+}
+
+/// The value a dotted path names, walking tables one key at a time.
+///
+/// This is how a program reads a setting it knows the shape of. A path through
+/// something that is not a table answers nothing rather than reporting, so a
+/// caller reading an optional section writes one lookup rather than one per
+/// level.
+export fn path(value: &Toml, dotted: Str) -> Option[Toml] {
+  var current = Some(*value)
+  for piece in dotted.split(".") {
+    if let Some(held) = current { current = field(&held, piece) } else { current = None }
+  }
+  current
+}
+
+/// The text a value holds, or nothing when it is not text.
+export fn asText(value: &Toml) -> Option[Str] {
+  if let Text(held) = value { Some(held) } else { None }
+}
+
+/// The whole number a value holds, or nothing when it is not one.
+export fn asWhole(value: &Toml) -> Option[Int] {
+  if let Whole(held) = value { Some(held) } else { None }
+}
+
+/// The truth a value holds, or nothing when it is not one.
+export fn asBoolean(value: &Toml) -> Option[Bool] {
+  if let Boolean(held) = value { Some(held) } else { None }
+}
+
+/// The date or time text a value holds, or nothing when it is not one.
+export fn asMoment(value: &Toml) -> Option[Str] {
+  if let Moment(held) = value { Some(held) } else { None }
+}
+
+/// The fractional number's text, or nothing when the value is not one.
+export fn asFractional(value: &Toml) -> Option[Str] {
+  if let Fractional(held) = value { Some(held) } else { None }
+}
+
+/// The items a list holds, or nothing when the value is not one.
+export fn asList(value: &Toml) -> Option[Array[Toml]] {
+  if let List(items) = value { Some(items) } else { None }
+}
+
+/// The pairings a table holds, or nothing when the value is not one.
+export fn asTable(value: &Toml) -> Option[Array[(Str, Toml)]] {
+  if let Table(entries) = value { Some(entries) } else { None }
+}
+
+/// The keys a table holds, in the order they were read.
+export fn keys(value: &Toml) -> Array[Str] {
+  var found: Array[Str] = []
+  for entry in Option.unwrapOr(asTable(value), []) { found = found.push(entry[0]) }
+  found
+}
+
+/// A table with a pairing added, replacing any already under the key.
+export fn withField(value: &Toml, name: Str, held: Toml) -> Toml {
+  let entries = Option.unwrapOr(asTable(value), [])
+  var built: Array[(Str, Toml)] = []
+  var replaced = false
+  for entry in entries {
+    if entry[0] == name {
+      built = built.push((name, held))
+      replaced = true
+    } else {
+      built = built.push(entry)
+    }
+  }
+  if replaced { Table(built) } else { Table(built.push((name, held))) }
+}
+
+/// A table holding nothing.
+export fn table() -> Toml { Table([]) }
+
+/// Whether a name may be written without quotes.
+///
+/// The format admits letters, digits, underscore, and hyphen. Anything else
+/// has to be quoted, and a writer that did not check would produce a file its
+/// own reader refuses.
+fn isBareKey(name: Str) -> Bool {
+  if name.isEmpty() {
+    false
+  } else {
+    var bare = true
+    var index = 0
+    while index < name.length() {
+      let character = name.slice(index, index + 1)
+      let admitted =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-".contains(character)
+      if !admitted { bare = false }
+      index = index + 1
+    }
+    bare
+  }
+}
+
+/// A key written the way the format writes one.
+export fn renderKey(name: Str) -> Str {
+  if isBareKey(name) { name } else { quoted(name) }
+}
+
+/// Text wrapped and escaped so a reader gets back what was written.
+fn quoted(text: Str) -> Str {
+  var out = "\""
+  var index = 0
+  while index < text.length() {
+    let character = text.slice(index, index + 1)
+    if character == "\"" {
+      out = out + "\\\""
+    } else {
+      if character == "\\" {
+        out = out + "\\\\"
+      } else {
+        if character == "\n" {
+          out = out + "\\n"
+        } else {
+          if character == "\t" { out = out + "\\t" } else { out = out + character }
+        }
+      }
+    }
+    index = index + 1
+  }
+  out + "\""
+}
+
+/// A value written the way it appears to the right of a key.
+///
+/// Tables written here are the inline form, because that is the only form a
+/// value in that position may take. `encode` writes a document's own tables as
+/// sections instead, which is what a person reading a configuration expects.
+export fn renderValue(value: &Toml) -> Str {
+  match value {
+    case Text(held) => quoted(held)
+    case Whole(held) => show(held)
+    case Fractional(digits) => digits
+    case Boolean(flag) => if flag { "true" } else { "false" }
+    case Moment(held) => held
+    case List(items) => renderList(&items)
+    case Table(entries) => renderInline(&entries)
+  }
+}
+
+fn renderList(items: &Array[Toml]) -> Str {
+  var out = "["
+  var index = 0
+  while index < items.length() {
+    if index > 0 { out = out + ", " }
+    out = out + renderValue(&items[index])
+    index = index + 1
+  }
+  out + "]"
+}
+
+fn renderInline(entries: &Array[(Str, Toml)]) -> Str {
+  var out = "\{"
+  var index = 0
+  while index < entries.length() {
+    if index > 0 { out = out + ", " }
+    out = out + renderKey(entries[index][0]) + " = " + renderValue(&entries[index][1])
+    index = index + 1
+  }
+  out + "\}"
+}
+
+/// Whether a value is a table, which decides whether it becomes a section.
+fn isTable(value: &Toml) -> Bool {
+  if let Table(_) = value { true } else { false }
+}
+
+/// Whether a value is a list holding only tables, which becomes a repeated
+/// section rather than an inline list.
+fn isTableList(value: &Toml) -> Bool {
+  let items = Option.unwrapOr(asList(value), [])
+  if items.length() == 0 {
+    false
+  } else {
+    var all = true
+    for item in items {
+      if !isTable(&item) { all = false }
+    }
+    all
+  }
+}
+
+/// A document written as text.
+///
+/// Plain values are written first and tables afterwards, because a key written
+/// after a section header belongs to that section: emitting them in the order
+/// they happen to sit in would silently move a top-level setting inside the
+/// section above it. That is the one mistake a writer of this format can make
+/// that produces a valid file meaning something else.
+export fn encode(value: &Toml) -> Str { encodeTable(value, "") }
+
+fn encodeTable(value: &Toml, prefix: Str) -> Str {
+  let entries = Option.unwrapOr(asTable(value), [])
+  var out = ""
+  for entry in entries {
+    if !isTable(&entry[1]) && !isTableList(&entry[1]) {
+      out = out + renderKey(entry[0]) + " = " + renderValue(&entry[1]) + "\n"
+    }
+  }
+  for entry in entries {
+    let name = joinKey(prefix, entry[0])
+    if isTable(&entry[1]) {
+      out = out + "\n[" + name + "]\n" + encodeTable(&entry[1], name)
+    } else {
+      if isTableList(&entry[1]) {
+        for item in Option.unwrapOr(asList(&entry[1]), []) {
+          out = out + "\n[[" + name + "]]\n" + encodeTable(&item, name)
+        }
+      }
+    }
+  }
+  out
+}
+
+fn joinKey(prefix: Str, name: Str) -> Str {
+  if prefix.isEmpty() { renderKey(name) } else { prefix + "." + renderKey(name) }
+}

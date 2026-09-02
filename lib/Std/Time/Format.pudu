@@ -1,0 +1,494 @@
+module Std.Time.Format
+
+import Std.Option as Option
+import Std.Time.Format.Civil as Civil
+
+/// Why text does not name a time.
+export type FormatError
+  = Malformed(Str)
+  | OutOfRange(Str, Int)
+  | Unsupported(Str)
+
+/// A moment taken apart into the fields a person writes.
+/// The year is the proleptic one, so a year before the calendar was adopted
+/// still counts the same way; a library that changed rules partway through
+/// would make arithmetic across the boundary silently wrong.
+export type Parts = {
+  year: Int,
+  month: Int,
+  day: Int,
+  hour: Int,
+  minute: Int,
+  second: Int,
+  milli: Int
+}
+
+/// Whether a year carries an extra day.
+export fn isLeapYear(year: Int) -> Bool { Civil.isLeapYear(year) }
+
+/// How many days a month holds in a given year.
+export fn daysInMonth(year: Int, month: Int) -> Int {
+  Civil.daysInMonth(year, month)
+}
+
+/// The day number a civil date stands on, counting from the start of 1970.
+///
+/// The calendar repeats exactly every four hundred years, so a date is placed
+/// by counting whole cycles and then the position within one. That is what
+/// makes this arithmetic rather than a table, and what makes it as correct in
+/// the year 3000 as in this one.
+export fn daysFromCivil(year: Int, month: Int, day: Int) -> Int {
+  Civil.daysFromCivil(year, month, day)
+}
+
+/// The civil date a day number stands on.
+export fn civilFromDays(days: Int) -> (Int, Int, Int) {
+  Civil.civilFromDays(days)
+}
+
+/// A moment taken apart, as the time at zero offset.
+export fn partsOf(millis: Int) -> Parts {
+  let days = Civil.floorDiv(millis, 86400000)
+  let inDay = Civil.floorMod(millis, 86400000)
+  let date = civilFromDays(days)
+  Parts {
+    year: date[0],
+    month: date[1],
+    day: date[2],
+    hour: inDay / 3600000,
+    minute: inDay / 60000 % 60,
+    second: inDay / 1000 % 60,
+    milli: inDay % 1000
+  }
+}
+
+/// The moment fields name, as the time at zero offset.
+/// Fields outside their range are carried rather than refused: the thirteenth
+/// month is January of the next year, which is what makes adding a month to
+/// December work without the caller checking first.
+export fn millisOf(parts: &Parts) -> Int {
+  let monthIndex = Civil.floorMod(parts.month - 1, 12)
+  let year = parts.year + Civil.floorDiv(parts.month - 1, 12)
+  daysFromCivil(year, monthIndex + 1, parts.day) * 86400000
+    + parts.hour * 3600000
+    + parts.minute * 60000
+    + parts.second * 1000
+    + parts.milli
+}
+
+/// Which day of the week a moment falls on, counting Sunday as zero.
+/// The first of January 1970 was a Thursday, which is why the count starts
+/// four days along.
+export fn weekdayOf(millis: Int) -> Int {
+  Civil.floorMod(Civil.floorDiv(millis, 86400000) + 4, 7)
+}
+
+/// Which day of its year a moment falls on, counting the first as one.
+export fn dayOfYear(millis: Int) -> Int {
+  let parts = partsOf(millis)
+  daysFromCivil(parts.year, parts.month, parts.day)
+    -daysFromCivil(parts.year, 1, 1)
+    + 1
+}
+
+const WEEKDAY_NAMES: Array[Str] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+const WEEKDAY_FULL: Array[Str] = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday"
+]
+
+const MONTH_NAMES: Array[Str] = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+]
+
+const MONTH_FULL: Array[Str] = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+]
+
+/// The month a name stands for, or nothing when it names no month.
+/// A module-scope constant, so reading a date costs one lookup per name
+/// rather than a walk of twelve.
+const MONTH_NUMBERS: Map[Str, Int] = monthTable()
+
+fn monthTable() -> Map[Str, Int] {
+  var table: Map[Str, Int] = mapOf([])
+  var index = 0
+  while index < 12 {
+    table = table.insert(MONTH_NAMES[index], index + 1)
+    index = index + 1
+  }
+  table
+}
+
+/// A number written with at least the given count of digits.
+fn padded(value: Int, width: Int) -> Str {
+  let sign = if value < 0 { "-" } else { "" }
+  var digits = show(if value < 0 { 0 - value } else { value })
+  while digits.length() < width { digits = "0" + digits }
+  sign + digits
+}
+
+/// A moment written in the interchange form, at zero offset.
+///
+/// Written in Pudu rather than asked of the machine, so it can be folded into
+/// a constant and gives the same answer wherever it runs. A rendering that
+/// reached the runtime would make a program's output depend on which machine
+/// compiled it.
+export fn toRfc3339(millis: Int) -> Str {
+  let parts = partsOf(millis)
+  padded(parts.year, 4) + "-" + padded(parts.month, 2) + "-" + padded(parts.day, 2)
+    + "T" + padded(parts.hour, 2) + ":" + padded(parts.minute, 2) + ":"
+    + padded(parts.second, 2)
+    + (if parts.milli == 0 { "" } else { "." + padded(parts.milli, 3) })
+    + "Z"
+}
+
+/// The moment interchange text names.
+///
+/// An offset other than zero is applied rather than rejected, so a value that
+/// arrived from a machine keeping local time is read as the moment it names
+/// rather than as the digits it was written with.
+export fn fromRfc3339(text: Str) -> Result[Int, FormatError] {
+  if text.length() < 20 {
+    Err(Malformed(text))
+  } else {
+    let year = digitsAt(text, 0, 4) ?
+    let month = digitsAt(text, 5, 2) ?
+    let day = digitsAt(text, 8, 2) ?
+    let hour = digitsAt(text, 11, 2) ?
+    let minute = digitsAt(text, 14, 2) ?
+    let second = digitsAt(text, 17, 2) ?
+    checkRange("month", month, 1, 12) ?
+    checkRange("day", day, 1, daysInMonth(year, month)) ?
+    checkRange("hour", hour, 0, 23) ?
+    checkRange("minute", minute, 0, 59) ?
+    checkRange("second", second, 0, 60) ?
+    let rest = text.drop(19)
+    let milli = fractionOf(rest)
+    let offset = offsetOf(rest) ?
+    let atZero =
+    millisOf(
+        &Parts {
+        year: year,
+        month: month,
+        day: day,
+        hour: hour,
+        minute: minute,
+        second: second,
+        milli: milli
+      }
+    )
+    Ok(atZero - offset)
+  }
+}
+
+/// The fraction of a second the text carries, in milliseconds.
+/// More than three digits are read and the rest dropped rather than refused: a
+/// value written with microseconds is still the moment it names, and refusing
+/// it would make this reject text that is perfectly well formed.
+fn fractionOf(rest: Str) -> Int {
+  if !rest.startsWith(".") {
+    0
+  } else {
+    var digits = ""
+    var index = 1
+    while index < rest.length() && "0123456789".contains(rest.slice(index, index + 1)) {
+      digits = digits + rest.slice(index, index + 1)
+      index = index + 1
+    }
+    var scaled = digits.take(3)
+    while scaled.length() < 3 { scaled = scaled + "0" }
+    Option.unwrapOr(wholeOf(scaled), 0)
+  }
+}
+
+/// How far from zero the text's offset is, in milliseconds.
+fn offsetOf(rest: Str) -> Result[Int, FormatError] {
+  var index = 0
+  while index < rest.length() && !"Zz+-".contains(rest.slice(index, index + 1)) {
+    index = index + 1
+  }
+  if index >= rest.length() {
+    Err(Malformed(rest))
+  } else {
+    let marker = rest.slice(index, index + 1)
+    if marker == "Z" || marker == "z" {
+      Ok(0)
+    } else {
+      let body = rest.drop(index + 1)
+      if body.length() < 5 {
+        Err(Malformed(rest))
+      } else {
+        let hours = digitsAt(body, 0, 2) ?
+        let minutes = digitsAt(body, 3, 2) ?
+        let size = hours * 3600000 + minutes * 60000
+        Ok(if marker == "-" { 0 - size } else { size })
+      }
+    }
+  }
+}
+
+/// A moment written the way a message header carries one.
+/// Always at zero offset and always in English, because the format says so:
+/// this is a value two programs exchange, not one a person is shown.
+export fn toHttpDate(millis: Int) -> Str {
+  let parts = partsOf(millis)
+  WEEKDAY_NAMES[weekdayOf(millis)] + ", " + padded(parts.day, 2) + " "
+    + MONTH_NAMES[parts.month - 1] + " " + padded(parts.year, 4) + " "
+    + padded(parts.hour, 2) + ":" + padded(parts.minute, 2) + ":"
+    + padded(parts.second, 2) + " GMT"
+}
+
+/// The moment a message header names.
+export fn fromHttpDate(text: Str) -> Result[Int, FormatError] {
+  let trimmed = text.trim()
+  if trimmed.length() < 29 {
+    Err(Malformed(text))
+  } else {
+    let day = digitsAt(trimmed, 5, 2) ?
+    let monthName = trimmed.slice(8, 11)
+    let year = digitsAt(trimmed, 12, 4) ?
+    let hour = digitsAt(trimmed, 17, 2) ?
+    let minute = digitsAt(trimmed, 20, 2) ?
+    let second = digitsAt(trimmed, 23, 2) ?
+    if let Some(month) = MONTH_NUMBERS.get(monthName) {
+      checkRange("day", day, 1, daysInMonth(year, month)) ?
+      Ok(
+        millisOf(
+            &Parts {
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute,
+            second: second,
+            milli: 0
+          }
+        )
+      )
+    } else {
+      Err(Malformed(monthName))
+    }
+  }
+}
+
+/// The digits at a position read as a number.
+fn digitsAt(text: Str, at: Int, width: Int) -> Result[Int, FormatError] {
+  if at + width > text.length() {
+    Err(Malformed(text))
+  } else {
+    let piece = text.slice(at, at + width)
+    if let Some(value) = wholeOf(piece) { Ok(value) } else { Err(Malformed(piece)) }
+  }
+}
+
+/// A run of digits as a number, or nothing when it holds something else.
+fn wholeOf(text: Str) -> Option[Int] {
+  if text.isEmpty() {
+    None
+  } else {
+    var total = 0
+    var index = 0
+    var good = true
+    while index < text.length() && good {
+      let digit = "0123456789".indexOf(text.slice(index, index + 1))
+      if digit < 0 { good = false } else { total = total * 10 + digit }
+      index = index + 1
+    }
+    if good { Some(total) } else { None }
+  }
+}
+
+fn checkRange(field: Str, value: Int, lower: Int, upper: Int) -> Result[(), FormatError] {
+  if value < lower || value > upper { Err(OutOfRange(field, value)) } else { Ok(()) }
+}
+
+/// A moment written by a pattern.
+///
+/// The directives are the ones a reader already knows: `%Y` the year, `%m` the
+/// month, `%d` the day, `%H` `%M` `%S` the time, `%L` the milliseconds, `%j`
+/// the day of the year, `%a` and `%A` the weekday, `%b` and `%B` the month by
+/// name, `%p` the half of the day, `%I` the hour on a twelve-hour clock, `%s`
+/// the seconds since the start of 1970, `%z` the offset, and `%%` a literal
+/// percent. A directive this list does not name is written through unchanged,
+/// so a pattern holding one is still readable rather than silently emptied.
+export fn render(millis: Int, pattern: Str) -> Str {
+  let parts = partsOf(millis)
+  var out = ""
+  var index = 0
+  while index < pattern.length() {
+    let character = pattern.slice(index, index + 1)
+    if character == "%" && index + 1 < pattern.length() {
+      out = out + directive(pattern.slice(index + 1, index + 2), millis, &parts)
+      index = index + 2
+    } else {
+      out = out + character
+      index = index + 1
+    }
+  }
+  out
+}
+
+fn directive(name: Str, millis: Int, parts: &Parts) -> Str {
+  if name == "Y" { return padded(parts.year, 4) }
+  if name == "m" { return padded(parts.month, 2) }
+  if name == "d" { return padded(parts.day, 2) }
+  if name == "H" { return padded(parts.hour, 2) }
+  if name == "M" { return padded(parts.minute, 2) }
+  if name == "S" { return padded(parts.second, 2) }
+  if name == "L" { return padded(parts.milli, 3) }
+  if name == "j" { return padded(dayOfYear(millis), 3) }
+  if name == "a" { return WEEKDAY_NAMES[weekdayOf(millis)] }
+  if name == "A" { return WEEKDAY_FULL[weekdayOf(millis)] }
+  if name == "b" { return MONTH_NAMES[parts.month - 1] }
+  if name == "B" { return MONTH_FULL[parts.month - 1] }
+  if name == "p" { return if parts.hour < 12 { "AM" } else { "PM" } }
+  if name == "I" { return padded(twelveHour(parts.hour), 2) }
+  if name == "e" { return show(parts.day) }
+  if name == "s" { return show(Civil.floorDiv(millis, 1000)) }
+  if name == "z" { return "+0000" }
+  if name == "Z" { return "UTC" }
+  if name == "%" { return "%" }
+  "%" + name
+}
+
+fn twelveHour(hour: Int) -> Int {
+  let wrapped = hour % 12
+  if wrapped == 0 { 12 } else { wrapped }
+}
+
+/// The moment a pattern reads out of text.
+///
+/// Only the numeric directives and `%b` can be read back, because they are the
+/// ones whose width says where they end. A pattern holding one that cannot be
+/// read is reported rather than guessed at, since a reader that guessed would
+/// answer a moment nobody wrote.
+export fn parse(pattern: Str, text: Str) -> Result[Int, FormatError] {
+  var year = 1970
+  var month = 1
+  var day = 1
+  var hour = 0
+  var minute = 0
+  var second = 0
+  var milli = 0
+  var at = 0
+  var index = 0
+  var failure: Option[FormatError] = None
+  while index < pattern.length() && Option.isNone(&failure) {
+    let character = pattern.slice(index, index + 1)
+    if character == "%" && index + 1 < pattern.length() {
+      let name = pattern.slice(index + 1, index + 2)
+      let width = numericWidth(name)
+      if width > 0 {
+        if let Ok(value) = digitsAt(text, at, width) {
+          if name == "Y" { year = value }
+          if name == "m" { month = value }
+          if name == "d" { day = value }
+          if name == "H" { hour = value }
+          if name == "M" { minute = value }
+          if name == "S" { second = value }
+          if name == "L" { milli = value }
+          at = at + width
+        } else {
+          failure = Some(Malformed(text))
+        }
+      } else {
+        if name == "b" {
+          if let Some(named) = MONTH_NUMBERS.get(text.slice(at, at + 3)) {
+            month = named
+            at = at + 3
+          } else {
+            failure = Some(Malformed(text))
+          }
+        } else {
+          if name == "%" { at = at + 1 } else { failure = Some(Unsupported("%" + name)) }
+        }
+      }
+      index = index + 2
+    } else {
+      at = at + 1
+      index = index + 1
+    }
+  }
+  if let Some(reason) = failure {
+    Err(reason)
+  } else {
+    Ok(
+      millisOf(
+          &Parts {
+          year: year,
+          month: month,
+          day: day,
+          hour: hour,
+          minute: minute,
+          second: second,
+          milli: milli
+        }
+      )
+    )
+  }
+}
+
+/// How many digits a directive reads, or zero when it is not a number.
+fn numericWidth(name: Str) -> Int {
+  if name == "Y" { return 4 }
+  if name == "m" || name == "d" || name == "H" || name == "M" || name == "S" { return 2 }
+  if name == "L" { return 3 }
+  0
+}
+
+/// A length of time written the way the interchange format writes one.
+/// A duration of no length is written `PT0S` rather than as nothing, because
+/// the format has no empty duration and a reader would refuse one.
+export fn renderDuration(millis: Int) -> Str {
+  if millis == 0 {
+    "PT0S"
+  } else {
+    let sign = if millis < 0 { "-" } else { "" }
+    let size = if millis < 0 { 0 - millis } else { millis }
+    let days = size / 86400000
+    let hours = size / 3600000 % 24
+    let minutes = size / 60000 % 60
+    let seconds = size / 1000 % 60
+    let fraction = size % 1000
+    var out = sign + "P"
+    if days > 0 { out = out + show(days) + "D" }
+    out = out + "T"
+    if hours > 0 { out = out + show(hours) + "H" }
+    if minutes > 0 { out = out + show(minutes) + "M" }
+    if seconds > 0 || fraction > 0 {
+      out = out + show(seconds)
+      if fraction > 0 { out = out + "." + padded(fraction, 3) }
+      out = out + "S"
+    }
+    if out.endsWith("T") { out.take(out.length() - 1) } else { out }
+  }
+}

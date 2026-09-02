@@ -42,17 +42,24 @@ library
     Pudu.Eval
     Pudu.Eval.Array
     Pudu.Eval.Builtin
+    Pudu.Eval.Bytes
     Pudu.Eval.Call
     Pudu.Eval.Clock
+    Pudu.Eval.Concurrent
     Pudu.Eval.Effect
+    Pudu.Eval.Entropy
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Handle
+    Pudu.Eval.Hash
+    Pudu.Eval.HashMap
     Pudu.Eval.Io
     Pudu.Eval.Keyed
     Pudu.Eval.Match
     Pudu.Eval.Loop
     Pudu.Eval.Operator
     Pudu.Eval.Program
+    Pudu.Eval.Socket
     Pudu.Eval.Order
     Pudu.Eval.Render
     Pudu.Eval.Value
@@ -149,8 +156,11 @@ library
     bytestring >=0.11 && <0.13,
     containers >=0.6 && <0.9,
     directory >=1.3 && <1.4,
+    entropy >=0.4.1 && <0.5,
     filepath >=1.4 && <1.6,
     haskeline >=0.8 && <0.9,
+    network >=3.1 && <3.3,
+    stm >=2.5 && <2.6,
     process >=1.6 && <1.7,
     text >=2.1 && <2.2,
     time >=1.12 && <1.15
@@ -172,6 +182,7 @@ test-suite pudu-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test
   main-is:          Main.hs
+  ghc-options:      -threaded -rtsopts
   other-modules:
     Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec

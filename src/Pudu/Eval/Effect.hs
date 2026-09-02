@@ -11,9 +11,48 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Eval.Clock
+import Pudu.Eval.Handle
+  ( closeHandleAt
+  , flushHandleAt
+  , openAppendHandle
+  , openReadHandle
+  , openWriteHandle
+  , readHandleChunk
+  , writeHandleChunk
+  )
+import Pudu.Eval.Concurrent
+  ( cellNew
+  , cellRead
+  , cellSwap
+  , channelClose
+  , channelNew
+  , channelPending
+  , channelReceive
+  , channelSend
+  , mutexLock
+  , mutexNew
+  , mutexUnlock
+  , sleepFor
+  , threadJoin
+  )
+import Pudu.Eval.Socket
+  ( acceptOn
+  , closeSocketAt
+  , connectTo
+  , listenOn
+  , localPortOf
+  , peerOf
+  , receiveFrom
+  , sendOn
+  , shutdownWriteAt
+  )
 import Pudu.Eval.Io
+import Pudu.Eval.Entropy (secureBytes)
 import Pudu.Eval.Env
   ( effectsAdmitted
+  , currentConcurrentStore
+  , currentHandleStore
+  , currentSocketStore
   , performEffect
   , Evaluator (..)
   , abortAt
@@ -58,6 +97,37 @@ effectBuiltins =
   , ParseTimeBuiltin
   , ZoneOffsetBuiltin
   , RunBuiltin
+  , OpenReaderBuiltin
+  , OpenWriterBuiltin
+  , OpenAppenderBuiltin
+  , ReadChunkBuiltin
+  , WriteChunkBuiltin
+  , FlushWriterBuiltin
+  , CloseHandleBuiltin
+  , TcpListenBuiltin
+  , TcpAcceptBuiltin
+  , TcpConnectBuiltin
+  , SocketSendBuiltin
+  , SocketReceiveBuiltin
+  , SocketCloseBuiltin
+  , SocketPeerBuiltin
+  , SocketPortBuiltin
+  , SocketFinishBuiltin
+  , SpawnThreadBuiltin
+  , JoinThreadBuiltin
+  , SleepBuiltin
+  , ChannelOpenBuiltin
+  , ChannelPushBuiltin
+  , ChannelPullBuiltin
+  , ChannelWaitingBuiltin
+  , ChannelFinishBuiltin
+  , MutexOpenBuiltin
+  , MutexAcquireBuiltin
+  , MutexReleaseBuiltin
+  , CellOpenBuiltin
+  , CellGetBuiltin
+  , CellSwapBuiltin
+  , SecureBytesBuiltin
   ]
 
 {-| Perform one effect.
@@ -72,6 +142,9 @@ effectBuiltins =
 callEffect :: Span -> Builtin -> [Value] -> Evaluator Value
 callEffect spanValue builtin arguments = do
   admitted <- effectsAdmitted
+  handles <- currentHandleStore
+  sockets <- currentSocketStore
+  concurrent <- currentConcurrentStore
   if not admitted
     then
       abortAt (Just spanValue) "E7009"
@@ -102,6 +175,83 @@ callEffect spanValue builtin arguments = do
         resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
       (CreateDirectoryBuiltin, [StrValue path]) ->
         effectUnit (createDirectoryAt (Text.unpack path))
+      {-| A handle is named by a token rather than held as a value, because a
+          value is copied through evaluation and an open file is not: two
+          copies of one file, each thinking it owns the position, would read
+          the same bytes twice. The token means nothing outside the runtime,
+          so a program cannot make one up. -}
+      (OpenReaderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openReadHandle handles (Text.unpack path))
+      (OpenWriterBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openWriteHandle handles (Text.unpack path))
+      (OpenAppenderBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf . fmap fromIntegral <$> lift refusal (openAppendHandle handles (Text.unpack path))
+      {-| Nothing read means the input has ended, which is a different answer
+          from an empty chunk: a reader that could not tell them apart would
+          either stop early or never stop. -}
+      (ReadChunkBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (readHandleChunk handles (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (WriteChunkBuiltin, [IntValue _ token, BytesValue chunk]) ->
+        effectUnit (writeHandleChunk handles (fromInteger token) chunk)
+      (FlushWriterBuiltin, [IntValue _ token]) ->
+        effectUnit (flushHandleAt handles (fromInteger token))
+      (CloseHandleBuiltin, [IntValue _ token]) ->
+        effectUnit (closeHandleAt handles (fromInteger token))
+      {-| An endpoint is named by a token for the reason an open file is: it is
+          one object with one position in its stream, while a value is copied
+          through evaluation. -}
+      (TcpListenBuiltin, [StrValue host, IntValue _ port, IntValue _ backlog]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (listenOn sockets host (fromInteger port) (fromInteger backlog))
+      (TcpAcceptBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (acceptOn sockets (fromInteger token))
+      (TcpConnectBuiltin, [StrValue host, IntValue _ port]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (connectTo sockets host (fromInteger port))
+      (SocketSendBuiltin, [IntValue _ token, BytesValue payload]) ->
+        effectUnit (sendOn sockets (fromInteger token) payload)
+      (SocketReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        outcome <- lift refusal (receiveFrom sockets (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (SocketCloseBuiltin, [IntValue _ token]) ->
+        effectUnit (closeSocketAt sockets (fromInteger token))
+      (SocketFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (shutdownWriteAt sockets (fromInteger token))
+      (SocketPeerBuiltin, [IntValue _ token]) ->
+        resultOf . fmap StrValue <$> lift refusal (peerOf sockets (fromInteger token))
+      (SocketPortBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf sockets (fromInteger token))
+      {-| A thread, a channel, a lock, and a cell are each named by a token for
+          the reason a file and a socket are: they are shared objects, while a
+          value is copied through evaluation, and two copies of a lock would
+          not exclude each other. -}
+      (JoinThreadBuiltin, [IntValue _ token]) ->
+        effectUnit (threadJoin concurrent (fromInteger token))
+      (SleepBuiltin, [IntValue _ millis]) -> effectUnit (sleepFor (fromInteger millis))
+      (ChannelOpenBuiltin, [IntValue _ limit]) ->
+        intOf . fromIntegral <$> lift refusal (channelNew concurrent (fromInteger limit))
+      (ChannelPushBuiltin, [IntValue _ token, value]) ->
+        effectUnit (channelSend concurrent (fromInteger token) value)
+      (ChannelPullBuiltin, [IntValue _ token]) -> do
+        outcome <- lift refusal (channelReceive concurrent (fromInteger token))
+        pure (resultOf (fmap optionalValue outcome))
+      (ChannelWaitingBuiltin, [IntValue _ token]) ->
+        resultOf . fmap (intOf . fromIntegral) <$> lift refusal (channelPending concurrent (fromInteger token))
+      (ChannelFinishBuiltin, [IntValue _ token]) ->
+        effectUnit (channelClose concurrent (fromInteger token))
+      (MutexOpenBuiltin, []) -> intOf . fromIntegral <$> lift refusal (mutexNew concurrent)
+      (MutexAcquireBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexLock concurrent (fromInteger token))
+      (MutexReleaseBuiltin, [IntValue _ token]) ->
+        effectUnit (mutexUnlock concurrent (fromInteger token))
+      (CellOpenBuiltin, [value]) -> intOf . fromIntegral <$> lift refusal (cellNew concurrent value)
+      (CellGetBuiltin, [IntValue _ token]) ->
+        resultOf <$> lift refusal (cellRead concurrent (fromInteger token))
+      (CellSwapBuiltin, [IntValue _ token, value]) ->
+        resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
+      (SecureBytesBuiltin, [IntValue _ count]) ->
+        resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
@@ -140,6 +290,12 @@ callEffect spanValue builtin arguments = do
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
   optionalText found = case found of
     Just text -> VariantValue "Some" [StrValue text]
+    Nothing -> VariantValue "None" []
+  optionalValue found = case found of
+    Just value -> VariantValue "Some" [value]
+    Nothing -> VariantValue "None" []
+  optionalBytes found = case found of
+    Just chunk -> VariantValue "Some" [BytesValue chunk]
     Nothing -> VariantValue "None" []
 
 {-| Run one effect behind the refusal that applies to it.

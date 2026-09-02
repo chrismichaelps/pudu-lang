@@ -1,0 +1,259 @@
+module Std.Toml.Scan
+
+import Std.Option as Option
+import Std.Toml {Boolean, Fractional, Moment, Toml, TomlError, Malformed, Unexpected, Unterminated, Whole}
+import Std.Toml as Document
+
+/// Reading one thing at a time out of configuration text.
+///
+/// Separated from [[Std Toml Read]] because the two answer different questions.
+/// This one knows what a key, a quoted string, an escape, and a number look
+/// like; that one knows what a section header does to the keys after it. A
+/// reader that mixed them would make a change to number syntax a change to
+/// document structure.
+
+/// The characters a bare key or an unquoted number may hold.
+const BARE: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+
+const DIGITS: Str = "0123456789"
+
+/// Past whitespace, comments, and line endings.
+export fn skipBlank(source: Str, start: Int) -> Int {
+  var index = start
+  var going = true
+  while going && index < source.length() {
+    let character = source.slice(index, index + 1)
+    if character == " " || character == "\t" || character == "\n" || character == "\r" {
+      index = index + 1
+    } else {
+      if character == "#" {
+        while index < source.length() && source.slice(index, index + 1) != "\n" {
+          index = index + 1
+        }
+      } else {
+        going = false
+      }
+    }
+  }
+  index
+}
+
+/// Past spaces and tabs only, so a line ending still ends the line.
+export fn skipInline(source: Str, start: Int) -> Int {
+  var index = start
+  while index < source.length() {
+    let character = source.slice(index, index + 1)
+    if character == " " || character == "\t" { index = index + 1 } else { return index }
+  }
+  index
+}
+
+/// One key, bare or quoted.
+export fn readKey(source: Str, start: Int) -> Result[(Str, Int), TomlError] {
+  let character = source.slice(start, start + 1)
+  if character == "\"" || character == "'" {
+    readQuoted(source, start)
+  } else {
+    var index = start
+    while index < source.length() && BARE.contains(source.slice(index, index + 1)) {
+      index = index + 1
+    }
+    if index == start {
+      Err(Unexpected(start, "a key with no name"))
+    } else {
+      Ok((source.slice(start, index), index))
+    }
+  }
+}
+
+/// Quoted text, and where it ended.
+///
+/// A literal string, written with an apostrophe, holds exactly its characters:
+/// the format gives it no escapes at all, which is what makes it the right way
+/// to write a path on a machine whose separator is a backslash.
+export fn readQuoted(source: Str, start: Int) -> Result[(Str, Int), TomlError] {
+  let mark = source.slice(start, start + 1)
+  let tripled = source.slice(start, start + 3) == mark + mark + mark
+  if tripled {
+    readMultiline(source, start, mark)
+  } else {
+    var out = ""
+    var index = start + 1
+    var closed = false
+    var failure: Option[TomlError] = None
+    while !closed && Option.isNone(&failure) && index < source.length() {
+      let character = source.slice(index, index + 1)
+      if character == mark {
+        closed = true
+        index = index + 1
+      } else {
+        if character == "\n" {
+          failure = Some(Unterminated(start))
+        } else {
+          if character == "\\" && mark == "\"" {
+            let escaped = readEscape(source, index)
+            if let Ok(found) = escaped {
+              out = out + found[0]
+              index = found[1]
+            } else {
+              failure = Some(Malformed(index, "an escape the format does not have"))
+            }
+          } else {
+            out = out + character
+            index = index + 1
+          }
+        }
+      }
+    }
+    if let Some(reason) = failure {
+      Err(reason)
+    } else {
+      if closed { Ok((out, index)) } else { Err(Unterminated(start)) }
+    }
+  }
+}
+
+/// Text written across lines, and where it ended.
+///
+/// A line ending straight after the opening marks is dropped, because a writer
+/// who put the opening on its own line meant the text to start on the next.
+export fn readMultiline(source: Str, start: Int, mark: Str) -> Result[(Str, Int), TomlError] {
+  let fence = mark + mark + mark
+  var index = start + 3
+  if source.slice(index, index + 1) == "\n" { index = index + 1 }
+  var out = ""
+  var closed = false
+  var failure: Option[TomlError] = None
+  while !closed && Option.isNone(&failure) && index < source.length() {
+    if source.slice(index, index + 3) == fence {
+      closed = true
+      index = index + 3
+    } else {
+      let character = source.slice(index, index + 1)
+      if character == "\\" && mark == "\"" {
+        let escaped = readEscape(source, index)
+        if let Ok(found) = escaped {
+          out = out + found[0]
+          index = found[1]
+        } else {
+          failure = Some(Malformed(index, "an escape the format does not have"))
+        }
+      } else {
+        out = out + character
+        index = index + 1
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    Err(reason)
+  } else {
+    if closed { Ok((out, index)) } else { Err(Unterminated(start)) }
+  }
+}
+
+/// One escape, and where it ended.
+export fn readEscape(source: Str, start: Int) -> Result[(Str, Int), TomlError] {
+  let marker = source.slice(start + 1, start + 2)
+  if marker == "n" { return Ok(("\n", start + 2)) }
+  if marker == "t" { return Ok(("\t", start + 2)) }
+  if marker == "r" { return Ok(("\r", start + 2)) }
+  if marker == "\"" { return Ok(("\"", start + 2)) }
+  if marker == "\\" { return Ok(("\\", start + 2)) }
+  if marker == "0" { return Ok((scalarText(0), start + 2)) }
+  if marker == "u" { return readScalar(source, start + 2, 4) }
+  if marker == "U" { return readScalar(source, start + 2, 8) }
+  Err(Malformed(start, "an escape the format does not have"))
+}
+
+/// The text one scalar value spells.
+///
+/// A number outside what a scalar may be answers empty rather than stopping:
+/// the format admits the escape, and refusing the whole document over one
+/// character that cannot be represented would lose everything else it said.
+fn scalarText(code: Int) -> Str {
+  if let Some(character) = charFromCode(code) { character.toText() } else { "" }
+}
+
+/// A scalar written as hexadecimal digits.
+export fn readScalar(source: Str, start: Int, width: Int) -> Result[(Str, Int), TomlError] {
+  let digits = source.slice(start, start + width)
+  if digits.length() != width {
+    Err(Malformed(start, "a scalar with too few digits"))
+  } else {
+    var code = 0
+    var index = 0
+    var good = true
+    while index < width && good {
+      let place = "0123456789abcdef".indexOf(digits.slice(index, index + 1).toLower())
+      if place < 0 { good = false } else { code = code * 16 + place }
+      index = index + 1
+    }
+    if !good {
+      Err(Malformed(start, "a scalar with a digit that is not hexadecimal"))
+    } else {
+      Ok((scalarText(code), start + width))
+    }
+  }
+}
+
+/// What an unquoted word means.
+///
+/// A moment is recognised by its shape rather than parsed, because the format
+/// has four of them and which one a text names is a question `Std.Time.Format`
+/// answers. Keeping the text means nothing is lost deciding here.
+export fn valueOf(word: Str) -> Toml {
+  if word == "true" { return Boolean(true) }
+  if word == "false" { return Boolean(false) }
+  if looksLikeMoment(word) { return Moment(word) }
+  if let Some(number) = wholeOf(word) { return Whole(number) }
+  Fractional(word)
+}
+
+/// Whether a word is written the way a date or time is.
+export fn looksLikeMoment(word: Str) -> Bool {
+  if word.length() < 8 {
+    false
+  } else {
+    // A date leads with four digits and a hyphen; a bare time with two digits
+    // and a colon. A number never holds either in those positions.
+    let dated = word.length() >= 10 && word.slice(4, 5) == "-" && word.slice(7, 8) == "-"
+    let timed = word.slice(2, 3) == ":" && word.slice(5, 6) == ":"
+    dated || timed
+  }
+}
+
+/// A whole number, or nothing when the word is not one.
+///
+/// Underscores separate digits for a reader and mean nothing to the value, so
+/// they are dropped first. A leading marker names the base the digits are in.
+export fn wholeOf(word: Str) -> Option[Int] {
+  let cleaned = word.replace("_", "")
+  if cleaned.startsWith("0x") { return digitsIn(cleaned.drop(2), "0123456789abcdef", 16) }
+  if cleaned.startsWith("0o") { return digitsIn(cleaned.drop(2), "01234567", 8) }
+  if cleaned.startsWith("0b") { return digitsIn(cleaned.drop(2), "01", 2) }
+  let negative = cleaned.startsWith("-")
+  let body = if negative || cleaned.startsWith("+") { cleaned.drop(1) } else { cleaned }
+  if let Some(size) = digitsIn(body, DIGITS, 10) {
+    if negative { Some(0 - size) } else { Some(size) }
+  } else {
+    None
+  }
+}
+
+/// The number a run of digits names in a base, or nothing when a character is
+/// not a digit of it.
+export fn digitsIn(text: Str, alphabet: Str, base: Int) -> Option[Int] {
+  if text.isEmpty() {
+    None
+  } else {
+    var total = 0
+    var index = 0
+    var good = true
+    while index < text.length() && good {
+      let place = alphabet.indexOf(text.slice(index, index + 1).toLower())
+      if place < 0 { good = false } else { total = total * base + place }
+      index = index + 1
+    }
+    if good { Some(total) } else { None }
+  }
+}

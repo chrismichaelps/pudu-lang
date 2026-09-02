@@ -20,7 +20,7 @@ wiredInTypeNames =
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "UInt"
   , "Float32", "Float64", "Float"
   , "Bool", "Char", "Str", "Never", "BigInt", "Decimal"
-  , "Option", "Result", "Array", "Task", "Map", "Set"
+  , "Option", "Result", "Array", "Task", "Map", "Set", "Bytes", "Buckets"
   , "Copy"
   ]
 
@@ -38,7 +38,8 @@ preludeTypeNames =
     without a declaration, so their variants must too. -}
 preludeValueNames :: [Text]
 preludeValueNames =
-  [ "panic", "charFromCode", "mapOf", "setOf", "show", "display", "convertInteger"
+  [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "bucketsOf", "mixHash", "show", "display", "convertInteger"
+  , "sha256Of", "hmacSha256Of", "deriveKey", "hashOf"
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"
@@ -52,6 +53,15 @@ effectValueNames =
   [ "print", "printError", "printPart", "printErrorPart", "readLine"
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
   , "listDirectory", "createDirectory"
+  , "openReader", "openWriter", "openAppender"
+  , "readChunk", "writeChunk", "flushWriter", "closeHandle"
+  , "tcpListen", "tcpAccept", "tcpConnect", "socketSend", "socketReceive"
+  , "socketClose", "socketPeer", "socketPort", "socketFinish"
+  , "spawnThread", "joinThread", "sleepMillis"
+  , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
+  , "mutexOpen", "mutexAcquire", "mutexRelease"
+  , "cellOpen", "cellGet", "cellSwap"
+  , "secureRandomBytes"
   , "arguments", "environment", "temporaryPath", "userHome"
   , "pathSeparators", "searchSeparator", "exit", "clock"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"

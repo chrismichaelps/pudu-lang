@@ -1,0 +1,50 @@
+module UsesCallbacks
+
+import Std.List as List
+import Std.Option as Option
+import Std.Result as Result
+
+/// A function a program declares must work wherever it is called from.
+///
+/// A declaration carries no captured environment: it runs in the frame of
+/// whoever called it. That is what lets a module's functions see each other,
+/// and it meant a named function handed to something in another module ran
+/// without its own imports — reporting them undefined at run time, having
+/// type-checked. Every check here passes a declared function to a standard
+/// module and calls it from there.
+export fn main() -> Int {
+  var held = 0
+
+  // Passed to a module that calls back into it.
+  if List.map(&[1, 2, 3], doubled) == [2, 4, 6] { held = held + 1 }
+  if List.filter(&[1, 2, 3, 4], isEven) == [2, 4] { held = held + 1 }
+
+  // Through a carrier, which is where the failure showed first.
+  if Option.unwrapOr(Option.map(Some(21), doubled), 0) == 42 { held = held + 1 }
+  if Result.unwrapOr(Result.map(Ok(21), doubled), 0) == 42 { held = held + 1 }
+
+  // A declaration whose body reaches for its own module's import, which is the
+  // part that was undefined when it ran somewhere else.
+  if Option.unwrapOr(Option.map(Some([3, 1, 2]), smallest), -1) == 1 { held = held + 1 }
+
+  // One that reaches for another function this module declared.
+  if List.map(&[1, 2], quadrupled) == [4, 8] { held = held + 1 }
+
+  // A literal still works, which it always did.
+  if List.map(&[1, 2], fn(n: Int) -> Int { n * 2 }) == [2, 4] { held = held + 1 }
+
+  // And a declaration used as a value rather than called.
+  let chosen = doubled
+  if chosen(5) == 10 { held = held + 1 }
+
+  held
+}
+
+fn doubled(value: Int) -> Int { value * 2 }
+
+fn quadrupled(value: Int) -> Int { doubled(doubled(value)) }
+
+fn isEven(value: Int) -> Bool { value % 2 == 0 }
+
+/// Reaches for this module's own import, which is what broke.
+fn smallest(values: Array[Int]) -> Int { Option.unwrapOr(List.minimum(&values), -1) }

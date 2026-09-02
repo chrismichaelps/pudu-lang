@@ -5,6 +5,13 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Entropy]] — bounded operating-system cryptographic entropy.
+- [[Eval Hash Map]] — persistent indexed buckets and deterministic map order.
+- [[Eval Bytes]] — compact byte values and their built-in operations.
+- [[Eval Handle]] — runtime-owned streaming file handles.
+- [[Eval Socket]] — runtime-owned TCP sockets and typed host outcomes.
+- [[Eval Concurrent]] — thread, channel, mutex, and atomic-cell tables.
+- [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.

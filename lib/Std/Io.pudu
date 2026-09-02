@@ -1,5 +1,9 @@
 module Std.Io
 
+import Std.Bytes as ByteSeq
+import Std.Path as Path
+import Std.Result as Result
+
 /// A line written to the program's output.
 /// The output is flushed, so a program that prints and then waits for input has
 /// already shown what it printed.
@@ -100,97 +104,351 @@ export fn move(from: Str, to: Str) -> Result[(), Str] {
   removeFile(from)
 }
 
+/// The path vocabulary, so a program reaching for it through `Std.Io` finds
+/// the same answers `Std.Path` gives. The work is written once, there, and
+/// these carry it: two implementations of `normalize` would eventually
+/// disagree about a path holding a climb, and only one of them would be the
+/// one a caller checked against before writing.
+
 /// The character this machine writes between the pieces of a path.
-///
-/// Asked of the machine rather than written down. It is a slash on one family
-/// of operating system and a backslash on the other, and a path built with the
-/// wrong one is not a path there.
-export fn separator() -> Str { pathSeparators()[0] }
+export fn separator() -> Str { Path.separator() }
 
 /// Whether a character ends a piece of a path on this machine.
-///
-/// Every separator this machine accepts, not only the one it writes: a path
-/// that arrived from somewhere else still has to come apart correctly, and one
-/// family of operating system reads the other's separator as its own.
-export fn isSeparator(character: Str) -> Bool {
-  pathSeparators().contains(character)
-}
-
-/// The position of the last separator in a path, or `-1` when it has none.
-fn lastSeparator(path: Str) -> Int {
-  var index = path.length() - 1
-  while index >= 0 {
-    if isSeparator(path.slice(index, index + 1)) { return index }
-    index = index - 1
-  }
-    -1
-}
-
-/// A path with any trailing separator removed, leaving a lone root alone.
-fn withoutTrailingSeparator(path: Str) -> Str {
-  let last = path.length() - 1
-  if last > 0 && isSeparator(path.slice(last, last + 1)) {
-    path.slice(0, last)
-  } else { path }
-}
+export fn isSeparator(character: Str) -> Bool { Path.isSeparator(character) }
 
 /// Two path pieces joined with a separator, without doubling one.
-export fn join(left: Str, right: Str) -> Str {
-  if left.isEmpty() { right } else {
-    if right.isEmpty() { left } else {
-      let last = left.length() - 1
-      if isSeparator(left.slice(last, last + 1)) { left + right }
-        else { left + separator() + right }
-    }
-  }
-}
+export fn join(left: Str, right: Str) -> Str { Path.join(left, right) }
 
 /// A path without its last piece, or `.` when it has only one.
-export fn directoryOf(path: Str) -> Str {
-  let trimmed = withoutTrailingSeparator(path)
-  let at = lastSeparator(trimmed)
-  if at < 0 { "." } else {
-    if at == 0 { trimmed.slice(0, 1) } else { trimmed.slice(0, at) }
-  }
-}
+export fn directoryOf(path: Str) -> Str { Path.directoryOf(path) }
 
 /// The last piece of a path.
-export fn nameOf(path: Str) -> Str {
-  let trimmed = withoutTrailingSeparator(path)
-  let at = lastSeparator(trimmed)
-  if at < 0 { trimmed } else { trimmed.slice(at + 1, trimmed.length()) }
-}
+export fn nameOf(path: Str) -> Str { Path.nameOf(path) }
 
-/// A file name's extension, without the dot, or `None` when it has none.
-export fn extensionOf(path: Str) -> Option[Str] {
-  let name = nameOf(path)
-  let at = lastIndexOf(name, ".")
-  if at <= 0 { None } else { Some(name.slice(at + 1, name.length())) }
-}
+/// A path's extension, without its dot, or nothing when it has none.
+export fn extensionOf(path: Str) -> Option[Str] { Path.extensionOf(path) }
 
-/// A file name with its extension removed.
-export fn withoutExtension(path: Str) -> Str {
-  let name = nameOf(path)
-  let at = lastIndexOf(name, ".")
-  if at <= 0 { name } else { name.slice(0, at) }
-}
+/// A path with its extension removed.
+export fn withoutExtension(path: Str) -> Str { Path.withoutExtension(path) }
 
-/// A file name with a different extension.
+/// A path carrying the given extension, replacing any it had.
 export fn withExtension(path: Str, extension: Str) -> Str {
-  join(directoryOf(path), withoutExtension(path) + "." + extension)
+  Path.withExtension(path, extension)
 }
 
-/// The position of the last occurrence of a needle, or -1.
-fn lastIndexOf(value: Str, needle: Str) -> Int {
-  var found = 0 - 1
+/// Why an operation over a file did not do what it was asked.
+/// One variant per cause a caller can act on differently: a missing file is
+/// created, a refused one is reported to a person, and a caller handed one
+/// message for both could do neither. `Other` carries what the operating
+/// system said, unchanged, for the causes this list does not name.
+export type IoError
+  = NotFound(Str)
+  | PermissionDenied(Str)
+  | IsDirectory(Str)
+  | AlreadyExists(Str)
+  | NotText
+  | UnexpectedEnd
+  | HandleClosed
+  | Other(Str)
+
+/// A file open for reading, named by a token the runtime gave out.
+/// The token is meaningless outside the bracket that produced it, and there is
+/// no way to write one down, so a reader cannot outlive the file it names.
+export type Reader = { token: Int }
+
+/// A file open for writing.
+export type Writer = { token: Int }
+
+/// How much is asked for in one read.
+/// Large enough that a big file is not read in thousands of small steps, and
+/// small enough that reading one is not the same as holding it all.
+const CHUNK: Int = 65536
+
+/// The phrases an operating system uses for the causes worth telling apart,
+/// paired with the cause. A module-scope constant, so classifying a failure
+/// costs a walk of this list rather than rebuilding it on every failure.
+const CAUSES: Array[(Str, Int)] = [
+  ("does not exist", 0),
+  ("No such file", 0),
+  ("permission denied", 1),
+  ("Permission denied", 1),
+  ("inappropriate type", 2),
+  ("is a directory", 2),
+  ("already exists", 3),
+  ("handle is closed", 4)
+]
+
+/// The cause a message names, or `Other` carrying the message itself.
+fn causeOf(message: Str, path: Str) -> IoError {
+  var found = Other(message)
   var index = 0
-  let size = value.length()
-  let width = needle.length()
-  if width == 0 { found } else {
-    while index + width <= size {
-      if value.slice(index, index + width) == needle { found = index }
-      index = index + 1
+  var going = true
+  while index < CAUSES.length() && going {
+    let entry = CAUSES[index]
+    if message.contains(entry[0]) {
+      found = namedCause(entry[1], path, message)
+      going = false
     }
-    found
+    index = index + 1
   }
+  found
+}
+
+fn namedCause(tag: Int, path: Str, message: Str) -> IoError {
+  if tag == 0 { NotFound(path) } else {
+    if tag == 1 { PermissionDenied(path) } else {
+      if tag == 2 { IsDirectory(path) } else {
+        if tag == 3 { AlreadyExists(path) } else {
+          if tag == 4 { HandleClosed } else { Other(message) }
+        }
+      }
+    }
+  }
+}
+
+/// Read a file through a handle the runtime owns for the length of the call.
+/// There is no `close` a caller can forget, because there is no `close`: the
+/// bracket opened the file and the bracket closes it, on the path where the
+/// action answered and on the path where it failed.
+export fn withReader[T](path: Str, action: fn(Reader) -> Result[T, IoError]) -> Result[T, IoError] {
+  let opened = openReader(path)
+  if let Err(message) = opened {
+    Err(causeOf(message, path))
+  } else {
+    let token = Result.unwrapOr(opened, 0)
+    let outcome = action(Reader{token: token})
+    let closed = release(token, path)
+    firstFailure(outcome, closed)
+  }
+}
+
+/// Write a file the same way, replacing whatever it held.
+/// The bracket flushes before it closes and reports a failing flush rather
+/// than discarding it: bytes that never reached the file are not written, and
+/// a caller told the write succeeded would have no way to find out.
+export fn withWriter[T](path: Str, action: fn(Writer) -> Result[T, IoError]) -> Result[T, IoError] {
+  writing(openWriter(path), path, action)
+}
+
+/// Write after what the file already holds.
+export fn withAppender[T](path: Str, action: fn(Writer) -> Result[T, IoError]) -> Result[T, IoError] {
+  writing(openAppender(path), path, action)
+}
+
+fn writing[T](
+  opened: Result[Int, Str],
+  path: Str,
+  action: fn(Writer) -> Result[T, IoError]
+) -> Result[T, IoError] {
+  if let Err(message) = opened {
+    Err(causeOf(message, path))
+  } else {
+    let token = Result.unwrapOr(opened, 0)
+    let outcome = action(Writer{token: token})
+    let flushed = flush(token, path)
+    let closed = release(token, path)
+    firstFailure(firstFailure(outcome, flushed), closed)
+  }
+}
+
+fn release(token: Int, path: Str) -> Result[(), IoError] {
+  Result.mapErr(closeHandle(token), fn(message: Str) -> IoError { causeOf(message, path) })
+}
+
+fn flush(token: Int, path: Str) -> Result[(), IoError] {
+  Result.mapErr(flushWriter(token), fn(message: Str) -> IoError { causeOf(message, path) })
+}
+
+/// The action's own failure wins, because it is the one the caller was doing.
+/// A failure closing the file is reported only when the action succeeded, and
+/// then it matters: it says the bytes did not arrive.
+fn firstFailure[T](outcome: Result[T, IoError], after: Result[(), IoError]) -> Result[T, IoError] {
+  if Result.isErr(&outcome) { outcome } else {
+    if let Err(reason) = after { Err(reason) } else { outcome }
+  }
+}
+
+/// The next bytes from a reader, or nothing when the input has ended.
+/// Nothing is a different answer from an empty sequence: a reader that could
+/// not tell them apart would either stop early or never stop.
+export fn readFrom(reader: &Reader, count: Int) -> Result[Option[Bytes], IoError] {
+  Result.mapErr(readChunk(reader.token, count), fn(message: Str) -> IoError { causeOf(message, "") })
+}
+
+/// Write bytes through a writer.
+export fn writeTo(writer: &Writer, chunk: &Bytes) -> Result[(), IoError] {
+  Result.mapErr(writeChunk(writer.token, *chunk), fn(message: Str) -> IoError { causeOf(message, "") })
+}
+
+/// Write text through a writer, as its UTF-8 encoding.
+export fn writeTextTo(writer: &Writer, text: Str) -> Result[(), IoError] {
+  writeTo(writer, &text.toBytes())
+}
+
+/// Combine every chunk of a file into one value, holding one chunk at a time.
+/// What it costs to run does not depend on how large the file is, which is the
+/// whole of what streaming buys: a file larger than memory is folded here and
+/// cannot be read by anything that materialises it first.
+export fn foldChunks[T](reader: &Reader, seed: T, step: fn(T, Bytes) -> T) -> Result[T, IoError] {
+  var total = seed
+  var failure: Option[IoError] = None
+  var going = true
+  while going {
+    let chunk = readFrom(reader, CHUNK)
+    if let Err(reason) = chunk {
+      failure = Some(reason)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(chunk, None)
+      if let Some(bytes) = piece { total = step(total, bytes) } else { going = false }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(total) }
+}
+
+/// Run an action for every chunk, keeping nothing.
+export fn forEachChunk(reader: &Reader, action: fn(Bytes) -> ()) -> Result[(), IoError] {
+  Result.map(
+    foldChunks(reader, 0, fn(count: Int, chunk: Bytes) -> Int {
+        action(chunk)
+        count + 1
+      }),
+    fn(_counted: Int) -> () { () }
+  )
+}
+
+/// How many bytes a file holds, without holding any of them.
+export fn countBytes(path: Str) -> Result[Int, IoError] {
+  withReader(path, fn(reader: Reader) -> Result[Int, IoError] {
+      foldChunks(&reader, 0, fn(total: Int, chunk: Bytes) -> Int { total + chunk.length() })
+    })
+}
+
+/// Every byte of a file, joined once rather than once per chunk.
+/// Named so its cost is visible: this is the wrapper that decides the memory
+/// profile of the program using it, and `foldChunks` is the one that does not.
+export fn readAllBytes(path: Str) -> Result[Bytes, IoError] {
+  withReader(path, fn(reader: Reader) -> Result[Bytes, IoError] {
+      Result.map(
+        foldChunks(&reader, [], fn(parts: Array[Bytes], chunk: Bytes) -> Array[Bytes] { parts.push(chunk) }),
+        fn(parts: Array[Bytes]) -> Bytes { ByteSeq.join(&parts) }
+      )
+    })
+}
+
+/// Write bytes to a file, replacing what it held.
+export fn writeAllBytes(path: Str, contents: &Bytes) -> Result[(), IoError] {
+  let payload = *contents
+  withWriter(path, fn(writer: Writer) -> Result[(), IoError] { writeTo(&writer, &payload) })
+}
+
+/// Add bytes after what a file already holds.
+export fn appendAllBytes(path: Str, contents: &Bytes) -> Result[(), IoError] {
+  let payload = *contents
+  withAppender(path, fn(writer: Writer) -> Result[(), IoError] { writeTo(&writer, &payload) })
+}
+
+/// Combine every line of a file into one value, holding one chunk at a time.
+/// A line is split on the newline wherever it falls, including across the
+/// boundary between two chunks, so what a caller sees does not depend on how
+/// the file happened to be divided. Text that is not a valid encoding is
+/// reported rather than replaced: a substituted character would make a broken
+/// file look like a readable one.
+///
+/// The value is threaded rather than gathered by the step function, for the
+/// same reason a sequence passes its state: a function literal carries a copy
+/// of what it captured, so a step that assigned to a variable outside itself
+/// would leave that variable as it found it.
+export fn foldLines[T](path: Str, seed: T, step: fn(T, Str) -> T) -> Result[T, IoError] {
+  withReader(path, fn(reader: Reader) -> Result[T, IoError] {
+      var total = seed
+      var carried = ByteSeq.empty()
+      var failure: Option[IoError] = None
+      var going = true
+      while going {
+        let chunk = readFrom(&reader, CHUNK)
+        if let Err(reason) = chunk {
+          failure = Some(reason)
+          going = false
+        } else {
+          let piece = Result.unwrapOr(chunk, None)
+          if let Some(bytes) = piece {
+            carried = carried.concat(bytes)
+            let split = takeLines(carried)
+            if let Err(reason) = split[0] {
+              failure = Some(reason)
+              going = false
+            }
+            for line in Result.unwrapOr(split[0], []) { total = step(total, line) }
+            carried = split[1]
+          } else {
+            going = false
+          }
+        }
+      }
+      if let Some(reason) = failure { Err(reason) } else {
+        if carried.isEmpty() { Ok(total) } else {
+          if let Some(line) = carried.toText() {
+            Ok(step(total, trimReturn(line)))
+          } else {
+            Err(NotText)
+          }
+        }
+      }
+    })
+}
+
+/// Run an action for every line of a file, keeping nothing.
+/// For an action that only reaches outside the program — printing a line,
+/// writing it elsewhere. A caller gathering the lines wants `foldLines`,
+/// because what this action assigns to a variable outside itself does not
+/// leave the action.
+export fn forEachLine(path: Str, action: fn(Str) -> ()) -> Result[(), IoError] {
+  Result.map(
+    foldLines(path, 0, fn(count: Int, line: Str) -> Int {
+        action(line)
+        count + 1
+      }),
+    fn(_counted: Int) -> () { () }
+  )
+}
+
+/// Every line of a file, in order.
+/// Named so its cost is visible: this holds every line at once, and
+/// `foldLines` is the one that does not.
+export fn readAllLinesOf(path: Str) -> Result[Array[Str], IoError] {
+  foldLines(path, [], fn(lines: Array[Str], line: Str) -> Array[Str] { lines.push(line) })
+}
+
+/// The complete lines a buffer holds, and the partial line left over.
+/// The remainder is carried into the next chunk rather than reported, because
+/// a line divided by a chunk boundary is one line and not two.
+fn takeLines(buffer: Bytes) -> (Result[Array[Str], IoError], Bytes) {
+  let newline = ByteSeq.fromArray(&[10u8])
+  var lines: Array[Str] = []
+  var rest = buffer
+  var failure: Option[IoError] = None
+  var going = true
+  while going {
+    let found = rest.indexOf(newline)
+    if found < 0 {
+      going = false
+    } else {
+      let text = rest.take(found).toText()
+      if let Some(line) = text {
+        lines = lines.push(trimReturn(line))
+      } else {
+        failure = Some(NotText)
+        going = false
+      }
+      rest = rest.drop(found + 1)
+    }
+  }
+  if let Some(reason) = failure { (Err(reason), rest) } else { (Ok(lines), rest) }
+}
+
+/// A file written where a carriage return precedes each newline still holds
+/// one line per newline, so the return is dropped rather than handed on.
+fn trimReturn(line: Str) -> Str {
+  if line.endsWith("\r") { line.take(line.length() - 1) } else { line }
 }

@@ -12,6 +12,7 @@ module Pudu.Eval
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
+import Control.Exception (bracket)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -35,6 +36,9 @@ import Pudu.Eval.Env
   , withFrame
   , withNewFrame
   )
+import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
+import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
+import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
   , evaluateFor
@@ -82,9 +86,8 @@ data EvalOutcome = EvalOutcome
   deriving stock (Eq, Show)
 
 runCounted :: Maybe (IORef (Map.Map Text Int)) -> Evaluator Value -> IO EvalOutcome
-runCounted counters (Evaluator action) = do
-  outcome <- action emptyEnv{envEffects = True, envTally = counters}
-  pure (outcomeOf outcome)
+runCounted counters (Evaluator action) =
+  withRuntime $ \env -> outcomeOf <$> action env{envEffects = True, envTally = counters}
 
 {-| Run an evaluation, choosing whether the program may reach the world.
 
@@ -93,9 +96,20 @@ runCounted counters (Evaluator action) = do
     depend on the world the compiler happened to be in, and would produce output
     nobody asked for. -}
 runWithEffects :: Bool -> Evaluator Value -> IO EvalOutcome
-runWithEffects effects (Evaluator action) = do
-  outcome <- action emptyEnv{envEffects = effects}
-  pure (outcomeOf outcome)
+runWithEffects effects (Evaluator action) =
+  withRuntime $ \env -> outcomeOf <$> action env{envEffects = effects}
+
+{-| Allocate one resource set for a run and close it on every exit path.
+
+    Workers stop before sockets and handles close, so a child cannot race
+    teardown while finishing an effect. Independent evaluations own disjoint
+    stores and therefore cannot invalidate one another's tokens. -}
+withRuntime :: (Env -> IO a) -> IO a
+withRuntime action =
+  bracket newHandleStore closeHandleStore $ \handles ->
+    bracket newSocketStore closeSocketStore $ \sockets ->
+      bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
+        action (emptyEnv handles sockets concurrent)
 
 {-| What a finished evaluation answers with. A control transfer that reached the
     top is the value it carried; only an abort has nothing to answer. -}

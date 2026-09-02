@@ -1,0 +1,285 @@
+module Std.HashMap
+
+import Std.List as List
+import Std.Option as Option
+import Std.Order {Eq, Hash}
+
+/// One pairing, with the position it was first put in.
+///
+/// The position is kept beside the pairing rather than in a list of its own,
+/// because a list would have to be searched and rewritten on every removal.
+/// Carrying it here makes a removal cost what removing from one bucket costs,
+/// and makes enumeration a sort of what the buckets already hold.
+export type Entry[K, V] = {
+  key: K,
+  value: V,
+  placed: Int
+}
+
+/// A map that finds a key by hashing it rather than by comparing it.
+///
+/// The ordered `Map` reaches a key by comparison, so a lookup walks a tree
+/// whose depth grows with the collection. This reaches a bucket by a number,
+/// which costs the same at any size; what it gives up is that keys come back
+/// in insertion order rather than sorted, and that a key must be able to hash
+/// as well as compare equal.
+///
+/// `placed` counts upwards and is never reused. Two entries can therefore
+/// never claim one position, which is what makes enumeration a total order
+/// rather than an order with ties the sort would break arbitrarily.
+export type HashMap[K, V] = {
+  buckets: Buckets[Array[Entry[K, V]]],
+  count: Int,
+  placed: Int
+}
+
+/// A map holding nothing.
+export fn empty[K: Eq + Hash, V]() -> HashMap[K, V] {
+  HashMap{buckets: bucketsOf(), count: 0, placed: 0}
+}
+
+/// Which bucket a key belongs in.
+///
+/// The key's own hash, spread across the whole word against a value chosen
+/// when the process started. Without the mixing, a caller who chooses keys
+/// chooses which of them collide, and a map keyed on what a program was sent
+/// becomes a list walked once per lookup.
+fn bucketOf[K: Eq + Hash, V](key: &K) -> Int { mixHash(key.hash()) }
+
+/// The entries sharing a key's bucket.
+fn bucketAt[K: Eq + Hash, V](target: &HashMap[K, V], index: Int) -> Array[Entry[K, V]] {
+  Option.unwrapOr(target.buckets.get(index), [])
+}
+
+/// Where a key sits in its bucket, or `-1` when the bucket does not hold it.
+///
+/// Identity is the key's own `Eq`, never the hash. Two keys that hash together
+/// are a collision, and a map that treated them as one key would answer a
+/// lookup with somebody else's value.
+fn positionIn[K: Eq + Hash, V](bucket: &Array[Entry[K, V]], key: &K) -> Int {
+  var index = 0
+  while index < bucket.length() {
+    if bucket[index].key.equals(key) { return index }
+    index = index + 1
+  }
+    -1
+}
+
+/// How many pairings a map holds.
+export fn size[K: Eq + Hash, V](target: &HashMap[K, V]) -> Int { target.count }
+
+/// Whether a map holds nothing.
+export fn isEmpty[K: Eq + Hash, V](target: &HashMap[K, V]) -> Bool { target.count == 0 }
+
+/// Whether a key is present.
+export fn containsKey[K: Eq + Hash, V](target: &HashMap[K, V], key: &K) -> Bool {
+  let bucket = bucketAt(target, bucketOf[K, V](key))
+  positionIn(&bucket, key) >= 0
+}
+
+/// The value under a key, or nothing when the map does not hold it.
+export fn get[K: Eq + Hash, V](target: &HashMap[K, V], key: &K) -> Option[V] {
+  let bucket = bucketAt(target, bucketOf[K, V](key))
+  let at = positionIn(&bucket, key)
+  if at < 0 { None } else { Some(bucket[at].value) }
+}
+
+/// The value under a key, or a fallback when the map does not hold it.
+export fn getOr[K: Eq + Hash, V](target: &HashMap[K, V], key: &K, fallback: V) -> V {
+  Option.unwrapOr(get(target, key), fallback)
+}
+
+/// A map with a pairing added, replacing any value already under the key.
+///
+/// Replacing keeps the position the key already had, so a value corrected
+/// after the fact does not move to the end of what enumeration reports. A key
+/// removed and put back is a new pairing and does take a new position.
+export fn insert[K: Eq + Hash, V](target: &HashMap[K, V], key: K, value: V) -> HashMap[K, V] {
+  let index = bucketOf[K, V](&key)
+  let bucket = bucketAt(target, index)
+  let at = positionIn(&bucket, &key)
+  if at < 0 {
+    let added = bucket.push(Entry{key: key, value: value, placed: target.placed})
+    HashMap {
+      buckets: target.buckets.insert(index, added),
+      count: target.count + 1,
+      placed: target.placed + 1
+    }
+  } else {
+    let kept = bucket[at].placed
+    let replaced = bucket.remove(at).insert(at, Entry{key: key, value: value, placed: kept})
+    HashMap {
+      buckets: target.buckets.insert(index, replaced),
+      count: target.count,
+      placed: target.placed
+    }
+  }
+}
+
+/// A map with a pairing added, combining with any value already there.
+///
+/// The value already present is given first, so a caller writing an addition
+/// or an append does not have to remember which way round the arguments came.
+export fn insertWith[K: Eq + Hash, V](
+  target: &HashMap[K, V],
+  key: K,
+  value: V,
+  combine: fn(V, V) -> V
+) -> HashMap[K, V] {
+  if let Some(held) = get(target, &key) {
+    insert(target, key, combine(held, value))
+  } else {
+    insert(target, key, value)
+  }
+}
+
+/// A map with a key removed, or the same map when it held none.
+export fn remove[K: Eq + Hash, V](target: &HashMap[K, V], key: &K) -> HashMap[K, V] {
+  let index = bucketOf[K, V](key)
+  let bucket = bucketAt(target, index)
+  let at = positionIn(&bucket, key)
+  if at < 0 {
+      *target
+  } else {
+    let left = bucket.remove(at)
+    // A bucket with nothing left is dropped rather than stored empty, so a map
+    // that filled and emptied does not keep a bucket for every key it ever saw.
+    let buckets = if left.length() == 0 {
+      target.buckets.remove(index)
+    } else {
+      target.buckets.insert(index, left)
+    }
+    HashMap{buckets: buckets, count: target.count - 1, placed: target.placed}
+  }
+}
+
+/// Every pairing, in the order the keys were first put in.
+///
+/// Order is what the entries record rather than where the buckets put them, so
+/// two programs that inserted the same keys in the same order enumerate them
+/// the same way — even though the seed makes their buckets differ.
+export fn entries[K: Eq + Hash, V](target: &HashMap[K, V]) -> Array[(K, V)] {
+  var gathered: Array[Entry[K, V]] = []
+  for bucket in target.buckets.values() {
+    for entry in bucket { gathered = gathered.push(entry) }
+  }
+  let ordered = List.sortBy(&gathered, fn(left: Entry[K, V], right: Entry[K, V]) -> Bool {
+      left.placed < right.placed
+    })
+  var pairs: Array[(K, V)] = []
+  for entry in ordered { pairs = pairs.push((entry.key, entry.value)) }
+  pairs
+}
+
+/// Every key, in the order they were first put in.
+export fn keys[K: Eq + Hash, V](target: &HashMap[K, V]) -> Array[K] {
+  var found: Array[K] = []
+  for pair in entries(target) { found = found.push(pair[0]) }
+  found
+}
+
+/// Every value, in the order their keys were first put in.
+export fn values[K: Eq + Hash, V](target: &HashMap[K, V]) -> Array[V] {
+  var found: Array[V] = []
+  for pair in entries(target) { found = found.push(pair[1]) }
+  found
+}
+
+/// A map built from pairings, later ones replacing earlier ones.
+export fn fromArray[K: Eq + Hash, V](pairs: &Array[(K, V)]) -> HashMap[K, V] {
+  var built: HashMap[K, V] = empty()
+  for pair in pairs { built = insert(&built, pair[0], pair[1]) }
+  built
+}
+
+/// A map holding one pairing.
+export fn singleton[K: Eq + Hash, V](key: K, value: V) -> HashMap[K, V] {
+  insert(&empty(), key, value)
+}
+
+/// A map with every value transformed, keeping keys and their order.
+export fn map[K: Eq + Hash, V, W](
+  target: &HashMap[K, V],
+  transform: fn(V) -> W
+) -> HashMap[K, W] {
+  var built: HashMap[K, W] = empty()
+  for pair in entries(target) { built = insert(&built, pair[0], transform(pair[1])) }
+  built
+}
+
+/// A map holding only the pairings a test accepts.
+export fn filter[K: Eq + Hash, V](
+  target: &HashMap[K, V],
+  accept: fn(K, V) -> Bool
+) -> HashMap[K, V] {
+  var built: HashMap[K, V] = empty()
+  for pair in entries(target) {
+    if accept(pair[0], pair[1]) { built = insert(&built, pair[0], pair[1]) }
+  }
+  built
+}
+
+/// Every pairing combined into one value, in insertion order.
+export fn fold[K: Eq + Hash, V, A](
+  target: &HashMap[K, V],
+  seed: A,
+  step: fn(A, K, V) -> A
+) -> A {
+  var total = seed
+  for pair in entries(target) { total = step(total, pair[0], pair[1]) }
+  total
+}
+
+/// Two maps joined, the second's value winning where both hold a key.
+export fn merge[K: Eq + Hash, V](
+  left: &HashMap[K, V],
+  right: &HashMap[K, V]
+) -> HashMap[K, V] {
+  var built = *left
+  for pair in entries(right) { built = insert(&built, pair[0], pair[1]) }
+  built
+}
+
+/// Two maps joined, a rule deciding where both hold a key.
+export fn mergeWith[K: Eq + Hash, V](
+  left: &HashMap[K, V],
+  right: &HashMap[K, V],
+  combine: fn(V, V) -> V
+) -> HashMap[K, V] {
+  var built = *left
+  for pair in entries(right) { built = insertWith(&built, pair[0], pair[1], combine) }
+  built
+}
+
+/// Whether two maps hold the same pairings.
+///
+/// Order is not part of it. Two maps built by inserting the same pairs in
+/// different orders hold the same thing, and a comparison that said otherwise
+/// would make equality depend on history rather than on contents.
+export fn equals[K: Eq + Hash, V: Eq](
+  left: &HashMap[K, V],
+  right: &HashMap[K, V]
+) -> Bool {
+  if left.count != right.count {
+    false
+  } else {
+    var same = true
+    for pair in entries(left) {
+      if let Some(held) = get(right, &pair[0]) {
+        if !held.equals(&pair[1]) { same = false }
+      } else {
+        same = false
+      }
+    }
+    same
+  }
+}
+
+/// How many buckets the map is currently spread across.
+///
+/// For a program measuring how well its keys distribute, not for one deciding
+/// what to do: a bucket count is a fact about the seed and the keys together,
+/// and it changes between runs even for the same keys.
+export fn bucketCount[K: Eq + Hash, V](target: &HashMap[K, V]) -> Int {
+  target.buckets.size()
+}

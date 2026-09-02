@@ -10,6 +10,7 @@ module Pudu.Type.Value
   , TypeVar (..)
   , boolType
   , charType
+  , bytesType
   , decimalType
   , floatType
   , integerType
@@ -118,6 +119,9 @@ stringType = NominalType "Str" []
 
 charType :: Type
 charType = NominalType "Char" []
+
+bytesType :: Type
+bytesType = NominalType "Bytes" []
 
 unitType :: Type
 unitType = UnitTypeValue

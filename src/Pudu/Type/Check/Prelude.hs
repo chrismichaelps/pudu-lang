@@ -17,6 +17,7 @@ import Pudu.Type.Env
 import Pudu.Type.Value
   ( Scheme
   , boolType
+  , bytesType
   , charType
   , decimalType
   , floatType
@@ -130,7 +131,28 @@ declareBuiltinConstructors = do
             (NominalType "Set" [RigidType "T"])
         )
     )
+  {-| A byte sequence is built from an array of `UInt8` for the same reason a
+      map and a set are built from arrays: there is no literal syntax for one,
+      and adding one would need a decision about how it reads beside the forms
+      that already use brackets. Text reaches bytes through its own `toBytes`
+      method, which is the commoner direction and needs no array at all. -}
+  {-| Hashing, wired in because the language cannot yet afford to run its own
+      implementation in a loop. `hashOf` is a number for a keyed collection and
+      not a digest; the other three are. -}
+  bindName "sha256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
+  bindName "deriveKey"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  bindName "hashOf" (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
+  bindName "mixHash" (monotype (FunctionTypeValue False [integerType] integerType))
+  {-| The indexed store `Std.HashMap` reaches its buckets through. Built empty
+      and grown by its methods, like a map or a set. -}
+  bindName "bucketsOf"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [] (NominalType "Buckets" [RigidType "V"])))
+  bindName "bytesOf"
+    (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
  where
+  byteType = NominalType "UInt8" []
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
 
@@ -157,6 +179,37 @@ effectSignatures =
   , ("removeFile", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
   , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
+  , ("openReader", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("openWriter", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("openAppender", monotype (FunctionTypeValue False [stringType] (resultOf integerType)))
+  , ("readChunk", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
+  , ("writeChunk", monotype (FunctionTypeValue False [integerType, bytesType] (resultOf unitTypeValue)))
+  , ("flushWriter", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("closeHandle", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("tcpListen", monotype (FunctionTypeValue False [stringType, integerType, integerType] (resultOf integerType)))
+  , ("tcpAccept", monotype (FunctionTypeValue False [integerType] (resultOf integerType)))
+  , ("tcpConnect", monotype (FunctionTypeValue False [stringType, integerType] (resultOf integerType)))
+  , ("socketSend", monotype (FunctionTypeValue False [integerType, bytesType] (resultOf unitTypeValue)))
+  , ("socketReceive", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
+  , ("socketClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("socketFinish", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("socketPeer", monotype (FunctionTypeValue False [integerType] (resultOf stringType)))
+  , ("socketPort", monotype (FunctionTypeValue False [integerType] (resultOf integerType)))
+  , ("spawnThread", monotype (FunctionTypeValue False [FunctionTypeValue False [] unitTypeValue] (resultOf integerType)))
+  , ("joinThread", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("sleepMillis", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("channelOpen", monotype (FunctionTypeValue False [integerType] integerType))
+  , ("channelPush", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf unitTypeValue)))
+  , ("channelPull", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (NominalType "Option" [RigidType "T"]))))
+  , ("channelWaiting", monotype (FunctionTypeValue False [integerType] (resultOf integerType)))
+  , ("channelFinish", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("mutexOpen", monotype (FunctionTypeValue False [] integerType))
+  , ("mutexAcquire", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("mutexRelease", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("cellOpen", polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
+  , ("cellGet", polytype [("T", 0)] [] (FunctionTypeValue False [integerType] (resultOf (RigidType "T"))))
+  , ("cellSwap", polytype [("T", 0)] [] (FunctionTypeValue False [integerType, RigidType "T"] (resultOf (RigidType "T"))))
+  , ("secureRandomBytes", monotype (FunctionTypeValue False [integerType] (resultOf bytesType)))
   , ("arguments", monotype (FunctionTypeValue False [] (arrayOf stringType)))
   , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
   , ("temporaryPath", monotype (FunctionTypeValue False [] stringType))

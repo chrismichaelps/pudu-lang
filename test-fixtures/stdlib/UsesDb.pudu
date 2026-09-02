@@ -1,0 +1,482 @@
+module UsesDb
+
+import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
+import Std.Db {Auth, Idle, Other, Server}
+import Std.Db as Db
+import Std.Db.Protocol as Wire
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a database client promises, checked against a server written here that
+/// speaks the protocol rather than against one that has to be installed.
+///
+/// A stub is the right thing to check against for everything except whether a
+/// real server agrees: it makes the client's own behaviour observable — what
+/// it sends, in what order, and what it does with what comes back — and it
+/// fails in the same way on every machine. What it cannot check is that the
+/// protocol is as this program believes, which is why the messages below are
+/// built from the same field layouts the client reads.
+export fn main() -> Int {
+  var held = 0
+
+  // Framing, checked on its own before anything sends one.
+  let framed = Wire.frame("Q", &Wire.cString("select 1"))
+  if Option.unwrapOr(framed.take(1).toText(), "") == "Q" { held = held + 1 }
+  if framed.length() == 14 { held = held + 1 }
+  if let Ok(read) = Wire.readMessage(&framed) {
+    if read[0].kind == "Q" { held = held + 1 }
+    if read[1].isEmpty() { held = held + 1 }
+  }
+
+  // A message cut short is reported as short rather than read as complete.
+  if let Err(_) = Wire.readMessage(&framed.take(6)) { held = held + 1 }
+
+  // A string with no terminator is a truncated message, not a short string.
+  if let Err(_) = Wire.readCString(&ByteSeq.fromText("no terminator")) { held = held + 1 }
+
+  // A value that is absent is written as a length of minus one, which is what
+  // keeps it distinct from a value that is empty.
+  let bound = Wire.bind("", "", &[Some("x"), None])
+  if bound.contains(bytesOf([255u8, 255u8, 255u8, 255u8])) { held = held + 1 }
+
+  // A connection that reaches a server answering nothing at all fails rather
+  // than waiting for a handshake that will not come.
+  held = held + runAgainst(trustServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      let opened = Db.connect(&settings)
+      if Result.isOk(&opened) { count = count + 1 }
+      if let Ok(stream) = opened {
+        // A query the stub answers with two rows and two columns.
+        let asked = Db.simple(stream, "select id, name from people")
+        if let Ok(pair) = asked {
+          let rows = pair[0]
+          if Db.rowCount(&rows) == 2 { count = count + 1 }
+          if rows.columns.length() == 2 { count = count + 1 }
+          if rows.columns[0].name == "id" { count = count + 1 }
+          if Option.unwrapOr(Db.value(&rows, 0, "name"), "") == "ada" { count = count + 1 }
+          if Option.unwrapOr(Db.value(&rows, 1, "name"), "") == "alan" { count = count + 1 }
+
+          // A column with no value is absent rather than empty, which is the
+          // distinction a caller reading it would otherwise lose.
+          let missing = Db.value(&rows, 1, "id")
+          if Option.isNone(&missing) { count = count + 1 }
+
+          // A column the result does not have answers nothing rather than
+          // reading past the row.
+          let absent = Db.value(&rows, 0, "height")
+          if Option.isNone(&absent) { count = count + 1 }
+
+          let _closed = Db.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A statement with values supplied apart from it sends them apart from it:
+  // the stub records the bytes it received, and the value never appears inside
+  // the statement text.
+  held = held + runAgainst(bindingServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Db.connect(&settings) {
+        let asked = Db.run(stream, "select $1", &[Some("it's; drop table people")])
+        if let Ok(pair) = asked {
+          if Db.rowCount(&pair[0]) == 1 { count = count + 1 }
+          if Option.unwrapOr(Db.value(&pair[0], 0, "echo"), "") == "bound" { count = count + 1 }
+          let _closed = Db.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A failure the server reports carries the code it gave, which is what a
+  // caller acts on rather than the wording of the message.
+  held = held + runAgainst(failingServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Db.connect(&settings) {
+        let asked = Db.simple(stream, "select bad")
+        if let Err(Server(_, code, _)) = asked {
+          if code == "42601" { count = count + 1 }
+        }
+      }
+      count
+    })
+
+  // The challenge a server left at its defaults asks for, answered in full:
+  // the password does not cross the wire, and the server's own signature is
+  // checked rather than assumed.
+  held = held + runAgainst(scramServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      let opened = Db.connect(&settings)
+      if Result.isOk(&opened) { count = count + 1 }
+      if let Ok(stream) = opened {
+        let asked = Db.simple(stream, "select 1")
+        if Result.isOk(&asked) { count = count + 1 }
+      }
+      count
+    })
+
+  // A transaction that failed is undone rather than left open. The stub
+  // reports the transaction status the server reports, so what is checked is
+  // that the client read it and acted on it.
+  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Db.connect(&settings) {
+        if Db.statusOf(&stream) == Idle { count = count + 1 }
+
+        // An action that fails is rolled back, and the connection comes back
+        // usable rather than stuck inside a failed transaction.
+        let attempted = Db.withTransaction(stream, fn(inside: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
+            (Err(Other("the caller gave up")), inside)
+          })
+        if Result.isErr(&attempted[0]) { count = count + 1 }
+        if !Db.inTransaction(&attempted[1]) { count = count + 1 }
+
+        // The stub records what it was sent, so the rollback is checked to have
+        // actually crossed the wire rather than only to have been intended.
+        let asked = Db.simple(attempted[1], "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("BEGIN") { count = count + 1 }
+          if seen.contains("ROLLBACK") { count = count + 1 }
+          if !seen.contains("COMMIT") { count = count + 1 }
+          let _closed = Db.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // An action that succeeds is committed, and a savepoint undoes only its own
+  // part rather than the transaction around it.
+  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Db.connect(&settings) {
+        let kept = Db.withTransaction(stream, fn(inside: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
+            let stepped = Db.withSavepoint(inside, "step", fn(deeper: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
+                (Err(Other("the optional step failed")), deeper)
+              })
+            (Ok(1), stepped[1])
+          })
+        if Result.unwrapOr(kept[0], 0) == 1 { count = count + 1 }
+        let asked = Db.simple(kept[1], "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("SAVEPOINT") { count = count + 1 }
+          if seen.contains("ROLLBACK TO SAVEPOINT") { count = count + 1 }
+          // The transaction itself was kept, because only the inner step failed.
+          if seen.contains("COMMIT") { count = count + 1 }
+          let _closed = Db.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A name written into a statement cannot end it and begin another.
+  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Db.connect(&settings) {
+        let marked = Db.savepoint(stream, "odd\"; DROP TABLE people --")
+        if let Ok(after) = marked {
+          let asked = Db.simple(after, "what did you get")
+          if let Ok(pair) = asked {
+            let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+            if !seen.contains("DROP TABLE people --\n") { count = count + 1 }
+            if seen.contains("\"\"") { count = count + 1 }
+            let _closed = Db.close(&pair[1])
+          }
+        }
+      }
+      count
+    })
+
+  // A server whose signature does not prove it knows the password is refused,
+  // which is the half of the exchange that stops something in the middle from
+  // impersonating the server.
+  held = held + runAgainst(lyingServer, fn(settings: Db.Config) -> Int {
+      if let Err(Auth(_)) = Db.connect(&settings) { 1 } else { 0 }
+    })
+
+  held
+}
+
+/// Start a stub on a port the machine chooses, run a client against it, and
+/// answer what the client counted.
+fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Db.Config) -> Int) -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, stub)
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let counted = client(
+      Db.at(&Db.config("people", "ada", "secret"), "127.0.0.1", port)
+    )
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    counted
+  } else {
+    0
+  }
+}
+
+// The messages a server sends, built from the same field layouts the client
+// reads, so a disagreement about the layout shows up as a failing check rather
+// than as two halves that are wrong together.
+
+fn authenticationOk() -> Bytes { Wire.frame("R", &ByteSeq.putU32Be(0u32)) }
+
+fn readyForQuery() -> Bytes { Wire.frame("Z", &bytesOf([73u8])) }
+
+fn parameterStatus(name: Str, value: Str) -> Bytes {
+  Wire.frame("S", &Wire.cString(name).concat(Wire.cString(value)))
+}
+
+/// A column, as the protocol describes one: its name, then the table it came
+/// from, its position there, its type, that type's width, its modifier, and
+/// the format its values are in.
+fn columnDescription(name: Str, oid: Int) -> Bytes {
+  ByteSeq.join(&[
+      Wire.cString(name),
+      ByteSeq.putU32Be(0u32),
+      ByteSeq.putU16Be(0u16),
+      ByteSeq.putU32Be(Option.unwrapOr(convertInteger[UInt32](oid), 0u32)),
+      ByteSeq.putU16Be(65535u16),
+      ByteSeq.putU32Be(0u32),
+      ByteSeq.putU16Be(0u16)
+    ])
+}
+
+fn rowDescription(columns: &Array[(Str, Int)]) -> Bytes {
+  var body = ByteSeq.putU16Be(Option.unwrapOr(convertInteger[UInt16](columns.length()), 0u16))
+  for entry in columns { body = body.concat(columnDescription(entry[0], entry[1])) }
+  Wire.frame("T", &body)
+}
+
+fn dataRow(values: &Array[Option[Str]]) -> Bytes {
+  var body = ByteSeq.putU16Be(Option.unwrapOr(convertInteger[UInt16](values.length()), 0u16))
+  for value in values {
+    if let Some(text) = value {
+      let payload = text.toBytes()
+      body = body.concat(ByteSeq.putU32Be(Option.unwrapOr(convertInteger[UInt32](payload.length()), 0u32)))
+      body = body.concat(payload)
+    } else {
+      body = body.concat(bytesOf([255u8, 255u8, 255u8, 255u8]))
+    }
+  }
+  Wire.frame("D", &body)
+}
+
+fn commandComplete(tag: Str) -> Bytes { Wire.frame("C", &Wire.cString(tag)) }
+
+fn errorResponse(severity: Str, code: Str, message: Str) -> Bytes {
+  let body = ByteSeq.join(&[
+      ByteSeq.fromText("S"),
+      Wire.cString(severity),
+      ByteSeq.fromText("C"),
+      Wire.cString(code),
+      ByteSeq.fromText("M"),
+      Wire.cString(message),
+      bytesOf([0u8])
+    ])
+  Wire.frame("E", &body)
+}
+
+fn greeting() -> Bytes {
+  ByteSeq.join(&[
+      authenticationOk(),
+      parameterStatus("server_version", "16.0"),
+      readyForQuery()
+    ])
+}
+
+/// Read one message from the client, ignoring what it is.
+fn awaitMessage(connection: &Net.Connection) -> Bytes {
+  let read = Net.receive(connection, 65536)
+  Option.unwrapOr(Result.unwrapOr(read, None), ByteSeq.empty())
+}
+
+/// A server that asks for nothing and answers one query with two rows.
+fn trustServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let _query = awaitMessage(&connection)
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        rowDescription(&[("id", 23), ("name", 25)]),
+        dataRow(&[Some("1"), Some("ada")]),
+        dataRow(&[None, Some("alan")]),
+        commandComplete("SELECT 2"),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that checks the client sent the value apart from the statement.
+fn bindingServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let request = awaitMessage(&connection)
+  // The statement text must not carry the value: a client that pasted it in
+  // would send one message holding both.
+  let pasted = request.contains(ByteSeq.fromText("select it's"))
+  let echoed = if pasted { "pasted" } else { "bound" }
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        Wire.frame("1", &ByteSeq.empty()),
+        Wire.frame("2", &ByteSeq.empty()),
+        rowDescription(&[("echo", 25)]),
+        dataRow(&[Some(echoed)]),
+        commandComplete("SELECT 1"),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that refuses a query with a code.
+fn failingServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  let _query = awaitMessage(&connection)
+  let _answered = Net.send(&connection, &ByteSeq.join(&[
+        errorResponse("ERROR", "42601", "syntax error at or near \"bad\""),
+        readyForQuery()
+      ]))
+  false
+}
+
+/// A server that reports transaction status and remembers what it was sent,
+/// so a client's rollback can be checked to have crossed the wire.
+///
+/// The status it reports is the one the real server would: inside a
+/// transaction after a begin, failed after a failure, idle after a rollback or
+/// a commit. A stub that always said idle would let a client that never read
+/// the status pass.
+fn transactionServer(connection: Net.Connection) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _greeted = Net.send(&connection, &greeting())
+  var seen = ""
+  var status = 73u8
+  var going = true
+  while going {
+    let asked = awaitMessage(&connection)
+    if asked.isEmpty() {
+      going = false
+    } else {
+      let sql = statementIn(&asked)
+      seen = seen + sql + "\n"
+      if sql.startsWith("BEGIN") { status = 84u8 }
+      if sql.startsWith("ROLLBACK") { status = 73u8 }
+      if sql.startsWith("COMMIT") { status = 73u8 }
+      if sql.startsWith("what did you get") {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              rowDescription(&[("seen", 25)]),
+              dataRow(&[Some(seen)]),
+              commandComplete("SELECT 1"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              commandComplete(sql),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      }
+    }
+  }
+  false
+}
+
+/// The statement text out of a simple query message.
+fn statementIn(message: &Bytes) -> Str {
+  let body = message.drop(5)
+  let stop = body.indexOf(bytesOf([0u8]))
+  if stop < 0 { "" } else { Option.unwrapOr(body.take(stop).toText(), "") }
+}
+
+const SALT: Str = "QSXCR+Q6sek8bf92"
+
+const ROUNDS: Int = 4096
+
+/// A server that performs the challenge, checking the client's proof and
+/// answering with one of its own.
+fn scramServer(connection: Net.Connection) -> Bool { challenge(connection, true) }
+
+/// The same, but signing with a key it does not have.
+fn lyingServer(connection: Net.Connection) -> Bool { challenge(connection, false) }
+
+fn challenge(connection: Net.Connection, honest: Bool) -> Bool {
+  let _startup = awaitMessage(&connection)
+  let _asked = Net.send(
+      &connection,
+      &Wire.frame("R", &ByteSeq.putU32Be(10u32).concat(Wire.cString("SCRAM-SHA-256")).concat(bytesOf([0u8])))
+  )
+
+  // The client's opening message, whose nonce the server must extend.
+  let first = awaitMessage(&connection)
+  let clientFirst = textAfterMechanism(&first)
+  let clientNonce = fieldIn(clientFirst, "r")
+  let combined = clientNonce + "serverpart"
+  let serverFirst = "r=" + combined + ",s=" + SALT + ",i=" + show(ROUNDS)
+  let _continued = Net.send(
+      &connection,
+      &Wire.frame("R", &ByteSeq.putU32Be(11u32).concat(ByteSeq.fromText(serverFirst)))
+  )
+
+  let final = awaitMessage(&connection)
+  let clientFinal = Option.unwrapOr(final.drop(5).toText(), "")
+  let withoutProof = beforeProof(clientFinal)
+  let firstBare = afterPrefix(clientFirst, "n,,")
+  let authMessage = (firstBare + "," + serverFirst + "," + withoutProof).toBytes()
+
+  let salted = deriveKey(
+    "secret".toBytes(),
+    Result.unwrapOr(ByteSeq.decodeBase64(SALT), ByteSeq.empty()),
+    ROUNDS,
+    32
+  )
+  let serverKey = hmacSha256Of(salted, ("Server Key" + (if honest { "" } else { "!" })).toBytes())
+  let signature = hmacSha256Of(serverKey, authMessage)
+  let _finished = Net.send(
+      &connection,
+      &Wire.frame(
+      "R",
+        &ByteSeq.putU32Be(12u32).concat(ByteSeq.fromText("v=" + ByteSeq.encodeBase64(&signature)))
+    )
+  )
+  // A server that signed with a key it does not have has told the client to
+  // give up, so it does not go on to wait for a query that will never come.
+  if honest {
+    let _done = Net.send(&connection, &ByteSeq.join(&[authenticationOk(), readyForQuery()]))
+    let _query = awaitMessage(&connection)
+    let _answered = Net.send(&connection, &ByteSeq.join(&[
+          rowDescription(&[("one", 23)]),
+          dataRow(&[Some("1")]),
+          commandComplete("SELECT 1"),
+          readyForQuery()
+        ]))
+  }
+  false
+}
+
+/// The client's opening text, after the mechanism name and its length.
+fn textAfterMechanism(message: &Bytes) -> Str {
+  let body = message.drop(5)
+  let stop = body.indexOf(bytesOf([0u8]))
+  if stop < 0 { "" } else { Option.unwrapOr(body.drop(stop + 5).toText(), "") }
+}
+
+fn fieldIn(source: Str, name: Str) -> Str {
+  var found = ""
+  for piece in source.split(",") {
+    if piece.startsWith(name + "=") && found.isEmpty() { found = piece.drop(name.length() + 1) }
+  }
+  found
+}
+
+fn beforeProof(source: Str) -> Str {
+  let mark = source.indexOf(",p=")
+  if mark < 0 { source } else { source.take(mark) }
+}
+
+fn afterPrefix(source: Str, prefix: Str) -> Str {
+  if source.startsWith(prefix) { source.drop(prefix.length()) } else { source }
+}

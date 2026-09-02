@@ -1,0 +1,60 @@
+module Std.Time.Format.Civil
+
+/// Division rounded toward negative infinity.
+export fn floorDiv(numerator: Int, denominator: Int) -> Int {
+  let quotient = numerator / denominator
+  if (numerator % denominator != 0) && ((numerator < 0) != (denominator < 0)) {
+    quotient - 1
+  } else {
+    quotient
+  }
+}
+
+/// The non-negative remainder paired with floor division for a positive divisor.
+export fn floorMod(numerator: Int, denominator: Int) -> Int {
+  numerator - floorDiv(numerator, denominator) * denominator
+}
+
+/// Whether a proleptic Gregorian year carries an extra day.
+export fn isLeapYear(year: Int) -> Bool {
+  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+const MONTH_LENGTHS: Array[Int] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+/// How many days a month holds, or zero for a month outside 1 through 12.
+export fn daysInMonth(year: Int, month: Int) -> Int {
+  if month < 1 || month > 12 {
+    0
+  } else {
+    if month == 2 && isLeapYear(year) { 29 } else { MONTH_LENGTHS[month - 1] }
+  }
+}
+
+/// A civil date as a day number counted from the start of 1970.
+export fn daysFromCivil(year: Int, month: Int, day: Int) -> Int {
+  let shifted = if month <= 2 { year - 1 } else { year }
+  let cycle = floorDiv(shifted, 400)
+  let yearInCycle = shifted - cycle * 400
+  let monthShifted = if month > 2 { month - 3 } else { month + 9 }
+  let dayInYear = (153 * monthShifted + 2) / 5 + day - 1
+  let dayInCycle =
+  yearInCycle * 365 + yearInCycle / 4 - yearInCycle / 100 + dayInYear
+  cycle * 146097 + dayInCycle - 719468
+}
+
+/// The civil date represented by a Unix-epoch day number.
+export fn civilFromDays(days: Int) -> (Int, Int, Int) {
+  let shifted = days + 719468
+  let cycle = floorDiv(shifted, 146097)
+  let dayInCycle = shifted - cycle * 146097
+  let yearInCycle =
+  (dayInCycle - dayInCycle / 1460 + dayInCycle / 36524 - dayInCycle / 146096) / 365
+  let dayInYear =
+  dayInCycle - (365 * yearInCycle + yearInCycle / 4 - yearInCycle / 100)
+  let monthShifted = (5 * dayInYear + 2) / 153
+  let day = dayInYear - (153 * monthShifted + 2) / 5 + 1
+  let month = if monthShifted < 10 { monthShifted + 3 } else { monthShifted - 9 }
+  let year = yearInCycle + cycle * 400
+  (if month <= 2 { year + 1 } else { year }, month, day)
+}

@@ -1,0 +1,82 @@
+module Std.Concurrent
+
+import Std.Result as Result
+
+/// Why a thread could not be started, or what it said when it failed.
+export type ConcurrentError
+  = Failed(Str)
+  | Missing
+  | Other(Str)
+
+/// A thread the program started.
+export type Task = { token: Int }
+
+/// Start an action on a thread of its own.
+///
+/// The action is given the environment as it stands at the call, which is the
+/// same environment an ordinary call would run in. Sharing it is safe because
+/// every value in it is immutable: the things two threads can both change are
+/// a channel, a lock, and a cell, and each of those is reached through
+/// `Std.Channel` or `Std.Sync` rather than by writing to a variable.
+///
+/// A thread that failed does not take the program down. It reports what it
+/// said to whoever joins it, which is the same rule every other operation
+/// that reaches outside the program follows: the caller decides.
+export fn start(action: fn() -> ()) -> Result[Task, ConcurrentError] {
+  Result.map(
+    Result.mapErr(spawnThread(action), causeOf),
+    fn(token: Int) -> Task { Task{token: token} }
+  )
+}
+
+/// Wait for a thread to finish, and report what it said if it failed.
+/// Joining twice answers the same way both times, so a scope joining its
+/// children and a caller that already joined one do not race.
+export fn join(worker: &Task) -> Result[(), ConcurrentError] {
+  Result.mapErr(joinThread(worker.token), causeOf)
+}
+
+/// Wait for every thread, in the order they were started.
+///
+/// The order is what makes a failure among them predictable: with several
+/// threads failing, the one reported is the one started first rather than
+/// whichever happened to finish first. A caller reading a report should not
+/// have to run the program twice to see the same answer.
+export fn joinAll(tasks: &Array[Task]) -> Result[(), ConcurrentError] {
+  var failure: Option[ConcurrentError] = None
+  for worker in tasks {
+    let outcome = join(&worker)
+    if let Err(reason) = outcome {
+      if let None = failure { failure = Some(reason) }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(()) }
+}
+
+/// Run every action at once and wait for all of them.
+///
+/// Every thread is started before any is joined. Starting and joining one at a
+/// time would run them in sequence while looking like it did not, which is the
+/// mistake this exists to make impossible to write by accident.
+export fn parallel(actions: &Array[fn() -> ()]) -> Result[(), ConcurrentError] {
+  var tasks: Array[Task] = []
+  var failure: Option[ConcurrentError] = None
+  for action in actions {
+    let started = start(action)
+    if let Ok(worker) = started { tasks = tasks.push(worker) }
+    if let Err(reason) = started {
+      if let None = failure { failure = Some(reason) }
+    }
+  }
+  let joined = joinAll(&tasks)
+  if let Some(reason) = failure { Err(reason) } else { joined }
+}
+
+/// Wait, without holding the machine while waiting.
+export fn sleep(millis: Int) -> Result[(), ConcurrentError] {
+  Result.mapErr(sleepMillis(millis), causeOf)
+}
+
+fn causeOf(message: Str) -> ConcurrentError {
+  if message.contains("no such thread") { Missing } else { Failed(message) }
+}

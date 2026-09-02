@@ -202,7 +202,7 @@ rejectUnknownQualifiedType declared typeSpan path
     than sending them to read what the module exports. -}
 builtinTypeNames :: [Text]
 builtinTypeNames =
-  [ "Array", "Str", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
+  [ "Array", "Str", "Bytes", "Buckets", "Map", "Set", "Char", "Bool", "Option", "Result", "Task"
   , "Int", "UInt", "BigInt", "Decimal", "Float", "Float32", "Float64"
   , "Int8", "Int16", "Int32", "Int64", "Int128"
   , "UInt8", "UInt16", "UInt32", "UInt64", "UInt128"

@@ -36,21 +36,33 @@ import Pudu.Eval.Builtin
   , callMapMethod
   , callMapOf
   , callPanic
+  , callHashing
   , callSetMethod
+  , Apply
   , callSetOf
   , callShow
   , callStringMethod
   , isDecimalBuiltin
   )
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar)
+import Control.Exception (SomeException, try)
+import Pudu.Diagnostic (diagnosticMessage)
+import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
+import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
+import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Env
   ( tally
+  , currentConcurrentStore
   , withCaptured
   , adoptChild
   , closeScope
   , openScope
   , releaseChild
+  , Eval (..)
   , Evaluator (..)
   , abortAt
+  , effectsAdmitted
   , ascend
   , catchUnwind
   , descend
@@ -69,6 +81,7 @@ import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
   ( Builtin (..)
   , Closure (..)
+  , intOf
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -131,6 +144,11 @@ dispatchCall needs spanValue target values =
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values
     BuiltinValue MapOfBuiltin -> callMapOf spanValue values
     BuiltinValue SetOfBuiltin -> callSetOf spanValue values
+    BuiltinValue BytesOfBuiltin -> callBytesOf spanValue values
+    BuiltinValue BucketsOfBuiltin -> callBucketsOf spanValue values
+    BuiltinValue SpawnThreadBuiltin -> callSpawnThread (applyFunction needs) spanValue values
+    BuiltinValue hashing
+      | isHashingBuiltin hashing -> callHashing spanValue hashing values
     BuiltinValue ShowBuiltin -> callShow spanValue values
     BuiltinValue DisplayBuiltin -> callDisplay spanValue values
     BuiltinValue ConvertIntegerBuiltin -> callConvertInteger spanValue [] values
@@ -142,6 +160,8 @@ dispatchCall needs spanValue target values =
     MapMethodValue method receiver -> callMapMethod spanValue method receiver values
     SetMethodValue method receiver -> callSetMethod spanValue method receiver values
     CharMethodValue method receiver -> callCharMethod spanValue method receiver values
+    BytesMethodValue method receiver -> callBytesMethod spanValue method receiver values
+    BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver values
     _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind target) Nothing
 
 {-| A two-segment path in callee position may select a method explicitly: by the
@@ -382,6 +402,8 @@ applyFunction needs spanValue function arguments = case function of
   MapMethodValue method receiver -> callMapMethod spanValue method receiver arguments
   SetMethodValue method receiver -> callSetMethod spanValue method receiver arguments
   CharMethodValue method receiver -> callCharMethod spanValue method receiver arguments
+  BytesMethodValue method receiver -> callBytesMethod spanValue method receiver arguments
+  BucketsMethodValue method receiver -> callBucketsMethod spanValue method receiver arguments
   _ -> abortAt (Just spanValue) "E7001" ("cannot call a " <> valueKind function) Nothing
 
 {-| Evaluate a structured scope.
@@ -427,3 +449,62 @@ callClosure needs closure arguments callSpan = do
 
 {-| Start a prepared closure body. Async calls retain these bindings in a cold
     task; ordinary calls enter here immediately. -}
+
+{-| Start a thread running a function, and answer the token naming it.
+
+    Dispatched here rather than beside the other effects because starting one
+    means calling back into evaluation, and the apply that does it is what this
+    module owns. Everything a started thread is afterwards — joining it, and
+    what it reports — belongs to [[Eval Concurrent]].
+
+    The thread is given the environment as it stands at the call. That is the
+    same environment an ordinary call would run in, and it is safe to share
+    because every value in it is immutable: the things two threads can both
+    change are the channel, the lock, and the cell, and each of those is a
+    token into a table rather than a value.
+
+    A thread that failed reports what it said rather than taking the program
+    down with it. A runtime that unwound past a boundary the program cannot see
+    would take away the only decision worth having, which is the same rule
+    every other effect here follows. -}
+callSpawnThread :: Apply -> Span -> [Value] -> Evaluator Value
+callSpawnThread apply spanValue arguments = case arguments of
+  [action] -> do
+    admitted <- effectsAdmitted
+    if not admitted
+      then
+        abortAt (Just spanValue) "E7009" "spawnThread reaches outside the program"
+          ( Just
+              ( "a compile-time constant is folded while the compiler runs, so it "
+                  <> "cannot start a thread"
+              )
+          )
+      else do
+        concurrent <- currentConcurrentStore
+        Evaluator $ \env -> do
+          slot <- newEmptyMVar
+          let Evaluator body = apply spanValue action []
+          threadId <- forkIO $ do
+            outcome <- try (body env) :: IO (Either SomeException (Eval Value))
+            putMVar slot (reported outcome)
+          token <- threadRegister concurrent threadId slot
+          pure (Done (VariantValue "Ok" [intOf (fromIntegral token)]) env)
+  _ -> abortAt (Just spanValue) "E7012" "spawnThread expects one function" Nothing
+ where
+  reported outcome = case outcome of
+    Left problem -> Just (Text.pack (show problem))
+    Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
+    Right _ -> Nothing
+
+{-| Whether a built-in is one of the hashing set, which is dispatched before
+    the effects because none of them reaches outside the program: a digest of
+    the same bytes is the same digest wherever it is taken, so a constant may
+    be folded through one. -}
+isHashingBuiltin :: Builtin -> Bool
+isHashingBuiltin builtin = case builtin of
+  Sha256Builtin -> True
+  HmacBuiltin -> True
+  DeriveKeyBuiltin -> True
+  HashOfBuiltin -> True
+  MixHashBuiltin -> True
+  _ -> False

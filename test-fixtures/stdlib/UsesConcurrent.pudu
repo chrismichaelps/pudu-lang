@@ -1,0 +1,130 @@
+module UsesConcurrent
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// What threads promise. Every check here is written so its answer does not
+/// depend on which thread got there first: a test that passed because of a
+/// scheduling accident would fail for the same reason later, on a machine
+/// nobody can reproduce.
+export fn main() -> Int {
+  var held = 0
+
+  // A channel carries values from one thread to another, and closing it is
+  // what ends the receiver's loop rather than a count agreed in advance.
+  let numbers: Channel.Channel[Int] = Channel.channel(4)
+  let producer = Concurrent.start(fn() -> () {
+      var sent = 0
+      while sent < 10 {
+        let _put = Channel.send(&numbers, sent)
+        sent = sent + 1
+      }
+      let _done = Channel.close(&numbers)
+      ()
+    })
+  if Result.isOk(&producer) { held = held + 1 }
+
+  // Drained from this thread while the other is still sending, so the two are
+  // genuinely running at once rather than one after the other.
+  let drained = Channel.drain(&numbers)
+  if Result.unwrapOr(Result.map(drained, fn(all: Array[Int]) -> Int { all.length() }), -1) == 10 {
+    held = held + 1
+  }
+  if Result.unwrapOr(drained, []) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] { held = held + 1 }
+
+  if let Ok(worker) = producer {
+    if Result.isOk(&Concurrent.join(&worker)) { held = held + 1 }
+  }
+
+  // Sending to a closed channel is refused rather than dropped, so a producer
+  // whose values were going nowhere is told.
+  if let Err(_) = Channel.send(&numbers, 99) { held = held + 1 }
+
+  // A receiver on a closed and empty channel is told there is nothing more,
+  // rather than waiting for something that will not arrive.
+  let after = Channel.receive(&numbers)
+  if Option.isNone(&Result.unwrapOr(after, Some(0))) { held = held + 1 }
+
+  // A counter adds without losing an addition. Four threads each add a
+  // thousand times, and the total is the one arithmetic says it is: without
+  // the lock underneath, reading and writing are two steps and two threads
+  // read the same number and write the same number.
+  let tally = Sync.counter(0)
+  let adders = Concurrent.parallel(&[
+      adding(&tally),
+      adding(&tally),
+      adding(&tally),
+      adding(&tally)
+    ])
+  if Result.isOk(&adders) { held = held + 1 }
+  if Result.unwrapOr(Sync.count(&tally), -1) == 4000 { held = held + 1 }
+
+  // A cell is read and replaced in one step nothing can come between, and the
+  // swap answers what was there before.
+  let held0: Sync.Cell[Str] = Sync.cell("first")
+  if Result.unwrapOr(Sync.get(&held0), "") == "first" { held = held + 1 }
+  if Result.unwrapOr(Sync.swap(&held0, "second"), "") == "first" { held = held + 1 }
+  if Result.unwrapOr(Sync.get(&held0), "") == "second" { held = held + 1 }
+
+  // A lock is released however the action ended, so a critical section left by
+  // the failing path does not hold the lock forever.
+  let guard = Sync.mutex()
+  if Result.unwrapOr(Sync.withLock(&guard, fn() -> Int { 7 }), 0) == 7 { held = held + 1 }
+  if Result.unwrapOr(Sync.withLock(&guard, fn() -> Int { 8 }), 0) == 8 { held = held + 1 }
+
+  // A mutex is owned by the thread that acquired it. A different thread may
+  // not release it, and releasing it twice reports the caller's mistake.
+  let owned = Sync.mutex()
+  let foreignRefused = Sync.cell(false)
+  if Result.isOk(&Sync.lock(&owned)) { held = held + 1 }
+  let foreign = Concurrent.start(fn() -> () {
+      if let Err(_) = Sync.unlock(&owned) {
+        let _recorded = Sync.set(&foreignRefused, true)
+      }
+      ()
+    })
+  if let Ok(worker) = foreign {
+    if Result.isOk(&Concurrent.join(&worker)) { held = held + 1 }
+  }
+  if Result.unwrapOr(Sync.get(&foreignRefused), false) { held = held + 1 }
+  if Result.isOk(&Sync.unlock(&owned)) { held = held + 1 }
+  if let Err(_) = Sync.unlock(&owned) { held = held + 1 }
+
+  // Threads are joined in the order they were started, so a failure among
+  // several is reported the same way every run rather than by a race.
+  var started: Array[Concurrent.Task] = []
+  var made = 0
+  while made < 3 {
+    if let Ok(worker) = Concurrent.start(fn() -> () { () }) { started = started.push(worker) }
+    made = made + 1
+  }
+  if started.length() == 3 { held = held + 1 }
+  if Result.isOk(&Concurrent.joinAll(&started)) { held = held + 1 }
+
+  // A thread that failed reports what it said rather than taking the program
+  // down with it.
+  if let Ok(doomed) = Concurrent.start(fn() -> () { panic("the thread gave up") }) {
+    if let Err(_) = Concurrent.join(&doomed) { held = held + 1 }
+  }
+
+  // Waiting does not hold the machine while it waits.
+  if Result.isOk(&Concurrent.sleep(1)) { held = held + 1 }
+
+  held
+}
+
+/// One adder, as a value, so the four started below are four separate threads
+/// rather than one closure called four times.
+fn adding(target: &Sync.Counter) -> fn() -> () {
+  fn() -> () {
+    var step = 0
+    while step < 1000 {
+      let _added = Sync.increment(target, 1)
+      step = step + 1
+    }
+    ()
+  }
+}

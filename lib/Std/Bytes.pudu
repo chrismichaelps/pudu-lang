@@ -1,0 +1,486 @@
+module Std.Bytes
+
+import Std.Option as Option
+
+/// What went wrong while reading a byte sequence.
+/// One variant per cause a caller can act on differently: a frame that ended
+/// early is retried when more input arrives, while one holding a digit no
+/// alphabet has is rejected outright, and a caller that could not tell them
+/// apart could recover from neither.
+export type BytesError
+  = Truncated(Int, Int)
+  | NotText(Int)
+  | BadDigit(Int)
+  | BadLength(Int)
+
+/// A sequence holding nothing.
+export fn empty() -> Bytes { bytesOf([]) }
+
+/// The bytes of an array of octets.
+export fn fromArray(octets: &Array[UInt8]) -> Bytes { bytesOf(*octets) }
+
+/// The UTF-8 encoding of text. This direction cannot fail.
+export fn fromText(text: Str) -> Bytes { text.toBytes() }
+
+/// The text a sequence encodes, or the reason it is not text.
+/// The position carried is the sequence's length rather than the offending
+/// byte: the runtime reports only that decoding failed, and inventing a
+/// position it did not supply would be worse than naming none.
+export fn toText(source: &Bytes) -> Result[Str, BytesError] {
+  Option.okOr(source.toText(), NotText(source.length()))
+}
+
+/// The octets of a sequence, one value per byte.
+/// This is the operation that costs a value per byte, and it is named so a
+/// reader can see it. Walking a sequence with `at` costs nothing extra.
+export fn toArray(source: &Bytes) -> Array[UInt8] { source.toArray() }
+
+/// How many bytes a sequence holds.
+export fn length(source: &Bytes) -> Int { source.length() }
+
+/// Whether a sequence holds nothing.
+export fn isEmpty(source: &Bytes) -> Bool { source.isEmpty() }
+
+/// The byte at a position, or nothing when the position is outside.
+export fn at(source: &Bytes, index: Int) -> Option[UInt8] { source.at(index) }
+
+/// The stretch between two positions, sharing storage with its source.
+export fn slice(source: &Bytes, from: Int, to: Int) -> Bytes { source.slice(from, to) }
+
+/// The first bytes of a sequence, sharing storage with it.
+export fn take(source: &Bytes, count: Int) -> Bytes { source.take(count) }
+
+/// Everything after the first bytes, sharing storage with the source.
+export fn drop(source: &Bytes, count: Int) -> Bytes { source.drop(count) }
+
+/// A sequence cut in two at a position, both halves sharing its storage.
+export fn splitAt(source: &Bytes, index: Int) -> (Bytes, Bytes) {
+  (source.take(index), source.drop(index))
+}
+
+/// Two sequences joined. This copies, and is named so a reader can see it.
+export fn concat(left: &Bytes, right: &Bytes) -> Bytes { left.concat(*right) }
+
+/// Every sequence joined in order, copying once rather than once per join.
+export fn join(parts: &Array[Bytes]) -> Bytes {
+  var octets: Array[UInt8] = []
+  for part in parts {
+    for octet in part.toArray() { octets = octets.push(octet) }
+  }
+  bytesOf(octets)
+}
+
+/// A sequence repeated, or nothing repeated when the count is not positive.
+export fn repeat(source: &Bytes, count: Int) -> Bytes {
+  var parts: Array[Bytes] = []
+  var made = 0
+  while made < count {
+    parts = parts.push(*source)
+    made = made + 1
+  }
+  join(&parts)
+}
+
+/// Where a sub-sequence begins, or `-1` when it is absent.
+export fn indexOf(source: &Bytes, needle: &Bytes) -> Int { source.indexOf(*needle) }
+
+/// Whether a sub-sequence appears anywhere.
+export fn contains(source: &Bytes, needle: &Bytes) -> Bool { source.contains(*needle) }
+
+/// Whether a sequence begins with another.
+export fn startsWith(source: &Bytes, prefix: &Bytes) -> Bool { source.startsWith(*prefix) }
+
+/// Whether a sequence ends with another.
+export fn endsWith(source: &Bytes, suffix: &Bytes) -> Bool { source.endsWith(*suffix) }
+
+/// Two sequences combined bit by bit, as long as the shorter of them.
+/// The length is the shorter rather than the longer because the operation has
+/// no answer where only one sequence has a byte: padding the shorter with
+/// zeros would quietly copy the longer's tail into the result, which for a
+/// proof carried over a wire is the difference between checking it and not.
+export fn xorWith(left: &Bytes, right: &Bytes) -> Bytes {
+  let size = if left.length() < right.length() { left.length() } else { right.length() }
+  var octets: Array[UInt8] = []
+  var index = 0
+  while index < size {
+    let a = Option.unwrapOr(left.at(index), 0u8)
+    let b = Option.unwrapOr(right.at(index), 0u8)
+    octets = octets.push(a ^ b)
+    index = index + 1
+  }
+  bytesOf(octets)
+}
+
+/// A sequence in reverse. This copies.
+export fn reverse(source: &Bytes) -> Bytes { source.reverse() }
+
+/// The pieces between each appearance of a separator.
+/// An empty separator would divide nothing, so it answers with the whole
+/// sequence rather than looping.
+export fn split(source: &Bytes, separator: &Bytes) -> Array[Bytes] {
+  if separator.isEmpty() { [*source] } else {
+    var pieces: Array[Bytes] = []
+    var rest = *source
+    var going = true
+    while going {
+      let found = rest.indexOf(*separator)
+      if found < 0 {
+        pieces = pieces.push(rest)
+        going = false
+      } else {
+        pieces = pieces.push(rest.take(found))
+        rest = rest.drop(found + separator.length())
+      }
+    }
+    pieces
+  }
+}
+
+/// A byte widened to the type an assembled number is built in.
+/// Widening always fits, so the absent case cannot arise; it answers zero
+/// rather than stopping, because a partial function here would be one the
+/// caller could not have avoided.
+fn wide(octet: UInt8) -> UInt64 {
+  Option.unwrapOr(convertInteger[UInt64](octet), 0u64)
+}
+
+/// The number the next bytes spell, most significant first.
+fn assembleBe(source: &Bytes, offset: Int, width: Int) -> Option[UInt64] {
+  if offset < 0 || offset + width > source.length() { None } else {
+    var value = 0u64
+    var step = 0
+    while step < width {
+      value = (value << 8) | wide(Option.unwrapOr(source.at(offset + step), 0u8))
+      step = step + 1
+    }
+    Some(value)
+  }
+}
+
+/// The number the next bytes spell, least significant first.
+fn assembleLe(source: &Bytes, offset: Int, width: Int) -> Option[UInt64] {
+  if offset < 0 || offset + width > source.length() { None } else {
+    var value = 0u64
+    var step = 0
+    while step < width {
+      value = (value << 8) | wide(Option.unwrapOr(source.at(offset + width - 1 - step), 0u8))
+      step = step + 1
+    }
+    Some(value)
+  }
+}
+
+/// A reader's answer: the number, and the input it has not read yet.
+/// The remainder is handed back rather than an offset kept by the caller, so a
+/// decoder threads what is left instead of counting how far it has come.
+fn stepped(source: &Bytes, width: Int, value: UInt64) -> (UInt64, Bytes) {
+  (value, source.drop(width))
+}
+
+fn readBe(source: &Bytes, width: Int) -> Result[(UInt64, Bytes), BytesError] {
+  if let Some(value) = assembleBe(source, 0, width) {
+    Ok(stepped(source, width, value))
+  } else {
+    Err(Truncated(width, source.length()))
+  }
+}
+
+fn readLe(source: &Bytes, width: Int) -> Result[(UInt64, Bytes), BytesError] {
+  if let Some(value) = assembleLe(source, 0, width) {
+    Ok(stepped(source, width, value))
+  } else {
+    Err(Truncated(width, source.length()))
+  }
+}
+
+/// One byte, and the rest of the input.
+export fn getU8(source: &Bytes) -> Result[(UInt8, Bytes), BytesError] {
+  if let Some(octet) = source.at(0) {
+    Ok((octet, source.drop(1)))
+  } else {
+    Err(Truncated(1, 0))
+  }
+}
+
+/// Two bytes as a number, most significant first, and the rest of the input.
+export fn getU16Be(source: &Bytes) -> Result[(UInt16, Bytes), BytesError] {
+  let read = readBe(source, 2) ?
+  narrow16(read)
+}
+
+/// Two bytes as a number, least significant first, and the rest of the input.
+export fn getU16Le(source: &Bytes) -> Result[(UInt16, Bytes), BytesError] {
+  let read = readLe(source, 2) ?
+  narrow16(read)
+}
+
+/// Four bytes as a number, most significant first, and the rest of the input.
+export fn getU32Be(source: &Bytes) -> Result[(UInt32, Bytes), BytesError] {
+  let read = readBe(source, 4) ?
+  narrow32(read)
+}
+
+/// Four bytes as a number, least significant first, and the rest of the input.
+export fn getU32Le(source: &Bytes) -> Result[(UInt32, Bytes), BytesError] {
+  let read = readLe(source, 4) ?
+  narrow32(read)
+}
+
+/// Eight bytes as a number, most significant first, and the rest of the input.
+export fn getU64Be(source: &Bytes) -> Result[(UInt64, Bytes), BytesError] {
+  readBe(source, 8)
+}
+
+/// Eight bytes as a number, least significant first, and the rest of the input.
+export fn getU64Le(source: &Bytes) -> Result[(UInt64, Bytes), BytesError] {
+  readLe(source, 8)
+}
+
+fn narrow16(read: (UInt64, Bytes)) -> Result[(UInt16, Bytes), BytesError] {
+  if let Some(value) = convertInteger[UInt16](read[0]) {
+    Ok((value, read[1]))
+  } else {
+    Err(BadLength(2))
+  }
+}
+
+fn narrow32(read: (UInt64, Bytes)) -> Result[(UInt32, Bytes), BytesError] {
+  if let Some(value) = convertInteger[UInt32](read[0]) {
+    Ok((value, read[1]))
+  } else {
+    Err(BadLength(4))
+  }
+}
+
+/// The next bytes as their own sequence, and the rest of the input.
+export fn getBytes(source: &Bytes, count: Int) -> Result[(Bytes, Bytes), BytesError] {
+  if count < 0 || count > source.length() {
+    Err(Truncated(count, source.length()))
+  } else {
+    Ok((source.take(count), source.drop(count)))
+  }
+}
+
+/// The next bytes decoded as text, and the rest of the input.
+export fn getText(source: &Bytes, count: Int) -> Result[(Str, Bytes), BytesError] {
+  let read = getBytes(source, count) ?
+  let text = toText(&read[0]) ?
+  Ok((text, read[1]))
+}
+
+/// The octets a number occupies, most significant first.
+fn spellBe(value: UInt64, width: Int) -> Array[UInt8] {
+  var octets: Array[UInt8] = []
+  var step = 0
+  while step < width {
+    let shift = (width - 1 - step) * 8
+    octets = octets.push(Option.unwrapOr(convertInteger[UInt8]((value >> shift) & 255u64), 0u8))
+    step = step + 1
+  }
+  octets
+}
+
+/// One byte written.
+export fn putU8(value: UInt8) -> Bytes { bytesOf([value]) }
+
+/// Two bytes written, most significant first.
+export fn putU16Be(value: UInt16) -> Bytes { bytesOf(spellBe(wide16(value), 2)) }
+
+/// Two bytes written, least significant first.
+export fn putU16Le(value: UInt16) -> Bytes { bytesOf(spellBe(wide16(value), 2)).reverse() }
+
+/// Four bytes written, most significant first.
+export fn putU32Be(value: UInt32) -> Bytes { bytesOf(spellBe(wide32(value), 4)) }
+
+/// Four bytes written, least significant first.
+export fn putU32Le(value: UInt32) -> Bytes { bytesOf(spellBe(wide32(value), 4)).reverse() }
+
+/// Eight bytes written, most significant first.
+export fn putU64Be(value: UInt64) -> Bytes { bytesOf(spellBe(value, 8)) }
+
+/// Eight bytes written, least significant first.
+export fn putU64Le(value: UInt64) -> Bytes { bytesOf(spellBe(value, 8)).reverse() }
+
+fn wide16(value: UInt16) -> UInt64 {
+  Option.unwrapOr(convertInteger[UInt64](value), 0u64)
+}
+
+fn wide32(value: UInt32) -> UInt64 {
+  Option.unwrapOr(convertInteger[UInt64](value), 0u64)
+}
+
+/// The digits hexadecimal is written with, lower case, as a table read by
+/// position rather than searched.
+const HEX_DIGITS: Str = "0123456789abcdef"
+
+/// The value of each hexadecimal digit, both cases, as a table.
+/// A module-scope constant is evaluated once, so a decode costs one lookup per
+/// digit however large the input is; the same table built inside the function
+/// would be rebuilt on every call.
+const HEX_VALUES: Map[Char, Int] = hexTable()
+
+fn hexTable() -> Map[Char, Int] {
+  var table: Map[Char, Int] = mapOf([])
+  var index = 0
+  while index < 16 {
+    table = table.insert(HEX_DIGITS.charAt(index), index)
+    table = table.insert(HEX_DIGITS.toUpper().charAt(index), index)
+    index = index + 1
+  }
+  table
+}
+
+/// A sequence written as lower-case hexadecimal, two digits a byte.
+export fn encodeHex(source: &Bytes) -> Str {
+  var out = ""
+  for octet in source.toArray() {
+    let value = narrowInt(octet)
+    out = out + HEX_DIGITS.charAt(value / 16).toText() + HEX_DIGITS.charAt(value % 16).toText()
+  }
+  out
+}
+
+fn narrowInt(octet: UInt8) -> Int {
+  Option.unwrapOr(convertInteger[Int](octet), 0)
+}
+
+/// The bytes hexadecimal text spells, or why it spells none.
+/// An odd number of digits is a length error rather than a digit error: the
+/// digits may all be valid and the text still not name a whole number of bytes.
+export fn decodeHex(text: Str) -> Result[Bytes, BytesError] {
+  if text.length() % 2 != 0 { Err(BadLength(text.length())) } else {
+    var octets: Array[UInt8] = []
+    var index = 0
+    var failure: Option[BytesError] = None
+    while index < text.length() && Option.isNone(&failure) {
+      let paired = Option.map2(
+        HEX_VALUES.get(text.charAt(index)),
+        HEX_VALUES.get(text.charAt(index + 1)),
+        fn(upper: Int, lower: Int) -> Int { upper * 16 + lower }
+      )
+      if let Some(value) = paired {
+        octets = octets.push(Option.unwrapOr(convertInteger[UInt8](value), 0u8))
+      } else {
+        failure = Some(BadDigit(index))
+      }
+      index = index + 2
+    }
+    if let Some(reason) = failure { Err(reason) } else { Ok(bytesOf(octets)) }
+  }
+}
+
+/// The alphabet base64 is written with, as a table read by position.
+const BASE64_DIGITS: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+/// The alphabet used where a value travels in a URL, differing only in the two
+/// digits that a URL would otherwise have to escape.
+const BASE64_URL_DIGITS: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+const BASE64_VALUES: Map[Char, Int] = alphabetTable(BASE64_DIGITS)
+
+const BASE64_URL_VALUES: Map[Char, Int] = alphabetTable(BASE64_URL_DIGITS)
+
+fn alphabetTable(alphabet: Str) -> Map[Char, Int] {
+  var table: Map[Char, Int] = mapOf([])
+  var index = 0
+  while index < alphabet.length() {
+    table = table.insert(alphabet.charAt(index), index)
+    index = index + 1
+  }
+  table
+}
+
+/// A sequence written as base64, padded to a multiple of four characters.
+export fn encodeBase64(source: &Bytes) -> Str { encodeWith(source, BASE64_DIGITS, true) }
+
+/// A sequence written as base64 in the alphabet a URL admits, unpadded.
+/// Padding is dropped because `=` is itself a character a URL escapes, which
+/// is the whole reason this alphabet exists.
+export fn encodeBase64Url(source: &Bytes) -> Str { encodeWith(source, BASE64_URL_DIGITS, false) }
+
+fn encodeWith(source: &Bytes, alphabet: Str, padded: Bool) -> Str {
+  let octets = source.toArray()
+  var out = ""
+  var index = 0
+  while index < octets.length() {
+    let remaining = octets.length() - index
+    let first = narrowInt(octets[index])
+    let second = if remaining > 1 { narrowInt(octets[index + 1]) } else { 0 }
+    let third = if remaining > 2 { narrowInt(octets[index + 2]) } else { 0 }
+    let packed = first * 65536 + second * 256 + third
+    out = out + alphabet.charAt(packed / 262144 % 64).toText()
+    out = out + alphabet.charAt(packed / 4096 % 64).toText()
+    if remaining > 1 {
+      out = out + alphabet.charAt(packed / 64 % 64).toText()
+    } else {
+      if padded { out = out + "=" } else { out = out }
+    }
+    if remaining > 2 {
+      out = out + alphabet.charAt(packed % 64).toText()
+    } else {
+      if padded { out = out + "=" } else { out = out }
+    }
+    index = index + 3
+  }
+  out
+}
+
+/// The bytes base64 text spells, or why it spells none.
+export fn decodeBase64(text: Str) -> Result[Bytes, BytesError] {
+  decodeWith(text, BASE64_VALUES)
+}
+
+/// The bytes URL-alphabet base64 spells, padded or not.
+export fn decodeBase64Url(text: Str) -> Result[Bytes, BytesError] {
+  decodeWith(text, BASE64_URL_VALUES)
+}
+
+/// Padding is stripped before decoding rather than admitted into the loop, so
+/// the same reader serves both alphabets and a value that travelled unpadded
+/// decodes without a caller putting the padding back.
+fn decodeWith(text: Str, values: Map[Char, Int]) -> Result[Bytes, BytesError] {
+  let trimmed = stripPadding(text)
+  if trimmed.length() % 4 == 1 { Err(BadLength(trimmed.length())) } else {
+    var octets: Array[UInt8] = []
+    var index = 0
+    var failure: Option[BytesError] = None
+    while index < trimmed.length() && Option.isNone(&failure) {
+      let remaining = trimmed.length() - index
+      let group = if remaining > 4 { 4 } else { remaining }
+      var packed = 0
+      var step = 0
+      while step < 4 && Option.isNone(&failure) {
+        let digit = if step < group {
+          values.get(trimmed.charAt(index + step))
+        } else {
+          Some(0)
+        }
+        if let Some(value) = digit {
+          packed = packed * 64 + value
+        } else {
+          failure = Some(BadDigit(index + step))
+        }
+        step = step + 1
+      }
+      if Option.isNone(&failure) {
+        octets = appendOctet(octets, packed / 65536 % 256)
+        if group > 2 { octets = appendOctet(octets, packed / 256 % 256) }
+        if group > 3 { octets = appendOctet(octets, packed % 256) }
+      }
+      index = index + 4
+    }
+    if let Some(reason) = failure { Err(reason) } else { Ok(bytesOf(octets)) }
+  }
+}
+
+fn stripPadding(text: Str) -> Str {
+  var trimmed = text
+  while trimmed.endsWith("=") { trimmed = trimmed.take(trimmed.length() - 1) }
+  trimmed
+}
+
+/// The caller has already reduced the value to a single byte, so the fallback
+/// names a case the arithmetic above cannot reach.
+fn appendOctet(octets: Array[UInt8], value: Int) -> Array[UInt8] {
+  octets.push(Option.unwrapOr(convertInteger[UInt8](value), 0u8))
+}

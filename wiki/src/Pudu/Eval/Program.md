@@ -46,6 +46,9 @@ evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
 - Compile-time folding runs the same interpreter with effects refused, which is
   why a `const` that reads a file is stopped at the boundary rather than
   quietly reading it while the compiler runs.
+- Resource lifetime is owned by the evaluator runner, not this linkage surface.
+  Every outcome, unwind, abort, or host exception tears down that run's isolated
+  resource set without touching another concurrent evaluation.
 
 ### Linkage
 
@@ -63,6 +66,8 @@ the entry name up, and call it.
   imports.
 - No compiling. A module arrives parsed and checked; running something that did
   not compile is what the pipeline refuses before reaching here.
+- No process-global close operation. Linkage cannot know which resources belong
+  to another evaluator running in the same host.
 
 ## Grill Log
 

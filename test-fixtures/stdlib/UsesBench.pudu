@@ -1,0 +1,80 @@
+module UsesBench
+
+import Std.Bench as Bench
+
+/// What a measurement says once it has been taken.
+///
+/// The readings are built by hand rather than timed, because a check against
+/// the clock would answer differently on a machine that was busy and a fixture
+/// that fails for that reason reports nothing about the code. The one
+/// measurement actually taken here is checked for its shape alone.
+export fn main() -> Int {
+  var held = 0
+
+  let sample = Bench.Sample{name: "sorting", batch: 100, times: [12, 10, 40, 11, 13]}
+  let report = Bench.summarize(&sample)
+
+  // The best reading leads, because it holds the least of the machine's other
+  // work: a run cannot go faster than the operation, only slower.
+  if report.best == 10 { held = held + 1 }
+  if report.worst == 40 { held = held + 1 }
+  if report.runs == 5 { held = held + 1 }
+  if report.total == 86 { held = held + 1 }
+
+  // The median and the mean answer different questions, and the gap between
+  // them is the evidence that the machine paused once during the run.
+  if report.median == 12 { held = held + 1 }
+  if report.mean == 17 { held = held + 1 }
+  if report.median < report.mean { held = held + 1 }
+  if report.spread == 30 { held = held + 1 }
+
+  // The figure per run is in microseconds, taken from the best reading over
+  // the size of the batch.
+  if report.perRun == 100 { held = held + 1 }
+  if !Bench.tooFast(&report) { held = held + 1 }
+
+  // A batch the clock could not see is said to be one, rather than letting a
+  // reader believe a zero the measurement cannot support.
+  let blind = Bench.summarize(&Bench.Sample{name: "fast", batch: 10, times: [0, 0, 0]})
+  if Bench.tooFast(&blind) { held = held + 1 }
+  if Bench.render(&blind).contains("too fast") { held = held + 1 }
+  if Bench.render(&report).contains("100us/run") { held = held + 1 }
+  if Bench.render(&report).contains("median") { held = held + 1 }
+
+  // A sample with no readings answers zero rather than dividing by nothing.
+  let nothing = Bench.summarize(&Bench.Sample{name: "none", batch: 1, times: []})
+  if nothing.runs == 0 { held = held + 1 }
+  if nothing.mean == 0 { held = held + 1 }
+
+  // Comparison is in hundredths, because these are counts of milliseconds and
+  // a quotient would suggest a precision the clock does not have.
+  let slow = Bench.summarize(&Bench.Sample{name: "slow", batch: 100, times: [20]})
+  let fast = Bench.summarize(&Bench.Sample{name: "fast", batch: 100, times: [10]})
+  if Bench.ratio(&fast, &slow) == 200 { held = held + 1 }
+  if Bench.ratio(&slow, &fast) == 50 { held = held + 1 }
+  if Bench.ratio(&fast, &fast) == 100 { held = held + 1 }
+
+  // A margin is required, so two readings of the same code do not report a
+  // change every time they are compared.
+  if Bench.slowerThan(&fast, &slow, 10) { held = held + 1 }
+  if Bench.fasterThan(&slow, &fast, 10) { held = held + 1 }
+  if !Bench.slowerThan(&fast, &fast, 10) { held = held + 1 }
+  if !Bench.fasterThan(&fast, &fast, 10) { held = held + 1 }
+
+  if Bench.compare(&fast, &slow).contains("100% slower") { held = held + 1 }
+  if Bench.compare(&slow, &fast).contains("50% faster") { held = held + 1 }
+  if Bench.compare(&fast, &fast).contains("measured the same") { held = held + 1 }
+
+  // Every report written, one to a line.
+  if Bench.renderAll(&[report, blind]).split("\n").length() == 3 { held = held + 1 }
+
+  // The one measurement actually taken: the count of readings is what was
+  // asked for, and the discarded first batch is not among them.
+  let measured = Bench.measure("counting", 3, 50, fn() -> () { () })
+  if measured.times.length() == 3 { held = held + 1 }
+  if measured.batch == 50 { held = held + 1 }
+  if measured.name == "counting" { held = held + 1 }
+  if Bench.run("counting", 2, 10, fn() -> () { () }).runs == 2 { held = held + 1 }
+
+  held
+}

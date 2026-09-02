@@ -1,6 +1,7 @@
 {-| @Program.Eval.Builtin — implements the values the prelude wires in -}
 module Pudu.Eval.Builtin
   ( Apply
+  , callHashing
   , callArrayMethod
   , callCharFromCode
   , callCharMethod
@@ -25,6 +26,9 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
+import Pudu.Eval.Bytes (bytesFromText)
+import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
+import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
@@ -368,6 +372,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringSplit, [StrValue separator])
       | Text.null separator -> pure (textArray (Text.chunksOf 1 text))
       | otherwise -> pure (textArray (Text.splitOn separator text))
+    (StringToBytes, []) -> pure (bytesFromText text)
     (StringChars, []) -> pure (ArrayValue (Seq.fromList (map CharValue (Text.unpack text))))
     (StringLines, []) -> pure (textArray (Text.lines text))
     (StringReverse, []) -> pure (StrValue (Text.reverse text))
@@ -495,3 +500,42 @@ callPanic spanValue values =
   case values of
     [StrValue message] -> abortAt (Just spanValue) "E7007" message Nothing
     _ -> abortAt (Just spanValue) "E7007" "panic" (Just "panic takes one string argument")
+
+{-| The hashing the library cannot afford to write in the language.
+
+    `Std.Crypto` still implements SHA-256 in Pudu, and that implementation is
+    what shows the language can express the algorithm. These exist because a
+    digest measured 23.6 ms there, and a database handshake derives a key with
+    four thousand and ninety-six iterations of two digests: a minute of
+    arithmetic to open one connection. A hash map's lookup cannot pay a digest
+    either. Both answer the same digests, and the fixtures check them against
+    each other rather than trusting that they do. -}
+callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
+callHashing spanValue builtin arguments = case (builtin, arguments) of
+  (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
+  (HmacBuiltin, [BytesValue key, BytesValue message]) ->
+    pure (BytesValue (hmacSha256 key message))
+  (DeriveKeyBuiltin, [BytesValue password, BytesValue salt, IntValue _ rounds, IntValue _ wanted])
+    | rounds < 1 -> refuse "an iteration count below one derives nothing"
+    | rounds > 10000000 -> refuse "an iteration count above 10000000 is refused"
+    | wanted < 1 -> refuse "a derived key of no length is not a key"
+    | wanted > 1048576 -> refuse "a derived key above 1048576 bytes is refused"
+    | otherwise ->
+        pure
+          ( BytesValue
+              (pbkdf2Sha256 password salt (fromInteger rounds) (fromInteger wanted))
+          )
+  {-| Not a digest, and deliberately not offered as one. This is the mixing a
+      hash map wants: cheap, well spread, and stable within a run. A value
+      hashed with it is not hidden, and two runs are not promised the same
+      number for the same value. -}
+  (HashOfBuiltin, [value]) -> pure (intOf (hashOfValue value))
+  {-| A hash spread across the whole word against a value chosen when the
+      process started, so the bucket a key lands in cannot be predicted from
+      the key alone. What a key equals is untouched. -}
+  (MixHashBuiltin, [IntValue _ value]) -> pure (intOf (mixKey value))
+  _ ->
+    abortAt (Just spanValue) "E7012"
+      ("wrong arguments for " <> builtinName builtin) Nothing
+ where
+  refuse message = abortAt (Just spanValue) "E7004" message Nothing

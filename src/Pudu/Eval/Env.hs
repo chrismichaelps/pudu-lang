@@ -17,6 +17,9 @@ module Pudu.Eval.Env
   , callLimit
   , captureEnvironment
   , currentFrame
+  , currentConcurrentStore
+  , currentHandleStore
+  , currentSocketStore
   , withCaptured
   , descend
   , effectsAdmitted
@@ -43,6 +46,8 @@ module Pudu.Eval.Env
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import Pudu.Eval.Concurrent (ConcurrentStore)
+import Pudu.Eval.Handle (HandleStore)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -51,6 +56,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Eval.Render (valueKind)
+import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Value (Value (..))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
@@ -70,7 +76,19 @@ data Env = Env
   , envDepth :: !Int
   , envScopes :: ![[Value]]
   , envEffects :: !Bool
+  , envHandleStore :: !HandleStore
+  , envSocketStore :: !SocketStore
+  , envConcurrentStore :: !ConcurrentStore
   }
+
+currentHandleStore :: Evaluator HandleStore
+currentHandleStore = Evaluator $ \env -> pure (Done (envHandleStore env) env)
+
+currentSocketStore :: Evaluator SocketStore
+currentSocketStore = Evaluator $ \env -> pure (Done (envSocketStore env) env)
+
+currentConcurrentStore :: Evaluator ConcurrentStore
+currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env) env)
 
 {-| Open a structured task scope. Every child started inside it is recorded so
     the scope can join them before it yields. -}
@@ -221,8 +239,8 @@ catchUnwind (Evaluator action) =
       Unwound transfer next -> Done (Left transfer) next
       Aborted stop -> Aborted stop
 
-emptyEnv :: Env
-emptyEnv =
+emptyEnv :: HandleStore -> SocketStore -> ConcurrentStore -> Env
+emptyEnv handles sockets concurrent =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
@@ -232,6 +250,9 @@ emptyEnv =
     , envDepth = 0
     , envScopes = []
     , envEffects = True
+    , envHandleStore = handles
+    , envSocketStore = sockets
+    , envConcurrentStore = concurrent
     }
 
 bind :: Text -> Value -> Evaluator ()

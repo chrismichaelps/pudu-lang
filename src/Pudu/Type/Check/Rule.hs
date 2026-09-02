@@ -53,6 +53,7 @@ import Pudu.Type.Value
   , Type (..)
   , boolType
   , charType
+  , bytesType
   , integerType
   , nominalKey
   , nominalName
@@ -210,7 +211,7 @@ builtinMethodNames =
   , "drop", "take", "spanOf", "spanNotOf"
   , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
-  , "map", "filter", "reduce"
+  , "map", "filter", "reduce", "at", "toArray", "toText", "toBytes"
   ]
 
 {-| The key the enclosing function's return type is filed under.
@@ -522,6 +523,8 @@ memberType spanValue targetType member = do
     VariableType _ -> freshVariable
     NominalType "Array" [element] -> arrayMethodType spanValue member element
     NominalType "Str" [] -> stringMethodType spanValue member
+    NominalType "Bytes" [] -> bytesMethodType spanValue member
+    NominalType "Buckets" [held] -> bucketsMethodType spanValue member held
     NominalType "Char" [] -> charMethodType spanValue member
     NominalType "Map" [key, held] -> mapMethodType spanValue member key held
     NominalType "Set" [element] -> setMethodType spanValue member element
@@ -646,6 +649,7 @@ stringMethodType spanValue member = case member of
   "split" -> pure (FunctionTypeValue False [stringType] (arrayOf stringType))
   "chars" -> pure (FunctionTypeValue False [] (arrayOf charType))
   "lines" -> pure (FunctionTypeValue False [] (arrayOf stringType))
+  "toBytes" -> pure (FunctionTypeValue False [] bytesType)
   "reverse" -> pure (FunctionTypeValue False [] stringType)
   _ -> do
     report "E3005" spanValue ("Str has no method " <> member)
@@ -653,6 +657,67 @@ stringMethodType spanValue member = case member of
     pure ErrorType
  where
   arrayOf element = NominalType "Array" [element]
+
+{-| Built-in byte methods, typed exactly.
+
+    `at` answers `Option[UInt8]` where the text and array methods report an
+    index outside the value. The two are answering different questions: a
+    reader indexing text wrote the position down, while a decoder indexing a
+    byte stream computed it from a length the input supplied, and a truncated
+    frame is an outcome it handles rather than a mistake it made.
+
+    `indexOf` answers `-1` for absent, matching the text and array methods of
+    the same name. One vocabulary answering `Option` in one place and a
+    sentinel in another would be worse than either answer used everywhere.
+
+    `toText` answers `Option[Str]` because not every sequence of bytes is a
+    valid encoding. It does not name the cause: a wired-in signature cannot
+    mention a type a library module declares, so `Std.Bytes` turns the absence
+    into an error that says what was wrong with the input. -}
+bytesMethodType :: Span -> Text -> Checker Type
+bytesMethodType spanValue member = case member of
+  "length" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "at" -> pure (FunctionTypeValue False [integerType] (optionOf byteType))
+  "slice" -> pure (FunctionTypeValue False [integerType, integerType] bytesType)
+  "take" -> pure (FunctionTypeValue False [integerType] bytesType)
+  "drop" -> pure (FunctionTypeValue False [integerType] bytesType)
+  "concat" -> pure (FunctionTypeValue False [bytesType] bytesType)
+  "indexOf" -> pure (FunctionTypeValue False [bytesType] integerType)
+  "contains" -> pure (FunctionTypeValue False [bytesType] boolType)
+  "startsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
+  "endsWith" -> pure (FunctionTypeValue False [bytesType] boolType)
+  "reverse" -> pure (FunctionTypeValue False [] bytesType)
+  "toArray" -> pure (FunctionTypeValue False [] (NominalType "Array" [byteType]))
+  "toText" -> pure (FunctionTypeValue False [] (optionOf stringType))
+  _ -> do
+    report "E3005" spanValue ("Bytes has no method " <> member)
+      (Just "check the method name against the documented byte methods")
+    pure ErrorType
+ where
+  byteType = NominalType "UInt8" []
+  optionOf held = NominalType "Option" [held]
+
+{-| Built-in methods of the indexed store.
+
+    Keyed by a plain number, because the store is the layer beneath a hash map
+    rather than one a program keys directly: the library computes the key's
+    hash, mixes it, and hands the number here. -}
+bucketsMethodType :: Span -> Text -> Type -> Checker Type
+bucketsMethodType spanValue member held = case member of
+  "size" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
+  "get" -> pure (FunctionTypeValue False [integerType] (NominalType "Option" [held]))
+  "insert" -> pure (FunctionTypeValue False [integerType, held] storeType)
+  "remove" -> pure (FunctionTypeValue False [integerType] storeType)
+  "keys" -> pure (FunctionTypeValue False [] (NominalType "Array" [integerType]))
+  "values" -> pure (FunctionTypeValue False [] (NominalType "Array" [held]))
+  _ -> do
+    report "E3005" spanValue ("Buckets has no method " <> member)
+      (Just "check the method name against the documented store methods")
+    pure ErrorType
+ where
+  storeType = NominalType "Buckets" [held]
 
 {-| Built-in array methods. Each returns a function type with the receiver
     already bound, matching the evaluator's `ArrayMethodValue` semantics. The
