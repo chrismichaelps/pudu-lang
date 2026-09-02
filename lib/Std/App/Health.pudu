@@ -1,0 +1,180 @@
+module Std.App.Health
+
+import Std.Map as Map
+
+/// How something is.
+///
+/// Ordered from best to worst, so the worst of a set is the one that survives
+/// a comparison and an aggregate needs no ordering to configure.
+export type Verdict
+  = Well
+  | Degraded
+  | Unwell
+
+/// What the program can see about itself.
+///
+/// A liveness judgement is given one of these rather than a connection, so it
+/// has nothing to reach with. What a program puts in it is its own — a count
+/// of workers, a queue depth, a flag set when something went irrecoverably
+/// wrong — and every one of those is a value the process already holds.
+export type Reading = { name: Str, counts: Map[Str, Int], flags: Map[Str, Bool] }
+
+/// Whether this process should still be running.
+///
+/// The judgement takes a reading and answers. It is given nothing that reaches
+/// outside the process, because a database being unreachable is not a reason
+/// to kill a healthy program — a liveness check that consults one turns a
+/// dependency's outage into every instance restarting at once.
+///
+/// Declare the judgement `comptime` and the language refuses a body that
+/// reaches a clock, a socket, or a file, which turns the rule from a note in
+/// review into a compile error.
+export type Liveness = { name: Str, judge: fn(Reading) -> Verdict }
+
+/// Whether this process should receive traffic.
+///
+/// This one may consult whatever it needs. Removing an instance from rotation
+/// is cheap and reversible, which is what makes the different rule correct
+/// rather than merely different.
+export type Readiness = { name: Str, judge: fn() -> Verdict }
+
+/// One check's answer.
+export type Finding = { name: Str, verdict: Verdict, detail: Str }
+
+/// What a set of checks reached.
+export type Report = { verdict: Verdict, findings: Array[Finding] }
+
+/// How bad each verdict is, so the worst of a set is a comparison rather than
+/// a rule written twice.
+const SEVERITY: Map[Verdict, Int] = mapOf([(Well, 0), (Degraded, 1), (Unwell, 2)])
+
+/// What each verdict is called.
+const VERDICT_NAMES: Map[Verdict, Str] = mapOf([
+    (Well, "well"),
+    (Degraded, "degraded"),
+    (Unwell, "unwell")
+  ])
+
+/// The status a verdict answers with.
+///
+/// A degraded service still answers requests, so it is not removed from
+/// rotation for being imperfect; an unwell one says so with the status that
+/// means the service is the problem rather than the request.
+const VERDICT_CODES: Map[Verdict, Int] = mapOf([(Well, 200), (Degraded, 200), (Unwell, 503)])
+
+/// A reading with nothing in it.
+export fn reading(name: Str) -> Reading {
+  Reading{name: name, counts: Map.empty(), flags: Map.empty()}
+}
+
+/// A reading with one more count.
+export fn counting(base: &Reading, name: Str, held: Int) -> Reading {
+  Reading{name: base.name, counts: Map.insert(&base.counts, name, held), flags: base.flags}
+}
+
+/// A reading with one more flag.
+export fn flagging(base: &Reading, name: Str, held: Bool) -> Reading {
+  Reading{name: base.name, counts: base.counts, flags: Map.insert(&base.flags, name, held)}
+}
+
+/// A count the reading holds, or zero.
+export fn countOf(held: &Reading, name: Str) -> Int { Map.getOr(&held.counts, name, 0) }
+
+/// A flag the reading holds, or false.
+export fn flagOf(held: &Reading, name: Str) -> Bool { Map.getOr(&held.flags, name, false) }
+
+/// A liveness check.
+export fn liveness(name: Str, judge: fn(Reading) -> Verdict) -> Liveness {
+  Liveness{name: name, judge: judge}
+}
+
+/// A readiness check.
+export fn readiness(name: Str, judge: fn() -> Verdict) -> Readiness {
+  Readiness{name: name, judge: judge}
+}
+
+/// A verdict from a truth, for the many checks that are one.
+export fn fromTruth(holds: Bool) -> Verdict { if holds { Well } else { Unwell } }
+
+/// Whether this process should still be running.
+///
+/// Every check sees the same reading, so two checks cannot disagree about what
+/// the process looked like at the moment they were asked.
+export fn alive(checks: &Array[Liveness], held: &Reading) -> Report {
+  var findings: Array[Finding] = []
+  for check in checks {
+    let reached = (check.judge)(*held)
+    findings = findings.push(Finding{name: check.name, verdict: reached, detail: ""})
+  }
+  Report{verdict: worstOf(&findings), findings: findings}
+}
+
+/// Whether this process should receive traffic.
+export fn ready(checks: &Array[Readiness]) -> Report {
+  var findings: Array[Finding] = []
+  for check in checks {
+    let reached = (check.judge)()
+    findings = findings.push(Finding{name: check.name, verdict: reached, detail: ""})
+  }
+  Report{verdict: worstOf(&findings), findings: findings}
+}
+
+/// The worst of a set.
+///
+/// An aggregate is as healthy as its unhealthiest part. Every other rule is a
+/// way of arranging for a failure not to count, and the failure still
+/// happened.
+export fn worstOf(findings: &Array[Finding]) -> Verdict {
+  var worst = Well
+  for held in findings {
+    if Map.getOr(&SEVERITY, held.verdict, 0) > Map.getOr(&SEVERITY, worst, 0) {
+      worst = held.verdict
+    }
+  }
+  worst
+}
+
+/// A report with no checks in it, which is well: a program that declared
+/// nothing has nothing wrong with it.
+export fn nothingToCheck() -> Report { Report{verdict: Well, findings: []} }
+
+/// Whether a report says everything is fine.
+export fn healthy(held: &Report) -> Bool { held.verdict == Well }
+
+/// The status a report answers with.
+export fn statusOf(held: &Report) -> Int { Map.getOr(&VERDICT_CODES, held.verdict, 503) }
+
+/// What a verdict is called.
+export fn verdictName(held: &Verdict) -> Str { Map.getOr(&VERDICT_NAMES, *held, "unknown") }
+
+/// A report as text, one check to a line, worst first so an operator reading a
+/// truncated report sees the part that matters.
+export fn render(held: &Report) -> Str {
+  var built = verdictName(&held.verdict)
+  for finding in ordered(&held.findings) {
+    built = built + "\n" + finding.name + ": " + verdictName(&finding.verdict)
+    if !finding.detail.isEmpty() { built = built + " (" + finding.detail + ")" }
+  }
+  built
+}
+
+/// The findings, worst first.
+fn ordered(findings: &Array[Finding]) -> Array[Finding] {
+  var sorted: Array[Finding] = []
+  for wanted in [Unwell, Degraded, Well] {
+    for held in findings { if held.verdict == wanted { sorted = sorted.push(held) } }
+  }
+  sorted
+}
+
+/// A finding with something said about it, for a check that knows more than
+/// its verdict.
+export fn detailed(name: Str, held: Verdict, detail: Str) -> Finding {
+  Finding{name: name, verdict: held, detail: detail}
+}
+
+/// A report from findings a caller assembled, for a program that gathered them
+/// somewhere this module does not know about.
+export fn reporting(findings: &Array[Finding]) -> Report {
+  Report{verdict: worstOf(findings), findings: *findings}
+}

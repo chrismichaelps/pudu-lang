@@ -117,7 +117,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Structured logging with levels and fields? | **Ready** | [[Std Log]]. A line is a value; formatting is a function on it. |
 | Does a log line carry a request identifier? | **Ready** | [[Std Http Server Guard]] carries one in and out, keeping a value that entered at a proxy so it stays the same across services. |
 | Metrics? | **Absent** | Slice 4. |
-| Health, separated into liveness and readiness? | **Absent** | Slice 3. The rule that liveness must not consult anything outside the process will be enforced by the types rather than written in prose. |
+| Health, separated into liveness and readiness? | **Ready** | [[Std App Health]]. They are separate types: a liveness judgement is handed a reading rather than a connection, and declaring it `comptime` makes reaching a clock or a socket a compile error rather than a review note. |
 | Distributed tracing? | **Absent** | Not designed. |
 | Configuration from files, environment, and arguments? | **Ready** | [[Std App Config]]. Four layers, fixed order, one spelling per key. |
 | Configuration per environment? | **Ready** | Profiles select a section; the machine's own settings are never profiled away. |

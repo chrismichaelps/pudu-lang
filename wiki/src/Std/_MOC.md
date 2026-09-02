@@ -30,6 +30,7 @@ tags: [moc, module, stdlib]
 - [[Std App]] — the program as a value: what starts it, and what stops it.
 - [[Std Html]] — a page as a value, so text placed in one cannot become markup.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
+- [[Std App Health]] — restarting and receiving traffic, kept apart by the types.
 - [[Std App Config]] — where a setting comes from when four places could supply it.
 - [[Std Http Safe]] — the judgements a server makes before it believes a request.
 - [[Std Http Server]] — reading requests off connections and answering them.

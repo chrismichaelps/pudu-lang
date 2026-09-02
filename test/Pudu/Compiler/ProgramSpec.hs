@@ -249,6 +249,7 @@ testProgramEvaluation = do
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
+  probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -464,6 +465,15 @@ testProgramEvaluation = do
     , counterexample
         "a schema change is planned before a database is reached"
         (schemas === Just "21")
+    {-| That the two questions asked from outside a process stay two
+        questions: a liveness judgement is handed a reading rather than a
+        connection and is declared comptime, so reaching a clock or a socket
+        from one is refused by the compiler; a readiness judgement may consult
+        what it needs; and an aggregate is as healthy as its unhealthiest
+        part, because every other rule arranges for a failure not to count. -}
+    , counterexample
+        "restarting and receiving traffic are different questions"
+        (probes === Just "29")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
