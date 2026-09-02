@@ -1,0 +1,175 @@
+module UsesHttpClient
+
+import Std.Concurrent as Concurrent
+import Std.Http.Client {BadUrl, NotPermitted, TooManyRedirects}
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Result as Result
+
+/// What a client promises.
+///
+/// The decisions worth checking — which addresses may be reached, what a
+/// redirect carries, and how a method changes across one — are all decidable
+/// without a network, so most of this runs without one. What genuinely needs a
+/// socket is checked over one, against a server this program started.
+export fn main() -> Int {
+  var held = 0
+
+  // Bounds rather than none. An unbounded client exhausts the memory of the
+  // program that made the request rather than of the one that answered.
+  let bounds = Client.limits()
+  if bounds.redirects > 0 { held = held + 1 }
+  if bounds.bodyBytes > 0 { held = held + 1 }
+  if bounds.followRedirects { held = held + 1 }
+  if Client.reading(&bounds, 100).bodyBytes == 100 { held = held + 1 }
+  if Client.following(&bounds, 2).redirects == 2 { held = held + 1 }
+
+  // Following nothing is expressed by bounding the count at nothing, so there
+  // is one way to say it rather than two that could disagree.
+  if !Client.following(&bounds, 0).followRedirects { held = held + 1 }
+
+  // An address a request named is refused when it is one the network trusts.
+  // A client that fetches whatever it is handed is how a server is made to
+  // reach what only the server can reach.
+  if let Err(NotPermitted(_)) = Client.fetch("http://127.0.0.1:1/x", &bounds) { held = held + 1 }
+  if let Err(NotPermitted(_)) = Client.fetch("http://169.254.169.254/latest", &bounds) {
+    held = held + 1
+  }
+  if let Err(NotPermitted(_)) = Client.fetch("http://10.0.0.1/x", &bounds) { held = held + 1 }
+
+  // Permitted by naming the host, because a service that genuinely must reach
+  // an internal one exists and a refusal it cannot lift would be worked around
+  // outside this module, where nothing checks anything.
+  let reaching = Client.reaching(&bounds, &["127.0.0.1"])
+  if let Err(NotPermitted(_)) = Client.fetch("http://127.0.0.1:1/x", &reaching) {
+    held = held + 0
+  } else {
+    held = held + 1
+  }
+
+  // Something that is not an address is refused as one.
+  if let Err(BadUrl(_)) = Client.fetch("not a url", &bounds) { held = held + 1 }
+
+  // Which statuses say to go somewhere else.
+  if Client.isRedirect(301) { held = held + 1 }
+  if Client.isRedirect(302) { held = held + 1 }
+  if Client.isRedirect(307) { held = held + 1 }
+  if Client.isRedirect(308) { held = held + 1 }
+  if !Client.isRedirect(200) { held = held + 1 }
+  if !Client.isRedirect(404) { held = held + 1 }
+
+  // A relative destination is resolved against where the request went.
+  if Client.resolved("https://a.example/one/two", "/three") == "https://a.example/three" {
+    held = held + 1
+  }
+  if Client.resolved("https://a.example/one", "three") == "https://a.example/three" {
+    held = held + 1
+  }
+  if Client.resolved("https://a.example/one", "https://b.example/x") == "https://b.example/x" {
+    held = held + 1
+  }
+
+  // A port that is the scheme's own is not part of the origin, and one that is
+  // not is.
+  if Client.originsMatch("https://a.example/x", "https://a.example:443/y") { held = held + 1 }
+  if !Client.originsMatch("https://a.example/x", "https://a.example:8443/y") { held = held + 1 }
+
+  // Two targets on the same origin, and two that are not. This is the question
+  // that decides whether credentials travel.
+  if Client.originsMatch("https://a.example/one", "https://a.example/two") { held = held + 1 }
+  if !Client.originsMatch("https://a.example/one", "https://b.example/one") { held = held + 1 }
+  if !Client.originsMatch("https://a.example/one", "http://a.example/one") { held = held + 1 }
+  if !Client.originsMatch("not a url", "https://a.example") { held = held + 1 }
+
+  // And now over a real connection, against a server this program started.
+  let running = Server.start("127.0.0.1", 0)
+  if Result.isOk(&running) { held = held + 1 }
+
+  if let Ok(live) = running {
+    let port = Server.portOf(&live)
+    let routed = Route.withFallback(
+        &Route.routing(&[
+          Route.get("/hello", greet),
+          Route.get("/away", elsewhere),
+          Route.get("/loop", roundAndRound)
+        ]),
+      missing
+    )
+    let listening = Server.server(&routed)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Server.run(&listening, &live, 20)
+        ()
+      })
+    if Result.isOk(&worker) { held = held + 1 }
+
+    let at = "http://127.0.0.1:" + show(port)
+    let permitted = Client.reaching(&bounds, &["127.0.0.1"])
+
+    // An ordinary request and its answer.
+    let answered = Client.fetch(at + "/hello", &permitted)
+    if Result.isOk(&answered) { held = held + 1 }
+    if let Ok(response) = answered {
+      if response.status.code == 200 { held = held + 1 }
+      if response.body == "hello" { held = held + 1 }
+    }
+
+    // A path nothing serves answers as such rather than failing to answer.
+    if let Ok(response) = Client.fetch(at + "/nowhere", &permitted) {
+      if response.status.code == 404 { held = held + 1 }
+    }
+
+    // A redirect is followed to where it points.
+    if let Ok(response) = Client.fetch(at + "/away", &permitted) {
+      if response.status.code == 200 { held = held + 1 }
+      if response.body == "hello" { held = held + 1 }
+    }
+
+    // A redirect not followed is answered as the redirect it is, so a caller
+    // that wants to see one can.
+    let unfollowed = Client.following(&permitted, 0)
+    if let Ok(response) = Client.fetch(at + "/away", &unfollowed) {
+      if response.status.code == 302 { held = held + 1 }
+    }
+
+    // A chain longer than the bound is refused rather than followed forever.
+    if let Err(TooManyRedirects(_)) = Client.fetch(at + "/loop", &Client.following(&permitted, 2)) {
+      held = held + 1
+    }
+
+    // An answer larger than the caller will read is refused rather than
+    // truncated: a truncated body parses to something the sender did not send.
+    if let Err(_) = Client.fetch(at + "/hello", &Client.reading(&permitted, 4)) { held = held + 1 }
+
+    let _stopped = Server.stop(&live)
+    if let Ok(started) = worker {
+      let _joined = Concurrent.join(&started)
+      held = held + 1
+    }
+  }
+
+  held
+}
+
+fn greet(_request: Route.Request) -> Http.Response { Reply.text(200, "hello") }
+
+fn elsewhere(_request: Route.Request) -> Http.Response {
+  Http.Response {
+    status: Http.Status{code: 302, reason: "Found"},
+    headers: [("Location", "/hello")],
+    body: ""
+  }
+}
+
+/// A redirect that points at itself, for the bound to catch.
+fn roundAndRound(_request: Route.Request) -> Http.Response {
+  Http.Response {
+    status: Http.Status{code: 302, reason: "Found"},
+    headers: [("Location", "/loop")],
+    body: ""
+  }
+}
+
+fn missing(_request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }

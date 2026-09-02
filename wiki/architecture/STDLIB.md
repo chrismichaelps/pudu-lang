@@ -293,6 +293,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.App.Metrics` | 22 | counters, gauges, distributions, units, and a series bound |
 | `Std.App.Health` | 21 | liveness and readiness as separate types, worst-wins aggregation |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
+| `Std.Http.Client` | 13 | bounded requests, verified transport, credential-safe redirects |
 | `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |
 | `Std.Http.Server.Guard` | 12 | protective headers, sharing, provenance, identity, and quiet failure |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |

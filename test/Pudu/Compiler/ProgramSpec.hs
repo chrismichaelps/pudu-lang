@@ -252,6 +252,7 @@ testProgramEvaluation = do
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
   permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
+  fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -494,6 +495,15 @@ testProgramEvaluation = do
     , counterexample
         "a route states what it requires or it is not a route"
         (permitted === Just "46")
+    {-| That a client bounds what a request may cost and where it may go: an
+        address the network trusts is refused unless the caller named it, and
+        refused again at every redirect rather than only at the first, since a
+        redirect to an internal address is how the first check is bypassed; a
+        chain longer than the bound and an answer larger than the caller will
+        read are refused rather than followed or truncated. -}
+    , counterexample
+        "a client is bounded in what it will fetch and where"
+        (fetched === Just "38")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
