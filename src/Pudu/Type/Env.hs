@@ -39,6 +39,7 @@ module Pudu.Type.Env
   , qualifiesSomething
   , isImportedMethod
   , lookupVariant
+  , lookupVariantIn
   , lookupVariantFields
   , lookupRecordedExpression
   , recordExpression
@@ -94,6 +95,15 @@ data DeclaredTypes = DeclaredTypes
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
   , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
+  {-| The same variants, keyed by the type that owns them as well as by their
+      name.
+
+      Two modules may each declare a variant called `Text`, and a bare-name
+      table can only hold one of them — so a pattern would match against
+      whichever module happened to be loaded last, which is not a property of
+      the module being checked. Keyed by owner there is no collision to
+      resolve. -}
+  , declaredOwnedVariants :: !(Map (NominalId, Text) (NominalId, [Text], [Type]))
   , declaredVariantFields :: !(Map Text [Text])
   , declaredOwners :: !(Map NominalId [Text])
   , declaredImpls :: !(Map NominalId [NominalId])
@@ -115,6 +125,7 @@ emptyDeclared =
     , declaredParams = Map.empty
     , declaredFields = Map.empty
     , declaredVariants = Map.empty
+    , declaredOwnedVariants = Map.empty
     , declaredVariantFields = Map.empty
     , declaredOwners = Map.empty
     , declaredImpls = Map.empty
@@ -522,6 +533,18 @@ lookupOwnerVariants owner =
 lookupVariant :: Text -> Checker (Maybe (NominalId, [Text], [Type]))
 lookupVariant name =
   Checker $ \state -> (Map.lookup name (declaredVariants (stateDeclared state)), state)
+
+{-| A variant of one named type.
+
+    Asked when the type is already known, which is the case wherever the
+    constructor was reached through a name that was in scope. Two modules
+    declaring a variant of the same name are then two different questions with
+    two different answers rather than one question whose answer depends on load
+    order. -}
+lookupVariantIn :: NominalId -> Text -> Checker (Maybe (NominalId, [Text], [Type]))
+lookupVariantIn owner name =
+  Checker $ \state ->
+    (Map.lookup (owner, name) (declaredOwnedVariants (stateDeclared state)), state)
 
 {-| The names a variant declared for its payload, when it declared any.
 

@@ -21,12 +21,42 @@ import Pudu.Type.Env
   , freshVariable
   , lookupField
   , lookupTypeParams
+  , lookupName
   , lookupVariant
   , lookupVariantFields
+  , lookupVariantIn
   , report
   )
 import Pudu.Type.Unify (unify, zonk)
-import Pudu.Type.Value (NominalId, Type (..), monotype)
+import Pudu.Type.Value (NominalId, Scheme (..), Type (..), monotype)
+
+{-| The variant a pattern names, found the way an expression finds one.
+
+    The name is resolved through the scope first, exactly as it would be in
+    expression position, and only then is its shape looked up under the type
+    that owns it. Resolving by bare name against a table holding every loaded
+    module's variants made a pattern mean whichever module was loaded last: two
+    modules may each declare a `Text`, and the one a pattern matched was not a
+    property of the module being checked. Falling back to the bare name keeps
+    a variant whose name is not separately bound — a wired-in one reached
+    without an import — working as before. -}
+variantForPath
+  :: ModuleName -> Text -> Checker (Maybe (NominalId, [Text], [Type]))
+variantForPath path name = do
+  bound <- lookupName (moduleNameText path)
+  case bound >>= ownerOfScheme of
+    Just owner -> do
+      owned <- lookupVariantIn owner name
+      maybe (lookupVariant name) (pure . Just) owned
+    Nothing -> lookupVariant name
+
+{-| The type a constructor answers with: the type itself for a variant with no
+    payload, and the result for one that takes a payload. -}
+ownerOfScheme :: Scheme -> Maybe NominalId
+ownerOfScheme scheme = case schemeType scheme of
+  NominalType owner _ -> Just owner
+  FunctionTypeValue _ _ (NominalType owner _) -> Just owner
+  _ -> Nothing
 
 {-| Check a pattern against the type it matches, binding the names it
     introduces at the types their positions imply. -}
@@ -50,7 +80,7 @@ bindPattern declared rigid (Located patternSpan pattern') subjectType = case pat
     sequence_ (zipWith (bindPattern declared rigid) members memberTypes)
   ConstructorPattern path arguments -> do
     let name = NonEmpty.last (moduleNameSegments path)
-    variant <- lookupVariant name
+    variant <- variantForPath path name
     {-| A variant that named its payload is matched by naming it, for the
         reason it is built that way: one spelling reaches the value, so the
         other can only ever fail to match. -}

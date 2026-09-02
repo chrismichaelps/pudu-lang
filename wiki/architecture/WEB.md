@@ -69,7 +69,7 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | Can it render a page on the server? | **Ready** | [[Std Html]]: a view is a value, rendered to markup. Escaping is a property of the type. |
 | Can a page be built from components? | **Ready** | [[Std Ui]]: a component is a state, a view function, and an update function. Components compose. |
-| Can a page be interactive without a full reload? | **Partial** | The difference between two screens is computed, and [[Std Http Server Socket]] carries messages both ways. What is missing is the circuit joining them — [[Std Ui Live]]. |
+| Can a page be interactive without a full reload? | **Ready** | [[Std Ui Live]] holds the screen, sends the difference, and takes the event back; [[Std Http Server Socket]] carries it. |
 | Is hydration mismatch possible? | **Ready** | No. There is one renderer. See above. |
 | Can the language run in the browser? | **Absent** | The evaluator walks a tree; there is no code generation backend. This is a compiler project and a language decision, not a library one. Nothing here approximates it. |
 | Does a page work without scripting? | **Ready** | A rendered page is markup and forms. Nothing in [[Std Html]] requires a script to display or to submit. |
@@ -84,7 +84,7 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | Where does a viewer's state live? | **Ready** | On the server, in the component value. It is a value, so it can be inspected and compared. |
 | What does a viewer cost? | **Partial** | The state a component holds, and a connection once live connections exist. There is no bound on either yet. |
-| What happens when the connection drops? | **Absent** | Recovery is not designed. It is the first thing to settle when live connections are built: state kept and re-attached, or state rebuilt from a stable identifier. |
+| What happens when the connection drops? | **Partial** | Rejoining sends a whole page rather than a difference, because what the viewer's screen shows after a drop is unknown. How long a session is kept for a viewer who may return is deliberately not decided here — see [[Std Ui Live]]. |
 | Multiple tabs? | **Absent** | Follows the same design. |
 | Does the back button work? | **Ready** for rendered pages, **Absent** for live ones. | A page is a URL. A live screen has no history model yet. |
 

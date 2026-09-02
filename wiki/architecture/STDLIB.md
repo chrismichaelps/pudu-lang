@@ -288,6 +288,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.App` | 20 | the application value, its stages, and running one, provisional |
 | `Std.Html` | 33 | a page as a value; escaping by construction, provisional |
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
+| `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.App.Access` | 20 | requirements as values; every route states one |
 | `Std.App.Metrics` | 22 | counters, gauges, distributions, units, and a series bound |

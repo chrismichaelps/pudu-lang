@@ -1,0 +1,159 @@
+module UsesLive
+
+import Std.Html as Html
+import Std.Option as Option
+import Std.Ui.Live {Changed, Nothing, Whole}
+import Std.Ui.Live as Live
+import Std.Ui as Ui
+
+/// A counter, which is the smallest screen with state, a view, and an event.
+type Step
+  = Up
+  | Clear
+
+/// What a live screen promises.
+///
+/// The claim under test is that there is one renderer and it is here, so the
+/// difference sent to a viewer is the difference the state made — and that a
+/// message naming an event the session never declared changes nothing.
+export fn main() -> Int {
+  var held = 0
+
+  let counting = Live.session(Ui.component(0, viewCount, step), &["up", "clear"])
+
+  // What the viewer first receives is a whole page, because they have nothing
+  // to apply a difference to.
+  if let Whole(markup) = Live.firstAnswer(&counting) {
+    if markup == "<p>0</p>" { held = held + 1 }
+  }
+  if Live.markupOf(&counting) == "<p>0</p>" { held = held + 1 }
+  if Live.stateOf(&counting) == 0 { held = held + 1 }
+
+  // What this end believes is on the screen is true from the first moment,
+  // rather than only after the first event.
+  if Live.shownBy(&counting) == Html.paragraph(&[], &[Html.text("0")]) { held = held + 1 }
+
+  // An event the session declared advances it, and what is sent is the
+  // difference rather than the page.
+  let bumped = Live.advanced(&counting, Up)
+  if Live.stateOf(&bumped[1]) == 1 { held = held + 1 }
+  if let Changed(edits) = bumped[0] {
+    if edits.length() == 1 { held = held + 1 }
+  }
+  if Live.worthSending(&bumped[0]) { held = held + 1 }
+
+  // The difference applied to what the viewer had gives what this end now
+  // holds. That is the whole contract between the two ends, and it is a
+  // comparison of values.
+  if let Changed(edits) = bumped[0] {
+    if Ui.applied(&Live.shownBy(&counting), &edits) == Live.shownBy(&bumped[1]) {
+      held = held + 1
+    }
+  }
+
+  // The session that follows believes what it sent, so the next difference is
+  // computed against the right screen.
+  let twice = Live.advanced(&bumped[1], Up)
+  if Live.stateOf(&twice[1]) == 2 { held = held + 1 }
+  if let Changed(edits) = twice[0] {
+    if Ui.applied(&Live.shownBy(&bumped[1]), &edits) == Live.shownBy(&twice[1]) {
+      held = held + 1
+    }
+  }
+
+  // An event that changes nothing sends nothing, so a screen that did not move
+  // costs no traffic.
+  let settled = Live.advanced(&counting, Clear)
+  if settled[0] == Nothing { held = held + 1 }
+  if !Live.worthSending(&settled[0]) { held = held + 1 }
+
+  // A message naming an event this session never declared changes nothing.
+  // What arrives is text from whoever is on the other end, and the other end
+  // is not necessarily the page this server rendered.
+  let probed = Live.given(&counting, &Live.event("drop-tables", ""), understood)
+  if probed[0] == Nothing { held = held + 1 }
+  if Live.stateOf(&probed[1]) == 0 { held = held + 1 }
+
+  // And it is counted, so a page being probed is visible rather than merely
+  // unaffected.
+  if Live.discardedCount(&probed[1]) == 1 { held = held + 1 }
+  if Live.discardedCount(&counting) == 0 { held = held + 1 }
+
+  // A declared event that this program cannot make sense of is also discarded
+  // rather than dispatched.
+  if Live.discardedCount(&Live.given(&counting, &Live.event("up", "nonsense"), refusing)[1]) == 1 {
+    held = held + 1
+  }
+
+  // A declared event that is understood does advance the session.
+  let arrived = Live.given(&counting, &Live.event("up", ""), understood)
+  if Live.stateOf(&arrived[1]) == 1 { held = held + 1 }
+  if Live.discardedCount(&arrived[1]) == 0 { held = held + 1 }
+  if Live.accepts(&counting, "up") { held = held + 1 }
+  if !Live.accepts(&counting, "drop-tables") { held = held + 1 }
+
+  // Rejoining after a dropped connection sends a whole page, never a
+  // difference: the state is known, but what the viewer's screen shows is not,
+  // and a difference against an unknown screen renders plausibly and wrongly.
+  let returned = Live.rejoined(&twice[1])
+  if let Whole(markup) = returned[0] {
+    if markup == "<p>2</p>" { held = held + 1 }
+  }
+  if Live.stateOf(&returned[1]) == 2 { held = held + 1 }
+
+  // The state survives the connection; only the screen was lost.
+  if Live.shownBy(&returned[1]) == Live.shownBy(&twice[1]) { held = held + 1 }
+
+  // What crosses the wire says which kind of update it is, so the far end
+  // knows whether to replace or to patch.
+  if Live.encode(&Nothing).contains("\"nothing\"") { held = held + 1 }
+  if Live.encode(&Whole("<p>x</p>")).contains("\"whole\"") { held = held + 1 }
+  if Live.encode(&Whole("<p>x</p>")).contains("<p>x</p>") { held = held + 1 }
+  if let Changed(edits) = bumped[0] {
+    let written = Live.encode(&Changed(edits))
+    if written.contains("\"changed\"") { held = held + 1 }
+    if written.contains("\"retexted\"") { held = held + 1 }
+    if written.contains("\"at\"") { held = held + 1 }
+  }
+
+  // A message from the viewer reads back as the event it named.
+  if let Some(sent) = Live.decode("\{\"event\": \"up\", \"value\": \"1\"\}") {
+    if sent.name == "up" { held = held + 1 }
+    if sent.value == "1" { held = held + 1 }
+  }
+
+  // A message naming no event is nothing rather than a half-read one, because
+  // a half-read event dispatches something the viewer did not do.
+  if Option.isNone(&Live.decode("\{\"value\": \"1\"\}")) { held = held + 1 }
+  if Option.isNone(&Live.decode("not json at all")) { held = held + 1 }
+
+  // A message with no value still names its event, since many events carry
+  // nothing.
+  if let Some(sent) = Live.decode("\{\"event\": \"clear\"\}") {
+    if sent.value.isEmpty() { held = held + 1 }
+  }
+
+  held
+}
+
+fn viewCount(count: Int) -> Html.Html { Html.paragraph(&[], &[Html.text(show(count))]) }
+
+fn step(count: Int, event: Step) -> Int {
+  match event {
+    case Up => count + 1
+    case Clear => 0
+  }
+}
+
+/// What this program makes of a message it accepted.
+fn understood(sent: Live.Event) -> Option[Step] {
+  match sent.name {
+    case "up" => if sent.value.isEmpty() { Some(Up) } else { None }
+    case "clear" => Some(Clear)
+    case _other => None
+  }
+}
+
+/// One that makes nothing of anything, for the case where a declared event
+/// still cannot be read.
+fn refusing(_sent: Live.Event) -> Option[Step] { None }

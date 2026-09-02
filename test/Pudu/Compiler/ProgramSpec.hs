@@ -255,6 +255,8 @@ testProgramEvaluation = do
   fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesValidate.pudu"
   lasting <- runEntry "test-fixtures/stdlib/UsesSocket.pudu"
+  driven <- runEntry "test-fixtures/stdlib/UsesLive.pudu"
+  scoped2 <- runEntry "test-fixtures/stdlib/UsesVariantScope.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -526,6 +528,25 @@ testProgramEvaluation = do
     , counterexample
         "a lasting connection is not offered to whoever asks"
         (lasting === Just "38")
+    {-| That there is one renderer and it is the server's: the difference sent
+        to a viewer is the difference the state made, applying it to what the
+        viewer had gives what the server holds, an event the session never
+        declared changes nothing and is counted, and rejoining after a drop
+        sends a whole page rather than a difference against a screen nobody
+        knows. -}
+    , counterexample
+        "a live screen sends the difference its state made"
+        (driven === Just "35")
+    {-| That a pattern matches the variant the module named. Two modules here
+        each declare a `Text`; only one is in scope unqualified, and reading
+        the name against a table holding every loaded module's variants made
+        the answer depend on which module was loaded last. Wired-in variants
+        reached without an import, and generic sums carrying their arguments
+        through a pattern, are checked alongside so the narrower resolution
+        did not lose them. -}
+    , counterexample
+        "a pattern matches the variant the module named"
+        (scoped2 === Just "11")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

@@ -280,6 +280,16 @@ lastSegment (ModuleName segments) = NonEmpty.last segments
 {-| The sums the compiler wires in. `Option` and `Result` are the language's
     absence and failure carriers, so their constructors exist without any
     declaration, exactly as their types do. -}
+{-| The wired-in variants keyed by the type that owns them, so a pattern
+    reaching one through a name in scope asks the same question a pattern
+    reaching a declared variant asks. -}
+builtinOwnedVariants :: Map (NominalId, Text) (NominalId, [Text], [Type])
+builtinOwnedVariants =
+  Map.fromList
+    [ ((owner, name), shape)
+    | (name, shape@(owner, _, _)) <- Map.toList builtinVariants
+    ]
+
 builtinVariants :: Map Text (NominalId, [Text], [Type])
 builtinVariants =
   Map.fromList
@@ -309,6 +319,8 @@ collectDeclaredFrom initial owner declarations = do
         (foldr (addShell owner) initial declarations)
           { declaredVariants = builtinVariants
               <> declaredVariants initial
+          , declaredOwnedVariants = builtinOwnedVariants
+              <> declaredOwnedVariants initial
           , declaredOwners = builtinOwners <> declaredOwners initial
           , declaredAliases = builtinAliases <> declaredAliases initial
           }
@@ -394,6 +406,11 @@ collectOne owner declared (Located _ declaration) = case declaration of
         pure
           declared
             { declaredVariants = insertAll payloads (declaredVariants declared)
+            , declaredOwnedVariants =
+                foldr
+                  (\(variantName', shape) -> Map.insert (identity, variantName') shape)
+                  (declaredOwnedVariants declared)
+                  payloads
             , declaredVariantFields =
                 foldr (\(key, value') acc -> Map.insert key value' acc)
                   (declaredVariantFields declared) named
