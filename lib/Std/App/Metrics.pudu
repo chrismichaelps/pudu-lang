@@ -41,9 +41,22 @@ export type Declared = {
 export type Series = { labels: Array[(Str, Str)], value: Int, counts: Array[Int], total: Int }
 
 /// Everything a program reports about itself.
+/// Everything a program reports about itself.
+///
+/// Declarations are held in a map for lookup and an array for the order they
+/// were declared in, because both questions are asked: rendering walks them in
+/// order, and every measurement looks one up. A single array answers the first
+/// and makes the second a scan of every metric the program has, on every
+/// count — which is the one operation a busy program does most.
+///
+/// Series are keyed by their labels rather than held in a list, for the same
+/// reason and more sharply: a metric broken down by route and method has as
+/// many series as the product of those, and finding one by comparing label
+/// lists reads every series to find one.
 export type Metrics = {
-  declared: Array[Declared],
-  series: Map[Str, Array[Series]],
+  declared: Map[Str, Declared],
+  order: Array[Str],
+  series: Map[Str, Map[Str, Series]],
   refused: Int
 }
 
@@ -76,7 +89,9 @@ const KIND_NAMES: Map[Kind, Str] = mapOf([
   ])
 
 /// Nothing measured yet.
-export fn empty() -> Metrics { Metrics{declared: [], series: Map.empty(), refused: 0} }
+export fn empty() -> Metrics {
+  Metrics{declared: Map.empty(), order: [], series: Map.empty(), refused: 0}
+}
 
 /// A counter, which only rises.
 export fn counter(base: &Metrics, name: Str, unit: Unit, help: Str) -> Metrics {
@@ -106,10 +121,11 @@ export fn distribution(
 
 /// The same metric with a different bound on how many series it may have.
 export fn limitedTo(base: &Metrics, name: Str, limit: Int) -> Metrics {
-  var declared: Array[Declared] = []
-  for held in base.declared {
-    declared = declared.push(
-      if held.name == name {
+  if let Some(held) = Map.get(&base.declared, name) {
+    Metrics {
+      declared: Map.insert(
+          &base.declared,
+        name,
         Declared {
           name: held.name,
           kind: held.kind,
@@ -118,12 +134,14 @@ export fn limitedTo(base: &Metrics, name: Str, limit: Int) -> Metrics {
           bounds: held.bounds,
           seriesLimit: limit
         }
-      } else {
-        held
-      }
-    )
+      ),
+      order: base.order,
+      series: base.series,
+      refused: base.refused
+    }
+  } else {
+      *base
   }
-  Metrics{declared: declared, series: base.series, refused: base.refused}
 }
 
 fn declaring(
@@ -135,11 +153,13 @@ fn declaring(
   bounds: &Array[Int],
   limit: Int
 ) -> Metrics {
-  if Option.isSome(&declarationOf(base, name)) {
+  if Map.containsKey(&base.declared, name) {
       *base
   } else {
     Metrics {
-      declared: base.declared.push(
+      declared: Map.insert(
+          &base.declared,
+        name,
         Declared {
           name: name,
           kind: kind,
@@ -149,7 +169,8 @@ fn declaring(
           seriesLimit: limit
         }
       ),
-      series: Map.insert(&base.series, name, []),
+      order: base.order.push(name),
+      series: Map.insert(&base.series, name, Map.empty()),
       refused: base.refused
     }
   }
@@ -247,7 +268,7 @@ export fn countAt(base: &Metrics, name: Str, labels: &Array[(Str, Str)], bound: 
 
 /// How many label combinations one metric currently has.
 export fn seriesCount(base: &Metrics, name: Str) -> Int {
-  Map.getOr(&base.series, name, []).length()
+  Map.size(&Map.getOr(&base.series, name, Map.empty()))
 }
 
 /// How many measurements were refused for exceeding a metric's bound.
@@ -259,23 +280,26 @@ export fn refusedCount(base: &Metrics) -> Int { base.refused }
 
 /// What a metric was declared as.
 export fn declarationOf(base: &Metrics, name: Str) -> Option[Declared] {
-  var found: Option[Declared] = None
-  for held in base.declared { if held.name == name { found = Some(held) } }
-  found
+  Map.get(&base.declared, name)
 }
 
 /// The names of everything declared, in the order it was declared.
-export fn names(base: &Metrics) -> Array[Str] {
-  var found: Array[Str] = []
-  for held in base.declared { found = found.push(held.name) }
-  found
-}
+export fn names(base: &Metrics) -> Array[Str] { base.order }
 
 fn seriesAt(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Option[Series] {
-  let wanted = byName(labels)
-  var found: Option[Series] = None
-  for held in Map.getOr(&base.series, name, []) { if held.labels == wanted { found = Some(held) } }
-  found
+  Map.get(&Map.getOr(&base.series, name, Map.empty()), signatureOf(labels))
+}
+
+/// The one text that names a set of labels.
+///
+/// Labels are put in name order first, so two callers writing the same labels
+/// in different orders name one series rather than two. The separators cannot
+/// appear in a name or a value that reached here, so two different label sets
+/// cannot produce one signature.
+fn signatureOf(labels: &Array[(Str, Str)]) -> Str {
+  var pieces: Array[Str] = []
+  for entry in byName(labels) { pieces = pieces.push(entry[0] + "\u{1}" + entry[1]) }
+  pieces.join("\u{2}")
 }
 
 /// A metric with one series changed, or refused when that would make one too
@@ -292,35 +316,29 @@ fn changed(
   alter: fn(Series) -> Series
 ) -> Metrics {
   if let Some(declared) = declarationOf(base, name) {
-    let wanted = byName(labels)
-    let existing = Map.getOr(&base.series, name, [])
-    var replaced: Array[Series] = []
-    var matched = false
-    for held in existing {
-      if held.labels == wanted {
-        matched = true
-        replaced = replaced.push(alter(held))
-      } else {
-        replaced = replaced.push(held)
-      }
-    }
-    if matched {
+    let held = Map.getOr(&base.series, name, Map.empty())
+    let signature = signatureOf(labels)
+    if let Some(existing) = Map.get(&held, signature) {
       Metrics {
         declared: base.declared,
-        series: Map.insert(&base.series, name, replaced),
+        order: base.order,
+        series: Map.insert(&base.series, name, Map.insert(&held, signature, alter(existing))),
         refused: base.refused
       }
     } else {
-      if existing.length() >= declared.seriesLimit {
-        Metrics{declared: base.declared, series: base.series, refused: base.refused + 1}
-      } else {
+      if Map.size(&held) >= declared.seriesLimit {
         Metrics {
           declared: base.declared,
-          series: Map.insert(
-              &base.series,
-            name,
-            replaced.push(alter(Series{labels: wanted, value: 0, counts: [], total: 0}))
-          ),
+          order: base.order,
+          series: base.series,
+          refused: base.refused + 1
+        }
+      } else {
+        let started = alter(Series{labels: byName(labels), value: 0, counts: [], total: 0})
+        Metrics {
+          declared: base.declared,
+          order: base.order,
+          series: Map.insert(&base.series, name, Map.insert(&held, signature, started)),
           refused: base.refused
         }
       }
@@ -332,16 +350,18 @@ fn changed(
 
 /// The measurements in the text form a collector reads.
 export fn render(base: &Metrics) -> Str {
-  var built = ""
-  for declared in base.declared {
-    built = built + "# HELP " + declared.name + " " + declared.help + "\n"
-    built = built + "# TYPE " + declared.name + " " + Map.getOr(&KIND_NAMES, declared.kind, "untyped") + "\n"
-    built = built + "# UNIT " + declared.name + " " + Map.getOr(&UNIT_NAMES, declared.unit, "count") + "\n"
-    for held in Map.getOr(&base.series, declared.name, []) {
-      built = built + renderSeries(&declared, &held)
+  var pieces: Array[Str] = []
+  for name in base.order {
+    if let Some(declared) = Map.get(&base.declared, name) {
+      pieces = pieces.push("# HELP " + name + " " + declared.help + "\n")
+      pieces = pieces.push("# TYPE " + name + " " + Map.getOr(&KIND_NAMES, declared.kind, "untyped") + "\n")
+      pieces = pieces.push("# UNIT " + name + " " + Map.getOr(&UNIT_NAMES, declared.unit, "count") + "\n")
+      for held in Map.values(&Map.getOr(&base.series, name, Map.empty())) {
+        pieces = pieces.push(renderSeries(&declared, &held))
+      }
     }
   }
-  built
+  pieces.join("")
 }
 
 fn renderSeries(declared: &Declared, held: &Series) -> Str {

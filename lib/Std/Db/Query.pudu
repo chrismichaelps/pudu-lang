@@ -1,0 +1,359 @@
+module Std.Db.Query
+
+import Std.Option as Option
+import Std.Set as Set
+import Std.Text as Text
+
+/// A statement, and the values that travel beside it.
+///
+/// The text is built only from parts the program wrote. Everything that came
+/// from outside is in `values`, and there is no call that moves one into the
+/// other — which is what makes an injection unrepresentable here rather than
+/// prevented by a rule someone remembers at every call site.
+export type Statement = { text: Str, values: Array[Option[Str]] }
+
+/// Why a statement would not be built.
+export type QueryError
+  = BadName(Str)
+  | BadOperator(Str)
+  | Empty
+
+/// The comparisons a condition may use.
+///
+/// A set rather than arbitrary text: an operator taken from outside is as
+/// dangerous as a name taken from outside, and there are few enough that
+/// naming them costs nothing.
+const OPERATORS: Set[Str] = setOf(["=", "<>", "!=", "<", "<=", ">", ">=", "like", "ilike", "is distinct from"])
+
+/// The characters a name may be made of.
+const NAME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+
+/// The characters a name may not begin with.
+const DIGITS: Str = "0123456789"
+
+/// A statement with nothing in it.
+export fn empty() -> Statement { Statement{text: "", values: []} }
+
+/// A statement from text the program wrote, carrying no values.
+///
+/// For the parts a builder does not cover. Values still travel separately —
+/// there is no door here that takes them any other way.
+export fn text(source: Str) -> Statement { Statement{text: source, values: []} }
+
+/// The text a statement holds, which a program may read before running it.
+export fn textOf(held: &Statement) -> Str { held.text }
+
+/// The values that travel beside it.
+export fn valuesOf(held: &Statement) -> Array[Option[Str]] { held.values }
+
+/// How many values a statement carries.
+export fn valueCount(held: &Statement) -> Int { held.values.length() }
+
+/// Two statements one after the other, with the second's placeholders
+/// renumbered to follow the first's.
+export fn then(left: &Statement, right: &Statement) -> Statement {
+  Statement {
+    text: joinedText(left.text, renumbered(right.text, left.values.length())),
+    values: left.values.concat(right.values)
+  }
+}
+
+/// A statement with one more piece of text and one more value.
+///
+/// The only way a value enters a statement. The placeholder is written here
+/// rather than by the caller, so a caller cannot write one that does not
+/// correspond to a value they supplied.
+export fn withValue(base: &Statement, fragment: Str, value: Option[Str]) -> Statement {
+  Statement {
+    text: joinedText(base.text, fragment + " $" + show(base.values.length() + 1)),
+    values: base.values.push(value)
+  }
+}
+
+/// A name, admitted only when it is one.
+///
+/// A table or a column cannot be a parameter, which is why a name taken from
+/// a request is an injection point that parameters do not close. Refused
+/// rather than quoted: quoting correctly depends on the dialect, and a quoted
+/// name that was wrong is an injection that looks handled.
+export fn name(candidate: Str) -> Result[Str, QueryError] {
+  if candidate.isEmpty() {
+    Err(Empty)
+  } else {
+    if DIGITS.contains(candidate.slice(0, 1)) {
+      Err(BadName(candidate))
+    } else {
+      var good = true
+      var index = 0
+      while index < candidate.length() && good {
+        if !NAME_CHARACTERS.contains(candidate.slice(index, index + 1)) { good = false }
+        index = index + 1
+      }
+      if good { Ok(candidate) } else { Err(BadName(candidate)) }
+    }
+  }
+}
+
+/// A name chosen from a list the program wrote.
+///
+/// What a program uses when a name really does come from outside: the choice
+/// is between things the program named, so nothing outside decides anything.
+export fn oneOf(candidate: Str, permitted: &Array[Str]) -> Result[Str, QueryError] {
+  if permitted.contains(candidate) { Ok(candidate) } else { Err(BadName(candidate)) }
+}
+
+/// An operator, admitted only when it is one.
+export fn operator(candidate: Str) -> Result[Str, QueryError] {
+  let held = candidate.trim().toLower()
+  if Set.contains(&OPERATORS, held) { Ok(held) } else { Err(BadOperator(candidate)) }
+}
+
+/// Everything from a table.
+export fn from(table: Str) -> Result[Statement, QueryError] {
+  let checked = name(table) ?
+  Ok(text("select * from " + checked))
+}
+
+/// Named columns from a table.
+export fn selecting(columns: &Array[Str], table: Str) -> Result[Statement, QueryError] {
+  let checkedTable = name(table) ?
+  var listed = ""
+  var index = 0
+  while index < columns.length() {
+    let checked = name(columns[index]) ?
+    if index > 0 { listed = listed + ", " }
+    listed = listed + checked
+    index = index + 1
+  }
+  if listed.isEmpty() {
+    Err(Empty)
+  } else {
+    Ok(text("select " + listed + " from " + checkedTable))
+  }
+}
+
+/// How many rows a table holds.
+export fn counting(table: Str) -> Result[Statement, QueryError] {
+  let checked = name(table) ?
+  Ok(text("select count(*) as count from " + checked))
+}
+
+/// A condition on a column, with the value travelling beside the statement.
+export fn matching(
+  base: &Statement,
+  column: Str,
+  comparison: Str,
+  value: Option[Str]
+) -> Result[Statement, QueryError] {
+  let checkedColumn = name(column) ?
+  let checkedOperator = operator(comparison) ?
+  Ok(withValue(base, "where " + checkedColumn + " " + checkedOperator, value))
+}
+
+/// A further condition that must also hold.
+export fn also(
+  base: &Statement,
+  column: Str,
+  comparison: Str,
+  value: Option[Str]
+) -> Result[Statement, QueryError] {
+  let checkedColumn = name(column) ?
+  let checkedOperator = operator(comparison) ?
+  Ok(withValue(base, "and " + checkedColumn + " " + checkedOperator, value))
+}
+
+/// A further condition where either may hold.
+export fn either(
+  base: &Statement,
+  column: Str,
+  comparison: Str,
+  value: Option[Str]
+) -> Result[Statement, QueryError] {
+  let checkedColumn = name(column) ?
+  let checkedOperator = operator(comparison) ?
+  Ok(withValue(base, "or " + checkedColumn + " " + checkedOperator, value))
+}
+
+/// A condition that a column is one of several values.
+///
+/// Each value is its own parameter, so a list from outside cannot become part
+/// of the text however long it is.
+export fn matchingOneOf(
+  base: &Statement,
+  column: Str,
+  values: &Array[Option[Str]]
+) -> Result[Statement, QueryError] {
+  let checkedColumn = name(column) ?
+  if values.length() == 0 {
+    // Nothing is in an empty list, and saying so is better than building a
+    // statement the database refuses to parse.
+    Ok(Statement{text: joinedText(base.text, "where false"), values: base.values})
+  } else {
+    var built = *base
+    var listed = ""
+    var index = 0
+    while index < values.length() {
+      if index > 0 { listed = listed + ", " }
+      listed = listed + "$" + show(built.values.length() + 1)
+      built = Statement{text: built.text, values: built.values.push(values[index])}
+      index = index + 1
+    }
+    Ok(Statement{text: joinedText(built.text, "where " + checkedColumn + " in (" + listed + ")"), values: built.values})
+  }
+}
+
+/// A condition that a column holds nothing.
+export fn matchingMissing(base: &Statement, column: Str) -> Result[Statement, QueryError] {
+  let checked = name(column) ?
+  Ok(Statement{text: joinedText(base.text, "where " + checked + " is null"), values: base.values})
+}
+
+/// The order rows come back in.
+export fn orderBy(base: &Statement, column: Str, descending: Bool) -> Result[Statement, QueryError] {
+  let checked = name(column) ?
+  Ok(
+    Statement {
+      text: joinedText(base.text, "order by " + checked + if descending { " desc" } else { " asc" }),
+      values: base.values
+    }
+  )
+}
+
+/// At most this many rows.
+///
+/// A number rather than a parameter, because it is written by the program and
+/// a database plans better when it knows it. It is a whole number by its type,
+/// so nothing else can arrive here.
+export fn limit(base: &Statement, count: Int) -> Statement {
+  Statement{text: joinedText(base.text, "limit " + show(count)), values: base.values}
+}
+
+/// Starting after this many rows.
+export fn offset(base: &Statement, count: Int) -> Statement {
+  Statement{text: joinedText(base.text, "offset " + show(count)), values: base.values}
+}
+
+/// A row added to a table, from the columns and the values that fill them.
+export fn insert(
+  table: Str,
+  columns: &Array[Str],
+  values: &Array[Option[Str]]
+) -> Result[Statement, QueryError] {
+  let checkedTable = name(table) ?
+  if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
+  var listed = ""
+  var placeholders = ""
+  var index = 0
+  while index < columns.length() {
+    let checked = name(columns[index]) ?
+    if index > 0 {
+      listed = listed + ", "
+      placeholders = placeholders + ", "
+    }
+    listed = listed + checked
+    placeholders = placeholders + "$" + show(index + 1)
+    index = index + 1
+  }
+  Ok(
+    Statement {
+      text: "insert into " + checkedTable + " (" + listed + ") values (" + placeholders + ")",
+      values: *values
+    }
+  )
+}
+
+/// Columns of a table set to new values.
+///
+/// The conditions that choose which rows are added afterwards, so their
+/// placeholders follow the ones the assignments used.
+export fn update(
+  table: Str,
+  columns: &Array[Str],
+  values: &Array[Option[Str]]
+) -> Result[Statement, QueryError] {
+  let checkedTable = name(table) ?
+  if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
+  var assignments = ""
+  var index = 0
+  while index < columns.length() {
+    let checked = name(columns[index]) ?
+    if index > 0 { assignments = assignments + ", " }
+    assignments = assignments + checked + " = $" + show(index + 1)
+    index = index + 1
+  }
+  Ok(Statement{text: "update " + checkedTable + " set " + assignments, values: *values})
+}
+
+/// Rows removed from a table.
+export fn deleteFrom(table: Str) -> Result[Statement, QueryError] {
+  let checked = name(table) ?
+  Ok(text("delete from " + checked))
+}
+
+/// A statement that answers with the rows it changed.
+export fn returning(base: &Statement, columns: &Array[Str]) -> Result[Statement, QueryError] {
+  var listed = ""
+  var index = 0
+  while index < columns.length() {
+    let checked = name(columns[index]) ?
+    if index > 0 { listed = listed + ", " }
+    listed = listed + checked
+    index = index + 1
+  }
+  if listed.isEmpty() {
+    Err(Empty)
+  } else {
+    Ok(Statement{text: joinedText(base.text, "returning " + listed), values: base.values})
+  }
+}
+
+/// What a refusal says.
+export fn explain(problem: &QueryError) -> Str {
+  match problem {
+    case BadName(candidate) =>
+    "that is not a name a statement may hold: " + candidate
+    case BadOperator(candidate) => "that is not a comparison this builds: " + candidate
+    case Empty => "the statement names nothing to act on"
+  }
+}
+
+fn joinedText(left: Str, right: Str) -> Str {
+  if left.isEmpty() { right } else { left + " " + right }
+}
+
+/// A fragment's placeholders moved along by however many already exist.
+///
+/// Only the numbers this module wrote are moved: the count is carried in the
+/// statement rather than read back out of the text, so a placeholder that
+/// appears inside a value is never one of them, because a value is never in
+/// the text.
+fn renumbered(source: Str, by: Int) -> Str {
+  if by == 0 {
+    source
+  } else {
+    var built = ""
+    var index = 0
+    while index < source.length() {
+      let character = source.slice(index, index + 1)
+      if character == "$" {
+        var digits = ""
+        var ahead = index + 1
+        while ahead < source.length() && DIGITS.contains(source.slice(ahead, ahead + 1)) {
+          digits = digits + source.slice(ahead, ahead + 1)
+          ahead = ahead + 1
+        }
+        if digits.isEmpty() {
+          built = built + character
+          index = index + 1
+        } else {
+          built = built + "$" + show(Option.unwrapOr(Text.countOf(digits), 0) + by)
+          index = ahead
+        }
+      } else {
+        built = built + character
+        index = index + 1
+      }
+    }
+    built
+  }
+}

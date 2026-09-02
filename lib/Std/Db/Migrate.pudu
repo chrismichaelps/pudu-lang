@@ -6,6 +6,7 @@ import Std.Db.Session as Session
 import Std.List as List
 import Std.Option as Option
 import Std.Result as Result
+import Std.Text as Text
 
 /// One change to a schema.
 ///
@@ -59,7 +60,7 @@ export fn migration(version: Int, name: Str, statements: &Array[Str]) -> Migrati
 /// ran the old text and one that ran the new both report the same version, and
 /// nothing afterwards can tell that their schemas differ.
 export fn digestOf(step: &Migration) -> Str {
-  Crypto.sha256Hex(joinedBy(&step.statements, ";\n"))
+  Crypto.sha256Hex(step.statements.join(";\n"))
 }
 
 /// The migrations in version order, which is the order they are considered in.
@@ -263,7 +264,7 @@ fn asApplied(result: &Db.Rows) -> Array[Applied] {
   while index < Db.rowCount(result) {
     found = found.push(
       Applied {
-        version: Option.unwrapOr(wholeOf(Db.value(result, index, "version")), 0),
+        version: Option.unwrapOr(countOf(Db.value(result, index, "version")), 0),
         name: Option.unwrapOr(Db.value(result, index, "name"), ""),
         digest: Option.unwrapOr(Db.value(result, index, "digest"), "")
       }
@@ -291,34 +292,8 @@ export fn explain(problem: &MigrationError) -> Str {
 
 fn emptyRows() -> Db.Rows { Db.Rows{columns: [], rows: [], tag: ""} }
 
-fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { built = built + separator }
-    built = built + pieces[index]
-    index = index + 1
-  }
-  built
-}
-
-fn wholeOf(digits: Option[Str]) -> Option[Int] {
-  if let Some(digit) = digits {
-    let trimmed = digit.trim()
-    if trimmed.isEmpty() {
-      None
-    } else {
-      var total = 0
-      var index = 0
-      var good = true
-      while index < trimmed.length() && good {
-        let digit = "0123456789".indexOf(trimmed.slice(index, index + 1))
-        if digit < 0 { good = false } else { total = total * 10 + digit }
-        index = index + 1
-      }
-      if good { Some(total) } else { None }
-    }
-  } else {
-    None
-  }
+/// A column that holds a count, when it is there and is one.
+fn countOf(digits: Option[Str]) -> Option[Int] {
+  let held = digits ?
+  Text.countOf(held)
 }

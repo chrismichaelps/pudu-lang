@@ -6,6 +6,7 @@ import Std.Net as Net
 import Std.Option as Option
 import Std.Random as Random
 import Std.Result as Result
+import Std.Text as Text
 
 /// Opening a connection and keeping it: the handshake, what the server asks
 /// for, and the messages that cross afterwards.
@@ -322,7 +323,7 @@ fn scram(start: Connection, settings: &Config) -> Result[Connection, DbError] {
   }
 
   let saltBytes = Result.mapErr(ByteSeq.decodeBase64(salt), asBytes) ?
-  let iterations = Option.unwrapOr(wholeOf(rounds), 4096)
+  let iterations = Option.unwrapOr(Text.countOf(rounds), 4096)
   let salted = deriveKey(settings.password.toBytes(), saltBytes, iterations, 32)
   let clientKey = hmacSha256Of(salted, "Client Key".toBytes())
   let storedKey = sha256Of(clientKey)
@@ -388,20 +389,3 @@ export fn emptyMessage() -> Wire.Message {
 }
 
 fn textOf(payload: &Bytes) -> Str { Option.unwrapOr(payload.toText(), "") }
-
-/// A run of digits as a number, or nothing when it holds something else.
-fn wholeOf(text: Str) -> Option[Int] {
-  if text.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < text.length() && good {
-      let digit = "0123456789".indexOf(text.slice(index, index + 1))
-      if digit < 0 { good = false } else { total = total * 10 + digit }
-      index = index + 1
-    }
-    if good { Some(total) } else { None }
-  }
-}

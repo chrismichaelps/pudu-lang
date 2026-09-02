@@ -84,18 +84,13 @@ export fn when(condition: Bool, view: Html) -> Html {
 
 /// The class attribute, from the classes rather than from their spelling, so a
 /// caller adding one does not also maintain the separators.
-export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", joinedBy(names, " ")) }
+export fn classes(names: &Array[Str]) -> (Str, Str) { ("class", names.join(" ")) }
 
 /// The style attribute, from its declarations.
 export fn style(declarations: &Array[(Str, Str)]) -> (Str, Str) {
-  var built = ""
-  var index = 0
-  while index < declarations.length() {
-    if index > 0 { built = built + "; " }
-    built = built + declarations[index][0] + ": " + declarations[index][1]
-    index = index + 1
-  }
-  ("style", built)
+  var pieces: Array[Str] = []
+  for entry in declarations { pieces = pieces.push(entry[0] + ": " + entry[1]) }
+  ("style", pieces.join("; "))
 }
 
 /// An attribute whose presence is its meaning, written as its own name.
@@ -191,15 +186,25 @@ export fn document(view: &Html) -> Str { "<!DOCTYPE html>\n" + render(view) }
 /// The ampersand goes first: escaping it after the others would escape the
 /// escapes and every entity would arrive doubled.
 export fn escape(content: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < content.length() {
-    let character = content.slice(index, index + 1)
-    built = built + escaped(character)
-    index = index + 1
+  if content.spanNotOf(ESCAPABLE) == content.length() {
+    content
+  } else {
+    content
+      .replace("&", "&amp;")
+      .replace("<", "&lt;")
+      .replace(">", "&gt;")
+      .replace("\"", "&quot;")
+      .replace("'", "&#39;")
   }
-  built
 }
+
+/// The characters that cannot be written as themselves.
+///
+/// Held as one string so deciding whether text needs escaping is a single
+/// pass over it, rather than one pass per character that might have to
+/// change. Most text on a page has nothing to escape, and that case is the
+/// one worth making cheap.
+const ESCAPABLE: Str = "&<>\"'"
 
 /// An attribute value, which escapes both kinds of quote because which one
 /// surrounds it is not something the value can know.
@@ -218,9 +223,9 @@ fn escaped(character: Str) -> Str {
 }
 
 fn renderAll(children: &Array[Html]) -> Str {
-  var built = ""
-  for child in children { built = built + render(&child) }
-  built
+  var pieces: Array[Str] = []
+  for child in children { pieces = pieces.push(render(&child)) }
+  pieces.join("")
 }
 
 fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Str {
@@ -233,20 +238,9 @@ fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Htm
 }
 
 fn renderAttributes(attributes: &Array[(Str, Str)]) -> Str {
-  var built = ""
+  var pieces: Array[Str] = []
   for entry in attributes {
-    built = built + " " + entry[0] + "=\"" + escapeAttribute(entry[1]) + "\""
+    pieces = pieces.push(" " + entry[0] + "=\"" + escapeAttribute(entry[1]) + "\"")
   }
-  built
-}
-
-fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { built = built + separator }
-    built = built + pieces[index]
-    index = index + 1
-  }
-  built
+  pieces.join("")
 }

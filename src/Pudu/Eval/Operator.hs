@@ -435,6 +435,7 @@ arrayMethods =
   , ("remove", ArrayRemove)
   , ("slice", ArraySlice)
   , ("concat", ArrayConcat)
+  , ("join", ArrayJoin)
   , ("reverse", ArrayReverse)
   , ("map", ArrayMap)
   , ("filter", ArrayFilter)

@@ -302,6 +302,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
 | `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
+| `Std.Db.Query` | 22 | statements built so a value can only ever be a parameter |
 | `Std.Db.Migrate` | 11 | versioned, digested, transactional schema changes, provisional |
 | `Std.Db.Session` | 13 | connecting, SCRAM, and one message at a time, provisional |
 | `Std.Db` | 25 | queries, rows, transactions, savepoints, and pools, provisional |

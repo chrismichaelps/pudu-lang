@@ -274,6 +274,7 @@ data ArrayMethod
   | ArrayRemove
   | ArraySlice
   | ArrayConcat
+  | ArrayJoin
   | ArrayReverse
   | ArrayMap
   | ArrayFilter
@@ -492,6 +493,7 @@ arrayMethodName method = case method of
   ArrayRemove -> "remove"
   ArraySlice -> "slice"
   ArrayConcat -> "concat"
+  ArrayJoin -> "join"
   ArrayReverse -> "reverse"
   ArrayMap -> "map"
   ArrayFilter -> "filter"

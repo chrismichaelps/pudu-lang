@@ -8,6 +8,7 @@ import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
+import Std.Text as Text
 
 /// A column of a result.
 export type Column = { name: Str, oid: Int }
@@ -170,7 +171,7 @@ export fn rowCount(result: &Rows) -> Int { result.rows.length() }
 export fn affected(result: &Rows) -> Int {
   let pieces = result.tag.split(" ")
   if pieces.length() == 0 { 0 } else {
-    Option.unwrapOr(wholeOf(pieces[pieces.length() - 1]), 0)
+    Option.unwrapOr(Text.countOf(pieces[pieces.length() - 1]), 0)
   }
 }
 
@@ -378,19 +379,3 @@ export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
 }
 
 fn asChannel(problem: Channel.ChannelError) -> Session.DbError { Other(show(problem)) }
-
-fn wholeOf(text: Str) -> Option[Int] {
-  if text.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < text.length() && good {
-      let digit = "0123456789".indexOf(text.slice(index, index + 1))
-      if digit < 0 { good = false } else { total = total * 10 + digit }
-      index = index + 1
-    }
-    if good { Some(total) } else { None }
-  }
-}

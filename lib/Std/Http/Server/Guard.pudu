@@ -149,10 +149,10 @@ fn sharingHeaders(
   // The answer differs by who asked, so anything holding it must be told that.
   headers = headers.push(("Vary", "Origin"))
   if permitted.methods.length() > 0 {
-    headers = headers.push(("Access-Control-Allow-Methods", joinedBy(&permitted.methods, ", ")))
+    headers = headers.push(("Access-Control-Allow-Methods", permitted.methods.join(", ")))
   }
   if permitted.headers.length() > 0 {
-    headers = headers.push(("Access-Control-Allow-Headers", joinedBy(&permitted.headers, ", ")))
+    headers = headers.push(("Access-Control-Allow-Headers", permitted.headers.join(", ")))
   }
   if permitted.credentials {
     headers = headers.push(("Access-Control-Allow-Credentials", "true"))
@@ -277,15 +277,4 @@ fn listed(origins: &Array[Str], origin: Str) -> Bool {
   var found = false
   for held in origins { if held.trim().toLower() == origin.trim().toLower() { found = true } }
   found
-}
-
-fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { built = built + separator }
-    built = built + pieces[index]
-    index = index + 1
-  }
-  built
 }

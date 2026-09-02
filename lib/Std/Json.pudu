@@ -1,5 +1,8 @@
 module Std.Json
 
+/// Aliased away from `Text` because this module declares a variant of that
+/// name, and a qualifier and a constructor cannot share one.
+import Std.Text as Reading
 /// A JSON value.
 /// Numbers are whole here: the language's floating types exist, but a decoder
 /// that silently turned `1` into a float would lose the distinction a caller
@@ -343,26 +346,8 @@ fn readNumber(source: Str, start: Int) -> Result[(Json, Int), JsonError] {
   let written = source.slice(start, index)
   if written.isEmpty() || written == "-" { return Err(Unexpected(start, "a number")) }
   if fractional { return Ok((Fractional(written), index)) }
-  let Some(number) = wholeOf(written) else { return Err(Unexpected(start, "a number")) }
+  let Some(number) = Reading.wholeOf(written) else { return Err(Unexpected(start, "a number")) }
   Ok((Number(number), index))
-}
-
-/// Digits read as a whole number, with a leading minus admitted.
-fn wholeOf(written: Str) -> Option[Int] {
-  var negative = false
-  var body = written
-  if body.startsWith("-") {
-    negative = true
-    body = body.slice(1, body.length())
-  }
-  if body.isEmpty() { None } else {
-    var total = 0
-    for character in body.chars() {
-      if !isDigitChar(character) { return None }
-      total = total * 10 + (character.code() - 48)
-    }
-    if negative { Some(0 - total) } else { Some(total) }
-  }
 }
 
 /// A quoted string, with the escapes the format defines.

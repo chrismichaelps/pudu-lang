@@ -3,6 +3,7 @@ module Std.Validate
 import Std.Map as Map
 import Std.Option as Option
 import Std.Set as Set
+import Std.Text as Text
 
 /// What a value must be, and what to say when it is not.
 ///
@@ -137,28 +138,7 @@ export fn render(held: &Report) -> Str {
 }
 
 /// A value read as a whole number, once the rules said it is one.
-export fn wholeOf(value: Str) -> Option[Int] {
-  let trimmed = value.trim()
-  let negative = trimmed.startsWith("-")
-  let body = if negative { trimmed.drop(1) } else { trimmed }
-  if body.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < body.length() && good {
-      let character = body.slice(index, index + 1)
-      if Set.contains(&DIGITS, character) {
-        total = total * 10 + "0123456789".indexOf(character)
-      } else {
-        good = false
-      }
-      index = index + 1
-    }
-    if good { Some(if negative { 0 - total } else { total }) } else { None }
-  }
-}
+export fn wholeOf(value: Str) -> Option[Int] { Text.wholeOf(value) }
 
 /// Whether a value satisfies a rule.
 export fn satisfied(value: Str, rule: &Rule) -> Bool {
@@ -196,21 +176,10 @@ export fn describe(rule: &Rule) -> Str {
     case AtLeast(count) => "at least " + show(count) + " characters"
     case AtMost(count) => "at most " + show(count) + " characters"
     case Exactly(count) => "exactly " + show(count) + " characters"
-    case OneOf(options) => "one of " + joinedBy(&options, ", ")
+    case OneOf(options) => "one of " + options.join(", ")
     case Whole => "a whole number"
     case Between(low, high) => "a number from " + show(low) + " to " + show(high)
     case Only(named, _allowed) => named
     case Judged(named, _holds) => named
   }
-}
-
-fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { built = built + separator }
-    built = built + pieces[index]
-    index = index + 1
-  }
-  built
 }

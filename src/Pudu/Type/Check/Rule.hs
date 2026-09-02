@@ -211,7 +211,7 @@ builtinMethodNames =
   , "drop", "take", "spanOf", "spanNotOf"
   , "slice", "trim", "toUpper", "toLower", "replace", "repeat", "split", "chars"
   , "lines", "reverse", "get", "push", "pop", "insert", "remove", "concat"
-  , "map", "filter", "reduce", "at", "toArray", "toText", "toBytes"
+  , "map", "filter", "reduce", "at", "toArray", "toText", "toBytes", "join"
   ]
 
 {-| The key the enclosing function's return type is filed under.
@@ -734,6 +734,7 @@ arrayMethodType spanValue member element = case member of
   "remove" -> pure (FunctionTypeValue False [integerType] arrayType)
   "slice" -> pure (FunctionTypeValue False [integerType, integerType] arrayType)
   "concat" -> pure (FunctionTypeValue False [arrayType] arrayType)
+  "join" -> pure (FunctionTypeValue False [stringType] stringType)
   "reverse" -> pure (FunctionTypeValue False [] arrayType)
   "map" -> do
     result <- freshVariable

@@ -298,20 +298,9 @@ export fn describe(requirement: &Requirement) -> Str {
     case Anyone => "anyone"
     case Someone => "anyone identified"
     case HoldingRole(role) => "the role " + role
-    case HoldingAll(roles) => "every one of " + joinedBy(&roles, ", ")
-    case HoldingAny(roles) => "any one of " + joinedBy(&roles, ", ")
+    case HoldingAll(roles) => "every one of " + roles.join(", ")
+    case HoldingAny(roles) => "any one of " + roles.join(", ")
     case Matching(name, value) => name + " being " + value
     case Judged(named, _judge) => named
   }
-}
-
-fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
-  var built = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { built = built + separator }
-    built = built + pieces[index]
-    index = index + 1
-  }
-  built
 }

@@ -257,6 +257,8 @@ testProgramEvaluation = do
   lasting <- runEntry "test-fixtures/stdlib/UsesSocket.pudu"
   driven <- runEntry "test-fixtures/stdlib/UsesLive.pudu"
   scoped2 <- runEntry "test-fixtures/stdlib/UsesVariantScope.pudu"
+  statements <- runEntry "test-fixtures/stdlib/UsesQuery.pudu"
+  numbers <- runEntry "test-fixtures/stdlib/UsesNumberText.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -547,6 +549,20 @@ testProgramEvaluation = do
     , counterexample
         "a pattern matches the variant the module named"
         (scoped2 === Just "11")
+    {-| That a value cannot become part of a statement: a value spelling a
+        whole statement stays one parameter, and the one place a parameter
+        cannot help — a table or column name — is refused rather than quoted,
+        since quoting correctly depends on the dialect and a quoted name that
+        was wrong is an injection that looks handled. -}
+    , counterexample
+        "a value cannot become part of a statement"
+        (statements === Just "53")
+    {-| That reading a number from text is two questions: a whole number may be
+        below nothing, a count may not. Twelve modules each carried a copy of
+        this and they did not agree, silently. -}
+    , counterexample
+        "a count and a whole number are read differently"
+        (numbers === Just "25")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

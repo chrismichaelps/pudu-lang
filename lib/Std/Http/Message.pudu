@@ -1,6 +1,7 @@
 module Std.Http.Message
 
 import Std.Http as Http
+import Std.Text as Text
 
 /// What stopped a message from being read.
 export type MessageError
@@ -162,7 +163,7 @@ fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
 fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
   let parts = splitSpaces(line)
   if parts.length() < 2 { Err(BadStatusLine(line)) } else {
-    match wholeOf(parts[1]) {
+    match Text.countOf(parts[1]) {
       case Some(code) => {
         var reason = ""
         var index = 2
@@ -212,17 +213,6 @@ fn hexOf(text: Str) -> Option[Int] {
       let found = "0123456789abcdef".indexOf(character.toText())
       if found < 0 { return None }
       total = total * 16 + found
-    }
-    Some(total)
-  }
-}
-
-fn wholeOf(text: Str) -> Option[Int] {
-  if text.isEmpty() { None } else {
-    var total = 0
-    for character in text.chars() {
-      if character < '0' || character > '9' { return None }
-      total = total * 10 + (character.code() - 48)
     }
     Some(total)
   }

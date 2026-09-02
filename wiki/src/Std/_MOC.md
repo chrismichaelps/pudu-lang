@@ -24,6 +24,7 @@ tags: [moc, module, stdlib]
 - [[Std Net]] — streaming-first TCP listeners and connections.
 - [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
+- [[Std Db Query]] — statements in which a value cannot become part of what runs.
 - [[Std Db Migrate]] — bringing a schema to what the program expects, once and never half way.
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
 - [[Std Db]] — queries, rows, transactions, and pools over a session.

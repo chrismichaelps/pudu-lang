@@ -1,6 +1,7 @@
 module Std.Time.Format
 
 import Std.Option as Option
+import Std.Text as Text
 import Std.Time.Format.Civil as Civil
 
 /// Why text does not name a time.
@@ -226,7 +227,7 @@ fn fractionOf(rest: Str) -> Int {
     }
     var scaled = digits.take(3)
     while scaled.length() < 3 { scaled = scaled + "0" }
-    Option.unwrapOr(wholeOf(scaled), 0)
+    Option.unwrapOr(Text.countOf(scaled), 0)
   }
 }
 
@@ -306,24 +307,7 @@ fn digitsAt(text: Str, at: Int, width: Int) -> Result[Int, FormatError] {
     Err(Malformed(text))
   } else {
     let piece = text.slice(at, at + width)
-    if let Some(value) = wholeOf(piece) { Ok(value) } else { Err(Malformed(piece)) }
-  }
-}
-
-/// A run of digits as a number, or nothing when it holds something else.
-fn wholeOf(text: Str) -> Option[Int] {
-  if text.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < text.length() && good {
-      let digit = "0123456789".indexOf(text.slice(index, index + 1))
-      if digit < 0 { good = false } else { total = total * 10 + digit }
-      index = index + 1
-    }
-    if good { Some(total) } else { None }
+    if let Some(value) = Text.countOf(piece) { Ok(value) } else { Err(Malformed(piece)) }
   }
 }
 

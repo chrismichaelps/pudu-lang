@@ -1,0 +1,63 @@
+module UsesNumberText
+
+import Std.Option as Option
+import Std.Text as Text
+
+/// That reading a number from text has two meanings, and they are two
+/// functions.
+///
+/// Twelve modules each carried their own copy of this and they did not agree:
+/// some admitted a leading sign and some could not, because a port and a
+/// length are never below nothing. The disagreement was silent. Here the two
+/// readings are named, and the difference between them is what these checks
+/// pin.
+export fn main() -> Int {
+  var held = 0
+
+  // A whole number may be below nothing, because a temperature, a balance,
+  // and an offset all legitimately are.
+  if Option.unwrapOr(Text.wholeOf("42"), 0) == 42 { held = held + 1 }
+  if Option.unwrapOr(Text.wholeOf("-7"), 0) == -7 { held = held + 1 }
+  if Option.unwrapOr(Text.wholeOf("+7"), 0) == 7 { held = held + 1 }
+  if Option.unwrapOr(Text.wholeOf("0"), -1) == 0 { held = held + 1 }
+
+  // A count may not. This is the reading a length, a port, or a quantity
+  // wants: minus one is not a short length, it is not a length.
+  if Option.unwrapOr(Text.countOf("42"), 0) == 42 { held = held + 1 }
+  if Option.isNone(&Text.countOf("-7")) { held = held + 1 }
+  if Option.isNone(&Text.countOf("+7")) { held = held + 1 }
+  if Option.unwrapOr(Text.countOf("0"), -1) == 0 { held = held + 1 }
+
+  // Surrounding space is ignored by both, because a value read from a header
+  // or a configuration file carries it and it means nothing.
+  if Option.unwrapOr(Text.wholeOf("  42  "), 0) == 42 { held = held + 1 }
+  if Option.unwrapOr(Text.countOf("  42  "), 0) == 42 { held = held + 1 }
+
+  // Anything else means the text does not spell a number. A reader that
+  // stopped at the first character it did not recognise would read this as
+  // twelve, which is how a wrong number arrives looking like a right one.
+  if Option.isNone(&Text.wholeOf("12a")) { held = held + 1 }
+  if Option.isNone(&Text.countOf("12a")) { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("4.2")) { held = held + 1 }
+  if Option.isNone(&Text.countOf("4.2")) { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("1 000")) { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("")) { held = held + 1 }
+  if Option.isNone(&Text.countOf("")) { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("-")) { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("   ")) { held = held + 1 }
+
+  // Joining is one pass rather than an append per piece, which is what makes
+  // assembling a page, a statement, or a report cost what it should.
+  if ["a", "b", "c"].join("") == "abc" { held = held + 1 }
+  if ["a", "b", "c"].join(", ") == "a, b, c" { held = held + 1 }
+  if ["only"].join(", ") == "only" { held = held + 1 }
+  if emptyPieces().join(", ").isEmpty() { held = held + 1 }
+  if Text.join(&["a", "b"], "-") == "a-b" { held = held + 1 }
+
+  // A separator appears between pieces and never around them.
+  if ["", "a", ""].join("|") == "|a|" { held = held + 1 }
+
+  held
+}
+
+fn emptyPieces() -> Array[Str] { [] }

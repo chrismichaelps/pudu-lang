@@ -460,6 +460,25 @@ callArrayMethod apply spanValue method receiver arguments = case method of
     [other@(ArrayValue _)] -> pure (arrayConcat receiver other)
     [_] -> abortAt (Just spanValue) "E7001" "concat expects an array" Nothing
     _ -> wrongArity "concat" 1
+  {-| Every element joined by a separator, in one pass.
+
+      Written here rather than as a loop in the library because a loop that
+      appends to text copies everything it has built so far on each step, so
+      the cost grows with the square of the result. Assembling a page, a
+      statement, or a report is exactly that shape, and at the sizes those
+      reach the difference is not a constant factor. -}
+  ArrayJoin -> case arguments of
+    [StrValue separator] -> case arrayToList receiver of
+      Just values -> do
+        pieces <- mapM asText values
+        pure (StrValue (Text.intercalate separator pieces))
+      Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
+    [_] -> abortAt (Just spanValue) "E7001" "join expects text" Nothing
+    _ -> wrongArity "join" 1
+   where
+    asText value = case value of
+      StrValue held -> pure held
+      _ -> abortAt (Just spanValue) "E7001" "join expects an array of text" Nothing
   ArrayReverse -> case arguments of
     [] -> pure (arrayReverse receiver)
     _ -> wrongArity "reverse" 0

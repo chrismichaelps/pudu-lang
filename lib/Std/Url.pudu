@@ -1,5 +1,6 @@
 module Std.Url
 
+import Std.Text as Text
 /// The parts of a URL, each already decoded.
 export type Url = {
   scheme: Str,
@@ -225,7 +226,7 @@ fn splitPort(authority: Str) -> Result[(Str, Option[Int]), UrlError] {
   let colon = authority.indexOf(":")
   if colon < 0 { Ok((authority.toLower(), None)) } else {
     let written = authority.slice(colon + 1, authority.length())
-    match wholeOf(written) {
+    match Text.countOf(written) {
       case Some(number) => Ok((authority.slice(0, colon).toLower(), Some(number)))
       case None => Err(BadPort(written))
     }
@@ -283,15 +284,4 @@ fn hexPair(text: Str) -> Option[Int] {
     total = total * 16 + found
   }
   Some(total)
-}
-
-fn wholeOf(text: Str) -> Option[Int] {
-  if text.isEmpty() { None } else {
-    var total = 0
-    for character in text.chars() {
-      if character < '0' || character > '9' { return None }
-      total = total * 10 + (character.code() - 48)
-    }
-    Some(total)
-  }
 }

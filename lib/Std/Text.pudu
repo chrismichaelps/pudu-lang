@@ -50,16 +50,7 @@ export fn padRight(value: Str, width: Int, filler: Str) -> Str {
 }
 
 /// Every piece joined with a separator between them.
-export fn join(pieces: &Array[Str], separator: Str) -> Str {
-  var out = ""
-  var index = 0
-  while index < pieces.length() {
-    if index > 0 { out = out + separator } else {}
-    out = out + pieces[index]
-    index = index + 1
-  }
-  out
-}
+export fn join(pieces: &Array[Str], separator: Str) -> Str { pieces.join(separator) }
 
 /// The pieces of text separated by a separator, with empty pieces removed.
 /// The built-in `split` keeps them, because "a,,b" has three fields; this is
@@ -527,3 +518,44 @@ export fn fromLines(lines: &Array[Str]) -> Str { join(lines, "\n") }
 
 /// Words joined with single spaces between them.
 export fn fromWords(pieces: &Array[Str]) -> Str { join(pieces, " ") }
+
+/// The whole number this text spells, or nothing.
+///
+/// A leading sign is admitted, because a temperature, a balance, and an offset
+/// are all legitimately below nothing. Surrounding space is ignored; anything
+/// else in the text means the text does not spell a number, and answering
+/// nothing is the honest reading — a reader that stopped at the first
+/// character it did not recognise would read "12a" as twelve.
+export fn wholeOf(value: Str) -> Option[Int] {
+  let trimmed = value.trim()
+  let negative = trimmed.startsWith("-")
+  let body = if negative || trimmed.startsWith("+") { trimmed.drop(1) } else { trimmed }
+  let total = digitsOf(body) ?
+  Some(if negative { 0 - total } else { total })
+}
+
+/// The count this text spells, or nothing.
+///
+/// A count is never below nothing, so a sign is not admitted rather than
+/// admitted and then rejected somewhere later. This is the reading a length, a
+/// port, a quantity, or an index wants: `-1` is not a short length, it is not a
+/// length, and the difference is worth having in the type of the answer rather
+/// than in a check every caller remembers.
+export fn countOf(value: Str) -> Option[Int] { digitsOf(value.trim()) }
+
+/// The digits of text that is nothing but digits.
+fn digitsOf(body: Str) -> Option[Int] {
+  if body.isEmpty() {
+    None
+  } else {
+    var total = 0
+    var index = 0
+    var good = true
+    while index < body.length() && good {
+      let digit = "0123456789".indexOf(body.slice(index, index + 1))
+      if digit < 0 { good = false } else { total = total * 10 + digit }
+      index = index + 1
+    }
+    if good { Some(total) } else { None }
+  }
+}
