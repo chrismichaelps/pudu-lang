@@ -5,17 +5,32 @@
   "version": "0.1.0",
   "publisher": "pudu-lang",
   "license": "MIT",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:pudu"],
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:pudu"
+  ],
   "main": "./src/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "pudu",
-        "aliases": ["Pudu"],
-        "extensions": [".pudu"],
-        "configuration": "./language-configuration.json"
+        "aliases": [
+          "Pudu"
+        ],
+        "extensions": [
+          ".pudu"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/pudu-file.png",
+          "dark": "./icons/pudu-file.png"
+        }
       }
     ],
     "grammars": [

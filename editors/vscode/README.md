@@ -11,6 +11,15 @@ That is deliberate: an editor and a command line that disagree about what a
 program means is worse than an editor that says nothing, and a second analyser
 written for the editor would drift from the first within a release.
 
+## The file icon
+
+A `.pudu` file carries the language's own mark, so a project's files are
+distinguishable at a glance in the explorer rather than all wearing the same
+blank page. The icon is contributed by the language rather than by a file icon
+theme, which means it appears whatever theme the reader has chosen — a theme
+that names its own icon for `.pudu` still wins, which is correct, because that
+is the reader's choice rather than ours.
+
 ## Installing
 
 1. Build the compiler and put it on your `PATH`:
