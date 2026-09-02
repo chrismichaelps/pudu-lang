@@ -49,6 +49,7 @@ replProperties =
   , ("inspection reports the session context without changing it", testInspection)
   , ("describing a name reports how the session declared it", testDescribe)
   , ("kinds report declared arity", testKinds)
+  , ("inspection preserves higher-kinded parameter arity", testHigherKindedInspection)
   , ("completion offers commands paths and session names", testCompletion)
   , ("completion offers what the value before the dot carries", testMemberCompletion)
   , ("type inspection stops before evaluation", testStaticTypeInspection)
@@ -608,6 +609,56 @@ testKinds = do
         , counterexample
             "an unknown type says so"
             (describeKindLines moduleValue "Nope" === ["not in scope: type 'Nope'"])
+        ]
+
+{-| A parameter that stands for a constructor is described as one.
+
+    Rendering `F[_]` as `F` describes a different declaration — one taking a
+    type where this one takes something a type is applied to — and a reader
+    asking what a trait accepts is asking exactly that. The kind parenthesises
+    the accepted constructor, without which a trait over one unary constructor
+    and a type over two ordinary parameters read identically. -}
+testHigherKindedInspection :: IO Property
+testHigherKindedInspection = do
+  session <-
+    feed
+      emptySession
+      [ "trait Higher[F[_]] {}"
+      , "trait Two[F[_, _]] {}"
+      , "trait Mixed[A, F[_], B] {}"
+      , "type Pair[A, B] = { left: A, right: B }"
+      ]
+  (_, parsed, _) <- inspectContext session
+  pure $ case parsed of
+    Nothing -> counterexample "the session parsed" (property False)
+    Just moduleValue ->
+      conjoin
+        [ counterexample
+            "a unary constructor parameter keeps its hole"
+            (any (Text.isInfixOf "Higher[F[_]]") (describeName moduleValue "Higher") === True)
+        , counterexample
+            "a binary constructor parameter keeps both holes"
+            (any (Text.isInfixOf "Two[F[_, _]]") (describeName moduleValue "Two") === True)
+        , counterexample
+            "ordinary and constructor parameters render in declaration order"
+            (any (Text.isInfixOf "Mixed[A, F[_], B]") (describeName moduleValue "Mixed") === True)
+        , counterexample
+            "a kind parenthesises the constructor it accepts"
+            (describeKindLines moduleValue "Higher" === ["Higher :: (type -> type) -> type"])
+        , counterexample
+            "a binary constructor parameter is one input, not two"
+            (describeKindLines moduleValue "Two" === ["Two :: (type -> type -> type) -> type"])
+        , counterexample
+            "a mixed declaration keeps each parameter's own shape"
+            ( describeKindLines moduleValue "Mixed"
+                === ["Mixed :: type -> (type -> type) -> type -> type"]
+            )
+        , counterexample
+            "a first-order declaration is unchanged"
+            (describeKindLines moduleValue "Pair" === ["Pair :: type -> type -> type"])
+        , counterexample
+            "an ordinary parameter carries no holes"
+            (any (Text.isInfixOf "Pair[A, B]") (describeName moduleValue "Pair") === True)
         ]
 
 feed :: Session -> [Text] -> IO Session
