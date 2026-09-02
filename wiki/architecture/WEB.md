@@ -69,7 +69,7 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | Can it render a page on the server? | **Ready** | [[Std Html]]: a view is a value, rendered to markup. Escaping is a property of the type. |
 | Can a page be built from components? | **Ready** | [[Std Ui]]: a component is a state, a view function, and an update function. Components compose. |
-| Can a page be interactive without a full reload? | **Partial** | The difference between two screens is computed and can be applied; what carries it is not yet written. See the live-connection row. |
+| Can a page be interactive without a full reload? | **Partial** | The difference between two screens is computed, and [[Std Http Server Socket]] carries messages both ways. What is missing is the circuit joining them — [[Std Ui Live]]. |
 | Is hydration mismatch possible? | **Ready** | No. There is one renderer. See above. |
 | Can the language run in the browser? | **Absent** | The evaluator walks a tree; there is no code generation backend. This is a compiler project and a language decision, not a library one. Nothing here approximates it. |
 | Does a page work without scripting? | **Ready** | A rendered page is markup and forms. Nothing in [[Std Html]] requires a script to display or to submit. |

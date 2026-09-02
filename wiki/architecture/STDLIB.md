@@ -296,6 +296,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Client` | 13 | bounded requests, verified transport, credential-safe redirects |
 | `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |
+| `Std.Http.Server.Socket` | 20 | upgrade with a mandatory origin check, and the frame format |
 | `Std.Http.Server.Guard` | 12 | protective headers, sharing, provenance, identity, and quiet failure |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |

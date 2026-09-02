@@ -1,0 +1,363 @@
+module Std.Http.Server.Socket
+
+import Std.Bytes as ByteSeq
+import Std.Crypto as Crypto
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a message is.
+export type Message
+  = Text(Str)
+  | Binary(Bytes)
+  | Goodbye(Int, Str)
+  | Ping(Bytes)
+  | Pong(Bytes)
+
+/// One frame read off a connection: what it is, whether it completes a
+/// message, and what it carried.
+export type Frame = { opcode: Int, final: Bool, payload: Bytes }
+
+/// Why a connection was refused or a frame would not be read.
+export type SocketError
+  = NotAnUpgrade
+  | WrongOrigin(Str)
+  | NoKey
+  | Unmasked
+  | TooLarge(Int)
+  | Incomplete
+  | UnknownOpcode(Int)
+
+/// The text every implementation appends to the offered key before digesting.
+///
+/// A constant the protocol names. It is not a secret and proves nothing about
+/// what either end knows — only that both followed the protocol — which is
+/// why the algorithm it names is acceptable here and nowhere else.
+const HANDSHAKE_SALT: Str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+/// How large a message may be before it is refused.
+///
+/// Checked against the length a frame states rather than against what has
+/// arrived, because by the time it has arrived the memory has been allocated
+/// and that is the whole of the attack.
+const DEFAULT_MESSAGE_BYTES: Int = 1048576
+
+const OPCODE_CONTINUE: Int = 0
+
+const OPCODE_TEXT: Int = 1
+
+const OPCODE_BINARY: Int = 2
+
+const OPCODE_CLOSE: Int = 8
+
+const OPCODE_PING: Int = 9
+
+const OPCODE_PONG: Int = 10
+
+/// How large a message this module reads when nothing said otherwise.
+export fn messageLimit() -> Int { DEFAULT_MESSAGE_BYTES }
+
+/// Whether a request is asking for a lasting connection.
+export fn isUpgrade(request: &Route.Request) -> Bool {
+  headerHas(request, "upgrade", "websocket") && headerHas(request, "connection", "upgrade")
+}
+
+/// The answer that agrees to a lasting connection, or the reason it is refused.
+///
+/// The permitted origins are a parameter rather than a step that can be
+/// omitted. A lasting connection is not subject to the rule that stops one
+/// site reading another's answers: a page on any site can open one to any
+/// server and it carries the viewer's cookies when it does. A server that
+/// upgrades whoever asks has given every site an authenticated connection to
+/// it, and the viewer sees nothing.
+export fn accept(
+  request: &Route.Request,
+  permittedOrigins: &Array[Str]
+) -> Result[Http.Response, SocketError] {
+  if !isUpgrade(request) { return Err(NotAnUpgrade) }
+  originAllowed(request, permittedOrigins) ?
+  let offered = Route.header(request, "sec-websocket-key")
+  if let Some(key) = offered {
+    Ok(
+      Http.Response {
+        status: Http.Status{code: 101, reason: "Switching Protocols"},
+        headers: [
+          ("Upgrade", "websocket"),
+          ("Connection", "Upgrade"),
+          ("Sec-WebSocket-Accept", accepting(key.trim()))
+        ],
+        body: ""
+      }
+    )
+  } else {
+    Err(NoKey)
+  }
+}
+
+/// Whether the request's origin is one the server permits.
+///
+/// A request with no origin is not from a browser and is not the case this
+/// check exists for; it is permitted here and left to whatever established
+/// who is asking. A request that states one must have it on the list.
+fn originAllowed(request: &Route.Request, permitted: &Array[Str]) -> Result[(), SocketError] {
+  if let Some(stated) = Route.header(request, "origin") {
+    var allowed = false
+    for held in permitted {
+      if held.trim().toLower() == stated.trim().toLower() { allowed = true }
+    }
+    if allowed { Ok(()) } else { Err(WrongOrigin(stated)) }
+  } else {
+    Ok(())
+  }
+}
+
+/// The value that proves this end followed the protocol.
+export fn accepting(key: Str) -> Str {
+  var octets: Array[UInt8] = []
+  for word in Crypto.legacyBytes(&Crypto.sha1(key + HANDSHAKE_SALT)) {
+    match convertInteger[UInt8](word) {
+      case Some(found) => { octets = octets.push(found) }
+      case None => {}
+    }
+  }
+  ByteSeq.encodeBase64(&ByteSeq.fromArray(&octets))
+}
+
+/// A frame to send to the far end.
+///
+/// Never masked. What this end sends is not masked and what it receives must
+/// be, which is what the protocol requires and what stops a crafted message
+/// being read as a request by something between the two ends.
+export fn encode(message: &Message) -> Bytes {
+  let opcode = opcodeOf(message)
+  let payload = payloadOf(message)
+  var header: Array[UInt8] = [byteOf(128 + opcode)]
+  let count = ByteSeq.length(&payload)
+  if count < 126 {
+    header = header.push(byteOf(count))
+  } else {
+    if count < 65536 {
+      header = header.push(byteOf(126))
+      header = header.push(byteOf(count / 256))
+      header = header.push(byteOf(count % 256))
+    } else {
+      header = header.push(byteOf(127))
+      var shift = 7
+      while shift >= 0 {
+        header = header.push(byteOf((count / twoTo(shift * 8)) % 256))
+        shift = shift - 1
+      }
+    }
+  }
+  ByteSeq.concat(&ByteSeq.fromArray(&header), &payload)
+}
+
+/// The frame at the start of these bytes, and how many bytes it used.
+///
+/// The stated length is checked against the bound before anything is read, so
+/// a sender cannot say how much memory to allocate.
+export fn decode(source: &Bytes, limit: Int) -> Result[(Frame, Int), SocketError] {
+  let available = ByteSeq.length(source)
+  if available < 2 { return Err(Incomplete) }
+  let first = octet(source, 0)
+  let second = octet(source, 1)
+  let masked = second >= 128
+  if !masked { return Err(Unmasked) }
+  let stated = second - 128
+  var at = 2
+  var count = stated
+  if stated == 126 {
+    if available < 4 { return Err(Incomplete) }
+    count = octet(source, 2) * 256 + octet(source, 3)
+    at = 4
+  } else {
+    if stated == 127 {
+      if available < 10 { return Err(Incomplete) }
+      count = 0
+      var index = 2
+      while index < 10 {
+        count = count * 256 + octet(source, index)
+        index = index + 1
+      }
+      at = 10
+    }
+  }
+  // Checked before a byte of it is taken.
+  if count > limit { return Err(TooLarge(limit)) }
+  if available < at + 4 + count { return Err(Incomplete) }
+  let key = [octet(source, at), octet(source, at + 1), octet(source, at + 2), octet(source, at + 3)]
+  let body = unmasked(source, at + 4, count, &key)
+  Ok(
+    (
+      Frame{opcode: first % 16, final: first >= 128, payload: body},
+      at + 4 + count
+    )
+  )
+}
+
+/// A frame's payload with the mask removed.
+fn unmasked(source: &Bytes, from: Int, count: Int, key: &Array[Int]) -> Bytes {
+  var out: Array[UInt8] = []
+  var index = 0
+  while index < count {
+    out = out.push(byteOf(xorOf(octet(source, from + index), key[index % 4])))
+    index = index + 1
+  }
+  ByteSeq.fromArray(&out)
+}
+
+/// What a frame means, once it is whole.
+export fn messageOf(held: &Frame) -> Result[Message, SocketError] {
+  if held.opcode == OPCODE_TEXT {
+    Ok(Text(Result.unwrapOr(ByteSeq.toText(&held.payload), "")))
+  } else {
+    if held.opcode == OPCODE_BINARY {
+      Ok(Binary(held.payload))
+    } else {
+      if held.opcode == OPCODE_CLOSE {
+        Ok(closeOf(&held.payload))
+      } else {
+        if held.opcode == OPCODE_PING {
+          Ok(Ping(held.payload))
+        } else {
+          if held.opcode == OPCODE_PONG {
+            Ok(Pong(held.payload))
+          } else {
+            if held.opcode == OPCODE_CONTINUE {
+              Ok(Binary(held.payload))
+            } else {
+              Err(UnknownOpcode(held.opcode))
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A goodbye, with the reason where there is one.
+///
+/// A connection that stopped answering and one that ended are otherwise
+/// indistinguishable to the other end, and it cannot tell either from a line
+/// being cut.
+fn closeOf(payload: &Bytes) -> Message {
+  if ByteSeq.length(payload) < 2 {
+    Goodbye(1005, "")
+  } else {
+    let code = octet(payload, 0) * 256 + octet(payload, 1)
+    let reason = ByteSeq.slice(payload, 2, ByteSeq.length(payload))
+    Goodbye(code, Result.unwrapOr(ByteSeq.toText(&reason), ""))
+  }
+}
+
+/// Whether a frame completes the message it belongs to.
+export fn completes(held: &Frame) -> Bool { held.final }
+
+/// Whether a frame is one the protocol handles rather than the program.
+export fn isControl(held: &Frame) -> Bool { held.opcode >= 8 }
+
+/// Text to send.
+export fn text(content: Str) -> Message { Text(content) }
+
+/// Bytes to send.
+export fn binary(content: &Bytes) -> Message { Binary(*content) }
+
+/// A goodbye to send.
+export fn goodbye(code: Int, reason: Str) -> Message { Goodbye(code, reason) }
+
+/// The answer a check of the far end expects.
+export fn answering(held: &Message) -> Option[Message] {
+  if let Ping(payload) = held { Some(Pong(payload)) } else { None }
+}
+
+fn opcodeOf(message: &Message) -> Int {
+  match message {
+    case Text(_content) => OPCODE_TEXT
+    case Binary(_content) => OPCODE_BINARY
+    case Goodbye(_code, _reason) => OPCODE_CLOSE
+    case Ping(_payload) => OPCODE_PING
+    case Pong(_payload) => OPCODE_PONG
+  }
+}
+
+fn payloadOf(message: &Message) -> Bytes {
+  match message {
+    case Text(content) => ByteSeq.fromText(content)
+    case Binary(content) => content
+    case Goodbye(code, reason) => closePayload(code, reason)
+    case Ping(payload) => payload
+    case Pong(payload) => payload
+  }
+}
+
+fn closePayload(code: Int, reason: Str) -> Bytes {
+  ByteSeq.concat(
+      &ByteSeq.fromArray(&[byteOf(code / 256), byteOf(code % 256)]),
+      &ByteSeq.fromText(reason)
+  )
+}
+
+/// What a refusal says.
+export fn explain(problem: &SocketError) -> Str {
+  match problem {
+    case NotAnUpgrade => "the request did not ask for a lasting connection"
+    case WrongOrigin(stated) => "a lasting connection is not offered to " + stated
+    case NoKey => "the request offered no key"
+    case Unmasked => "a message from the far end was not masked"
+    case TooLarge(limit) => "a message larger than " + show(limit) + " bytes"
+    case Incomplete => "the frame has not all arrived"
+    case UnknownOpcode(code) => "a frame of a kind this does not read: " + show(code)
+  }
+}
+
+fn headerHas(request: &Route.Request, name: Str, wanted: Str) -> Bool {
+  if let Some(held) = Route.header(request, name) {
+    held.toLower().contains(wanted)
+  } else {
+    false
+  }
+}
+
+fn octet(source: &Bytes, index: Int) -> Int {
+  if let Some(found) = ByteSeq.at(source, index) {
+    match convertInteger[Int](found) {
+      case Some(value) => value
+      case None => 0
+    }
+  } else {
+    0
+  }
+}
+
+fn byteOf(value: Int) -> UInt8 {
+  match convertInteger[UInt8](value % 256) {
+    case Some(found) => found
+    case None => 0u8
+  }
+}
+
+/// One byte combined with one byte of the mask.
+fn xorOf(left: Int, right: Int) -> Int {
+  var out = 0
+  var place = 1
+  var a = left
+  var b = right
+  while place <= 128 {
+    if (a % 2) != (b % 2) { out = out + place }
+    a = a / 2
+    b = b / 2
+    place = place * 2
+  }
+  out
+}
+
+fn twoTo(power: Int) -> Int {
+  var out = 1
+  var remaining = power
+  while remaining > 0 {
+    out = out * 2
+    remaining = remaining - 1
+  }
+  out
+}

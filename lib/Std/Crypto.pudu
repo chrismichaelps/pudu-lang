@@ -234,3 +234,132 @@ fn hexWord(value: UInt32) -> Str {
   }
   out
 }
+
+/// A SHA-1 digest: five words, which is the form that algorithm produces.
+///
+/// Present for the handshakes that specify it and for nothing else. It is not
+/// a choice for anything that has to resist an adversary — collisions in it
+/// have been produced — and it is separate from `Digest` so a caller cannot
+/// pass one where the other belongs.
+export type LegacyDigest = { words: Array[UInt32] }
+
+/// The SHA-1 digest of text, taken over its UTF-8 bytes.
+///
+/// Where a protocol names this algorithm, the digest is proving that a party
+/// followed the protocol rather than that it knows a secret, so what matters
+/// is agreeing with every other implementation.
+export fn sha1(message: Str) -> LegacyDigest { sha1Bytes(&utf8(message)) }
+
+/// The SHA-1 digest of bytes.
+export fn sha1Bytes(message: &Array[UInt32]) -> LegacyDigest {
+  let padded = pad(message)
+  var state = legacyState()
+  var block = 0
+  let blocks = padded.length() / 64
+  while block < blocks {
+    state = legacyCompress(&state, &padded.slice(block * 64, block * 64 + 64))
+    block = block + 1
+  }
+  LegacyDigest{words: state}
+}
+
+/// A legacy digest written as lower-case hexadecimal.
+export fn legacyHex(value: &LegacyDigest) -> Str {
+  var out = ""
+  for word in value.words { out = out + hexWord(word) }
+  out
+}
+
+/// A legacy digest as the bytes it is, for a protocol that encodes them.
+export fn legacyBytes(value: &LegacyDigest) -> Array[UInt32] {
+  var out: Array[UInt32] = []
+  for word in value.words {
+    var shift = 24
+    while shift >= 0 {
+      out = out.push((word >> shift) & 255u32)
+      shift = shift - 8
+    }
+  }
+  out
+}
+
+/// The five words that algorithm starts from.
+fn legacyState() -> Array[UInt32] {
+  [1732584193u32, 4023233417u32, 2562383102u32, 271733878u32, 3285377520u32]
+}
+
+/// One block folded into the state.
+fn legacyCompress(state: &Array[UInt32], block: &Array[UInt32]) -> Array[UInt32] {
+  let schedule = legacyExpand(block)
+  var a = state[0]
+  var b = state[1]
+  var c = state[2]
+  var d = state[3]
+  var e = state[4]
+  var round = 0
+  while round < 80 {
+    let mixed = legacyMix(round, b, c, d)
+    let held = legacyRotate(a, 5) &+ mixed &+ e &+ legacyConstant(round) &+ schedule[round]
+    e = d
+    d = c
+    c = legacyRotate(b, 30)
+    b = a
+    a = held
+    round = round + 1
+  }
+  [state[0] &+ a, state[1] &+ b, state[2] &+ c, state[3] &+ d, state[4] &+ e]
+}
+
+/// The mixing function, which differs by which quarter of the rounds it is in.
+fn legacyMix(round: Int, b: UInt32, c: UInt32, d: UInt32) -> UInt32 {
+  if round < 20 {
+    (b & c) | ((b ^ 4294967295u32) & d)
+  } else {
+    if round < 40 {
+      b ^ c ^ d
+    } else {
+      if round < 60 { (b & c) | (b & d) | (c & d) } else { b ^ c ^ d }
+    }
+  }
+}
+
+/// The constant for a round, which likewise differs by quarter.
+fn legacyConstant(round: Int) -> UInt32 {
+  if round < 20 {
+    1518500249u32
+  } else {
+    if round < 40 {
+      1859775393u32
+    } else {
+      if round < 60 { 2400959708u32 } else { 3395469782u32 }
+    }
+  }
+}
+
+/// The sixteen words of a block, extended to eighty.
+fn legacyExpand(block: &Array[UInt32]) -> Array[UInt32] {
+  var schedule: Array[UInt32] = []
+  var index = 0
+  while index < 16 {
+    let at = index * 4
+    schedule = schedule.push(
+      (block[at] << 24) | (block[at + 1] << 16) | (block[at + 2] << 8) | block[at + 3]
+    )
+    index = index + 1
+  }
+  while index < 80 {
+    schedule = schedule.push(
+      legacyRotate(
+        schedule[index - 3] ^ schedule[index - 8] ^ schedule[index - 14] ^ schedule[index - 16],
+        1
+      )
+    )
+    index = index + 1
+  }
+  schedule
+}
+
+/// A word rotated left, which is the direction this algorithm turns.
+fn legacyRotate(value: UInt32, places: Int) -> UInt32 {
+  (value << places) | (value >> (32 - places))
+}

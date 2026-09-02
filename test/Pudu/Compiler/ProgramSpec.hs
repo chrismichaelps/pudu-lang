@@ -254,6 +254,7 @@ testProgramEvaluation = do
   permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
   fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
   checked <- runEntry "test-fixtures/stdlib/UsesValidate.pudu"
+  lasting <- runEntry "test-fixtures/stdlib/UsesSocket.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -514,6 +515,17 @@ testProgramEvaluation = do
     , counterexample
         "everything wrong is reported at once"
         (checked === Just "54")
+    {-| That a lasting connection is not offered to whoever asks: it is not
+        subject to the rule stopping one site reading another's answers, so a
+        page on any site could otherwise open one carrying the viewer's
+        cookies. The origin is a parameter of the upgrade rather than a step
+        that can be omitted. A message from the far end is refused unless
+        masked, and how large one may be is checked against the length it
+        states rather than against what arrived. The handshake is checked
+        against the example the protocol itself publishes. -}
+    , counterexample
+        "a lasting connection is not offered to whoever asks"
+        (lasting === Just "38")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

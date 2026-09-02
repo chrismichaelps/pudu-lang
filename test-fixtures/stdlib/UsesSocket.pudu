@@ -1,0 +1,268 @@
+module UsesSocket
+
+import Std.Bytes as ByteSeq
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Http.Server.Socket {Binary, Goodbye, NoKey, NotAnUpgrade, Ping, Pong, Text, TooLarge, Unmasked, WrongOrigin}
+import Std.Http.Server.Socket as Socket
+import Std.Result as Result
+
+/// What a lasting connection promises.
+///
+/// The check that matters most here is the one on the upgrade: a lasting
+/// connection is not subject to the rule that stops one site reading another's
+/// answers, so a server that upgrades whoever asks has given every site an
+/// authenticated connection to it.
+export fn main() -> Int {
+  var held = 0
+
+  let permitted = ["https://app.example"]
+
+  // The value that proves this end followed the protocol, against the
+  // handshake the specification itself gives as an example.
+  if Socket.accepting("dGhlIHNhbXBsZSBub25jZQ==") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" {
+    held = held + 1
+  }
+
+  // Whether a request is asking for a lasting connection at all.
+  if Socket.isUpgrade(&upgradeFrom("https://app.example")) { held = held + 1 }
+  if !Socket.isUpgrade(&plainRequest()) { held = held + 1 }
+
+  // A request that is not asking for one is refused as such.
+  if let Err(NotAnUpgrade) = Socket.accept(&plainRequest(), &permitted) { held = held + 1 }
+
+  // An origin on the list is agreed to.
+  let agreed = Socket.accept(&upgradeFrom("https://app.example"), &permitted)
+  if Result.isOk(&agreed) { held = held + 1 }
+  if let Ok(answer) = agreed {
+    if answer.status.code == 101 { held = held + 1 }
+    if headerOf(&answer, "Upgrade") == "websocket" { held = held + 1 }
+    if headerOf(&answer, "Sec-WebSocket-Accept") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" {
+      held = held + 1
+    }
+  }
+
+  // An origin that is not is refused before anything is agreed to. Without
+  // this, a page on any site opens a connection carrying the viewer's cookies
+  // and the viewer sees nothing.
+  if let Err(WrongOrigin(_)) = Socket.accept(&upgradeFrom("https://evil.example"), &permitted) {
+    held = held + 1
+  }
+  if let Err(_) = Socket.accept(&upgradeFrom("https://app.example"), &[]) { held = held + 1 }
+
+  // A request with no origin is not from a browser and is not the case the
+  // check exists for.
+  if Result.isOk(&Socket.accept(&upgradeWithout("origin"), &permitted)) { held = held + 1 }
+
+  // A request offering no key cannot be answered.
+  if let Err(NoKey) = Socket.accept(&upgradeWithout("sec-websocket-key"), &permitted) {
+    held = held + 1
+  }
+
+  // A frame this end sends is never masked, and says how long it is.
+  let sent = Socket.encode(&Socket.text("hello"))
+  if ByteSeq.length(&sent) == 7 { held = held + 1 }
+  if octetAt(&sent, 0) == 129 { held = held + 1 }
+  if octetAt(&sent, 1) == 5 { held = held + 1 }
+
+  // A longer message states its length in two bytes rather than one.
+  let longer = Socket.encode(&Socket.text(repeated("x", 200)))
+  if octetAt(&longer, 1) == 126 { held = held + 1 }
+  if octetAt(&longer, 2) * 256 + octetAt(&longer, 3) == 200 { held = held + 1 }
+
+  // A message from the far end is refused unless it is masked. The masking is
+  // what stops a crafted message being read as a request by something between
+  // the two ends that does not understand this protocol.
+  if let Err(Unmasked) = Socket.decode(&sent, Socket.messageLimit()) { held = held + 1 }
+
+  // A masked message is read, and comes back as what was sent.
+  let arriving = maskedFrame(1, "hello")
+  let read = Socket.decode(&arriving, Socket.messageLimit())
+  if Result.isOk(&read) { held = held + 1 }
+  if let Ok(found) = read {
+    if Socket.completes(&found[0]) { held = held + 1 }
+    if found[1] == ByteSeq.length(&arriving) { held = held + 1 }
+    if let Ok(Text(content)) = Socket.messageOf(&found[0]) {
+      if content == "hello" { held = held + 1 }
+    }
+  }
+
+  // How large a message may be is checked against the length it states, not
+  // against what has arrived: by the time it has arrived the memory has been
+  // allocated, and that is the whole of the attack.
+  if let Err(TooLarge(_)) = Socket.decode(&maskedFrame(1, "hello"), 2) { held = held + 1 }
+
+  // A frame that has not all arrived is said to be incomplete rather than read
+  // as a shorter one.
+  if let Err(_) = Socket.decode(&ByteSeq.slice(&arriving, 0, 3), Socket.messageLimit()) {
+    held = held + 1
+  }
+  if let Err(_) = Socket.decode(&ByteSeq.empty(), Socket.messageLimit()) { held = held + 1 }
+
+  // Bytes rather than text.
+  let carried = Socket.encode(&Socket.binary(&ByteSeq.fromText("raw")))
+  if octetAt(&carried, 0) == 130 { held = held + 1 }
+
+  // A goodbye carries its reason, so a connection that ended and one that
+  // stopped answering are not the same thing to the other end.
+  let farewell = Socket.encode(&Socket.goodbye(1000, "done"))
+  if octetAt(&farewell, 0) == 136 { held = held + 1 }
+  if let Ok(Goodbye(code, reason)) = Socket.messageOf(&Socket.Frame {
+      opcode: 8,
+      final: true,
+      payload: ByteSeq.slice(&farewell, 2, ByteSeq.length(&farewell))
+    })
+  {
+    if code == 1000 { held = held + 1 }
+    if reason == "done" { held = held + 1 }
+  }
+
+  // A goodbye with nothing in it is still a goodbye.
+  if let Ok(Goodbye(_code, reason)) = Socket.messageOf(&Socket.Frame {
+      opcode: 8,
+      final: true,
+      payload: ByteSeq.empty()
+    })
+  {
+    if reason.isEmpty() { held = held + 1 }
+  }
+
+  // A check that the other end is there, and the answer it expects.
+  let checking = Socket.Frame{opcode: 9, final: true, payload: ByteSeq.fromText("?")}
+  if let Ok(message) = Socket.messageOf(&checking) {
+    if let Some(Pong(payload)) = Socket.answering(&message) {
+      if Result.unwrapOr(ByteSeq.toText(&payload), "") == "?" { held = held + 1 }
+    }
+  }
+  if let Ok(Ping(_payload)) = Socket.messageOf(&checking) { held = held + 1 }
+
+  // Nothing answers something that is not a check.
+  if let Ok(message) = Socket.messageOf(&Socket.Frame {
+      opcode: 1,
+      final: true,
+      payload: ByteSeq.fromText("x")
+    })
+  {
+    if let Some(_answer) = Socket.answering(&message) { held = held + 0 } else { held = held + 1 }
+  }
+
+  // Which frames the protocol handles rather than the program.
+  if Socket.isControl(&Socket.Frame{opcode: 8, final: true, payload: ByteSeq.empty()}) {
+    held = held + 1
+  }
+  if !Socket.isControl(&Socket.Frame{opcode: 1, final: true, payload: ByteSeq.empty()}) {
+    held = held + 1
+  }
+
+  // A frame that does not complete its message says so, so a reader knows to
+  // keep going.
+  if !Socket.completes(&Socket.Frame{opcode: 1, final: false, payload: ByteSeq.empty()}) {
+    held = held + 1
+  }
+
+  // A refusal names what was wrong.
+  if Socket.explain(&Unmasked).contains("masked") { held = held + 1 }
+  if Socket.explain(&WrongOrigin("https://evil.example")).contains("evil.example") {
+    held = held + 1
+  }
+
+  held
+}
+
+fn upgradeFrom(origin: Str) -> Route.Request {
+  requestWith(&[
+      ("Upgrade", "websocket"),
+      ("Connection", "Upgrade"),
+      ("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="),
+      ("Origin", origin)
+    ])
+}
+
+/// The same upgrade with one header left out.
+fn upgradeWithout(name: Str) -> Route.Request {
+  var kept: Array[(Str, Str)] = []
+  for entry in [
+    ("Upgrade", "websocket"),
+    ("Connection", "Upgrade"),
+    ("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ=="),
+    ("Origin", "https://app.example")
+  ] {
+    if entry[0].toLower() != name { kept = kept.push(entry) }
+  }
+  requestWith(&kept)
+}
+
+fn plainRequest() -> Route.Request { requestWith(&[("Host", "x")]) }
+
+fn requestWith(headers: &Array[(Str, Str)]) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Http.Get, target: "/live", headers: *headers, body: ""},
+    path: "/live",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "test"
+  }
+}
+
+/// A frame as the far end would send one: masked, as the protocol requires.
+fn maskedFrame(opcode: Int, content: Str) -> Bytes {
+  let payload = ByteSeq.fromText(content)
+  let count = ByteSeq.length(&payload)
+  let key = [37, 88, 3, 199]
+  var out: Array[UInt8] = [asByte(128 + opcode), asByte(128 + count)]
+  for value in key { out = out.push(asByte(value)) }
+  var index = 0
+  while index < count {
+    out = out.push(asByte(xorOf(octetAt(&payload, index), key[index % 4])))
+    index = index + 1
+  }
+  ByteSeq.fromArray(&out)
+}
+
+fn octetAt(source: &Bytes, index: Int) -> Int {
+  if let Some(found) = ByteSeq.at(source, index) {
+    match convertInteger[Int](found) {
+      case Some(value) => value
+      case None => 0
+    }
+  } else {
+    0
+  }
+}
+
+fn asByte(value: Int) -> UInt8 {
+  match convertInteger[UInt8](value % 256) {
+    case Some(found) => found
+    case None => 0u8
+  }
+}
+
+fn xorOf(left: Int, right: Int) -> Int {
+  var out = 0
+  var place = 1
+  var a = left
+  var b = right
+  while place <= 128 {
+    if (a % 2) != (b % 2) { out = out + place }
+    a = a / 2
+    b = b / 2
+    place = place * 2
+  }
+  out
+}
+
+fn repeated(piece: Str, times: Int) -> Str {
+  var built = ""
+  var index = 0
+  while index < times {
+    built = built + piece
+    index = index + 1
+  }
+  built
+}
+
+fn headerOf(answer: &Http.Response, name: Str) -> Str {
+  var found = ""
+  for entry in answer.headers { if entry[0].toLower() == name.toLower() { found = entry[1] } }
+  found
+}
