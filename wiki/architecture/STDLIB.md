@@ -289,6 +289,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.App` | 20 | the application value, its stages, and running one, provisional |
 | `Std.Html` | 33 | a page as a value; escaping by construction, provisional |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
+| `Std.App.Metrics` | 22 | counters, gauges, distributions, units, and a series bound |
 | `Std.App.Health` | 21 | liveness and readiness as separate types, worst-wins aggregation |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |

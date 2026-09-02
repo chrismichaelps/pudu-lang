@@ -1,0 +1,423 @@
+module Std.App.Metrics
+
+import Std.List as List
+import Std.Map as Map
+import Std.Option as Option
+
+/// What a measurement is.
+///
+/// A counter only rises, so a fall in one means the process restarted, and
+/// everything reading it is entitled to assume that. A gauge moves either way.
+/// A distribution answers how many observations fell at or below each stated
+/// boundary.
+export type Kind
+  = Counter
+  | Gauge
+  | Distribution
+
+/// What a measurement is in.
+///
+/// Declared with the metric rather than left to its name. The commonest
+/// failure with measurements is not a wrong number but a right one in a unit
+/// nobody wrote down, found during an incident when two dashboards disagree.
+export type Unit
+  = Count
+  | Seconds
+  | Milliseconds
+  | Bytes
+  | Ratio
+
+/// What a metric is, apart from its values.
+export type Declared = {
+  name: Str,
+  kind: Kind,
+  unit: Unit,
+  help: Str,
+  bounds: Array[Int],
+  seriesLimit: Int
+}
+
+/// One labelled series of one metric.
+export type Series = { labels: Array[(Str, Str)], value: Int, counts: Array[Int], total: Int }
+
+/// Everything a program reports about itself.
+export type Metrics = {
+  declared: Array[Declared],
+  series: Map[Str, Array[Series]],
+  refused: Int
+}
+
+/// How many label combinations one metric may have when it does not say.
+///
+/// A bound rather than none, because unbounded labels are how a monitoring
+/// system is taken down: a label carrying an identifier turns one metric into
+/// millions, and the collector falls over rather than the program that caused
+/// it.
+const DEFAULT_SERIES_LIMIT: Int = 1000
+
+/// The boundaries a distribution uses when it does not state its own,
+/// in the unit it was declared in.
+const DEFAULT_BOUNDS: Array[Int] = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+
+/// How each unit is written.
+const UNIT_NAMES: Map[Unit, Str] = mapOf([
+    (Count, "count"),
+    (Seconds, "seconds"),
+    (Milliseconds, "milliseconds"),
+    (Bytes, "bytes"),
+    (Ratio, "ratio")
+  ])
+
+/// How each kind is written.
+const KIND_NAMES: Map[Kind, Str] = mapOf([
+    (Counter, "counter"),
+    (Gauge, "gauge"),
+    (Distribution, "histogram")
+  ])
+
+/// Nothing measured yet.
+export fn empty() -> Metrics { Metrics{declared: [], series: Map.empty(), refused: 0} }
+
+/// A counter, which only rises.
+export fn counter(base: &Metrics, name: Str, unit: Unit, help: Str) -> Metrics {
+  declaring(base, name, Counter, unit, help, &[], DEFAULT_SERIES_LIMIT)
+}
+
+/// A gauge, which moves either way.
+export fn gauge(base: &Metrics, name: Str, unit: Unit, help: Str) -> Metrics {
+  declaring(base, name, Gauge, unit, help, &[], DEFAULT_SERIES_LIMIT)
+}
+
+/// A distribution over stated boundaries.
+///
+/// The boundaries are stated rather than derived from what has been seen: a
+/// distribution whose buckets moved cannot be compared against itself last
+/// week, which is most of what one is for.
+export fn distribution(
+  base: &Metrics,
+  name: Str,
+  unit: Unit,
+  help: Str,
+  bounds: &Array[Int]
+) -> Metrics {
+  let stated = if bounds.length() == 0 { DEFAULT_BOUNDS } else { List.sorted(bounds) }
+  declaring(base, name, Distribution, unit, help, &stated, DEFAULT_SERIES_LIMIT)
+}
+
+/// The same metric with a different bound on how many series it may have.
+export fn limitedTo(base: &Metrics, name: Str, limit: Int) -> Metrics {
+  var declared: Array[Declared] = []
+  for held in base.declared {
+    declared = declared.push(
+      if held.name == name {
+        Declared {
+          name: held.name,
+          kind: held.kind,
+          unit: held.unit,
+          help: held.help,
+          bounds: held.bounds,
+          seriesLimit: limit
+        }
+      } else {
+        held
+      }
+    )
+  }
+  Metrics{declared: declared, series: base.series, refused: base.refused}
+}
+
+fn declaring(
+  base: &Metrics,
+  name: Str,
+  kind: Kind,
+  unit: Unit,
+  help: Str,
+  bounds: &Array[Int],
+  limit: Int
+) -> Metrics {
+  if Option.isSome(&declarationOf(base, name)) {
+      *base
+  } else {
+    Metrics {
+      declared: base.declared.push(
+        Declared {
+          name: name,
+          kind: kind,
+          unit: unit,
+          help: help,
+          bounds: *bounds,
+          seriesLimit: limit
+        }
+      ),
+      series: Map.insert(&base.series, name, []),
+      refused: base.refused
+    }
+  }
+}
+
+/// Add to a counter or a gauge.
+///
+/// A metric nothing declared is not measured and is not an error: a module
+/// reporting something the program did not declare should not be able to stop
+/// it, and the absence is visible in what is rendered.
+export fn add(base: &Metrics, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Metrics {
+  changed(base, name, labels, fn(held: Series) -> Series {
+      Series {
+        labels: held.labels,
+        value: held.value + amount,
+        counts: held.counts,
+        total: held.total
+      }
+    })
+}
+
+/// Add one, which is what most counting is.
+export fn increment(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Metrics {
+  add(base, name, labels, 1)
+}
+
+/// Set a gauge to what it is now.
+export fn set(base: &Metrics, name: Str, labels: &Array[(Str, Str)], value: Int) -> Metrics {
+  changed(base, name, labels, fn(held: Series) -> Series {
+      Series{labels: held.labels, value: value, counts: held.counts, total: held.total}
+    })
+}
+
+/// Record one observation in a distribution.
+///
+/// Counts are cumulative: each boundary holds how many observations fell at or
+/// below it, which is what the collectors reading this format expect and what
+/// makes a quantile computable from the buckets alone.
+export fn observe(base: &Metrics, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Metrics {
+  if let Some(declared) = declarationOf(base, name) {
+    changed(base, name, labels, fn(held: Series) -> Series {
+        var counts = held.counts
+        var index = 0
+        while index < declared.bounds.length() {
+          if amount <= declared.bounds[index] {
+            counts = countsWith(&counts, index, atOr(&counts, index) + 1)
+          }
+          index = index + 1
+        }
+        Series {
+          labels: held.labels,
+          value: held.value + 1,
+          counts: counts,
+          total: held.total + amount
+        }
+      })
+  } else {
+      *base
+  }
+}
+
+/// What a series holds, or nothing when it was never measured.
+export fn valueOf(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Option[Int] {
+  if let Some(found) = seriesAt(base, name, labels) { Some(found.value) } else { None }
+}
+
+/// What a series holds, or zero.
+export fn valueOr(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Int {
+  Option.unwrapOr(valueOf(base, name, labels), 0)
+}
+
+/// Everything a distribution's observations added up to.
+export fn totalOf(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Int {
+  if let Some(found) = seriesAt(base, name, labels) { found.total } else { 0 }
+}
+
+/// How many observations fell at or below one boundary.
+export fn countAt(base: &Metrics, name: Str, labels: &Array[(Str, Str)], bound: Int) -> Int {
+  if let Some(declared) = declarationOf(base, name) {
+    if let Some(found) = seriesAt(base, name, labels) {
+      var answer = 0
+      var index = 0
+      while index < declared.bounds.length() {
+        if declared.bounds[index] == bound { answer = atOr(&found.counts, index) }
+        index = index + 1
+      }
+      answer
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+}
+
+/// How many label combinations one metric currently has.
+export fn seriesCount(base: &Metrics, name: Str) -> Int {
+  Map.getOr(&base.series, name, []).length()
+}
+
+/// How many measurements were refused for exceeding a metric's bound.
+///
+/// Counted rather than discarded silently, because a program whose labels are
+/// wrong should be able to see that they are without waiting for the collector
+/// to fail.
+export fn refusedCount(base: &Metrics) -> Int { base.refused }
+
+/// What a metric was declared as.
+export fn declarationOf(base: &Metrics, name: Str) -> Option[Declared] {
+  var found: Option[Declared] = None
+  for held in base.declared { if held.name == name { found = Some(held) } }
+  found
+}
+
+/// The names of everything declared, in the order it was declared.
+export fn names(base: &Metrics) -> Array[Str] {
+  var found: Array[Str] = []
+  for held in base.declared { found = found.push(held.name) }
+  found
+}
+
+fn seriesAt(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Option[Series] {
+  let wanted = byName(labels)
+  var found: Option[Series] = None
+  for held in Map.getOr(&base.series, name, []) { if held.labels == wanted { found = Some(held) } }
+  found
+}
+
+/// A metric with one series changed, or refused when that would make one too
+/// many.
+///
+/// A combination that would exceed the bound is refused and counted. The
+/// existing series keep their values, which matters: evicting one instead
+/// would make a counter restart at zero, and a counter that falls is what
+/// alerting reads as a restart.
+fn changed(
+  base: &Metrics,
+  name: Str,
+  labels: &Array[(Str, Str)],
+  alter: fn(Series) -> Series
+) -> Metrics {
+  if let Some(declared) = declarationOf(base, name) {
+    let wanted = byName(labels)
+    let existing = Map.getOr(&base.series, name, [])
+    var replaced: Array[Series] = []
+    var matched = false
+    for held in existing {
+      if held.labels == wanted {
+        matched = true
+        replaced = replaced.push(alter(held))
+      } else {
+        replaced = replaced.push(held)
+      }
+    }
+    if matched {
+      Metrics {
+        declared: base.declared,
+        series: Map.insert(&base.series, name, replaced),
+        refused: base.refused
+      }
+    } else {
+      if existing.length() >= declared.seriesLimit {
+        Metrics{declared: base.declared, series: base.series, refused: base.refused + 1}
+      } else {
+        Metrics {
+          declared: base.declared,
+          series: Map.insert(
+              &base.series,
+            name,
+            replaced.push(alter(Series{labels: wanted, value: 0, counts: [], total: 0}))
+          ),
+          refused: base.refused
+        }
+      }
+    }
+  } else {
+      *base
+  }
+}
+
+/// The measurements in the text form a collector reads.
+export fn render(base: &Metrics) -> Str {
+  var built = ""
+  for declared in base.declared {
+    built = built + "# HELP " + declared.name + " " + declared.help + "\n"
+    built = built + "# TYPE " + declared.name + " " + Map.getOr(&KIND_NAMES, declared.kind, "untyped") + "\n"
+    built = built + "# UNIT " + declared.name + " " + Map.getOr(&UNIT_NAMES, declared.unit, "count") + "\n"
+    for held in Map.getOr(&base.series, declared.name, []) {
+      built = built + renderSeries(&declared, &held)
+    }
+  }
+  built
+}
+
+fn renderSeries(declared: &Declared, held: &Series) -> Str {
+  if declared.kind == Distribution {
+    var built = ""
+    var index = 0
+    while index < declared.bounds.length() {
+      built = built + declared.name + "_bucket"
+        + renderLabels(&held.labels.push(("le", show(declared.bounds[index]))))
+        + " " + show(atOr(&held.counts, index)) + "\n"
+      index = index + 1
+    }
+    built + declared.name + "_bucket" + renderLabels(&held.labels.push(("le", "+Inf"))) + " "
+      + show(held.value) + "\n" + declared.name + "_sum" + renderLabels(&held.labels) + " "
+      + show(held.total) + "\n" + declared.name + "_count" + renderLabels(&held.labels) + " "
+      + show(held.value) + "\n"
+  } else {
+    declared.name + renderLabels(&held.labels) + " " + show(held.value) + "\n"
+  }
+}
+
+fn renderLabels(labels: &Array[(Str, Str)]) -> Str {
+  if labels.length() == 0 {
+    ""
+  } else {
+    var built = "\{"
+    var index = 0
+    while index < labels.length() {
+      if index > 0 { built = built + "," }
+      built = built + labels[index][0] + "=\"" + escaped(labels[index][1]) + "\""
+      index = index + 1
+    }
+    built + "\}"
+  }
+}
+
+/// A label value with the characters that would end it written as themselves.
+fn escaped(value: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < value.length() {
+    let character = value.slice(index, index + 1)
+    built = built + escapeFor(character)
+    index = index + 1
+  }
+  built
+}
+
+const LABEL_ESCAPES: Map[Str, Str] = mapOf([
+    ("\\", "\\\\"),
+    ("\"", "\\\""),
+    ("\n", "\\n")
+  ])
+
+fn escapeFor(character: Str) -> Str {
+  Map.getOr(&LABEL_ESCAPES, character, character)
+}
+
+/// Labels in name order, so two callers writing the same labels in different
+/// orders name the same series rather than two.
+fn byName(labels: &Array[(Str, Str)]) -> Array[(Str, Str)] {
+  List.sortBy(labels, fn(left: (Str, Str), right: (Str, Str)) -> Bool { left[0] < right[0] })
+}
+
+fn atOr(counts: &Array[Int], index: Int) -> Int {
+  if index < counts.length() { counts[index] } else { 0 }
+}
+
+fn countsWith(counts: &Array[Int], index: Int, value: Int) -> Array[Int] {
+  var built = *counts
+  while built.length() <= index { built = built.push(0) }
+  var replaced: Array[Int] = []
+  var position = 0
+  while position < built.length() {
+    replaced = replaced.push(if position == index { value } else { built[position] })
+    position = position + 1
+  }
+  replaced
+}

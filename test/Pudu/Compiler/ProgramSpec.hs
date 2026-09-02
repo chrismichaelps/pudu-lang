@@ -250,6 +250,7 @@ testProgramEvaluation = do
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
+  measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -474,6 +475,15 @@ testProgramEvaluation = do
     , counterexample
         "restarting and receiving traffic are different questions"
         (probes === Just "29")
+    {-| That a set of measurements is a value, so the one before a count is
+        still there to compare against; that a metric states its unit where it
+        is declared; and that how many label combinations one metric may have
+        is bounded, with the combination that would exceed it refused and
+        counted rather than evicting a series — an evicted counter restarts at
+        zero, and a counter that falls is read as a restart. -}
+    , counterexample
+        "a metric cannot grow a series for every identifier it is handed"
+        (measured === Just "41")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
