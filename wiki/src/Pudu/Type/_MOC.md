@@ -21,6 +21,7 @@ tags: [moc, module]
 - [[Type Check Iteration]] — what a `for` loop's binder takes, from the value beside it.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.
 - [[Type Check Import]] — body-free canonical interface installation and trait-scope filtering.
+- [[Type Check Prelude]] — wired-in constructors and the signatures of runtime-provided effects.
 - [[Type Check Coherence]] — nominal orphan ownership plus qualified, alpha-normalized duplicate checks over implementation syntax.
 - [[Type Check Pattern]] — checking patterns against the type they match.
 

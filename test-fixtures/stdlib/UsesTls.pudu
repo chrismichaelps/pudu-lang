@@ -3,7 +3,7 @@ module UsesTls
 import Std.Concurrent as Concurrent
 import Std.Net as Net
 import Std.Result as Result
-import Std.Tls {Refused, Unresolved}
+import Std.Tls {Refused, TlsOperationTimedOut, Unresolved}
 import Std.Tls as Tls
 
 /// What a secured connection promises, checked without reaching the network.
@@ -31,6 +31,10 @@ export fn main() -> Int {
   // connection would open and only fail later, or not at all.
   held = held + refusesPlainListener()
 
+  // One operation budget includes the handshake. A peer that accepts a TCP
+  // connection and then says nothing cannot hold the caller forever.
+  held = held + timesOutSilentListener()
+
   // The bracket closes whatever it opened, and reports the failure to open
   // rather than pretending it succeeded.
   let bracketed = Tls.withConnection("127.0.0.1", 1, fn(_open: Tls.Secured) -> Result[Int, Tls.TlsError] {
@@ -39,6 +43,26 @@ export fn main() -> Int {
   if Result.isErr(&bracketed) { held = held + 1 }
 
   held
+}
+
+fn timesOutSilentListener() -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(_connection: Net.Connection) -> Bool {
+            let _waited = Concurrent.sleep(100)
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let attempted = Tls.connectWithin("127.0.0.1", port, 10)
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    if let Err(TlsOperationTimedOut) = attempted { 1 } else { 0 }
+  } else {
+    0
+  }
 }
 
 /// Stand up a listener that answers with something that is not a handshake,

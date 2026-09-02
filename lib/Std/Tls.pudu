@@ -15,6 +15,7 @@ export type TlsError
   | Refused(Str)
   | Unresolved(Str)
   | Closed
+  | TlsOperationTimedOut
   | NotText
   | Other(Str)
 
@@ -33,6 +34,7 @@ const CHUNK: Int = 65536
 /// call every unresolvable name a refused connection, and a caller retrying a
 /// refusal would retry forever against a name that will never exist.
 const CAUSES: Array[(Str, Int)] = [
+  ("operation timed out", 4),
   ("getAddrInfo", 2),
   ("Name or service not known", 2),
   ("nodename nor servname", 2),
@@ -69,7 +71,9 @@ fn namedCause(tag: Int, message: Str) -> TlsError {
   if tag == 0 { Untrusted(message) } else {
     if tag == 1 { Refused(message) } else {
       if tag == 2 { Unresolved(message) } else {
-        if tag == 3 { Closed } else { Other(message) }
+        if tag == 3 { Closed } else {
+          if tag == 4 { TlsOperationTimedOut } else { Other(message) }
+        }
       }
     }
   }
@@ -86,8 +90,13 @@ fn namedCause(tag: Int, message: Str) -> TlsError {
 /// its machines about an internal authority is believed without this library
 /// keeping a list that would go stale.
 export fn connect(host: Str, port: Int) -> Result[Secured, TlsError] {
+  connectWithin(host, port, -1)
+}
+
+/// Open and verify a connection within the stated milliseconds.
+export fn connectWithin(host: Str, port: Int, millis: Int) -> Result[Secured, TlsError] {
   Result.map(
-    Result.mapErr(tlsConnect(host, port), causeOf),
+    Result.mapErr(tlsConnectWithin(host, port, millis), causeOf),
     fn(token: Int) -> Secured { Secured{token: token} }
   )
 }
@@ -100,12 +109,30 @@ export fn peerOf(connection: &Secured) -> Result[Str, TlsError] {
 
 /// Send bytes, and keep sending until every one has gone.
 export fn send(connection: &Secured, payload: &Bytes) -> Result[(), TlsError] {
-  Result.mapErr(tlsSend(connection.token, *payload), causeOf)
+  sendWithin(connection, payload, -1)
+}
+
+/// Send bytes within the stated milliseconds.
+export fn sendWithin(
+  connection: &Secured,
+  payload: &Bytes,
+  millis: Int
+) -> Result[(), TlsError] {
+  Result.mapErr(tlsSendWithin(connection.token, *payload, millis), causeOf)
 }
 
 /// Send text, as its UTF-8 encoding.
 export fn sendText(connection: &Secured, text: Str) -> Result[(), TlsError] {
   send(connection, &text.toBytes())
+}
+
+/// Send text within the stated milliseconds.
+export fn sendTextWithin(
+  connection: &Secured,
+  text: Str,
+  millis: Int
+) -> Result[(), TlsError] {
+  sendWithin(connection, &text.toBytes(), millis)
 }
 
 /// The next bytes, or nothing when the far end has finished.
@@ -114,12 +141,26 @@ export fn sendText(connection: &Secured, text: Str) -> Result[(), TlsError] {
 /// records, so what arrives is what one record held, and a caller needing an
 /// exact number reads until it has them — as over any other connection.
 export fn receive(connection: &Secured, count: Int) -> Result[Option[Bytes], TlsError] {
-  Result.mapErr(tlsReceive(connection.token, count), causeOf)
+  receiveWithin(connection, count, -1)
+}
+
+/// Read the next bytes within the stated milliseconds.
+export fn receiveWithin(
+  connection: &Secured,
+  count: Int,
+  millis: Int
+) -> Result[Option[Bytes], TlsError] {
+  Result.mapErr(tlsReceiveWithin(connection.token, count, millis), causeOf)
 }
 
 /// Close a connection, telling the far end it ended.
 export fn close(connection: &Secured) -> Result[(), TlsError] {
   Result.mapErr(tlsClose(connection.token), causeOf)
+}
+
+/// Close a connection, bounding the protocol goodbye before the socket closes.
+export fn closeWithin(connection: &Secured, millis: Int) -> Result[(), TlsError] {
+  Result.mapErr(tlsCloseWithin(connection.token, millis), causeOf)
 }
 
 /// Combine everything the far end sends into one value, holding one chunk at a

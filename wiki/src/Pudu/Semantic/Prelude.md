@@ -42,6 +42,8 @@ isPreludeModule :: ModuleName -> Bool
 - A module may declare its own `Drop` or `panic`; shadowing a prelude name is silent, because it displaces a library binding rather than a wired-in type or a user import.
 - Library types such as `List` belong to neither list; a program that uses one imports it, which keeps the prelude from silently becoming a standard library.
 - Names only. No arities, kinds, signatures, or definitions — those enter with typing, and a placeholder here would be a second source of truth.
+- Both compatibility network effect names and their `Within` variants are present; this module owns
+  discoverability only, while [[Type Check Prelude]] owns their different signatures.
 
 ### Linkage
 

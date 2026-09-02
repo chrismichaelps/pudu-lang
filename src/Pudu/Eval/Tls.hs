@@ -16,15 +16,19 @@
 module Pudu.Eval.Tls
   ( TlsStore
   , closeTlsAt
+  , closeTlsAtWithin
   , closeTlsStore
   , newTlsStore
   , receiveTls
+  , receiveTlsWithin
   , secureConnect
+  , secureConnectWithin
   , sendTls
+  , sendTlsWithin
   , tlsPeerName
   ) where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, bracketOnError, try)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Default.Class (def)
@@ -37,6 +41,7 @@ import qualified Network.Socket as Net
 import qualified Network.TLS as Tls
 import qualified Network.TLS.Extra.Cipher as Cipher
 import Pudu.Eval.Io (IoOutcome (..))
+import qualified System.Timeout as Timeout
 import qualified System.X509 as X509
 
 {-| One secured connection: the protocol context and the socket beneath it.
@@ -81,23 +86,30 @@ lookupSecured store token = IntMap.lookup token <$> readIORef (tlsTable store)
     offers. Letting the certificate choose is how a valid certificate for one
     host is accepted for another. -}
 secureConnect :: TlsStore -> Text -> Int -> IO (IoOutcome Int)
-secureConnect store host port = do
-  resolved <- resolveAddress (Text.unpack host) port
-  case resolved of
-    Left problem -> pure (IoFailed problem)
-    Right address -> do
-      attempted <- try (openSecured address) :: IO (Either SomeException Secured)
-      case attempted of
-        Left problem -> pure (IoFailed (Text.pack (show problem)))
-        Right secured -> IoDone <$> remember store secured
+secureConnect store host port = secureConnectWithin store host port (-1)
+
+{-| Open and verify a connection within one operation budget. A negative
+    budget retains the unbounded low-level primitive. -}
+secureConnectWithin :: TlsStore -> Text -> Int -> Integer -> IO (IoOutcome Int)
+secureConnectWithin store host port millis = do
+  attempted <- attemptWithin millis $ do
+    resolved <- resolveAddressRaw (Text.unpack host) port
+    case resolved of
+      Left problem -> pure (Left problem)
+      Right address -> Right <$> openSecured address
+  case attempted of
+    Left problem -> pure (IoFailed (Text.pack (show problem)))
+    Right Nothing -> pure (IoFailed timeoutMessage)
+    Right (Just (Left problem)) -> pure (IoFailed problem)
+    Right (Just (Right secured)) -> IoDone <$> remember store secured
  where
-  openSecured address = do
-    socket <- Net.openSocket address
-    Net.connect socket (Net.addrAddress address)
-    trust <- X509.getSystemCertificateStore
-    context <- Tls.contextNew socket (parameters trust)
-    Tls.handshake context
-    pure Secured{securedContext = context, securedSocket = socket, securedHost = host}
+  openSecured address =
+    bracketOnError (Net.openSocket address) Net.close $ \socket -> do
+      Net.connect socket (Net.addrAddress address)
+      trust <- X509.getSystemCertificateStore
+      context <- Tls.contextNew socket (parameters trust)
+      Tls.handshake context
+      pure Secured{securedContext = context, securedSocket = socket, securedHost = host}
 
   parameters trust =
     (Tls.defaultParamsClient (Text.unpack host) mempty)
@@ -105,28 +117,29 @@ secureConnect store host port = do
       , Tls.clientShared = def{Tls.sharedCAStore = trust}
       }
 
-{-| The address a host and port name, asked of the resolver rather than parsed
-    here, so a name and a numeric address arrive the same way. -}
-resolveAddress :: String -> Int -> IO (Either Text Net.AddrInfo)
-resolveAddress host port = do
+resolveAddressRaw :: String -> Int -> IO (Either Text Net.AddrInfo)
+resolveAddressRaw host port = do
   let hints = Net.defaultHints{Net.addrSocketType = Net.Stream}
-  found <-
-    try (Net.getAddrInfo (Just hints) (Just host) (Just (show port)))
-      :: IO (Either SomeException [Net.AddrInfo])
+  found <- Net.getAddrInfo (Just hints) (Just host) (Just (show port))
   pure $ case found of
-    Left problem -> Left (Text.pack (show problem))
-    Right [] -> Left (Text.pack ("no address for " <> host <> ":" <> show port))
-    Right (address : _) -> Right address
+    [] -> Left (Text.pack ("no address for " <> host <> ":" <> show port))
+    address : _ -> Right address
 
 {-| Send bytes, and keep sending until every one of them has gone. -}
 sendTls :: TlsStore -> Int -> ByteString.ByteString -> IO (IoOutcome ())
-sendTls store token payload = withSecured store token $ \secured -> do
-  attempted <-
-    try (Tls.sendData (securedContext secured) (LazyByteString.fromStrict payload))
-      :: IO (Either SomeException ())
-  pure $ case attempted of
-    Left problem -> IoFailed (Text.pack (show problem))
-    Right () -> IoDone ()
+sendTls store token payload = sendTlsWithin store token payload (-1)
+
+sendTlsWithin :: TlsStore -> Int -> ByteString.ByteString -> Integer -> IO (IoOutcome ())
+sendTlsWithin store token payload millis = do
+  found <- lookupSecured store token
+  case found of
+    Nothing -> pure (IoFailed "the secured connection is closed")
+    Just secured -> do
+      attempted <- attemptWithin millis (Tls.sendData (securedContext secured) (LazyByteString.fromStrict payload))
+      case attempted of
+        Left problem -> pure (IoFailed (Text.pack (show problem)))
+        Right Nothing -> invalidateTls store token >> pure (IoFailed timeoutMessage)
+        Right (Just ()) -> pure (IoDone ())
 
 {-| The next bytes, or nothing when the far end has finished.
 
@@ -134,17 +147,23 @@ sendTls store token payload = withSecured store token $ \secured -> do
     records, so what arrives is what one record held. A caller needing an exact
     number reads until it has them, exactly as over a plain connection. -}
 receiveTls :: TlsStore -> Int -> Int -> IO (IoOutcome (Maybe ByteString.ByteString))
-receiveTls store token count
+receiveTls store token count = receiveTlsWithin store token count (-1)
+
+receiveTlsWithin :: TlsStore -> Int -> Int -> Integer -> IO (IoOutcome (Maybe ByteString.ByteString))
+receiveTlsWithin store token count millis
   | count <= 0 = pure (IoDone (Just ByteString.empty))
-  | otherwise = withSecured store token $ \secured -> do
-      attempted <-
-        try (Tls.recvData (securedContext secured))
-          :: IO (Either SomeException ByteString.ByteString)
-      pure $ case attempted of
-        Left problem -> IoFailed (Text.pack (show problem))
-        Right chunk
-          | ByteString.null chunk -> IoDone Nothing
-          | otherwise -> IoDone (Just chunk)
+  | otherwise = do
+      found <- lookupSecured store token
+      case found of
+        Nothing -> pure (IoFailed "the secured connection is closed")
+        Just secured -> do
+          attempted <- attemptWithin millis (Tls.recvData (securedContext secured))
+          case attempted of
+            Left problem -> pure (IoFailed (Text.pack (show problem)))
+            Right Nothing -> invalidateTls store token >> pure (IoFailed timeoutMessage)
+            Right (Just chunk)
+              | ByteString.null chunk -> pure (IoDone Nothing)
+              | otherwise -> pure (IoDone (Just chunk))
 
 {-| The name this connection was opened against, which is the name that was
     proven rather than whatever the certificate happened to offer. -}
@@ -157,17 +176,21 @@ tlsPeerName store token = withSecured store token (pure . IoDone . securedHost)
     ended rather than inferring it from a socket that stopped answering, which
     it cannot tell from an attacker cutting the line. -}
 closeTlsAt :: TlsStore -> Int -> IO (IoOutcome ())
-closeTlsAt store token = do
+closeTlsAt store token = closeTlsAtWithin store token (-1)
+
+closeTlsAtWithin :: TlsStore -> Int -> Integer -> IO (IoOutcome ())
+closeTlsAtWithin store token millis = do
   taken <-
     atomicModifyIORef' (tlsTable store) $ \table ->
       (IntMap.delete token table, IntMap.lookup token table)
   case taken of
     Nothing -> pure (IoDone ())
     Just secured -> do
-      attempted <- try (releaseQuietly secured) :: IO (Either SomeException ())
-      pure $ case attempted of
-        Left problem -> IoFailed (Text.pack (show problem))
-        Right () -> IoDone ()
+      farewell <- attemptWithin millis (Tls.bye (securedContext secured))
+      _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
+      pure $ case farewell of
+        Right Nothing -> IoFailed timeoutMessage
+        _ -> IoDone ()
 
 {-| Close every connection the run still holds. -}
 closeTlsStore :: TlsStore -> IO ()
@@ -196,3 +219,26 @@ withSecured store token action = do
   case found of
     Nothing -> pure (IoFailed "the secured connection is closed")
     Just secured -> action secured
+
+attemptWithin :: Integer -> IO a -> IO (Either SomeException (Maybe a))
+attemptWithin millis action
+  | millis < 0 = fmap (fmap Just) (try action)
+  | otherwise = try (Timeout.timeout (microseconds millis) action)
+
+microseconds :: Integer -> Int
+microseconds millis =
+  fromInteger (min (toInteger (maxBound :: Int)) (max 0 millis * 1000))
+
+timeoutMessage :: Text
+timeoutMessage = "operation timed out"
+
+invalidateTls :: TlsStore -> Int -> IO ()
+invalidateTls store token = do
+  taken <-
+    atomicModifyIORef' (tlsTable store) $ \table ->
+      (IntMap.delete token table, IntMap.lookup token table)
+  case taken of
+    Nothing -> pure ()
+    Just secured -> do
+      _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
+      pure ()

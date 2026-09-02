@@ -401,7 +401,7 @@ testProgramEvaluation = do
         given, so nothing is assumed about what else the machine holds. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "10")
+        (endpoints === Just "14")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having
@@ -546,7 +546,7 @@ testProgramEvaluation = do
         not, so failing closed is the only property worth checking offline. -}
     , counterexample
         "a secured connection refuses what it cannot prove"
-        (secured === Just "6")
+        (secured === Just "7")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"
