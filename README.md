@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/pudu-lang-full-logo.png" alt="Pudu" width="800">
+</p>
+
 # Pudu
 
 Pudu is a statically typed, expression-oriented language. Effects return `Result` values, absence
