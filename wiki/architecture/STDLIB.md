@@ -61,13 +61,11 @@ compiles anywhere the compiler runs.
 ```pudu
 module Report
 
-import Std.Http as Http
-import Std.Json {decode, encode}
-import Std.Time {Instant, Duration}
+import Std.Http as Protocol
+import Std.Http.Client as Http
 
-export async fn fetch(url: Str) -> Result[Json, Http.Error] {
-  let response = Http.get(url).timeout(Duration.seconds(30)).await?
-  decode(response.body)
+export fn fetch(url: Str) -> Result[Protocol.Response, Http.ClientError] {
+  Http.fetch(url, &Http.limits())
 }
 ```
 
@@ -82,8 +80,8 @@ whose oldest corners constrain what its newest ones can look like.
 
 Pudu takes the middle position deliberately:
 
-- **Shipped, so there is one answer.** `Std.Http` is *the* HTTP client. A reader of any Pudu program
-  recognises it without checking a manifest.
+- **Shipped, so there is one answer.** `Std.Http.Client` is *the* HTTP client. A reader of any Pudu
+  program recognises it without checking a manifest.
 - **Namespaced, so it can grow.** `Std.Http.Server` can arrive without disturbing `Std.Http`.
 - **Versioned with the language, so it can be held to the same rules.** Every module below obeys the
   ownership, failure, and concurrency rules in [[architecture/SEMANTICS]]. A standard library that
@@ -184,7 +182,8 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 
 | Module | Provides |
 |---|---|
-| `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
+| `Std.Http` | protocol requests, responses, headers, cookies, negotiation, and ranges |
+| `Std.Http.Client` | verified requests with whole-chain deadlines plus redirect, destination, and response-size bounds; pooling remains absent |
 | `Std.App` | the program itself: configuration, what starts, what stops |
 | `Std.App.Config` | layered settings, typed where they are read |
 | `Std.Http.Server` | server: reading requests off connections and answering them |
@@ -572,9 +571,14 @@ parsing or rendering a complete message.
 
 `Std.Http.Server` now joins that protocol surface to `Std.Net`: handlers remain socket-free values,
 routes are first-match, and the reader enforces explicit head/body limits before materializing a
-request. The HTTP client transport is still absent. A client must add redirects, deadlines, response
-limits, connection reuse, and TLS verification rather than expose a `send` that only works for the
-happy path.
+request. `Std.Http.Client` joins the same protocol surface to verified TLS or plain TCP, bounds every
+redirect and response, refuses trusted-network destinations unless named, removes credentials when
+an origin changes, and decodes transfer framing before returning the body. Its controlled fixture
+covers refusals and a scheduled/manual external gate reaches public HTTP, HTTPS, and JSON endpoints.
+One monotonic deadline now covers resolution, connect, TLS handshake, send, read, and every redirect
+in a request chain; expiry is typed separately from an unreachable address. It is still **partial**,
+not production-complete: callers cannot explicitly cancel an in-flight request, and every request
+opens a new connection rather than using a bounded pool.
 
 ## What writing it found
 

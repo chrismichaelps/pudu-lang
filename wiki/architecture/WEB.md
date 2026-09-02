@@ -75,7 +75,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Does a page work without scripting? | **Ready** | A rendered page is markup and forms. Nothing in [[Std Html]] requires a script to display or to submit. |
 | Is the markup crawlable? | **Ready** | It is markup, present in the first response. |
 | Can a response be streamed as it is produced? | **Absent** | Rendering produces a complete value before anything is written. Work not done. |
-| Can it call another service? | **Ready** | [[Std Http Client]]. Verified transport, bounded redirects and response size, addresses the network trusts refused unless named, and credentials dropped when a redirect changes origin. |
+| Can it call another service? | **Partial** | [[Std Http Client]]. Verified transport, a whole-chain deadline, bounded redirects and response size, transfer decoding, trusted-network refusal, and cross-origin credential stripping are covered locally and against public HTTP/HTTPS/JSON endpoints. Explicit cancellation and connection reuse are absent. |
 | Client-side routing? | **Absent** | Follows the browser-execution row. |
 
 ## State and the viewer

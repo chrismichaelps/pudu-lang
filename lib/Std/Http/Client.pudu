@@ -16,6 +16,7 @@ import Std.Url as Url
 /// Bounds rather than none: an unbounded client is a way to exhaust the memory
 /// of the program that made the request rather than of the one that answered.
 export type Limits = {
+  deadlineMillis: Int,
   redirects: Int,
   bodyBytes: Int,
   permittedHosts: Array[Str],
@@ -27,15 +28,31 @@ export type ClientError
   = BadUrl(Str)
   | Unreachable(Str)
   | NotPermitted(Str)
+  | TimedOut(Int)
   | TooManyRedirects(Int)
   | TooLarge(Int)
   | Malformed(Str)
 
+/// Bytes received before HTTP framing is interpreted.
+type Received
+  = Complete(Bytes)
+  | BeyondLimit
+
 /// How many redirects a chain may have before it is refused.
 const DEFAULT_REDIRECTS: Int = 5
 
+/// How long one request chain may wait, including every redirected hop.
+const DEFAULT_DEADLINE_MILLIS: Int = 30000
+
 /// How large an answer will be read.
 const DEFAULT_BODY_BYTES: Int = 8388608
+
+/// Space permitted for the status line, headers, and chunk delimiters.
+///
+/// This is deliberately separate from the caller's body allowance. The
+/// transport must stop a peer before parsing, but protocol framing is not part
+/// of the response body the caller bounded.
+const RESPONSE_FRAMING_BYTES: Int = 131072
 
 /// The header that must not survive a change of origin.
 ///
@@ -60,6 +77,7 @@ const SECURE_SCHEME: Str = "https"
 /// The bounds a request has when the caller does not say.
 export fn limits() -> Limits {
   Limits {
+    deadlineMillis: DEFAULT_DEADLINE_MILLIS,
     redirects: DEFAULT_REDIRECTS,
     bodyBytes: DEFAULT_BODY_BYTES,
     permittedHosts: [],
@@ -70,6 +88,7 @@ export fn limits() -> Limits {
 /// The same bounds, reading at most this many bytes of an answer.
 export fn reading(base: &Limits, bytes: Int) -> Limits {
   Limits {
+    deadlineMillis: base.deadlineMillis,
     redirects: base.redirects,
     bodyBytes: bytes,
     permittedHosts: base.permittedHosts,
@@ -80,6 +99,7 @@ export fn reading(base: &Limits, bytes: Int) -> Limits {
 /// The same bounds, following at most this many redirects.
 export fn following(base: &Limits, count: Int) -> Limits {
   Limits {
+    deadlineMillis: base.deadlineMillis,
     redirects: count,
     bodyBytes: base.bodyBytes,
     permittedHosts: base.permittedHosts,
@@ -94,6 +114,7 @@ export fn following(base: &Limits, count: Int) -> Limits {
 /// outside this module, where nothing checks anything.
 export fn reaching(base: &Limits, hosts: &Array[Str]) -> Limits {
   Limits {
+    deadlineMillis: base.deadlineMillis,
     redirects: base.redirects,
     bodyBytes: base.bodyBytes,
     permittedHosts: *hosts,
@@ -101,7 +122,17 @@ export fn reaching(base: &Limits, hosts: &Array[Str]) -> Limits {
   }
 }
 
-/// Fetch a URL.
+/// The same bounds, allowing the whole request chain this many milliseconds.
+export fn within(base: &Limits, millis: Int) -> Limits {
+  Limits {
+    deadlineMillis: if millis < 0 { 0 } else { millis },
+    redirects: base.redirects,
+    bodyBytes: base.bodyBytes,
+    permittedHosts: base.permittedHosts,
+    followRedirects: base.followRedirects
+  }
+}
+
 export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError] {
   send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held)
 }
@@ -112,23 +143,25 @@ export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError
 /// because a redirect is a new request to a new place and treating it as a
 /// continuation is how the checks get skipped.
 export fn send(request: &Http.Request, held: &Limits) -> Result[Http.Response, ClientError] {
+  let bounded = within(held, held.deadlineMillis)
   var carrying = *request
   var hops = 0
+  let expires = clock() + bounded.deadlineMillis
   var answer: Option[Http.Response] = None
   var failure: Option[ClientError] = None
 
   while Option.isNone(&answer) && Option.isNone(&failure) {
-    let reached = once(&carrying, held)
+    let reached = once(&carrying, &bounded, expires)
     if let Err(problem) = reached {
       failure = Some(problem)
     } else {
       let received = Result.unwrapOr(reached, emptyResponse())
-      if !held.followRedirects || !isRedirect(received.status.code) {
+      if !bounded.followRedirects || !isRedirect(received.status.code) {
         answer = Some(received)
       } else {
         hops = hops + 1
-        if hops > held.redirects {
-          failure = Some(TooManyRedirects(held.redirects))
+        if hops > bounded.redirects {
+          failure = Some(TooManyRedirects(bounded.redirects))
         } else {
           let next = redirected(&carrying, &received)
           if let Err(problem) = next { failure = Some(problem) } else {
@@ -142,8 +175,7 @@ export fn send(request: &Http.Request, held: &Limits) -> Result[Http.Response, C
   if let Some(problem) = failure { Err(problem) } else { Ok(Option.unwrapOr(answer, emptyResponse())) }
 }
 
-/// One request, without following anything.
-fn once(request: &Http.Request, held: &Limits) -> Result[Http.Response, ClientError] {
+fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Response, ClientError] {
   let parsed = Url.parse(request.target)
   if let Err(_) = parsed { return Err(BadUrl(request.target)) }
   let place = Result.unwrapOr(parsed, emptyUrl())
@@ -154,11 +186,13 @@ fn once(request: &Http.Request, held: &Limits) -> Result[Http.Response, ClientEr
   }
   let port = Option.unwrapOr(Url.effectivePort(&place), if secured(&place) { 443 } else { 80 })
   let written = Message.renderRequest(&addressed(request, &place))
-  if secured(&place) { overSecured(&place, port, written, held) } else { overPlain(&place, port, written, held) }
+  if secured(&place) {
+    overSecured(&place, port, written, held, expires)
+  } else {
+    overPlain(&place, port, written, held, expires)
+  }
 }
 
-/// The request as it goes on the wire: the path rather than the whole URL, and
-/// the host it was addressed to.
 fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
   Http.Request {
     method: request.method,
@@ -184,21 +218,31 @@ fn withHost(headers: &Array[(Str, Str)], place: &Url.Url) -> Array[(Str, Str)] {
 
 fn secured(place: &Url.Url) -> Bool { place.scheme.toLower() == SECURE_SCHEME }
 
-/// Over a connection whose contents only the two ends can read.
 fn overSecured(
   place: &Url.Url,
   port: Int,
   written: Str,
-  held: &Limits
+  held: &Limits,
+  expires: Int
 ) -> Result[Http.Response, ClientError] {
-  let outcome = Tls.withConnection(place.host, port, fn(connection: Tls.Secured) -> Result[Bytes, Tls.TlsError] {
-      Tls.sendText(&connection, written) ?
-      Tls.receiveAll(&connection)
-    })
+  let opened = Tls.connectWithin(place.host, port, remaining(expires))
+  if let Err(problem) = opened { return securedFailure(problem, held.deadlineMillis) }
+  let connection = Result.unwrapOr(opened, Tls.Secured{token: 0})
+  let outcome = Result.andThen(Tls.sendTextWithin(&connection, written, remaining(expires)),
+    fn(_sent: ()) -> Result[Received, Tls.TlsError] {
+      receiveSecured(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires)
+    }
+  )
+  let closed = Tls.closeWithin(&connection, remaining(expires))
   if let Err(problem) = outcome {
-    Err(Unreachable(show(problem)))
+    securedFailure(problem, held.deadlineMillis)
+  } else if let Err(problem) = closed {
+    securedFailure(problem, held.deadlineMillis)
   } else {
-    readAnswer(&Result.unwrapOr(outcome, ByteSeq.empty()), held)
+    match Result.unwrapOr(outcome, BeyondLimit) {
+      case Complete(received) => readAnswer(&received, held)
+      case BeyondLimit => Err(TooLarge(held.bodyBytes))
+    }
   }
 }
 
@@ -206,16 +250,101 @@ fn overPlain(
   place: &Url.Url,
   port: Int,
   written: Str,
-  held: &Limits
+  held: &Limits,
+  expires: Int
 ) -> Result[Http.Response, ClientError] {
-  let outcome = Net.withConnection(place.host, port, fn(connection: Net.Connection) -> Result[Bytes, Net.NetError] {
-      Net.sendText(&connection, written) ?
-      Net.receiveAll(&connection)
-    })
+  let opened = Net.connectWithin(place.host, port, remaining(expires))
+  if let Err(problem) = opened { return plainFailure(problem, held.deadlineMillis) }
+  let connection = Result.unwrapOr(opened, Net.Connection{token: 0})
+  let outcome = Result.andThen(Net.sendTextWithin(&connection, written, remaining(expires)),
+    fn(_sent: ()) -> Result[Received, Net.NetError] {
+      receivePlain(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires)
+    }
+  )
+  let closed = Net.close(&connection)
   if let Err(problem) = outcome {
-    Err(Unreachable(show(problem)))
+    plainFailure(problem, held.deadlineMillis)
+  } else if let Err(problem) = closed {
+    plainFailure(problem, held.deadlineMillis)
   } else {
-    readAnswer(&Result.unwrapOr(outcome, ByteSeq.empty()), held)
+    match Result.unwrapOr(outcome, BeyondLimit) {
+      case Complete(received) => readAnswer(&received, held)
+      case BeyondLimit => Err(TooLarge(held.bodyBytes))
+    }
+  }
+}
+
+fn receiveSecured(
+  connection: &Tls.Secured,
+  limit: Int,
+  expires: Int
+) -> Result[Received, Tls.TlsError] {
+  var pieces: Array[Bytes] = []
+  var size = 0
+  var failure: Option[Tls.TlsError] = None
+  var exceeded = false
+  var going = true
+  while going {
+    let next = Tls.receiveWithin(connection, 65536, remaining(expires))
+    if let Err(problem) = next {
+      failure = Some(problem)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(next, None)
+      if let Some(bytes) = piece {
+        size = size + bytes.length()
+        if size > limit {
+          exceeded = true
+          going = false
+        } else {
+          pieces = pieces.push(bytes)
+        }
+      } else {
+        going = false
+      }
+    }
+  }
+  if let Some(problem) = failure {
+    Err(problem)
+  } else {
+    Ok(if exceeded { BeyondLimit } else { Complete(ByteSeq.join(&pieces)) })
+  }
+}
+
+fn receivePlain(
+  connection: &Net.Connection,
+  limit: Int,
+  expires: Int
+) -> Result[Received, Net.NetError] {
+  var pieces: Array[Bytes] = []
+  var size = 0
+  var failure: Option[Net.NetError] = None
+  var exceeded = false
+  var going = true
+  while going {
+    let next = Net.receiveWithin(connection, 65536, remaining(expires))
+    if let Err(problem) = next {
+      failure = Some(problem)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(next, None)
+      if let Some(bytes) = piece {
+        size = size + bytes.length()
+        if size > limit {
+          exceeded = true
+          going = false
+        } else {
+          pieces = pieces.push(bytes)
+        }
+      } else {
+        going = false
+      }
+    }
+  }
+  if let Some(problem) = failure {
+    Err(problem)
+  } else {
+    Ok(if exceeded { BeyondLimit } else { Complete(ByteSeq.join(&pieces)) })
   }
 }
 
@@ -224,24 +353,29 @@ fn overPlain(
 /// Refused rather than truncated: a truncated body parses to something the
 /// sender did not send, and the caller has no way to know that it did.
 fn readAnswer(received: &Bytes, held: &Limits) -> Result[Http.Response, ClientError] {
-  if received.length() > held.bodyBytes {
-    Err(TooLarge(held.bodyBytes))
+  let text = ByteSeq.toText(received)
+  if let Err(_) = text {
+    Err(Malformed("the answer is not text"))
   } else {
-    let text = ByteSeq.toText(received)
-    if let Err(_) = text {
-      Err(Malformed("the answer is not text"))
+    let parsed = Message.parseResponse(Result.unwrapOr(text, ""))
+    if let Err(problem) = parsed {
+      Err(Malformed(Message.explain(&problem)))
     } else {
-      let parsed = Message.parseResponse(Result.unwrapOr(text, ""))
-      if let Err(problem) = parsed {
-        Err(Malformed(Message.explain(&problem)))
+      let response = Result.unwrapOr(parsed, emptyResponse())
+      let body = if Http.isChunked(&response.headers) {
+        Message.decodeChunked(response.body)
       } else {
-        Ok(Result.unwrapOr(parsed, emptyResponse()))
+        response.body
+      }
+      if body.toBytes().length() > held.bodyBytes {
+        Err(TooLarge(held.bodyBytes))
+      } else {
+        Ok(Http.Response{status: response.status, headers: response.headers, body: body})
       }
     }
   }
 }
 
-/// Whether a status says to go somewhere else.
 export fn isRedirect(code: Int) -> Bool {
   Set.contains(&METHOD_DROPPING, code) || Set.contains(&METHOD_KEEPING, code)
 }
@@ -268,7 +402,6 @@ fn redirected(request: &Http.Request, answer: &Http.Response) -> Result[Http.Req
   )
 }
 
-/// The method a redirect is followed with.
 fn methodAfter(method: &Http.Method, code: Int) -> Http.Method {
   if Set.contains(&METHOD_KEEPING, code) { *method } else { Http.Get }
 }
@@ -289,7 +422,6 @@ fn locationOf(headers: &Array[(Str, Str)]) -> Str {
   found
 }
 
-/// A destination resolved against where the request went.
 export fn resolved(from: Str, stated: Str) -> Str {
   if stated.startsWith("http://") || stated.startsWith("https://") {
     stated
@@ -315,8 +447,6 @@ fn portSuffix(place: &Url.Url) -> Str {
   }
 }
 
-/// Whether two targets name the same origin, which is the question that
-/// decides whether credentials travel.
 export fn originsMatch(left: Str, right: Str) -> Bool {
   if let Ok(first) = Url.parse(left) {
     if let Ok(second) = Url.parse(right) {
@@ -329,15 +459,34 @@ export fn originsMatch(left: Str, right: Str) -> Bool {
   }
 }
 
-/// What a refusal says.
 export fn explain(problem: &ClientError) -> Str {
   match problem {
     case BadUrl(target) => "that is not an address: " + target
     case Unreachable(reason) => "could not reach it: " + reason
     case NotPermitted(reason) => reason
+    case TimedOut(millis) => "the request exceeded " + show(millis) + "ms"
     case TooManyRedirects(count) => "more than " + show(count) + " redirects"
     case TooLarge(limit) => "the answer is larger than " + show(limit) + " bytes"
     case Malformed(reason) => "the answer could not be read: " + reason
+  }
+}
+
+fn remaining(expires: Int) -> Int {
+  let left = expires - clock()
+  if left < 0 { 0 } else { left }
+}
+
+fn securedFailure(problem: Tls.TlsError, millis: Int) -> Result[Http.Response, ClientError] {
+  match problem {
+    case Tls.TlsOperationTimedOut => Err(TimedOut(millis))
+    case _ => Err(Unreachable(show(problem)))
+  }
+}
+
+fn plainFailure(problem: Net.NetError, millis: Int) -> Result[Http.Response, ClientError] {
+  match problem {
+    case Net.NetOperationTimedOut => Err(TimedOut(millis))
+    case _ => Err(Unreachable(show(problem)))
   }
 }
 

@@ -1,7 +1,7 @@
 module UsesHttpClient
 
 import Std.Concurrent as Concurrent
-import Std.Http.Client {BadUrl, NotPermitted, TooManyRedirects}
+import Std.Http.Client {BadUrl, NotPermitted, TimedOut, TooManyRedirects}
 import Std.Http.Client as Client
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
@@ -21,11 +21,14 @@ export fn main() -> Int {
   // Bounds rather than none. An unbounded client exhausts the memory of the
   // program that made the request rather than of the one that answered.
   let bounds = Client.limits()
+  if bounds.deadlineMillis == 30000 { held = held + 1 }
   if bounds.redirects > 0 { held = held + 1 }
   if bounds.bodyBytes > 0 { held = held + 1 }
   if bounds.followRedirects { held = held + 1 }
   if Client.reading(&bounds, 100).bodyBytes == 100 { held = held + 1 }
   if Client.following(&bounds, 2).redirects == 2 { held = held + 1 }
+  if Client.within(&bounds, 25).deadlineMillis == 25 { held = held + 1 }
+  if Client.within(&bounds, -1).deadlineMillis == 0 { held = held + 1 }
 
   // Following nothing is expressed by bounding the count at nothing, so there
   // is one way to say it rather than two that could disagree.
@@ -93,7 +96,11 @@ export fn main() -> Int {
     let routed = Route.withFallback(
         &Route.routing(&[
           Route.get("/hello", greet),
+          Route.get("/chunks", chunks),
+          Route.get("/slow", slowly),
           Route.get("/away", elsewhere),
+          Route.get("/pause-away", pausedElsewhere),
+          Route.get("/pause-hello", pausedGreeting),
           Route.get("/loop", roundAndRound)
         ]),
       missing
@@ -121,6 +128,16 @@ export fn main() -> Int {
       if response.status.code == 404 { held = held + 1 }
     }
 
+    // Transfer framing belongs to the protocol, not to the body a caller
+    // reads. This is the shape the public web uses even for a small page.
+    if let Ok(response) = Client.fetch(at + "/chunks", &permitted) {
+      if response.status.code == 200 { held = held + 1 }
+      if response.body == "hello" { held = held + 1 }
+    }
+    if let Ok(response) = Client.fetch(at + "/chunks", &Client.reading(&permitted, 5)) {
+      if response.body == "hello" { held = held + 1 }
+    }
+
     // A redirect is followed to where it points.
     if let Ok(response) = Client.fetch(at + "/away", &permitted) {
       if response.status.code == 200 { held = held + 1 }
@@ -139,6 +156,20 @@ export fn main() -> Int {
       held = held + 1
     }
 
+    // The limit covers waiting for an answer, not only opening the socket.
+    if let Err(TimedOut(10)) = Client.fetch(at + "/slow", &Client.within(&permitted, 10)) {
+      held = held + 1
+    }
+    if let Err(TimedOut(0)) = Client.fetch(at + "/hello", &Client.within(&permitted, -1)) {
+      held = held + 1
+    }
+
+    // Redirects spend the original budget instead of receiving a fresh one.
+    if let Err(TimedOut(150)) = Client.fetch(
+      at + "/pause-away",
+        &Client.within(&permitted, 150)
+    ) { held = held + 1 }
+
     // An answer larger than the caller will read is refused rather than
     // truncated: a truncated body parses to something the sender did not send.
     if let Err(_) = Client.fetch(at + "/hello", &Client.reading(&permitted, 4)) { held = held + 1 }
@@ -155,12 +186,39 @@ export fn main() -> Int {
 
 fn greet(_request: Route.Request) -> Http.Response { Reply.text(200, "hello") }
 
+fn slowly(_request: Route.Request) -> Http.Response {
+  let _waited = Concurrent.sleep(100)
+  Reply.text(200, "late")
+}
+
+fn chunks(_request: Route.Request) -> Http.Response {
+  Http.Response {
+    status: Http.Status{code: 200, reason: "OK"},
+    headers: [("Transfer-Encoding", "chunked")],
+    body: "5\r\nhello\r\n0\r\n\r\n"
+  }
+}
+
 fn elsewhere(_request: Route.Request) -> Http.Response {
   Http.Response {
     status: Http.Status{code: 302, reason: "Found"},
     headers: [("Location", "/hello")],
     body: ""
   }
+}
+
+fn pausedElsewhere(_request: Route.Request) -> Http.Response {
+  let _waited = Concurrent.sleep(100)
+  Http.Response {
+    status: Http.Status{code: 302, reason: "Found"},
+    headers: [("Location", "/pause-hello")],
+    body: ""
+  }
+}
+
+fn pausedGreeting(_request: Route.Request) -> Http.Response {
+  let _waited = Concurrent.sleep(100)
+  Reply.text(200, "late")
 }
 
 /// A redirect that points at itself, for the bound to catch.

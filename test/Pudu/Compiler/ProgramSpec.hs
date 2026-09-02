@@ -505,7 +505,7 @@ testProgramEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "38")
+        (fetched === Just "47")
     {-| That everything wrong is reported at once rather than the first thing,
         since a person correcting a form wants the whole list; that a failure
         says what was expected and never repeats what was submitted, so a
