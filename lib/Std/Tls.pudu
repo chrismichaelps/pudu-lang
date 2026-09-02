@@ -1,0 +1,228 @@
+module Std.Tls
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Result as Result
+
+/// Why a secured connection did not do what it was asked.
+///
+/// A refusal to trust is kept apart from every other kind, because it is the
+/// one a caller must not retry around: a certificate that did not verify is a
+/// connection to somebody, and which somebody is exactly what could not be
+/// established.
+export type TlsError
+  = Untrusted(Str)
+  | Refused(Str)
+  | Unresolved(Str)
+  | Closed
+  | NotText
+  | Other(Str)
+
+/// A connection whose contents only the two ends can read.
+export type Secured = { token: Int }
+
+/// How much is asked for in one read.
+const CHUNK: Int = 65536
+
+/// The phrases a handshake failure carries, paired with the cause.
+/// A module-scope constant, so classifying a failure walks this list rather
+/// than rebuilding it every time one happens.
+/// The order is part of the table. A name that does not resolve is reported by
+/// the resolver in a message that also says the address does not exist, so the
+/// resolution phrases are tried first; matching the general one earlier would
+/// call every unresolvable name a refused connection, and a caller retrying a
+/// refusal would retry forever against a name that will never exist.
+const CAUSES: Array[(Str, Int)] = [
+  ("getAddrInfo", 2),
+  ("Name or service not known", 2),
+  ("nodename nor servname", 2),
+  ("no address for", 2),
+  ("certificate", 0),
+  ("CertificateRejected", 0),
+  ("Unknown CA", 0),
+  ("NameMismatch", 0),
+  ("Expired", 0),
+  ("HandshakeFailed", 0),
+  ("Connection refused", 1),
+  ("does not exist", 1),
+  ("the secured connection is closed", 3),
+  ("Broken pipe", 3),
+  ("Connection reset", 3)
+]
+
+fn causeOf(message: Str) -> TlsError {
+  var found = Other(message)
+  var index = 0
+  var going = true
+  while index < CAUSES.length() && going {
+    let entry = CAUSES[index]
+    if message.contains(entry[0]) {
+      found = namedCause(entry[1], message)
+      going = false
+    }
+    index = index + 1
+  }
+  found
+}
+
+fn namedCause(tag: Int, message: Str) -> TlsError {
+  if tag == 0 { Untrusted(message) } else {
+    if tag == 1 { Refused(message) } else {
+      if tag == 2 { Unresolved(message) } else {
+        if tag == 3 { Closed } else { Other(message) }
+      }
+    }
+  }
+}
+
+/// Open a connection and prove the far end is the host that was named.
+///
+/// There is no argument that turns the proof off. A caller given one would
+/// eventually use it to make something work, and what it produces is a
+/// connection encrypted against a stranger rather than private with the
+/// intended server — worse than an unsecured one, because it looks safe.
+///
+/// Trust comes from the machine's own store, so an organisation that has told
+/// its machines about an internal authority is believed without this library
+/// keeping a list that would go stale.
+export fn connect(host: Str, port: Int) -> Result[Secured, TlsError] {
+  Result.map(
+    Result.mapErr(tlsConnect(host, port), causeOf),
+    fn(token: Int) -> Secured { Secured{token: token} }
+  )
+}
+
+/// The host this connection was opened against, which is the name that was
+/// proven rather than whatever the certificate happened to offer.
+export fn peerOf(connection: &Secured) -> Result[Str, TlsError] {
+  Result.mapErr(tlsPeer(connection.token), causeOf)
+}
+
+/// Send bytes, and keep sending until every one has gone.
+export fn send(connection: &Secured, payload: &Bytes) -> Result[(), TlsError] {
+  Result.mapErr(tlsSend(connection.token, *payload), causeOf)
+}
+
+/// Send text, as its UTF-8 encoding.
+export fn sendText(connection: &Secured, text: Str) -> Result[(), TlsError] {
+  send(connection, &text.toBytes())
+}
+
+/// The next bytes, or nothing when the far end has finished.
+///
+/// The count asked for is not a promise. The protocol hands over whole
+/// records, so what arrives is what one record held, and a caller needing an
+/// exact number reads until it has them — as over any other connection.
+export fn receive(connection: &Secured, count: Int) -> Result[Option[Bytes], TlsError] {
+  Result.mapErr(tlsReceive(connection.token, count), causeOf)
+}
+
+/// Close a connection, telling the far end it ended.
+export fn close(connection: &Secured) -> Result[(), TlsError] {
+  Result.mapErr(tlsClose(connection.token), causeOf)
+}
+
+/// Combine everything the far end sends into one value, holding one chunk at a
+/// time. What it costs does not depend on how much arrives.
+///
+/// The value is threaded rather than gathered by the step function, because a
+/// function literal carries a copy of what it captured: a step assigning to a
+/// variable outside itself would leave that variable as it found it.
+export fn foldChunks[T](
+  connection: &Secured,
+  seed: T,
+  step: fn(T, Bytes) -> T
+) -> Result[T, TlsError] {
+  var total = seed
+  var failure: Option[TlsError] = None
+  var going = true
+  while going {
+    let chunk = receive(connection, CHUNK)
+    if let Err(reason) = chunk {
+      failure = Some(reason)
+      going = false
+    } else {
+      let piece = Result.unwrapOr(chunk, None)
+      if let Some(bytes) = piece { total = step(total, bytes) } else { going = false }
+    }
+  }
+  if let Some(reason) = failure { Err(reason) } else { Ok(total) }
+}
+
+/// Everything the far end sends until it finishes, joined once rather than
+/// once per chunk. Named so its cost is visible.
+export fn receiveAll(connection: &Secured) -> Result[Bytes, TlsError] {
+  Result.map(
+    foldChunks(connection, [], fn(parts: Array[Bytes], chunk: Bytes) -> Array[Bytes] {
+        parts.push(chunk)
+      }),
+    fn(parts: Array[Bytes]) -> Bytes { ByteSeq.join(&parts) }
+  )
+}
+
+/// Read until a marker arrives, answering what came before it and what came
+/// after.
+///
+/// The marker can arrive split across two records, so the buffer is searched
+/// whole each time rather than only the newest piece. The remainder is
+/// answered because it is the start of the next message.
+export fn receiveUntil(
+  connection: &Secured,
+  marker: &Bytes,
+  limit: Int
+) -> Result[(Bytes, Bytes), TlsError] {
+  var buffer = ByteSeq.empty()
+  var failure: Option[TlsError] = None
+  var found = -1
+  var going = true
+  while going {
+    found = buffer.indexOf(*marker)
+    if found >= 0 {
+      going = false
+    } else {
+      if buffer.length() > limit {
+        failure = Some(Other("the marker did not arrive within " + show(limit) + " bytes"))
+        going = false
+      } else {
+        let chunk = receive(connection, CHUNK)
+        if let Err(reason) = chunk {
+          failure = Some(reason)
+          going = false
+        } else {
+          let piece = Result.unwrapOr(chunk, None)
+          if let Some(bytes) = piece {
+            buffer = buffer.concat(bytes)
+          } else {
+            failure = Some(Closed)
+            going = false
+          }
+        }
+      }
+    }
+  }
+  if let Some(reason) = failure {
+    Err(reason)
+  } else {
+    Ok((buffer.take(found), buffer.drop(found + marker.length())))
+  }
+}
+
+/// Open a connection, hand it to an action, and close it however the action
+/// ended. There is no close a caller can forget, because there is no close.
+export fn withConnection[T](
+  host: Str,
+  port: Int,
+  action: fn(Secured) -> Result[T, TlsError]
+) -> Result[T, TlsError] {
+  let opened = connect(host, port)
+  if let Err(reason) = opened {
+    Err(reason)
+  } else {
+    let connection = Result.unwrapOr(opened, Secured{token: 0})
+    let outcome = action(connection)
+    let closed = close(&connection)
+    if Result.isErr(&outcome) { outcome } else {
+      if let Err(reason) = closed { Err(reason) } else { outcome }
+    }
+  }
+}

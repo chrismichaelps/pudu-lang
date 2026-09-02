@@ -187,7 +187,7 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
 | `Std.Http.Server` | server: routing, handlers, middleware |
 | `Std.Net` | addresses, TCP, UDP |
-| `Std.Tls` | transport security for the above |
+| `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
 
 ### Concurrency
@@ -660,9 +660,12 @@ dependencies are its own files plus the compiler it is built with, and that is t
   their source text rather than being rounded or given a zone. The note below is the record of what
   it had to preserve: line/column diagnostics, duplicate-key and
   dotted-table rules, and a deterministic value model. It is library work, not syntax.
-- **`Std.Tls` and HTTP client transport.** TLS needs verified peer names, trust roots, protocol
-  versions, deadlines, close behavior, and a narrow audited host adapter. Disabling verification may
-  exist only behind an explicit unsafe/testing boundary.
+- ~~**`Std.Tls`.**~~ Shipped. The protocol is not written in Pudu and not written in this
+  repository: transport security is the one place here where being wrong is silent, since a
+  handshake that skips a check still completes and still carries traffic. It reaches a reviewed
+  implementation the way sockets reach the system's own, and what the library owns is the part that
+  must not be defaulted — verification on with no argument to disable it, the machine's trust store
+  as the authority, and the caller's own name as the name to prove.
 - **Project/package tooling.** A manifest, lockfile, content-addressed cache, deterministic resolver,
   offline build, checksums, and compatibility rules must precede any registry publication. The
   standard library remains shipped and cannot be shadowed by dependency resolution.

@@ -241,6 +241,7 @@ testProgramEvaluation = do
   callbacks <- runEntry "test-fixtures/stdlib/UsesCallbacks.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
   configured <- runEntry "test-fixtures/stdlib/UsesToml.pudu"
+  secured <- runEntry "test-fixtures/stdlib/UsesTls.pudu"
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -428,6 +429,12 @@ testProgramEvaluation = do
     , counterexample
         "a configuration reads back what it was written as"
         (configured === Just "44")
+    {-| Every case here is a handshake that must fail. A handshake that
+        wrongly succeeds carries traffic and looks exactly like one that did
+        not, so failing closed is the only property worth checking offline. -}
+    , counterexample
+        "a secured connection refuses what it cannot prove"
+        (secured === Just "6")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

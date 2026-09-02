@@ -37,6 +37,7 @@ import Pudu.Eval.Env
   , withNewFrame
   )
 import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
+import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
 import Pudu.Eval.Loop
@@ -101,15 +102,16 @@ runWithEffects effects (Evaluator action) =
 
 {-| Allocate one resource set for a run and close it on every exit path.
 
-    Workers stop before sockets and handles close, so a child cannot race
-    teardown while finishing an effect. Independent evaluations own disjoint
+    Workers stop before secured connections, sockets, and handles close, so a
+    child cannot race teardown while finishing an effect. Independent evaluations own disjoint
     stores and therefore cannot invalidate one another's tokens. -}
 withRuntime :: (Env -> IO a) -> IO a
 withRuntime action =
   bracket newHandleStore closeHandleStore $ \handles ->
     bracket newSocketStore closeSocketStore $ \sockets ->
-      bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
-        action (emptyEnv handles sockets concurrent)
+      bracket newTlsStore closeTlsStore $ \secured ->
+        bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
+          action (emptyEnv handles sockets secured concurrent)
 
 {-| What a finished evaluation answers with. A control transfer that reached the
     top is the value it carried; only an abort has nothing to answer. -}

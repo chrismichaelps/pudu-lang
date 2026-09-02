@@ -20,6 +20,7 @@ module Pudu.Eval.Env
   , currentConcurrentStore
   , currentHandleStore
   , currentSocketStore
+  , currentTlsStore
   , withCaptured
   , descend
   , effectsAdmitted
@@ -57,6 +58,7 @@ import Pudu.Diagnostic
   )
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
+import Pudu.Eval.Tls (TlsStore)
 import Pudu.Eval.Value (Value (..))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
@@ -78,6 +80,7 @@ data Env = Env
   , envEffects :: !Bool
   , envHandleStore :: !HandleStore
   , envSocketStore :: !SocketStore
+  , envTlsStore :: !TlsStore
   , envConcurrentStore :: !ConcurrentStore
   }
 
@@ -86,6 +89,9 @@ currentHandleStore = Evaluator $ \env -> pure (Done (envHandleStore env) env)
 
 currentSocketStore :: Evaluator SocketStore
 currentSocketStore = Evaluator $ \env -> pure (Done (envSocketStore env) env)
+
+currentTlsStore :: Evaluator TlsStore
+currentTlsStore = Evaluator $ \env -> pure (Done (envTlsStore env) env)
 
 currentConcurrentStore :: Evaluator ConcurrentStore
 currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env) env)
@@ -239,8 +245,8 @@ catchUnwind (Evaluator action) =
       Unwound transfer next -> Done (Left transfer) next
       Aborted stop -> Aborted stop
 
-emptyEnv :: HandleStore -> SocketStore -> ConcurrentStore -> Env
-emptyEnv handles sockets concurrent =
+emptyEnv :: HandleStore -> SocketStore -> TlsStore -> ConcurrentStore -> Env
+emptyEnv handles sockets secured concurrent =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
@@ -252,6 +258,7 @@ emptyEnv handles sockets concurrent =
     , envEffects = True
     , envHandleStore = handles
     , envSocketStore = sockets
+    , envTlsStore = secured
     , envConcurrentStore = concurrent
     }
 

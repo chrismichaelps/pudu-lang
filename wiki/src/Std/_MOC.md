@@ -22,6 +22,7 @@ tags: [moc, module, stdlib]
 - [[Std Channel]] — bounded typed queues with closure.
 - [[Std Sync]] — runtime mutexes and atomic cells.
 - [[Std Net]] — streaming-first TCP listeners and connections.
+- [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
 - [[Std Db]] — PostgreSQL authentication, binding, transactions, and pools.
 - [[Std Http Server]] — deterministic routing, middleware, and bounded serving.

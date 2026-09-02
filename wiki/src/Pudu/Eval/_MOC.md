@@ -10,6 +10,7 @@ tags: [moc, module]
 - [[Eval Bytes]] — compact byte values and their built-in operations.
 - [[Eval Handle]] — runtime-owned streaming file handles.
 - [[Eval Socket]] — runtime-owned TCP sockets and typed host outcomes.
+- [[Eval Tls]] — secured connections held for one evaluation.
 - [[Eval Concurrent]] — thread, channel, mutex, and atomic-cell tables.
 - [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.

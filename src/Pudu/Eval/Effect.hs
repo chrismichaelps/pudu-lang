@@ -35,6 +35,13 @@ import Pudu.Eval.Concurrent
   , sleepFor
   , threadJoin
   )
+import Pudu.Eval.Tls
+  ( closeTlsAt
+  , receiveTls
+  , secureConnect
+  , sendTls
+  , tlsPeerName
+  )
 import Pudu.Eval.Socket
   ( acceptOn
   , closeSocketAt
@@ -53,6 +60,7 @@ import Pudu.Eval.Env
   , currentConcurrentStore
   , currentHandleStore
   , currentSocketStore
+  , currentTlsStore
   , performEffect
   , Evaluator (..)
   , abortAt
@@ -113,6 +121,11 @@ effectBuiltins =
   , SocketPeerBuiltin
   , SocketPortBuiltin
   , SocketFinishBuiltin
+  , TlsConnectBuiltin
+  , TlsSendBuiltin
+  , TlsReceiveBuiltin
+  , TlsCloseBuiltin
+  , TlsPeerBuiltin
   , SpawnThreadBuiltin
   , JoinThreadBuiltin
   , SleepBuiltin
@@ -220,6 +233,26 @@ callEffect spanValue builtin arguments = do
         effectUnit (shutdownWriteAt sockets (fromInteger token))
       (SocketPeerBuiltin, [IntValue _ token]) ->
         resultOf . fmap StrValue <$> lift refusal (peerOf sockets (fromInteger token))
+      {-| A secured connection is named by a token like a plain one, and the
+          verification that makes it secure happens once, when it opens. There
+          is no operation here that can turn it off. -}
+      (TlsConnectBuiltin, [StrValue host, IntValue _ port]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (secureConnect store host (fromInteger port))
+      (TlsSendBuiltin, [IntValue _ token, BytesValue payload]) -> do
+        store <- currentTlsStore
+        effectUnit (sendTls store (fromInteger token) payload)
+      (TlsReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
+        store <- currentTlsStore
+        outcome <- lift refusal (receiveTls store (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (TlsCloseBuiltin, [IntValue _ token]) -> do
+        store <- currentTlsStore
+        effectUnit (closeTlsAt store (fromInteger token))
+      (TlsPeerBuiltin, [IntValue _ token]) -> do
+        store <- currentTlsStore
+        resultOf . fmap StrValue <$> lift refusal (tlsPeerName store (fromInteger token))
       (SocketPortBuiltin, [IntValue _ token]) ->
         resultOf . fmap (intOf . fromIntegral) <$> lift refusal (localPortOf sockets (fromInteger token))
       {-| A thread, a channel, a lock, and a cell are each named by a token for

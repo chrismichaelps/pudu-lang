@@ -57,6 +57,7 @@ effectValueNames =
   , "readChunk", "writeChunk", "flushWriter", "closeHandle"
   , "tcpListen", "tcpAccept", "tcpConnect", "socketSend", "socketReceive"
   , "socketClose", "socketPeer", "socketPort", "socketFinish"
+  , "tlsConnect", "tlsSend", "tlsReceive", "tlsClose", "tlsPeer"
   , "spawnThread", "joinThread", "sleepMillis"
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"
   , "mutexOpen", "mutexAcquire", "mutexRelease"

@@ -1,0 +1,67 @@
+module UsesTls
+
+import Std.Concurrent as Concurrent
+import Std.Net as Net
+import Std.Result as Result
+import Std.Tls {Refused, Unresolved}
+import Std.Tls as Tls
+
+/// What a secured connection promises, checked without reaching the network.
+///
+/// The property worth checking offline is the one that matters most: a
+/// connection that cannot prove who it reached does not open. Every case here
+/// is a handshake that must fail, because a handshake that wrongly succeeds is
+/// indistinguishable from a correct one until somebody is reading the traffic.
+export fn main() -> Int {
+  var held = 0
+
+  // A port with nothing behind it is refused rather than waited on.
+  let closed = Tls.connect("127.0.0.1", 1)
+  if Result.isErr(&closed) { held = held + 1 }
+  if let Err(Refused(_)) = closed { held = held + 1 }
+
+  // A name that resolves to nothing is a configuration mistake, and says so
+  // rather than being reported as a refusal.
+  let unnamed = Tls.connect("pudu.invalid.example.nowhere", 443)
+  if Result.isErr(&unnamed) { held = held + 1 }
+  if let Err(Unresolved(_)) = unnamed { held = held + 1 }
+
+  // A listener that speaks no security at all cannot be handshaken with. This
+  // is the check that the handshake actually runs: without verification the
+  // connection would open and only fail later, or not at all.
+  held = held + refusesPlainListener()
+
+  // The bracket closes whatever it opened, and reports the failure to open
+  // rather than pretending it succeeded.
+  let bracketed = Tls.withConnection("127.0.0.1", 1, fn(_open: Tls.Secured) -> Result[Int, Tls.TlsError] {
+      Ok(1)
+    })
+  if Result.isErr(&bracketed) { held = held + 1 }
+
+  held
+}
+
+/// Stand up a listener that answers with something that is not a handshake,
+/// and check the secured connection refuses it.
+fn refusesPlainListener() -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(connection: Net.Connection) -> Bool {
+            // Read whatever the client offers, then answer with plain text. A
+            // client that accepted this would be treating noise as a peer.
+            let _heard = Net.receive(&connection, 4096)
+            let _said = Net.sendText(&connection, "this is not a handshake\n")
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let attempted = Tls.connect("127.0.0.1", port)
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    if Result.isErr(&attempted) { 1 } else { 0 }
+  } else {
+    0
+  }
+}
