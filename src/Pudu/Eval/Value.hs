@@ -462,7 +462,25 @@ data Closure = Closure
   , closureSelf :: !(Maybe Value)
   , closureCaptured :: !(Maybe [Map Text Value])
   }
-  deriving stock (Eq, Show)
+  deriving stock (Show)
+
+{-| Two closures are the same when they are the same function reached the same
+    way.
+
+    The captured environment is deliberately left out. A module's functions see
+    each other, so the environment a declaration captures holds that declaration
+    among its own bindings, and walking it to compare would not terminate — a
+    scope removing the child it had just awaited would compare one task against
+    itself and never finish.
+
+    Nothing that compares closures is asking about the environment. The question
+    is always which closure this is, and the name, the function, and the
+    receiver it was reached through answer that. -}
+instance Eq Closure where
+  left == right =
+    closureName left == closureName right
+      && closureSelf left == closureSelf right
+      && closureFunction left == closureFunction right
 
 {-| @Eval.Value.OrdValue — a value used as a key.
 
