@@ -58,8 +58,8 @@ regression in the focused Answer test module before the second review pass.
 
 ## Exact Next Action
 
-Complete. PR #192 merged into `dev` at `d1d9025`, issue #189 is closed, and
-the feature branch and worktree are removed.
+Obtain final implementation and Forensic Guardian clearance for the current PR
+head, then merge PR #192 after CI passes.
 
 ## Referenced by
 
