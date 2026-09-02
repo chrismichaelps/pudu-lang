@@ -1,0 +1,317 @@
+module Std.App.Access
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Map as Map
+import Std.Option as Option
+import Std.Set as Set
+
+/// Who is asking.
+///
+/// Assembled by whatever established the identity, not here. This module
+/// decides given who someone is; proving who they are has its own failure
+/// modes, and folding the two together is how a decision ends up trusting an
+/// identity nobody proved.
+export type Principal = {
+  identity: Str,
+  roles: Set[Str],
+  attributes: Map[Str, Str],
+  authenticated: Bool
+}
+
+/// What a route requires.
+///
+/// A value, so a program's whole authorisation model can be listed and
+/// compared without a request — including the check that matters most, which
+/// is asking what every route requires and reading the answer.
+export type Requirement
+  = Anyone
+  | Someone
+  | HoldingRole(Str)
+  | HoldingAll(Array[Str])
+  | HoldingAny(Array[Str])
+  | Matching(Str, Str)
+  | Judged(Str, fn(Principal) -> Bool)
+
+/// What a requirement decided.
+///
+/// Not knowing who is asking and not being allowed are different answers: one
+/// the caller can fix and one they cannot, and answering the second as the
+/// first sends them round a login loop that cannot succeed.
+export type Decision
+  = Permitted
+  | Unidentified
+  | Forbidden(Str)
+
+/// A route that stated what it requires.
+///
+/// There is no other kind. A route with no requirement and a route needing
+/// none are indistinguishable in source, and the first is invisible until it
+/// is exploited — so the requirement is in the same call as the handler and
+/// there is no way to leave it out.
+export type Guarded = { requirement: Requirement, route: Route.Route, name: Str }
+
+/// What a denied caller is told.
+///
+/// Not why. A refusal naming the missing role tells a stranger the shape of
+/// the model, and doing that one route at a time is how the model is mapped.
+const REFUSAL_TEXT: Str = "not permitted"
+
+const CHALLENGE_TEXT: Str = "not identified"
+
+/// Nobody in particular.
+export fn anonymous() -> Principal {
+  Principal{identity: "", roles: Set.empty(), attributes: Map.empty(), authenticated: false}
+}
+
+/// Somebody, identified.
+export fn principal(identity: Str, roles: &Array[Str]) -> Principal {
+  Principal {
+    identity: identity,
+    roles: Set.fromArray(roles),
+    attributes: Map.empty(),
+    authenticated: true
+  }
+}
+
+/// The same principal with one more thing known about them.
+export fn knowing(base: &Principal, name: Str, value: Str) -> Principal {
+  Principal {
+    identity: base.identity,
+    roles: base.roles,
+    attributes: Map.insert(&base.attributes, name, value),
+    authenticated: base.authenticated
+  }
+}
+
+/// Whether a principal holds a role.
+export fn holds(who: &Principal, role: Str) -> Bool { Set.contains(&who.roles, role) }
+
+/// What is known about a principal under a name.
+export fn attributeOf(who: &Principal, name: Str) -> Option[Str] {
+  Map.get(&who.attributes, name)
+}
+
+/// What a requirement decides about a principal.
+///
+/// A pure function, so a program's authorisation can be checked by comparing
+/// values and every branch reached without a request.
+export fn decide(requirement: &Requirement, who: &Principal) -> Decision {
+  match requirement {
+    case Anyone => Permitted
+    case Someone => identified(who, "")
+    case HoldingRole(role) => hasRole(who, role)
+    case HoldingAll(roles) => allRoles(who, &roles)
+    case HoldingAny(roles) => anyRole(who, &roles)
+    case Matching(name, value) => attributeIs(who, name, value)
+    case Judged(named, judge) => judgedBy(who, named, judge)
+  }
+}
+
+/// A caller who has not said who they are can fix that; one who has cannot.
+fn identified(who: &Principal, reason: Str) -> Decision {
+  if who.authenticated { Permitted } else { Unidentified }
+}
+
+fn hasRole(who: &Principal, role: Str) -> Decision {
+  if !who.authenticated {
+    Unidentified
+  } else {
+    if holds(who, role) { Permitted } else { Forbidden("without the role " + role) }
+  }
+}
+
+fn allRoles(who: &Principal, roles: &Array[Str]) -> Decision {
+  if !who.authenticated {
+    Unidentified
+  } else {
+    var missing = ""
+    for role in roles { if !holds(who, role) && missing.isEmpty() { missing = role } }
+    if missing.isEmpty() { Permitted } else { Forbidden("without the role " + missing) }
+  }
+}
+
+fn anyRole(who: &Principal, roles: &Array[Str]) -> Decision {
+  if !who.authenticated {
+    Unidentified
+  } else {
+    var found = false
+    for role in roles { if holds(who, role) { found = true } }
+    if found { Permitted } else { Forbidden("without any of the roles required") }
+  }
+}
+
+fn attributeIs(who: &Principal, name: Str, value: Str) -> Decision {
+  if !who.authenticated {
+    Unidentified
+  } else {
+    if Option.unwrapOr(attributeOf(who, name), "") == value {
+      Permitted
+    } else {
+      Forbidden("without " + name)
+    }
+  }
+}
+
+fn judgedBy(who: &Principal, named: Str, judge: fn(Principal) -> Bool) -> Decision {
+  if !who.authenticated {
+    Unidentified
+  } else {
+    if judge(*who) { Permitted } else { Forbidden(named) }
+  }
+}
+
+/// Whether a decision permits.
+export fn permits(held: &Decision) -> Bool { *held == Permitted }
+
+/// The status a decision answers with.
+///
+/// The two refusals are different statuses because they are different
+/// answers: the first says identify yourself, the second says you have and it
+/// is not enough.
+export fn statusOf(held: &Decision) -> Int {
+  match held {
+    case Permitted => 200
+    case Unidentified => 401
+    case Forbidden(_reason) => 403
+  }
+}
+
+/// What a denied caller receives.
+export fn refusal(held: &Decision) -> Http.Response {
+  match held {
+    case Permitted => Reply.text(200, "")
+    case Unidentified => Reply.text(401, CHALLENGE_TEXT)
+    case Forbidden(_reason) => Reply.text(403, REFUSAL_TEXT)
+  }
+}
+
+/// Why a decision refused, for a log rather than for a caller.
+export fn reasonOf(held: &Decision) -> Str {
+  match held {
+    case Permitted => ""
+    case Unidentified => "the caller did not say who they are"
+    case Forbidden(reason) => reason
+  }
+}
+
+/// A route that requires something, for each method.
+///
+/// The requirement and the handler are given together, so there is no state in
+/// which a route exists without one.
+export fn get(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Get, pattern, requirement, handler)
+}
+
+export fn post(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Post, pattern, requirement, handler)
+}
+
+export fn put(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Put, pattern, requirement, handler)
+}
+
+export fn patch(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Patch, pattern, requirement, handler)
+}
+
+export fn remove(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Delete, pattern, requirement, handler)
+}
+
+export fn query(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
+  guarding(Http.Query, pattern, requirement, handler)
+}
+
+/// A route requiring something, for a method this module does not name.
+export fn on(
+  method: Http.Method,
+  pattern: Str,
+  requirement: Requirement,
+  handler: Route.Handler
+) -> Guarded {
+  guarding(method, pattern, requirement, handler)
+}
+
+fn guarding(
+  method: Http.Method,
+  pattern: Str,
+  requirement: Requirement,
+  handler: Route.Handler
+) -> Guarded {
+  Guarded {
+    requirement: requirement,
+    route: Route.on(method, pattern, handler),
+    name: Http.methodName(&method) + " " + pattern
+  }
+}
+
+/// A router over routes that all stated what they require.
+///
+/// The principal is read from each request by the function given here, so
+/// establishing who is asking stays one decision made in one place rather than
+/// something every handler repeats differently.
+export fn routing(
+  routes: &Array[Guarded],
+  identify: fn(Route.Request) -> Principal
+) -> Route.Router {
+  var wrapped: Array[Route.Route] = []
+  for held in routes { wrapped = wrapped.push(checked(&held, identify)) }
+  Route.routing(&wrapped)
+}
+
+/// One guarded route as an ordinary route that decides before it answers.
+fn checked(held: &Guarded, identify: fn(Route.Request) -> Principal) -> Route.Route {
+  let requirement = held.requirement
+  let handler = held.route.handler
+  Route.on(held.route.method, held.route.pattern, fn(request: Route.Request) -> Http.Response {
+      let who = identify(request)
+      let decided = decide(&requirement, &who)
+      if permits(&decided) { handler(request) } else { refusal(&decided) }
+    })
+}
+
+/// What every route requires, in the order the routes were given.
+///
+/// The point of the whole module: a program can ask what it protects and read
+/// the answer, rather than reading every handler to find out.
+export fn requirements(routes: &Array[Guarded]) -> Array[(Str, Str)] {
+  var found: Array[(Str, Str)] = []
+  for held in routes { found = found.push((held.name, describe(&held.requirement))) }
+  found
+}
+
+/// The routes anyone may reach.
+///
+/// Worth asking directly, because this is the list a review actually wants and
+/// the one that is otherwise assembled by hand and incompletely.
+export fn openRoutes(routes: &Array[Guarded]) -> Array[Str] {
+  var found: Array[Str] = []
+  for held in routes { if held.requirement == Anyone { found = found.push(held.name) } }
+  found
+}
+
+/// What a requirement is, as text.
+export fn describe(requirement: &Requirement) -> Str {
+  match requirement {
+    case Anyone => "anyone"
+    case Someone => "anyone identified"
+    case HoldingRole(role) => "the role " + role
+    case HoldingAll(roles) => "every one of " + joinedBy(&roles, ", ")
+    case HoldingAny(roles) => "any one of " + joinedBy(&roles, ", ")
+    case Matching(name, value) => name + " being " + value
+    case Judged(named, _judge) => named
+  }
+}
+
+fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { built = built + separator }
+    built = built + pieces[index]
+    index = index + 1
+  }
+  built
+}

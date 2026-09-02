@@ -251,6 +251,7 @@ testProgramEvaluation = do
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
+  permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -484,6 +485,15 @@ testProgramEvaluation = do
     , counterexample
         "a metric cannot grow a series for every identifier it is handed"
         (measured === Just "41")
+    {-| That a route which decided nothing cannot be written: the requirement
+        is given in the same call as the handler, so a route needing nothing
+        and a route somebody forgot stop being the same line; that not knowing
+        who is asking and not being permitted are different answers with
+        different statuses; and that a denial does not name what was missing,
+        because doing that one route at a time maps the model. -}
+    , counterexample
+        "a route states what it requires or it is not a route"
+        (permitted === Just "46")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
