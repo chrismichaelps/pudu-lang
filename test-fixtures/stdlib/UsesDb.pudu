@@ -2,9 +2,10 @@ module UsesDb
 
 import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
-import Std.Db {Auth, Idle, Other, Server}
 import Std.Db as Db
 import Std.Db.Protocol as Wire
+import Std.Db.Session {Auth, Idle, Other, Server}
+import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
@@ -43,9 +44,9 @@ export fn main() -> Int {
 
   // A connection that reaches a server answering nothing at all fails rather
   // than waiting for a handshake that will not come.
-  held = held + runAgainst(trustServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      let opened = Db.connect(&settings)
+      let opened = Session.connect(&settings)
       if Result.isOk(&opened) { count = count + 1 }
       if let Ok(stream) = opened {
         // A query the stub answers with two rows and two columns.
@@ -68,7 +69,7 @@ export fn main() -> Int {
           let absent = Db.value(&rows, 0, "height")
           if Option.isNone(&absent) { count = count + 1 }
 
-          let _closed = Db.close(&pair[1])
+          let _closed = Session.close(&pair[1])
         }
       }
       count
@@ -77,14 +78,14 @@ export fn main() -> Int {
   // A statement with values supplied apart from it sends them apart from it:
   // the stub records the bytes it received, and the value never appears inside
   // the statement text.
-  held = held + runAgainst(bindingServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(bindingServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      if let Ok(stream) = Db.connect(&settings) {
+      if let Ok(stream) = Session.connect(&settings) {
         let asked = Db.run(stream, "select $1", &[Some("it's; drop table people")])
         if let Ok(pair) = asked {
           if Db.rowCount(&pair[0]) == 1 { count = count + 1 }
           if Option.unwrapOr(Db.value(&pair[0], 0, "echo"), "") == "bound" { count = count + 1 }
-          let _closed = Db.close(&pair[1])
+          let _closed = Session.close(&pair[1])
         }
       }
       count
@@ -92,9 +93,9 @@ export fn main() -> Int {
 
   // A failure the server reports carries the code it gave, which is what a
   // caller acts on rather than the wording of the message.
-  held = held + runAgainst(failingServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(failingServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      if let Ok(stream) = Db.connect(&settings) {
+      if let Ok(stream) = Session.connect(&settings) {
         let asked = Db.simple(stream, "select bad")
         if let Err(Server(_, code, _)) = asked {
           if code == "42601" { count = count + 1 }
@@ -106,9 +107,9 @@ export fn main() -> Int {
   // The challenge a server left at its defaults asks for, answered in full:
   // the password does not cross the wire, and the server's own signature is
   // checked rather than assumed.
-  held = held + runAgainst(scramServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(scramServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      let opened = Db.connect(&settings)
+      let opened = Session.connect(&settings)
       if Result.isOk(&opened) { count = count + 1 }
       if let Ok(stream) = opened {
         let asked = Db.simple(stream, "select 1")
@@ -120,14 +121,14 @@ export fn main() -> Int {
   // A transaction that failed is undone rather than left open. The stub
   // reports the transaction status the server reports, so what is checked is
   // that the client read it and acted on it.
-  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      if let Ok(stream) = Db.connect(&settings) {
+      if let Ok(stream) = Session.connect(&settings) {
         if Db.statusOf(&stream) == Idle { count = count + 1 }
 
         // An action that fails is rolled back, and the connection comes back
         // usable rather than stuck inside a failed transaction.
-        let attempted = Db.withTransaction(stream, fn(inside: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
+        let attempted = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
             (Err(Other("the caller gave up")), inside)
           })
         if Result.isErr(&attempted[0]) { count = count + 1 }
@@ -141,7 +142,7 @@ export fn main() -> Int {
           if seen.contains("BEGIN") { count = count + 1 }
           if seen.contains("ROLLBACK") { count = count + 1 }
           if !seen.contains("COMMIT") { count = count + 1 }
-          let _closed = Db.close(&pair[1])
+          let _closed = Session.close(&pair[1])
         }
       }
       count
@@ -149,11 +150,11 @@ export fn main() -> Int {
 
   // An action that succeeds is committed, and a savepoint undoes only its own
   // part rather than the transaction around it.
-  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      if let Ok(stream) = Db.connect(&settings) {
-        let kept = Db.withTransaction(stream, fn(inside: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
-            let stepped = Db.withSavepoint(inside, "step", fn(deeper: Db.Connection) -> (Result[Int, Db.DbError], Db.Connection) {
+      if let Ok(stream) = Session.connect(&settings) {
+        let kept = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            let stepped = Db.withSavepoint(inside, "step", fn(deeper: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
                 (Err(Other("the optional step failed")), deeper)
               })
             (Ok(1), stepped[1])
@@ -166,16 +167,16 @@ export fn main() -> Int {
           if seen.contains("ROLLBACK TO SAVEPOINT") { count = count + 1 }
           // The transaction itself was kept, because only the inner step failed.
           if seen.contains("COMMIT") { count = count + 1 }
-          let _closed = Db.close(&pair[1])
+          let _closed = Session.close(&pair[1])
         }
       }
       count
     })
 
   // A name written into a statement cannot end it and begin another.
-  held = held + runAgainst(transactionServer, fn(settings: Db.Config) -> Int {
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
       var count = 0
-      if let Ok(stream) = Db.connect(&settings) {
+      if let Ok(stream) = Session.connect(&settings) {
         let marked = Db.savepoint(stream, "odd\"; DROP TABLE people --")
         if let Ok(after) = marked {
           let asked = Db.simple(after, "what did you get")
@@ -183,7 +184,7 @@ export fn main() -> Int {
             let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
             if !seen.contains("DROP TABLE people --\n") { count = count + 1 }
             if seen.contains("\"\"") { count = count + 1 }
-            let _closed = Db.close(&pair[1])
+            let _closed = Session.close(&pair[1])
           }
         }
       }
@@ -193,8 +194,8 @@ export fn main() -> Int {
   // A server whose signature does not prove it knows the password is refused,
   // which is the half of the exchange that stops something in the middle from
   // impersonating the server.
-  held = held + runAgainst(lyingServer, fn(settings: Db.Config) -> Int {
-      if let Err(Auth(_)) = Db.connect(&settings) { 1 } else { 0 }
+  held = held + runAgainst(lyingServer, fn(settings: Session.Config) -> Int {
+      if let Err(Auth(_)) = Session.connect(&settings) { 1 } else { 0 }
     })
 
   held
@@ -202,7 +203,7 @@ export fn main() -> Int {
 
 /// Start a stub on a port the machine chooses, run a client against it, and
 /// answer what the client counted.
-fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Db.Config) -> Int) -> Int {
+fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Session.Config) -> Int) -> Int {
   let opened = Net.listenLocal(0)
   if let Ok(listener) = opened {
     let port = Result.unwrapOr(Net.portOf(&listener), 0)
@@ -212,7 +213,7 @@ fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Db.Config) -> Int) ->
         ()
       })
     let counted = client(
-      Db.at(&Db.config("people", "ada", "secret"), "127.0.0.1", port)
+      Session.at(&Session.config("people", "ada", "secret"), "127.0.0.1", port)
     )
     if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
     counted

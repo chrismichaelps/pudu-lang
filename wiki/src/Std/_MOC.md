@@ -24,8 +24,11 @@ tags: [moc, module, stdlib]
 - [[Std Net]] — streaming-first TCP listeners and connections.
 - [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
-- [[Std Db]] — PostgreSQL authentication, binding, transactions, and pools.
-- [[Std Http Server]] — deterministic routing, middleware, and bounded serving.
+- [[Std Db Session]] — becoming a connection, and one message across it at a time.
+- [[Std Db]] — queries, rows, transactions, and pools over a session.
+- [[Std Http Server]] — reading requests off connections and answering them.
+- [[Std Http Server Route]] — which handler answers a request, and what it is given.
+- [[Std Http Server Reply]] — the answers a handler gives.
 - [[Std Http]] — pure HTTP protocol values and transformations.
 - [[Std Http Message]] — HTTP message parsing, rendering, length validation, and chunk decoding.
 - [[Std Result]] — recoverable-result combinators and collection traversal.

@@ -185,7 +185,9 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 | Module | Provides |
 |---|---|
 | `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
-| `Std.Http.Server` | server: routing, handlers, middleware |
+| `Std.Http.Server` | server: reading requests off connections and answering them |
+| `Std.Http.Server.Route` | which handler answers a request, and what it is given |
+| `Std.Http.Server.Reply` | the answers a handler gives |
 | `Std.Net` | addresses, TCP, UDP |
 | `Std.Tls` | transport security for the above, verified against the machine's trust store |
 | `Std.Url` | parsing, building, percent-encoding |
@@ -212,7 +214,8 @@ claim a lifetime guarantee the evaluator does not yet enforce.
 
 | `Std.Bench` | timing with statistics, not one stopwatch reading |
 | `Std.Crypto` | hashes, HMAC, constant-time comparison, secure random |
-| `Std.Db` | typed SQL, parameter binding, connection pooling |
+| `Std.Db` | typed SQL, parameter binding, transactions, connection pooling |
+| `Std.Db.Session` | opening a connection and carrying one message across it |
 
 ## What ships today
 
@@ -280,9 +283,12 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Channel` | 9 | bounded typed queues with explicit closure, provisional |
 | `Std.Sync` | 15 | runtime mutexes, atomic cells, and counters, provisional |
 | `Std.Net` | 21 | TCP listeners/connections and bounded streaming reads, provisional |
-| `Std.Http.Server` | 45 | routing, middleware, limits, and HTTP/1 serving, provisional |
+| `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
+| `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
+| `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
 | `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
-| `Std.Db` | 33 | PostgreSQL connection, SCRAM, queries, transactions, and pools, provisional |
+| `Std.Db.Session` | 13 | connecting, SCRAM, and one message at a time, provisional |
+| `Std.Db` | 25 | queries, rows, transactions, savepoints, and pools, provisional |
 
 ### On structures
 

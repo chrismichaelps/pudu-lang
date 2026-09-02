@@ -4,70 +4,25 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Http as Http
 import Std.Http.Message as Message
-import Std.Map as Map
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Reply {text}
+import Std.Http.Server.Route as Route
+import Std.Http.Server.Route {dispatch}
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
-import Std.Url as Url
 
-/// Why a server could not do what it was asked.
-/// A request that did not parse is not one of these: that is answered to the
-/// client as a bad request, because the server is working correctly when it
-/// refuses a malformed message.
 export type ServerError
   = Bind(Str)
   | Accept(Str)
   | Stopped
   | Other(Str)
 
-/// A request as a handler sees it.
-///
-/// The protocol's own request is kept whole rather than taken apart, so a
-/// handler that needs a header the router did not look at still has one. What
-/// is added is the part routing produced: the path with its query removed, the
-/// values a pattern captured, and the query read once rather than by every
-/// handler that wants a parameter.
-export type Request = {
-  message: Http.Request,
-  path: Str,
-  params: Map[Str, Str],
-  query: Map[Str, Str],
-  peer: Str
-}
-
-/// What a handler is: a request in, a response out, and nothing else.
-///
-/// A handler cannot reach the connection, which is what makes it testable
-/// without one. Every check over a handler in this module's own fixture calls
-/// it directly, and a program's tests can do the same.
-export type Handler = fn(Request) -> Http.Response
-
-/// A step that wraps a handler.
-///
-/// It is given the request and the rest of the chain, so it decides whether
-/// to call on at all: that is what lets one refuse a request outright, and it
-/// is why this shape is used rather than a pair of before and after hooks. A
-/// hook that ran before could only edit the request, never stop it.
-export type Middleware = fn(Request, Handler) -> Http.Response
-
-/// One route: a method, a pattern, and what answers it.
-export type Route = {
-  method: Http.Method,
-  pattern: Str,
-  handler: Handler
-}
-
-/// Where requests are sent, and what answers the ones nothing matched.
-export type Router = {
-  routes: Array[Route],
-  fallback: Handler
-}
-
 /// A server, ready to be given an address.
 export type Server = {
-  router: Router,
-  middleware: Array[Middleware],
+  router: Route.Router,
+  middleware: Array[Route.Middleware],
   headLimit: Int,
   bodyLimit: Int
 }
@@ -89,90 +44,8 @@ const HEAD_LIMIT: Int = 65536
 /// The largest body a request may carry before it is refused.
 const BODY_LIMIT: Int = 8388608
 
-/// One route, as a value.
-///
-/// A route is built on its own rather than by adding to a router, so a list of
-/// them reads down the page in the order they are tried. Building a router by
-/// wrapping it in itself once per route puts the last route written outermost,
-/// which reads backwards and nests one level deeper for every route added.
-export fn on(method: Http.Method, pattern: Str, handler: Handler) -> Route {
-  Route{method: method, pattern: pattern, handler: handler}
-}
-
-export fn get(pattern: Str, handler: Handler) -> Route { on(Http.Get, pattern, handler) }
-
-export fn post(pattern: Str, handler: Handler) -> Route { on(Http.Post, pattern, handler) }
-
-export fn put(pattern: Str, handler: Handler) -> Route { on(Http.Put, pattern, handler) }
-
-export fn patch(pattern: Str, handler: Handler) -> Route { on(Http.Patch, pattern, handler) }
-
-export fn delete(pattern: Str, handler: Handler) -> Route { on(Http.Delete, pattern, handler) }
-
-/// A route for a request carrying its terms in its own body.
-///
-/// Answered like any other route, and the terms are read from the body rather
-/// than from the query. A handler for one is written against `body` where a
-/// handler reached by a target's query is written against `queryParam`.
-export fn query(pattern: Str, handler: Handler) -> Route { on(Http.Query, pattern, handler) }
-
-/// A router over a list of routes.
-///
-/// Routes are tried in the order given, so a pattern that could also match an
-/// earlier one never will. That is a rule a reader applies by reading down the
-/// list, which the alternative — the most specific pattern wins — is not: it
-/// asks the reader to compare every pattern against every other.
-export fn routing(routes: &Array[Route]) -> Router {
-  Router{routes: *routes, fallback: notFoundHandler}
-}
-
-/// A router with nothing in it, answering everything as not found.
-export fn router() -> Router { routing(&[]) }
-
-/// A router with one more route after the ones it has.
-/// For a program building its routes from something it read rather than from a
-/// list written in the source.
-export fn adding(base: &Router, added: Route) -> Router {
-  Router{routes: base.routes.push(added), fallback: base.fallback}
-}
-
-/// Two routers joined, the first tried before the second.
-/// This is how a group of routes written elsewhere is mounted: a module
-/// exports its own router, and the program joins it to the rest.
-export fn joining(first: &Router, second: &Router) -> Router {
-  Router{routes: first.routes.concat(second.routes), fallback: first.fallback}
-}
-
-/// Every route with a prefix in front of its pattern.
-/// So a group of routes can be written without repeating where they live, and
-/// moved by changing one line.
-export fn under(prefix: Str, routes: &Array[Route]) -> Array[Route] {
-  var moved: Array[Route] = []
-  for entry in routes {
-    moved = moved.push(
-      Route {
-        method: entry.method,
-        pattern: joinPattern(prefix, entry.pattern),
-        handler: entry.handler
-      }
-    )
-  }
-  moved
-}
-
-fn joinPattern(prefix: Str, pattern: Str) -> Str {
-  let left = if prefix.endsWith("/") { prefix.take(prefix.length() - 1) } else { prefix }
-  let right = if pattern.startsWith("/") { pattern } else { "/" + pattern }
-  left + right
-}
-
-/// A router answering unmatched requests with something of its own.
-export fn withFallback(base: &Router, handler: Handler) -> Router {
-  Router{routes: base.routes, fallback: handler}
-}
-
 /// A server over a router, with no middleware and the default limits.
-export fn server(base: &Router) -> Server {
+export fn server(base: &Route.Router) -> Server {
   Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT}
 }
 
@@ -182,7 +55,7 @@ export fn server(base: &Router) -> Server {
 /// before every step added after it and sees the response after them. That is
 /// the order a reader assumes from the order they wrote, and the reverse would
 /// make logging and timing report the wrong span.
-export fn using(base: &Server, step: Middleware) -> Server {
+export fn using(base: &Server, step: Route.Middleware) -> Server {
   Server {
     router: base.router,
     middleware: base.middleware.push(step),
@@ -196,129 +69,19 @@ export fn withLimits(base: &Server, head: Int, payload: Int) -> Server {
   Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload}
 }
 
-/// The pieces of a path, with empty ones dropped.
-/// A path is the same place whether it was written with a trailing separator
-/// or without, so both come apart the same way.
-fn piecesOf(path: Str) -> Array[Str] {
-  var found: Array[Str] = []
-  for piece in path.split("/") {
-    if !piece.isEmpty() { found = found.push(piece) }
-  }
-  found
-}
-
-/// Whether a pattern matches a path, and what it captured.
-///
-/// A piece written `:name` matches one piece and captures it. A piece written
-/// `*name` matches every remaining piece and captures them joined, which is
-/// what serving files under a prefix needs. Anything else matches itself.
-fn matchPattern(pattern: Str, path: Str) -> Option[Map[Str, Str]] {
-  let wanted = piecesOf(pattern)
-  let given = piecesOf(path)
-  var captured: Array[(Str, Str)] = []
-  var index = 0
-  var matched = true
-  var rest = false
-  while index < wanted.length() && matched && !rest {
-    let piece = wanted[index]
-    if piece.startsWith("*") {
-      captured = captured.push((piece.drop(1), joinFrom(&given, index)))
-      rest = true
-    } else {
-      if index >= given.length() {
-        matched = false
-      } else {
-        if piece.startsWith(":") {
-          captured = captured.push((piece.drop(1), given[index]))
-        } else {
-          if piece != given[index] { matched = false }
-        }
-      }
-    }
-    index = index + 1
-  }
-  if matched && (rest || wanted.length() == given.length()) {
-    Some(mapOf(captured))
-  } else {
-    None
-  }
-}
-
-fn joinFrom(pieces: &Array[Str], from: Int) -> Str {
-  var out = ""
-  var index = from
-  while index < pieces.length() {
-    if index > from { out = out + "/" }
-    out = out + pieces[index]
-    index = index + 1
-  }
-  out
-}
-
-/// The path a target names, with its query removed.
-fn pathOf(target: Str) -> Str {
-  let mark = target.indexOf("?")
-  if mark < 0 { target } else { target.take(mark) }
-}
-
-/// The query a target carries, read once rather than by every handler.
-fn queryOf(target: Str) -> Map[Str, Str] {
-  let mark = target.indexOf("?")
-  if mark < 0 { mapOf([]) } else { mapOf(Url.parseQuery(target.drop(mark + 1))) }
-}
-
-/// Send a request through a router.
-///
-/// A path that matches a route written for another method answers that the
-/// method is not allowed rather than that the path is not there. The two are
-/// different to a client: one is a mistake in the request, and the other says
-/// the thing does not exist.
-export fn dispatch(target: &Router, request: Request) -> Http.Response {
-  var answer: Option[Http.Response] = None
-  var pathExists = false
-  var index = 0
-  while index < target.routes.length() && Option.isNone(&answer) {
-    let candidate = target.routes[index]
-    let captured = matchPattern(candidate.pattern, request.path)
-    if let Some(params) = captured {
-      if candidate.method == request.message.method {
-        answer = Some(candidate.handler(withParams(&request, params)))
-      } else {
-        pathExists = true
-      }
-    }
-    index = index + 1
-  }
-  if let Some(response) = answer {
-    response
-  } else {
-    if pathExists { methodNotAllowed() } else { target.fallback(request) }
-  }
-}
-
-fn withParams(request: &Request, params: Map[Str, Str]) -> Request {
-  Request {
-    message: request.message,
-    path: request.path,
-    params: params,
-    query: request.query,
-    peer: request.peer
-  }
-}
-
 /// The handler a server presents, with every step wrapped around it.
 ///
 /// Built once rather than per request: the chain is the same for every
 /// request, and rebuilding it on each one would put the whole of the server's
 /// configuration inside its hot path.
-export fn handlerOf(target: &Server) -> Handler {
+export fn handlerOf(target: &Server) -> Route.Handler {
   let routed = target.router
-  var next: Handler = fn(request: Request) -> Http.Response { dispatch(&routed, request) }
+  var next: Route.Handler = fn(request: Route.Request) -> Http.Response { dispatch(&routed, request) }
   var index = target.middleware.length() - 1
   while index >= 0 {
     let outer = target.middleware[index]
     let inner = next
-    next = fn(request: Request) -> Http.Response { outer(request, inner) }
+    next = fn(request: Route.Request) -> Http.Response { outer(request, inner) }
     index = index - 1
   }
   next
@@ -331,7 +94,7 @@ fn readRequest(
   connection: &Net.Connection,
   headLimit: Int,
   bodyLimit: Int
-) -> Result[Request, Http.Response] {
+) -> Result[Route.Request, Http.Response] {
   let split = Net.receiveUntil(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
   let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
@@ -355,11 +118,11 @@ fn readRequest(
     body: Result.unwrapOr(ByteSeq.toText(&payload), "")
   }
   Ok(
-    Request {
+    Route.Request {
       message: whole,
-      path: pathOf(whole.target),
+      path: Route.pathOf(whole.target),
       params: mapOf([]),
-      query: queryOf(whole.target),
+      query: Route.queryOf(whole.target),
       peer: Result.unwrapOr(Net.peerOf(connection), "")
     }
   )
@@ -551,63 +314,6 @@ export fn listenAndServe(
   served
 }
 
-/// A response carrying text.
-export fn text(code: Int, content: Str) -> Http.Response {
-  Message.respond(code, "text/plain; charset=utf-8", content)
-}
-
-/// A response carrying HTML.
-export fn html(code: Int, content: Str) -> Http.Response {
-  Message.respond(code, "text/html; charset=utf-8", content)
-}
-
-/// The media types a resource accepts for a request that carries its terms in
-/// its body, as the header that advertises them.
-///
-/// Sent with the refusal a resource gives a body it cannot read, so a client
-/// told its request was unreadable is also told what would be readable. A
-/// refusal that only said no would leave the client guessing.
-export fn acceptQuery(types: &Array[Str]) -> (Str, Str) {
-  var listed = ""
-  var index = 0
-  while index < types.length() {
-    if index > 0 { listed = listed + ", " }
-    listed = listed + types[index]
-    index = index + 1
-  }
-  ("Accept-Query", listed)
-}
-
-/// The refusal a body in a type the resource cannot read receives.
-export fn unsupportedMediaType(accepted: &Array[Str]) -> Http.Response {
-  let answer = text(415, "this resource does not read that media type")
-  Http.Response {
-    status: answer.status,
-    headers: answer.headers.push(acceptQuery(accepted)),
-    body: answer.body
-  }
-}
-
-/// The refusal a body the resource could read but could not act on receives.
-/// Distinct from a body it could not read at all: one says the type was wrong,
-/// the other says the content was, and a client can act on the difference.
-export fn unprocessable(reason: Str) -> Http.Response { text(422, reason) }
-
-/// A response carrying JSON, already encoded.
-export fn json(code: Int, content: Str) -> Http.Response {
-  Message.respond(code, "application/json", content)
-}
-
-/// A response with a status and nothing else.
-export fn empty(code: Int) -> Http.Response { Message.respondEmpty(code) }
-
-/// The response a request nothing matched receives.
-export fn notFoundHandler(request: Request) -> Http.Response {
-  text(404, "no route for " + request.path)
-}
-
-fn methodNotAllowed() -> Http.Response { text(405, "that method is not allowed here") }
-
 fn badRequest(reason: Str) -> Http.Response { text(400, reason) }
 
 fn tooLarge() -> Http.Response { text(413, "the body is larger than this server accepts") }
@@ -616,8 +322,8 @@ fn emptyRequest() -> Http.Request {
   Http.Request{method: Http.Get, target: "/", headers: [], body: ""}
 }
 
-fn emptyServerRequest() -> Request {
-  Request {
+fn emptyServerRequest() -> Route.Request {
+  Route.Request {
     message: emptyRequest(),
     path: "/",
     params: mapOf([]),
@@ -626,35 +332,13 @@ fn emptyServerRequest() -> Request {
   }
 }
 
-/// A captured piece of the path, or nothing when the pattern captured none.
-export fn param(request: &Request, name: Str) -> Option[Str] { request.params.get(name) }
-
-/// A query value, or nothing when the request carried none.
-export fn queryParam(request: &Request, name: Str) -> Option[Str] { request.query.get(name) }
-
-/// A header, found without regard to the case it was written in.
-/// The protocol says a header name means the same thing however it is spelled,
-/// and a client that wrote one differently from the server's expectation is
-/// not making a mistake.
-export fn header(request: &Request, name: Str) -> Option[Str] {
-  let wanted = name.toLower()
-  var found: Option[Str] = None
-  for entry in request.message.headers {
-    if entry[0].toLower() == wanted && Option.isNone(&found) { found = Some(entry[1]) }
-  }
-  found
-}
-
-/// The body a request carried.
-export fn body(request: &Request) -> Str { request.message.body }
-
 /// A step that writes a line about every request once its answer is known.
 ///
 /// Given as an example of the shape as much as for its own sake: it calls on,
 /// times what it wrapped, and reports afterwards, which is what a step that
 /// only ran before could not do.
-export fn logging(write: fn(Str) -> ()) -> Middleware {
-  fn(request: Request, next: Handler) -> Http.Response {
+export fn logging(write: fn(Str) -> ()) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let started = clock()
     let answer = next(request)
     write(

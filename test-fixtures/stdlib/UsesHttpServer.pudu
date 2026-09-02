@@ -4,6 +4,8 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Http as Http
 import Std.Http.Message as Message
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
 import Std.Http.Server as Server
 import Std.Net as Net
 import Std.Option as Option
@@ -21,12 +23,12 @@ export fn main() -> Int {
 
   // Routes read down the page in the order they are tried, one to a line, and
   // each handler is a named function rather than a literal buried in the list.
-  let routed = Server.withFallback(
-      &Server.routing(&[
-        Server.get("/health", health),
-        Server.get("/users/:id", showUser),
-        Server.get("/files/*rest", showFile),
-        Server.post("/users", createUser)
+  let routed = Route.withFallback(
+      &Route.routing(&[
+        Route.get("/health", health),
+        Route.get("/users/:id", showUser),
+        Route.get("/files/*rest", showFile),
+        Route.post("/users", createUser)
       ]),
     nothingHere
   )
@@ -52,8 +54,8 @@ export fn main() -> Int {
   // A query is read once rather than by every handler, and is not part of the
   // path the router matched against.
   let asked = requestFor(Http.Get, "/users/7?verbose=true&page=2")
-  if Server.dispatch(&routed, asked).status.code == 200 { held = held + 1 }
-  if Option.unwrapOr(Server.queryParam(&asked, "page"), "") == "2" { held = held + 1 }
+  if Route.dispatch(&routed, asked).status.code == 200 { held = held + 1 }
+  if Option.unwrapOr(Route.queryParam(&asked, "page"), "") == "2" { held = held + 1 }
   if asked.path == "/users/7" { held = held + 1 }
 
   // A step wraps the handler and sees the answer, which is what a hook that
@@ -67,9 +69,9 @@ export fn main() -> Int {
   if headerOf(&stamped, "X-Step-inner") == "yes" { held = held + 1 }
 
   // A step may refuse a request outright rather than call on.
-  let guarded = Server.using(&Server.server(&routed), fn(request: Server.Request, next: Server.Handler) -> Http.Response {
-      if Option.isNone(&Server.header(&request, "authorization")) {
-        Server.text(401, "who are you")
+  let guarded = Server.using(&Server.server(&routed), fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+      if Option.isNone(&Route.header(&request, "authorization")) {
+        Reply.text(401, "who are you")
       } else {
         next(request)
       }
@@ -96,21 +98,21 @@ export fn main() -> Int {
 
   // A resource refusing a body it cannot read says what it would accept, so a
   // client told its request was unreadable is not left guessing.
-  let refused = Server.unsupportedMediaType(&["application/json", "application/sql"])
+  let refused = Reply.unsupportedMediaType(&["application/json", "application/sql"])
   if refused.status.code == 415 { held = held + 1 }
   if headerOf(&refused, "Accept-Query") == "application/json, application/sql" {
     held = held + 1
   }
-  if Server.unprocessable("that filter names no column").status.code == 422 { held = held + 1 }
+  if Reply.unprocessable("that filter names no column").status.code == 422 { held = held + 1 }
 
   // And routed like any other method, with the terms read from the body.
-  let searching = Server.routing(&[Server.query("/search", runSearch)])
-  let found = Server.dispatch(&searching, bodied(Http.Query, "/search", "name eq ada"))
+  let searching = Route.routing(&[Route.query("/search", runSearch)])
+  let found = Route.dispatch(&searching, bodied(Http.Query, "/search", "name eq ada"))
   if found.body == "searched name eq ada" { held = held + 1 }
 
   // A query sent to a path that only answers another method is told the method
   // is wrong rather than that the path is missing.
-  if Server.dispatch(&searching, requestFor(Http.Get, "/search")).status.code == 405 {
+  if Route.dispatch(&searching, requestFor(Http.Get, "/search")).status.code == 405 {
     held = held + 1
   }
 
@@ -156,30 +158,30 @@ export fn main() -> Int {
   held
 }
 
-fn health(_request: Server.Request) -> Http.Response { Server.text(200, "ok") }
+fn health(_request: Route.Request) -> Http.Response { Reply.text(200, "ok") }
 
-fn showUser(request: Server.Request) -> Http.Response {
-  Server.text(200, "user " + Option.unwrapOr(Server.param(&request, "id"), "?"))
+fn showUser(request: Route.Request) -> Http.Response {
+  Reply.text(200, "user " + Option.unwrapOr(Route.param(&request, "id"), "?"))
 }
 
-fn showFile(request: Server.Request) -> Http.Response {
-  Server.text(200, "file " + Option.unwrapOr(Server.param(&request, "rest"), "?"))
+fn showFile(request: Route.Request) -> Http.Response {
+  Reply.text(200, "file " + Option.unwrapOr(Route.param(&request, "rest"), "?"))
 }
 
-fn createUser(request: Server.Request) -> Http.Response {
-  Server.text(201, Server.body(&request))
+fn createUser(request: Route.Request) -> Http.Response {
+  Reply.text(201, Route.body(&request))
 }
 
-fn nothingHere(_request: Server.Request) -> Http.Response { Server.text(404, "nothing here") }
+fn nothingHere(_request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }
 
-fn runSearch(request: Server.Request) -> Http.Response {
-  Server.text(200, "searched " + Server.body(&request))
+fn runSearch(request: Route.Request) -> Http.Response {
+  Reply.text(200, "searched " + Route.body(&request))
 }
 
 /// A request carrying a body, for the methods whose terms live there.
-fn bodied(method: Http.Method, target: Str, content: Str) -> Server.Request {
+fn bodied(method: Http.Method, target: Str, content: Str) -> Route.Request {
   let base = requestFor(method, target)
-  Server.Request {
+  Route.Request {
     message: Http.Request {
       method: base.message.method,
       target: base.message.target,
@@ -195,8 +197,8 @@ fn bodied(method: Http.Method, target: Str, content: Str) -> Server.Request {
 
 /// A step that records that it ran, so the order of the chain is visible in
 /// the answer rather than only in what was written.
-fn stamping(name: Str) -> Server.Middleware {
-  fn(request: Server.Request, next: Server.Handler) -> Http.Response {
+fn stamping(name: Str) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let answer = next(request)
     Http.Response {
       status: answer.status,
@@ -206,9 +208,9 @@ fn stamping(name: Str) -> Server.Middleware {
   }
 }
 
-fn requestFor(method: Http.Method, target: Str) -> Server.Request {
+fn requestFor(method: Http.Method, target: Str) -> Route.Request {
   let message = Http.Request{method: method, target: target, headers: [], body: ""}
-  Server.Request {
+  Route.Request {
     message: message,
     path: pathOf(target),
     params: mapOf([]),
@@ -236,8 +238,8 @@ fn parsePairs(source: Str) -> Array[(Str, Str)] {
   found
 }
 
-fn withHeader(request: Server.Request, name: Str, value: Str) -> Server.Request {
-  Server.Request {
+fn withHeader(request: Route.Request, name: Str, value: Str) -> Route.Request {
+  Route.Request {
     message: Http.Request {
       method: request.message.method,
       target: request.message.target,
@@ -251,12 +253,12 @@ fn withHeader(request: Server.Request, name: Str, value: Str) -> Server.Request 
   }
 }
 
-fn bodyOf(target: &Server.Router, method: Http.Method, path: Str) -> Str {
-  Server.dispatch(target, requestFor(method, path)).body
+fn bodyOf(target: &Route.Router, method: Http.Method, path: Str) -> Str {
+  Route.dispatch(target, requestFor(method, path)).body
 }
 
-fn codeOf(target: &Server.Router, method: Http.Method, path: Str) -> Int {
-  Server.dispatch(target, requestFor(method, path)).status.code
+fn codeOf(target: &Route.Router, method: Http.Method, path: Str) -> Int {
+  Route.dispatch(target, requestFor(method, path)).status.code
 }
 
 fn headerOf(answer: &Http.Response, name: Str) -> Str {
