@@ -13,7 +13,16 @@
       "include": "#numbers"
     },
     {
+      "include": "#declarations"
+    },
+    {
       "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#operators"
     },
     {
       "include": "#types"
@@ -82,7 +91,7 @@
       "patterns": [
         {
           "name": "keyword.control.pudu",
-          "match": "\\b(module|import|export|as|let|var|const|mut|fn|async|return|if|else|match|case|for|in|while|loop|break|continue|type|enum|struct|trait|impl|where|await|task|spawn|comptime|macro|true|false|null|unsafe|with|scope)\\b"
+          "match": "\\b(module|import|export|as|let|var|const|mut|fn|async|return|if|else|match|case|for|in|while|loop|break|continue|type|enum|struct|trait|impl|where|await|task|spawn|comptime|macro|unsafe|with|scope|dynamic)\\b"
         }
       ]
     },
@@ -99,6 +108,95 @@
         {
           "name": "entity.name.label.pudu",
           "match": "@[a-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.pudu",
+          "match": "\\b(true|false|null)\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(fn)\\s+([a-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "entity.name.function.pudu"
+            }
+          }
+        },
+        {
+          "match": "\\b(type|trait|enum|struct)\\s+([A-Z][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "entity.name.type.pudu"
+            }
+          }
+        },
+        {
+          "match": "\\b(const)\\s+([A-Z_][A-Z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "variable.other.constant.pudu"
+            }
+          }
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.wrapping.pudu",
+          "match": "&[+\\-*]"
+        },
+        {
+          "name": "keyword.operator.saturating.pudu",
+          "match": "[+\\-*]\\|"
+        },
+        {
+          "name": "keyword.operator.propagate.pudu",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.arrow.pudu",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.range.pudu",
+          "match": "\\.\\.=?"
+        },
+        {
+          "name": "keyword.operator.comparison.pudu",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.pudu",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.bitwise.pudu",
+          "match": "<<|>>|\\^|~|&|\\|"
+        },
+        {
+          "name": "keyword.operator.assignment.pudu",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.pudu",
+          "match": "[+\\-*/%]"
         }
       ]
     }

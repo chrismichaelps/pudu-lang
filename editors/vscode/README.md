@@ -20,6 +20,16 @@ theme, which means it appears whatever theme the reader has chosen — a theme
 that names its own icon for `.pudu` still wins, which is correct, because that
 is the reader's choice rather than ours.
 
+## Highlighting
+
+The grammar's keyword list is taken from the compiler's own token table rather
+than kept by hand, so a keyword the language gains does not go unhighlighted
+until somebody notices. Beyond keywords it separates the things a reader
+distinguishes: the name a declaration introduces from the keyword introducing
+it, a constant from a control keyword, and — because this is the difference the
+language exists to make explicit — checked arithmetic from its wrapping and
+saturating forms, which are three different operators and read as three.
+
 ## Installing
 
 1. Build the compiler and put it on your `PATH`:
