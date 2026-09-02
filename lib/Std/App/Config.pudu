@@ -1,0 +1,415 @@
+module Std.App.Config
+
+import Std.Decimal as Decimal
+import Std.Env as Env
+import Std.Io as Io
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+import Std.Toml.Read as TomlRead
+import Std.Toml as Toml
+
+/// Where a setting came from.
+///
+/// Kept beside the value rather than discarded, because a program refused over
+/// a setting should be able to say which of four places supplied it. Without
+/// this, the answer to "why is the port 9000" is a search.
+export type Source
+  = Declared
+  | Document
+  | Environment
+  | Argument
+
+/// A setting, and the layer that supplied it.
+export type Setting = { value: Str, source: Source }
+
+/// Everything the program was told, and which profile selected it.
+///
+/// A default is held in the same table as everything else rather than applied
+/// after a lookup failed. A default applied afterwards is invisible: nothing
+/// can list it, report it, or say where it came from, so a program cannot show
+/// its own configuration.
+export type Config = { settings: Map[Str, Setting], profile: Str }
+
+/// Why a setting could not be used.
+///
+/// A failure names the key, the layer, and the text, because a program that
+/// stops over one setting has told the operator almost nothing if it only says
+/// that a setting was wrong.
+export type ConfigError
+  = Missing(Str)
+  | NotWhole(Str, Source, Str)
+  | NotTruth(Str, Source, Str)
+  | NotFractional(Str, Source, Str)
+  | Unreadable(Str)
+
+/// The layers, in the order they are applied.
+const LAYERS: Array[Source] = [Declared, Document, Environment, Argument]
+
+/// The name of the setting that selects a profile.
+const PROFILE_KEY: Str = "profile"
+
+/// An empty configuration, holding nothing and naming no profile.
+export fn empty() -> Config { Config{settings: Map.empty(), profile: ""} }
+
+/// The configuration a program gets when it does not say otherwise: its own
+/// declared defaults, the named file, the machine, and this invocation, in
+/// that order, with the profile selected by an argument or the environment.
+///
+/// This is the whole of what most programs want from configuration, and it is
+/// one call so that they can have it in one call. Everything it does is a
+/// public function below it, so a program needing a different arrangement
+/// writes that arrangement rather than working around this one.
+export fn discover(defaults: &Array[(Str, Str)], path: Str) -> Result[Config, ConfigError] {
+  let base = withProfile(&declaring(defaults), activeProfile())
+  let filed = withFile(&base, path) ?
+  Ok(withArguments(&withEnvironment(&filed)))
+}
+
+/// The profile this invocation asked for, from the argument first and the
+/// machine second, or none.
+///
+/// Read before the document rather than from it, because it decides which of
+/// the document's sections applies and cannot be inside the thing it selects.
+export fn activeProfile() -> Str {
+  if let Some(named) = Env.option("--" + PROFILE_KEY) {
+    named
+  } else {
+    Option.unwrapOr(Env.variable(environmentName(PROFILE_KEY)), "")
+  }
+}
+
+/// A configuration from declared defaults alone.
+///
+/// The starting point for a program that reads nothing from outside itself,
+/// and the first layer of every program that does.
+export fn declaring(defaults: &Array[(Str, Str)]) -> Config {
+  layered(&empty(), defaults, Declared)
+}
+
+/// A configuration with a document's settings written over it.
+///
+/// The document is read as a table of dotted keys, so a section and a key
+/// beneath it name `section.key`, which is the same name the environment and
+/// an argument use for it.
+export fn withDocument(base: &Config, source: Str) -> Result[Config, ConfigError] {
+  let parsed = TomlRead.read(source)
+  if let Err(_) = parsed {
+    Err(Unreadable("the configuration document could not be read"))
+  } else {
+    let document = Result.unwrapOr(parsed, Toml.table())
+    let selected = sectionFor(&document, base.profile)
+    Ok(layered(base, &flatten(&selected, ""), Document))
+  }
+}
+
+/// A configuration with a document read from a file written over it.
+/// A file that is not there is not a failure: a program with defaults for
+/// everything is correctly configured, and refusing it would make the file
+/// mandatory in every deployment that did not need one.
+export fn withFile(base: &Config, path: Str) -> Result[Config, ConfigError] {
+  if !Io.exists(path) {
+    Ok(*base)
+  } else {
+    let read = Io.read(path)
+    if let Err(_) = read {
+      Err(Unreadable(path))
+    } else {
+      withDocument(base, Result.unwrapOr(read, ""))
+    }
+  }
+}
+
+/// A configuration with the machine's own variables written over it.
+///
+/// A dotted key is matched by transforming it rather than by consulting a
+/// table of both spellings: `server.port` is `SERVER_PORT`. Only keys the
+/// configuration already knows are looked for, so the whole environment does
+/// not become configuration.
+export fn withEnvironment(base: &Config) -> Config {
+  var found: Array[(Str, Str)] = []
+  for key in Map.keys(&base.settings) {
+    if let Some(held) = Env.variable(environmentName(key)) {
+      found = found.push((key, held))
+    }
+  }
+  layered(base, &found, Environment)
+}
+
+/// A configuration with this invocation's arguments written over it.
+/// An argument is `--server.port 8080`, spelled with the key itself, so
+/// nothing has to be learned to override a setting from the command line.
+export fn withArguments(base: &Config) -> Config {
+  var found: Array[(Str, Str)] = []
+  for key in Map.keys(&base.settings) {
+    if let Some(held) = Env.option("--" + key) { found = found.push((key, held)) }
+  }
+  layered(base, &found, Argument)
+}
+
+/// The profile a configuration selects, chosen before the document is read
+/// because it decides which of the document's sections applies.
+export fn withProfile(base: &Config, name: Str) -> Config {
+  Config{settings: base.settings, profile: name}
+}
+
+/// Which profile is active.
+export fn profileOf(target: &Config) -> Str { target.profile }
+
+/// Everything the program was told, in key order, for a program that reports
+/// its own configuration.
+export fn entries(target: &Config) -> Array[(Str, Setting)] { Map.pairs(&target.settings) }
+
+/// Which layer supplied a setting.
+export fn sourceOf(target: &Config, key: Str) -> Option[Source] {
+  if let Some(setting) = Map.get(&target.settings, key) { Some(setting.source) } else { None }
+}
+
+/// A setting as text.
+export fn text(target: &Config, key: Str) -> Result[Str, ConfigError] {
+  let setting = settingOf(target, key) ?
+  Ok(setting.value)
+}
+
+/// A setting as text, or a fallback when it is absent.
+/// A fallback is for a caller that has one at the point of reading; a value
+/// every caller shares belongs in the declared layer, where it can be seen.
+export fn textOr(target: &Config, key: Str, fallback: Str) -> Str {
+  Result.unwrapOr(text(target, key), fallback)
+}
+
+/// A setting as a whole number.
+export fn whole(target: &Config, key: Str) -> Result[Int, ConfigError] {
+  let setting = settingOf(target, key) ?
+  if let Some(number) = wholeOf(setting.value) {
+    Ok(number)
+  } else {
+    Err(NotWhole(key, setting.source, setting.value))
+  }
+}
+
+/// A setting as a whole number, or a fallback.
+export fn wholeOr(target: &Config, key: Str, fallback: Int) -> Int {
+  Result.unwrapOr(whole(target, key), fallback)
+}
+
+/// A setting as an exact fractional number.
+export fn fractional(target: &Config, key: Str) -> Result[Decimal, ConfigError] {
+  let setting = settingOf(target, key) ?
+  if let Some(number) = Decimal.parse(setting.value.trim()) {
+    Ok(number)
+  } else {
+    Err(NotFractional(key, setting.source, setting.value))
+  }
+}
+
+/// A setting as a truth.
+///
+/// The spellings accepted are the ones a configuration file is actually
+/// written with. A value outside them is refused rather than read as false,
+/// because a setting spelled `yes` that silently means no is worse than one
+/// that stops the program.
+export fn truth(target: &Config, key: Str) -> Result[Bool, ConfigError] {
+  let setting = settingOf(target, key) ?
+  let word = setting.value.trim().toLower()
+  if TRUE_WORDS.contains(word) {
+    Ok(true)
+  } else {
+    if FALSE_WORDS.contains(word) {
+      Ok(false)
+    } else {
+      Err(NotTruth(key, setting.source, setting.value))
+    }
+  }
+}
+
+/// A setting as a truth, or a fallback.
+export fn truthOr(target: &Config, key: Str, fallback: Bool) -> Bool {
+  Result.unwrapOr(truth(target, key), fallback)
+}
+
+/// A setting as a list, written separated by commas.
+export fn list(target: &Config, key: Str) -> Result[Array[Str], ConfigError] {
+  let held = text(target, key) ?
+  var found: Array[Str] = []
+  for piece in held.split(",") {
+    let trimmed = piece.trim()
+    if !trimmed.isEmpty() { found = found.push(trimmed) }
+  }
+  Ok(found)
+}
+
+/// A setting that must be there, for one the program cannot invent.
+/// A database password has no sensible default, and a program that started
+/// with an invented one would fail later and further away.
+export fn require(target: &Config, key: Str) -> Result[Str, ConfigError] {
+  let held = text(target, key) ?
+  if held.trim().isEmpty() { Err(Missing(key)) } else { Ok(held) }
+}
+
+/// What a refusal says, for a program reporting why it will not start.
+export fn explain(problem: &ConfigError) -> Str {
+  match problem {
+    case Missing(key) => "no value for " + key
+    case NotWhole(key, layer, held) => malformed(key, &layer, "a whole number", held)
+    case NotTruth(key, layer, held) => malformed(key, &layer, "true or false", held)
+    case NotFractional(key, layer, held) => malformed(key, &layer, "a decimal number", held)
+    case Unreadable(what) => "could not read " + what
+  }
+}
+
+/// The name of the layer, for a report.
+export fn sourceName(layer: &Source) -> Str { Map.getOr(&SOURCE_NAMES, *layer, "unknown") }
+
+/// The layers, in the order they apply, so a program can report the rule
+/// rather than restate it.
+export fn layerOrder() -> Array[Source] { LAYERS }
+
+const SOURCE_NAMES: Map[Source, Str] = mapOf([
+    (Declared, "declared"),
+    (Document, "document"),
+    (Environment, "environment"),
+    (Argument, "argument")
+  ])
+
+const TRUE_WORDS: Set[Str] = setOf(["true", "yes", "on", "1"])
+
+const FALSE_WORDS: Set[Str] = setOf(["false", "no", "off", "0"])
+
+fn settingOf(target: &Config, key: Str) -> Result[Setting, ConfigError] {
+  if let Some(setting) = Map.get(&target.settings, key) { Ok(setting) } else { Err(Missing(key)) }
+}
+
+fn malformed(key: Str, layer: &Source, expected: Str, held: Str) -> Str {
+  key + " from " + sourceName(layer) + " is not " + expected + ": " + held
+}
+
+/// Write one layer's settings over what is already held.
+fn layered(base: &Config, found: &Array[(Str, Str)], layer: Source) -> Config {
+  var settings = base.settings
+  for entry in found {
+    settings = Map.insert(&settings, entry[0], Setting{value: entry[1], source: layer})
+  }
+  Config{settings: settings, profile: base.profile}
+}
+
+/// The document a profile selects: the whole of it, with the named profile's
+/// own section written over the top. A profile adds to the shared settings
+/// rather than replacing them, so a profile states its differences.
+fn sectionFor(document: &Toml.Toml, profile: Str) -> Toml.Toml {
+  if profile.isEmpty() {
+      *document
+  } else {
+    if let Some(section) = Toml.field(document, profile) {
+      merged(document, &section, profile)
+    } else {
+        *document
+    }
+  }
+}
+
+/// The document with one section's fields written over the top level, and that
+/// section itself removed so it does not also appear under its own name.
+fn merged(document: &Toml.Toml, section: &Toml.Toml, named: Str) -> Toml.Toml {
+  var built = Toml.table()
+  for key in Toml.keys(document) {
+    if key != named {
+      if let Some(held) = Toml.field(document, key) { built = Toml.withField(&built, key, held) }
+    }
+  }
+  overlaid(&built, section)
+}
+
+/// Recursively apply a profile table without discarding sibling settings.
+fn overlaid(base: &Toml.Toml, changes: &Toml.Toml) -> Toml.Toml {
+  var built = *base
+  for key in Toml.keys(changes) {
+    if let Some(replacement) = Toml.field(changes, key) {
+      var selected = replacement
+      if let Some(existing) = Toml.field(&built, key) {
+        if Option.isSome(&Toml.asTable(&existing)) && Option.isSome(&Toml.asTable(&replacement)) {
+          selected = overlaid(&existing, &replacement)
+        }
+      }
+      built = Toml.withField(&built, key, selected)
+    }
+  }
+  built
+}
+
+/// Every leaf of a document, named by the dotted path that reaches it.
+fn flatten(value: &Toml.Toml, prefix: Str) -> Array[(Str, Str)] {
+  var found: Array[(Str, Str)] = []
+  for key in Toml.keys(value) {
+    let name = if prefix.isEmpty() { key } else { prefix + "." + key }
+    if let Some(held) = Toml.field(value, key) {
+      if Option.isSome(&Toml.asTable(&held)) {
+        for entry in flatten(&held, name) { found = found.push(entry) }
+      } else {
+        found = found.push((name, scalarText(&held)))
+      }
+    }
+  }
+  found
+}
+
+/// A leaf as the text a setting holds. A list becomes the comma-separated form
+/// a list setting is read back from, so a value written either way reads the
+/// same.
+fn scalarText(value: &Toml.Toml) -> Str {
+  if let Some(held) = Toml.asText(value) {
+    held
+  } else {
+    if let Some(items) = Toml.asList(value) {
+      joined(&items)
+    } else {
+      Toml.renderValue(value)
+    }
+  }
+}
+
+fn joined(items: &Array[Toml.Toml]) -> Str {
+  var listed = ""
+  var index = 0
+  while index < items.length() {
+    if index > 0 { listed = listed + "," }
+    listed = listed + scalarText(&items[index])
+    index = index + 1
+  }
+  listed
+}
+
+/// The machine's name for a dotted key.
+fn environmentName(key: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < key.length() {
+    let character = key.slice(index, index + 1)
+    built = built + if character == "." || character == "-" { "_" } else { character }
+    index = index + 1
+  }
+  built.toUpper()
+}
+
+fn wholeOf(digits: Str) -> Option[Int] {
+  let trimmed = digits.trim()
+  if trimmed.isEmpty() {
+    None
+  } else {
+    let negative = trimmed.slice(0, 1) == "-"
+    let body = if negative { trimmed.drop(1) } else { trimmed }
+    if body.isEmpty() {
+      None
+    } else {
+      var total = 0
+      var index = 0
+      var good = true
+      while index < body.length() && good {
+        let digit = "0123456789".indexOf(body.slice(index, index + 1))
+        if digit < 0 { good = false } else { total = total * 10 + digit }
+        index = index + 1
+      }
+      if good { Some(if negative { 0 - total } else { total }) } else { None }
+    }
+  }
+}

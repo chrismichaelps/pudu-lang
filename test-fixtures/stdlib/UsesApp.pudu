@@ -1,0 +1,186 @@
+module UsesApp
+
+import Std.App as App
+import Std.App.Config {Argument, Declared, Document, Environment}
+import Std.App.Config as Config
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// What an application promises.
+///
+/// Every check here runs without a socket, which is the point being proved: an
+/// application is a value, so it can be built, read, started, and stopped by a
+/// program that never binds a port.
+export fn main() -> Int {
+  var held = 0
+
+  // Settings a program declares are held like any other, so a declared default
+  // is readable and can say where it came from. A default applied after a
+  // failed lookup could do neither.
+  let declared = Config.declaring(&[("server.port", "8080"), ("app.name", "shop")])
+  if Config.textOr(&declared, "app.name", "") == "shop" { held = held + 1 }
+  if Config.wholeOr(&declared, "server.port", 0) == 8080 { held = held + 1 }
+  if Option.unwrapOr(Config.sourceOf(&declared, "app.name"), Argument) == Declared {
+    held = held + 1
+  }
+
+  // A document is written over the declaration, and a key beneath a section is
+  // named by the dotted path that reaches it.
+  let documented = readOr(&declared, "[server]\nport = 9000\nhost = \"127.0.0.1\"\n")
+  if Config.wholeOr(&documented, "server.port", 0) == 9000 { held = held + 1 }
+  if Config.textOr(&documented, "server.host", "") == "127.0.0.1" { held = held + 1 }
+  if Option.unwrapOr(Config.sourceOf(&documented, "server.port"), Declared) == Document {
+    held = held + 1
+  }
+
+  // A key the document did not mention keeps the value that was declared.
+  if Config.textOr(&documented, "app.name", "") == "shop" { held = held + 1 }
+
+  // A profile writes its own section over the shared settings rather than
+  // replacing them, so a profile states only its differences.
+  let profiled = readOr(
+      &Config.withProfile(&declared, "prod"),
+    "[server]\nport = 9000\nhost = \"127.0.0.1\"\n\n[prod]\n[prod.server]\nport = 443\n"
+  )
+  if Config.wholeOr(&profiled, "server.port", 0) == 443 { held = held + 1 }
+  if Config.textOr(&profiled, "server.host", "") == "127.0.0.1" { held = held + 1 }
+  if Config.profileOf(&profiled) == "prod" { held = held + 1 }
+
+  // A profile that is not in the document leaves the document alone rather
+  // than emptying the configuration.
+  let missing = readOr(&Config.withProfile(&declared, "staging"), "[server]\nport = 9000\n")
+  if Config.wholeOr(&missing, "server.port", 0) == 9000 { held = held + 1 }
+
+  // Reading states the type it expects and says what it found when the text
+  // cannot be that.
+  let typed = readOr(
+      &Config.empty(),
+    "port = \"nine\"\nready = true\nloud = \"yes\"\nnames = [\"a\", \"b\"]\nratio = \"1.25\"\n"
+  )
+  if let Err(problem) = Config.whole(&typed, "port") {
+    let explained = Config.explain(&problem)
+    if explained.contains("nine") && explained.contains("document") { held = held + 1 }
+  }
+  if Config.truthOr(&typed, "ready", false) { held = held + 1 }
+  if Config.truthOr(&typed, "loud", false) { held = held + 1 }
+  if Result.unwrapOr(Config.list(&typed, "names"), []) == ["a", "b"] { held = held + 1 }
+  if Result.unwrapOr(Config.fractional(&typed, "ratio"), 0.0d) == 1.25d { held = held + 1 }
+  if let Err(_) = Config.fractional(&typed, "port") { held = held + 1 }
+
+  // A truth spelled as something else is refused rather than read as false,
+  // because a setting that silently means the opposite is worse than one that
+  // stops the program.
+  if let Err(_) = Config.truth(&typed, "port") { held = held + 1 }
+
+  // A setting that is absent is absent, and one that must be there says so.
+  if let Err(_) = Config.text(&typed, "nothing.here") { held = held + 1 }
+  if let Err(_) = Config.require(&typed, "nothing.here") { held = held + 1 }
+
+  // The layers are in a fixed order that the module can state rather than a
+  // reader having to reconstruct.
+  if Config.layerOrder() == [Declared, Document, Environment, Argument] { held = held + 1 }
+  if Config.sourceName(&Environment) == "environment" { held = held + 1 }
+
+  // An application is a value: built, read, and never run.
+  let routed = Route.routing(&[Route.get("/health", healthy)])
+  let base = App.over("shop", &documented, &routed)
+  if App.nameOf(&base) == "shop" { held = held + 1 }
+  if App.stageNames(&base) == [] { held = held + 1 }
+  if Config.wholeOr(&App.configOf(&base), "server.port", 0) == 9000 { held = held + 1 }
+
+  // Its routes answer without a connection, which is what lets a handler be
+  // checked at all.
+  if Route.dispatch(&App.routerOf(&base), requestFor("/health")).body == "ok" { held = held + 1 }
+
+  // Stages start in the order written and stop in the reverse of it. The
+  // record proves the order rather than the reader assuming it.
+  let ledger = Sync.cell("")
+  let ordered = App.using(
+      &App.using(&base, recording(ledger, "first")),
+    recording(ledger, "second")
+  )
+  if App.stageNames(&ordered) == ["first", "second"] { held = held + 1 }
+
+  let coming = App.start(&ordered)
+  if App.succeeded(&coming) { held = held + 1 }
+  if coming.started == ["first", "second"] { held = held + 1 }
+  if Result.unwrapOr(Sync.get(&ledger), "") == "+first+second" { held = held + 1 }
+
+  let going = App.stop(&ordered)
+  if App.succeeded(&going) { held = held + 1 }
+  if going.started == ["second", "first"] { held = held + 1 }
+  if Result.unwrapOr(Sync.get(&ledger), "") == "+first+second-second-first" { held = held + 1 }
+
+  // A stage that will not start unwinds the ones already up, so a program that
+  // cannot come up does not leave half of itself running.
+  let unwinding = Sync.cell("")
+  let broken = App.using(
+      &App.using(&App.over("shop", &documented, &routed), recording(unwinding, "opened")),
+    App.stage("refuses", fn() -> Result[(), Str] { Err("no") }, fn() -> Result[(), Str] { Ok(()) })
+  )
+  let failed = App.start(&broken)
+  if !App.succeeded(&failed) { held = held + 1 }
+  if App.explainReport(&failed) == "refuses: no" { held = held + 1 }
+  if failed.started == ["opened"] { held = held + 1 }
+  if Result.unwrapOr(Sync.get(&unwinding), "") == "+opened-opened" { held = held + 1 }
+
+  // Stopping attempts every stage even after one fails: a resource that would
+  // not close is not a reason to leak the next one.
+  let leaking = Sync.cell("")
+  let stubborn = App.using(
+      &App.using(&App.over("shop", &documented, &routed), recording(leaking, "outer")),
+    App.stage("inner", fn() -> Result[(), Str] { Ok(()) }, fn() -> Result[(), Str] { Err("stuck") })
+  )
+  let struggled = App.stop(&stubborn)
+  if !App.succeeded(&struggled) { held = held + 1 }
+  if App.explainReport(&struggled) == "inner: stuck" { held = held + 1 }
+  if Result.unwrapOr(Sync.get(&leaking), "") == "-outer" { held = held + 1 }
+
+  // A stage with nothing to undo still starts.
+  let simple = App.using(&base, App.once("prepare", fn() -> Result[(), Str] { Ok(()) }))
+  if App.succeeded(&App.start(&simple)) { held = held + 1 }
+  if App.succeeded(&App.stop(&simple)) { held = held + 1 }
+
+  // What a refusal says names the stage rather than only reporting that one
+  // failed.
+  if App.explain(&App.StageFailed("pool", "refused")).contains("pool") { held = held + 1 }
+
+  held
+}
+
+fn healthy(_request: Route.Request) -> Http.Response { Reply.text(200, "ok") }
+
+fn readOr(base: &Config.Config, source: Str) -> Config.Config {
+  Result.unwrapOr(Config.withDocument(base, source), *base)
+}
+
+/// A stage that writes its name when it starts and again when it stops, so the
+/// order of both is a value rather than an assumption.
+fn recording(ledger: Sync.Cell[Str], name: Str) -> App.Stage {
+  App.stage(
+    name,
+    fn() -> Result[(), Str] {
+      let _noted = Sync.set(&ledger, Result.unwrapOr(Sync.get(&ledger), "") + "+" + name)
+      Ok(())
+    },
+    fn() -> Result[(), Str] {
+      let _noted = Sync.set(&ledger, Result.unwrapOr(Sync.get(&ledger), "") + "-" + name)
+      Ok(())
+    }
+  )
+}
+
+fn requestFor(path: Str) -> Route.Request {
+  let message = Http.Request{method: Http.Get, target: path, headers: [], body: ""}
+  Route.Request {
+    message: message,
+    path: path,
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "test"
+  }
+}

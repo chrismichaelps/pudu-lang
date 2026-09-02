@@ -244,6 +244,17 @@ testProgramEvaluation = do
   secured <- runEntry "test-fixtures/stdlib/UsesTls.pudu"
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
+  wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
+  markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
+  screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
+  refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
+  schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
+  probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
+  measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
+  permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
+  fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
+  checked <- runEntry "test-fixtures/stdlib/UsesValidate.pudu"
+  lasting <- runEntry "test-fixtures/stdlib/UsesSocket.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -390,7 +401,7 @@ testProgramEvaluation = do
         given, so nothing is assumed about what else the machine holds. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "10")
+        (endpoints === Just "14")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having
@@ -414,6 +425,107 @@ testProgramEvaluation = do
     , counterexample
         "a database client binds, authenticates, and rolls back"
         (database === Just "33")
+    {-| The obligations [[ADR-0016]] places on an application: that a declared
+        default is held like any other setting and can say where it came from,
+        that a later layer wins over an earlier one, that a profile states its
+        differences rather than replacing what it did not mention, that a read
+        says what it expected when the text cannot be that, and — the property
+        that only holds because an application is a value — that stages start
+        in the order written, stop in the reverse of it, and unwind what came
+        up when one of them refuses to. -}
+    , counterexample
+        "an application is a value that starts and stops in a written order"
+        (wired === Just "43")
+    {-| That placing text in a page cannot place markup in one: a script
+        written into text renders as that text, a quote inside an attribute
+        does not end the value and start another, and the ampersand is written
+        before the rest so an entity arrives once rather than twice. -}
+    , counterexample
+        "text placed in a page stays text"
+        (markup === Just "34")
+    {-| That a screen is a function from state to view, so the difference
+        between two renders is exactly the difference the state made: an
+        element that became a different element is replaced whole rather than
+        reconciled, a list whose length changed replaces the node holding it,
+        and applying the changes to the earlier screen gives the later one. -}
+    , counterexample
+        "two screens differ in what their state differs in"
+        (screens === Just "37")
+    {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
+        exists for and each paired with the legitimate version of the same
+        thing: a message framed both by a length and by a chunked encoding, two
+        lengths that disagree, a header value carrying a line break, a
+        state-changing request from another site or from one that will not say,
+        a redirect aimed off-site, a path climbing out of its root by an
+        encoded ascent, and an address only the server can reach. -}
+    , counterexample
+        "the web layer refuses what it is supposed to refuse"
+        (refused === Just "73")
+    {-| That what a schema change should do is decided without a database: a
+        migration edited after it was applied stops everything, because both
+        databases report the same version from then on and nothing later can
+        detect that their schemas differ; a version arriving below one already
+        applied is refused rather than run out of order; and a rename is not an
+        edit, because the digest is over what runs. -}
+    , counterexample
+        "a schema change is planned before a database is reached"
+        (schemas === Just "21")
+    {-| That the two questions asked from outside a process stay two
+        questions: a liveness judgement is handed a reading rather than a
+        connection and is declared comptime, so reaching a clock or a socket
+        from one is refused by the compiler; a readiness judgement may consult
+        what it needs; and an aggregate is as healthy as its unhealthiest
+        part, because every other rule arranges for a failure not to count. -}
+    , counterexample
+        "restarting and receiving traffic are different questions"
+        (probes === Just "29")
+    {-| That a set of measurements is a value, so the one before a count is
+        still there to compare against; that a metric states its unit where it
+        is declared; and that how many label combinations one metric may have
+        is bounded, with the combination that would exceed it refused and
+        counted rather than evicting a series — an evicted counter restarts at
+        zero, and a counter that falls is read as a restart. -}
+    , counterexample
+        "a metric cannot grow a series for every identifier it is handed"
+        (measured === Just "41")
+    {-| That a route which decided nothing cannot be written: the requirement
+        is given in the same call as the handler, so a route needing nothing
+        and a route somebody forgot stop being the same line; that not knowing
+        who is asking and not being permitted are different answers with
+        different statuses; and that a denial does not name what was missing,
+        because doing that one route at a time maps the model. -}
+    , counterexample
+        "a route states what it requires or it is not a route"
+        (permitted === Just "46")
+    {-| That a client bounds what a request may cost and where it may go: an
+        address the network trusts is refused unless the caller named it, and
+        refused again at every redirect rather than only at the first, since a
+        redirect to an internal address is how the first check is bypassed; a
+        chain longer than the bound and an answer larger than the caller will
+        read are refused rather than followed or truncated. -}
+    , counterexample
+        "a client is bounded in what it will fetch and where"
+        (fetched === Just "47")
+    {-| That everything wrong is reported at once rather than the first thing,
+        since a person correcting a form wants the whole list; that a failure
+        says what was expected and never repeats what was submitted, so a
+        message cannot become somewhere a script is rendered; and that nothing
+        repairs its input, because a validator that trims is deciding what the
+        sender meant. -}
+    , counterexample
+        "everything wrong is reported at once"
+        (checked === Just "54")
+    {-| That a lasting connection is not offered to whoever asks: it is not
+        subject to the rule stopping one site reading another's answers, so a
+        page on any site could otherwise open one carrying the viewer's
+        cookies. The origin is a parameter of the upgrade rather than a step
+        that can be omitted. A message from the far end is refused unless
+        masked, and how large one may be is checked against the length it
+        states rather than against what arrived. The handshake is checked
+        against the example the protocol itself publishes. -}
+    , counterexample
+        "a lasting connection is not offered to whoever asks"
+        (lasting === Just "38")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
@@ -434,7 +546,7 @@ testProgramEvaluation = do
         not, so failing closed is the only property worth checking offline. -}
     , counterexample
         "a secured connection refuses what it cannot prove"
-        (secured === Just "6")
+        (secured === Just "7")
     , counterexample "the collection module sorts, maps, filters, and joins"
         (collections === Just "41")
     , counterexample "every standard module links into one program"

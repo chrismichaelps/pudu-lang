@@ -1,0 +1,324 @@
+module Std.Db.Migrate
+
+import Std.Crypto as Crypto
+import Std.Db as Db
+import Std.Db.Session as Session
+import Std.List as List
+import Std.Option as Option
+import Std.Result as Result
+
+/// One change to a schema.
+///
+/// A value, so the whole set a program holds can be listed, ordered, and
+/// planned against a record without a database being present.
+export type Migration = { version: Int, name: Str, statements: Array[Str] }
+
+/// One that has already run, as the database records it.
+export type Applied = { version: Int, name: Str, digest: Str }
+
+/// What should happen next.
+///
+/// Both halves are here rather than only the first: a caller that is about to
+/// change a schema wants to see what is already there, and a report naming
+/// only the pending ones cannot be checked against the record it came from.
+export type Plan = { pending: Array[Migration], already: Array[Applied] }
+
+/// Why a schema will not be changed.
+export type MigrationError
+  = Changed(Int, Str)
+  | ArrivedLate(Int, Int)
+  | Repeated(Int)
+  | Unordered(Int, Int)
+  | Refused(Str, Str)
+
+/// Where the record of what has run is kept.
+const RECORD_TABLE: Str = "schema_migrations"
+
+/// The statements that make the record, run before it is read.
+///
+/// A first run against an empty database is the ordinary case rather than a
+/// failure, so nothing here requires the record to already exist.
+const RECORD_SCHEMA: Str = "create table if not exists schema_migrations (version bigint primary key, name text not null, digest text not null, applied_at timestamptz not null default now())"
+
+/// The number this program locks on while it migrates.
+///
+/// The lock is taken in the database because the processes that race are
+/// different programs on different machines, and a lock either of them holds
+/// alone is not a lock. A process that does not get it waits, then finds there
+/// is nothing to do, which is the correct outcome rather than an error.
+const LOCK_KEY: Int = 3141592653
+
+/// A migration from its parts.
+export fn migration(version: Int, name: Str, statements: &Array[Str]) -> Migration {
+  Migration{version: version, name: name, statements: *statements}
+}
+
+/// The digest of a migration's statements as they stand.
+///
+/// What makes an edit after the fact detectable. Without it, a database that
+/// ran the old text and one that ran the new both report the same version, and
+/// nothing afterwards can tell that their schemas differ.
+export fn digestOf(step: &Migration) -> Str {
+  Crypto.sha256Hex(joinedBy(&step.statements, ";\n"))
+}
+
+/// The migrations in version order, which is the order they are considered in.
+export fn ordered(available: &Array[Migration]) -> Array[Migration] {
+  List.sortBy(available, fn(left: Migration, right: Migration) -> Bool {
+      left.version < right.version
+    })
+}
+
+/// What should happen next, decided without a database.
+///
+/// A pure function of what the program holds and what the record reports, so
+/// the decision is checked by comparing values and only carrying it out needs
+/// a connection.
+export fn plan(available: &Array[Migration], record: &Array[Applied]) -> Result[Plan, MigrationError] {
+  let sorted = ordered(available)
+  repeatedVersion(&sorted) ?
+  let highest = highestApplied(record)
+  var pending: Array[Migration] = []
+  var index = 0
+  var failure: Option[MigrationError] = None
+  while index < sorted.length() && Option.isNone(&failure) {
+    let step = sorted[index]
+    if let Some(ran) = appliedAt(record, step.version) {
+      // A migration edited after it ran means this database and a fresh one
+      // would not reach the same schema, and from here on both report the same
+      // version, so nothing later can detect it.
+      if ran.digest != digestOf(&step) { failure = Some(Changed(step.version, step.name)) }
+    } else {
+      // A version below one already applied means two branches were merged
+      // without renumbering. Running it now gives this database a history no
+      // other database has.
+      if step.version <= highest {
+        failure = Some(ArrivedLate(step.version, highest))
+      } else {
+        pending = pending.push(step)
+      }
+    }
+    index = index + 1
+  }
+  if let Some(problem) = failure {
+    Err(problem)
+  } else {
+    Ok(Plan{pending: pending, already: *record})
+  }
+}
+
+/// Whether a plan has anything to do.
+export fn settled(decided: &Plan) -> Bool { decided.pending.length() == 0 }
+
+/// How many migrations a plan would run.
+export fn pendingCount(decided: &Plan) -> Int { decided.pending.length() }
+
+/// The versions a plan would run, in order.
+export fn pendingVersions(decided: &Plan) -> Array[Int] {
+  var found: Array[Int] = []
+  for step in decided.pending { found = found.push(step.version) }
+  found
+}
+
+/// The record a database holds.
+///
+/// The table is made before it is read, because a first run against an empty
+/// database is the ordinary case.
+export fn recordOf(
+  stream: Session.Connection
+) -> Result[(Array[Applied], Session.Connection), Session.DbError] {
+  let made = Db.simple(stream, RECORD_SCHEMA) ?
+  let read = Db.simple(made[1], "select version, name, digest from " + RECORD_TABLE + " order by version") ?
+  Ok((asApplied(&read[0]), read[1]))
+}
+
+/// Bring the schema to what the program expects.
+///
+/// Each migration runs in its own transaction, so a failure leaves every
+/// earlier one applied and the failing one absent and the record always
+/// describes the schema. One transaction around all of them is attractive
+/// until a statement that cannot run inside one appears.
+export fn migrate(
+  stream: Session.Connection,
+  available: &Array[Migration]
+) -> Result[(Int, Session.Connection), MigrationError] {
+  let locked = lockTaken(stream) ?
+  let recorded = reported(recordOf(locked)) ?
+  let decided = plan(available, &recorded[0]) ?
+  var carrying = recorded[1]
+  var done = 0
+  var failure: Option[MigrationError] = None
+  var index = 0
+  while index < decided.pending.length() && Option.isNone(&failure) {
+    let outcome = applyOne(carrying, &decided.pending[index])
+    if let Ok(after) = outcome {
+      carrying = after
+      done = done + 1
+    } else {
+      failure = Some(refusalOf(outcome, &decided.pending[index]))
+    }
+    index = index + 1
+  }
+  let released = release(carrying)
+  if let Some(problem) = failure {
+    Err(problem)
+  } else {
+    Ok((done, Result.unwrapOr(released, carrying)))
+  }
+}
+
+/// One migration, in its own transaction, recorded in the same one.
+///
+/// The statements and the record of them commit together, so the record can
+/// never say a migration ran when it did not, or fail to say one did.
+fn applyOne(
+  stream: Session.Connection,
+  step: &Migration
+) -> Result[Session.Connection, Session.DbError] {
+  var carrying = Db.begin(stream) ?
+  for statement in step.statements {
+    let ran = Db.simple(carrying, statement)
+    if let Err(problem) = ran {
+      let _undone = Db.rollback(carrying)
+      return Err(problem)
+    }
+    carrying = Result.unwrapOr(ran, (emptyRows(), carrying))[1]
+  }
+  let noted = Db.run(
+    carrying,
+    "insert into " + RECORD_TABLE + " (version, name, digest) values ($1, $2, $3)",
+      &[Some(show(step.version)), Some(step.name), Some(digestOf(step))]
+  )
+  if let Err(problem) = noted {
+    let _undone = Db.rollback(carrying)
+    Err(problem)
+  } else {
+    Db.commit(Result.unwrapOr(noted, (emptyRows(), carrying))[1])
+  }
+}
+
+/// Take the lock, so two processes starting together do not both migrate.
+fn lockTaken(stream: Session.Connection) -> Result[Session.Connection, MigrationError] {
+  let taken = Db.simple(stream, "select pg_advisory_lock(" + show(LOCK_KEY) + ")")
+  if let Err(problem) = taken {
+    Err(Refused("the migration lock", show(problem)))
+  } else {
+    Ok(Result.unwrapOr(taken, (emptyRows(), stream))[1])
+  }
+}
+
+fn release(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  let freed = Db.simple(stream, "select pg_advisory_unlock(" + show(LOCK_KEY) + ")") ?
+  Ok(freed[1])
+}
+
+fn reported[T](
+  outcome: Result[T, Session.DbError]
+) -> Result[T, MigrationError] {
+  Result.mapErr(outcome, fn(problem: Session.DbError) -> MigrationError {
+      Refused("the migration record", show(problem))
+    })
+}
+
+fn refusalOf(
+  outcome: Result[Session.Connection, Session.DbError],
+  step: &Migration
+) -> MigrationError {
+  if let Err(problem) = outcome {
+    Refused(show(step.version) + " " + step.name, show(problem))
+  } else {
+    Refused(show(step.version) + " " + step.name, "the migration did not run")
+  }
+}
+
+/// Two migrations with the same version, which cannot both be the truth about
+/// what that version is.
+fn repeatedVersion(sorted: &Array[Migration]) -> Result[(), MigrationError] {
+  var index = 1
+  var repeated: Option[Int] = None
+  while index < sorted.length() {
+    if sorted[index].version == sorted[index - 1].version {
+      repeated = Some(sorted[index].version)
+    }
+    index = index + 1
+  }
+  if let Some(version) = repeated { Err(Repeated(version)) } else { Ok(()) }
+}
+
+fn highestApplied(record: &Array[Applied]) -> Int {
+  var highest = 0
+  for ran in record { if ran.version > highest { highest = ran.version } }
+  highest
+}
+
+fn appliedAt(record: &Array[Applied], version: Int) -> Option[Applied] {
+  var found: Option[Applied] = None
+  for ran in record { if ran.version == version { found = Some(ran) } }
+  found
+}
+
+fn asApplied(result: &Db.Rows) -> Array[Applied] {
+  var found: Array[Applied] = []
+  var index = 0
+  while index < Db.rowCount(result) {
+    found = found.push(
+      Applied {
+        version: Option.unwrapOr(wholeOf(Db.value(result, index, "version")), 0),
+        name: Option.unwrapOr(Db.value(result, index, "name"), ""),
+        digest: Option.unwrapOr(Db.value(result, index, "digest"), "")
+      }
+    )
+    index = index + 1
+  }
+  found
+}
+
+/// What a refusal says.
+export fn explain(problem: &MigrationError) -> Str {
+  match problem {
+    case Changed(version, name) =>
+    "migration " + show(version) + " " + name
+      + " changed after it was applied; a database that ran the earlier text would not reach the same schema"
+    case ArrivedLate(version, highest) =>
+    "migration " + show(version) + " is below " + show(highest)
+      + ", which is already applied; renumber it rather than running it out of order"
+    case Repeated(version) => "two migrations both claim version " + show(version)
+    case Unordered(version, other) =>
+    "migration " + show(version) + " is out of order against " + show(other)
+    case Refused(what, reason) => what + " was refused: " + reason
+  }
+}
+
+fn emptyRows() -> Db.Rows { Db.Rows{columns: [], rows: [], tag: ""} }
+
+fn joinedBy(pieces: &Array[Str], separator: Str) -> Str {
+  var built = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 { built = built + separator }
+    built = built + pieces[index]
+    index = index + 1
+  }
+  built
+}
+
+fn wholeOf(digits: Option[Str]) -> Option[Int] {
+  if let Some(digit) = digits {
+    let trimmed = digit.trim()
+    if trimmed.isEmpty() {
+      None
+    } else {
+      var total = 0
+      var index = 0
+      var good = true
+      while index < trimmed.length() && good {
+        let digit = "0123456789".indexOf(trimmed.slice(index, index + 1))
+        if digit < 0 { good = false } else { total = total * 10 + digit }
+        index = index + 1
+      }
+      if good { Some(total) } else { None }
+    }
+  } else {
+    None
+  }
+}

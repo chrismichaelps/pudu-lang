@@ -6,6 +6,8 @@ tags: [moc, adr]
 # Decision Map
 
 - [[ADR-0015-hash-contract-and-hash-map]] — coherent equality/hashing and deterministic persistent hash maps.
+- [[ADR-0017-what-the-web-layer-refuses]] — accepted: framing ambiguity, header injection, cross-site changes, off-site redirects, escaping paths, and self-disclosure are refused by default.
+- [[ADR-0016-an-application-is-a-value]] — accepted: wiring is a graph the programmer wrote, lifecycle is a list, and the program is a value that can be read without being run.
 
 - [[ADR-0001-language-purpose-and-v1-scope]] — coherent native systems-language purpose and staged feature admission.
 - [[ADR-0002-compiler-pipeline]] — explicit Haskell phases, checked Core IR, interpreter oracle, and C11 backend.

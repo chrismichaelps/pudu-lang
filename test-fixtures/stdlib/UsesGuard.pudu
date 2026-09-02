@@ -1,0 +1,274 @@
+module UsesGuard
+
+import Std.Http as Http
+import Std.Http.Safe {Escapes, FramedTwice, FromAnotherSite, LengthDisagrees, Reserved, SameOrigin, Unstated}
+import Std.Http.Safe as Safe
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Result as Result
+
+/// What the web layer refuses.
+///
+/// Each check supplies the attack and asserts the refusal, and where a refusal
+/// could plausibly catch ordinary traffic there is a companion check that the
+/// legitimate version still passes — a defence that also refuses real requests
+/// has not been tested.
+export fn main() -> Int {
+  var held = 0
+
+  // A message that states its body length two ways is refused rather than
+  // resolved. Adopting a precedence rule is what lets two readers in a chain
+  // disagree, which is the whole of the attack.
+  if let Err(FramedTwice) = Safe.bodyLength(&[
+      ("Content-Length", "6"),
+      ("Transfer-Encoding", "chunked")
+    ])
+  {
+    held = held + 1
+  }
+
+  // Two lengths that disagree are refused, and the refusal names both.
+  if let Err(problem) = Safe.bodyLength(&[("Content-Length", "6"), ("Content-Length", "9")]) {
+    if Safe.explain(&problem).contains("6") && Safe.explain(&problem).contains("9") {
+      held = held + 1
+    }
+  }
+
+  // Two lengths that agree are not a conflict.
+  if Result.unwrapOr(Safe.bodyLength(&[("Content-Length", "6"), ("content-length", "6")]), -1) == 6 {
+    held = held + 1
+  }
+
+  // A length that is not a number is refused rather than read as none.
+  if let Err(_) = Safe.bodyLength(&[("Content-Length", "6x")]) { held = held + 1 }
+  if let Err(_) = Safe.bodyLength(&[("Content-Length", "-1")]) { held = held + 1 }
+
+  // An ordinary message still says how long it is, and one with no body says
+  // nothing rather than being refused.
+  if Result.unwrapOr(Safe.bodyLength(&[("Content-Length", "42")]), -1) == 42 { held = held + 1 }
+  if Result.unwrapOr(Safe.bodyLength(&[("Host", "x")]), -1) == 0 { held = held + 1 }
+  if Safe.isChunked(&[("Transfer-Encoding", "chunked")]) { held = held + 1 }
+
+  // A header value that would end the header is refused rather than escaped.
+  // Escaping guesses at an intent no legitimate value has.
+  if let Err(_) = Safe.headerWritable("X-Note", "fine\r\nSet-Cookie: stolen=1") { held = held + 1 }
+  if let Err(_) = Safe.headerWritable("X-Note", "fine\nX-Other: 1") { held = held + 1 }
+  if let Err(_) = Safe.headerWritable("X-Bad\r\nX", "fine") { held = held + 1 }
+  if let Ok(_) = Safe.headerWritable("X-Note", "an ordinary value") { held = held + 1 }
+  if let Err(_) = Safe.headersWritable(&[("A", "ok"), ("B", "bad\r\n")]) { held = held + 1 }
+  if let Ok(_) = Safe.headersWritable(&[("A", "ok"), ("B", "also ok")]) { held = held + 1 }
+
+  // Where a request came from is read from what the browser stated and a page
+  // cannot forge.
+  if Safe.provenanceOf(&[("Sec-Fetch-Site", "same-origin")]) == SameOrigin { held = held + 1 }
+  if Safe.provenanceOf(&[("Sec-Fetch-Site", "cross-site")]) == FromAnotherSite { held = held + 1 }
+  if Safe.provenanceOf(&[("Host", "x")]) == Unstated { held = held + 1 }
+
+  // A method that changes nothing is always allowed, whatever it says.
+  if let Ok(_) = Safe.changeAllowed(&Http.Get, &[("Sec-Fetch-Site", "cross-site")]) {
+    held = held + 1
+  }
+
+  // One that changes something must have come from this site.
+  if let Err(_) = Safe.changeAllowed(&Http.Post, &[("Sec-Fetch-Site", "cross-site")]) {
+    held = held + 1
+  }
+  if let Ok(_) = Safe.changeAllowed(&Http.Post, &[("Sec-Fetch-Site", "same-origin")]) {
+    held = held + 1
+  }
+
+  // A request that states nothing is treated as though it came from elsewhere:
+  // an old client and a hostile one look the same, and one reading is safe for
+  // both.
+  if let Err(_) = Safe.changeAllowed(&Http.Delete, &[("Host", "x")]) { held = held + 1 }
+
+  // A redirect goes somewhere the program named. A path on this site always
+  // counts; an origin has to be on the list.
+  if Result.unwrapOr(Safe.redirectTarget("/account", &[]), "") == "/account" { held = held + 1 }
+  if let Err(_) = Safe.redirectTarget("https://evil.example/steal", &[]) { held = held + 1 }
+  if Result.unwrapOr(Safe.redirectTarget("https://ok.example/x", &["https://ok.example"]), "")
+    == "https://ok.example/x"
+  {
+    held = held + 1
+  }
+
+  // A target that keeps the scheme and changes the host reads as a path and is
+  // not one, which is the form this check exists for.
+  if let Err(_) = Safe.redirectTarget("//evil.example/steal", &[]) { held = held + 1 }
+  if let Err(_) = Safe.redirectTarget("", &[]) { held = held + 1 }
+
+  // A path from a request cannot leave the directory it is resolved under.
+  // Segments are walked rather than searched for a shape, because every filter
+  // of that kind has an encoding that gets past it.
+  if let Err(Escapes(_)) = Safe.resolveUnder("/srv/www", "../../etc/passwd") { held = held + 1 }
+  if let Err(_) = Safe.resolveUnder("/srv/www", "a/../../../etc/passwd") { held = held + 1 }
+  if let Err(_) = Safe.resolveUnder("/srv/www", "%2e%2e%2f%2e%2e%2fetc/passwd") { held = held + 1 }
+  if Result.unwrapOr(Safe.resolveUnder("/srv/www", "css/site.css"), "") == "/srv/www/css/site.css" {
+    held = held + 1
+  }
+
+  // An ascent that stays inside the root is ordinary and is not refused.
+  if Result.unwrapOr(Safe.resolveUnder("/srv/www", "a/../b.css"), "") == "/srv/www/b.css" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Safe.resolveUnder("/srv/www/", "./x.css"), "") == "/srv/www/x.css" {
+    held = held + 1
+  }
+
+  // An address a request named is refused when it is one the network trusts,
+  // because a server that fetches what it is told to fetch reaches what only
+  // the server can reach.
+  if Safe.reservedHost("127.0.0.1") { held = held + 1 }
+  if Safe.reservedHost("localhost") { held = held + 1 }
+  if Safe.reservedHost("169.254.169.254") { held = held + 1 }
+  if Safe.reservedHost("10.0.0.5") { held = held + 1 }
+  if Safe.reservedHost("192.168.1.1") { held = held + 1 }
+  if Safe.reservedHost("172.16.0.1") { held = held + 1 }
+  if !Safe.reservedHost("172.15.0.1") { held = held + 1 }
+  if !Safe.reservedHost("example.com") { held = held + 1 }
+  if let Err(Reserved(_)) = Safe.outboundHost("127.0.0.1", &[]) { held = held + 1 }
+  if let Ok(_) = Safe.outboundHost("127.0.0.1", &["127.0.0.1"]) { held = held + 1 }
+
+  // Now the steps, over a router that answers without a connection.
+  let routed = Route.routing(&[Route.get("/x", plain), Route.post("/x", plain)])
+  let guarded = wrapped(&routed, Guard.protectedHeaders())
+
+  // The protective headers are there without anyone asking for them.
+  let answered = guarded(requestFor(Http.Get, "/x", &[]))
+  if headerOf(&answered, "X-Frame-Options") == "deny" { held = held + 1 }
+  if headerOf(&answered, "X-Content-Type-Options") == "nosniff" { held = held + 1 }
+  if headerOf(&answered, "Referrer-Policy") == "no-referrer" { held = held + 1 }
+  if headerOf(&answered, "Content-Security-Policy").contains("frame-ancestors 'none'") {
+    held = held + 1
+  }
+  if headerOf(&answered, "Cross-Origin-Opener-Policy") == "same-origin" { held = held + 1 }
+
+  // Nothing says what this is. The published list of headers to strip is
+  // largely a list of frameworks that disclosed themselves.
+  if headerOf(&answered, "Server") == "" { held = held + 1 }
+  if headerOf(&answered, "X-Powered-By") == "" { held = held + 1 }
+
+  // The header claiming the site is only ever reached securely is sent only
+  // when the connection was, because sending it otherwise states something
+  // untrue.
+  if headerOf(&answered, "Strict-Transport-Security") == "" { held = held + 1 }
+  let overSecure = guarded(requestFor(Http.Get, "/x", &[("X-Forwarded-Proto", "https")]))
+  if headerOf(&overSecure, "Strict-Transport-Security").contains("max-age=") { held = held + 1 }
+
+  // A cross-site post is refused before it reaches the handler.
+  let checked = wrapped(&routed, Guard.sameSiteOnly())
+  if checked(requestFor(Http.Post, "/x", &[("Sec-Fetch-Site", "cross-site")])).status.code == 403 {
+    held = held + 1
+  }
+  if checked(requestFor(Http.Post, "/x", &[("Sec-Fetch-Site", "same-origin")])).status.code == 200 {
+    held = held + 1
+  }
+  if checked(requestFor(Http.Get, "/x", &[("Sec-Fetch-Site", "cross-site")])).status.code == 200 {
+    held = held + 1
+  }
+
+  // A cross-origin permission is an allowlist. An origin not on it receives no
+  // permission at all, rather than one permitting nothing, because the absence
+  // is what a browser acts on.
+  let sharing = Guard.shareWith(&["https://friend.example"])
+  let sharedRoutes = wrapped(&routed, Guard.shared(&sharing))
+  let welcomed = sharedRoutes(requestFor(Http.Get, "/x", &[("Origin", "https://friend.example")]))
+  if headerOf(&welcomed, "Access-Control-Allow-Origin") == "https://friend.example" {
+    held = held + 1
+  }
+  if headerOf(&welcomed, "Vary") == "Origin" { held = held + 1 }
+  let stranger = sharedRoutes(requestFor(Http.Get, "/x", &[("Origin", "https://evil.example")]))
+  if headerOf(&stranger, "Access-Control-Allow-Origin") == "" { held = held + 1 }
+
+  // The requesting origin is never reflected back, which is what a
+  // misconfiguration looks like from the outside.
+  if headerOf(&stranger, "Access-Control-Allow-Origin") != "https://evil.example" {
+    held = held + 1
+  }
+
+  // A permission with credentials is reachable only because a wildcard is not.
+  let trusting = Guard.withCredentials(&sharing)
+  let trusted = wrapped(&routed, Guard.shared(&trusting))
+  let credentialled = trusted(requestFor(Http.Get, "/x", &[("Origin", "https://friend.example")]))
+  if headerOf(&credentialled, "Access-Control-Allow-Credentials") == "true" { held = held + 1 }
+  if headerOf(&credentialled, "Access-Control-Allow-Origin") != "*" { held = held + 1 }
+
+  // A request identity is carried into the answer, and one that arrived is
+  // kept so a value stays the same across every service it reaches.
+  let tagged = wrapped(&routed, Guard.identified())
+  if headerOf(&tagged(requestFor(Http.Get, "/x", &[("X-Request-Id", "abc123")])), "X-Request-Id")
+    == "abc123"
+  {
+    held = held + 1
+  }
+  if !headerOf(&tagged(requestFor(Http.Get, "/x", &[])), "X-Request-Id").isEmpty() {
+    held = held + 1
+  }
+
+  // An identity that arrived is held to what a header may hold, rather than
+  // trusted for having arrived.
+  if headerOf(&tagged(requestFor(Http.Get, "/x", &[("X-Request-Id", "a\r\nb")])), "X-Request-Id")
+    != "a\r\nb"
+  {
+    held = held + 1
+  }
+
+  // A failure says that it failed, and nothing else. What explains itself to a
+  // stranger is a reconnaissance tool.
+  let failing = Route.routing(&[Route.get("/x", leaks)])
+  let hushed = wrapped(&failing, Guard.quiet(fn(_line: Str) -> () { () }))
+  let refused = hushed(requestFor(Http.Get, "/x", &[]))
+  if refused.status.code == 500 { held = held + 1 }
+  if !refused.body.contains("/etc/secrets") { held = held + 1 }
+  if !refused.body.contains("connection refused") { held = held + 1 }
+  if !headerOf(&refused, "X-Request-Id").isEmpty() { held = held + 1 }
+
+  // An answer that did not fail is left exactly as the handler wrote it.
+  let untouched = wrapped(&routed, Guard.quiet(fn(_line: Str) -> () { () }))
+  if untouched(requestFor(Http.Get, "/x", &[])).body == "ok" { held = held + 1 }
+
+  // A redirect goes where the program named it, and refuses otherwise.
+  if Guard.redirect(302, "/next", &[]).status.code == 302 { held = held + 1 }
+  if headerOf(&Guard.redirect(302, "/next", &[]), "Location") == "/next" { held = held + 1 }
+  if Guard.redirect(302, "https://evil.example", &[]).status.code == 400 { held = held + 1 }
+
+  // The standard set is every step, so a service is protected before its
+  // author has thought about any of this.
+  if Guard.standard(&Guard.shareNothing()).length() == 4 { held = held + 1 }
+  if Guard.strict().length() == 4 { held = held + 1 }
+
+  held
+}
+
+fn plain(_request: Route.Request) -> Http.Response { Reply.text(200, "ok") }
+
+/// A handler that says too much, which is what the quiet step exists for.
+fn leaks(_request: Route.Request) -> Http.Response {
+  Reply.text(500, "opening /etc/secrets/db.key: connection refused at 10.0.0.4:5432")
+}
+
+/// A router with one step around it, as a handler that can be called directly.
+fn wrapped(routed: &Route.Router, step: Route.Middleware) -> Route.Handler {
+  let inner = *routed
+  fn(request: Route.Request) -> Http.Response {
+    step(request, fn(passed: Route.Request) -> Http.Response { Route.dispatch(&inner, passed) })
+  }
+}
+
+fn requestFor(method: Http.Method, path: Str, headers: &Array[(Str, Str)]) -> Route.Request {
+  let message = Http.Request{method: method, target: path, headers: *headers, body: ""}
+  Route.Request {
+    message: message,
+    path: path,
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "test"
+  }
+}
+
+fn headerOf(answer: &Http.Response, name: Str) -> Str {
+  var found = ""
+  for entry in answer.headers { if entry[0].toLower() == name.toLower() { found = entry[1] } }
+  found
+}

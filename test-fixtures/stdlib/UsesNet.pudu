@@ -3,6 +3,7 @@ module UsesNet
 import Std.Bytes as ByteSeq
 import Std.Channel as Channel
 import Std.Concurrent as Concurrent
+import Std.Net {Closed, NetOperationTimedOut}
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
@@ -68,6 +69,9 @@ export fn main() -> Int {
   let refused = Net.connect("127.0.0.1", 1)
   if Result.isErr(&refused) { held = held + 1 }
 
+  held = held + invalidatesTimedOutRead()
+  held = held + invalidatesTimedOutSend()
+
   // A second listener answers with a port of its own, so binding twice does
   // not silently hand back the same endpoint.
   let first = Net.listenLocal(0)
@@ -83,6 +87,57 @@ export fn main() -> Int {
   }
 
   held
+}
+
+fn invalidatesTimedOutRead() -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(_connection: Net.Connection) -> Bool {
+            let _waited = Concurrent.sleep(100)
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let connected = Net.connect("127.0.0.1", port)
+    var held = 0
+    if let Ok(connection) = connected {
+      if let Err(NetOperationTimedOut) = Net.receiveWithin(&connection, 1, 10) { held = held + 1 }
+      if let Err(Closed) = Net.receive(&connection, 1) { held = held + 1 }
+    }
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    held
+  } else {
+    0
+  }
+}
+
+fn invalidatesTimedOutSend() -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, 1, fn(_connection: Net.Connection) -> Bool {
+            let _waited = Concurrent.sleep(100)
+            false
+          })
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let connected = Net.connect("127.0.0.1", port)
+    var held = 0
+    if let Ok(connection) = connected {
+      let payload = ByteSeq.fromText("ping")
+      if let Err(NetOperationTimedOut) = Net.sendWithin(&connection, &payload, 0) { held = held + 1 }
+      if let Err(Closed) = Net.receive(&connection, 1) { held = held + 1 }
+    }
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    held
+  } else {
+    0
+  }
 }
 
 fn textOf(payload: &Bytes) -> Str { Result.unwrapOr(ByteSeq.toText(payload), "") }

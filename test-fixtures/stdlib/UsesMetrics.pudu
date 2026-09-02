@@ -1,0 +1,181 @@
+module UsesMetrics
+
+import Std.App.Metrics {Bytes, Count, Counter, Distribution, Gauge, Milliseconds}
+import Std.App.Metrics as Metrics
+import Std.Option as Option
+
+/// What a measurement promises.
+///
+/// The two claims under test are that a set of measurements is a value, so it
+/// can be compared, and that the failure that takes down monitoring systems —
+/// a metric growing a series per identifier — is refused rather than reached.
+export fn main() -> Int {
+  var held = 0
+
+  let declared = Metrics.distribution(
+      &Metrics.gauge(
+        &Metrics.counter(&Metrics.empty(), "requests", Count, "requests answered"),
+      "connections",
+      Count,
+      "connections open"
+    ),
+    "latency",
+    Milliseconds,
+    "how long an answer took",
+      &[10, 50, 100]
+  )
+
+  // Everything declared is there, in the order it was declared.
+  if Metrics.names(&declared) == ["requests", "connections", "latency"] { held = held + 1 }
+  if Option.unwrapOr(Metrics.declarationOf(&declared, "requests"), missing()).kind == Counter {
+    held = held + 1
+  }
+  if Option.unwrapOr(Metrics.declarationOf(&declared, "connections"), missing()).kind == Gauge {
+    held = held + 1
+  }
+  if Option.unwrapOr(Metrics.declarationOf(&declared, "latency"), missing()).kind == Distribution {
+    held = held + 1
+  }
+
+  // A metric states its unit when it is declared. A right number in a unit
+  // nobody wrote down is the commonest failure here, and it is found during an
+  // incident when two dashboards disagree.
+  if Option.unwrapOr(Metrics.declarationOf(&declared, "latency"), missing()).unit == Milliseconds {
+    held = held + 1
+  }
+
+  // Declaring the same metric twice leaves the first, so a module that
+  // declares what it needs does not reset what another module measured.
+  let again = Metrics.counter(&declared, "requests", Bytes, "something else")
+  if Option.unwrapOr(Metrics.declarationOf(&again, "requests"), missing()).unit == Count {
+    held = held + 1
+  }
+
+  // Adding to a counter answers a new set, so the one before is still there to
+  // compare against. That is what makes all of this checkable.
+  let counted = Metrics.increment(&Metrics.increment(&declared, "requests", &[]), "requests", &[])
+  if Metrics.valueOr(&counted, "requests", &[]) == 2 { held = held + 1 }
+  if Metrics.valueOr(&declared, "requests", &[]) == 0 { held = held + 1 }
+  if Metrics.valueOr(&Metrics.add(&counted, "requests", &[], 5), "requests", &[]) == 7 {
+    held = held + 1
+  }
+
+  // A gauge moves either way.
+  let moved = Metrics.set(&Metrics.set(&declared, "connections", &[], 9), "connections", &[], 4)
+  if Metrics.valueOr(&moved, "connections", &[]) == 4 { held = held + 1 }
+
+  // A series nothing measured is nothing rather than zero, because a caller
+  // that could not tell them apart would read an unmeasured thing as measured.
+  if Option.isNone(&Metrics.valueOf(&declared, "requests", &[])) { held = held + 1 }
+  if Option.isSome(&Metrics.valueOf(&counted, "requests", &[])) { held = held + 1 }
+
+  // A metric nothing declared is not measured and is not an error: a module
+  // reporting something the program did not declare should not be able to stop
+  // it.
+  if Metrics.valueOr(&Metrics.increment(&declared, "undeclared", &[]), "undeclared", &[]) == 0 {
+    held = held + 1
+  }
+  if Metrics.names(&Metrics.increment(&declared, "undeclared", &[])).length() == 3 {
+    held = held + 1
+  }
+
+  // Labels break a metric down, and two callers writing the same labels in
+  // different orders name one series rather than two.
+  let labelled = Metrics.increment(
+      &Metrics.increment(&declared, "requests", &[("route", "/x"), ("method", "get")]),
+    "requests",
+      &[("method", "get"), ("route", "/x")]
+  )
+  if Metrics.valueOr(&labelled, "requests", &[("route", "/x"), ("method", "get")]) == 2 {
+    held = held + 1
+  }
+  if Metrics.seriesCount(&labelled, "requests") == 1 { held = held + 1 }
+
+  // Different labels are different series.
+  let split = Metrics.increment(&labelled, "requests", &[("route", "/y"), ("method", "get")])
+  if Metrics.seriesCount(&split, "requests") == 2 { held = held + 1 }
+  if Metrics.valueOr(&split, "requests", &[("route", "/y"), ("method", "get")]) == 1 {
+    held = held + 1
+  }
+
+  // How many combinations a metric may have is bounded. A label carrying an
+  // identifier turns one metric into millions, and the collector falls over
+  // rather than the program that caused it.
+  let bounded = Metrics.limitedTo(&declared, "requests", 2)
+  var crowded = bounded
+  var index = 0
+  while index < 10 {
+    crowded = Metrics.increment(&crowded, "requests", &[("user", show(index))])
+    index = index + 1
+  }
+  if Metrics.seriesCount(&crowded, "requests") == 2 { held = held + 1 }
+
+  // The ones already there keep their values. Evicting one instead would make
+  // a counter restart at zero, and a counter that falls is what alerting reads
+  // as a restart.
+  if Metrics.valueOr(&crowded, "requests", &[("user", "0")]) == 1 { held = held + 1 }
+  if Metrics.valueOr(&crowded, "requests", &[("user", "1")]) == 1 { held = held + 1 }
+  if Metrics.valueOr(&crowded, "requests", &[("user", "9")]) == 0 { held = held + 1 }
+
+  // What was refused is counted, so a program whose labels are wrong can see
+  // that without waiting for the collector to fail.
+  if Metrics.refusedCount(&crowded) == 8 { held = held + 1 }
+  if Metrics.refusedCount(&declared) == 0 { held = held + 1 }
+
+  // A series already present is still updated after the bound is reached, so
+  // reaching it stops new combinations rather than stopping measurement.
+  if Metrics.valueOr(&Metrics.increment(&crowded, "requests", &[("user", "0")]), "requests", &[("user", "0")])
+    == 2
+  {
+    held = held + 1
+  }
+
+  // A distribution counts how many observations fell at or below each stated
+  // boundary, cumulatively, which is what makes a quantile computable from the
+  // buckets alone.
+  var timed = declared
+  for amount in [5, 20, 20, 200] { timed = Metrics.observe(&timed, "latency", &[], amount) }
+  if Metrics.countAt(&timed, "latency", &[], 10) == 1 { held = held + 1 }
+  if Metrics.countAt(&timed, "latency", &[], 50) == 3 { held = held + 1 }
+  if Metrics.countAt(&timed, "latency", &[], 100) == 3 { held = held + 1 }
+
+  // Every observation is counted and summed, including the ones above the
+  // highest boundary.
+  if Metrics.valueOr(&timed, "latency", &[]) == 4 { held = held + 1 }
+  if Metrics.totalOf(&timed, "latency", &[]) == 245 { held = held + 1 }
+
+  // Boundaries are the ones stated, in order, whatever order they were given.
+  let jumbled = Metrics.distribution(&Metrics.empty(), "d", Count, "d", &[100, 10, 50])
+  if Option.unwrapOr(Metrics.declarationOf(&jumbled, "d"), missing()).bounds == [10, 50, 100] {
+    held = held + 1
+  }
+
+  // A distribution that states no boundaries gets ones rather than none.
+  let defaulted = Metrics.distribution(&Metrics.empty(), "d", Count, "d", &[])
+  if Option.unwrapOr(Metrics.declarationOf(&defaulted, "d"), missing()).bounds.length() > 0 {
+    held = held + 1
+  }
+
+  // The rendered form names the metric, its kind, and its unit.
+  let written = Metrics.render(&timed)
+  if written.contains("# TYPE latency histogram") { held = held + 1 }
+  if written.contains("# UNIT latency milliseconds") { held = held + 1 }
+  if written.contains("# HELP requests requests answered") { held = held + 1 }
+  if written.contains("latency_sum 245") { held = held + 1 }
+  if written.contains("latency_count 4") { held = held + 1 }
+  if written.contains("le=\"+Inf\"") { held = held + 1 }
+
+  // A labelled series renders its labels.
+  if Metrics.render(&split).contains("route=\"/x\"") { held = held + 1 }
+
+  // A label value carrying a quote does not end the label and begin another.
+  let quoted = Metrics.increment(&declared, "requests", &[("note", "a \" b")])
+  if !Metrics.render(&quoted).contains("note=\"a \" b\"") { held = held + 1 }
+  if Metrics.render(&quoted).contains("\\\"") { held = held + 1 }
+
+  held
+}
+
+fn missing() -> Metrics.Declared {
+  Metrics.Declared{name: "", kind: Counter, unit: Count, help: "", bounds: [], seriesLimit: 0}
+}

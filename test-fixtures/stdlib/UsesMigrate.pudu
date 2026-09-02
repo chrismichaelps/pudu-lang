@@ -1,0 +1,111 @@
+module UsesMigrate
+
+import Std.Db.Migrate {Applied, ArrivedLate, Changed, Repeated}
+import Std.Db.Migrate as Migrate
+import Std.Result as Result
+
+/// What a schema change promises.
+///
+/// The decision about what should run is a pure function of what the program
+/// holds and what the database reports, so all of it is checked here by
+/// comparing values. Only carrying the decision out needs a connection.
+export fn main() -> Int {
+  var held = 0
+
+  let first = Migrate.migration(1, "accounts", &["create table accounts (id bigint primary key)"])
+  let second = Migrate.migration(2, "email", &["alter table accounts add column email text"])
+  let third = Migrate.migration(3, "index", &["create index on accounts (email)"])
+
+  // Against an empty database everything is pending, in version order.
+  let fresh = planOf(&[third, first, second], &[])
+  if Migrate.pendingCount(&fresh) == 3 { held = held + 1 }
+  if Migrate.pendingVersions(&fresh) == [1, 2, 3] { held = held + 1 }
+  if !Migrate.settled(&fresh) { held = held + 1 }
+
+  // Order is by version and not by the order the program listed them, so a
+  // program that gathers its migrations from anywhere still runs them in the
+  // order they were numbered.
+  if Migrate.ordered(&[third, first, second])[0].version == 1 { held = held + 1 }
+  if Migrate.ordered(&[third, first, second])[2].version == 3 { held = held + 1 }
+
+  // What has run is not run again.
+  let partway = planOf(&[first, second, third], &[ranOf(&first)])
+  if Migrate.pendingVersions(&partway) == [2, 3] { held = held + 1 }
+
+  // Nothing left to do is a settled plan rather than an error.
+  let done = planOf(&[first, second], &[ranOf(&first), ranOf(&second)])
+  if Migrate.settled(&done) { held = held + 1 }
+  if Migrate.pendingCount(&done) == 0 { held = held + 1 }
+
+  // A plan reports what is already there as well as what is pending, so a
+  // report can be checked against the record it came from.
+  if done.already.length() == 2 { held = held + 1 }
+
+  // A migration edited after it was applied stops everything. Both databases
+  // report the same version from then on, so nothing later could detect that
+  // their schemas differ.
+  let edited = Migrate.migration(1, "accounts", &["create table accounts (id bigint primary key, extra text)"])
+  if let Err(Changed(version, _name)) = Migrate.plan(&[edited], &[ranOf(&first)]) {
+    if version == 1 { held = held + 1 }
+  }
+  if let Err(problem) = Migrate.plan(&[edited], &[ranOf(&first)]) {
+    if Migrate.explain(&problem).contains("changed after it was applied") { held = held + 1 }
+  }
+
+  // A migration whose name changed but whose statements did not is not an
+  // edit: the digest is over what runs, and a rename changes nothing that any
+  // database will end up with.
+  let renamed = Migrate.migration(1, "accounts_table", &["create table accounts (id bigint primary key)"])
+  if let Ok(_) = Migrate.plan(&[renamed], &[ranOf(&first)]) { held = held + 1 }
+
+  // A version arriving below one already applied is refused rather than run
+  // out of order. This is what merging two branches produces, and it is also
+  // how two deployments end up with different schemas while both succeed.
+  let late = Migrate.migration(2, "late", &["select 1"])
+  if let Err(ArrivedLate(version, highest)) = Migrate.plan(&[late], &[ranOf(&third)]) {
+    if version == 2 && highest == 3 { held = held + 1 }
+  }
+  if let Err(problem) = Migrate.plan(&[late], &[ranOf(&third)]) {
+    if Migrate.explain(&problem).contains("renumber") { held = held + 1 }
+  }
+
+  // Two migrations claiming the same version cannot both be the truth about
+  // what that version is.
+  let clashing = Migrate.migration(2, "other", &["select 2"])
+  if let Err(Repeated(version)) = Migrate.plan(&[second, clashing], &[]) {
+    if version == 2 { held = held + 1 }
+  }
+
+  // The digest is over the statements, so two migrations with the same
+  // statements have the same digest and two with different ones do not.
+  if Migrate.digestOf(&first) == Migrate.digestOf(&renamed) { held = held + 1 }
+  if Migrate.digestOf(&first) != Migrate.digestOf(&edited) { held = held + 1 }
+  if Migrate.digestOf(&first).length() == 64 { held = held + 1 }
+
+  // A migration with several statements digests all of them, so an edit to any
+  // one is detected rather than only an edit to the first.
+  let manyWays = Migrate.migration(4, "several", &["select 1", "select 2"])
+  let oneChanged = Migrate.migration(4, "several", &["select 1", "select 3"])
+  if Migrate.digestOf(&manyWays) != Migrate.digestOf(&oneChanged) { held = held + 1 }
+
+  // A migration a program no longer holds but a database has applied is not a
+  // failure. Removing an old file from a repository is ordinary; the database
+  // that ran it is still correct.
+  if let Ok(_) = Migrate.plan(&[second, third], &[ranOf(&first), ranOf(&second)]) {
+    held = held + 1
+  }
+
+  // Nothing at all, on either side, is a settled plan.
+  if Migrate.settled(&planOf(&[], &[])) { held = held + 1 }
+
+  held
+}
+
+fn planOf(available: &Array[Migrate.Migration], record: &Array[Applied]) -> Migrate.Plan {
+  Result.unwrapOr(Migrate.plan(available, record), Migrate.Plan{pending: [], already: []})
+}
+
+/// The record a database would hold for a migration that ran as it stands.
+fn ranOf(step: &Migrate.Migration) -> Applied {
+  Applied{version: step.version, name: step.name, digest: Migrate.digestOf(step)}
+}

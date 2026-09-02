@@ -31,12 +31,21 @@ effectSignatures           :: [(Text, Scheme)]
 - **A table rather than a rule.** Nothing here decides anything; it states what the language already has.
 - That is why it depends on nothing in checking and nothing in checking reaches back into it — which made this the one cut in the checker that needed no capability at all.
 - Every effect answers with `Result[T, Str]` rather than failing, so a missing file is an outcome a caller handles rather than something that stops the program.
+- Existing TCP/TLS effects retain their original signatures; separately named `Within` connect,
+  send, receive, and TLS-close signatures carry the millisecond operation timeout consumed by the
+  runtime boundary. `Std.Net` and `Std.Tls` own the typed public spelling.
 
 ### Linkage
 
 - **Requires:** [[Type Env]], [[Type Value]].
 - **Consumed by:** [[Type Check Method]].
 
+## Grill Log
+
+- **Q:** Replace the original network signatures with timeout parameters? **A:** No. _Rationale:_
+  existing source must retain its original effect ABI; separately named `Within` effects carry the
+  new argument. _Rejected:_ an arity-breaking replacement.
+
 ## Referenced by
 
-[[src/Pudu/_MOC]]
+[[src/Pudu/Type/_MOC]]

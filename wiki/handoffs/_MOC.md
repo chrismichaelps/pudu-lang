@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-02-public-http-deadlines]] — public HTTP/HTTPS/JSON evidence and whole-chain deadline
+  hardening for issue #196.
 - [[2026-09-01-production-stdlib-recovery]] — architecture and delivery recovery for issue #193 and the remaining production standard-library gaps.
 - [[2026-08-31-static-repl-inspection]] — static `:type` inspection for issue #189.
 - [[2026-09-01-higher-kinded-repl-inspection]] — lossless higher-kinded `:info` and structural `:kind` inspection for issue #190.

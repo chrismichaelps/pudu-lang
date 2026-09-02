@@ -13,6 +13,7 @@ export type NetError
   | Unresolved(Str)
   | Closed
   | AddressInUse(Int)
+  | NetOperationTimedOut
   | NotText
   | Other(Str)
 
@@ -34,6 +35,7 @@ const BACKLOG: Int = 128
 /// A module-scope constant, so classifying a failure walks this list rather
 /// than rebuilding it on every failure.
 const CAUSES: Array[(Str, Int)] = [
+  ("operation timed out", 4),
   ("Connection refused", 0),
   ("connect: does not exist", 0),
   ("does not exist (Connection refused)", 0),
@@ -66,7 +68,9 @@ fn namedCause(tag: Int, message: Str, port: Int) -> NetError {
   if tag == 0 { Refused(message) } else {
     if tag == 1 { Unresolved(message) } else {
       if tag == 2 { AddressInUse(port) } else {
-        if tag == 3 { Closed } else { Other(message) }
+        if tag == 3 { Closed } else {
+          if tag == 4 { NetOperationTimedOut } else { Other(message) }
+        }
       }
     }
   }
@@ -110,8 +114,15 @@ export fn accept(listener: &Listener) -> Result[Connection, NetError] {
 
 /// Open a connection to somewhere else.
 export fn connect(host: Str, port: Int) -> Result[Connection, NetError] {
+  connectWithin(host, port, -1)
+}
+
+/// Open a connection, waiting no longer than the stated milliseconds.
+export fn connectWithin(host: Str, port: Int, millis: Int) -> Result[Connection, NetError] {
   Result.map(
-    Result.mapErr(tcpConnect(host, port), fn(message: Str) -> NetError { causeOf(message, port) }),
+    Result.mapErr(tcpConnectWithin(host, port, millis), fn(message: Str) -> NetError {
+        causeOf(message, port)
+      }),
     fn(token: Int) -> Connection { Connection{token: token} }
   )
 }
@@ -126,7 +137,16 @@ export fn peerOf(connection: &Connection) -> Result[Str, NetError] {
 /// this loops underneath rather than writing once: a sender that moved on
 /// would truncate exactly the large messages it most matters not to.
 export fn send(connection: &Connection, payload: &Bytes) -> Result[(), NetError] {
-  Result.mapErr(socketSend(connection.token, *payload), fn(message: Str) -> NetError {
+  sendWithin(connection, payload, -1)
+}
+
+/// Send bytes, waiting no longer than the stated milliseconds.
+export fn sendWithin(
+  connection: &Connection,
+  payload: &Bytes,
+  millis: Int
+) -> Result[(), NetError] {
+  Result.mapErr(socketSendWithin(connection.token, *payload, millis), fn(message: Str) -> NetError {
       causeOf(message, 0)
     })
 }
@@ -136,11 +156,29 @@ export fn sendText(connection: &Connection, text: Str) -> Result[(), NetError] {
   send(connection, &text.toBytes())
 }
 
+/// Send text, waiting no longer than the stated milliseconds.
+export fn sendTextWithin(
+  connection: &Connection,
+  text: Str,
+  millis: Int
+) -> Result[(), NetError] {
+  sendWithin(connection, &text.toBytes(), millis)
+}
+
 /// The next bytes, or nothing when the other end has closed.
 /// Nothing is a different answer from an empty read: a reader that could not
 /// tell them apart would stop on a slow peer or never stop on a finished one.
 export fn receive(connection: &Connection, count: Int) -> Result[Option[Bytes], NetError] {
-  Result.mapErr(socketReceive(connection.token, count), fn(message: Str) -> NetError {
+  receiveWithin(connection, count, -1)
+}
+
+/// Read the next bytes, waiting no longer than the stated milliseconds.
+export fn receiveWithin(
+  connection: &Connection,
+  count: Int,
+  millis: Int
+) -> Result[Option[Bytes], NetError] {
+  Result.mapErr(socketReceiveWithin(connection.token, count, millis), fn(message: Str) -> NetError {
       causeOf(message, 0)
     })
 }

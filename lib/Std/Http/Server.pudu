@@ -4,6 +4,7 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Http as Http
 import Std.Http.Message as Message
+import Std.Http.Safe as Safe
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Reply {text}
 import Std.Http.Server.Route as Route
@@ -102,7 +103,17 @@ fn readRequest(
   let parsed = Message.parseRequest(head + "\r\n\r\n")
   if let Err(problem) = parsed { return Err(badRequest(Message.explain(&problem))) }
   let message = Result.unwrapOr(parsed, emptyRequest())
-  let needed = contentLength(&message.headers)
+  // How long a body is coming is asked of one place, which refuses a message
+  // that says it two ways. A message framed both by a length and by a chunked
+  // encoding is not an ambiguity to resolve: it is built to be read
+  // differently by two things in a chain, and a precedence rule here is what
+  // lets them disagree.
+  let framing = Safe.bodyLength(&message.headers)
+  if let Err(problem) = framing { return Err(badRequest(Safe.explain(&problem))) }
+  let needed = Result.unwrapOr(framing, 0)
+  if Safe.isChunked(&message.headers) {
+    return Err(badRequest("this server does not read a chunked body"))
+  }
   if needed > bodyLimit { return Err(tooLarge()) }
   let carried = pair[1]
   var payload = carried.take(needed)
@@ -128,33 +139,6 @@ fn readRequest(
   )
 }
 
-/// How long a body the head says is coming, or none.
-fn contentLength(headers: &Array[(Str, Str)]) -> Int {
-  var found = 0
-  for entry in headers {
-    if entry[0].toLower() == "content-length" {
-      found = Option.unwrapOr(wholeOf(entry[1].trim()), 0)
-    }
-  }
-  found
-}
-
-fn wholeOf(digits: Str) -> Option[Int] {
-  if digits.isEmpty() {
-    None
-  } else {
-    var total = 0
-    var index = 0
-    var good = true
-    while index < digits.length() && good {
-      let digit = "0123456789".indexOf(digits.slice(index, index + 1))
-      if digit < 0 { good = false } else { total = total * 10 + digit }
-      index = index + 1
-    }
-    if good { Some(total) } else { None }
-  }
-}
-
 /// Serve one connection: read a request, answer it, and say whether the
 /// connection may carry another.
 ///
@@ -178,8 +162,18 @@ export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool 
   }
 }
 
+/// Write a response, having first refused one that could not be written.
+///
+/// A line break in a header value would end the header and begin whatever
+/// followed it, which is a response this program did not write. A response
+/// carrying one is replaced rather than escaped: escaping guesses at an intent
+/// no legitimate value has.
 fn sendResponse(connection: &Net.Connection, answer: &Http.Response) -> Result[(), Net.NetError] {
-  Net.sendText(connection, Message.renderResponse(answer))
+  if let Err(_) = Safe.headersWritable(&answer.headers) {
+    Net.sendText(connection, Message.renderResponse(&withLength(&text(500, "the response could not be written"))))
+  } else {
+    Net.sendText(connection, Message.renderResponse(answer))
+  }
 }
 
 /// Whether the client asked to keep the connection open.

@@ -37,20 +37,27 @@ import Pudu.Eval.Concurrent
   )
 import Pudu.Eval.Tls
   ( closeTlsAt
+  , closeTlsAtWithin
   , receiveTls
+  , receiveTlsWithin
   , secureConnect
+  , secureConnectWithin
   , sendTls
+  , sendTlsWithin
   , tlsPeerName
   )
 import Pudu.Eval.Socket
   ( acceptOn
   , closeSocketAt
   , connectTo
+  , connectToWithin
   , listenOn
   , localPortOf
   , peerOf
   , receiveFrom
+  , receiveFromWithin
   , sendOn
+  , sendOnWithin
   , shutdownWriteAt
   )
 import Pudu.Eval.Io
@@ -115,16 +122,23 @@ effectBuiltins =
   , TcpListenBuiltin
   , TcpAcceptBuiltin
   , TcpConnectBuiltin
+  , TcpConnectWithinBuiltin
   , SocketSendBuiltin
+  , SocketSendWithinBuiltin
   , SocketReceiveBuiltin
+  , SocketReceiveWithinBuiltin
   , SocketCloseBuiltin
   , SocketPeerBuiltin
   , SocketPortBuiltin
   , SocketFinishBuiltin
   , TlsConnectBuiltin
+  , TlsConnectWithinBuiltin
   , TlsSendBuiltin
+  , TlsSendWithinBuiltin
   , TlsReceiveBuiltin
+  , TlsReceiveWithinBuiltin
   , TlsCloseBuiltin
+  , TlsCloseWithinBuiltin
   , TlsPeerBuiltin
   , SpawnThreadBuiltin
   , JoinThreadBuiltin
@@ -222,10 +236,18 @@ callEffect spanValue builtin arguments = do
       (TcpConnectBuiltin, [StrValue host, IntValue _ port]) ->
         resultOf . fmap (intOf . fromIntegral)
           <$> lift refusal (connectTo sockets host (fromInteger port))
+      (TcpConnectWithinBuiltin, [StrValue host, IntValue _ port, IntValue _ timeout]) ->
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (connectToWithin sockets host (fromInteger port) timeout)
       (SocketSendBuiltin, [IntValue _ token, BytesValue payload]) ->
         effectUnit (sendOn sockets (fromInteger token) payload)
+      (SocketSendWithinBuiltin, [IntValue _ token, BytesValue payload, IntValue _ timeout]) ->
+        effectUnit (sendOnWithin sockets (fromInteger token) payload timeout)
       (SocketReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
         outcome <- lift refusal (receiveFrom sockets (fromInteger token) (fromInteger count))
+        pure (resultOf (fmap optionalBytes outcome))
+      (SocketReceiveWithinBuiltin, [IntValue _ token, IntValue _ count, IntValue _ timeout]) -> do
+        outcome <- lift refusal (receiveFromWithin sockets (fromInteger token) (fromInteger count) timeout)
         pure (resultOf (fmap optionalBytes outcome))
       (SocketCloseBuiltin, [IntValue _ token]) ->
         effectUnit (closeSocketAt sockets (fromInteger token))
@@ -240,16 +262,30 @@ callEffect spanValue builtin arguments = do
         store <- currentTlsStore
         resultOf . fmap (intOf . fromIntegral)
           <$> lift refusal (secureConnect store host (fromInteger port))
+      (TlsConnectWithinBuiltin, [StrValue host, IntValue _ port, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (secureConnectWithin store host (fromInteger port) timeout)
       (TlsSendBuiltin, [IntValue _ token, BytesValue payload]) -> do
         store <- currentTlsStore
         effectUnit (sendTls store (fromInteger token) payload)
+      (TlsSendWithinBuiltin, [IntValue _ token, BytesValue payload, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        effectUnit (sendTlsWithin store (fromInteger token) payload timeout)
       (TlsReceiveBuiltin, [IntValue _ token, IntValue _ count]) -> do
         store <- currentTlsStore
         outcome <- lift refusal (receiveTls store (fromInteger token) (fromInteger count))
         pure (resultOf (fmap optionalBytes outcome))
+      (TlsReceiveWithinBuiltin, [IntValue _ token, IntValue _ count, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        outcome <- lift refusal (receiveTlsWithin store (fromInteger token) (fromInteger count) timeout)
+        pure (resultOf (fmap optionalBytes outcome))
       (TlsCloseBuiltin, [IntValue _ token]) -> do
         store <- currentTlsStore
         effectUnit (closeTlsAt store (fromInteger token))
+      (TlsCloseWithinBuiltin, [IntValue _ token, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        effectUnit (closeTlsAtWithin store (fromInteger token) timeout)
       (TlsPeerBuiltin, [IntValue _ token]) -> do
         store <- currentTlsStore
         resultOf . fmap StrValue <$> lift refusal (tlsPeerName store (fromInteger token))

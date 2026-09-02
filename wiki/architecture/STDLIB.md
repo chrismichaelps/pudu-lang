@@ -61,13 +61,11 @@ compiles anywhere the compiler runs.
 ```pudu
 module Report
 
-import Std.Http as Http
-import Std.Json {decode, encode}
-import Std.Time {Instant, Duration}
+import Std.Http as Protocol
+import Std.Http.Client as Http
 
-export async fn fetch(url: Str) -> Result[Json, Http.Error] {
-  let response = Http.get(url).timeout(Duration.seconds(30)).await?
-  decode(response.body)
+export fn fetch(url: Str) -> Result[Protocol.Response, Http.ClientError] {
+  Http.fetch(url, &Http.limits())
 }
 ```
 
@@ -82,8 +80,8 @@ whose oldest corners constrain what its newest ones can look like.
 
 Pudu takes the middle position deliberately:
 
-- **Shipped, so there is one answer.** `Std.Http` is *the* HTTP client. A reader of any Pudu program
-  recognises it without checking a manifest.
+- **Shipped, so there is one answer.** `Std.Http.Client` is *the* HTTP client. A reader of any Pudu
+  program recognises it without checking a manifest.
 - **Namespaced, so it can grow.** `Std.Http.Server` can arrive without disturbing `Std.Http`.
 - **Versioned with the language, so it can be held to the same rules.** Every module below obeys the
   ownership, failure, and concurrency rules in [[architecture/SEMANTICS]]. A standard library that
@@ -184,7 +182,10 @@ Encoding uses named escapes where JSON has them and `\u00XX` for the remaining c
 
 | Module | Provides |
 |---|---|
-| `Std.Http` | client: requests, responses, redirects, timeouts, pooling |
+| `Std.Http` | protocol requests, responses, headers, cookies, negotiation, and ranges |
+| `Std.Http.Client` | verified requests with whole-chain deadlines plus redirect, destination, and response-size bounds; pooling remains absent |
+| `Std.App` | the program itself: configuration, what starts, what stops |
+| `Std.App.Config` | layered settings, typed where they are read |
 | `Std.Http.Server` | server: reading requests off connections and answering them |
 | `Std.Http.Server.Route` | which handler answers a request, and what it is given |
 | `Std.Http.Server.Reply` | the answers a handler gives |
@@ -216,6 +217,7 @@ claim a lifetime guarantee the evaluator does not yet enforce.
 | `Std.Crypto` | hashes, HMAC, constant-time comparison, secure random |
 | `Std.Db` | typed SQL, parameter binding, transactions, connection pooling |
 | `Std.Db.Session` | opening a connection and carrying one message across it |
+| `Std.Db.Migrate` | schema changes, planned without a database and applied one at a time |
 
 ## What ships today
 
@@ -283,10 +285,23 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Channel` | 9 | bounded typed queues with explicit closure, provisional |
 | `Std.Sync` | 15 | runtime mutexes, atomic cells, and counters, provisional |
 | `Std.Net` | 21 | TCP listeners/connections and bounded streaming reads, provisional |
+| `Std.App` | 20 | the application value, its stages, and running one, provisional |
+| `Std.Html` | 33 | a page as a value; escaping by construction, provisional |
+| `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
+| `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
+| `Std.App.Access` | 20 | requirements as values; every route states one |
+| `Std.App.Metrics` | 22 | counters, gauges, distributions, units, and a series bound |
+| `Std.App.Health` | 21 | liveness and readiness as separate types, worst-wins aggregation |
+| `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
+| `Std.Http.Client` | 13 | bounded requests, verified transport, credential-safe redirects |
+| `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |
+| `Std.Http.Server.Socket` | 20 | upgrade with a mandatory origin check, and the frame format |
+| `Std.Http.Server.Guard` | 12 | protective headers, sharing, provenance, identity, and quiet failure |
 | `Std.Http.Server` | 14 | limits, connection lifetime, and HTTP/1 serving, provisional |
 | `Std.Http.Server.Route` | 26 | first-match routing, captures, query, and middleware, provisional |
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
 | `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
+| `Std.Db.Migrate` | 11 | versioned, digested, transactional schema changes, provisional |
 | `Std.Db.Session` | 13 | connecting, SCRAM, and one message at a time, provisional |
 | `Std.Db` | 25 | queries, rows, transactions, savepoints, and pools, provisional |
 
@@ -556,9 +571,14 @@ parsing or rendering a complete message.
 
 `Std.Http.Server` now joins that protocol surface to `Std.Net`: handlers remain socket-free values,
 routes are first-match, and the reader enforces explicit head/body limits before materializing a
-request. The HTTP client transport is still absent. A client must add redirects, deadlines, response
-limits, connection reuse, and TLS verification rather than expose a `send` that only works for the
-happy path.
+request. `Std.Http.Client` joins the same protocol surface to verified TLS or plain TCP, bounds every
+redirect and response, refuses trusted-network destinations unless named, removes credentials when
+an origin changes, and decodes transfer framing before returning the body. Its controlled fixture
+covers refusals and a scheduled/manual external gate reaches public HTTP, HTTPS, and JSON endpoints.
+One monotonic deadline now covers resolution, connect, TLS handshake, send, read, and every redirect
+in a request chain; expiry is typed separately from an unreachable address. It is still **partial**,
+not production-complete: callers cannot explicitly cancel an in-flight request, and every request
+opens a new connection rather than using a bounded pool.
 
 ## What writing it found
 

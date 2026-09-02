@@ -24,9 +24,22 @@ tags: [moc, module, stdlib]
 - [[Std Net]] — streaming-first TCP listeners and connections.
 - [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
+- [[Std Db Migrate]] — bringing a schema to what the program expects, once and never half way.
 - [[Std Db Session]] — becoming a connection, and one message across it at a time.
 - [[Std Db]] — queries, rows, transactions, and pools over a session.
+- [[Std App]] — the program as a value: what starts it, and what stops it.
+- [[Std Html]] — a page as a value, so text placed in one cannot become markup.
+- [[Std Validate]] — saying what is wrong with everything that is wrong, once.
+- [[Std Ui]] — screens as functions from state to view, and the difference between two.
+- [[Std App Access]] — a route that decided nothing cannot be written.
+- [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
+- [[Std App Health]] — restarting and receiving traffic, kept apart by the types.
+- [[Std App Config]] — where a setting comes from when four places could supply it.
+- [[Std Http Client]] — sending a request somewhere and reading what comes back.
+- [[Std Http Safe]] — the judgements a server makes before it believes a request.
 - [[Std Http Server]] — reading requests off connections and answering them.
+- [[Std Http Server Guard]] — the steps that make a service safe before anyone asks.
+- [[Std Http Server Socket]] — a connection that stays open, and who may open one.
 - [[Std Http Server Route]] — which handler answers a request, and what it is given.
 - [[Std Http Server Reply]] — the answers a handler gives.
 - [[Std Http]] — pure HTTP protocol values and transformations.

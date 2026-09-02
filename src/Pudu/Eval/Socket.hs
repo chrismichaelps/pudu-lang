@@ -5,12 +5,15 @@ module Pudu.Eval.Socket
   , closeSocketStore
   , closeSocketAt
   , connectTo
+  , connectToWithin
   , listenOn
   , localPortOf
   , newSocketStore
   , peerOf
   , receiveFrom
+  , receiveFromWithin
   , sendOn
+  , sendOnWithin
   , shutdownWriteAt
   ) where
 
@@ -24,6 +27,7 @@ import qualified Data.Text as Text
 import qualified Network.Socket as Net
 import qualified Network.Socket.ByteString as NetBytes
 import Pudu.Eval.Io (IoOutcome (..))
+import qualified System.Timeout as Timeout
 
 {-| Every endpoint one evaluation has open. The store is shared by captured
     frames and child threads but never by independent evaluations. -}
@@ -105,22 +109,27 @@ acceptOn store token = withSocket store token $ \socket -> do
 
 {-| Open a connection to somewhere else. -}
 connectTo :: SocketStore -> Text -> Int -> IO (IoOutcome Int)
-connectTo store host port = do
-  resolved <- addressFor False (Text.unpack host) port
-  case resolved of
-    Left problem -> pure (IoFailed problem)
-    Right address -> do
-      attempted <-
-        try
-          ( bracketOnError
-              (Net.openSocket address)
-              Net.close
-              (\socket -> Net.connect socket (Net.addrAddress address) >> pure socket)
-          )
-          :: IO (Either SomeException Net.Socket)
-      case attempted of
-        Left problem -> pure (IoFailed (Text.pack (show problem)))
-        Right socket -> IoDone <$> remember store socket
+connectTo store host port = connectToWithin store host port (-1)
+
+{-| Open a connection, interrupting resolution or connection when the operation
+    budget is exhausted. A negative budget retains the unbounded primitive. -}
+connectToWithin :: SocketStore -> Text -> Int -> Integer -> IO (IoOutcome Int)
+connectToWithin store host port millis = do
+  attempted <- attemptWithin millis $ do
+    resolved <- addressForRaw False (Text.unpack host) port
+    case resolved of
+      Left problem -> pure (Left problem)
+      Right address ->
+        Right
+          <$> bracketOnError
+            (Net.openSocket address)
+            Net.close
+            (\socket -> Net.connect socket (Net.addrAddress address) >> pure socket)
+  case attempted of
+    Left problem -> pure (IoFailed (Text.pack (show problem)))
+    Right Nothing -> pure (IoFailed timeoutMessage)
+    Right (Just (Left problem)) -> pure (IoFailed problem)
+    Right (Just (Right socket)) -> IoDone <$> remember store socket
 
 {-| Send bytes, and keep sending until every one of them has gone.
 
@@ -128,11 +137,19 @@ connectTo store host port = do
     sender that wrote once and moved on would silently truncate exactly the
     large messages it was most important not to. -}
 sendOn :: SocketStore -> Int -> ByteString.ByteString -> IO (IoOutcome ())
-sendOn store token payload = withSocket store token $ \socket -> do
-  attempted <- try (NetBytes.sendAll socket payload) :: IO (Either SomeException ())
-  pure $ case attempted of
-    Left problem -> IoFailed (Text.pack (show problem))
-    Right () -> IoDone ()
+sendOn store token payload = sendOnWithin store token payload (-1)
+
+sendOnWithin :: SocketStore -> Int -> ByteString.ByteString -> Integer -> IO (IoOutcome ())
+sendOnWithin store token payload millis = do
+  found <- lookupSocket store token
+  case found of
+    Nothing -> pure (IoFailed "the endpoint is closed")
+    Just socket -> do
+      attempted <- attemptWithin millis (NetBytes.sendAll socket payload)
+      case attempted of
+        Left problem -> pure (IoFailed (Text.pack (show problem)))
+        Right Nothing -> invalidateSocket store token >> pure (IoFailed timeoutMessage)
+        Right (Just ()) -> pure (IoDone ())
 
 {-| Read at most the requested count of bytes.
 
@@ -140,17 +157,23 @@ sendOn store token payload = withSocket store token $ \socket -> do
     different answer from an empty read: a reader that could not tell them
     apart would either stop on a slow peer or never stop on a finished one. -}
 receiveFrom :: SocketStore -> Int -> Int -> IO (IoOutcome (Maybe ByteString.ByteString))
-receiveFrom store token count
+receiveFrom store token count = receiveFromWithin store token count (-1)
+
+receiveFromWithin :: SocketStore -> Int -> Int -> Integer -> IO (IoOutcome (Maybe ByteString.ByteString))
+receiveFromWithin store token count millis
   | count <= 0 = pure (IoDone (Just ByteString.empty))
-  | otherwise = withSocket store token $ \socket -> do
-      attempted <-
-        try (NetBytes.recv socket count)
-          :: IO (Either SomeException ByteString.ByteString)
-      pure $ case attempted of
-        Left problem -> IoFailed (Text.pack (show problem))
-        Right chunk
-          | ByteString.null chunk -> IoDone Nothing
-          | otherwise -> IoDone (Just chunk)
+  | otherwise = do
+      found <- lookupSocket store token
+      case found of
+        Nothing -> pure (IoFailed "the endpoint is closed")
+        Just socket -> do
+          attempted <- attemptWithin millis (NetBytes.recv socket count)
+          case attempted of
+            Left problem -> pure (IoFailed (Text.pack (show problem)))
+            Right Nothing -> invalidateSocket store token >> pure (IoFailed timeoutMessage)
+            Right (Just chunk)
+              | ByteString.null chunk -> pure (IoDone Nothing)
+              | otherwise -> pure (IoDone (Just chunk))
 
 {-| Say that nothing more will be sent, while still reading what arrives.
 
@@ -229,3 +252,33 @@ withSocket store token action = do
   case found of
     Nothing -> pure (IoFailed "the endpoint is closed")
     Just socket -> action socket
+
+addressForRaw :: Bool -> String -> Int -> IO (Either Text Net.AddrInfo)
+addressForRaw passive host port = do
+  let hints =
+        Net.defaultHints
+          { Net.addrSocketType = Net.Stream
+          , Net.addrFlags = if passive then [Net.AI_PASSIVE] else []
+          }
+      wanted = if passive && null host then Nothing else Just host
+  found <- Net.getAddrInfo (Just hints) wanted (Just (show port))
+  pure $ case found of
+    [] -> Left (Text.pack ("no address for " <> host <> ":" <> show port))
+    address : _ -> Right address
+
+attemptWithin :: Integer -> IO a -> IO (Either SomeException (Maybe a))
+attemptWithin millis action
+  | millis < 0 = fmap (fmap Just) (try action)
+  | otherwise = try (Timeout.timeout (microseconds millis) action)
+
+microseconds :: Integer -> Int
+microseconds millis =
+  fromInteger (min (toInteger (maxBound :: Int)) (max 0 millis * 1000))
+
+timeoutMessage :: Text
+timeoutMessage = "operation timed out"
+
+invalidateSocket :: SocketStore -> Int -> IO ()
+invalidateSocket store token = do
+  _ <- closeSocketAt store token
+  pure ()

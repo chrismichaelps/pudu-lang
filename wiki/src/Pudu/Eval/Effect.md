@@ -58,6 +58,18 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - No host exceptions escape. Every failure becomes a `Result` or an `E7xxx` diagnostic.
 - No effect performed during constant folding, on any path.
 - No typing decisions.
+- Network connect/send/receive effects carry a millisecond operation timeout; negative retains the
+  unbounded low-level primitive and non-negative expiry returns the stable host failure text that
+  `Std.Net` and `Std.Tls` classify as their operation-timeout variants.
+
+## Grill Log
+
+- **Q:** Change the arity of the existing network effects? **A:** No. _Rationale:_ compiler-provided
+  prelude functions are public source contracts even when standard-library wrappers are their main
+  caller. _Rejected:_ silently turning every two-argument network call into a type error.
+- **Q:** Leave a timed-out stream token usable? **A:** No. _Rationale:_ a partial write or interrupted
+  TLS record leaves the next operation unable to know its position. _Rejected:_ retrying on an
+  indeterminate stream.
 
 ## Referenced by
 

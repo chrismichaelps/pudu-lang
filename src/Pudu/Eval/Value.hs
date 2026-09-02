@@ -32,6 +32,7 @@ import Data.Map.Strict (Map)
 import Data.Set (Set)
 import Data.Text (Text)
 import Pudu.IntegerLiteral (IntegerKind, defaultIntegerKind)
+import Pudu.Eval.Builtin.Definition (Builtin (..), builtinName)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
@@ -93,186 +94,11 @@ data Value
   | BucketsMethodValue !BucketsMethod !Value
   deriving stock (Eq, Show)
 
-{-| The name a built-in answers to, which is the name it was bound under. -}
-builtinName :: Builtin -> Text
-builtinName value = case value of
-  PanicBuiltin -> "panic"
-  CharFromCodeBuiltin -> "charFromCode"
-  MapOfBuiltin -> "mapOf"
-  SetOfBuiltin -> "setOf"
-  BytesOfBuiltin -> "bytesOf"
-  BucketsOfBuiltin -> "bucketsOf"
-  ShowBuiltin -> "show"
-  DisplayBuiltin -> "display"
-  PrintBuiltin -> "print"
-  PrintErrorBuiltin -> "printError"
-  PrintPartBuiltin -> "printPart"
-  PrintErrorPartBuiltin -> "printErrorPart"
-  ReadLineBuiltin -> "readLine"
-  ReadFileBuiltin -> "readFile"
-  WriteFileBuiltin -> "writeFile"
-  AppendFileBuiltin -> "appendFile"
-  FileExistsBuiltin -> "fileExists"
-  RemoveFileBuiltin -> "removeFile"
-  ListDirectoryBuiltin -> "listDirectory"
-  OpenReaderBuiltin -> "openReader"
-  OpenWriterBuiltin -> "openWriter"
-  OpenAppenderBuiltin -> "openAppender"
-  ReadChunkBuiltin -> "readChunk"
-  WriteChunkBuiltin -> "writeChunk"
-  FlushWriterBuiltin -> "flushWriter"
-  CloseHandleBuiltin -> "closeHandle"
-  TcpListenBuiltin -> "tcpListen"
-  TcpAcceptBuiltin -> "tcpAccept"
-  TcpConnectBuiltin -> "tcpConnect"
-  SocketSendBuiltin -> "socketSend"
-  SocketReceiveBuiltin -> "socketReceive"
-  SocketCloseBuiltin -> "socketClose"
-  SocketPeerBuiltin -> "socketPeer"
-  SocketPortBuiltin -> "socketPort"
-  SocketFinishBuiltin -> "socketFinish"
-  TlsConnectBuiltin -> "tlsConnect"
-  TlsSendBuiltin -> "tlsSend"
-  TlsReceiveBuiltin -> "tlsReceive"
-  TlsCloseBuiltin -> "tlsClose"
-  TlsPeerBuiltin -> "tlsPeer"
-  SpawnThreadBuiltin -> "spawnThread"
-  JoinThreadBuiltin -> "joinThread"
-  SleepBuiltin -> "sleepMillis"
-  ChannelOpenBuiltin -> "channelOpen"
-  ChannelPushBuiltin -> "channelPush"
-  ChannelPullBuiltin -> "channelPull"
-  ChannelWaitingBuiltin -> "channelWaiting"
-  ChannelFinishBuiltin -> "channelFinish"
-  MutexOpenBuiltin -> "mutexOpen"
-  MutexAcquireBuiltin -> "mutexAcquire"
-  MutexReleaseBuiltin -> "mutexRelease"
-  CellOpenBuiltin -> "cellOpen"
-  CellGetBuiltin -> "cellGet"
-  CellSwapBuiltin -> "cellSwap"
-  SecureBytesBuiltin -> "secureRandomBytes"
-  Sha256Builtin -> "sha256Of"
-  HmacBuiltin -> "hmacSha256Of"
-  DeriveKeyBuiltin -> "deriveKey"
-  HashOfBuiltin -> "hashOf"
-  MixHashBuiltin -> "mixHash"
-  CreateDirectoryBuiltin -> "createDirectory"
-  ArgumentsBuiltin -> "arguments"
-  EnvironmentBuiltin -> "environment"
-  TemporaryDirectoryBuiltin -> "temporaryPath"
-  HomeDirectoryBuiltin -> "userHome"
-  PathSeparatorsBuiltin -> "pathSeparators"
-  SearchSeparatorBuiltin -> "searchSeparator"
-  ExitBuiltin -> "exit"
-  ClockBuiltin -> "clock"
-  NowBuiltin -> "now"
-  FormatTimeBuiltin -> "formatTime"
-  ParseTimeBuiltin -> "parseTime"
-  ZoneOffsetBuiltin -> "zoneOffset"
-  RunBuiltin -> "runProgram"
-  ConvertIntegerBuiltin -> "convertInteger"
-  DecimalOfBuiltin -> "decimalOf"
-  DecimalFromIntBuiltin -> "decimalFromInt"
-  DecimalScaleBuiltin -> "decimalScale"
-  DecimalToIntBuiltin -> "decimalToInt"
-  DecimalToFloatBuiltin -> "decimalToFloat"
-  DecimalDivideBuiltin -> "decimalDivide"
-  DecimalRoundBuiltin -> "decimalRound"
-
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
     index, a scalar value. That is the type the language gives an unsuffixed
     literal, so a caller comparing the two never has to convert. -}
 intOf :: Integer -> Value
 intOf = IntValue defaultIntegerKind
-
-{-| A wired-in function the evaluator recognizes by name rather than by closure.
-    `panic` is the prelude's unrecoverable abort: it takes a message and stops
-    evaluation with `E7007`, matching [[architecture/SEMANTICS]]'s rule that
-    panics represent violated invariants, not recoverable domain failure. -}
-data Builtin
-  = PanicBuiltin
-  | CharFromCodeBuiltin
-  | MapOfBuiltin
-  | SetOfBuiltin
-  | BytesOfBuiltin
-  | BucketsOfBuiltin
-  | ShowBuiltin
-  | DisplayBuiltin
-  | PrintBuiltin
-  | PrintErrorBuiltin
-  | PrintPartBuiltin
-  | PrintErrorPartBuiltin
-  | ReadLineBuiltin
-  | ReadFileBuiltin
-  | WriteFileBuiltin
-  | AppendFileBuiltin
-  | FileExistsBuiltin
-  | RemoveFileBuiltin
-  | ListDirectoryBuiltin
-  | OpenReaderBuiltin
-  | OpenWriterBuiltin
-  | OpenAppenderBuiltin
-  | ReadChunkBuiltin
-  | WriteChunkBuiltin
-  | FlushWriterBuiltin
-  | CloseHandleBuiltin
-  | TcpListenBuiltin
-  | TcpAcceptBuiltin
-  | TcpConnectBuiltin
-  | SocketSendBuiltin
-  | SocketReceiveBuiltin
-  | SocketCloseBuiltin
-  | SocketPeerBuiltin
-  | SocketPortBuiltin
-  | SocketFinishBuiltin
-  | TlsConnectBuiltin
-  | TlsSendBuiltin
-  | TlsReceiveBuiltin
-  | TlsCloseBuiltin
-  | TlsPeerBuiltin
-  | SpawnThreadBuiltin
-  | JoinThreadBuiltin
-  | SleepBuiltin
-  | ChannelOpenBuiltin
-  | ChannelPushBuiltin
-  | ChannelPullBuiltin
-  | ChannelWaitingBuiltin
-  | ChannelFinishBuiltin
-  | MutexOpenBuiltin
-  | MutexAcquireBuiltin
-  | MutexReleaseBuiltin
-  | CellOpenBuiltin
-  | CellGetBuiltin
-  | CellSwapBuiltin
-  | SecureBytesBuiltin
-  | Sha256Builtin
-  | HmacBuiltin
-  | DeriveKeyBuiltin
-  | HashOfBuiltin
-  | MixHashBuiltin
-  | CreateDirectoryBuiltin
-  | ArgumentsBuiltin
-  | EnvironmentBuiltin
-  | TemporaryDirectoryBuiltin
-  | HomeDirectoryBuiltin
-  | PathSeparatorsBuiltin
-  | SearchSeparatorBuiltin
-  | ExitBuiltin
-  | ClockBuiltin
-  | NowBuiltin
-  | FormatTimeBuiltin
-  | ParseTimeBuiltin
-  | ZoneOffsetBuiltin
-  | RunBuiltin
-  | ConvertIntegerBuiltin
-  | DecimalOfBuiltin
-  | DecimalFromIntBuiltin
-  | DecimalScaleBuiltin
-  | DecimalToIntBuiltin
-  | DecimalToFloatBuiltin
-  | DecimalDivideBuiltin
-  | DecimalRoundBuiltin
-  deriving stock (Eq, Show)
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
     arity and semantics. The receiver is carried so `arr.push(x)` evaluates as

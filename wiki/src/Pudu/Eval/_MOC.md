@@ -16,6 +16,7 @@ tags: [moc, module]
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.
 - [[Eval Builtin]] — the effects, built-in methods, and conversions the prelude wires in.
+- [[Eval Builtin Definition]] — the closed wired-in function vocabulary and canonical source names.
 - [[Eval Clock]] — calendar time and subprocesses.
 - [[Eval Io]] — the effects a program may perform, each answering with an outcome.
 - [[Eval Keyed]] — the runtime semantics of `Map` and `Set`, kept in key order by a balanced tree.
@@ -29,7 +30,7 @@ tags: [moc, module]
 - [[Eval Operator]] — unary, binary, member, index, and `?` semantics.
 - [[Eval Array]] — Array[T] runtime values, indexing, iteration, and 42 accessor methods.
 
-Dependency direction: Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
+Dependency direction: Builtin Definition → Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
 
 ## Referenced by
 

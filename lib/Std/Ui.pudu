@@ -1,0 +1,299 @@
+module Std.Ui
+
+import Std.Html {Element, Fragment, Text, Trusted}
+import Std.Html as Html
+import Std.Option as Option
+
+/// A screen: what is known, what that shows as, and how an event changes it.
+///
+/// The view is a function rather than a stored value, so rendering twice with
+/// the same state gives the same view. That is what makes the difference
+/// between two renders exactly the difference the state made, and it is why a
+/// screen can be checked by comparing values rather than by driving one.
+export type Component[S, E] = { state: S, view: fn(S) -> Html.Html, update: fn(S, E) -> S }
+
+/// Where an event is answered.
+///
+/// A property of the event rather than of the framework. The server-rendered
+/// model that sends every interaction across the network makes a control that
+/// could have answered immediately wait for it; one that answers everything
+/// locally cannot reach what only the server knows. Saying which per event is
+/// the only arrangement that is right in both cases.
+export type Answered
+  = Locally
+  | AtTheServer
+
+/// The path to a node: the indices that reach it from the root.
+///
+/// A value both ends can hold without either keeping a copy of the tree, which
+/// is what lets one end describe a change to a screen the other end is showing.
+export type Path = { steps: Array[Int] }
+
+/// One difference between two screens.
+export type Change
+  = Replaced(Path, Html.Html)
+  | Retexted(Path, Str)
+  | Reattributed(Path, Array[(Str, Str)])
+
+/// A component from its three parts.
+export fn component[S, E](
+  state: S,
+  view: fn(S) -> Html.Html,
+  update: fn(S, E) -> S
+) -> Component[S, E] {
+  Component{state: state, view: view, update: update}
+}
+
+/// A component that shows something and answers nothing, for a screen that is
+/// only ever read.
+export fn showing[S](state: S, view: fn(S) -> Html.Html) -> Component[S, ()] {
+  Component{state: state, view: view, update: fn(held: S, _event: ()) -> S { held }}
+}
+
+/// What the component currently knows.
+export fn stateOf[S, E](target: &Component[S, E]) -> S { target.state }
+
+/// What the component currently shows.
+export fn render[S, E](target: &Component[S, E]) -> Html.Html { (target.view)(target.state) }
+
+/// The component after an event.
+export fn given[S, E](target: &Component[S, E], event: E) -> Component[S, E] {
+  Component {
+    state: (target.update)(target.state, event),
+    view: target.view,
+    update: target.update
+  }
+}
+
+/// The component after several events, in order.
+export fn givenAll[S, E](target: &Component[S, E], events: &Array[E]) -> Component[S, E] {
+  var held = *target
+  for event in events { held = given(&held, event) }
+  held
+}
+
+/// The component with its state replaced, for a caller that learned the state
+/// from somewhere other than an event.
+export fn holding[S, E](target: &Component[S, E], state: S) -> Component[S, E] {
+  Component{state: state, view: target.view, update: target.update}
+}
+
+/// A component whose view is wrapped in another, so a screen is made of
+/// screens without either knowing about the other's state.
+export fn within[S, E](
+  target: &Component[S, E],
+  surround: fn(Html.Html) -> Html.Html
+) -> Component[S, E] {
+  let inner = target.view
+  Component {
+    state: target.state,
+    view: fn(held: S) -> Html.Html { surround(inner(held)) },
+    update: target.update
+  }
+}
+
+/// The path to the root.
+export fn root() -> Path { Path{steps: []} }
+
+/// The path to a child of a node.
+export fn childOf(base: &Path, index: Int) -> Path { Path{steps: base.steps.push(index)} }
+
+/// How deep a path reaches.
+export fn depthOf(target: &Path) -> Int { target.steps.length() }
+
+/// The changes that turn one screen into the other.
+///
+/// Both trees are walked together. A node whose element name changed is
+/// replaced whole rather than reconciled, because an element that became a
+/// different element shares nothing with what it was, and matching its children
+/// anyway produces a tree that is wrong and renders plausibly.
+export fn changes(before: &Html.Html, after: &Html.Html) -> Array[Change] {
+  differences(before, after, &root())
+}
+
+/// Whether two screens are the same, which is the question a sender asks
+/// before sending anything at all.
+export fn unchanged(before: &Html.Html, after: &Html.Html) -> Bool {
+  changes(before, after).length() == 0
+}
+
+/// A screen with the changes applied.
+///
+/// Present so that the two ends can be checked against each other: applying
+/// the changes to the earlier screen must give the later one, and that is a
+/// comparison of values.
+export fn applied(base: &Html.Html, edits: &Array[Change]) -> Html.Html {
+  var held = *base
+  for edit in edits { held = applyOne(&held, &edit) }
+  held
+}
+
+/// Where the node a path names is, as the node itself.
+export fn nodeAt(base: &Html.Html, target: &Path) -> Option[Html.Html] {
+  var held = *base
+  var index = 0
+  var found = true
+  while index < target.steps.length() && found {
+    let children = childrenOf(&held)
+    let step = target.steps[index]
+    if step < 0 || step >= children.length() {
+      found = false
+    } else {
+      held = children[step]
+    }
+    index = index + 1
+  }
+  if found { Some(held) } else { None }
+}
+
+fn differences(before: &Html.Html, after: &Html.Html, here: &Path) -> Array[Change] {
+  match before {
+    case Text(was) => textDifference(was, after, here)
+    case Trusted(was) => if sameTrusted(was, after) { [] } else { [Replaced(*here, *after)] }
+    case Fragment(children) => listDifference(&children, after, here, "")
+    case Element(name, attributes, children) =>
+    elementDifference(name, &attributes, &children, after, here)
+  }
+}
+
+fn textDifference(was: Str, after: &Html.Html, here: &Path) -> Array[Change] {
+  if let Text(now) = after {
+    if was == now { [] } else { [Retexted(*here, now)] }
+  } else {
+    [Replaced(*here, *after)]
+  }
+}
+
+fn sameTrusted(was: Str, after: &Html.Html) -> Bool {
+  if let Trusted(now) = after { was == now } else { false }
+}
+
+fn elementDifference(
+  name: Str,
+  attributes: &Array[(Str, Str)],
+  children: &Array[Html.Html],
+  after: &Html.Html,
+  here: &Path
+) -> Array[Change] {
+  if let Element(other, laterAttributes, laterChildren) = after {
+    if name != other {
+      [Replaced(*here, *after)]
+    } else {
+      if children.length() != laterChildren.length() {
+        [Replaced(*here, *after)]
+      } else {
+        var found: Array[Change] = []
+        if *attributes != laterAttributes {
+          found = found.push(Reattributed(*here, laterAttributes))
+        }
+        for edit in pairwise(children, &laterChildren, here) { found = found.push(edit) }
+        found
+      }
+    }
+  } else {
+    [Replaced(*here, *after)]
+  }
+}
+
+fn listDifference(
+  children: &Array[Html.Html],
+  after: &Html.Html,
+  here: &Path,
+  _unused: Str
+) -> Array[Change] {
+  if let Fragment(laterChildren) = after {
+    if children.length() != laterChildren.length() {
+      [Replaced(*here, *after)]
+    } else {
+      pairwise(children, &laterChildren, here)
+    }
+  } else {
+    [Replaced(*here, *after)]
+  }
+}
+
+/// The differences between two lists of the same length, position by position.
+///
+/// A list whose length changed is not compared here at all: the caller replaces
+/// the node that holds it, because positions no longer name the same things and
+/// every later comparison would be against the wrong node. The caller is the
+/// one that does it because only the caller holds the node to put in its place.
+fn pairwise(
+  before: &Array[Html.Html],
+  after: &Array[Html.Html],
+  here: &Path
+) -> Array[Change] {
+  {
+    var found: Array[Change] = []
+    var index = 0
+    while index < before.length() {
+      for edit in differences(&before[index], &after[index], &childOf(here, index)) {
+        found = found.push(edit)
+      }
+      index = index + 1
+    }
+    found
+  }
+}
+
+fn childrenOf(node: &Html.Html) -> Array[Html.Html] {
+  match node {
+    case Element(_name, _attributes, children) => children
+    case Fragment(children) => children
+    case Text(_content) => []
+    case Trusted(_markup) => []
+  }
+}
+
+fn applyOne(base: &Html.Html, edit: &Change) -> Html.Html {
+  match edit {
+    case Replaced(spot, node) => replaceAt(base, &spot.steps, 0, &node)
+    case Retexted(spot, content) => replaceAt(base, &spot.steps, 0, &Text(content))
+    case Reattributed(spot, attributes) => reattributeAt(base, &spot.steps, 0, &attributes)
+  }
+}
+
+fn replaceAt(base: &Html.Html, steps: &Array[Int], depth: Int, node: &Html.Html) -> Html.Html {
+  if depth >= steps.length() {
+      *node
+  } else {
+    withChildAt(base, steps[depth], fn(child: Html.Html) -> Html.Html {
+        replaceAt(&child, steps, depth + 1, node)
+      })
+  }
+}
+
+fn reattributeAt(
+  base: &Html.Html,
+  steps: &Array[Int],
+  depth: Int,
+  attributes: &Array[(Str, Str)]
+) -> Html.Html {
+  if depth >= steps.length() {
+    if let Element(name, _was, children) = base { Element(name, *attributes, children) } else { *base }
+  } else {
+    withChildAt(base, steps[depth], fn(child: Html.Html) -> Html.Html {
+        reattributeAt(&child, steps, depth + 1, attributes)
+      })
+  }
+}
+
+fn withChildAt(base: &Html.Html, index: Int, change: fn(Html.Html) -> Html.Html) -> Html.Html {
+  let children = childrenOf(base)
+  if index < 0 || index >= children.length() {
+      *base
+  } else {
+    var built: Array[Html.Html] = []
+    var position = 0
+    while position < children.length() {
+      built = built.push(if position == index { change(children[position]) } else { children[position] })
+      position = position + 1
+    }
+    match base {
+      case Element(name, attributes, _children) => Element(name, attributes, built)
+      case Fragment(_children) => Fragment(built)
+      case Text(content) => Text(content)
+      case Trusted(markup) => Trusted(markup)
+    }
+  }
+}

@@ -1,0 +1,140 @@
+module UsesHtml
+
+import Std.Html as Html
+
+/// What a page promises.
+///
+/// The claim under test is that placing text in a page cannot place markup in
+/// one. Every check is a comparison of values, because rendering reads nothing
+/// outside the view it was given.
+export fn main() -> Int {
+  var held = 0
+
+  // An element, with and without attributes.
+  if Html.render(&Html.tag("p", &[Html.text("hello")])) == "<p>hello</p>" { held = held + 1 }
+  if Html.render(&Html.div(&[("id", "main")], &[])) == "<div id=\"main\"></div>" {
+    held = held + 1
+  }
+
+  // An element written without a closing tag is written without one.
+  if Html.render(&Html.image("a.png", "a picture", &[]))
+    == "<img src=\"a.png\" alt=\"a picture\" />"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.meta(&[("charset", "utf-8")])) == "<meta charset=\"utf-8\" />" {
+    held = held + 1
+  }
+
+  // Text is text. A caller who writes markup into text gets that text, which
+  // is the whole of the design: there is no call that would have done
+  // otherwise, so there is no rule to remember at the call site.
+  let attempted = Html.text("<script>steal()</script>")
+  if Html.render(&attempted) == "&lt;script&gt;steal()&lt;/script&gt;" { held = held + 1 }
+  if !Html.render(&attempted).contains("<script>") { held = held + 1 }
+
+  // The same holds inside an attribute, where a quote would otherwise end the
+  // value and start another attribute.
+  let broken = Html.div(&[("title", "a \" onload=\"steal()")], &[])
+  if !Html.render(&broken).contains("onload=\"steal") { held = held + 1 }
+  if Html.render(&broken).contains("&quot;") { held = held + 1 }
+
+  // The ampersand is written first, so an entity arrives once rather than
+  // twice.
+  if Html.escape("a & b") == "a &amp; b" { held = held + 1 }
+  if Html.escape("&lt;") == "&amp;lt;" { held = held + 1 }
+  if Html.escape("'") == "&#39;" { held = held + 1 }
+
+  // Markup the caller took responsibility for passes through, and the word
+  // they used to say so is in their source rather than in a setting.
+  if Html.render(&Html.trusted("<em>fine</em>")) == "<em>fine</em>" { held = held + 1 }
+
+  // Views nest, and a fragment puts no element around what it holds.
+  let nested = Html.div(
+      &[Html.classes(&["card", "wide"])],
+      &[Html.heading(2, &[], &[Html.text("Title")]), Html.paragraph(&[], &[Html.text("Body")])]
+  )
+  if Html.render(&nested)
+    == "<div class=\"card wide\"><h2>Title</h2><p>Body</p></div>"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.fragment(&[Html.text("a"), Html.text("b")])) == "ab" { held = held + 1 }
+  if Html.render(&Html.nothing()) == "" { held = held + 1 }
+
+  // A heading outside the levels that exist is brought to one that does,
+  // rather than rendering an element with no meaning.
+  if Html.render(&Html.heading(9, &[], &[])) == "<h6></h6>" { held = held + 1 }
+  if Html.render(&Html.heading(0, &[], &[])) == "<h1></h1>" { held = held + 1 }
+
+  // A view per item, and a view only when a condition holds.
+  let listed = Html.each(&["a", "b"], fn(item: Str) -> Html.Html {
+      Html.span(&[], &[Html.text(item)])
+    })
+  if Html.render(&listed) == "<span>a</span><span>b</span>" { held = held + 1 }
+  if Html.render(&Html.when(true, Html.text("yes"))) == "yes" { held = held + 1 }
+  if Html.render(&Html.when(false, Html.text("yes"))) == "" { held = held + 1 }
+
+  // Attributes whose values are lists are built rather than spelled, so a
+  // caller adding one does not also maintain the separators.
+  if Html.classes(&["a", "b"]) == ("class", "a b") { held = held + 1 }
+  if Html.style(&[("color", "red"), ("width", "2px")]) == ("style", "color: red; width: 2px") {
+    held = held + 1
+  }
+  if Html.flag("disabled") == ("disabled", "disabled") { held = held + 1 }
+
+  // A list renders its items inside the element that holds one.
+  if Html.render(&Html.list(false, &[], &[Html.text("one"), Html.text("two")]))
+    == "<ul><li>one</li><li>two</li></ul>"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.list(true, &[], &[Html.text("one")])) == "<ol><li>one</li></ol>" {
+    held = held + 1
+  }
+
+  // A table, and a cell that is a heading rather than a value.
+  if Html.render(&Html.table(&[], &[Html.row(&[Html.cell(true, &[Html.text("Name")])])]))
+    == "<table><tr><th>Name</th></tr></table>"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.row(&[Html.cell(false, &[Html.text("ada")])])) == "<tr><td>ada</td></tr>" {
+    held = held + 1
+  }
+
+  // A form and the controls inside it.
+  if Html.render(&Html.form("/users", "post", &[Html.input(&[("name", "who")])]))
+    == "<form action=\"/users\" method=\"post\"><input name=\"who\" /></form>"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.button(&[Html.flag("disabled")], &[Html.text("Send")]))
+    == "<button disabled=\"disabled\">Send</button>"
+  {
+    held = held + 1
+  }
+
+  // A link carries its destination, and an anchor keeps the attributes it was
+  // also given.
+  if Html.render(&Html.anchor("/here", &[Html.classes(&["x"])], &[Html.text("go")]))
+    == "<a class=\"x\" href=\"/here\">go</a>"
+  {
+    held = held + 1
+  }
+
+  // A whole document says which one it is.
+  let page = Html.html(&[("lang", "en")], &[Html.head(&[Html.title("Shop")]), Html.body(&[], &[])])
+  if Html.document(&page).contains("<!DOCTYPE html>") { held = held + 1 }
+  if Html.document(&page).contains("<title>Shop</title>") { held = held + 1 }
+
+  // A title escapes like any other text, so a page named with a bracket does
+  // not close its own head.
+  if Html.render(&Html.title("a < b")) == "<title>a &lt; b</title>" { held = held + 1 }
+
+  // Two renders of equal views are equal, which is what lets a page be
+  // compared in a test rather than matched against a pattern.
+  if Html.render(&nested) == Html.render(&nested) { held = held + 1 }
+
+  held
+}

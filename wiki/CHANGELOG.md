@@ -5,6 +5,38 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-02 · [[Std App Config]], [[architecture/STDLIB]] · make typed configuration refusals keep
+  their provenance. Whole, truth, and exact-decimal reads now report the key, source layer, and
+  supplied text; the previously documented fractional reader is implemented and malformed decimals
+  remain typed failures. The application fixture grows to forty-two checks · risk MEDIUM · depth
+  MEDIUM→MEDIUM · issue #196
+
+- 2026-09-02 · [[Std Http Client]], [[Std Net]], [[Std Tls]], [[Eval Socket]], [[Eval Tls]],
+  [[Eval Effect]], [[Eval Value]], [[Eval Builtin Definition]], [[Semantic Prelude]],
+  [[Type Check Prelude]],
+  [[architecture/STDLIB]], [[architecture/WEB]] · prove the client
+  against the public web as well as against itself. A scheduled and manually dispatched integration
+  gate fetches the IANA-reserved example
+  domain over both HTTPS and HTTP, then fetches a documented JSONPlaceholder resource, requiring a
+  successful status, stable HTML markers, and typed JSON fields through the same
+  `Std.Http.Client.fetch` path a
+  program calls. The ordinary suite keeps its controlled
+  loopback server: DNS, certificate stores, internet access, and someone else's uptime are evidence
+  of interoperability, not deterministic pull-request dependencies, while malformed framing,
+  redirect, credential, and size-limit refusals still require a server the fixture controls. The
+  first public run found that HTTP/1.1 chunk delimiters were being returned as response content; the
+  client now removes transfer framing, checks the body limit after decoding, and stops the transport
+  read at the body allowance plus bounded framing space instead of allocating an unbounded answer
+  before reporting `TooLarge`. Every request now also has a thirty-second default deadline that a
+  caller can replace with `within`; one monotonic budget covers resolution, connect, TLS handshake,
+  send, read, and every redirect rather than restarting for each operation. Timeout interruption
+  closes sockets that have not completed connection or verification, and expiry is a typed `TimedOut`
+  refusal. Loopback fixtures retain both framing and timeout regressions without needing the web
+  and separately named timeout effects preserve the source ABI of existing direct network calls.
+  The closed builtin tags and name table move to [[Eval Builtin Definition]], preserving the
+  established `Eval.Value` import surface while returning that implementation below 500 lines
+  · risk MEDIUM · depth MEDIUM→MEDIUM · issue #196
+
 - 2026-09-02 · [[Std Http Server]], [[Std Http Server Route]], [[Std Http Server Reply]], [[Std Db]], [[Std Db Session]], [[Eval Value]], [[2026-09-01-production-stdlib-recovery]] · finish the two modules that outgrew a page, and find why the full gate never finished. `Std.Http.Server` was 666 lines and `Std.Db` was 768, and both had been left whole on the argument that splitting them needed a wall of forwarding functions. They did not: routing answers what a request means without a connection, a reply is the one part of serving built with nothing else in hand, and a session is what a connection holds between statements. Callers import the piece they use, and the fixtures that guarded each — thirty-five checks and thirty-three — pass unchanged, which is what a no-delta guard is for. The gate that had been recorded as impossible on this host was neither killed nor short of memory; it was spinning, and the reading was wrong because output was block-buffered, so the last line printed named a group that had already passed and every conclusion drawn from it pointed at the wrong place. Through a pseudo-terminal the line buffers and the true position is `structured scopes join every task they start`. Releasing a child from its scope removed it by comparing values, and comparing two closures compared the environments they captured; a closure's captured environment reaches its own scope, so the comparison had no end, and extending a scope to the root module made every release walk the whole program. Closure equality is now identity over name, receiver and function — the question a release is actually asking. The unfiltered suite completes green at 309 groups with no falsification · risk MEDIUM · depth MEDIUM→DEEP · issue #195
 
 - 2026-09-01 · [[Evaluator]], [[Eval Env]], [[Eval Handle]], [[Eval Socket]], [[Eval Concurrent]], [[Eval Entropy]], [[Std Random]], [[Std Sync]], [[Std Db]] · harden recovered runtime resources for embedded production use. Every evaluator run now owns isolated file, socket, worker, channel, mutex, and cell stores, and teardown stops its workers before closing only its sockets and files; one concurrent evaluation can no longer clear another's process-global tables. Bounded channels use constant-time `Seq` queue operations. Mutexes record their acquiring host thread and reject foreign or repeated release instead of manufacturing a second permit. SCRAM client nonces use a reviewed cross-platform operating-system entropy provider, with no clock or deterministic fallback, and both entropy requests and PBKDF2 counts are bounded before arbitrary-precision values become host allocations or iteration counts. Focused gates pass at Concurrent 22, Net 10, HTTP server 35, DB 33, and UUID/entropy 24; the durable unfiltered gate remains required after an earlier run produced 190 successful groups and then terminated without a falsified property · risk HIGH · depth MEDIUM→DEEP · issue #193

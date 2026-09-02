@@ -1,0 +1,162 @@
+module UsesUi
+
+import Std.Html as Html
+import Std.Option as Option
+import Std.Ui {AtTheServer, Locally, Reattributed, Replaced, Retexted}
+import Std.Ui as Ui
+
+/// A counter: the smallest screen that has state, a view, and an event.
+type Bump
+  = Up
+  | Down
+  | Reset
+
+/// What a screen promises.
+///
+/// The property everything else rests on is that a component is a function
+/// from state to view. Every check here is a comparison of values, which is
+/// only possible because of that.
+export fn main() -> Int {
+  var held = 0
+
+  let counter = Ui.component(0, viewCount, step)
+
+  // A component renders from its state, and renders the same twice.
+  if Html.render(&Ui.render(&counter)) == "<p>0</p>" { held = held + 1 }
+  if Ui.render(&counter) == Ui.render(&counter) { held = held + 1 }
+  if Ui.stateOf(&counter) == 0 { held = held + 1 }
+
+  // An event makes a new component rather than changing this one, so the one
+  // before an event is still there to be compared against.
+  let bumped = Ui.given(&counter, Up)
+  if Ui.stateOf(&bumped) == 1 { held = held + 1 }
+  if Ui.stateOf(&counter) == 0 { held = held + 1 }
+  if Html.render(&Ui.render(&bumped)) == "<p>1</p>" { held = held + 1 }
+
+  // Several events, in the order given.
+  let walked = Ui.givenAll(&counter, &[Up, Up, Up, Down])
+  if Ui.stateOf(&walked) == 2 { held = held + 1 }
+  if Ui.stateOf(&Ui.givenAll(&walked, &[Reset])) == 0 { held = held + 1 }
+
+  // A state learned from somewhere other than an event.
+  if Ui.stateOf(&Ui.holding(&counter, 9)) == 9 { held = held + 1 }
+
+  // A screen that is only read still has the same shape.
+  let plain = Ui.showing("ada", fn(who: Str) -> Html.Html { Html.text(who) })
+  if Html.render(&Ui.render(&plain)) == "ada" { held = held + 1 }
+
+  // A component wrapped in another renders inside it, and neither knows about
+  // the other's state.
+  let framed = Ui.within(&counter, fn(inner: Html.Html) -> Html.Html {
+      Html.div(&[Html.classes(&["frame"])], &[inner])
+    })
+  if Html.render(&Ui.render(&framed)) == "<div class=\"frame\"><p>0</p></div>" {
+    held = held + 1
+  }
+  if Ui.stateOf(&framed) == 0 { held = held + 1 }
+
+  // Two identical screens differ in nothing, which is the question a sender
+  // asks before sending anything at all.
+  if Ui.unchanged(&Ui.render(&counter), &Ui.render(&counter)) { held = held + 1 }
+  if Ui.changes(&Ui.render(&counter), &Ui.render(&counter)) == [] { held = held + 1 }
+
+  // Text that changed is reported as text that changed, at the path that
+  // reaches it, rather than as a replaced element.
+  let before = Ui.render(&counter)
+  let after = Ui.render(&bumped)
+  let edits = Ui.changes(&before, &after)
+  if edits.length() == 1 { held = held + 1 }
+  if let Retexted(spot, content) = edits[0] {
+    if content == "1" { held = held + 1 }
+    if Ui.depthOf(&spot) == 1 { held = held + 1 }
+  }
+
+  // Applying the changes to the earlier screen gives the later one. This is
+  // the whole contract between the two ends, and it is a comparison.
+  if Ui.applied(&before, &edits) == after { held = held + 1 }
+  if Html.render(&Ui.applied(&before, &edits)) == Html.render(&after) { held = held + 1 }
+
+  // An attribute that changed is reported as such, and the rest of the node is
+  // left alone.
+  let quiet = Html.div(&[("class", "off")], &[Html.text("x")])
+  let loud = Html.div(&[("class", "on")], &[Html.text("x")])
+  let recoloured = Ui.changes(&quiet, &loud)
+  if recoloured.length() == 1 { held = held + 1 }
+  if let Reattributed(spot, attributes) = recoloured[0] {
+    if attributes == [("class", "on")] { held = held + 1 }
+    if Ui.depthOf(&spot) == 0 { held = held + 1 }
+  }
+  if Ui.applied(&quiet, &recoloured) == loud { held = held + 1 }
+
+  // An element that became a different element is replaced whole. Matching its
+  // children instead would build a tree that is wrong and renders plausibly,
+  // which is the worst failure available here.
+  let wasParagraph = Html.paragraph(&[], &[Html.text("same")])
+  let nowSpan = Html.span(&[], &[Html.text("same")])
+  let swapped = Ui.changes(&wasParagraph, &nowSpan)
+  if swapped.length() == 1 { held = held + 1 }
+  if let Replaced(_spot, node) = swapped[0] {
+    if node == nowSpan { held = held + 1 }
+  }
+  if Ui.applied(&wasParagraph, &swapped) == nowSpan { held = held + 1 }
+
+  // Text that became an element, and an element that became text, are both
+  // replacements rather than edits.
+  if Ui.changes(&Html.text("a"), &Html.span(&[], &[])).length() == 1 { held = held + 1 }
+  if Ui.applied(&Html.text("a"), &Ui.changes(&Html.text("a"), &Html.span(&[], &[])))
+    == Html.span(&[], &[])
+  {
+    held = held + 1
+  }
+
+  // A list that grew is replaced at the node that holds it, because the
+  // positions no longer name the same things.
+  let shortList = Html.div(&[], &[Html.text("a")])
+  let longList = Html.div(&[], &[Html.text("a"), Html.text("b")])
+  if Ui.applied(&shortList, &Ui.changes(&shortList, &longList)) == longList { held = held + 1 }
+
+  // A change deep in a tree reaches only that node, and the path says where.
+  let nestedBefore = Html.div(&[], &[Html.span(&[], &[Html.text("one")]), Html.text("tail")])
+  let nestedAfter = Html.div(&[], &[Html.span(&[], &[Html.text("two")]), Html.text("tail")])
+  let deep = Ui.changes(&nestedBefore, &nestedAfter)
+  if deep.length() == 1 { held = held + 1 }
+  if let Retexted(spot, _content) = deep[0] {
+    if Ui.depthOf(&spot) == 2 { held = held + 1 }
+  }
+  if Ui.applied(&nestedBefore, &deep) == nestedAfter { held = held + 1 }
+
+  // A path names a node, and one that reaches past the tree names nothing
+  // rather than something near it.
+  if Option.isSome(&Ui.nodeAt(&nestedBefore, &Ui.childOf(&Ui.root(), 0))) { held = held + 1 }
+  if Option.isNone(&Ui.nodeAt(&nestedBefore, &Ui.childOf(&Ui.root(), 7))) { held = held + 1 }
+  if Option.unwrapOr(Ui.nodeAt(&nestedBefore, &Ui.root()), Html.nothing()) == nestedBefore {
+    held = held + 1
+  }
+
+  // Where an event is answered is a value, so a component states it once
+  // rather than a framework deciding it per interaction.
+  if answeredFor(&Up) == Locally { held = held + 1 }
+  if answeredFor(&Reset) == AtTheServer { held = held + 1 }
+
+  held
+}
+
+fn viewCount(count: Int) -> Html.Html { Html.paragraph(&[], &[Html.text(show(count))]) }
+
+fn step(count: Int, event: Bump) -> Int {
+  match event {
+    case Up => count + 1
+    case Down => count - 1
+    case Reset => 0
+  }
+}
+
+/// A counter can add without asking anyone; clearing it is what the other end
+/// has to agree to, so only that one makes the trip.
+fn answeredFor(event: &Bump) -> Ui.Answered {
+  match event {
+    case Up => Locally
+    case Down => Locally
+    case Reset => AtTheServer
+  }
+}
