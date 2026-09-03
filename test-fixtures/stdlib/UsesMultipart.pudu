@@ -1,0 +1,162 @@
+module UsesMultipart
+
+import Std.Bytes as ByteSeq
+import Std.Http.Multipart {BoundaryMissing, Empty, NoBoundary, NotAName, TooManyParts}
+import Std.Http.Multipart as Multipart
+import Std.Option as Option
+import Std.Result as Result
+
+/// What reading an uploaded form promises.
+///
+/// The claim that matters is that the name a sender gave a file never becomes
+/// a path. A file uploaded as `../../etc/passwd` has that as its name, and a
+/// program that joins it to a directory has been told where to write by
+/// whoever sent it.
+export fn main() -> Int {
+  var held = 0
+
+  let bounds = Multipart.limits()
+  let contentType = "multipart/form-data; boundary=XbCY"
+
+  // The separator a request names, however it was written.
+  if Option.unwrapOr(Multipart.boundaryOf(contentType), "") == "XbCY" { held = held + 1 }
+  if Option.unwrapOr(Multipart.boundaryOf("multipart/form-data; boundary=\"a b\""), "") == "a b" {
+    held = held + 1
+  }
+  if Option.isNone(&Multipart.boundaryOf("application/json")) { held = held + 1 }
+  if Option.isNone(&Multipart.boundaryOf("multipart/form-data")) { held = held + 1 }
+
+  // An ordinary form: a value and a file.
+  let body = ByteSeq.fromText(
+    "--XbCY\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nA report\r\n"
+      + "--XbCY\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"notes.txt\"\r\n"
+      + "Content-Type: text/plain\r\n\r\nhello there\r\n--XbCY--\r\n"
+  )
+  let parts = Result.unwrapOr(Multipart.read(&body, contentType, &bounds), [])
+  if parts.length() == 2 { held = held + 1 }
+  if Multipart.fields(&parts) == ["title", "upload"] { held = held + 1 }
+
+  // A value comes back as what was sent.
+  if let Some(one) = Multipart.field(&parts, "title") {
+    if Option.unwrapOr(Multipart.textOf(&one), "") == "A report" { held = held + 1 }
+    if !Multipart.isFile(&one) { held = held + 1 }
+    if Option.isNone(&Multipart.senderName(&one)) { held = held + 1 }
+  }
+
+  // And a file comes back with what the sender called it and said it is.
+  if let Some(one) = Multipart.field(&parts, "upload") {
+    if Multipart.isFile(&one) { held = held + 1 }
+    if Option.unwrapOr(Multipart.senderName(&one), "") == "notes.txt" { held = held + 1 }
+    if Option.unwrapOr(Multipart.declaredTypeOf(&one), "") == "text/plain" { held = held + 1 }
+    if Option.unwrapOr(Multipart.textOf(&one), "") == "hello there" { held = held + 1 }
+    if Multipart.sizeOf(&one) == 11 { held = held + 1 }
+    if Result.unwrapOr(Multipart.safeName(&one), "") == "notes.txt" { held = held + 1 }
+  }
+
+  // The attack this module exists for: a name that is a path.
+  if Result.unwrapOr(Multipart.safeNameOf("../../etc/passwd"), "") == "passwd" { held = held + 1 }
+  if Result.unwrapOr(Multipart.safeNameOf("/etc/passwd"), "") == "passwd" { held = held + 1 }
+  if Result.unwrapOr(Multipart.safeNameOf("..\\..\\windows\\system32\\cmd.exe"), "") == "cmd.exe" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Multipart.safeNameOf("a/b/c/report.pdf"), "") == "report.pdf" {
+    held = held + 1
+  }
+
+  // Nothing that survives carries a separator of either kind.
+  if !Result.unwrapOr(Multipart.safeNameOf("../../etc/passwd"), "x").contains("/") {
+    held = held + 1
+  }
+  if !Result.unwrapOr(Multipart.safeNameOf("..\\..\\a.txt"), "x").contains("\\") {
+    held = held + 1
+  }
+
+  // A name that is not a name is refused rather than made into one.
+  if let Err(NotAName(_)) = Multipart.safeNameOf("..") { held = held + 1 }
+  if let Err(NotAName(_)) = Multipart.safeNameOf(".") { held = held + 1 }
+  if let Err(NotAName(_)) = Multipart.safeNameOf("a/..") { held = held + 1 }
+  if let Err(Empty) = Multipart.safeNameOf("") { held = held + 1 }
+  if let Err(Empty) = Multipart.safeNameOf("a/b/") { held = held + 1 }
+  if let Err(Empty) = Multipart.safeNameOf("   ") { held = held + 1 }
+
+  // The names a filesystem reserves, whatever a program means by them.
+  if let Err(NotAName(_)) = Multipart.safeNameOf("con") { held = held + 1 }
+  if let Err(NotAName(_)) = Multipart.safeNameOf("NUL") { held = held + 1 }
+
+  // An ordinary name is untouched, so the check does not refuse real uploads.
+  if Result.unwrapOr(Multipart.safeNameOf("Report 2026.final.pdf"), "") == "Report 2026.final.pdf" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Multipart.safeNameOf("a-b_c.tar.gz"), "") == "a-b_c.tar.gz" { held = held + 1 }
+
+  // Nothing is decoded before checking: what arrived is what was sent, and
+  // undoing an encoding first is how a check is bypassed.
+  if Result.unwrapOr(Multipart.safeNameOf("%2e%2e%2fpasswd"), "") == "%2e%2e%2fpasswd" {
+    held = held + 1
+  }
+
+  // A part with no name to write under says so rather than inventing one.
+  if let Some(one) = Multipart.field(&parts, "title") {
+    if let Err(Empty) = Multipart.safeName(&one) { held = held + 1 }
+  }
+
+  // A form that repeated a field carries every one of them.
+  let repeated = ByteSeq.fromText(
+    "--XbCY\r\nContent-Disposition: form-data; name=\"tag\"\r\n\r\none\r\n"
+      + "--XbCY\r\nContent-Disposition: form-data; name=\"tag\"\r\n\r\ntwo\r\n--XbCY--\r\n"
+  )
+  let many = Result.unwrapOr(Multipart.read(&repeated, contentType, &bounds), [])
+  if Multipart.allNamed(&many, "tag").length() == 2 { held = held + 1 }
+  if Multipart.fields(&many) == ["tag"] { held = held + 1 }
+
+  // How many parts and how large each may be are bounded before anything is
+  // kept, because a bound checked afterwards is one checked once the memory is
+  // gone.
+  // Each bound is named in the refusal, and the whole-body bound is asked
+  // first — so this one has to leave room for the body to fit before the
+  // parts bound is what it trips on.
+  if let Err(TooManyParts(_)) = Multipart.read(
+      &repeated,
+    contentType,
+      &Multipart.accepting(1, 1000, 10000)
+  )
+  {
+    held = held + 1
+  }
+  if let Err(_) = Multipart.read(&body, contentType, &Multipart.accepting(10, 2, 1000)) {
+    held = held + 1
+  }
+  if let Err(_) = Multipart.read(&body, contentType, &Multipart.accepting(10, 1000, 10)) {
+    held = held + 1
+  }
+
+  // Within the bounds, the same form reads fine — a bound that refuses real
+  // forms has not been tested.
+  if Result.unwrapOr(Multipart.read(&body, contentType, &Multipart.accepting(10, 1000, 10000)), []).length()
+    == 2
+  {
+    held = held + 1
+  }
+
+  // A body without a separator, or one whose separator never appears, is
+  // refused rather than guessed at.
+  if let Err(NoBoundary) = Multipart.read(&body, "application/json", &bounds) { held = held + 1 }
+  if let Err(BoundaryMissing) = Multipart.read(
+      &ByteSeq.fromText("nothing like a form"),
+    contentType,
+      &bounds
+  )
+  {
+    held = held + 1
+  }
+
+  // A part with no field name is not a part.
+  let nameless = ByteSeq.fromText("--XbCY\r\nContent-Type: text/plain\r\n\r\nx\r\n--XbCY--\r\n")
+  if let Err(_) = Multipart.read(&nameless, contentType, &bounds) { held = held + 1 }
+
+  // A refusal says what was wrong, and never repeats the name it refused.
+  if Multipart.explain(&NoBoundary).contains("separates") { held = held + 1 }
+  if !Multipart.explainName(&NotAName("../../etc/passwd")).contains("passwd") { held = held + 1 }
+
+  held
+}

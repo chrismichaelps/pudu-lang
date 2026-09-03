@@ -1,0 +1,318 @@
+module Std.Http.Multipart
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Result as Result
+import Std.Set as Set
+
+/// One thing a form carried.
+///
+/// `filename` is what the sender called it, kept as what it is. It is not a
+/// path and this module will not make one from it: see `safeName`.
+export type Part = {
+  field: Str,
+  filename: Option[Str],
+  declaredType: Option[Str],
+  content: Bytes
+}
+
+/// How much a read will accept.
+///
+/// Bounds rather than none: a body announcing ten thousand parts is not a
+/// form, it is a way to exhaust the memory of whatever reads it.
+export type Limits = { parts: Int, partBytes: Int, wholeBytes: Int }
+
+/// Why a body could not be read.
+export type MultipartError
+  = NoBoundary
+  | BoundaryMissing
+  | TooManyParts(Int)
+  | PartTooLarge(Str, Int)
+  | WholeTooLarge(Int)
+  | Malformed(Str)
+
+/// Why a name cannot be written to disk.
+export type NameError
+  = NotAName(Str)
+  | Empty
+
+/// The names that are not names, whatever a filesystem makes of them.
+const RESERVED_NAMES: Set[Str] = setOf([".", "..", "con", "prn", "aux", "nul"])
+
+/// The separators a name may not carry, of either kind, so a name made on one
+/// machine is refused on the other.
+const SEPARATORS: Str = "/\\"
+
+/// What a read accepts when nobody says.
+const DEFAULT_PARTS: Int = 64
+
+const DEFAULT_PART_BYTES: Int = 8388608
+
+const DEFAULT_WHOLE_BYTES: Int = 33554432
+
+/// What a read accepts when nobody says otherwise.
+export fn limits() -> Limits {
+  Limits{parts: DEFAULT_PARTS, partBytes: DEFAULT_PART_BYTES, wholeBytes: DEFAULT_WHOLE_BYTES}
+}
+
+/// Bounds a program chose.
+export fn accepting(parts: Int, partBytes: Int, wholeBytes: Int) -> Limits {
+  Limits{parts: parts, partBytes: partBytes, wholeBytes: wholeBytes}
+}
+
+/// The boundary a content type names, or nothing when it names none.
+export fn boundaryOf(contentType: Str) -> Option[Str] {
+  let lowered = contentType.toLower()
+  if !lowered.contains("multipart/") {
+    None
+  } else {
+    let mark = lowered.indexOf("boundary=")
+    if mark < 0 {
+      None
+    } else {
+      let rest = contentType.drop(mark + 9).trim()
+      let unquoted = if rest.startsWith("\"") { rest.drop(1) } else { rest }
+      let stop = firstOf(unquoted, "\";")
+      let found = if stop < 0 { unquoted } else { unquoted.take(stop) }
+      if found.trim().isEmpty() { None } else { Some(found.trim()) }
+    }
+  }
+}
+
+/// The parts a body carried.
+///
+/// The bounds are applied while reading rather than afterwards, because a
+/// bound checked afterwards is a bound checked once the memory is gone.
+export fn read(
+  body: &Bytes,
+  contentType: Str,
+  held: &Limits
+) -> Result[Array[Part], MultipartError] {
+  if ByteSeq.length(body) > held.wholeBytes { return Err(WholeTooLarge(held.wholeBytes)) }
+  let boundary = boundaryOf(contentType)
+  if let Some(marker) = boundary { partsOf(body, marker, held) } else { Err(NoBoundary) }
+}
+
+fn partsOf(
+  body: &Bytes,
+  boundary: Str,
+  held: &Limits
+) -> Result[Array[Part], MultipartError] {
+  let marker = ByteSeq.fromText("--" + boundary)
+  if ByteSeq.indexOf(body, &marker) < 0 { return Err(BoundaryMissing) }
+  var found: Array[Part] = []
+  var failure: Option[MultipartError] = None
+  var index = 0
+  let chunks = ByteSeq.split(body, &marker)
+  while index < chunks.length() && Option.isNone(&failure) {
+    let chunk = chunks[index]
+    if !closingOrEmpty(&chunk) {
+      if found.length() >= held.parts {
+        failure = Some(TooManyParts(held.parts))
+      } else {
+        let one = partOf(&chunk, held)
+        if let Ok(piece) = one { found = found.push(piece) } else { failure = failureOf(one) }
+      }
+    }
+    index = index + 1
+  }
+  if let Some(problem) = failure { Err(problem) } else { Ok(found) }
+}
+
+fn failureOf(outcome: Result[Part, MultipartError]) -> Option[MultipartError] {
+  if let Err(problem) = outcome { Some(problem) } else { Some(Malformed("a part could not be read")) }
+}
+
+/// Whether a chunk is the end marker or the empty space around one.
+fn closingOrEmpty(chunk: &Bytes) -> Bool {
+  let text = Result.unwrapOr(ByteSeq.toText(chunk), "").trim()
+  text.isEmpty() || text == "--"
+}
+
+/// One part: its headers, then what it carried.
+fn partOf(chunk: &Bytes, held: &Limits) -> Result[Part, MultipartError] {
+  let separator = ByteSeq.fromText("\r\n\r\n")
+  let mark = ByteSeq.indexOf(chunk, &separator)
+  if mark < 0 {
+    Err(Malformed("a part with no headers"))
+  } else {
+    let headText = Result.unwrapOr(ByteSeq.toText(&ByteSeq.slice(chunk, 0, mark)), "")
+    let body = trimmedEnd(&ByteSeq.slice(chunk, mark + 4, ByteSeq.length(chunk)))
+    let disposition = headerIn(headText, "content-disposition")
+    let sentUnder = valueIn(disposition, "name")
+    if Option.isNone(&sentUnder) {
+      Err(Malformed("a part with no field name"))
+    } else {
+      let named = Option.unwrapOr(sentUnder, "")
+      if ByteSeq.length(&body) > held.partBytes {
+        Err(PartTooLarge(named, held.partBytes))
+      } else {
+        Ok(
+          Part {
+            field: named,
+            filename: valueIn(disposition, "filename"),
+            declaredType: headerIn(headText, "content-type"),
+            content: body
+          }
+        )
+      }
+    }
+  }
+}
+
+/// A part's body without the line break that separates it from the next
+/// boundary, which belongs to the framing rather than to the content.
+fn trimmedEnd(body: &Bytes) -> Bytes {
+  let length = ByteSeq.length(body)
+  if length >= 2 {
+    let tail = Result.unwrapOr(ByteSeq.toText(&ByteSeq.slice(body, length - 2, length)), "")
+    if tail == "\r\n" { ByteSeq.slice(body, 0, length - 2) } else { *body }
+  } else {
+      *body
+  }
+}
+
+/// One header of a part, by name.
+fn headerIn(headText: Str, name: Str) -> Option[Str] {
+  var found: Option[Str] = None
+  for line in headText.split("\r\n") {
+    let mark = line.indexOf(":")
+    if mark > 0 {
+      if line.take(mark).trim().toLower() == name { found = Some(line.drop(mark + 1).trim()) }
+    }
+  }
+  found
+}
+
+/// One parameter of a header value, by name.
+fn valueIn(header: Option[Str], name: Str) -> Option[Str] {
+  if let Some(value) = header {
+    var found: Option[Str] = None
+    for piece in value.split(";") {
+      let trimmed = piece.trim()
+      let mark = trimmed.indexOf("=")
+      if mark > 0 {
+        if trimmed.take(mark).trim().toLower() == name {
+          let raw = trimmed.drop(mark + 1).trim()
+          found = Some(if raw.startsWith("\"") && raw.endsWith("\"") && raw.length() >= 2 {
+              raw.slice(1, raw.length() - 1)
+            } else {
+              raw
+            })
+        }
+      }
+    }
+    found
+  } else {
+    None
+  }
+}
+
+/// The part sent under a field, if the form carried one.
+export fn field(parts: &Array[Part], name: Str) -> Option[Part] {
+  var found: Option[Part] = None
+  for one in parts { if one.field == name { found = Some(one) } }
+  found
+}
+
+/// Every part sent under a field, for a form that repeated one.
+export fn allNamed(parts: &Array[Part], name: Str) -> Array[Part] {
+  var found: Array[Part] = []
+  for one in parts { if one.field == name { found = found.push(one) } }
+  found
+}
+
+/// The fields a form carried, each once, in the order they arrived.
+export fn fields(parts: &Array[Part]) -> Array[Str] {
+  var found: Array[Str] = []
+  for one in parts { if !found.contains(one.field) { found = found.push(one.field) } }
+  found
+}
+
+/// A part's content as text, for the fields that are text.
+export fn textOf(one: &Part) -> Option[Str] {
+  if let Ok(text) = ByteSeq.toText(&one.content) { Some(text) } else { None }
+}
+
+/// Whether a part was sent as a file rather than as a value.
+export fn isFile(one: &Part) -> Bool { Option.isSome(&one.filename) }
+
+/// What the sender called the file.
+///
+/// What the sender called it, and nothing more. It is not a path and must not
+/// be joined to one: a file uploaded as `../../etc/passwd` has that as its
+/// name, and a program that joins it to a directory has been told where to
+/// write by whoever sent it. Ask `safeName` for something that may be written.
+export fn senderName(one: &Part) -> Option[Str] { one.filename }
+
+/// A name safe to write to disk, or the reason there is none.
+///
+/// Only what follows the last separator of either kind survives, so a name
+/// carrying a directory carries nothing after this. Nothing is decoded first:
+/// what arrived is what was sent, and undoing an encoding before checking is
+/// how a check is bypassed.
+export fn safeName(one: &Part) -> Result[Str, NameError] {
+  if let Some(given) = one.filename { safeNameOf(given) } else { Err(Empty) }
+}
+
+/// The same, for a name a caller already holds.
+export fn safeNameOf(given: Str) -> Result[Str, NameError] {
+  var last = -1
+  var index = 0
+  while index < given.length() {
+    if SEPARATORS.contains(given.slice(index, index + 1)) { last = index }
+    index = index + 1
+  }
+  let tail = if last < 0 { given } else { given.drop(last + 1) }
+  let trimmed = tail.trim()
+  if trimmed.isEmpty() {
+    Err(Empty)
+  } else {
+    if Set.contains(&RESERVED_NAMES, trimmed.toLower()) {
+      Err(NotAName(given))
+    } else {
+      if trimmed.contains("\u{0}") { Err(NotAName(given)) } else { Ok(trimmed) }
+    }
+  }
+}
+
+/// What the sender said the file is.
+///
+/// Carried because a program may want it, and never treated as a fact about
+/// the bytes: it is a claim by whoever sent them, and a program that decides
+/// what to do from this alone has let the sender choose.
+export fn declaredTypeOf(one: &Part) -> Option[Str] { one.declaredType }
+
+/// How large a part is.
+export fn sizeOf(one: &Part) -> Int { ByteSeq.length(&one.content) }
+
+fn firstOf(value: Str, characters: Str) -> Int {
+  var found = -1
+  var index = 0
+  while index < value.length() && found < 0 {
+    if characters.contains(value.slice(index, index + 1)) { found = index }
+    index = index + 1
+  }
+  found
+}
+
+/// What a refusal says.
+export fn explain(problem: &MultipartError) -> Str {
+  match problem {
+    case NoBoundary => "the request did not say what separates the parts"
+    case BoundaryMissing => "the body does not contain the separator it named"
+    case TooManyParts(limit) => "more than " + show(limit) + " parts"
+    case PartTooLarge(named, limit) =>
+    "the part " + named + " is larger than " + show(limit) + " bytes"
+    case WholeTooLarge(limit) => "the body is larger than " + show(limit) + " bytes"
+    case Malformed(reason) => reason
+  }
+}
+
+/// What a refusal about a name says.
+export fn explainName(problem: &NameError) -> Str {
+  match problem {
+    case NotAName(_given) => "that is not a name a file may be written under"
+    case Empty => "there is no name to write under"
+  }
+}

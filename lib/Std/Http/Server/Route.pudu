@@ -1,6 +1,7 @@
 module Std.Http.Server.Route
 
 import Std.Http as Http
+import Std.Http.Multipart as Multipart
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Reply {text}
 import Std.Map as Map
@@ -277,3 +278,25 @@ export fn header(request: &Request, name: Str) -> Option[Str] {
 
 /// The body a request carried.
 export fn body(request: &Request) -> Str { request.message.body }
+
+/// The form a request carried, when it carried one.
+///
+/// The seam between a handler and an uploaded form: a handler holds a request
+/// and should not have to know how the parts were framed, or find the header
+/// that says what separates them. What comes back keeps the sender's filename
+/// as what it is — see [[Std Http Multipart]] for why that is never a path.
+export fn formOf(
+  request: &Request,
+  held: &Multipart.Limits
+) -> Result[Array[Multipart.Part], Multipart.MultipartError] {
+  Multipart.read(
+      &request.message.body.toBytes(),
+    Option.unwrapOr(header(request, "content-type"), ""),
+    held
+  )
+}
+
+/// Whether a request carried a form with files in it.
+export fn carriesForm(request: &Request) -> Bool {
+  Option.isSome(&Multipart.boundaryOf(Option.unwrapOr(header(request, "content-type"), "")))
+}

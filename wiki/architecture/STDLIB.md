@@ -298,6 +298,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.App.Health` | 21 | liveness and readiness as separate types, worst-wins aggregation |
 | `Std.App.Config` | 24 | four configuration layers, typed reads, and profiles, provisional |
 | `Std.Http.Client` | 13 | bounded requests, verified transport, credential-safe redirects |
+| `Std.Http.Multipart` | 17 | uploaded forms, bounded, with names that never become paths |
 | `Std.Http.Safe` | 12 | framing, header, provenance, redirect, path, and address judgements |
 | `Std.Http.Server.Socket` | 20 | upgrade with a mandatory origin check, and the frame format |
 | `Std.Http.Server.Guard` | 12 | protective headers, sharing, provenance, identity, and quiet failure |

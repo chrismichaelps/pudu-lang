@@ -1,10 +1,16 @@
 module Std.App
 
 import Std.App.Config as Config
+import Std.App.Health as Health
+import Std.App.Metrics as Metrics
+import Std.Http as Http
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Http.Server as Server
 import Std.Option as Option
 import Std.Result as Result
+import Std.Sync as Sync
 
 /// One thing that starts and later stops.
 ///
@@ -14,13 +20,19 @@ import Std.Result as Result
 /// what exists.
 export type Stage = { name: Str, start: fn() -> Result[(), Str], stop: fn() -> Result[(), Str] }
 
-/// The program: what it is called, what it was told, what it serves, and what
-/// has to be running before it serves it.
+/// The program: what it is called, what it was told, what it serves, what has
+/// to be running before it serves it, and what is wrapped around every handler.
+///
+/// The steps are part of the application rather than left to each program,
+/// because the protections they carry are the ones a service should have
+/// before anybody has thought about them. A program that needs them different
+/// says so, and that is a line in its source rather than the absence of one.
 export type App = {
   name: Str,
   config: Config.Config,
   router: Route.Router,
-  stages: Array[Stage]
+  stages: Array[Stage],
+  steps: Array[Route.Middleware]
 }
 
 /// What a start or a stop did.
@@ -79,7 +91,8 @@ export fn web(name: Str, routes: &Route.Router) -> Result[App, AppError] {
         name: name,
         config: Result.unwrapOr(found, Config.empty()),
         router: *routes,
-        stages: []
+        stages: [],
+        steps: Guard.strict()
       }
     )
   }
@@ -88,7 +101,7 @@ export fn web(name: Str, routes: &Route.Router) -> Result[App, AppError] {
 /// An application over settings the caller already has, for a program whose
 /// configuration comes from somewhere this module does not know about.
 export fn over(name: Str, settings: &Config.Config, routes: &Route.Router) -> App {
-  App{name: name, config: *settings, router: *routes, stages: []}
+  App{name: name, config: *settings, router: *routes, stages: [], steps: Guard.strict()}
 }
 
 /// An application with one more thing to start.
@@ -97,12 +110,69 @@ export fn over(name: Str, settings: &Config.Config, routes: &Route.Router) -> Ap
 /// because an inferred order cannot be read off the page and needs a second
 /// mechanism to correct it in the cases that matter.
 export fn using(base: &App, step: Stage) -> App {
-  App{name: base.name, config: base.config, router: base.router, stages: base.stages.push(step)}
+  App{..*base, stages: base.stages.push(step)}
 }
 
 /// An application with different routes.
-export fn serving(base: &App, routes: &Route.Router) -> App {
-  App{name: base.name, config: base.config, router: *routes, stages: base.stages}
+export fn serving(base: &App, routes: &Route.Router) -> App { App{..*base, router: *routes} }
+
+/// The application, permitting the named origins to read its answers.
+export fn sharing(base: &App, origins: &Array[Str]) -> App {
+  App{..*base, steps: Guard.standard(&Guard.shareWith(origins))}
+}
+
+/// The application with one more step around every handler, outside the ones
+/// already there.
+export fn wrapping(base: &App, step: Route.Middleware) -> App {
+  App{..*base, steps: base.steps.push(step)}
+}
+
+/// The application with steps a program chose instead of the usual ones.
+///
+/// Named so that a service without the ordinary protections is a line
+/// somebody wrote rather than a line nobody wrote — which is the same reason
+/// a route states what it requires.
+export fn steppedBy(base: &App, steps: &Array[Route.Middleware]) -> App {
+  App{..*base, steps: *steps}
+}
+
+/// The steps wrapped around this application's handlers.
+export fn stepsOf(base: &App) -> Array[Route.Middleware] { base.steps }
+
+/// The application answering what it is asked about itself.
+///
+/// Mounted where the program says rather than at a path this module chose: an
+/// endpoint that appears without being written is one nobody decided to
+/// expose, and the same mechanism that publishes a health report publishes an
+/// environment dump beside it.
+export fn reporting(
+  base: &App,
+  livePath: Str,
+  readyPath: Str,
+  checks: &Array[Health.Liveness],
+  ready: &Array[Health.Readiness],
+  reading: Health.Reading
+) -> App {
+  let living = *checks
+  let answering = *ready
+  let seen = reading
+  let mounted = Route.adding(
+      &Route.adding(
+        &base.router,
+      Route.get(livePath, fn(_request: Route.Request) -> Http.Response {
+          answered(&Health.alive(&living, &seen))
+        })
+    ),
+    Route.get(readyPath, fn(_request: Route.Request) -> Http.Response {
+        answered(&Health.ready(&answering))
+      })
+  )
+  App{..*base, router: mounted}
+}
+
+/// A health report as the answer something outside the process receives.
+fn answered(report: &Health.Report) -> Http.Response {
+  Reply.text(Health.statusOf(report), Health.render(report))
 }
 
 /// A stage from its two halves.
@@ -205,7 +275,8 @@ export fn run(target: &App) -> Result[Int, AppError] {
   let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
   let port = Config.wholeOr(&target.config, "server.port", DEFAULT_PORT)
   let limit = Config.wholeOr(&target.config, "server.connections", 0)
-  let listening = Server.server(&target.router)
+  var listening = Server.server(&target.router)
+  for step in target.steps { listening = Server.using(&listening, step) }
   let served = Server.listenAndServe(&listening, host, port, limit)
   let _stopped = stop(target)
   if let Err(problem) = served { Err(Listen(show(problem))) } else { Ok(Result.unwrapOr(served, 0)) }
@@ -217,5 +288,70 @@ export fn explain(problem: &AppError) -> Str {
     case Configuration(reason) => "configuration: " + reason
     case StageFailed(named, reason) => named + " did not start: " + reason
     case Listen(reason) => "could not serve: " + reason
+  }
+}
+
+/// The names the ordinary request measurements are kept under.
+const REQUESTS_MEASURED: Str = "http.requests"
+
+const REQUEST_MILLISECONDS: Str = "http.request.milliseconds"
+
+/// Measurements a service takes of itself, declared and ready to be added to.
+///
+/// Declared here rather than left to each program because a service that
+/// reports nothing about its own traffic is the ordinary failure, and the two
+/// measurements every service wants are the same two.
+export fn requestMeasurements() -> Metrics.Metrics {
+  Metrics.distribution(
+      &Metrics.counter(
+        &Metrics.empty(),
+      REQUESTS_MEASURED,
+      Metrics.Count,
+      "requests answered"
+    ),
+    REQUEST_MILLISECONDS,
+    Metrics.Milliseconds,
+    "how long answering took",
+      &[]
+  )
+}
+
+/// The application measuring its own traffic into a cell the program holds,
+/// and answering with what it has measured where the program says.
+///
+/// The cell is the program's because the measurements are: nothing here is
+/// global, so two evaluations do not share counts and a test does not inherit
+/// another's. The route is written rather than mounted automatically, for the
+/// same reason a health report is.
+export fn measuring(base: &App, into: Sync.Cell[Metrics.Metrics], at: Str) -> App {
+  let store = into
+  let exposed = Route.adding(
+      &base.router,
+    Route.get(at, fn(_request: Route.Request) -> Http.Response {
+        Reply.text(200, Metrics.render(&Result.unwrapOr(Sync.get(&store), Metrics.empty())))
+      })
+  )
+  App{..*base, router: exposed, steps: base.steps.push(counting(into))}
+}
+
+/// A step that counts every request and how long it took.
+///
+/// The route is a label rather than the path, because a path carrying an
+/// identifier turns one measurement into millions — which is the bound
+/// [[Std App Metrics]] exists to hold, and holding it starts here.
+fn counting(into: Sync.Cell[Metrics.Metrics]) -> Route.Middleware {
+  let store = into
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let began = clock()
+    let answer = next(request)
+    let labels = [
+      ("method", Http.methodName(&request.message.method)),
+      ("status", show(answer.status.code))
+    ]
+    let held = Result.unwrapOr(Sync.get(&store), Metrics.empty())
+    let counted = Metrics.increment(&held, REQUESTS_MEASURED, &labels)
+    let timed = Metrics.observe(&counted, REQUEST_MILLISECONDS, &labels, clock() - began)
+    let _kept = Sync.set(&store, timed)
+    answer
   }
 }

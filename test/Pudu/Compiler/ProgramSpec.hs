@@ -267,6 +267,7 @@ testProgramEvaluation = do
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
   remembered <- runEntry "test-fixtures/stdlib/UsesSession.pudu"
+  uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -447,7 +448,7 @@ testProgramEvaluation = do
         up when one of them refuses to. -}
     , counterexample
         "an application is a value that starts and stops in a written order"
-        (wired === Just "46")
+        (wired === Just "67")
     {-| That placing text in a page cannot place markup in one: a script
         written into text renders as that text, a quote inside an attribute
         does not end the value and start another, and the ampersand is written
@@ -643,6 +644,16 @@ testProgramEvaluation = do
     , counterexample
         "signing in always answers a session with a new name"
         (remembered === Just "48")
+    {-| That the name a sender gave a file never becomes a path: a file
+        uploaded as an ascent has that as its name, and only what follows the
+        last separator of either kind survives being asked for a name to write
+        under — asked for, because a program reaching for a path should have to
+        say so. Nothing is decoded before checking, since undoing an encoding
+        first is how a check is bypassed, and every bound is applied while
+        reading rather than once the memory is gone. -}
+    , counterexample
+        "an uploaded name never becomes a path"
+        (uploaded === Just "44")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

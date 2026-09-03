@@ -45,6 +45,7 @@ tags: [moc, module, stdlib]
 - [[Std App Health]] — restarting and receiving traffic, kept apart by the types.
 - [[Std App Config]] — where a setting comes from when four places could supply it.
 - [[Std Http Client]] — sending a request somewhere and reading what comes back.
+- [[Std Http Multipart]] — reading a form that carried files, without letting the sender choose where they go.
 - [[Std Http Safe]] — the judgements a server makes before it believes a request.
 - [[Std Http Server]] — reading requests off connections and answering them.
 - [[Std Http Server Guard]] — the steps that make a service safe before anyone asks.
