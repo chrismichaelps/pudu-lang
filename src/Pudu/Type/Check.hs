@@ -90,6 +90,7 @@ import Pudu.Type.Value
   , Scheme (..)
   , monotype
   , polytype
+  , restrictedBy
   , Type (..)
   )
 import Pudu.Type.Interface (ImportTypes)
@@ -160,7 +161,9 @@ declareFunction declared value = do
   result <- formOptionalType declared rigid (functionReturn value)
   bindName (locatedValue (functionName value))
     ( polytype rigid (declareBounds declared value)
-        (FunctionTypeValue (functionAsync value) inputs result)
+        ( restrictedBy (map locatedValue <$> functionUnsafe value)
+            (FunctionTypeValue (functionAsync value) inputs result)
+        )
     )
   case functionUnsafe value of
     Nothing -> pure ()

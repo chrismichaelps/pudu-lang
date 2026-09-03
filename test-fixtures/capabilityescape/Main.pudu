@@ -1,0 +1,20 @@
+module Main
+
+import Risky
+
+/// A parameter that accepts an ordinary function.
+fn through(action: fn(Int) -> Int, value: Int) -> Int { action(value) }
+
+/// Three ways a requirement used to be lost, each refused now.
+///
+/// Storing the function in a variable, handing it to a parameter that asks for
+/// an ordinary function, and calling the blanket form without a region. The
+/// requirement is in the type, so it travels with the value rather than with
+/// the spelling that first named it.
+export fn main() -> Int {
+  let held = Risky.stepped
+  let counted = held(1)
+  let passed = through(Risky.stepped, 2)
+  let blank = Risky.blanket(3)
+  counted + passed + blank
+}

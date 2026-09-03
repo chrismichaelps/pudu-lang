@@ -23,10 +23,11 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Frontend.Syntax.Tree (TypeSyntax (..))
 import Pudu.Frontend.Token
-  ( Keyword (KwDynamic, KwAsync, KwFn, KwMut)
+  ( Keyword (KwDynamic, KwAsync, KwFn, KwMut, KwUnsafe)
   , Token (tokenKind, tokenSpan)
   , TokenKind (..)
   )
+import Pudu.Frontend.Parser.Capability (parseCapabilities)
 import Pudu.Source (Span, mergeSpans)
 
 parseTypeSyntax :: Parser (Located TypeSyntax)
@@ -38,6 +39,30 @@ parseTypeSyntax = do
 
 parseTypeSyntaxBody :: Parser (Located TypeSyntax)
 parseTypeSyntaxBody = do
+  unsafeKeyword <- matchKeyword KwUnsafe
+  case unsafeKeyword of
+    Just token -> parseUnsafeType token
+    Nothing -> parseReferenceOrAtom
+
+{-| `unsafe(raw) fn(Int) -> Int` — a function type that says what calling it
+    needs.
+
+    Without this a program could hold an unsafe function but never name the
+    shape of one, so a parameter could not accept it and higher-order code over
+    a binding would be unwritable. Closing a hole by making the feature useless
+    is not closing it. -}
+parseUnsafeType :: Token -> Parser (Located TypeSyntax)
+parseUnsafeType token = do
+  capabilities <- parseCapabilities
+  target <- parseTypeSyntax
+  pure
+    Located
+      { locatedSpan = mergedOrLeft (tokenSpan token) (locatedSpan target)
+      , locatedValue = UnsafeType capabilities target
+      }
+
+parseReferenceOrAtom :: Parser (Located TypeSyntax)
+parseReferenceOrAtom = do
   reference <- matchSymbol "&"
   case reference of
     Just token -> do

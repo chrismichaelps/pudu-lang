@@ -129,6 +129,13 @@ consumesAll (wanted : rest) available = case break (compatible wanted) available
     would hide the entry rather than qualify it. -}
 compatible :: SigType -> SigType -> Bool
 compatible wanted found = case (wanted, found) of
+  {-| What calling a function requires is not part of the shape a reader typed.
+      Somebody searching for `Str -> Int64` wants the one a foreign block
+      declares as much as any other, so the requirement is looked through from
+      either side. It is shown on hover, where it answers a different question:
+      not what shape is this, but what does calling it need. -}
+  (SigRestricted _ inner, _) -> compatible inner found
+  (_, SigRestricted _ inner) -> compatible wanted inner
   (SigUnknown, _) -> True
   (_, SigUnknown) -> True
   (_, SigVar _) -> True

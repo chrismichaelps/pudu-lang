@@ -328,13 +328,16 @@ unsafe_block     = "unsafe", capabilities?, block ;
 capabilities     = "(", capability, (",", capability)*, ","?, ")" ;
 capability       = "raw" | "foreign" | "unchecked" | "null" ;
 function_decl    = "unsafe", capabilities?, ... ;
+unsafe_type      = "unsafe", capabilities?, type ;
 ```
 
 - `unsafe { ... }` is the only construct enabling raw pointers, foreign calls marked unsafe, unchecked indexing, or `null`.
 - A region names the capabilities it grants. `unsafe(raw) { ... }` grants raw pointer work and nothing else; `unsafe { ... }` with no list is the blanket form and grants all four. Naming them is what makes an unsafe region auditable: a reader sees which invariant is in play without reading the body, and tooling can find every region that does raw pointer work without a whole-program analysis.
 - A function may be declared `unsafe`, optionally naming capabilities. A call requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them.
 - **The requirement follows the function, not the spelling.** `Bindings.open`, `B.open` after `import Bindings as B`, and a selected `open` are one function, and each requires what its declaration asked for. The same holds for `comptime`: an imported compile-time function stays one, and an imported ordinary function cannot be called from a compile-time body. Restrictions that stopped at the import were a boundary that held inside a module and dissolved at its edge — and putting bindings in a module of their own is the arrangement [[ADR-0018 Calling a Library Written Elsewhere]] recommends, so the edge was exactly where it mattered.
-- A restriction still travels with a *name*. A function value stored in a variable or passed as a parameter carries no capability metadata in its type, so a call through one is not yet rejected; [[ADR-0009 Effects in the Type]] is where that is settled.
+- **The requirement is part of the function's type**, so it travels with the value rather than with the name. A function stored in a variable, returned, or passed as an argument still asks for what its declaration asked for, and the call is checked wherever it finally happens. The type is written `unsafe(raw) fn(Int) -> Int`, and the blanket form `unsafe fn(Int) -> Int` requires only that some region be open.
+- **A parameter must say what it accepts.** `fn(action: fn(Int) -> Int)` takes an ordinary function and refuses one that requires more, because a body written for an ordinary function grants nothing. `fn(action: unsafe(raw) fn(Int) -> Int)` takes one that requires `raw`, and the body must grant it. That is what makes a safe wrapper writable: the wrapper opens one small region, and its own callers need nothing.
+- **Capability sets match exactly.** A function requiring less does not stand where one requiring more is expected, nor the reverse. Whether a set should be allowed to narrow is what capability variables would answer, and [[ADR-0009 Effects in the Type]] is where that is settled.
 - A function's unsafety is a contract its callers uphold, not a claim about its body. A body that needs nothing unchecked is still a legitimate unsafe function, because the invariant may live in its parameters.
 - A region that grants a capability nothing in it used is reported. Unsafe is an audited surface, so a grant that buys nothing is removed rather than kept.
 - Unsafe does not disable type checking, ownership of safe values, or lexical initialization checks.
@@ -385,7 +388,7 @@ foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
 
 ## Senior Definition Needed
 
-- `comptime` and unsafe capability metadata must become part of callable types before the compiler can enforce either restriction through aliases and higher-order calls.
+- `comptime` is still carried by name rather than by type, so a compile-time function stored in a variable and called through it is not yet checked. Unsafe capabilities no longer have this gap.
 - Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 
 ## Referenced by

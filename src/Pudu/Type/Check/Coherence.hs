@@ -14,7 +14,8 @@ import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..), mapLocated)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Declaration (..)
+  ( Capability
+  , Declaration (..)
   , Impl (..)
   , Trait (..)
   , TypeDeclarationValue (..)
@@ -25,7 +26,7 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, report)
 import Pudu.Type.Marker (isUserImplementable)
-import Pudu.Type.Value (NominalId (..))
+import Pudu.Type.Value (NominalId (..), capabilityName)
 
 data ImplementationKey = ImplementationKey !TypeKey !TypeKey
   deriving stock (Eq, Ord)
@@ -44,6 +45,10 @@ data TypeKey
   | ReferenceKey !Bool !TypeKey
   | TupleKey ![TypeKey]
   | FunctionKey !Bool ![TypeKey] !TypeKey
+  {-| A function that requires unchecked abilities keys apart from one that does
+      not, because they are different types. Without this, an implementation for
+      each would be reported as a duplicate of the other. -}
+  | RestrictedKey ![Capability] !TypeKey
   | UnitKey
   | InvalidKey
   deriving stock (Eq, Ord)
@@ -161,6 +166,8 @@ substituteType bindings syntax = case syntax of
     FunctionType asynchronous
       (map (mapLocated (substituteType bindings)) inputs)
       (mapLocated (substituteType bindings) result)
+  UnsafeType capabilities target ->
+    UnsafeType capabilities (mapLocated (substituteType bindings) target)
   UnitType -> UnitType
   InvalidType -> InvalidType
 
@@ -192,6 +199,8 @@ typeKey parameters syntax = case syntax of
     FunctionKey asynchronous
       (map (typeKey parameters . locatedValue) inputs)
       (typeKey parameters (locatedValue result))
+  UnsafeType capabilities target ->
+    RestrictedKey (map locatedValue capabilities) (typeKey parameters (locatedValue target))
   UnitType -> UnitKey
   InvalidType -> InvalidKey
 
@@ -228,6 +237,9 @@ renderTypeKey key = case key of
     (if asynchronous then "async " else "") <> "fn("
       <> Text.intercalate ", " (map renderTypeKey inputs) <> ") -> "
       <> renderTypeKey result
+  RestrictedKey capabilities target ->
+    "unsafe(" <> Text.intercalate ", " (map capabilityName capabilities) <> ") "
+      <> renderTypeKey target
   UnitKey -> "()"
   InvalidKey -> "<invalid>"
 

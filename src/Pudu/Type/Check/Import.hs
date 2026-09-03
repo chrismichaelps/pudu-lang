@@ -60,6 +60,7 @@ import Pudu.Type.Value
   , monotype
   , nominalKey
   , polytype
+  , restrictedBy
   )
 
 collectImportedDeclared :: ImportTypes -> Checker DeclaredTypes
@@ -240,7 +241,11 @@ declareFunction declared value = do
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
   bindName name
-    (polytype rigid (declareBounds declared value) (FunctionTypeValue (functionAsync value) inputs result))
+    ( polytype rigid (declareBounds declared value)
+        ( restrictedBy (map locatedValue <$> functionUnsafe value)
+            (FunctionTypeValue (functionAsync value) inputs result)
+        )
+    )
   case functionUnsafe value of
     Nothing -> pure ()
     Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)

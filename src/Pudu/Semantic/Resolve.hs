@@ -443,6 +443,7 @@ walkType (Located typeSpan value) = case value of
   ReferenceType _ target -> walkType target
   TupleType members -> mapM_ walkType members
   FunctionType _ inputs result -> mapM_ walkType inputs >> walkType result
+  UnsafeType _ target -> walkType target
   UnitType -> pure ()
   InvalidType -> pure ()
 

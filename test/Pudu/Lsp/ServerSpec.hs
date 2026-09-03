@@ -226,6 +226,12 @@ testForeignTooling = do
   pure $ conjoin
     [ counterexample "hover keeps the compiler-inferred handle signature"
         (property (maybe False (Text.isInfixOf "Box -> Int32") hoverBody))
+    {-| The requirement is part of the signature, so a reader sees what calling
+        it needs without being told separately. It is in the type because that
+        is what stops the requirement being lost when the function is stored in
+        a variable or handed to a parameter. -}
+    , counterexample "hover shows what calling the function requires"
+        (property (maybe False (Text.isInfixOf "unsafe(foreign)") hoverBody))
     , counterexample "hover identifies an asserted foreign boundary"
         (property (maybe False (Text.isInfixOf "foreign function from c, asserted rather than proved") hoverBody))
     , counterexample "definition reaches the foreign declaration"

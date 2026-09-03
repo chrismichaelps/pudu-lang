@@ -15,6 +15,14 @@ aliases: [Type Check Rule]
 
 # Type Check Rule
 
+- **A call's requirement is answered here, once.** Every callee reaches `callType`, whatever
+  spelling found it — a name, a module qualifier, an alias, a variable holding the function, a
+  parameter it arrived as. Checking here rather than at the name is what makes a stored or passed
+  function carry its requirement, and it is why there is one check instead of one per spelling.
+- **An empty set is the blanket form.** A declaration that said `unsafe` and named nothing asks only
+  that some region be open, and that is the empty set rather than the absence of one; an ordinary
+  function has no set at all.
+
 ## Purpose
 
 Own the closed operator, call, member, and index rules for [[Type Check]].

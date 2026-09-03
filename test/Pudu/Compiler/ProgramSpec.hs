@@ -82,6 +82,8 @@ testForeignHandles = do
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
   importedCapability <- codes "test-fixtures/importedcapability/Main.pudu"
+  carriedCapability <- runEntry "test-fixtures/capabilitytype/Main.pudu"
+  escapedCapability <- codes "test-fixtures/capabilityescape/Main.pudu"
   beforeCleanup <- cppDeleteCount
   CInt activeBefore <- cppActiveCount
   cleanupSuccess <- runEntry "test-fixtures/stdlib/UsesForeignHandleCleanup.pudu"
@@ -121,6 +123,16 @@ testForeignHandles = do
         a compile-time body cannot call an imported ordinary function. Before
         this, every one of them was silently exempt, so the boundary held inside
         a module and dissolved at the import — which is where bindings live. -}
+    {-| A requirement travels with the value, not with the spelling that named
+        it. A function stored in a variable still asks for what it asked for; a
+        parameter written to take an ordinary function refuses one that asks for
+        more; and the blanket form, which names nothing, still needs a region.
+        A wrapper that grants what it needs stays ordinary to its own callers,
+        which is what keeps the boundary small instead of spreading it. -}
+    , counterexample "a capability travels with the function value"
+        (carriedCapability === Just "1")
+    , counterexample "a requirement cannot be lost by storing or passing the function"
+        (escapedCapability === ["E3023", "E3001", "E3023"])
     , counterexample "an imported declaration keeps the restrictions it was declared under"
         (importedCapability === ["E3023", "E3023", "E3023", "E3023", "E3023", "E3025"])
     , counterexample "runtime teardown preserves a successful result"

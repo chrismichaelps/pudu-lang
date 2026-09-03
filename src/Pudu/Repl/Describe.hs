@@ -253,6 +253,9 @@ renderType (Located _ syntax) = case syntax of
   FunctionType asynchronous inputs result ->
     (if asynchronous then "async fn(" else "fn(")
       <> Text.intercalate ", " (map renderType inputs) <> ") -> " <> renderType result
+  UnsafeType capabilities target ->
+    "unsafe(" <> Text.intercalate ", " (map (capabilityName . locatedValue) capabilities)
+      <> ") " <> renderType target
   UnitType -> "()"
   InvalidType -> "?"
 

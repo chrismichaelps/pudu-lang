@@ -16,11 +16,14 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Frontend.Syntax.Tree (Capability)
 import Pudu.Type.Value
   ( NominalId
   , Scheme (..)
   , Type (..)
   , TypeVar (..)
+  , capabilityList
+  , capabilityName
   , nominalKey
   , nominalName
   )
@@ -40,6 +43,13 @@ data SigType
   | SigRef !Bool !SigType
   | SigTuple ![SigType]
   | SigFun ![SigType] !SigType
+  {-| A function that requires unchecked abilities of whoever calls it.
+
+      Carried so hover can show what calling it needs. Search normalises it
+      away, because a reader looking for `Str -> Int64` should find one whether
+      or not calling it takes a capability — what it requires is a property of
+      the call, not of the shape they typed. -}
+  | SigRestricted ![Capability] !SigType
   | SigUnit
   | SigNever
   | SigUnknown
@@ -51,6 +61,12 @@ data SigType
     a constant and a nullary function are searched by the same shape. -}
 data Signature = Signature
   { signatureConstraints :: ![(Text, [Text])]
+  {-| What calling this declaration requires of whoever calls it.
+
+      Kept beside the arguments rather than wrapped around them, so the
+      arguments still split — a search by arity and a hover that reads as a
+      signature both need that — while the requirement is still shown. -}
+  , signatureCapabilities :: ![Capability]
   , signatureArguments :: ![SigType]
   , signatureResult :: !SigType
   }
@@ -58,20 +74,25 @@ data Signature = Signature
 
 {-| The searchable signature of a scheme the checker produced. -}
 schemeSignature :: Scheme -> Signature
-schemeSignature scheme = case schemeType scheme of
+schemeSignature scheme = case unwrapped of
   FunctionTypeValue _ inputs result ->
     Signature
       { signatureConstraints = bounds
+      , signatureCapabilities = required
       , signatureArguments = map sigTypeFromType inputs
       , signatureResult = sigTypeFromType result
       }
   other ->
     Signature
       { signatureConstraints = bounds
+      , signatureCapabilities = required
       , signatureArguments = []
       , signatureResult = sigTypeFromType other
       }
  where
+  (required, unwrapped) = case schemeType scheme of
+    RestrictedType capabilities inner -> (capabilityList capabilities, inner)
+    other -> ([], other)
   bounds =
     [ (name, map nominalName obligations)
     | (name, obligations) <- schemeBounds scheme
@@ -96,6 +117,8 @@ sigTypeFromType typeValue = case typeValue of
   NominalType identity arguments -> SigCon (nominalLabel identity) (map sigTypeFromType arguments)
   TupleTypeValue members -> SigTuple (map sigTypeFromType members)
   FunctionTypeValue _ inputs result -> SigFun (map sigTypeFromType inputs) (sigTypeFromType result)
+  RestrictedType capabilities inner ->
+    SigRestricted (capabilityList capabilities) (sigTypeFromType inner)
   ReferenceTypeValue mutable target -> SigRef mutable (sigTypeFromType target)
   RigidType name -> SigVar name
   {-| A parameter applied to arguments searches as a constructor named by the
@@ -137,6 +160,7 @@ alphaNormalise signature =
     SigRef mutable target -> SigRef mutable (rename target)
     SigTuple members -> SigTuple (map rename members)
     SigFun inputs result -> SigFun (map rename inputs) (rename result)
+    SigRestricted capabilities inner -> SigRestricted capabilities (rename inner)
     other -> other
 
 canonicalNames :: [Text]
@@ -165,6 +189,7 @@ readableVariables signature =
     SigRef mutable target -> SigRef mutable (rename target)
     SigTuple members -> SigTuple (map rename members)
     SigFun inputs result -> SigFun (map rename inputs) (rename result)
+    SigRestricted capabilities inner -> SigRestricted capabilities (rename inner)
     other -> other
 
 {-| Variables in order of first appearance across arguments then result. -}
@@ -178,6 +203,7 @@ orderedVariables signature =
     SigRef _ target -> collect target
     SigTuple members -> concatMap collect members
     SigFun inputs result -> concatMap collect inputs <> collect result
+    SigRestricted _ inner -> collect inner
     _ -> []
 
   distinct = reverse . fst . foldl step ([], Set.empty)
@@ -207,6 +233,7 @@ typeVariables signature = foldMap gather (signatureResult signature : signatureA
     SigRef _ target -> gather target
     SigTuple members -> foldMap gather members
     SigFun inputs result -> foldMap gather inputs <> gather result
+    SigRestricted _ inner -> gather inner
     _ -> Set.empty
 
 {-| How many arguments a signature takes, which is the cheapest thing a search
@@ -223,6 +250,9 @@ renderSigType sigType = case sigType of
   SigTuple members -> "(" <> Text.intercalate ", " (map renderSigType members) <> ")"
   SigFun inputs result ->
     "fn(" <> Text.intercalate ", " (map renderSigType inputs) <> ") -> " <> renderSigType result
+  SigRestricted capabilities inner ->
+    "unsafe(" <> Text.intercalate ", " (map capabilityName capabilities) <> ") "
+      <> renderSigType inner
   SigUnit -> "()"
   SigNever -> "!"
   SigUnknown -> "?"
@@ -242,12 +272,20 @@ renderNested sigType = case sigType of
     arrow shape first and the obligations second. -}
 renderSignature :: Signature -> Text
 renderSignature original =
-  Text.intercalate " -> " (map renderSigType arguments <> [renderSigType (signatureResult signature)])
+  requirement
+    <> Text.intercalate " -> " (map renderSigType arguments <> [renderSigType (signatureResult signature)])
     <> constraintSuffix
  where
   signature = readableVariables original
 
   arguments = signatureArguments signature
+
+  {-| Shown before the shape, because what calling it needs is the first thing a
+      reader deciding how carefully to check the call wants to know. -}
+  requirement = case signatureCapabilities signature of
+    [] -> Text.empty
+    capabilities ->
+      "unsafe(" <> Text.intercalate ", " (map capabilityName capabilities) <> ") "
 
   constraintSuffix = case rendered of
     [] -> Text.empty

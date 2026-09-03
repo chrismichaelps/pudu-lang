@@ -28,7 +28,7 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, DeclaredTypes, bindName, recordUnsafeFunction, report)
 import Pudu.Type.Formation (formType)
-import Pudu.Type.Value (Type (..), monotype)
+import Pudu.Type.Value (Type (..), capabilitiesOf, monotype)
 
 {-| The opaque things a block declares, which its own signatures may name. -}
 foreignHandles :: Foreign -> Set.Set Text
@@ -51,7 +51,15 @@ declareOne declared handles (Located _ function) = do
   inputs <- mapM (parameterCrossing declared handles) (foreignParameters function)
   result <- formedCrossing declared handles (foreignResult function)
   let name = locatedValue (foreignName function)
-  bindName name (monotype (FunctionTypeValue False inputs result))
+  {-| Every foreign function requires the capability, and requires it in its
+      own type, so a binding stored in a variable or passed on still asks for
+      it wherever it is finally called. -}
+  bindName name
+    ( monotype
+        ( RestrictedType (capabilitiesOf [ForeignCapability])
+            (FunctionTypeValue False inputs result)
+        )
+    )
   {-| Every foreign call needs the capability, without the declaration saying
       so. The signature is unverifiable by construction, and the language
       already has a word for an assertion of that kind. -}

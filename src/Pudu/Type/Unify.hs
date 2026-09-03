@@ -61,6 +61,19 @@ unify spanValue expected actual = do
           inputs <- unifyAll spanValue leftInputs rightInputs
           result <- unify spanValue leftResult rightResult
           pure (FunctionTypeValue leftAsync inputs result)
+    {-| Two restricted functions agree when they require the same abilities and
+        the functions underneath them agree.
+
+        Exactly the same set, not a subset either way. A function requiring less
+        cannot stand where one requiring more is expected, because the caller
+        was written to grant what the expected type asked for and would grant
+        more than it needs; and one requiring more certainly cannot stand where
+        less is expected, which is the laundering this exists to stop. Whether a
+        set should be allowed to narrow is the question capability variables
+        answer, and [[ADR-0009 Effects in the Type]] is where that is settled. -}
+    (RestrictedType leftCapabilities leftInner, RestrictedType rightCapabilities rightInner)
+      | leftCapabilities == rightCapabilities ->
+          RestrictedType leftCapabilities <$> unify spanValue leftInner rightInner
     (ReferenceTypeValue leftMutable leftTarget, ReferenceTypeValue rightMutable rightTarget)
       | leftMutable == rightMutable ->
           ReferenceTypeValue leftMutable <$> unify spanValue leftTarget rightTarget
@@ -137,6 +150,7 @@ occursIn variable candidate = do
     FunctionTypeValue _ inputs result -> do
       inInputs <- anyOccurs inputs
       if inInputs then pure True else occursIn variable result
+    RestrictedType _ inner -> occursIn variable inner
     ReferenceTypeValue _ target -> occursIn variable target
     _ -> pure False
  where
@@ -199,6 +213,7 @@ zonk typeValue = do
     TupleTypeValue members -> TupleTypeValue <$> mapM zonk members
     FunctionTypeValue asynchronous inputs result ->
       FunctionTypeValue asynchronous <$> mapM zonk inputs <*> zonk result
+    RestrictedType capabilities inner -> RestrictedType capabilities <$> zonk inner
     ReferenceTypeValue mutable target -> ReferenceTypeValue mutable <$> zonk target
     other -> pure other
 

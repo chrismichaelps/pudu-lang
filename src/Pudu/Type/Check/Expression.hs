@@ -46,7 +46,6 @@ import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
-  , checkUnsafeCall
   , dottedName
   , reportUnusedCapabilities
   )
@@ -130,7 +129,6 @@ inferExpression around declared rigid spanValue expression = case expression of
     rightType <- checkExpression around declared rigid right
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
-    checkUnsafeCall spanValue callee
     checkComptimeCall spanValue callee
     dispatched <- traitQualifiedCall (expressionChecker around) declared rigid callee arguments
     case dispatched of

@@ -40,7 +40,7 @@ import Pudu.Type.Env
   , emptyDeclared
   , freshVariable
   )
-import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal)
+import Pudu.Type.Value (NominalId (..), Type (..), canonicalNominal, restrictedBy)
 
 {-| Form a type from its syntax. Names that were declared as generic parameters
     become rigid; every other name is nominal, and an alias expands
@@ -83,6 +83,11 @@ formTypeWith valuePosition declared rigid (Located typeSpan syntax) = case synta
     ReferenceTypeValue mutable <$> formTypeWith valuePosition declared rigid target
   TupleType members ->
     TupleTypeValue <$> mapM (formTypeWith valuePosition declared rigid) members
+  {-| What a function requires of its caller travels with its type, so a
+      parameter can accept one and a variable can hold one without the
+      requirement being lost on the way. -}
+  UnsafeType capabilities target ->
+    restrictedBy (Just (map locatedValue capabilities)) <$> formType declared rigid target
   FunctionType asynchronous inputs result ->
     FunctionTypeValue asynchronous
       <$> mapM (formTypeWith valuePosition declared rigid) inputs

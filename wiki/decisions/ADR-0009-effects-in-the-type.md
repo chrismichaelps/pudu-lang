@@ -220,6 +220,23 @@ started rather than importing something foreign.
    it has no precedent I can point at.
 3. Whether `unsafe { }` as a region survives, or becomes `uses` on the block.
 
+## What has since been settled
+
+**Unsafe capabilities are in the callable type.** A function that requires an unchecked ability of
+its caller has the type `unsafe(raw) fn(Int) -> Int`, and the requirement travels with the value:
+stored in a variable, returned, or passed as an argument, it still asks for what its declaration
+asked for, and the call is checked wherever it finally happens. Sets match exactly, which is enough
+for a wrapper to accept a restricted function and grant what it needs while staying ordinary to its
+own callers.
+
+What this does *not* settle is capability *variables* — a function generic over what its argument
+requires, so one wrapper could serve `raw` and `foreign` callers alike. Today each set is a distinct
+type and such a wrapper is written once per set. That is the polymorphism this decision is about,
+and it remains open.
+
+`comptime` is still carried by name rather than by type, so a compile-time function stored in a
+variable and called through it is not yet checked.
+
 ## Referenced by
 
 [[decisions/_MOC]] · [[ADR-0008]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[Type Check]]

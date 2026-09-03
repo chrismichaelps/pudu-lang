@@ -247,6 +247,12 @@ data TypeSyntax
   | ReferenceType !Bool !(Located TypeSyntax)
   | TupleType ![Located TypeSyntax]
   | FunctionType !Bool ![Located TypeSyntax] !(Located TypeSyntax)
+  {-| A function that requires unchecked abilities of whoever calls it.
+
+      Written as a prefix on the type rather than as part of the function
+      arrow, so an ordinary signature stays exactly what it was and only the
+      declarations that require something say so. -}
+  | UnsafeType ![Located Capability] !(Located TypeSyntax)
   | UnitType
   | InvalidType
   deriving stock (Eq, Show)

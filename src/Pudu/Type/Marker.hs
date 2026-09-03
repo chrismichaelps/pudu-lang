@@ -64,6 +64,9 @@ decide marker visiting typeValue = case typeValue of
   DynamicTypeValue _ -> pure False
   TupleTypeValue members -> allDecide marker visiting members
   FunctionTypeValue{} -> pure (marker /= "Copy")
+  {-| What a function requires of its caller says nothing about how the value
+      itself may be held or moved, so it decides as the function it wraps. -}
+  RestrictedType _ inner -> decide marker visiting inner
   ReferenceTypeValue mutable target -> reference marker visiting mutable target
   NominalType owner arguments -> nominal marker visiting owner arguments
 

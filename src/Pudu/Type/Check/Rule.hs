@@ -19,7 +19,7 @@ module Pudu.Type.Check.Rule
   , unaryType
   ) where
 
-import Control.Monad (filterM)
+import Control.Monad (filterM, unless)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -33,6 +33,8 @@ import Pudu.Frontend.Syntax.Tree (Capability (..))
 import Pudu.Type.Env
   ( Checker
   , useCapability
+  , insideUnsafe
+  , useUnsafeRegion
   , addObligation
   , constrainIntegerLiteral
   , freshVariable
@@ -58,6 +60,8 @@ import Pudu.Type.Value
   , nominalKey
   , nominalName
   , renderType
+  , capabilityList
+  , capabilityName
   , decimalType
   , stringType
   )
@@ -431,6 +435,26 @@ binaryType spanValue operator left right
 callType :: Span -> Type -> [Type] -> Checker Type
 callType spanValue calleeType argumentTypes = case calleeType of
   ErrorType -> pure ErrorType
+  {-| Every call arrives here, whatever spelling reached it — a name, a module
+      qualifier, an alias, a variable holding the function, a parameter it was
+      passed as. So this is where a requirement is answered, once, and a
+      function cannot shed what it requires by being stored or handed on. -}
+  RestrictedType capabilities inner -> do
+    case capabilityList capabilities of
+      {-| A declaration that said `unsafe` and named nothing asks only that some
+          region be open. Naming none is the blanket form, and it is the empty
+          set rather than the absence of one — an ordinary function has no set
+          at all. -}
+      [] -> do
+        open <- insideUnsafe
+        if open
+          then useUnsafeRegion
+          else
+            report "E3023" spanValue
+              "this call needs an unsafe region here"
+              (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
+      required -> mapM_ (requireCallCapability spanValue) required
+    callType spanValue inner argumentTypes
   FunctionTypeValue asynchronous inputs result
     | length inputs == length argumentTypes -> do
         _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
@@ -506,6 +530,22 @@ propagateFailure syntax spanValue failure declaredResult = do
 
 renderCallee :: Type -> Text
 renderCallee = renderType
+
+{-| A call needs what the function it names asks for.
+
+    Reported here rather than at the declaration because this is the only place
+    that knows both what was required and what the surrounding region granted. -}
+requireCallCapability :: Span -> Capability -> Checker ()
+requireCallCapability spanValue capability = do
+  granted <- useCapability capability
+  unless granted $
+    report "E3023" spanValue
+      ("this call needs the " <> capabilityName capability <> " capability here")
+      ( Just
+          ( "wrap the call in unsafe(" <> capabilityName capability
+              <> ") { ... }, or declare the caller with that capability"
+          )
+      )
 
 countText :: Int -> Text
 countText total = case total of

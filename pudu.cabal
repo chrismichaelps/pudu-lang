@@ -78,6 +78,7 @@ library
     Pudu.Frontend.Parser
     Pudu.Frontend.Parser.Name
     Pudu.Frontend.Parser.Pattern
+    Pudu.Frontend.Parser.Capability
     Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block

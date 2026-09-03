@@ -20,6 +20,8 @@ tags: [moc, module]
 
 Dependency direction avoids import cycles: State → Name/Type/Pattern → Expression → Declaration submodules → orchestrator → façade. [[Parser Block]] is the recursion fixed point: it passes itself to Expression and Binding as their block capability, so no submodule imports the orchestrator.
 
+- [[Parser Capability]] — the unchecked abilities an unsafe declaration or an unsafe type names.
+
 ## Referenced by
 
 [[src/Pudu/Frontend/_MOC]] · [[Frontend]]

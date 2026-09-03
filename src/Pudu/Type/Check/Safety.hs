@@ -1,7 +1,6 @@
 {-| @Type.Check.Safety — checks compile-time purity and unsafe capabilities -}
 module Pudu.Type.Check.Safety
   ( checkComptimeCall
-  , checkUnsafeCall
   , comptimeBuiltins
   , reportUnusedCapabilities
   , requireComptimePurity
@@ -13,20 +12,13 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Tree
-  ( Capability (..)
-  , Expression (..)
-  , Function (..)
-  )
+import Pudu.Frontend.Syntax.Tree (Expression (..), Function (..))
 import Pudu.Source (Span)
+import Pudu.Type.Value (capabilityName)
 import Pudu.Type.Env
   ( Checker
   , UnsafeFrame (..)
-  , insideUnsafe
   , leaveUnsafe
-  , unsafeFunctionCapabilities
-  , useCapability
-  , useUnsafeRegion
   , warn
   , isComptimeFunction
   , inComptime
@@ -107,60 +99,17 @@ reportUnusedCapabilities spanValue = do
               ("unsafe region grants unused " <> Text.intercalate ", " (map capabilityName unused))
               (Just "drop the capabilities the region does not need")
 
-capabilityName :: Capability -> Text
-capabilityName capability = case capability of
-  RawCapability -> "raw"
-  ForeignCapability -> "foreign"
-  UncheckedCapability -> "unchecked"
-  NullCapability -> "null"
-
-{-| Calling an unsafe function requires an unsafe context that grants what the
-    declaration asked for. A blanket declaration requires only that some region
-    is open; a declaration that names capabilities requires each of them, which
-    is what makes the requirement auditable rather than all-or-nothing. -}
-checkUnsafeCall :: Span -> Located Expression -> Checker ()
-checkUnsafeCall spanValue callee = case dottedName (locatedValue callee) of
-  Just name -> do
-    declaredCapabilities <- unsafeFunctionCapabilities name
-    case declaredCapabilities of
-      Nothing -> pure ()
-      Just [] -> do
-        open <- insideUnsafe
-        if open
-          then useUnsafeRegion
-          else
-            report "E3023" spanValue
-              ("unsafe function " <> name <> " called outside an unsafe region")
-              (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
-      Just required -> mapM_ (requireCapability spanValue name) required
-  Nothing -> pure ()
-
 {-| A chain of names, written as a path or as member accesses, joined back into
     the dotted name it stands for. Anything else is not a name.
 
     The dotted spelling is the key the checker binds a name under, so asking
-    about `Bindings.open` finds the same declaration the call resolves against.
+    about `Bindings.fold` finds the same declaration the call resolves against.
     A qualified call arrives here as member access rather than as a path, and
-    matching only the undotted form was how an unsafe function stopped being
-    unsafe the moment it was reached through its module — which is the
-    arrangement this library recommends for bindings. -}
+    matching only the undotted form was how a compile-time body could reach an
+    ordinary function by naming its module. -}
 dottedName :: Expression -> Maybe Text
 dottedName expression = case expression of
   NameExpression names -> Just (Text.intercalate "." (NonEmpty.toList names))
   MemberExpression target member ->
     (\prefix -> prefix <> "." <> locatedValue member) <$> dottedName (locatedValue target)
   _ -> Nothing
-
-requireCapability :: Span -> Text -> Capability -> Checker ()
-requireCapability spanValue name capability = do
-  granted <- useCapability capability
-  unless granted $
-    report "E3023" spanValue
-      ( "unsafe function " <> name <> " needs the "
-          <> capabilityName capability <> " capability here"
-      )
-      ( Just
-          ( "wrap the call in unsafe(" <> capabilityName capability
-              <> ") { ... }, or declare the caller with that capability"
-          )
-      )
