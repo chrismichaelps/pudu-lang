@@ -19,6 +19,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeParam (..)
   )
 import qualified Pudu.Frontend.Syntax.Tree as Tree
+import Pudu.Type.Check.Foreign (declareForeign)
 import Pudu.Type.Check.Method
   ( declareInterfaceMethods
   , declareBounds
@@ -119,6 +120,10 @@ declareInterface declared visibleTraits available traits defaults value = do
           mapM_ (publishValue . locatedValue . Tree.variantName . locatedValue) variants
         _ -> pure ()
     TraitDeclaration trait -> declareTraitMembers interfaceDeclared trait
+    ForeignDeclaration foreignValue -> do
+      declareForeign interfaceDeclared foreignValue
+      mapM_ (publishValue . locatedValue . Tree.foreignName . locatedValue)
+        (Tree.foreignFunctions foreignValue)
     ImplDeclaration implementation -> do
       formed <- formTraitReference interfaceDeclared [] (implTrait implementation)
       case formed of
@@ -148,6 +153,8 @@ interfaceLocalNames value = Map.fromList (concatMap one declarations)
   one (Located _ declaration) = case declaration of
     TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
     TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
+    ForeignDeclaration foreignValue ->
+      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 
@@ -193,6 +200,8 @@ interfaceIdentities value = concatMap one (interfaceDeclarations value)
   one (Located _ declaration) = case declaration of
     TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
     TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
+    ForeignDeclaration foreignValue ->
+      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 

@@ -13,6 +13,8 @@ module Pudu.Foreign.Crossing
   , fitsCrossing
   ) where
 
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -35,6 +37,13 @@ data Crossing
   | FloatingCrossing !Int
   | BooleanCrossing
   | TextCrossing
+  {-| An address the library hands back, under the name its own block gave it.
+
+      Opaque: nothing here reads through it, and the name is carried so a
+      texture cannot be passed where a window is wanted. A library's handles are
+      not interchangeable, and one address type for all of them turns a mistake
+      the checker could catch into one the library reports by failing. -}
+  | HandleCrossing !Text
   | NothingCrossing
   deriving stock (Eq, Show)
 
@@ -43,13 +52,15 @@ data Crossing
     Anything absent from this is refused at the declaration, which is the point
     of stating it: a type that cannot cross is a diagnostic where it is written
     rather than a fault where it is called. -}
-crossingFor :: Located TypeSyntax -> Maybe Crossing
-crossingFor (Located _ syntax) = case syntax of
+crossingFor :: Set Text -> Located TypeSyntax -> Maybe Crossing
+crossingFor handles (Located _ syntax) = case syntax of
   UnitType -> Just NothingCrossing
   NamedType path [] -> named (NonEmpty.last (moduleNameSegments path))
   _ -> Nothing
  where
-  named name = case name of
+  named name
+    | Set.member name handles = Just (HandleCrossing name)
+    | otherwise = case name of
     "Int8" -> Just (SignedCrossing 8)
     "Int16" -> Just (SignedCrossing 16)
     "Int32" -> Just (SignedCrossing 32)
@@ -72,6 +83,7 @@ crossingName crossing = case crossing of
   FloatingCrossing width -> "Float" <> Text.pack (show width)
   BooleanCrossing -> "Bool"
   TextCrossing -> "Str"
+  HandleCrossing name -> name
   NothingCrossing -> "()"
 
 {-| The type a crossed value has on this side.
@@ -100,4 +112,5 @@ fitsCrossing crossing value = case crossing of
 {-| The names a declaration may write, for a diagnostic to offer. -}
 crossableNames :: Text
 crossableNames =
-  "Int8 Int16 Int32 Int64, UInt8 UInt16 UInt32 UInt64, Float32 Float64, Bool, Str, ()"
+  "Int8 Int16 Int32 Int64, UInt8 UInt16 UInt32 UInt64, Float32 Float64, Bool, Str, (), "
+    <> "and a type the block itself declares"

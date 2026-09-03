@@ -7,6 +7,8 @@ tags: [moc, module]
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
+- [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge and test-only C++ conformance
+  surface.
 
 ## Depth Baseline
 

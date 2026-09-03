@@ -40,6 +40,10 @@ data Declaration
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
   | InvalidDeclaration
+data Foreign = Foreign
+  { foreignVisibility :: !Visibility, foreignLibrary :: !(Located Text)
+  , foreignVersion :: !(Maybe (Located Text)), foreignTypes :: ![Located Text]
+  , foreignFunctions :: ![Located ForeignFunction] }
 data Function = Function
   { functionVisibility :: !Visibility, functionAsync :: !Bool
   , functionName :: !(Located Text), functionTypeParams :: ![Located TypeParam]
@@ -139,6 +143,8 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 - An absent `functionBody` means a trait member declared without a default; it is the one legitimate bodiless function and is never produced at module scope.
 - Patterns are syntax only: alternation is flat, a range keeps two literal endpoints, and a record rest is an explicit flag rather than an implied field list.
 - `IfLetExpression` preserves the pattern condition the reader wrote so diagnostics and `:ast` do not expose an invented match. Its phases reuse ordinary pattern machinery; the tree adds surface identity, not new matching semantics.
+- A foreign block retains its opaque handle names separately from its function declarations. A
+  handle has no fields, constructors, or representation syntax in the tree.
 
 ### Linkage
 

@@ -30,6 +30,7 @@ The exported signatures are the module header's export list.
 - A **type parameter is not a type constructor**. Written with arguments — `F[Int]` where `F` is a parameter — it is refused with `E3038` rather than formed and stripped. The arguments are carried as far as the check so there is something to report on; dropping them made `F[Int]` and `F[Str]` the same type, and a signature could promise one and deliver the other.
 - A trait written where a type belongs is `E3030`, reported at the signature rather than at the first call that fails against the phantom type it used to form. Only a trait may follow `dynamic` (`E3031`); a dynamic type over one concrete type would be that type written the long way.
 - Formation diagnostics report once per span and code. A signature is formed both when the module declares it and when its body is checked against it, and one mistake in one signature is one mistake.
+- Every handle declared by a foreign block contributes an opaque nominal shell owned by its module. It has no fields or constructors and follows the same canonical identity rules as other nominal types.
 
 - An alias is a **synonym**: writing it is writing what it stands for. A generic one substitutes its
   arguments, so `type Boxed[T] = Option[T]` used as `Boxed[Int]` *is* `Option[Int]`. Before this it
@@ -47,6 +48,7 @@ The exported signatures are the module header's export list.
 - An absent annotation becomes a fresh inference variable rather than a default, because defaulting would decide something the reader did not write.
 - A type alias expands transparently; a declared generic parameter stays rigid inside the declaration that introduced it. The compiler wires in `Float` as an alias for `Float64`, because [[grammar/pudu]] makes the alias transparent at the type level and a reader who writes `Float` expects the same type as `Float64`.
 - `DeclaredTypes` carries a path-to-canonical-identity map assembled by [[Type Interface]]. `formType` resolves the complete syntax path through that map before constructing `NominalType`; it never drops qualifiers to their last segment.
+- A private foreign handle is formable by signatures in its own block but never enters an importing module's visible name map.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
 - A variant written with field names carries the same positional payload as one written with types alone. The names are collected alongside the payload rather than instead of it, so nothing that reads a variant's shape needs to know which spelling declared it.

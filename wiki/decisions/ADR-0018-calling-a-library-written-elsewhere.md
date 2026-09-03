@@ -68,21 +68,25 @@ the machines the table knew about. Asking the program for its own symbols is cor
 costs nothing.
 
 **Ownership is part of the declaration, and that is the question the standard library left open.**
-A pointer a foreign library hands back is one of two things, and the declaration says which:
+The block declares each opaque handle type before a signature names it:
 
 ```pudu
 foreign "raylib" {
+  type Texture
   fn LoadTexture(path: Str) -> owned Texture by UnloadTexture
+  fn UnloadTexture(texture: Texture) -> ()
   fn GetFrameTime() -> Float32
 }
 ```
 
-`owned … by …` names the function that releases it. So an owned value carries what frees it in its
-own type, a program that drops one without releasing it is something a checker can see, and
-releasing one twice is refused rather than being a fault the operating system reports much later.
-A pointer without `owned` is borrowed: valid for the call that produced it and not to be kept. The
-alternative — every foreign pointer looking alike and a comment saying which must be freed — is how
-every C binding leaks.
+`owned … by …` names the function that releases it. The release takes exactly that handle and
+returns nothing. The checker therefore distinguishes a `Texture` from every other address-shaped
+value, while the runtime records each live address and refuses null results, use after release,
+release of an unowned address, and a second release before foreign code runs. A handle result
+without `owned` remains refused until borrowed lifetimes have a representation; calling it
+"borrowed" without being able to bound that borrow would be a promise the implementation cannot
+keep. The alternative — every foreign pointer looking alike and a comment saying which must be
+freed — is how every C binding leaks.
 
 **Calling one requires `unsafe` and the `foreign` capability**, which the language already has. The
 declaration is an assertion by whoever wrote it that the signature matches the library, and nothing
@@ -108,11 +112,13 @@ is a different size on some machine somebody runs.
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
 | `Str` | a pointer to bytes ending in a nought | copied for the call and freed after; text containing a nought is refused, since the other side would read less than the text says |
 | `()` | nothing | a function returning nothing |
+| a block-local opaque type | one owned address | nominal, non-null, and released only by the declared function |
 
-**A pointer is not yet on this list.** `Ptr[T]`, an address that may be nought, and a record crossing
-by value are the next slice: each needs a runtime representation of its own, and `owned … by …`
-exists in the declaration form already so that slice adds a type rather than a syntax. Until then a
-declaration naming one is refused where it is written.
+**An opaque owned handle is on this list; an arbitrary pointer is not.** A handle is declared by
+`type Name` inside its foreign block, crosses as one machine address, cannot be inspected, and is
+not interchangeable with a handle of another declared name. `Ptr[T]`, borrowed handles, nullable
+pointers, and records crossing by value remain later slices because each needs a lifetime, absence,
+or layout rule that an opaque owned address does not.
 
 Everything else is refused at the declaration, which is the point of stating the list: a type that
 cannot cross is a diagnostic where it is written rather than a fault when it is called.
@@ -159,9 +165,10 @@ not less:
   program mentions them.
 - **Going to the definition goes to the declaration.** It is the definition, as far as this program
   is concerned.
-- **The declaration carries its own diagnostics**: a type that cannot cross, an owned result that
-  names no release, a release that is not declared in the same library. Each is caught where it is
-  written rather than where it is called.
+- **The declaration carries its own diagnostics**: a type that cannot cross, a handle result without
+  ownership, an owned non-handle result, an owned result that names no release, an absent release,
+  or a release whose one parameter is not the handle it frees. Each is caught where it is written
+  rather than where it is called.
 
 Because the declaration is checked and typed like any other signature, all of this falls out of the
 existing machinery rather than needing a second one — which is the argument for putting it in the
@@ -217,9 +224,10 @@ their own registers, and a mixture of the classes — which is the case a bounda
 gets wrong first, because arguments of different classes are placed by different rules and one
 counted into the wrong place arrives as whatever was already there.
 
-The declaration's own refusals are checked too: a type that cannot cross, an owned result naming a
-release the library does not declare, and a call made without the capability. What remains for the
-pointer slice is that releasing an owned value twice is refused.
+The opaque-handle slice is checked against a small C++ implementation exported through
+`extern "C"`: construction, typed use, release, null-result refusal, and double-release refusal all
+cross the same libffi boundary as an installed library. The declaration's own failures and the
+editor's inferred signatures and foreign provenance are checked alongside it.
 
 ## Referenced by
 

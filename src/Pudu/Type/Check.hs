@@ -151,7 +151,7 @@ declareSignature declared traits (Located _ declaration) = case declaration of
   TypeDeclaration value -> declareConstructors declared value
   ImplDeclaration value -> declareMethods declared traits value
   TraitDeclaration value -> declareTraitMembers declared value
-  ForeignDeclaration value -> declareForeign value
+  ForeignDeclaration value -> declareForeign declared value
   _ -> pure ()
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do

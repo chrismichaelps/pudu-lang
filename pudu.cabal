@@ -105,8 +105,10 @@ library
     Pudu.FloatLiteral
     Pudu.Format
     Pudu.Lsp.Feature
+    Pudu.Lsp.Hover
     Pudu.Lsp.Json
     Pudu.Lsp.Documents
+    Pudu.Lsp.Definition
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
     Pudu.IntegerLiteral
@@ -197,6 +199,12 @@ test-suite pudu-test
   hs-source-dirs:   test
   main-is:          Main.hs
   ghc-options:      -threaded -rtsopts
+  cxx-sources:      cbits/pudu_ffi_cpp_fixture.cpp
+  cxx-options:      -std=c++11
+  if os(darwin)
+    ghc-options:    -optl-Wl,-export_dynamic
+  else
+    ghc-options:    -optl-Wl,--export-dynamic
   other-modules:
     Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec

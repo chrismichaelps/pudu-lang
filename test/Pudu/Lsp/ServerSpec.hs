@@ -24,6 +24,7 @@ serverProperties =
   , ("definition points at the declaration of the name under the cursor", testDefinition)
   , ("the outline lists what the file declares", testSymbols)
   , ("completion offers every documented name", testCompletion)
+  , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("formatting replaces the document in one edit", testFormatting)
   , ("an unknown request is refused rather than ignored", testUnknownRequest)
   , ("a notification is never answered", testNotificationSilence)
@@ -47,6 +48,21 @@ broken =
   Text.unlines
     [ "module Demo"
     , "fn wrong() -> Int { \"text\" }"
+    ]
+
+foreignDemo :: Text
+foreignDemo =
+  Text.unlines
+    [ "module Demo"
+    , ""
+    , "foreign \"c\" {"
+    , "  type Box"
+    , "  fn pudu_ffi_cpp_box_new(value: Int32) -> owned Box by pudu_ffi_cpp_box_delete"
+    , "  fn pudu_ffi_cpp_box_read(box: Box) -> Int32"
+    , "  fn pudu_ffi_cpp_box_delete(box: Box) -> ()"
+    , "}"
+    , ""
+    , "fn caller(box: Box) -> Int32 { unsafe(foreign) { pudu_ffi_cpp_box_read(box) } }"
     ]
 
 {-| The name of the document under test.
@@ -184,6 +200,36 @@ testCompletion = do
   size value = case value of
     JsonArray members -> length members
     _ -> 0
+
+testForeignTooling :: IO Property
+testForeignTooling = do
+  documents <- opened foreignDemo
+  let shown = request "textDocument/hover" (atPosition 9 60) documents
+      hoverBody = shown >>= lookupField "contents" >>= lookupField "value" >>= textOf
+      found = request "textDocument/definition" (atPosition 9 60) documents
+      definitionLine = found >>= lookupField "range" >>= lookupField "start" >>= lookupField "line"
+      listed = request "textDocument/documentSymbol" wholeDocument documents
+      offered = request "textDocument/completion" wholeDocument documents
+  pure $ conjoin
+    [ counterexample "hover keeps the compiler-inferred handle signature"
+        (property (maybe False (Text.isInfixOf "Box -> Int32") hoverBody))
+    , counterexample "hover identifies an asserted foreign boundary"
+        (property (maybe False (Text.isInfixOf "foreign function from c, asserted rather than proved") hoverBody))
+    , counterexample "definition reaches the foreign declaration"
+        (definitionLine === Just (JsonNumber 5))
+    , counterexample "the outline contains the opaque handle type"
+        (property (containsLabel "Box" listed))
+    , counterexample "completion contains the opaque handle type"
+        (property (containsLabel "Box" offered))
+    , counterexample "completion contains the foreign function"
+        (property (containsLabel "pudu_ffi_cpp_box_read" offered))
+    ]
+ where
+  containsLabel expected value = case value of
+    Just (JsonArray members) ->
+      any (== Just expected) [lookupField "label" member >>= textOf | member <- members]
+        || any (== Just expected) [lookupField "name" member >>= textOf | member <- members]
+    _ -> False
 
 {-| One edit rather than a computed minimal set: the formatter only moves
     whitespace, so replacing everything cannot change the program. -}

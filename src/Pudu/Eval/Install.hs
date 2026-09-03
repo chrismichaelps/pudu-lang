@@ -10,6 +10,8 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing), crossingFor)
 import Pudu.Eval.Builtin
@@ -125,20 +127,47 @@ installDeclaration traits (Located _ declaration) = case declaration of
     reported by the checker. -}
 installForeign :: Foreign -> Located ForeignFunction -> Evaluator ()
 installForeign library (Located _ function) =
-  bind (locatedValue (foreignName function))
+  bind name
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
-          , foreignBindingSymbol = locatedValue (foreignName function)
+          , foreignBindingSymbol = name
           , foreignBindingArguments =
-              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor)
+              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles)
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingResult =
-              fromMaybe NothingCrossing (crossingFor (foreignResult function))
+              fromMaybe NothingCrossing (crossingFor handles (foreignResult function))
           , foreignBindingReleasedBy = locatedValue <$> foreignReleasedBy function
+          , foreignBindingReleases = Map.lookup name (releasesOf library)
           }
     )
+ where
+  name = locatedValue (foreignName function)
+  handles = Set.fromList (map locatedValue (foreignTypes library))
+
+{-| The functions of a block that release something.
+
+    Read from the declarations rather than from a name, so a release is
+    whatever some function in the same block named after `by` — which is the
+    only place that fact is written. -}
+releasesOf :: Foreign -> Map Text Text
+releasesOf library =
+  Map.fromList
+    [ (locatedValue named, handleName result)
+    | Located _ function <- foreignFunctions library
+    , Just named <- [foreignReleasedBy function]
+    , let result = foreignResult function
+    , isHandleName (handleName result)
+    ]
+ where
+  known = Set.fromList (map locatedValue (foreignTypes library))
+  isHandleName = (`Set.member` known)
+  handleName (Located _ syntax) = case syntax of
+    NamedType path [] -> NonEmpty.last segments
+     where
+      ModuleName segments = path
+    _ -> ""
 
 {-| An implementation's functions are installed under a key naming the type they
     implement for, so a member access on a value of that type finds them. -}

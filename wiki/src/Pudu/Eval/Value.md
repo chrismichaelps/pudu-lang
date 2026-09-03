@@ -17,7 +17,9 @@ aliases: [Eval Value]
 
 ## Purpose
 
-Own runtime values, including retained floating precision, builtin functions, and the total order the keyed collections are held in. How a value prints belongs to [[Eval Render]].
+Own runtime values, including retained floating precision, foreign bindings and opaque handles,
+builtin functions, and the total order the keyed collections are held in. How a value prints
+belongs to [[Eval Render]].
 
 ## Interface
 
@@ -41,6 +43,8 @@ body.
 - `OrdValue` and `compareValues` are declared here, not in [[Eval Order]], because `MapValue` and `SetValue` are keyed by that order and the value type cannot be declared without it. `Value` itself still has no `Ord` instance: a function is a value and no order on functions is meaningful, so the wrapper keeps every keyed use visible.
 - Original network builtins and separately named timeout variants remain distinct constructors, so
   adding an operation budget does not change the arity of an existing prelude value.
+- `ForeignHandleValue` carries a declared handle name and address. The name is semantic identity;
+  the address remains opaque storage and ownership decisions stay in [[Eval Foreign]].
 
 ### Linkage
 

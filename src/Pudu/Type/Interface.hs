@@ -23,6 +23,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , Import (..)
   , Impl (..)
@@ -93,6 +95,8 @@ mapMaybeDeclaration = foldr keep []
     ImplDeclaration value ->
       Located spanValue
         (ImplDeclaration value{implFunctions = map stripMember (filter (completeSignature . locatedValue) (implFunctions value))}) : rest
+    ForeignDeclaration value
+      | foreignVisibility value == Exported -> Located spanValue declaration : rest
     _ -> rest
   stripMember (Located spanValue value) = Located spanValue value{functionBody = Nothing}
 
@@ -105,6 +109,9 @@ privateNominalShells = foldr keep []
     TraitDeclaration value
       | traitVisibility value == Private ->
           Located spanValue (TraitDeclaration value{traitMembers = []}) : rest
+    ForeignDeclaration value
+      | foreignVisibility value == Private ->
+          Located spanValue (ForeignDeclaration value{foreignFunctions = []}) : rest
     _ -> rest
 
 completeSignature :: Function -> Bool
@@ -205,11 +212,17 @@ exportedIdentity :: ModuleName -> Located Declaration -> [(Text, NominalId, Bool
 exportedIdentity owner (Located _ declaration) = case declaration of
   TypeDeclaration value -> [(locatedValue (typeName value), canonicalNominal owner (locatedValue (typeName value)), False)]
   TraitDeclaration value -> [(locatedValue (traitName value), canonicalNominal owner (locatedValue (traitName value)), True)]
+  ForeignDeclaration value ->
+    [ (locatedValue name, canonicalNominal owner (locatedValue name), False)
+    | name <- foreignTypes value
+    ]
   _ -> []
 
 exportedValue :: Located Declaration -> [Text]
 exportedValue (Located _ declaration) = case declaration of
   FunctionDeclaration value -> [locatedValue (functionName value)]
+  ForeignDeclaration value ->
+    map (locatedValue . foreignName . locatedValue) (foreignFunctions value)
   TypeDeclaration value -> case locatedValue (typeDefinition value) of
     SumDefinition variants -> map (locatedValue . variantName . locatedValue) variants
     _ -> []

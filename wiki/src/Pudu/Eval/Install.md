@@ -17,8 +17,9 @@ aliases: [Eval Install]
 
 ## Purpose
 
-Put a module's declarations into the environment before anything runs: functions, variant
-constructors, implementation methods, and then the constants that may reference them.
+Put a module's declarations into the environment before anything runs: functions, foreign
+bindings, variant constructors, implementation methods, and then the constants that may reference
+them.
 
 ## Interface
 
@@ -46,6 +47,9 @@ lastSegmentOf    :: NonEmpty Text -> Text
 - The `Evaluate` capability exists because a module constant's value is an expression, and
   evaluating one needs the environment this module is still building. One direction has to be an
   argument, and this is that direction.
+- A foreign binding retains the block-local handle crossings, whether its result is owned, and
+  whether it is the declared release for a handle. The evaluator therefore does not rediscover
+  ownership from function names at call time.
 
 ### Linkage
 

@@ -4,6 +4,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TextIO
+import Foreign.C.Types (CInt (..))
 import Pudu.Compiler (CompileContext (..), CompileResult (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
@@ -38,7 +39,52 @@ programProperties =
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
+  , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)
   ]
+
+foreign import ccall unsafe "pudu_ffi_cpp_anchor"
+  cppFixtureAnchor :: IO CInt
+
+foreign import ccall unsafe "pudu_ffi_cpp_delete_count"
+  cppDeleteCount :: IO CInt
+
+testForeignHandles :: IO Property
+testForeignHandles = do
+  CInt anchor <- cppFixtureAnchor
+  successful <- runEntry "test-fixtures/stdlib/UsesForeignHandles.pudu"
+  imported <- runEntry "test-fixtures/foreignmodule/Main.pudu"
+  beforeDouble <- cppDeleteCount
+  doubleRelease <- runtimeCodes "test-fixtures/stdlib/RejectsForeignDoubleRelease.pudu"
+  afterDouble <- cppDeleteCount
+  useAfterRelease <- runtimeCodes "test-fixtures/stdlib/RejectsForeignUseAfterRelease.pudu"
+  nullResult <- runtimeCodes "test-fixtures/stdlib/RejectsForeignNullHandle.pudu"
+  duplicateOwnership <- runtimeCodes "test-fixtures/stdlib/RejectsDuplicateForeignOwnership.pudu"
+  borrowed <- codes "test-fixtures/stdlib/RejectsBorrowedForeignHandle.pudu"
+  badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
+  wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
+  pure $ conjoin
+    [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
+    , counterexample "a C++ object crosses as an opaque handle and is read and released"
+        (successful === Just "2")
+    , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
+        (imported === Just "1")
+    , counterexample "a second release is refused before C++ is entered"
+        (doubleRelease === ["E7022"])
+    , counterexample "the native destructor ran exactly once"
+        (afterDouble - beforeDouble === 1)
+    , counterexample "an alias cannot use a handle after release"
+        (useAfterRelease === ["E7022"])
+    , counterexample "a null owned result is refused"
+        (nullResult === ["E7020"])
+    , counterexample "one live native address cannot create two ownership claims"
+        (duplicateOwnership === ["E7021"])
+    , counterexample "borrowed handle results are refused until lifetimes exist"
+        (borrowed === ["E3066"])
+    , counterexample "a release must take its matching handle and return unit"
+        (badRelease === ["E3067"])
+    , counterexample "nominal handles cannot cross as another declared handle"
+        (wrongHandle === ["E3001"])
+    ]
 
 {-| A qualified type name is judged only against a module the compiler read.
 
@@ -824,6 +870,19 @@ runEntry path = do
           "main"
           parsed
       pure (fmap renderValue (outcomeValue outcome))
+
+runtimeCodes :: FilePath -> IO [Text]
+runtimeCodes path = do
+  program <- compileProgram path
+  case rootCompileResult program >>= compileModule of
+    Nothing -> pure (map (diagnosticCodeText . diagnosticCode) (programDiagnostics program))
+    Just parsed -> do
+      outcome <- evaluateProgramEntry
+          (programIntegerKinds program)
+          (programDependencies program)
+          "main"
+          parsed
+      pure (map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics outcome))
 
 moduleNames :: FilePath -> IO [Text]
 moduleNames path = do

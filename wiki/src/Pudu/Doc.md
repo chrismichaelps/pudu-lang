@@ -25,7 +25,7 @@ reader documented about it, and where to find it.
 ### Signatures
 
 ```haskell
-data DocKind = DocFunction | DocTraitMethod !Text | DocMethod !Text | DocConstant | DocType | DocTrait | DocMacro
+data DocKind = DocFunction | DocTraitMethod !Text | DocMethod !Text | DocConstant | DocType | DocTrait | DocMacro | DocForeign !Text
 data DocEntry = DocEntry { docName, docModule :: !Text, docKind :: !DocKind
                          , docSignature :: !(Maybe Signature), docComment :: ![Text]
                          , docSpan :: !(Int, Int) }
@@ -62,6 +62,9 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
   describes one as the other.
 - An implementation's methods are reported against the type they implement, not against `Self`.
   A trait's own members keep `Self`, where it is the point.
+- A foreign block contributes its opaque handle declarations as types and its functions as foreign
+  functions. The latter retain the library name so hover can state that their signature is asserted
+  rather than proved, including at a call site.
 
 ### Linkage
 

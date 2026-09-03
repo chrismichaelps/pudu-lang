@@ -1,0 +1,8 @@
+module Bindings
+
+export foreign "c" {
+  type Box
+  fn pudu_ffi_cpp_box_new(value: Int32) -> owned Box by pudu_ffi_cpp_box_delete
+  fn pudu_ffi_cpp_box_read(box: Box) -> Int32
+  fn pudu_ffi_cpp_box_delete(box: Box) -> ()
+}

@@ -29,7 +29,7 @@ declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 ## Governance
 
 - Each interface is collected under its declaring module, so unqualified source spellings form canonical identities before consumer aliases are overlaid.
-- Exported functions, annotated constants, constructors, traits, and implementation methods publish canonical keys; consumer import spelling is only an alias to those keys.
+- Exported functions, foreign functions, opaque foreign handles, annotated constants, constructors, traits, and implementation methods publish canonical keys; consumer import spelling is only an alias to those keys.
 - Imported implementations are installed only when their canonical trait identity is in `importedTraits`.
 - Default methods use body-free availability metadata; dependency bodies and coherence checks never enter the consumer.
 - Private nominal shells participate in formation under their declaring module but never publish names or constructors.
@@ -59,6 +59,7 @@ Collect each interface's exported shapes and private nominal shells under its ow
 - An imported trait default is available from metadata even though its function body is absent.
 - A foreign trait default is available when the trait interface and the local-target implementation interface are both loaded.
 - Two imported, in-scope traits implementing the same member for one target diagnose ambiguity rather than depending on interface order.
+- An imported foreign function is formed against the declaring interface's canonical handle shells and retains the `foreign` unsafe capability when published under qualified or selected spelling.
 
 ## Depth
 

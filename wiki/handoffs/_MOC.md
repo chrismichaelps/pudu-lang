@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-03-ffi-handles]] — active issue #200 implementation and review boundary for opaque
+  foreign handles, C++ C-ABI evidence, and editor type visibility.
 - [[2026-09-02-public-http-deadlines]] — public HTTP/HTTPS/JSON evidence and whole-chain deadline
   hardening for issue #196.
 - [[2026-09-01-production-stdlib-recovery]] — architecture and delivery recovery for issue #193 and the remaining production standard-library gaps.

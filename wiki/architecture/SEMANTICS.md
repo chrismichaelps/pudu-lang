@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.4.0-draft"
+semantic_version: "0.6.0-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -200,6 +200,8 @@ drop p:                     Available → Moved
 - The compiler continues to enforce syntax, types, scope, safe-value ownership, and control-flow cleanup within unsafe blocks.
 - Safe callers cannot be required to uphold undocumented invariants. A safe wrapper validates inputs or encodes the invariant in its types.
 - Foreign integer sizes, calling convention, struct layout, exception behavior, allocation ownership, thread safety, and nullability are explicit in foreign declarations.
+- A foreign block may declare opaque nominal handle types. An owned handle result names one same-block release function taking exactly that handle and returning unit; null results, use after release, and repeated release are runtime refusals before another foreign call begins.
+- C++ crosses only through an exported `extern "C"` surface. Mangled names, object layout, templates, and exceptions do not cross the boundary.
 - Undefined behavior is confined to violated unsafe contracts; safe Pudu code must not cause undefined behavior through any input.
 
 ## Observable Equivalence
@@ -243,6 +245,7 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **0.6.0-draft · 2026-09-03:** Added opaque nominal foreign handles, explicit same-block release ownership, pre-dispatch liveness refusals, reusable exported binding modules with canonical handle identity, and C++ interoperability through `extern "C"` only. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.5.0-draft · 2026-08-31:** Added ordered Set literals and Set-only membership expressions, preserving source-order evaluation, key-order identity, contextual typing for the empty literal, and the existing `E7008` key-order boundary. See [[ADR-0013-ordered-set-literals-and-membership]].
 - **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
 - **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].

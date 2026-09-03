@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-03 · [[ADR-0018 Calling a Library Written Elsewhere]], [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[Type Check Foreign]], [[Type Interface]], [[Semantic Interface]], [[Doc]], [[Lsp Server]] · make native resource boundaries usable without turning addresses into integers. A foreign block may declare opaque nominal handles and an owned result names the exact same-block function that releases it. Release shape is checked statically; null ownership, use after release, duplicate ownership, and repeated release are refused before another native call begins. Exported binding modules preserve canonical handle identity across imports. A test-only C++ object crosses through an `extern "C"` surface, is read, and is destroyed exactly once, proving real object lifetime without admitting mangled ABI, layout, templates, or exceptions. Hover, definition, outline, and completion expose inferred handle signatures while retaining the asserted foreign provenance · risk HIGH · semantic 0.5.0-draft→0.6.0-draft · depth MEDIUM→DEEP · issue #200
+
 - 2026-09-02 · [[Std App Config]], [[architecture/STDLIB]] · make typed configuration refusals keep
   their provenance. Whole, truth, and exact-decimal reads now report the key, source layer, and
   supplied text; the previously documented fractional reader is implemented and malformed decimals

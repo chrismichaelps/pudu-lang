@@ -20,6 +20,7 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameSegments, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Foreign (..)
   , Impl (..)
   , Parameter (..)
   , FieldDeclaration (..)
@@ -346,6 +347,17 @@ addShell owner (Located _ declaration) declared = case declaration of
             (Map.insert name identity (declaredNames declared))
       , declaredTraitNames = Set.insert identity (declaredTraitNames declared)
       }
+  ForeignDeclaration value ->
+    foldr addHandle declared (foreignTypes value)
+   where
+    addHandle named accumulated =
+      let name = locatedValue named
+          identity = canonicalNominal owner name
+       in accumulated
+        { declaredNames =
+            Map.insert (moduleNameText owner <> "." <> name) identity
+              (Map.insert name identity (declaredNames accumulated))
+        }
   _ -> declared
 
 paramNames :: TypeDeclarationValue -> [Text]

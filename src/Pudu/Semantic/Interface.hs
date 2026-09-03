@@ -25,6 +25,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , Import (..)
   , Module (..)
@@ -81,6 +83,10 @@ declarationExports owner (Located _ declaration) = case declaration of
         one TypeSpace (typeName value) <> variantExports owner (typeDefinition value)
   TraitDeclaration value
     | traitVisibility value == Exported -> one TypeSpace (traitName value)
+  ForeignDeclaration value
+    | foreignVisibility value == Exported ->
+        concatMap (one TypeSpace) (foreignTypes value)
+          <> concatMap (one ValueSpace . foreignName . locatedValue) (foreignFunctions value)
   _ -> []
  where
   one namespace name =

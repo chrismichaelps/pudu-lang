@@ -42,6 +42,18 @@ const recentSource = readFileSync(
 // this names a document that need not exist anywhere.
 const uri = "file:///pudu-fixtures/session.pudu";
 const recentUri = "file:///pudu-fixtures/RecentLanguage.pudu";
+const foreignUri = "file:///pudu-fixtures/ForeignSession.pudu";
+const foreignSource = [
+  "module ForeignSession",
+  'export foreign "c" {',
+  "  type Box",
+  "  fn create(value: Int32) -> owned Box by destroy",
+  "  fn read(box: Box) -> Int32",
+  "  fn destroy(box: Box) -> ()",
+  "}",
+  "fn inspect(box: Box) -> Int32 { unsafe(foreign) { read(box) } }",
+  "",
+].join("\n");
 
 const messages = [
   { id: 1, method: "initialize", params: { processId: null, rootUri: null, capabilities: {} } },
@@ -54,6 +66,12 @@ const messages = [
     method: "textDocument/didOpen",
     params: {
       textDocument: { uri: recentUri, languageId: "pudu", version: 1, text: recentSource },
+    },
+  },
+  {
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: foreignUri, languageId: "pudu", version: 1, text: foreignSource },
     },
   },
   {
@@ -87,6 +105,17 @@ const messages = [
     id: 8,
     method: "textDocument/completion",
     params: { textDocument: { uri }, position: { line: 9, character: 17 } },
+  },
+  {
+    id: 9,
+    method: "textDocument/hover",
+    params: { textDocument: { uri: foreignUri }, position: { line: 7, character: 52 } },
+  },
+  { id: 10, method: "textDocument/documentSymbol", params: { textDocument: { uri: foreignUri } } },
+  {
+    id: 11,
+    method: "textDocument/definition",
+    params: { textDocument: { uri: foreignUri }, position: { line: 7, character: 52 } },
   },
   { id: 5, method: "shutdown", params: null },
   { method: "exit", params: null },
@@ -246,11 +275,32 @@ assert(
   "completion did not offer a method the program implemented",
 );
 
+const foreignHover = replyTo(9)?.result;
+assert(foreignHover, "hover returned nothing over a foreign function use");
+const foreignHoverText = JSON.stringify(foreignHover);
+assert(foreignHoverText.includes("Box -> Int32"), "foreign hover lost the inferred handle signature");
+assert(
+  foreignHoverText.includes("asserted rather than proved"),
+  "foreign hover hid the declaration's trust boundary",
+);
+
+const foreignSymbols = replyTo(10)?.result;
+assert(
+  Array.isArray(foreignSymbols) && foreignSymbols.some(entry => entry.name === "Box"),
+  "the foreign handle type was absent from the document outline",
+);
+
+const foreignDefinition = replyTo(11)?.result;
+assert(foreignDefinition, "definition returned nothing for a foreign function use");
+const foreignTarget = Array.isArray(foreignDefinition) ? foreignDefinition[0] : foreignDefinition;
+assert(foreignTarget.range.start.line === 4, "foreign definition did not reach its declaration");
+
 console.log(
   JSON.stringify({
     frames: frames.length,
     diagnostics: diagnostics.length,
     recentDiagnostics: recentDiagnostics.length,
+    foreignSymbols: foreignSymbols.length,
     methods: labels.length,
   }),
 );

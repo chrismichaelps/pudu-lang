@@ -38,6 +38,12 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   compiles to must not depend on what happened to be installed on the machine that compiled it.
 - **A failure names the library and the symbol**, because the usual cause is that the library is not
   installed and the usual remedy is to install it.
+- **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
+  pass, and its address is never exposed as an integer.
+- **Ownership is checked before entering foreign code.** Null owned results are refused; ordinary
+  handle uses require a live address; release atomically removes that address so a repeated release
+  cannot call the library twice. A call-setup failure restores the claim because the release did not
+  run.
 
 ### Linkage
 
@@ -54,6 +60,9 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   _Rationale:_ stripping hands the other side a shorter string while the caller
   believes the whole of it crossed — and whatever was checked about the whole was
   not checked about the part. _Rejected:_ truncating at the nought.
+- **Q:** Let a release function decide whether a handle is valid? **A:** No. _Rationale:_ calling a
+  destructor twice is already undefined behaviour; validation after the call is too late.
+  _Rejected:_ foreign-side double-release detection as the safety boundary.
 
 ## Referenced by
 

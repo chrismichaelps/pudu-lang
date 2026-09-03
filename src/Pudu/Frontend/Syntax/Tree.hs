@@ -320,6 +320,11 @@ data Foreign = Foreign
       than enforced: nothing here fetches or verifies a library, and claiming
       to check a version this cannot see would be worse than saying nothing. -}
   , foreignVersion :: !(Maybe (Located Text))
+  {-| The opaque things this library hands back, named so a signature can say
+      which one it means. A library's handles are not interchangeable — a window
+      is not a texture — and one address type for all of them makes passing the
+      wrong one a fault the library reports rather than one the checker does. -}
+  , foreignTypes :: ![Located Text]
   , foreignFunctions :: ![Located ForeignFunction]
   }
   deriving stock (Eq, Show)

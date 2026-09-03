@@ -37,6 +37,7 @@ import Pudu.Eval.Builtin.Definition (Builtin (..), builtinName)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
+import Data.Int (Int64)
 import Pudu.FloatLiteral (FloatWidth)
 import Pudu.Foreign.Crossing (Crossing)
 import Pudu.Frontend.Syntax.Tree (Function)
@@ -102,6 +103,14 @@ data Value
       anything else is that its type was asserted rather than proved, which is
       why reaching it needed the foreign capability at the call site. -}
   | ForeignValue !ForeignBinding
+  {-| Something a foreign library handed back, under the name its block gave it.
+
+      Opaque: the address is carried and never read through, and the name keeps
+      a texture from being passed where a window is wanted. What makes it worth
+      being a value of its own rather than a number is that the runtime knows
+      what frees it, so releasing one twice is refused where it happens instead
+      of being a fault the operating system reports much later. -}
+  | ForeignHandleValue !Text !Int64
   deriving stock (Eq, Show)
 
 {-| Everything the runtime needs to make one foreign call.
@@ -115,6 +124,11 @@ data ForeignBinding = ForeignBinding
   , foreignBindingArguments :: ![Crossing]
   , foreignBindingResult :: !Crossing
   , foreignBindingReleasedBy :: !(Maybe Text)
+  {-| The handle type this function releases, when it is a release.
+
+      Known from the declaration rather than guessed at the call: a release is
+      whatever some function in the same block named after `by`. -}
+  , foreignBindingReleases :: !(Maybe Text)
   }
   deriving stock (Eq, Show)
 
@@ -472,6 +486,7 @@ shapeRank value = case value of
   BucketsValue _ -> 23
   BucketsMethodValue _ _ -> 24
   ForeignValue _ -> 25
+  ForeignHandleValue _ _ -> 26
 
 
 {-| The name a text method answers to, which is the same spelling the checker

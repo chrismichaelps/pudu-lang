@@ -33,14 +33,12 @@ import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Feature
   ( completionItems
   , documentSymbols
-  , entryAt
-  , hoverContents
-  , locationOf
   , offsetAt
   , rangeOfOffsets
-  , wordAt
   )
 import Pudu.Lsp.Json (Json (..), lookupField, textOf)
+import Pudu.Lsp.Definition (definitionAt)
+import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
@@ -66,7 +64,7 @@ import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
 import Data.Char (isAlphaNum)
 import Data.List (nub, sort)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), narrowestAt, renderType)
+import Pudu.Type (Type (..), narrowestAt)
 import Pudu.Type.Value (nominalName)
 import System.Directory (getCurrentDirectory)
 import System.Exit (ExitCode (ExitFailure), exitWith)
@@ -362,43 +360,7 @@ severityCode severity = case severity of
 hover :: Documents -> Json -> Json
 hover documents parameters = case located documents parameters of
   Nothing -> JsonNull
-  {-| What the cursor is on comes first, and the declaration containing it only
-      when nothing else answers.
-
-      The documentation index holds declarations, so asking it alone could only
-      ever name the function a cursor was inside: hovering `text` in
-      `text.length()` reported the enclosing `main`, which is true of every
-      position in the body and therefore tells a reader nothing. -}
-  Just (value, offset) -> case analysisTypes value >>= narrowestAt offset of
-    Just typeValue ->
-      JsonObject
-        [ ( "contents"
-          , JsonObject
-              [ ("kind", JsonText "markdown")
-              , ("value", JsonText (fenced (nameAt value offset <> renderType typeValue)))
-              ]
-          )
-        ]
-    Nothing -> case entryAt (analysisIndex value) offset of
-      Nothing -> JsonNull
-      Just entry ->
-        JsonObject
-          [ ( "contents"
-            , JsonObject
-                [("kind", JsonText "markdown"), ("value", JsonText (hoverContents entry))]
-            )
-          , ("range", rangeJson (rangeOfOffsets (analysisText value) (fst (docSpan entry)) (snd (docSpan entry))))
-          ]
-
-{-| The name the cursor is on, written before its type when there is one, so a
-    hover reads as the reader would say it. -}
-nameAt :: Analysis -> Int -> Text
-nameAt value offset = case wordAt (analysisText value) offset of
-  Just name | not (Text.null name) -> name <> " : "
-  _ -> ""
-
-fenced :: Text -> Text
-fenced body = "```pudu\n" <> body <> "\n```"
+  Just (value, offset) -> hoverAt value offset
 
 {-| Jump to where a name was declared.
 
@@ -407,19 +369,8 @@ fenced body = "```pudu\n" <> body <> "\n```"
     nowhere near the declaration's span. -}
 definition :: Documents -> Json -> Json
 definition documents parameters = case (uriOf parameters, located documents parameters) of
-  (Just uri, Just (value, offset)) ->
-    case wordAt (analysisText value) offset of
-      Nothing -> JsonNull
-      Just name -> case declarationNamed (analysisIndex value) name of
-        Nothing -> JsonNull
-        Just entry -> locationOf uri (analysisText value) entry
+  (Just uri, Just (value, offset)) -> definitionAt uri value offset
   _ -> JsonNull
-
-declarationNamed :: DocIndex -> Text -> Maybe DocEntry
-declarationNamed index name =
-  case [entry | entry <- indexEntries index, docName entry == name] of
-    entry : _ -> Just entry
-    [] -> Nothing
 
 symbols :: Documents -> Json -> Json
 symbols documents parameters = case documentOf documents parameters of

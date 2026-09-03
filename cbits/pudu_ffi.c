@@ -32,7 +32,8 @@ enum pudu_kind {
   PUDU_F64 = 9,
   PUDU_BOOL = 10,
   PUDU_TEXT = 11,
-  PUDU_VOID = 12
+  PUDU_VOID = 12,
+  PUDU_HANDLE = 13
 };
 
 #define PUDU_MAX_ARGUMENTS 32
@@ -68,6 +69,7 @@ static ffi_type *type_for(uint8_t kind) {
   case PUDU_BOOL:
     return &ffi_type_uint8;
   case PUDU_TEXT:
+  case PUDU_HANDLE:
     return &ffi_type_pointer;
   case PUDU_VOID:
     return &ffi_type_void;
@@ -155,6 +157,12 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     case PUDU_TEXT:
       slots[index].pointer = pointers[index];
       break;
+    /* A handle arrives as the address it was handed back as, which is why it
+     * travels in the integer array rather than the string one: nothing here
+     * allocated it and nothing here frees it. */
+    case PUDU_HANDLE:
+      slots[index].pointer = (void *)(intptr_t)integers[index];
+      break;
     default:
       return 3;
     }
@@ -219,6 +227,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     *result_double = produced.f64;
     break;
   case PUDU_TEXT:
+  case PUDU_HANDLE:
     *result_integer = (int64_t)(intptr_t)produced.raw;
     break;
   case PUDU_VOID:

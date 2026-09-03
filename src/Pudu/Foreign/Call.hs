@@ -14,10 +14,16 @@ module Pudu.Foreign.Call
   , callSymbol
   , CrossedValue (..)
   , kindCode
+  , claimOwned
+  , ownsAddress
+  , releaseOwned
   ) where
 
-import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
+import Control.Concurrent.MVar (MVar, modifyMVar, newMVar, readMVar)
+import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Foreign.C.String (CString, newCString, peekCString, withCString)
@@ -26,7 +32,6 @@ import Foreign.Marshal.Alloc (alloca, free)
 import Foreign.Marshal.Array (withArray)
 import Foreign.Ptr (Ptr, nullPtr)
 import Foreign.Storable (peek)
-import Data.Int (Int64)
 import Data.Word (Word8)
 import Pudu.Foreign.Crossing (Crossing (..))
 import System.IO.Unsafe (unsafePerformIO)
@@ -137,11 +142,48 @@ findSymbol (ForeignHandle handle) name = do
         else Right found
     )
 
+{-| The owned addresses a program is currently holding.
+
+    Kept because the declaration says what frees each one, which makes two
+    things checkable that are otherwise found by a crash much later: releasing
+    the same address twice, and releasing something this program never owned.
+    Nothing else in a foreign boundary knows enough to check either. -}
+ownedAddresses :: MVar (Set Int64)
+ownedAddresses = unsafePerformIO (newMVar Set.empty)
+{-# NOINLINE ownedAddresses #-}
+
+{-| Record that the program now owns an address and must release it. -}
+claimOwned :: Int64 -> IO Bool
+claimOwned address =
+  modifyMVar ownedAddresses $ \held ->
+    pure (Set.insert address held, not (Set.member address held))
+
+{-| Whether the program still owns an address.
+
+    A handle value may outlive the ownership it represents because values are
+    immutable and can be aliased. Checking at every call turns that alias into
+    a deterministic refusal after release rather than a pointer handed back to
+    code that is free to dereference it. -}
+ownsAddress :: Int64 -> IO Bool
+ownsAddress address = Set.member address <$> readMVar ownedAddresses
+
+{-| Give up an owned address, answering whether the program held it.
+
+    A false answer is a release of something already released or never owned,
+    and the call is not made. Making it is undefined behaviour in the library —
+    typically a crash somewhere else, later, in code that did nothing wrong. -}
+releaseOwned :: Int64 -> IO Bool
+releaseOwned address =
+  modifyMVar ownedAddresses $ \held ->
+    pure (Set.delete address held, Set.member address held)
+
 {-| A value on its way across, already narrowed to what the declaration said. -}
 data CrossedValue
   = CrossedInteger !Int64
   | CrossedDouble !Double
   | CrossedText !Text
+  {-| An address the library handed back, under the name its block gave it. -}
+  | CrossedHandle !Text !Int64
   deriving stock (Eq, Show)
 
 {-| The code the other side reads for a kind.
@@ -164,6 +206,7 @@ kindCode crossing = case crossing of
   BooleanCrossing -> 10
   TextCrossing -> 11
   NothingCrossing -> 12
+  HandleCrossing _ -> 13
 
 {-| Make the call.
 
@@ -202,6 +245,7 @@ callSymbol symbol arguments result = do
   freeString pointer = if pointer == nullPtr then pure () else free pointer
   integerOf (_, value) = case value of
     CrossedInteger held -> held
+    CrossedHandle _ held -> held
     _ -> 0
   doubleOf (_, value) = case value of
     CrossedDouble held -> held
@@ -210,6 +254,7 @@ callSymbol symbol arguments result = do
 received :: Crossing -> Int64 -> Double -> CrossedValue
 received crossing asInteger asDouble = case crossing of
   FloatingCrossing _ -> CrossedDouble asDouble
+  HandleCrossing name -> CrossedHandle name asInteger
   _ -> CrossedInteger asInteger
 
 refusal :: CInt -> Text

@@ -11,7 +11,7 @@ module Pudu.Frontend.Parser.Declaration.Foreign
 import Pudu.Frontend.Parser.Declaration.Function (parseParameters)
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Parser.Expression.Recovery (mergedOrLeft)
-import Pudu.Frontend.Parser.Name (expectValueIdentifier)
+import Pudu.Frontend.Parser.Name (expectUpperIdentifier, expectValueIdentifier)
 import Data.Text (Text)
 import Pudu.Frontend.Parser.State
   ( Parser
@@ -35,7 +35,7 @@ import Pudu.Frontend.Syntax.Tree
   , Visibility
   )
 import Pudu.Frontend.Token
-  ( Keyword (KwFn)
+  ( Keyword (KwFn, KwType)
   , Token (..)
   , TokenKind (..)
   )
@@ -53,7 +53,7 @@ parseForeign visibility = do
   library <- expectStringLiteral "for the library's name"
   version <- parseVersion
   _ <- expectSymbol "{" "to start the foreign declarations"
-  functions <- parseForeignFunctions []
+  (types, functions) <- parseForeignMembers [] []
   closing <- expectSymbol "}" "to close the foreign declarations"
   pure
     ( Located (mergedOrLeft (tokenSpan start) (tokenSpan closing))
@@ -62,6 +62,7 @@ parseForeign visibility = do
               { foreignVisibility = visibility
               , foreignLibrary = library
               , foreignVersion = version
+              , foreignTypes = types
               , foreignFunctions = functions
               }
         )
@@ -78,19 +79,37 @@ parseVersion = do
     Nothing -> pure Nothing
     Just _ -> Just <$> expectStringLiteral "after version"
 
-parseForeignFunctions :: [Located ForeignFunction] -> Parser [Located ForeignFunction]
-parseForeignFunctions reversed = do
+{-| The members of a block: the opaque things the library hands back, and the
+    functions that produce and consume them.
+
+    A handle is declared rather than inferred from the signatures that mention
+    it, so a misspelling in one of them is a name nothing declares rather than a
+    second handle type that silently accepts nothing. -}
+parseForeignMembers
+  :: [Located Text]
+  -> [Located ForeignFunction]
+  -> Parser ([Located Text], [Located ForeignFunction])
+parseForeignMembers types reversed = do
   kind <- peekKind
   exhausted <- budgetExhausted
   if isSymbol "}" kind || kind == EndOfFile || exhausted
-    then pure (reverse reversed)
+    then pure (reverse types, reverse reversed)
     else do
       before <- peekToken
-      one <- parseForeignFunction
-      after <- peekToken
-      if before == after
-        then pure (reverse reversed)
-        else parseForeignFunctions (maybe reversed (: reversed) one)
+      if kind == Keyword KwType
+        then do
+          _ <- advanceToken
+          name <- expectUpperIdentifier "after type"
+          after <- peekToken
+          if before == after
+            then pure (reverse types, reverse reversed)
+            else parseForeignMembers (name : types) reversed
+        else do
+          one <- parseForeignFunction
+          after <- peekToken
+          if before == after
+            then pure (reverse types, reverse reversed)
+            else parseForeignMembers types (maybe reversed (: reversed) one)
 
 {-| One function, as this program asserts its shape.
 

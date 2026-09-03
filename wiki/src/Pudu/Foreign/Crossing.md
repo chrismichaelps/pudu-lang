@@ -24,9 +24,9 @@ read the same list.
 
 ```haskell
 data Crossing = SignedCrossing !Int | UnsignedCrossing !Int | FloatingCrossing !Int
-              | BooleanCrossing | TextCrossing | NothingCrossing
+              | BooleanCrossing | TextCrossing | HandleCrossing !Text | NothingCrossing
 
-crossingFor    :: Located TypeSyntax -> Maybe Crossing
+crossingFor    :: Set Text -> Located TypeSyntax -> Maybe Crossing
 crossingName   :: Crossing -> Text
 crossingType   :: Crossing -> Type
 fitsCrossing   :: Crossing -> Integer -> Bool
@@ -47,6 +47,9 @@ crossableNames :: Text
   keeps running with a value it never computed.
 - **The names are in one place** so a diagnostic can offer the whole list rather than a guess about
   which one was meant.
+- **Handle names come from the enclosing block.** A misspelled handle is not silently admitted as a
+  second address type, and two resources cannot become interchangeable merely because both are
+  represented by addresses.
 
 ### Linkage
 
@@ -60,11 +63,9 @@ crossableNames :: Text
   a second spelling for the same thing means a caller converts at every call and
   the foreign names leak into code that has nothing to do with the boundary.
   _Rejected:_ a parallel width vocabulary.
-- **Q:** Admit a pointer now, since [[ADR-0018 Calling a Library Written Elsewhere]]
-  describes one? **A:** Not in this slice. _Rationale:_ a pointer needs a runtime
-  representation and an ownership rule of its own, and `owned … by …` already
-  exists in the declaration form, so the next slice adds a type rather than a
-  syntax. _Rejected:_ an opaque integer standing in for an address.
+- **Q:** Represent a handle as an integer? **A:** No. _Rationale:_ its address-shaped storage is not
+  permission to calculate with it, and its declared name prevents one resource from being passed as
+  another. _Rejected:_ exposing addresses as `Int64`; one universal pointer type.
 
 ## Referenced by
 

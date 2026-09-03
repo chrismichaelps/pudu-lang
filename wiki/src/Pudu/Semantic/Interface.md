@@ -39,6 +39,7 @@ importBindings
 
 - Exports are indexed by declaring module, namespace, and declared name. The index is built from parsed module declarations before any body is resolved.
 - Only `export` declarations enter the index. Implementations are unnamed and are carried by [[Type Interface]], not introduced as lexical bindings.
+- An exported foreign block contributes every opaque handle in the type namespace and every foreign function in the value namespace. The block is the visibility boundary: exporting individual members could expose a producer without its release function.
 - A selected import from a loaded module must name an exported declaration. A missing or private selection reports `E2013` at the selected item and introduces no placeholder.
 - A module or alias import introduces one module binding. Resolution recognizes the qualifier's first segment; later type/value validation is owned by the type interface.
 - An import binding records its namespace, local spelling, and span. Declaring identity is preserved by the export/type indexes rather than embedded in this lexical binding. Imports remain private and never re-export.
@@ -61,6 +62,7 @@ Project each parsed declaration with exported visibility into its value/type nam
 ## Edge Cases
 
 - A type and value with the same spelling may both be exported because namespaces remain separate.
+- A selected import may bring an opaque foreign handle and its functions into the same two namespaces as ordinary declarations; no pointer representation leaks into the lexical interface.
 - Selecting a spelling exported in only one namespace introduces only that namespace, unlike the old opaque-import fallback that guessed both.
 - Selecting the same item twice remains a same-frame conflict in [[Resolve Context]].
 - An empty selection imports no names; a bare or aliased module import introduces only its qualifier. The resolver validates that qualifier's first segment, while later qualified type/value lookup uses [[Type Interface]].

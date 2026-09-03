@@ -39,6 +39,9 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   check this cannot perform would be a claim rather than a check.
 - **An owned result that names no release is refused here**, rather than leaking later. The reason
   ownership is in the declaration is that it can be checked where it is written.
+- **A block-local `type Name` declares an opaque handle.** It has no fields or constructors because
+  the foreign library, not Pudu, owns its representation. `type` retains its established keyword
+  role and the handle name must follow the ordinary upper-identifier rule.
 
 ### Linkage
 
