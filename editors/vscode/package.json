@@ -2,7 +2,7 @@
   "name": "pudu",
   "displayName": "Pudu",
   "description": "Language support for Pudu: diagnostics, hover, go to definition, outline, completion, and formatting.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "pudu-lang",
   "license": "MIT",
   "icon": "icon.png",
