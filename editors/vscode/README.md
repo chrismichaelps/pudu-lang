@@ -11,6 +11,13 @@ That is deliberate: an editor and a command line that disagree about what a
 program means is worse than an editor that says nothing, and a second analyser
 written for the editor would drift from the first within a release.
 
+## Versions
+
+The extension's version changes whenever what it ships changes. An editor
+decides whether to replace a build it already holds by comparing versions, so
+shipping new contents under a version already installed leaves every editor
+that has it showing the old one.
+
 ## The file icon
 
 A `.pudu` file carries the language's own mark, so a project's files are
