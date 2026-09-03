@@ -261,8 +261,16 @@ prefixKinds pieces = go Nothing pieces
       _ -> False
 
 {-| The symbols that may begin an operand as well as join two. -}
+{-| The symbols that attach to what follows them when nothing precedes them as
+    an operand.
+
+    `..` is here for the record written as a change to another: after the brace
+    there is no operand, so it attaches — `Thing{..base}`. Between two operands
+    it is the range it has always been and is spaced as one, which is why
+    membership in this list is not the whole test. -}
 unaryOperators :: [SymbolKind]
-unaryOperators = [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar]
+unaryOperators =
+  [SymBang, SymMinus, SymAmpersand, SymTilde, SymStar, SymRangeExclusive]
 
 {-| Whether each piece, if it is a brace, belongs to a tightly written pair.
 
@@ -329,6 +337,10 @@ braceKinds pieces
     {-| An empty pair right after a name is a record construction with no
         fields — `Silent{}` — and stays tight like any other. -}
     first : _ | closesImmediately first -> True
+    {-| A leading `..` is a record written as a change to another, which is a
+        record construction and is written tight like the rest. No block begins
+        with a range. -}
+    first : _ | opensUpdate first -> True
     first : second : _ -> named first && follows second
     [first] -> named first
     [] -> False
@@ -347,6 +359,10 @@ braceKinds pieces
 
   closesImmediately token = case tokenKind token of
     Symbol SymRightBrace -> True
+    _ -> False
+
+  opensUpdate token = case tokenKind token of
+    Symbol SymRangeExclusive -> True
     _ -> False
 
 {-| The keywords whose head runs up to a block, where the grammar does not admit

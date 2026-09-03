@@ -1,0 +1,250 @@
+module Std.App.Session
+
+import Std.Bytes as ByteSeq
+import Std.Http as Http
+import Std.Map as Map
+import Std.Option as Option
+import Std.Random as Random
+
+/// Why a session could not be started or continued.
+export type SessionError
+  = NoEntropy
+  | Unknown(Str)
+
+/// Why a session is no longer good.
+///
+/// The two are separate answers because they mean different things to whoever
+/// is asking: one says the session lived long enough, the other says nobody
+/// has been there.
+export type Expiry
+  = Live
+  | LivedLongEnough
+  | LeftUnused
+
+/// Somebody remembered between requests.
+///
+/// The name is what travels; everything else stays where the program put it.
+/// A cookie carrying the contents is a session whose contents the holder can
+/// edit.
+export type Session = {
+  name: Str,
+  identity: Str,
+  began: Int,
+  seen: Int
+}
+
+/// How long a session may live, and how long it may sit unused.
+export type Bounds = { lifetime: Int, idle: Int }
+
+/// The sessions a program is holding.
+export type Sessions = { held: Map[Str, Session] }
+
+/// How many bytes a name is made of.
+///
+/// Enough that guessing one is not worth attempting, from the machine's own
+/// entropy and from nothing else.
+const NAME_BYTES: Int = 16
+
+/// What the cookie carrying a session is called.
+const COOKIE_NAME: Str = "session"
+
+/// The bounds a session has when a program does not say.
+///
+/// Twelve hours to live and half an hour unused: long enough that ordinary
+/// work is not interrupted, short enough that a screen left in an office does
+/// not stay signed in until morning.
+const DEFAULT_LIFETIME: Int = 43200
+
+const DEFAULT_IDLE: Int = 1800
+
+/// The bounds a session has when nobody chose.
+export fn bounds() -> Bounds { Bounds{lifetime: DEFAULT_LIFETIME, idle: DEFAULT_IDLE} }
+
+/// Bounds a program chose.
+export fn boundedBy(lifetime: Int, idle: Int) -> Bounds {
+  Bounds{lifetime: lifetime, idle: idle}
+}
+
+/// No sessions at all.
+export fn none() -> Sessions { Sessions{held: Map.empty()} }
+
+/// A session belonging to nobody in particular.
+///
+/// What a visitor gets before they say who they are: somewhere to keep a
+/// basket or a chosen language. It carries no identity, and gaining one is the
+/// thing that issues a new name.
+export fn anonymous(now: Int) -> Result[Session, SessionError] {
+  let name = freshName() ?
+  Ok(Session{name: name, identity: "", began: now, seen: now})
+}
+
+/// The session somebody has after signing in.
+///
+/// Always a new name. There is no call that changes who a session belongs to
+/// while keeping the name it had, and that absence is what closes the oldest
+/// attack against sessions: somebody arranges for a victim's browser to hold a
+/// name they already know, waits for the victim to sign in, then presents the
+/// same name. Every defence amounts to issuing a new name at this moment, so
+/// here it is not a step to remember.
+export fn signedIn(previous: &Session, identity: Str, now: Int) -> Result[Session, SessionError] {
+  let name = freshName() ?
+  Ok(Session{name: name, identity: identity, began: now, seen: now})
+}
+
+/// A session for somebody who has just proved who they are, with nothing
+/// before it.
+export fn started(identity: Str, now: Int) -> Result[Session, SessionError] {
+  let name = freshName() ?
+  Ok(Session{name: name, identity: identity, began: now, seen: now})
+}
+
+/// The session somebody has after signing out.
+///
+/// A new name again, so a name seen while signed in is worth nothing
+/// afterwards.
+export fn signedOut(previous: &Session, now: Int) -> Result[Session, SessionError] {
+  let name = freshName() ?
+  Ok(Session{name: name, identity: "", began: now, seen: now})
+}
+
+/// The same session, seen now.
+///
+/// What makes an idle bound measure from the last request rather than the
+/// first. The name does not change, because being used is not a change of
+/// privilege.
+export fn touched(held: &Session, now: Int) -> Session { Session{..*held, seen: now} }
+
+/// Whether a session belongs to somebody.
+export fn identified(held: &Session) -> Bool { !held.identity.isEmpty() }
+
+/// Who it belongs to, or nobody.
+export fn identityOf(held: &Session) -> Option[Str] {
+  if identified(held) { Some(held.identity) } else { None }
+}
+
+/// What the session is called.
+export fn nameOf(held: &Session) -> Str { held.name }
+
+/// Whether a session is still good, and if not, which bound it passed.
+export fn expiry(held: &Session, limits: &Bounds, now: Int) -> Expiry {
+  if limits.lifetime > 0 && now - held.began >= limits.lifetime {
+    LivedLongEnough
+  } else {
+    if limits.idle > 0 && now - held.seen >= limits.idle { LeftUnused } else { Live }
+  }
+}
+
+/// Whether a session may still be used.
+export fn live(held: &Session, limits: &Bounds, now: Int) -> Bool {
+  expiry(held, limits, now) == Live
+}
+
+/// What an expiry says.
+export fn explainExpiry(held: &Expiry) -> Str {
+  match held {
+    case Live => "the session is still good"
+    case LivedLongEnough => "the session has been open long enough"
+    case LeftUnused => "the session has been left unused"
+  }
+}
+
+/// The sessions with one more kept.
+export fn keeping(store: &Sessions, held: &Session) -> Sessions {
+  Sessions{held: Map.insert(&store.held, held.name, *held)}
+}
+
+/// The sessions with one forgotten.
+///
+/// What signing out does to the store, since the session that replaced it has
+/// a different name and the old one must stop working.
+export fn forgetting(store: &Sessions, name: Str) -> Sessions {
+  Sessions{held: Map.remove(&store.held, name)}
+}
+
+/// The session a name refers to, if it is one that is held and still good.
+///
+/// Expiry is asked here rather than left to the caller, because a caller that
+/// forgot would have a session that works forever and nothing would say so.
+export fn find(store: &Sessions, name: Str, limits: &Bounds, now: Int) -> Option[Session] {
+  if let Some(held) = Map.get(&store.held, name) {
+    if live(&held, limits, now) { Some(held) } else { None }
+  } else {
+    None
+  }
+}
+
+/// The sessions with every expired one forgotten.
+///
+/// Worth doing on a schedule rather than only on lookup: a session nobody
+/// looks up again is one that stays in the store forever, and a store that
+/// only grows is a leak that takes a month to notice.
+export fn withoutExpired(store: &Sessions, limits: &Bounds, now: Int) -> Sessions {
+  Sessions{held: Map.filterValues(&store.held, fn(one: Session) -> Bool { live(&one, limits, now) })}
+}
+
+/// How many sessions are held.
+export fn count(store: &Sessions) -> Int { Map.size(&store.held) }
+
+/// The cookie a session travels in.
+///
+/// Only the name. Secure and unreadable by script, and refused on a request
+/// that came from another site — which is what stops a session being used by a
+/// page the reader did not open.
+export fn cookieFor(held: &Session, limits: &Bounds) -> Http.SetCookie {
+  Http.SetCookie {
+    name: COOKIE_NAME,
+    value: held.name,
+    path: Some("/"),
+    domain: None,
+    maxAge: Some(limits.lifetime),
+    secure: true,
+    httpOnly: true,
+    sameSite: Some("Strict")
+  }
+}
+
+/// The cookie that ends a session in the reader's browser.
+export fn endingCookie() -> Http.SetCookie {
+  Http.SetCookie {
+    name: COOKIE_NAME,
+    value: "",
+    path: Some("/"),
+    domain: None,
+    maxAge: Some(0),
+    secure: true,
+    httpOnly: true,
+    sameSite: Some("Strict")
+  }
+}
+
+/// The session name a request carried, if it carried one.
+export fn nameFrom(cookies: &Array[Http.Cookie]) -> Option[Str] {
+  var found: Option[Str] = None
+  for held in cookies { if held.name == COOKIE_NAME { found = Some(held.value) } }
+  found
+}
+
+/// What the cookie is called, for a program that writes its own.
+export fn cookieName() -> Str { COOKIE_NAME }
+
+/// A name nobody can guess from another.
+fn freshName() -> Result[Str, SessionError] {
+  let drawn = Random.secureBytes(NAME_BYTES)
+  if let Ok(bytes) = drawn {
+    if ByteSeq.length(&bytes) == NAME_BYTES {
+      Ok(ByteSeq.encodeBase64Url(&bytes))
+    } else {
+      Err(NoEntropy)
+    }
+  } else {
+    Err(NoEntropy)
+  }
+}
+
+/// What a refusal says.
+export fn explain(problem: &SessionError) -> Str {
+  match problem {
+    case NoEntropy => "the machine could not supply randomness for a session name"
+    case Unknown(name) => "no session called " + name
+  }
+}

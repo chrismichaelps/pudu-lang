@@ -1,0 +1,148 @@
+module UsesSession
+
+import Std.App.Session {LeftUnused, Live, LivedLongEnough, NoEntropy}
+import Std.App.Session as Session
+import Std.Http as Http
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a session promises.
+///
+/// The claim that matters is that signing in always answers a session with a
+/// new name, because that is the whole of the oldest attack against sessions
+/// and there is no call here that does otherwise.
+export fn main() -> Int {
+  var held = 0
+
+  let limits = Session.bounds()
+  let visiting = orNothing(Session.anonymous(1000))
+
+  // A visitor has a session before saying who they are, and it belongs to
+  // nobody.
+  if !Session.identified(&visiting) { held = held + 1 }
+  if Option.isNone(&Session.identityOf(&visiting)) { held = held + 1 }
+  if !Session.nameOf(&visiting).isEmpty() { held = held + 1 }
+
+  // Signing in answers a session with a new name. This is the module's whole
+  // point: somebody who arranged for a browser to hold the earlier name holds
+  // nothing once the reader signs in.
+  let signedIn = orNothing(Session.signedIn(&visiting, "ada", 1000))
+  if Session.nameOf(&signedIn) != Session.nameOf(&visiting) { held = held + 1 }
+  if Session.identified(&signedIn) { held = held + 1 }
+  if Option.unwrapOr(Session.identityOf(&signedIn), "") == "ada" { held = held + 1 }
+
+  // Signing out answers a new name again, so a name seen while signed in is
+  // worth nothing afterwards.
+  let signedOut = orNothing(Session.signedOut(&signedIn, 1000))
+  if Session.nameOf(&signedOut) != Session.nameOf(&signedIn) { held = held + 1 }
+  if !Session.identified(&signedOut) { held = held + 1 }
+
+  // Two sessions never share a name, because a name comes from the machine's
+  // entropy and from nothing else — not a counter, not who it belongs to.
+  let one = orNothing(Session.started("ada", 1000))
+  let two = orNothing(Session.started("ada", 1000))
+  if Session.nameOf(&one) != Session.nameOf(&two) { held = held + 1 }
+  if !Session.nameOf(&one).contains("ada") { held = held + 1 }
+  if Session.nameOf(&one).length() >= 20 { held = held + 1 }
+
+  // Being used is not a change of privilege, so it does not change the name.
+  let touched = Session.touched(&signedIn, 1500)
+  if Session.nameOf(&touched) == Session.nameOf(&signedIn) { held = held + 1 }
+  if touched.seen == 1500 { held = held + 1 }
+  if touched.began == signedIn.began { held = held + 1 }
+
+  // Two bounds, because they answer two questions. Within both, the session is
+  // good.
+  if Session.expiry(&signedIn, &limits, 1000) == Live { held = held + 1 }
+  if Session.live(&signedIn, &limits, 1000) { held = held + 1 }
+
+  // One says the session has been open long enough, which bounds how long a
+  // stolen one is useful.
+  let short = Session.boundedBy(100, 1000000)
+  if Session.expiry(&signedIn, &short, 1000 + 100) == LivedLongEnough { held = held + 1 }
+  if !Session.live(&signedIn, &short, 1000 + 100) { held = held + 1 }
+  if Session.expiry(&signedIn, &short, 1000 + 99) == Live { held = held + 1 }
+
+  // The other says nobody has been there, which bounds an unattended screen.
+  let impatient = Session.boundedBy(1000000, 50)
+  if Session.expiry(&signedIn, &impatient, 1000 + 50) == LeftUnused { held = held + 1 }
+  if Session.expiry(&signedIn, &impatient, 1000 + 49) == Live { held = held + 1 }
+
+  // And touching it moves the idle bound without moving the other.
+  if Session.expiry(&Session.touched(&signedIn, 1040), &impatient, 1080) == Live {
+    held = held + 1
+  }
+  if Session.expiry(&Session.touched(&signedIn, 1040), &short, 1101) == LivedLongEnough {
+    held = held + 1
+  }
+
+  // A bound of nothing is no bound, for a session that should last as long as
+  // the other bound allows.
+  if Session.expiry(&signedIn, &Session.boundedBy(0, 0), 999999) == Live { held = held + 1 }
+
+  // Each expiry says which it was, because they mean different things to
+  // whoever is asking.
+  if Session.explainExpiry(&LivedLongEnough).contains("long enough") { held = held + 1 }
+  if Session.explainExpiry(&LeftUnused).contains("unused") { held = held + 1 }
+
+  // A store the program holds, with nothing global about it.
+  let store = Session.keeping(&Session.keeping(&Session.none(), &signedIn), &visiting)
+  if Session.count(&store) == 2 { held = held + 1 }
+  if Session.count(&Session.none()) == 0 { held = held + 1 }
+
+  // A name finds the session it refers to, and an unknown one finds nothing.
+  if Option.isSome(&Session.find(&store, Session.nameOf(&signedIn), &limits, 1000)) {
+    held = held + 1
+  }
+  if Option.isNone(&Session.find(&store, "not a name", &limits, 1000)) { held = held + 1 }
+
+  // Expiry is asked at the lookup, so a caller that forgot to check would not
+  // have a session that works forever.
+  if Option.isNone(&Session.find(&store, Session.nameOf(&signedIn), &short, 1000 + 100)) {
+    held = held + 1
+  }
+
+  // Forgetting one is what signing out does to the store, since the session
+  // that replaced it has a different name and the old one must stop working.
+  let after = Session.forgetting(&store, Session.nameOf(&signedIn))
+  if Session.count(&after) == 1 { held = held + 1 }
+  if Option.isNone(&Session.find(&after, Session.nameOf(&signedIn), &limits, 1000)) {
+    held = held + 1
+  }
+
+  // Every expired one can be forgotten at once, because a session nobody looks
+  // up again would otherwise stay in the store forever.
+  let swept = Session.withoutExpired(&store, &short, 1000 + 100)
+  if Session.count(&swept) == 0 { held = held + 1 }
+  if Session.count(&Session.withoutExpired(&store, &limits, 1000)) == 2 { held = held + 1 }
+
+  // What travels is the name and nothing else: a cookie carrying the contents
+  // is a session whose contents the holder can edit.
+  let cookie = Session.cookieFor(&signedIn, &limits)
+  if cookie.value == Session.nameOf(&signedIn) { held = held + 1 }
+  if !cookie.value.contains("ada") { held = held + 1 }
+  if cookie.secure { held = held + 1 }
+  if cookie.httpOnly { held = held + 1 }
+  if Option.unwrapOr(cookie.sameSite, "") == "Strict" { held = held + 1 }
+  if cookie.name == Session.cookieName() { held = held + 1 }
+
+  // And a cookie that ends the session in the reader's browser.
+  if Session.endingCookie().value.isEmpty() { held = held + 1 }
+  if Option.unwrapOr(Session.endingCookie().maxAge, -1) == 0 { held = held + 1 }
+  if Session.endingCookie().httpOnly { held = held + 1 }
+
+  // The name a request carried, or nothing when it carried none.
+  let carried = Http.parseCookies("theme=dark; session=abc123; other=1")
+  if Option.unwrapOr(Session.nameFrom(&carried), "") == "abc123" { held = held + 1 }
+  if Option.isNone(&Session.nameFrom(&Http.parseCookies("theme=dark"))) { held = held + 1 }
+  if Option.isNone(&Session.nameFrom(&[])) { held = held + 1 }
+
+  // A refusal says what was wrong.
+  if Session.explain(&NoEntropy).contains("randomness") { held = held + 1 }
+
+  held
+}
+
+fn orNothing(outcome: Result[Session.Session, Session.SessionError]) -> Session.Session {
+  Result.unwrapOr(outcome, Session.Session{name: "", identity: "", began: 0, seen: 0})
+}

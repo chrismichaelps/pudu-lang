@@ -439,17 +439,17 @@ fn withLocking(base: &Statement, locking: Locking) -> Statement {
 /// advance: a search screen adding a filter for each thing the reader typed
 /// builds it exactly this way.
 export fn answering(base: &Select, columns: &Array[Selected]) -> Select {
-  Select { .. *base, columns: *columns }
+  Select{..*base, columns: *columns}
 }
 
 /// The same query, reading from another table beside its own.
 export fn alongside(base: &Select, joins: &Array[Join]) -> Select {
-  Select { .. *base, joins: *joins }
+  Select{..*base, joins: *joins}
 }
 
 /// The same query, keeping only the rows these conditions describe.
 export fn keeping(base: &Select, conditions: &Array[Condition]) -> Select {
-  Select { .. *base, conditions: *conditions }
+  Select{..*base, conditions: *conditions}
 }
 
 /// The same query, with one more condition than it had.
@@ -457,33 +457,33 @@ export fn keeping(base: &Select, conditions: &Array[Condition]) -> Select {
 /// What a search screen wants: a filter is added for each thing the reader
 /// typed, and nothing else about the query changes.
 export fn andKeeping(base: &Select, condition: Condition) -> Select {
-  Select { .. *base, conditions: base.conditions.push(condition) }
+  Select{..*base, conditions: base.conditions.push(condition)}
 }
 
 /// The same query, gathered by these columns.
 export fn gatheredBy(base: &Select, columns: &Array[Str]) -> Select {
-  Select { .. *base, groupBy: *columns }
+  Select{..*base, groupBy: *columns}
 }
 
 /// The same query, keeping only the groups these conditions describe.
 export fn keepingGroups(base: &Select, conditions: &Array[Condition]) -> Select {
-  Select { .. *base, having: *conditions }
+  Select{..*base, having: *conditions}
 }
 
 /// The same query, in this order.
 export fn inOrder(base: &Select, orderBy: &Array[Ordering]) -> Select {
-  Select { .. *base, orderBy: *orderBy }
+  Select{..*base, orderBy: *orderBy}
 }
 
 /// The same query, this much of it.
 export fn bounded(base: &Select, bound: Bound) -> Select {
-  Select { .. *base, bound: bound }
+  Select{..*base, bound: bound}
 }
 
 /// The same query, with duplicate rows removed.
-export fn distinctly(base: &Select) -> Select { Select { .. *base, distinct: true } }
+export fn distinctly(base: &Select) -> Select { Select{..*base, distinct: true} }
 
 /// The same query, holding the rows it reads.
 export fn locked(base: &Select, locking: Locking) -> Select {
-  Select { .. *base, locking: locking }
+  Select{..*base, locking: locking}
 }

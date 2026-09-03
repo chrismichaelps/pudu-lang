@@ -266,6 +266,7 @@ testProgramEvaluation = do
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
+  remembered <- runEntry "test-fixtures/stdlib/UsesSession.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -632,6 +633,16 @@ testProgramEvaluation = do
     , counterexample
         "a stored password proves itself without being held"
         (proved === Just "40")
+    {-| That signing in always answers a session with a new name, which is the
+        whole of the oldest attack against sessions — somebody arranges for a
+        browser to hold a name they know, waits for a sign-in, then presents
+        it. There is no call here that keeps a name across a change of
+        privilege. Two bounds are kept because they answer different
+        questions, the clock is given rather than read, and what travels is
+        the name and nothing else. -}
+    , counterexample
+        "signing in always answers a session with a new name"
+        (remembered === Just "48")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
