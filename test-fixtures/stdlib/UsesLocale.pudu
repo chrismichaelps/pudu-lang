@@ -1,0 +1,190 @@
+module UsesLocale
+
+import Std.App.Locale {Few, Many, One, Other, Two, Zero}
+import Std.App.Locale as Locale
+
+/// What saying the same thing in another language promises.
+///
+/// The two claims that matter are the ones frameworks get wrong: a number
+/// chooses among the forms the language actually has rather than by comparing
+/// with one, and a missing translation can be found by a build rather than by
+/// a reader.
+export fn main() -> Int {
+  var held = 0
+
+  // A locale is a language and, where it matters, a place.
+  if Locale.render(&Locale.language("en")) == "en" { held = held + 1 }
+  if Locale.render(&Locale.locale("en", "gb")) == "en-GB" { held = held + 1 }
+  if Locale.render(&Locale.parse("pt-BR")) == "pt-BR" { held = held + 1 }
+  if Locale.render(&Locale.parse("pt_BR")) == "pt-BR" { held = held + 1 }
+  if Locale.render(&Locale.parse("  FR  ")) == "fr" { held = held + 1 }
+  if Locale.placed(&Locale.parse("en-GB")) { held = held + 1 }
+  if !Locale.placed(&Locale.parse("en")) { held = held + 1 }
+
+  // A language with a place falls back to the language before it falls back to
+  // the one a program was written in, so a reader asking for one region's
+  // Spanish gets Spanish rather than English.
+  let chain = Locale.fallbacks(&Locale.parse("es-MX"), &Locale.language("en"))
+  if Locale.render(&chain[0]) == "es-MX" { held = held + 1 }
+  if Locale.render(&chain[1]) == "es" { held = held + 1 }
+  if Locale.render(&chain[2]) == "en" { held = held + 1 }
+  if Locale.fallbacks(&Locale.language("en"), &Locale.language("en")).length() == 1 {
+    held = held + 1
+  }
+
+  // What a request asked for, chosen by weight rather than by which came
+  // first — ignoring the weights answers in a language the reader ranked
+  // lower than one on offer.
+  let available = [Locale.language("en"), Locale.language("fr"), Locale.language("de")]
+  if Locale.render(&Locale.negotiate("fr", &available, Locale.language("en"))) == "fr" {
+    held = held + 1
+  }
+  if Locale.render(&Locale.negotiate("da;q=0.9,de;q=0.8", &available, Locale.language("en")))
+    == "de"
+  {
+    held = held + 1
+  }
+  if Locale.render(&Locale.negotiate("de;q=0.2,fr;q=0.9", &available, Locale.language("en")))
+    == "fr"
+  {
+    held = held + 1
+  }
+  if Locale.render(&Locale.negotiate("fr;q=0.2,de;q=0.9", &available, Locale.language("en")))
+    == "de"
+  {
+    held = held + 1
+  }
+
+  // A language nothing is available for falls back to what a program chose.
+  if Locale.render(&Locale.negotiate("ja,ko", &available, Locale.language("en"))) == "en" {
+    held = held + 1
+  }
+  if Locale.render(&Locale.negotiate("", &available, Locale.language("en"))) == "en" {
+    held = held + 1
+  }
+
+  // A region asked for falls back to the language when only the language is
+  // available.
+  if Locale.render(&Locale.negotiate("fr-CA", &available, Locale.language("en"))) == "fr" {
+    held = held + 1
+  }
+
+  // A catalogue says things, in each language it says them.
+  let book = Locale.saying(
+      &Locale.saying(
+        &Locale.saying(&Locale.catalogue(Locale.language("en")), &Locale.language("en"), "greeting", "Hello"),
+        &Locale.language("en"),
+      "farewell",
+      "Goodbye"
+    ),
+      &Locale.language("fr"),
+    "greeting",
+    "Bonjour"
+  )
+  if Locale.text(&book, &Locale.language("en"), "greeting") == "Hello" { held = held + 1 }
+  if Locale.text(&book, &Locale.language("fr"), "greeting") == "Bonjour" { held = held + 1 }
+
+  // A language that does not say something falls back rather than showing the
+  // reader nothing.
+  if Locale.text(&book, &Locale.language("fr"), "farewell") == "Goodbye" { held = held + 1 }
+
+  // And the gap is reportable, which is the whole reason falling back is
+  // tolerable: it can be found by a build rather than by a reader.
+  if Locale.missing(&book, &Locale.language("fr")) == ["farewell"] { held = held + 1 }
+  if Locale.missing(&book, &Locale.language("en")) == [] { held = held + 1 }
+  if Locale.complete(&book, &Locale.language("en")) { held = held + 1 }
+  if !Locale.complete(&book, &Locale.language("fr")) { held = held + 1 }
+  if !Locale.says(&book, &Locale.language("fr"), "farewell") { held = held + 1 }
+  if Locale.says(&book, &Locale.language("fr"), "greeting") { held = held + 1 }
+
+  // A language nothing was written in is missing everything rather than
+  // nothing.
+  if Locale.missing(&book, &Locale.language("de")).length() == 2 { held = held + 1 }
+
+  // A key nothing says at all comes back as the key, which is visible in a
+  // page rather than a blank.
+  if Locale.text(&book, &Locale.language("en"), "absent.key") == "absent.key" { held = held + 1 }
+
+  // The parts a message leaves open are filled with text, and what comes out
+  // stays text.
+  let named = Locale.saying(&book, &Locale.language("en"), "welcome", "Welcome, %name%")
+  if Locale.filled(&named, &Locale.language("en"), "welcome", &[("name", "Ada")]) == "Welcome, Ada" {
+    held = held + 1
+  }
+  if Locale.fill("%a% and %b%", &[("a", "one"), ("b", "two")]) == "one and two" { held = held + 1 }
+
+  // A part nobody filled is left as it was, rather than becoming a blank that
+  // reads as finished text.
+  if Locale.fill("Welcome, %name%", &[]) == "Welcome, %name%" { held = held + 1 }
+
+  // A number chooses among the forms the language has. English has two and a
+  // rule anybody would guess.
+  if Locale.quantityFor(&Locale.language("en"), 1) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("en"), 0) == Other { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("en"), 2) == Other { held = held + 1 }
+
+  // French counts zero with one, which a comparison against one gets wrong.
+  if Locale.quantityFor(&Locale.language("fr"), 0) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("fr"), 1) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("fr"), 2) == Other { held = held + 1 }
+
+  // Slavic languages have three, and the rule is not about being one.
+  if Locale.quantityFor(&Locale.language("ru"), 1) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ru"), 2) == Few { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ru"), 5) == Many { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ru"), 11) == Many { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ru"), 21) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("pl"), 22) == Few { held = held + 1 }
+
+  // Arabic has more still, including a form for none and one for two.
+  if Locale.quantityFor(&Locale.language("ar"), 0) == Zero { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ar"), 1) == One { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ar"), 2) == Two { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ar"), 5) == Few { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ar"), 100) == Many { held = held + 1 }
+
+  // And some make no distinction by number at all, so asking for a singular
+  // and a plural would ask a translator for something their language has no
+  // way to write.
+  if Locale.quantityFor(&Locale.language("ja"), 1) == Other { held = held + 1 }
+  if Locale.quantityFor(&Locale.language("ja"), 5) == Other { held = held + 1 }
+
+  // A message chosen by number, in a language with two forms.
+  let counted = Locale.counting(
+      &Locale.catalogue(Locale.language("en")),
+      &Locale.language("en"),
+    "items",
+      &[(One, "%count% item"), (Other, "%count% items")]
+  )
+  if Locale.about(&counted, &Locale.language("en"), "items", 1) == "1 item" { held = held + 1 }
+  if Locale.about(&counted, &Locale.language("en"), "items", 3) == "3 items" { held = held + 1 }
+  if Locale.about(&counted, &Locale.language("en"), "items", 0) == "0 items" { held = held + 1 }
+
+  // And in one with three, where a two-form catalogue would have been wrong.
+  let russian = Locale.counting(
+      &counted,
+      &Locale.language("ru"),
+    "items",
+      &[(One, "%count% predmet"), (Few, "%count% predmeta"), (Many, "%count% predmetov")]
+  )
+  if Locale.about(&russian, &Locale.language("ru"), "items", 1) == "1 predmet" { held = held + 1 }
+  if Locale.about(&russian, &Locale.language("ru"), "items", 3) == "3 predmeta" { held = held + 1 }
+  if Locale.about(&russian, &Locale.language("ru"), "items", 7) == "7 predmetov" { held = held + 1 }
+
+  // A form a catalogue does not write falls back to the general one rather
+  // than showing the key.
+  let partial = Locale.counting(
+      &Locale.catalogue(Locale.language("en")),
+      &Locale.language("ru"),
+    "items",
+      &[(Other, "%count% things")]
+  )
+  if Locale.about(&partial, &Locale.language("ru"), "items", 3) == "3 things" { held = held + 1 }
+
+  // A catalogue can be asked what it holds, so a program can report what it
+  // says and in which languages.
+  if Locale.keys(&book).length() == 2 { held = held + 1 }
+  if Locale.languages(&book).length() == 2 { held = held + 1 }
+
+  held
+}

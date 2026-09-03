@@ -1,0 +1,344 @@
+module Std.App.Locale
+
+import Std.Map as Map
+import Std.Option as Option
+import Std.Set as Set
+
+/// A language, and the place where that matters.
+///
+/// The place is kept apart from the language rather than folded into one name,
+/// because falling back from one region's Spanish to Spanish is a different
+/// step from falling back to the language a program was written in.
+export type Locale = { language: Str, place: Str }
+
+/// How many of something a message is about.
+///
+/// The categories a language actually has, rather than the two English has. A
+/// translator given only a singular and a plural cannot write correct Polish,
+/// and asking for those two has decided the translator is wrong.
+export type Quantity
+  = Zero
+  | One
+  | Two
+  | Few
+  | Many
+  | Other
+
+/// What a program can say, in each language it says it.
+///
+/// `reference` is the language the messages were written in, which is what a
+/// missing translation is reported against.
+export type Catalogue = {
+  reference: Locale,
+  messages: Map[Str, Map[Str, Str]],
+  forms: Map[Str, Map[Str, Map[Quantity, Str]]]
+}
+
+/// The languages whose plural rule is the one English has.
+const TWO_FORM_LANGUAGES: Set[Str] = setOf([
+    "en",
+    "de",
+    "nl",
+    "sv",
+    "da",
+    "no",
+    "it",
+    "es",
+    "pt",
+    "el",
+    "fi",
+    "et",
+    "he",
+    "hu",
+    "tr"
+  ])
+
+/// The languages that make no distinction by number at all.
+const ONE_FORM_LANGUAGES: Set[Str] = setOf(["ja", "zh", "ko", "vi", "th", "id", "ms"])
+
+/// The languages whose rule is the Slavic one: one, a few, and many.
+const SLAVIC_LANGUAGES: Set[Str] = setOf(["ru", "uk", "pl", "cs", "sk", "hr", "sr", "be"])
+
+/// A locale from its parts.
+export fn locale(named: Str, place: Str) -> Locale {
+  Locale{language: named.trim().toLower(), place: place.trim().toUpper()}
+}
+
+/// A locale with no place.
+export fn language(named: Str) -> Locale { locale(named, "") }
+
+/// A locale read from how one is written, as `en`, `en-GB`, or `en_GB`.
+export fn parse(written: Str) -> Locale {
+  let cleaned = written.trim().replace("_", "-")
+  let mark = cleaned.indexOf("-")
+  if mark < 0 { language(cleaned) } else { locale(cleaned.take(mark), cleaned.drop(mark + 1)) }
+}
+
+/// How a locale is written.
+export fn render(held: &Locale) -> Str {
+  if held.place.isEmpty() { held.language } else { held.language + "-" + held.place }
+}
+
+/// Whether a locale names a place.
+export fn placed(held: &Locale) -> Bool { !held.place.isEmpty() }
+
+/// The same language without its place, which is the first thing to fall back
+/// to.
+export fn withoutPlace(held: &Locale) -> Locale { Locale{..*held, place: ""} }
+
+/// The locales to try, in order: the one asked for, the language without its
+/// place, and then the one the messages were written in.
+export fn fallbacks(wanted: &Locale, reference: &Locale) -> Array[Locale] {
+  var found = [*wanted]
+  if placed(wanted) { found = found.push(withoutPlace(wanted)) }
+  if !found.contains(*reference) { found = found.push(*reference) }
+  found
+}
+
+/// The locale a request asked for, chosen from the ones a program has.
+///
+/// The request states several in order of preference with weights. Choosing
+/// the first that happens to match ignores what the reader said; the best
+/// available by weight is what they asked for.
+export fn negotiate(header: Str, available: &Array[Locale], fallback: Locale) -> Locale {
+  var best = fallback
+  var bestWeight = -1
+  for piece in header.split(",") {
+    let asked = weighted(piece.trim())
+    if asked[1] > bestWeight {
+      if let Some(found) = matching(&asked[0], available) {
+        best = found
+        bestWeight = asked[1]
+      }
+    }
+  }
+  best
+}
+
+/// One entry of what a request asked for: the locale, and how much it wants it
+/// as a whole number of thousandths, so ordering is exact.
+fn weighted(piece: Str) -> (Locale, Int) {
+  let mark = piece.indexOf(";")
+  if mark < 0 {
+    (parse(piece), 1000)
+  } else {
+    (parse(piece.take(mark)), qualityOf(piece.drop(mark + 1)))
+  }
+}
+
+/// The weight a preference states, as thousandths.
+fn qualityOf(written: Str) -> Int {
+  let mark = written.indexOf("=")
+  if mark < 0 {
+    1000
+  } else {
+    let value = written.drop(mark + 1).trim()
+    let dot = value.indexOf(".")
+    if dot < 0 {
+      if value == "1" { 1000 } else { 0 }
+    } else {
+      let fraction = (value.drop(dot + 1) + "000").take(3)
+      var total = 0
+      var index = 0
+      var good = true
+      while index < fraction.length() && good {
+        let digit = "0123456789".indexOf(fraction.slice(index, index + 1))
+        if digit < 0 { good = false } else { total = total * 10 + digit }
+        index = index + 1
+      }
+      if good { total } else { 0 }
+    }
+  }
+}
+
+/// The best of the available locales for one that was asked for.
+fn matching(wanted: &Locale, available: &Array[Locale]) -> Option[Locale] {
+  var exact: Option[Locale] = None
+  var byLanguage: Option[Locale] = None
+  for one in available {
+    if one == *wanted { exact = Some(one) }
+    if one.language == wanted.language && Option.isNone(&byLanguage) { byLanguage = Some(one) }
+  }
+  if Option.isSome(&exact) { exact } else { byLanguage }
+}
+
+/// A catalogue written in one language.
+export fn catalogue(reference: Locale) -> Catalogue {
+  Catalogue{reference: reference, messages: Map.empty(), forms: Map.empty()}
+}
+
+/// The catalogue with one more thing it can say.
+export fn saying(base: &Catalogue, held: &Locale, key: Str, message: Str) -> Catalogue {
+  let named = render(held)
+  let existing = Map.getOr(&base.messages, named, Map.empty())
+  Catalogue{..*base, messages: Map.insert(&base.messages, named, Map.insert(&existing, key, message))}
+}
+
+/// The catalogue with one more thing it says differently by number.
+export fn counting(
+  base: &Catalogue,
+  held: &Locale,
+  key: Str,
+  byQuantity: &Array[(Quantity, Str)]
+) -> Catalogue {
+  let named = render(held)
+  let existing = Map.getOr(&base.forms, named, Map.empty())
+  Catalogue {
+      ..*base,
+    forms: Map.insert(&base.forms, named, Map.insert(&existing, key, Map.fromPairs(byQuantity)))
+  }
+}
+
+/// What a program says for a key, in the language it can.
+///
+/// Falls back through the language without its place to the one the messages
+/// were written in. A key nothing says is answered as the key itself, which is
+/// visible in a page rather than a blank — and `missing` is how it is found
+/// before a reader finds it.
+export fn text(base: &Catalogue, held: &Locale, key: Str) -> Str {
+  var found = key
+  var settled = false
+  for one in fallbacks(held, &base.reference) {
+    if !settled {
+      if let Some(message) = Map.get(&Map.getOr(&base.messages, render(&one), Map.empty()), key) {
+        found = message
+        settled = true
+      }
+    }
+  }
+  found
+}
+
+/// The same, with the parts it leaves open filled in.
+///
+/// What comes out is text and stays text. A message that could carry markup is
+/// whoever edits the catalogue writing into every page that shows it.
+export fn filled(
+  base: &Catalogue,
+  held: &Locale,
+  key: Str,
+  parts: &Array[(Str, Str)]
+) -> Str {
+  fill(text(base, held, key), parts)
+}
+
+/// A message's parts filled in.
+///
+/// A part is written between percent signs — `Welcome, %name%` — rather than
+/// between braces. Braces are how this language writes a value into a string,
+/// so a catalogue using them would need every message escaped, and a catalogue
+/// is edited by people who are translating rather than programming. The
+/// delimiter that costs them nothing is the one to use.
+export fn fill(message: Str, parts: &Array[(Str, Str)]) -> Str {
+  var built = message
+  for entry in parts { built = built.replace("%" + entry[0] + "%", entry[1]) }
+  built
+}
+
+/// What a program says for a key about a number of things.
+export fn about(base: &Catalogue, held: &Locale, key: Str, count: Int) -> Str {
+  let wanted = quantityFor(held, count)
+  var found = key
+  var settled = false
+  for one in fallbacks(held, &base.reference) {
+    if !settled {
+      let byKey = Map.getOr(&base.forms, render(&one), Map.empty())
+      if let Some(byQuantity) = Map.get(&byKey, key) {
+        if let Some(message) = Map.get(&byQuantity, wanted) {
+          found = message
+          settled = true
+        } else {
+          if let Some(message) = Map.get(&byQuantity, Other) {
+            found = message
+            settled = true
+          }
+        }
+      }
+    }
+  }
+  fill(found, &[("count", show(count))])
+}
+
+/// Which form a language uses for a number.
+///
+/// The rule each language actually has, rather than a comparison with one.
+export fn quantityFor(held: &Locale, count: Int) -> Quantity {
+  let named = held.language
+  if Set.contains(&ONE_FORM_LANGUAGES, named) {
+    Other
+  } else {
+    if Set.contains(&SLAVIC_LANGUAGES, named) {
+      slavicForm(count)
+    } else {
+      if named == "ar" {
+        arabicForm(count)
+      } else {
+        if named == "fr" {
+          if count == 0 || count == 1 { One } else { Other }
+        } else {
+          if Set.contains(&TWO_FORM_LANGUAGES, named) {
+            if count == 1 { One } else { Other }
+          } else {
+            if count == 1 { One } else { Other }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn slavicForm(count: Int) -> Quantity {
+  let last = count % 10
+  let lastTwo = count % 100
+  if last == 1 && lastTwo != 11 {
+    One
+  } else {
+    if last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) { Few } else { Many }
+  }
+}
+
+fn arabicForm(count: Int) -> Quantity {
+  let lastTwo = count % 100
+  if count == 0 {
+    Zero
+  } else {
+    if count == 1 {
+      One
+    } else {
+      if count == 2 {
+        Two
+      } else {
+        if lastTwo >= 3 && lastTwo <= 10 { Few } else { Many }
+      }
+    }
+  }
+}
+
+/// The keys one language is missing against the one the messages were written
+/// in.
+///
+/// The whole reason falling back is tolerable: a gap can be found by a build
+/// rather than by a reader.
+export fn missing(base: &Catalogue, held: &Locale) -> Array[Str] {
+  let reference = Map.getOr(&base.messages, render(&base.reference), Map.empty())
+  let translated = Map.getOr(&base.messages, render(held), Map.empty())
+  var found: Array[Str] = []
+  for key in Map.keys(&reference) { if !Map.containsKey(&translated, key) { found = found.push(key) } }
+  found
+}
+
+/// Whether a language says everything the reference does.
+export fn complete(base: &Catalogue, held: &Locale) -> Bool { missing(base, held).length() == 0 }
+
+/// The languages a catalogue says anything in.
+export fn languages(base: &Catalogue) -> Array[Str] { Map.keys(&base.messages) }
+
+/// The keys the reference language names.
+export fn keys(base: &Catalogue) -> Array[Str] {
+  Map.keys(&Map.getOr(&base.messages, render(&base.reference), Map.empty()))
+}
+
+/// Whether a language says anything at all for a key.
+export fn says(base: &Catalogue, held: &Locale, key: Str) -> Bool {
+  Map.containsKey(&Map.getOr(&base.messages, render(held), Map.empty()), key)
+}

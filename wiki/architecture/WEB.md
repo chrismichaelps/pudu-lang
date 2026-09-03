@@ -149,7 +149,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 
 | Question | Verdict | Where it stands |
 |---|---|---|
-| More than one language on the page? | **Absent** | No message catalogue, no formatting by locale. [[Std Fmt]] shapes values without a locale. |
+| More than one language on the page? | **Partial** | [[Std App Locale]]: negotiation by weight, catalogues with reportable gaps, and the plural forms each language actually has. Formatting numbers and dates by locale is still absent — [[Std Fmt]] shapes values without one. |
 | Accessible markup? | **Partial** | Any attribute can be written, and an image requires its description at the call. Nothing checks the rest. |
 | Multi-tenancy? | **Partial** | [[Std App Access]] decides on an attribute of the principal, so a per-tenant requirement is expressible. Nothing separates tenants' data or bounds their limits. |
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |

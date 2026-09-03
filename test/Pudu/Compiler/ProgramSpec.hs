@@ -270,6 +270,7 @@ testProgramEvaluation = do
   uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
   followed <- runEntry "test-fixtures/stdlib/UsesTrace.pudu"
   scheduled <- runEntry "test-fixtures/stdlib/UsesWork.pudu"
+  spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -677,6 +678,16 @@ testProgramEvaluation = do
     , counterexample
         "a job that fails is recorded and runs again"
         (scheduled === Just "35")
+    {-| That a number chooses among the forms a language actually has rather
+        than by comparing with one — French counting zero with one, three
+        Slavic forms where the rule is not about being one, Arabic's forms for
+        none and for two, and the languages with no distinction at all, each of
+        which a singular-and-plural catalogue gets wrong. And that a missing
+        translation is reportable rather than silent, which is the whole reason
+        falling back to the original language is tolerable. -}
+    , counterexample
+        "a number chooses the form the language has, and a gap can be found"
+        (spoken === Just "60")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
