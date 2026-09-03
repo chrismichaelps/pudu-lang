@@ -98,7 +98,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Are request sizes bounded? | **Ready** | Head and body limits are enforced before anything is buffered. |
 | Is there a deadline on a request? | **Absent** | A handler that does not finish is not interrupted. Named in [[architecture/STDLIB]] as owed. |
 | Rate limiting? | **Absent** | Not written. [[Std Http Server Guard]] holds the other steps. |
-| Caching, and a content network in front? | **Partial** | Cache directives can be set; nothing helps a program decide them. |
+| Caching, and a content network in front? | **Partial** | [[Std App Cache]] holds answers in the process and says whether one is stale, so a hot key that expires is refreshed once rather than by every request at once. Cache directives for anything in front can be set; nothing helps a program decide them. |
 
 ## Data
 

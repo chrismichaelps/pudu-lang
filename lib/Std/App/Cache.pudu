@@ -1,0 +1,192 @@
+module Std.App.Cache
+
+import Std.LruCache as Lru
+import Std.Option as Option
+
+/// What a lookup found.
+///
+/// Three answers rather than two, and that is the whole design. An interface
+/// answering a value or nothing forces a caller to treat an expired entry as
+/// an absent one — so when a much-read key expires, every request that wanted
+/// it finds nothing and every one of them recomputes it at the same moment,
+/// against whatever the cache was protecting. Told the entry is stale, a
+/// caller hands back the old answer and refreshes once.
+export type Found[V]
+  = Fresh(V)
+  | Stale(V)
+  | KnownAbsent
+  | Missing
+
+/// One thing kept, and when it stops being fresh.
+export type Entry[V] = { held: Option[V], until: Int }
+
+/// A cache: bounded, with a lifetime for answers and a shorter one for
+/// absences.
+export type Cache[K, V] = {
+  entries: Lru.LruCache[K, Entry[V]],
+  lifetime: Int,
+  absentLifetime: Int,
+  hits: Int,
+  staleHits: Int,
+  misses: Int
+}
+
+/// A cache holding at most this many things, each for this long.
+///
+/// The bound is on entries rather than bytes: the size of a value is not
+/// something this can know, and a bound it cannot enforce is a claim rather
+/// than a bound.
+export fn holding[K, V](limit: Int, lifetime: Int) -> Cache[K, V] {
+  Cache {
+    entries: Lru.withCapacity(limit),
+    lifetime: lifetime,
+    absentLifetime: lifetime / 4,
+    hits: 0,
+    staleHits: 0,
+    misses: 0
+  }
+}
+
+/// The same, saying how long an absence is remembered.
+export fn rememberingAbsence[K, V](base: &Cache[K, V], lifetime: Int) -> Cache[K, V] {
+  Cache{..*base, absentLifetime: lifetime}
+}
+
+/// What a lookup found, and the cache that follows it.
+///
+/// The cache comes back because looking something up moves it to the front of
+/// what is kept, and because what was asked for is counted.
+export fn lookup[K, V](base: &Cache[K, V], key: K, now: Int) -> (Found[V], Cache[K, V]) {
+  let taken = Lru.get(&base.entries, key)
+  let moved = taken[1]
+  if let Some(entry) = taken[0] {
+    let fresh = now < entry.until
+    if let Some(value) = entry.held {
+      if fresh {
+        (Fresh(value), Cache{..*base, entries: moved, hits: base.hits + 1})
+      } else {
+        (Stale(value), Cache{..*base, entries: moved, staleHits: base.staleHits + 1})
+      }
+    } else {
+      if fresh {
+        (KnownAbsent, Cache{..*base, entries: moved, hits: base.hits + 1})
+      } else {
+        (Missing, Cache{..*base, entries: Lru.remove(&moved, key), misses: base.misses + 1})
+      }
+    }
+  } else {
+    (Missing, Cache{..*base, entries: moved, misses: base.misses + 1})
+  }
+}
+
+/// What a lookup found, without counting it or moving anything.
+///
+/// For a program reporting on its own cache, which should not change what it
+/// reports on.
+export fn peek[K, V](base: &Cache[K, V], key: K, now: Int) -> Found[V] {
+  if let Some(entry) = Lru.peek(&base.entries, key) {
+    let fresh = now < entry.until
+    if let Some(value) = entry.held {
+      if fresh { Fresh(value) } else { Stale(value) }
+    } else {
+      if fresh { KnownAbsent } else { Missing }
+    }
+  } else {
+    Missing
+  }
+}
+
+/// The cache with an answer kept.
+export fn keeping[K, V](base: &Cache[K, V], key: K, value: V, now: Int) -> Cache[K, V] {
+  Cache {
+      ..*base,
+    entries: Lru.put(&base.entries, key, Entry{held: Some(value), until: now + base.lifetime})
+  }
+}
+
+/// The cache remembering that there was no answer.
+///
+/// For less time than a real answer, because being wrong about an absence
+/// costs less, and because a key that does not exist yet is the thing most
+/// likely to start existing.
+export fn keepingAbsence[K, V](base: &Cache[K, V], key: K, now: Int) -> Cache[K, V] {
+  Cache {
+      ..*base,
+    entries: Lru.put(&base.entries, key, Entry{held: None, until: now + base.absentLifetime})
+  }
+}
+
+/// The cache with one thing forgotten, for when a program knows an answer
+/// changed.
+export fn forgetting[K, V](base: &Cache[K, V], key: K) -> Cache[K, V] {
+  Cache{..*base, entries: Lru.remove(&base.entries, key)}
+}
+
+/// The cache holding nothing, keeping what it was told about lifetimes.
+export fn emptied[K, V](base: &Cache[K, V]) -> Cache[K, V] {
+  Cache{..*base, entries: Lru.withCapacity(Lru.capacity(&base.entries))}
+}
+
+/// Whether a lookup found something usable, fresh or not.
+export fn usable[V](held: &Found[V]) -> Bool {
+  match held {
+    case Fresh(_value) => true
+    case Stale(_value) => true
+    case KnownAbsent => true
+    case Missing => false
+  }
+}
+
+/// Whether what was found should be replaced.
+export fn worthRefreshing[V](held: &Found[V]) -> Bool {
+  match held {
+    case Fresh(_value) => false
+    case Stale(_value) => true
+    case KnownAbsent => false
+    case Missing => true
+  }
+}
+
+/// What was found, when something was.
+export fn valueOf[V](held: &Found[V]) -> Option[V] {
+  match held {
+    case Fresh(value) => Some(value)
+    case Stale(value) => Some(value)
+    case KnownAbsent => None
+    case Missing => None
+  }
+}
+
+/// How many things are kept.
+export fn size[K, V](base: &Cache[K, V]) -> Int { Lru.size(&base.entries) }
+
+/// How many it may keep.
+export fn capacity[K, V](base: &Cache[K, V]) -> Int { Lru.capacity(&base.entries) }
+
+/// How long an answer stays fresh.
+export fn lifetimeOf[K, V](base: &Cache[K, V]) -> Int { base.lifetime }
+
+/// How long an absence is remembered.
+export fn absentLifetimeOf[K, V](base: &Cache[K, V]) -> Int { base.absentLifetime }
+
+/// How many lookups were answered without asking anything else.
+export fn hitsOf[K, V](base: &Cache[K, V]) -> Int { base.hits }
+
+/// How many were answered with something old.
+export fn staleHitsOf[K, V](base: &Cache[K, V]) -> Int { base.staleHits }
+
+/// How many found nothing at all.
+export fn missesOf[K, V](base: &Cache[K, V]) -> Int { base.misses }
+
+/// How often it answered, as a percentage, counting a stale answer as an
+/// answer — because it was one, and the request it saved is the point.
+export fn hitRate[K, V](base: &Cache[K, V]) -> Int {
+  let asked = base.hits + base.staleHits + base.misses
+  if asked == 0 { 0 } else { (base.hits + base.staleHits) * 100 / asked }
+}
+
+/// What a cache has been doing.
+export fn render[K, V](base: &Cache[K, V]) -> Str {
+  "held " + show(size(base)) + " of " + show(capacity(base)) + ", answered " + show(base.hits)
+    + " fresh and " + show(base.staleHits) + " stale, missed " + show(base.misses)
+}
