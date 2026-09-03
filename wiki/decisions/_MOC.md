@@ -6,6 +6,7 @@ tags: [moc, adr]
 # Decision Map
 
 - [[ADR-0015-hash-contract-and-hash-map]] — coherent equality/hashing and deterministic persistent hash maps.
+- [[ADR-0018-calling-a-library-written-elsewhere]] — accepted: a foreign block declares a library once, ownership is named in the declaration, and calling one needs the capability the language already reserved.
 - [[ADR-0017-what-the-web-layer-refuses]] — accepted: framing ambiguity, header injection, cross-site changes, off-site redirects, escaping paths, and self-disclosure are refused by default.
 - [[ADR-0016-an-application-is-a-value]] — accepted: wiring is a graph the programmer wrote, lifecycle is a list, and the program is a value that can be read without being run.
 

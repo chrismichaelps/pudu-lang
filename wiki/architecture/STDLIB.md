@@ -720,8 +720,12 @@ dependencies are its own files plus the compiler it is built with, and that is t
   admitting one, Pudu needs to decide whether it can be checked at compile time — a literal pattern
   can be, a computed one cannot — and shipping the unchecked form first would settle that question by
   default.
-- **`Std.Ffi`.** Calling into C requires the `foreign` capability from [[Unsafe Capabilities]] and a
-  decision about how a foreign type's ownership is described. Both are open.
+- **`Std.Ffi`.** Both open questions are settled by [[ADR-0018 Calling a Library Written Elsewhere]]:
+  the `foreign` capability from [[Unsafe Capabilities]] gates every call, and ownership is named in
+  the declaration — an owned pointer carries the function that releases it. The mechanism was
+  verified against the C library present on every machine before the decision was taken. What is
+  still open is callbacks into this language, which thread a call runs on, and where a library comes
+  from.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.
