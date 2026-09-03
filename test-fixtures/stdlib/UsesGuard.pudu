@@ -1,5 +1,6 @@
 module UsesGuard
 
+import Std.App.Trace as Trace
 import Std.Http as Http
 import Std.Http.Safe {Escapes, FramedTwice, FromAnotherSite, LengthDisagrees, Reserved, SameOrigin, Unstated}
 import Std.Http.Safe as Safe
@@ -248,6 +249,37 @@ export fn main() -> Int {
     held = held + 1
   }
   if !Guard.identityOf(&requestFor(Http.Get, "/x", &[])).isEmpty() { held = held + 1 }
+
+  // A request belongs to a piece of work, continued from what it carried, so
+  // every service in a chain agrees about which piece it is.
+  let followed = wrapped(&routed, Guard.traced(true))
+  let carried = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  let answered2 = followed(requestFor(Http.Get, "/x", &[("traceparent", carried)]))
+  if headerOf(&answered2, "traceparent").contains("4bf92f3577b34da6a3ce929d0e0e4736") {
+    held = held + 1
+  }
+
+  // A new step within it, so the answer does not claim to be the step that
+  // asked.
+  if !headerOf(&answered2, "traceparent").contains("00f067aa0ba902b7") { held = held + 1 }
+
+  // A request carrying nothing begins one.
+  if !headerOf(&followed(requestFor(Http.Get, "/x", &[])), "traceparent").isEmpty() {
+    held = held + 1
+  }
+
+  // And one carrying nonsense begins one too, rather than being refused —
+  // the header is a diagnostic, and refusing over a malformed diagnostic makes
+  // the diagnosis into the outage.
+  let confused = followed(requestFor(Http.Get, "/x", &[("traceparent", "nonsense")]))
+  if confused.status.code == 200 { held = held + 1 }
+  if !headerOf(&confused, "traceparent").contains("nonsense") { held = held + 1 }
+
+  // The trace a request belongs to can be read directly, for a handler that
+  // wants to note something against it.
+  if Trace.traced(&Guard.traceOf(&requestFor(Http.Get, "/x", &[("traceparent", carried)]), true)) {
+    held = held + 1
+  }
 
   // The standard set is every step, so a service is protected before its
   // author has thought about any of this.

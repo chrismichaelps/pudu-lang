@@ -268,6 +268,7 @@ testProgramEvaluation = do
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
   remembered <- runEntry "test-fixtures/stdlib/UsesSession.pudu"
   uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
+  followed <- runEntry "test-fixtures/stdlib/UsesTrace.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -473,7 +474,7 @@ testProgramEvaluation = do
         encoded ascent, and an address only the server can reach. -}
     , counterexample
         "the web layer refuses what it is supposed to refuse"
-        (refused === Just "76")
+        (refused === Just "82")
     {-| That what a schema change should do is decided without a database: a
         migration edited after it was applied stops everything, because both
         databases report the same version from then on and nothing later can
@@ -654,6 +655,17 @@ testProgramEvaluation = do
     , counterexample
         "an uploaded name never becomes a path"
         (uploaded === Just "44")
+    {-| That one piece of work can be followed across every service that
+        touched it, checked against the header the format itself publishes as
+        an example. A header that cannot be read starts a new trace rather
+        than refusing the request — the one place here where malformed input
+        is not refused, because a service that fails over a malformed
+        diagnostic has made the diagnosis into the outage. The recording
+        decision travels rather than being retaken, and a span carries only
+        what a program put on it. -}
+    , counterexample
+        "a piece of work can be followed across the services that touched it"
+        (followed === Just "48")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

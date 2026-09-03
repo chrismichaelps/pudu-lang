@@ -1,5 +1,6 @@
 module Std.Http.Server.Guard
 
+import Std.App.Trace as Trace
 import Std.Http as Http
 import Std.Http.Safe as Safe
 import Std.Http.Server.Reply as Reply
@@ -277,4 +278,35 @@ fn listed(origins: &Array[Str], origin: Str) -> Bool {
   var found = false
   for held in origins { if held.trim().toLower() == origin.trim().toLower() { found = true } }
   found
+}
+
+/// The trace a request belongs to, continued from what it carried.
+///
+/// Read here rather than in each handler, so every service in a chain agrees
+/// about what piece of work a request is part of. A request that carried
+/// nothing readable begins a new one rather than being refused: the header is
+/// a diagnostic, and refusing over a malformed diagnostic makes the diagnosis
+/// into the outage.
+export fn traceOf(request: &Route.Request, recordedWhenNew: Bool) -> Trace.Trace {
+  Trace.continuing(Route.header(request, Trace.headerName()), recordedWhenNew)
+}
+
+/// A step that answers with the trace the request belongs to.
+///
+/// So a caller holding an answer can find the record of what produced it, and
+/// a service handing work on has the header to hand on.
+export fn traced(recordedWhenNew: Bool) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let following = traceOf(&request, recordedWhenNew)
+    let answer = next(request)
+    if !Trace.traced(&following) || hasHeader(&answer.headers, Trace.headerName()) {
+      answer
+    } else {
+      Http.Response {
+        status: answer.status,
+        headers: answer.headers.push(Trace.asHeader(&following)),
+        body: answer.body
+      }
+    }
+  }
 }

@@ -1,0 +1,251 @@
+module Std.App.Trace
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Random as Random
+import Std.Set as Set
+
+/// One piece of work, and this service's step in it.
+///
+/// `recorded` travels rather than being decided again: a piece of work
+/// recorded by one service and not the next is missing its middle, which reads
+/// as a service that stopped answering rather than as a choice.
+export type Trace = { work: Str, step: Str, recorded: Bool }
+
+/// A named stretch of work within a trace.
+export type Span = {
+  trace: Trace,
+  name: Str,
+  began: Int,
+  ended: Int,
+  notes: Array[(Str, Str)]
+}
+
+/// The header a trace travels in.
+const HEADER: Str = "traceparent"
+
+/// The version of the format this writes.
+const VERSION: Str = "00"
+
+/// How long each identifier is, written as hexadecimal.
+const WORK_DIGITS: Int = 32
+
+const STEP_DIGITS: Int = 16
+
+/// The identifiers the format uses to mean "absent", which are therefore never
+/// generated: one of them names nothing a reader can follow.
+const ABSENT_WORK: Str = "00000000000000000000000000000000"
+
+const ABSENT_STEP: Str = "0000000000000000"
+
+/// The characters an identifier is written with.
+const HEX_DIGITS: Set[Str] = setOf([
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f"
+  ])
+
+/// What the header is called, for a program writing its own.
+export fn headerName() -> Str { HEADER }
+
+/// A trace that follows nothing and is not recorded.
+///
+/// What a piece of work has when entropy could not be reached. Not a failure:
+/// tracing exists to explain what happened, and it must not be able to stop
+/// the work it is explaining.
+export fn untraced() -> Trace { Trace{work: ABSENT_WORK, step: ABSENT_STEP, recorded: false} }
+
+/// Whether a trace is one anything can follow.
+export fn traced(held: &Trace) -> Bool { held.work != ABSENT_WORK }
+
+/// A new piece of work, recorded or not as the caller says.
+export fn starting(recorded: Bool) -> Trace {
+  let work = freshHex(WORK_DIGITS)
+  let step = freshHex(STEP_DIGITS)
+  if work == ABSENT_WORK || step == ABSENT_STEP {
+    untraced()
+  } else {
+    Trace{work: work, step: step, recorded: recorded}
+  }
+}
+
+/// The trace a request carried, or a new one when it carried nothing this can
+/// read.
+///
+/// A header that is nonsense, truncated, or from a version this does not know
+/// is treated as no header at all. Everywhere else here something unreadable
+/// is refused; this is the one place it is not, because a service that fails a
+/// request over a malformed diagnostic has made the diagnosis into the outage.
+export fn continuing(carried: Option[Str], recordedWhenNew: Bool) -> Trace {
+  if let Some(header) = carried {
+    if let Some(found) = parse(header) { childOf(&found) } else { starting(recordedWhenNew) }
+  } else {
+    starting(recordedWhenNew)
+  }
+}
+
+/// The trace a header names, or nothing when it names none.
+export fn parse(header: Str) -> Option[Trace] {
+  let parts = header.trim().split("-")
+  if parts.length() != 4 {
+    None
+  } else {
+    if parts[0] != VERSION {
+      None
+    } else {
+      let work = parts[1].toLower()
+      let step = parts[2].toLower()
+      if !isHex(work, WORK_DIGITS) || !isHex(step, STEP_DIGITS) {
+        None
+      } else {
+        if work == ABSENT_WORK || step == ABSENT_STEP {
+          None
+        } else {
+          if !isHex(parts[3].toLower(), 2) {
+            None
+          } else {
+            Some(Trace{work: work, step: step, recorded: recordedIn(parts[3])})
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A step within the same piece of work, for what this service hands on.
+///
+/// The recording decision is carried rather than retaken.
+export fn childOf(held: &Trace) -> Trace {
+  let step = freshHex(STEP_DIGITS)
+  if step == ABSENT_STEP {
+      *held
+  } else {
+    Trace{..*held, step: step}
+  }
+}
+
+/// The header this trace travels in.
+export fn render(held: &Trace) -> Str {
+  [VERSION, held.work, held.step, if held.recorded { "01" } else { "00" }].join("-")
+}
+
+/// The header as a name and a value, for adding to a request.
+export fn asHeader(held: &Trace) -> (Str, Str) { (HEADER, render(held)) }
+
+/// What the whole piece of work is called.
+export fn workOf(held: &Trace) -> Str { held.work }
+
+/// What this step in it is called.
+export fn stepOf(held: &Trace) -> Str { held.step }
+
+/// Whether it is being recorded.
+export fn isRecorded(held: &Trace) -> Bool { held.recorded }
+
+/// The same trace, recorded or not.
+///
+/// For the one service that decides, which is the one the work entered at.
+/// Every service after it carries what it was told.
+export fn recording(held: &Trace, recorded: Bool) -> Trace { Trace{..*held, recorded: recorded} }
+
+/// A stretch of work beginning now.
+export fn span(held: &Trace, name: Str, now: Int) -> Span {
+  Span{trace: *held, name: name, began: now, ended: 0, notes: []}
+}
+
+/// The same stretch, finished.
+export fn finished(held: &Span, now: Int) -> Span { Span{..*held, ended: now} }
+
+/// The same stretch with something noted about it.
+///
+/// What a program put there, and only that. Nothing is noted automatically,
+/// because a field added automatically is a field nobody chose — which is how
+/// a trace comes to carry a password.
+export fn noting(held: &Span, name: Str, value: Str) -> Span {
+  Span{..*held, notes: held.notes.push((name, value))}
+}
+
+/// How long a finished stretch took, or nothing while it is still running.
+export fn took(held: &Span) -> Option[Int] {
+  if held.ended > 0 { Some(held.ended - held.began) } else { None }
+}
+
+/// Whether a stretch has finished.
+export fn complete(held: &Span) -> Bool { held.ended > 0 }
+
+/// What was noted under a name.
+export fn noteOf(held: &Span, name: Str) -> Option[Str] {
+  var found: Option[Str] = None
+  for entry in held.notes { if entry[0] == name { found = Some(entry[1]) } }
+  found
+}
+
+/// A span as the fields a log line carries, so one line ties to one trace.
+export fn fieldsOf(held: &Span) -> Array[(Str, Str)] {
+  var found = [("trace", held.trace.work), ("span", held.trace.step), ("name", held.name)]
+  if let Some(elapsed) = took(held) { found = found.push(("ms", show(elapsed))) }
+  found.concat(held.notes)
+}
+
+fn recordedIn(flags: Str) -> Bool {
+  if let Some(value) = hexValue(flags.toLower()) { value % 2 == 1 } else { false }
+}
+
+fn hexValue(text: Str) -> Option[Int] {
+  var total = 0
+  var index = 0
+  var good = true
+  while index < text.length() && good {
+    let digit = "0123456789abcdef".indexOf(text.slice(index, index + 1))
+    if digit < 0 { good = false } else { total = total * 16 + digit }
+    index = index + 1
+  }
+  if good && text.length() > 0 { Some(total) } else { None }
+}
+
+fn isHex(text: Str, digits: Int) -> Bool {
+  if text.length() != digits {
+    false
+  } else {
+    var good = true
+    var index = 0
+    while index < text.length() && good {
+      if !Set.contains(&HEX_DIGITS, text.slice(index, index + 1)) { good = false }
+      index = index + 1
+    }
+    good
+  }
+}
+
+/// An identifier from the machine's entropy, or the absent one when there is
+/// none to be had.
+fn freshHex(digits: Int) -> Str {
+  let drawn = Random.secureBytes(digits / 2)
+  if let Ok(bytes) = drawn {
+    if ByteSeq.length(&bytes) == digits / 2 { ByteSeq.encodeHex(&bytes) } else { zeros(digits) }
+  } else {
+    zeros(digits)
+  }
+}
+
+fn zeros(digits: Int) -> Str {
+  var built = ""
+  var index = 0
+  while index < digits {
+    built = built + "0"
+    index = index + 1
+  }
+  built
+}

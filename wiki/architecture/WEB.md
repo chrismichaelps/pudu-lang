@@ -119,7 +119,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Does a log line carry a request identifier? | **Ready** | [[Std Http Server Guard]] carries one in and out, keeping a value that entered at a proxy so it stays the same across services. |
 | Metrics? | **Ready** | [[Std App Metrics]]. Counters, gauges, and distributions as a value, each declaring its unit, with a bound on how many label combinations one metric may have — the combination that would exceed it is refused and counted rather than evicting a series. |
 | Health, separated into liveness and readiness? | **Ready** | [[Std App Health]]. They are separate types: a liveness judgement is handed a reading rather than a connection, and declaring it `comptime` makes reaching a clock or a socket a compile error rather than a review note. |
-| Distributed tracing? | **Absent** | Not designed. |
+| Distributed tracing? | **Ready** | [[Std App Trace]], read by [[Std Http Server Guard]] so every service in a chain agrees which piece of work a request is part of. A header that cannot be read starts a new trace rather than refusing the request. |
 | Configuration from files, environment, and arguments? | **Ready** | [[Std App Config]]. Four layers, fixed order, one spelling per key. |
 | Configuration per environment? | **Ready** | Profiles select a section; the machine's own settings are never profiled away. |
 | Does startup order have to be guessed? | **Ready** | No. It is a list. Stop is the reverse. |
