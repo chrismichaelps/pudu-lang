@@ -152,7 +152,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | More than one language on the page? | **Absent** | No message catalogue, no formatting by locale. [[Std Fmt]] shapes values without a locale. |
 | Accessible markup? | **Partial** | Any attribute can be written, and an image requires its description at the call. Nothing checks the rest. |
 | Multi-tenancy? | **Partial** | [[Std App Access]] decides on an attribute of the principal, so a per-tenant requirement is expressible. Nothing separates tenants' data or bounds their limits. |
-| File uploads? | **Absent** | Multipart bodies are not parsed. [[Std App Bind]] reads forms and documents; a file is neither. |
+| File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
 | Background work outside a request? | **Partial** | [[Std Concurrent]] starts workers; there is no queue, no retry, no schedule. |
 | Feature flags? | **Absent** | A setting can stand in for one. |
 | Sending mail? | **Absent** | No transport. |
