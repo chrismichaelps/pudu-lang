@@ -3,6 +3,7 @@ module Pudu.Compiler.ProgramSpec (programProperties) where
 import Data.Text (Text)
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, threadDelay, tryTakeMVar)
 import Data.IORef (modifyIORef', newIORef, readIORef)
+import System.Timeout (timeout)
 import Data.Maybe (isJust, isNothing)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
@@ -52,6 +53,7 @@ programProperties =
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
   , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)
   , ("foreign ownership serializes release and call use", testForeignOwnershipStore)
+  , ("foreign teardown ends even while a native call is inside", testForeignTeardownEnds)
   ]
 
 foreign import ccall unsafe "pudu_ffi_cpp_anchor"
@@ -131,6 +133,39 @@ testForeignHandles = do
         (afterCleanup - beforeCleanup === 3)
     , counterexample "no native object remains live after any evaluator exit"
         (activeAfter === activeBefore)
+    ]
+
+{-| Teardown ends, and leaves alone what somebody is inside.
+
+    An unbounded wait here was a program that hangs on exit with nothing said
+    whenever a foreign call does not return — the one failure that hides every
+    other. The resource still leased keeps its claim and its destructor is not
+    called, because freeing an address another thread is holding is the fault
+    this store exists to prevent. -}
+testForeignTeardownEnds :: IO Property
+testForeignTeardownEnds = do
+  store <- newForeignStore
+  idleCleanups <- newIORef (0 :: Int)
+  leasedCleanups <- newIORef (0 :: Int)
+  _ <- claimOwned store 11 (modifyIORef' idleCleanups (+ 1))
+  _ <- claimOwned store 22 (modifyIORef' leasedCleanups (+ 1))
+  entered <- newEmptyMVar
+  finishUse <- newEmptyMVar
+  _ <- forkIO $ do
+    _ <- withOwned store [22] (putMVar entered () >> takeMVar finishUse)
+    pure ()
+  takeMVar entered
+  ended <- timeout 20000000 (closeForeignStore store)
+  idle <- readIORef idleCleanups
+  leased <- readIORef leasedCleanups
+  putMVar finishUse ()
+  pure $ conjoin
+    [ counterexample "teardown ends rather than waiting for a call that is still inside"
+        (property (isJust ended))
+    , counterexample "a resource nobody is inside runs its declared destructor"
+        (idle === 1)
+    , counterexample "a resource somebody is inside is left alone rather than freed under them"
+        (leased === 0)
     ]
 
 testForeignOwnershipStore :: IO Property

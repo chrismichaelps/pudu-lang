@@ -72,6 +72,25 @@ all leases reach zero, then performs cleanup outside STM.
 
 ## Grill Log
 
+- **Q:** Wait as long as it takes for every lease to close at teardown? **A:** No;
+  wait a bounded five seconds and then stop. _Rationale:_ teardown has to end. An
+  unbounded wait is a program that hangs on exit with nothing said whenever a
+  foreign call does not return, which is the one failure that hides every other.
+  _Rejected:_ an unbounded `retry`.
+- **Q:** Free what is still leased when the wait ends? **A:** No; leave it.
+  _Rationale:_ another thread is inside the library holding that address, and
+  freeing underneath it is the exact fault this store exists to prevent. The
+  process is ending, so the memory returns anyway — an abandoned resource costs
+  nothing and a destructor called under a live user costs everything.
+  _Rejected:_ freeing regardless; refusing to exit.
+- **Q:** Bound the wait with `System.Timeout.timeout`? **A:** No; a deadline in
+  STM. _Rationale:_ `timeout` bounds a computation by throwing to the thread
+  running it, which makes the guarantee depend on an asynchronous exception
+  reaching a thread parked in `retry`. `registerDelay` with `orElse` is the same
+  bound expressed as a transaction, and it either drains or takes what is idle
+  without leaving the question of delivery open. _Rejected:_ an asynchronous
+  bound around a blocking transaction.
+
 - **Q:** Report a handle live and call native code after releasing the lock? **A:** No; lease it for
   the complete call interval. _Rationale:_ another thread could destroy it between the check and
   dereference. _Rejected:_ an atomic membership test with an unprotected call.

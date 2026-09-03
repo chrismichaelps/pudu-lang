@@ -15,7 +15,9 @@ import Control.Concurrent.STM
   , TVar
   , atomically
   , newTVarIO
+  , orElse
   , readTVar
+  , registerDelay
   , retry
   , writeTVar
   )
@@ -96,10 +98,36 @@ restoreOwned (ForeignStore table) address resource = atomically $ do
   held <- readTVar table
   writeTVar table (Map.insert address resource held)
 
-{-| Drain and release every resource still owned by this evaluation. -}
+{-| How long teardown waits for native calls still inside a library.
+
+    Generous against any call a program is likely to be in the middle of, and
+    finite because teardown has to end. -}
+drainPatience :: Int
+drainPatience = 5 * 1000 * 1000
+
+{-| Drain and release every resource still owned by this evaluation.
+
+    Teardown waits for leases to close, and then stops waiting. A resource
+    still leased when the wait ends is left alone rather than destroyed: another
+    thread is inside the library holding that address, and freeing underneath it
+    is the fault this whole store exists to prevent. The process is ending, so
+    the memory returns anyway — an abandoned resource costs nothing, and a
+    destructor called under a live user costs everything.
+
+    Waiting without a bound was the other option and is worse: a program whose
+    foreign call never returns would hang on exit with nothing said, which is
+    the one failure that hides every other. -}
 closeForeignStore :: ForeignStore -> IO ()
 closeForeignStore (ForeignStore table) = do
-  resources <- atomically (drain table)
+  deadline <- registerDelay drainPatience
+  resources <-
+    atomically
+      ( drain table
+          `orElse` ( do
+                       expired <- readTVar deadline
+                       if expired then drainUnleased table else retry
+                   )
+      )
   mapM_ cleanupQuietly resources
 
 drain :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
@@ -110,6 +138,14 @@ drain table = do
     else do
       writeTVar table Map.empty
       pure (Map.elems held)
+
+{-| Everything nobody is inside, when the wait has ended. -}
+drainUnleased :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
+drainUnleased table = do
+  held <- readTVar table
+  let (idle, busy) = Map.partition ((== 0) . resourceUses) held
+  writeTVar table busy
+  pure (Map.elems idle)
 
 cleanupQuietly :: ForeignResource -> IO ()
 cleanupQuietly resource = do
