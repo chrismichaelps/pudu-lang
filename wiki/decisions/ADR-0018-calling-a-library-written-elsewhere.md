@@ -37,7 +37,7 @@ so the decision below is about what to expose rather than about what is possible
 
 ```pudu
 foreign "raylib" version "5" {
-  fn InitWindow(width: I32, height: I32, title: CText) -> ()
+  fn InitWindow(width: Int32, height: Int32, title: Str) -> ()
   fn WindowShouldClose() -> Bool
   fn BeginDrawing() -> ()
   fn EndDrawing() -> ()
@@ -51,18 +51,29 @@ itself" wants one place to look rather than a search. The declared name is what 
 asked for, not a path — a path is a claim about somebody else's machine, which this library has
 refused everywhere else.
 
-**The types that may cross are a stated, small set.** The integer widths, the two floating widths,
-a boolean, text as the C representation, an opaque pointer, and a record whose fields are themselves
-crossable. What is not on that list does not cross. A general marshaller for arbitrary types is how
-an interface becomes unable to say what it does, and every value it fails on fails at run time.
+**The types that may cross are a stated, small set, and they are this language's own types.** The
+integer widths, the two floating widths, a boolean, text, and nothing. `Int32` is already a type
+here, not a spelling invented for the boundary, so a foreign signature is an ordinary signature: it
+is checked by the ordinary checker, shown by the ordinary hover, and a caller passing the wrong
+width is told so the same way as anywhere else. Every binding language that invents its own parallel
+set of width names ends up spreading them through the code that calls the binding. What is not on
+that list does not cross. A general marshaller for arbitrary types is how an interface becomes
+unable to say what it does, and every value it fails on fails at run time.
+
+**The C library is named rather than filed.** `foreign "c"` resolves to the running program's own
+symbols, because every platform links the C library and every platform files it under a different
+name — `libc.so.6` here, `libSystem.B.dylib` there, and in one common case a linker script rather
+than a library at all. Nearly every language's C bindings carry a table of those names and work on
+the machines the table knew about. Asking the program for its own symbols is correct everywhere and
+costs nothing.
 
 **Ownership is part of the declaration, and that is the question the standard library left open.**
 A pointer a foreign library hands back is one of two things, and the declaration says which:
 
 ```pudu
 foreign "raylib" {
-  fn LoadTexture(path: CText) -> owned Texture by UnloadTexture
-  fn GetFrameTime() -> F32
+  fn LoadTexture(path: Str) -> owned Texture by UnloadTexture
+  fn GetFrameTime() -> Float32
 }
 ```
 
@@ -87,27 +98,29 @@ what somebody meant.
 
 The mapping is stated rather than inferred, and the widths are explicit. C's own `int` is not a
 width — it is thirty-two bits nearly everywhere and that is a habit rather than a promise — so a
-declaration names `I32` and never `Int`. The same for `size_t`, `long`, and an enum, each of which
+declaration names `Int32` and never `Int`. The same for `size_t`, `long`, and an enum, each of which
 is a different size on some machine somebody runs.
 
 | Declared | What crosses | Notes |
 |---|---|---|
-| `I8` `I16` `I32` `I64` `U8` `U16` `U32` `U64` | the integer of that exact width | never a C `int`; the width is the declaration's job |
-| `F32` `F64` | the two floating widths | |
+| `Int8` `Int16` `Int32` `Int64` `UInt8` `UInt16` `UInt32` `UInt64` | the integer of that exact width | never a C `int`; the width is the declaration's job, and a value that does not fit is refused rather than wrapped |
+| `Float32` `Float64` | the two floating widths | placed in their own registers, which is the case a boundary assembled by hand gets wrong first |
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
-| `CText` | a pointer to bytes ending in a nought | borrowed for the call unless declared `owned` |
-| `Ptr[T]` | an address | opaque; nothing is read through it without a further declaration |
-| `Opt[Ptr[T]]` | an address that may be nought | the only place a nought crosses, and it becomes `None` here |
-| a record of the above | by value | admitted only when every field is admitted |
+| `Str` | a pointer to bytes ending in a nought | copied for the call and freed after; text containing a nought is refused, since the other side would read less than the text says |
 | `()` | nothing | a function returning nothing |
+
+**A pointer is not yet on this list.** `Ptr[T]`, an address that may be nought, and a record crossing
+by value are the next slice: each needs a runtime representation of its own, and `owned … by …`
+exists in the declaration form already so that slice adds a type rather than a syntax. Until then a
+declaration naming one is refused where it is written.
 
 Everything else is refused at the declaration, which is the point of stating the list: a type that
 cannot cross is a diagnostic where it is written rather than a fault when it is called.
 
-**A pointer that may be absent says so.** C has one representation for "no answer" and "the answer is
-address zero", and a declaration that does not distinguish them turns the first into a crash on the
-next use. `Opt[Ptr[T]]` is how a nought is admitted, and it becomes `None` before it leaves the
-boundary — which is what the language already required of `null`.
+**A pointer that may be absent will say so.** C has one representation for "no answer" and "the
+answer is address zero", and a declaration that does not distinguish them turns the first into a
+crash on the next use. `Opt[Ptr[T]]` is how a nought will be admitted, becoming `None` before it
+leaves the boundary — which is what the language already requires of `null`.
 
 ## On C++ specifically, which is not the same question
 
@@ -138,7 +151,8 @@ A declaration is the only description of a foreign function that exists — ther
 and no definition to jump to elsewhere — which makes it more important here than for ordinary code,
 not less:
 
-- **Its signature is what hover shows**, and hover says it is foreign. A reader looking at a call
+- **Its signature is what hover shows**, and hover says it is foreign, naming the library and saying
+  the type is asserted rather than proved. A reader looking at a call
   should learn from the editor that the type is asserted rather than proved, because that is the
   thing that decides how carefully they check it.
 - **Completion offers the names in the block**, with their signatures, since nothing else in the
@@ -196,10 +210,16 @@ assertion; the language already has a word for that, and using it costs one line
 
 ## Validation
 
-The mechanism is verified against a library present on every machine before any of the above is
-built on it. Each slice adds its own checks: that a declaration's types are the ones admitted, that
-a call outside `unsafe` is refused, that an owned value names its release, and that releasing one
-twice is refused.
+The mechanism was verified against a library present on every machine before any of the above was
+built on it, and the first slice is checked by a program that calls it: text crossing as bytes
+ending in a nought, a narrow integer and a wide one reaching different symbols, doubles arriving in
+their own registers, and a mixture of the classes — which is the case a boundary assembled by hand
+gets wrong first, because arguments of different classes are placed by different rules and one
+counted into the wrong place arrives as whatever was already there.
+
+The declaration's own refusals are checked too: a type that cannot cross, an owned result naming a
+release the library does not declare, and a call made without the capability. What remains for the
+pointer slice is that releasing an owned value twice is refused.
 
 ## Referenced by
 

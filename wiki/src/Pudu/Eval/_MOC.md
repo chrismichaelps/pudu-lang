@@ -25,6 +25,7 @@ tags: [moc, module]
 - [[Eval Dispatch]] — array method dispatch (currently inline in Eval.hs, extraction planned).
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
 - [[Eval Value]] — runtime values, and the total order the keyed collections are held in.
+- [[Eval Foreign]] — the call into a library written elsewhere, and every check made before the value leaves.
 - [[Eval Env]] — environment frames, control unwinding, and abort diagnostics.
 - [[Eval Match]] — total pattern matching against values.
 - [[Eval Operator]] — unary, binary, member, index, and `?` semantics.

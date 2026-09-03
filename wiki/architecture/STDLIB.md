@@ -573,9 +573,12 @@ mistake rather than preventing it.
 
 The interpreter now has narrow host boundaries for file handles, sockets, workers, synchronization,
 and cryptographic primitives. They are not a general foreign interface: Pudu source cannot name a C
-symbol, invent a resource token, or assert host ownership. That restriction lets `Std.Net`,
-`Std.Http.Server`, and the PostgreSQL-specific `Std.Db` exist without prematurely settling
-`Std.Ffi`; every host exception is translated into the library's declared `Result` error.
+symbol through them, invent a resource token, or assert host ownership. That restriction let
+`Std.Net`, `Std.Http.Server`, and the PostgreSQL-specific `Std.Db` exist without prematurely settling
+how a library written elsewhere is reached; every host exception is translated into the library's
+declared `Result` error. Naming a C symbol is now possible, but through a `foreign` declaration in
+the language — where it is checked, capability-gated, and visible — rather than through one of these
+boundaries.
 
 ### On HTTP
 
@@ -720,12 +723,13 @@ dependencies are its own files plus the compiler it is built with, and that is t
   admitting one, Pudu needs to decide whether it can be checked at compile time — a literal pattern
   can be, a computed one cannot — and shipping the unchecked form first would settle that question by
   default.
-- **`Std.Ffi`.** Both open questions are settled by [[ADR-0018 Calling a Library Written Elsewhere]]:
-  the `foreign` capability from [[Unsafe Capabilities]] gates every call, and ownership is named in
-  the declaration — an owned pointer carries the function that releases it. The mechanism was
-  verified against the C library present on every machine before the decision was taken. What is
-  still open is callbacks into this language, which thread a call runs on, and where a library comes
-  from.
+- **`Std.Ffi`.** No longer a library question. [[ADR-0018 Calling a Library Written Elsewhere]]
+  settled both open questions and the first slice is built: a `foreign` block is a declaration in the
+  language rather than a module in the library, the `foreign` capability from [[Unsafe Capabilities]]
+  gates every call, and ownership is named in the declaration — an owned result carries the function
+  that releases it. Integers, the two floating widths, a boolean, and text cross, in this language's
+  own types. What is still open is a pointer, callbacks into this language, which thread a call runs
+  on, and where a library comes from.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.

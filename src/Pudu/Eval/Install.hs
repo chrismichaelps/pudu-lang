@@ -9,7 +9,9 @@ module Pudu.Eval.Install
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Pudu.Foreign.Crossing (Crossing (NothingCrossing), crossingFor)
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -23,6 +25,7 @@ import Pudu.Eval.Value
   ( Builtin (..)
   , builtinName
   , Closure (..)
+  , ForeignBinding (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -30,8 +33,11 @@ import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Expression (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , Impl (..)
+  , Parameter (..)
   , Trait (..)
   , TypeDeclarationValue (..)
   , TypeSyntax (..)
@@ -108,7 +114,31 @@ installDeclaration traits (Located _ declaration) = case declaration of
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
+  ForeignDeclaration value -> mapM_ (installForeign value) (foreignFunctions value)
   _ -> pure ()
+
+{-| One foreign function becomes a value under its own name.
+
+    Everything the call needs is settled here rather than looked up when it
+    runs: the library, the symbol, and how each value crosses. A call is then a
+    call, and a declaration that could not be resolved into one has already been
+    reported by the checker. -}
+installForeign :: Foreign -> Located ForeignFunction -> Evaluator ()
+installForeign library (Located _ function) =
+  bind (locatedValue (foreignName function))
+    ( ForeignValue
+        ForeignBinding
+          { foreignBindingLibrary = locatedValue (foreignLibrary library)
+          , foreignBindingSymbol = locatedValue (foreignName function)
+          , foreignBindingArguments =
+              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor)
+              | Located _ parameter <- foreignParameters function
+              ]
+          , foreignBindingResult =
+              fromMaybe NothingCrossing (crossingFor (foreignResult function))
+          , foreignBindingReleasedBy = locatedValue <$> foreignReleasedBy function
+          }
+    )
 
 {-| An implementation's functions are installed under a key naming the type they
     implement for, so a member access on a value of that type finds them. -}

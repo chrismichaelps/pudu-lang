@@ -8,6 +8,7 @@ import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Syntax
   ( Declaration (..)
+  , Foreign (..)
   , Function (..)
   , Import (..)
   , Trait (..)
@@ -239,4 +240,5 @@ declarationShape (Located _ declaration) = case declaration of
   TraitDeclaration value -> "trait " <> locatedValue (traitName value)
   ImplDeclaration _ -> "impl"
   MacroDeclaration _ -> "macro"
+  ForeignDeclaration value -> "foreign " <> locatedValue (foreignLibrary value)
   InvalidDeclaration -> "invalid"

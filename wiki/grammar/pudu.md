@@ -339,6 +339,26 @@ function_decl    = "unsafe", capabilities?, ... ;
 - Public safe APIs wrapping unsafe code must state and enforce their invariants. The current checker cannot prove this through ordinary function parameters until function types carry unsafe capability metadata.
 - `null` requires the `null` capability. It has no type until raw pointers exist, so writing it reports which slice will give it one rather than admitting an untyped value.
 
+## Calling a Library Written Elsewhere
+
+```ebnf
+foreign_decl     = "export"?, "foreign", string, ("version", string)?,
+                   "{", foreign_fn*, "}" ;
+foreign_fn       = "fn", identifier, "(", parameters?, ")",
+                   ("->", "owned"?, type, ("by", identifier)?)? ;
+```
+
+- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `owned`, and `by`. Reserving four common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
+- A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
+- `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.
+- The types that may cross are stated: `Int8` `Int16` `Int32` `Int64`, `UInt8` `UInt16` `UInt32` `UInt64`, `Float32` `Float64`, `Bool`, `Str`, and `()`. These are the language's own types, so a foreign signature is an ordinary signature and a caller passing the wrong width is told so by the ordinary checker. Anything else is refused at the declaration, which is the point of stating the list.
+- `Str` crosses as bytes ending in a nought, copied for the call and freed after. Text containing a nought is refused, because the other side reads to the first one and would see less than the text says.
+- An integer that does not fit the width it crosses as is refused rather than wrapped. Silent wraparound at this boundary is how a program calling a library keeps running with a value it never computed.
+- `owned T by release` names the function that frees a result, and that function must be declared in the same block. A result without `owned` is borrowed: valid for the call that produced it and not to be kept.
+- Every call needs the `foreign` capability. The signature is an assertion by whoever wrote it that nothing can check — a wrong width is not a diagnostic, it is a corrupted stack — and `unsafe` is where this language already says a thing is asserted rather than proved.
+- A foreign call is an effect, so a `comptime` body cannot make one: a constant is folded while the compiler runs, and what a program compiles to must not depend on what was installed on the machine that compiled it.
+- A library written in C++ is reachable through the surface it exports as `extern "C"`, and not otherwise. Its symbol names encode its parameter types and differ between compilers, a method needs an object whose layout its compiler decided, a template exports nothing until something instantiates it, and an exception crossing the boundary is undefined. [[ADR-0018 Calling a Library Written Elsewhere]] states this at length.
+
 ## Copy Eligibility
 
 - `Copy` is a compiler-controlled marker used by ownership checking, not an ordinary trait that user code may implement manually.
@@ -361,7 +381,6 @@ function_decl    = "unsafe", capabilities?, ... ;
 
 ## Senior Definition Needed
 
-- Stable syntax for unsafe foreign declarations and C ABI layouts will be finalized before the FFI slice.
 - `comptime` and unsafe capability metadata must become part of callable types before the compiler can enforce either restriction through aliases and higher-order calls.
 - Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 

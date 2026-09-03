@@ -21,6 +21,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      # Calling a library written elsewhere assembles the call at run time,
+      # which needs the headers for the machine's own dynamic caller. The
+      # runner has the library and not the headers.
+      - name: Install the dynamic call headers
+        run: sudo apt-get update && sudo apt-get install -y libffi-dev
       - run: cabal update
       # A fresh checkout has nothing built, so this cannot answer "up to date"
       # without compiling — which is how a local `-Werror` run passed for a week

@@ -18,6 +18,7 @@ module Pudu.Eval.Value
   , stringMethodName
   , Closure (..)
   , Value (..)
+  , ForeignBinding (..)
   , OrdValue (..)
   , compareValues
   , arrayMethodName
@@ -37,6 +38,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.DecimalLiteral (Decimal, decimalCompare)
 import Pudu.FloatLiteral (FloatWidth)
+import Pudu.Foreign.Crossing (Crossing)
 import Pudu.Frontend.Syntax.Tree (Function)
 import Pudu.Source (Span)
 
@@ -92,6 +94,28 @@ data Value
   | SetMethodValue !SetMethod !Value
   | BytesMethodValue !BytesMethod !Value
   | BucketsMethodValue !BucketsMethod !Value
+  {-| A function that is somebody else's, reached through the boundary the
+      declaration describes.
+
+      It is a value like any other so that passing one around, naming one, and
+      calling one all work the way calling anything here works. What is not like
+      anything else is that its type was asserted rather than proved, which is
+      why reaching it needed the foreign capability at the call site. -}
+  | ForeignValue !ForeignBinding
+  deriving stock (Eq, Show)
+
+{-| Everything the runtime needs to make one foreign call.
+
+    Resolved from the declaration rather than looked up per call: the library
+    name, the symbol, and how each value crosses. Nothing here is decided while
+    the program is running, so a call is a call rather than a search. -}
+data ForeignBinding = ForeignBinding
+  { foreignBindingLibrary :: !Text
+  , foreignBindingSymbol :: !Text
+  , foreignBindingArguments :: ![Crossing]
+  , foreignBindingResult :: !Crossing
+  , foreignBindingReleasedBy :: !(Maybe Text)
+  }
   deriving stock (Eq, Show)
 
 {-| A plain `Int`, for the counts the runtime itself produces: a length, an
@@ -447,6 +471,7 @@ shapeRank value = case value of
   BytesMethodValue _ _ -> 22
   BucketsValue _ -> 23
   BucketsMethodValue _ _ -> 24
+  ForeignValue _ -> 25
 
 
 {-| The name a text method answers to, which is the same spelling the checker

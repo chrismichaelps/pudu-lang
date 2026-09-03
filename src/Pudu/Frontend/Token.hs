@@ -54,7 +54,6 @@ data Keyword
   | KwFalse
   | KwNull
   | KwUnsafe
-  | KwForeign
   | KwWith
   | KwScope
   | KwDynamic
@@ -201,7 +200,6 @@ keywordText keyword =
     KwFalse -> "false"
     KwNull -> "null"
     KwUnsafe -> "unsafe"
-    KwForeign -> "foreign"
     KwWith -> "with"
     KwScope -> "scope"
     KwDynamic -> "dynamic"

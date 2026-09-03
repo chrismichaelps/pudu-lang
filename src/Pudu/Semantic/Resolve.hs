@@ -18,6 +18,8 @@ import Pudu.Frontend.Syntax.Tree
   , FieldDeclaration (..)
   , FieldInit (..)
   , FieldPattern (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , FunctionBody (..)
   , Impl (..)
@@ -193,7 +195,18 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
   MacroDeclaration _ -> pure ()
-  ForeignDeclaration _ -> pure ()
+  {-| Every function a foreign block declares is a module-scope name, since the
+      declaration is the only definition of it that exists. The block's own
+      visibility carries to all of them: they were written together because they
+      belong to one library, and exporting them one at a time would let a caller
+      reach half of a boundary. -}
+  ForeignDeclaration value ->
+    mapM_
+      ( \(Located _ function) ->
+          declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False
+            (foreignName function)
+      )
+      (foreignFunctions value)
   InvalidDeclaration -> pure ()
 
 {-| Variants live in their type's namespace, so they are recorded as symbols but
@@ -227,8 +240,17 @@ walkDeclaration (Located _ declaration) = case declaration of
     mapM_ walkConstraint (implConstraints value)
     mapM_ (\member -> walkFunction (locatedValue member)) (implFunctions value)
   MacroDeclaration _ -> pure ()
-  ForeignDeclaration _ -> pure ()
+  ForeignDeclaration value ->
+    mapM_ (walkForeignFunction . locatedValue) (foreignFunctions value)
   InvalidDeclaration -> pure ()
+
+{-| A foreign signature's types are resolved like any other, so a type it names
+    that does not exist is reported where it is written. There is no body to
+    walk: the body is somebody else's. -}
+walkForeignFunction :: ForeignFunction -> Resolver ()
+walkForeignFunction function = do
+  mapM_ (mapM_ walkType . parameterType . locatedValue) (foreignParameters function)
+  walkType (foreignResult function)
 
 {-| A parameter is visible to the defaults of later parameters and to the body,
     which is exactly the left-to-right rule for default arguments. -}

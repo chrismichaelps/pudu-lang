@@ -273,6 +273,7 @@ testProgramEvaluation = do
   spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   cached <- runEntry "test-fixtures/stdlib/UsesCache.pudu"
   posted <- runEntry "test-fixtures/stdlib/UsesMail.pudu"
+  reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -710,6 +711,16 @@ testProgramEvaluation = do
     , counterexample
         "a message cannot carry more than it says"
         (posted === Just "46")
+    {-| A library written elsewhere, actually called. Text crossing as bytes
+        ending in a nought, a narrow integer and a wide one reaching different
+        symbols, doubles arriving in their own registers, and a mixture of the
+        classes — which is the case a boundary assembled by hand gets wrong
+        first, because arguments of different classes are placed by different
+        rules and one counted into the wrong place arrives as whatever was
+        there. [[ADR-0018]] states what may cross. -}
+    , counterexample
+        "a library written elsewhere is reached through a declared boundary"
+        (reached === Just "12")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

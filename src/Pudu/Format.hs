@@ -418,6 +418,10 @@ wantsSpace leftShape shape before after = case (before, after) of
     {-| `fn(A) -> B` names a function type and `fn(x: Int) => x` writes one, and
         both are spelled tight. -}
     Keyword KwFn -> True
+    {-| `unsafe(foreign)` names the abilities a region is granted rather than
+        grouping a condition, so it is spelled tight like an argument list —
+        which is what every diagnostic that asks a reader to write one shows. -}
+    Keyword KwUnsafe -> True
     Symbol symbol -> symbol `elem` (closers <> [SymBang, SymQuestion])
     _ -> False
 

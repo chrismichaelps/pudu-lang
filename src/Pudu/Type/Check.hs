@@ -93,6 +93,7 @@ import Pudu.Type.Value
   , Type (..)
   )
 import Pudu.Type.Interface (ImportTypes)
+import Pudu.Type.Check.Foreign (checkForeign, declareForeign)
 import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
@@ -150,6 +151,7 @@ declareSignature declared traits (Located _ declaration) = case declaration of
   TypeDeclaration value -> declareConstructors declared value
   ImplDeclaration value -> declareMethods declared traits value
   TraitDeclaration value -> declareTraitMembers declared value
+  ForeignDeclaration value -> declareForeign value
   _ -> pure ()
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
@@ -222,6 +224,7 @@ checkDeclaration declared (Located _ declaration) = case declaration of
       mapM_
         (checkMember (implAliases declared value) (implRigid value) (implBounds declared value) Nothing)
         (implFunctions value)
+  ForeignDeclaration value -> checkForeign value
   _ -> pure ()
 
 checkFunctionWith

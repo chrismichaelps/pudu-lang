@@ -16,6 +16,9 @@
       "include": "#declarations"
     },
     {
+      "include": "#foreign"
+    },
+    {
       "include": "#keywords"
     },
     {
@@ -197,6 +200,44 @@
         {
           "name": "keyword.operator.arithmetic.pudu",
           "match": "[+\\-*/%]"
+        }
+      ]
+    },
+    "foreign": {
+      "patterns": [
+        {
+          "name": "meta.declaration.foreign.pudu",
+          "begin": "^\\s*(?:(export)\\s+)?(foreign)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.pudu"
+            },
+            "2": {
+              "name": "keyword.control.foreign.pudu"
+            }
+          },
+          "end": "(?<=\\})",
+          "patterns": [
+            {
+              "name": "keyword.other.foreign.pudu",
+              "match": "\\b(version|owned|by)\\b"
+            },
+            {
+              "include": "#comments"
+            },
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#keywords"
+            },
+            {
+              "include": "#types"
+            },
+            {
+              "include": "#numbers"
+            }
+          ]
         }
       ]
     }

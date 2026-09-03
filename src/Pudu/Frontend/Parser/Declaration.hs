@@ -8,6 +8,7 @@ import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.Declaration.Function (parseFunction)
 import Pudu.Frontend.Parser.Declaration.Import (parseImport)
 import Pudu.Frontend.Parser.Declaration.Macro (parseMacro)
+import Pudu.Frontend.Parser.Declaration.Foreign (parseForeign)
 import Pudu.Frontend.Parser.Declaration.Trait (parseImpl, parseTrait)
 import Pudu.Frontend.Parser.Declaration.Type (parseTypeDeclaration)
 import Pudu.Frontend.Parser.Name (parseModuleName)
@@ -119,6 +120,11 @@ parseTopDeclaration kind = do
     Keyword KwType -> parseTypeDeclaration visibility
     Keyword KwTrait -> parseTrait visibility
     Keyword KwImpl -> parseImpl
+    {-| `foreign` starts a declaration without being reserved anywhere else.
+        Reserving it would break every program that had used the word for a
+        variable, and a language that costs its own users a rename to gain a
+        feature has chosen the feature over them. -}
+    Identifier "foreign" -> parseForeign visibility
     Keyword reserved | isReservedDeclaration reserved -> reservedDeclaration
     _ -> unexpectedModuleToken
 

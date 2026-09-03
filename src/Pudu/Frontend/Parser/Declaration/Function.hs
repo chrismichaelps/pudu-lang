@@ -2,6 +2,8 @@
 module Pudu.Frontend.Parser.Declaration.Function
   ( parseFunction
   , parseFunctionValue
+  , parseParameters
+  , parseReturnType
   ) where
 
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)

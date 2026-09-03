@@ -22,6 +22,7 @@ tags: [moc, module]
 - [[src/Pudu/Repl/_MOC|REPL modules]] — the `puduci` session, its commands, and its structural outline.
 - [[Diagnostic Render]] — human-readable diagnostics with source excerpts and carets.
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
+- [[src/Pudu/Foreign/_MOC|Foreign modules]] — reaching a library written elsewhere: what may cross, and how a call is carried.
 - [[src/Pudu/Frontend/_MOC|Frontend modules]] — lossless lexing, recovery-capable untyped syntax, and the complete first parser slice.
 
 ## Referenced by

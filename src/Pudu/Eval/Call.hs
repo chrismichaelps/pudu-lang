@@ -51,6 +51,7 @@ import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
+import Pudu.Eval.Foreign (callForeign)
 import Pudu.Eval.Env
   ( tally
   , currentConcurrentStore
@@ -139,6 +140,7 @@ dispatchCall :: CallNeeds -> Span -> Value -> [Value] -> Evaluator Value
 dispatchCall needs spanValue target values =
   case target of
     FunctionValue closure -> callClosure needs closure values (Just spanValue)
+    ForeignValue binding -> callForeign spanValue binding values
     VariantValue name [] -> pure (VariantValue name values)
     BuiltinValue PanicBuiltin -> callPanic spanValue values
     BuiltinValue CharFromCodeBuiltin -> callCharFromCode spanValue values

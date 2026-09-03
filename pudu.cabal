@@ -51,6 +51,7 @@ library
     Pudu.Eval.Entropy
     Pudu.Eval.Install
     Pudu.Eval.Env
+    Pudu.Eval.Foreign
     Pudu.Eval.Handle
     Pudu.Eval.Hash
     Pudu.Eval.HashMap
@@ -79,6 +80,9 @@ library
     Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block
+    Pudu.Foreign.Call
+    Pudu.Foreign.Crossing
+    Pudu.Frontend.Parser.Declaration.Foreign
     Pudu.Frontend.Parser.Declaration.Function
     Pudu.Frontend.Parser.Declaration.Generic
     Pudu.Frontend.Parser.Declaration.Trait
@@ -125,6 +129,7 @@ library
     Pudu.Semantic.Interface
     Pudu.Type
     Pudu.Type.Check
+    Pudu.Type.Check.Foreign
     Pudu.Type.Check.Import
     Pudu.Type.Check.Call
     Pudu.Type.Check.Collection
@@ -153,6 +158,8 @@ library
     Pudu.Semantic.Scope
     Pudu.Semantic.Symbol
     Pudu.Source
+  c-sources:        cbits/pudu_ffi.c
+  extra-libraries:  ffi
   build-depends:
     base >=4.20 && <4.23,
     bytestring >=0.11 && <0.13,

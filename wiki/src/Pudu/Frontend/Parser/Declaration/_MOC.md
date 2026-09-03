@@ -13,6 +13,7 @@ tags: [moc, module]
 - [[Parser Type Declaration]] — record, sum, and alias `type` declarations.
 - [[Parser Trait]] — trait contracts and `impl` blocks.
 - [[Parser Macro]] — typed syntax transformers, whose parameters declare the syntax each accepts.
+- [[Parser Declaration Foreign]] — a block declaring a library written elsewhere, the functions it exports, and what releases an owned result.
 
 The submodules accept narrow parser capabilities and never import the declaration orchestrator, preventing the recursive block/expression/declaration knot from becoming a Haskell module cycle.
 

@@ -55,6 +55,8 @@ renderValue value = case value of
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
   BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
   BucketsMethodValue method _ -> "<store method " <> bucketsMethodName method <> ">"
+  ForeignValue binding ->
+    "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
   {-| Bytes print as hexadecimal pairs rather than as the text they might
       decode to. A sequence being inspected is usually one that did not decode,
       and rendering it as text would hide the bytes the reader is looking for
@@ -85,6 +87,7 @@ escape =
     static type. -}
 valueKind :: Value -> Text
 valueKind value = case value of
+  ForeignValue _ -> "foreign function"
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"

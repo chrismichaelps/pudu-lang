@@ -22,6 +22,8 @@ import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Function (..)
   , Impl (..)
   , Macro (..)
@@ -46,6 +48,13 @@ data DocKind
   | DocType
   | DocTrait
   | DocMacro
+  {-| A function of a library written elsewhere, and the library it is in.
+
+      Kept apart from an ordinary function because the difference matters to
+      whoever is reading: its type was asserted by whoever wrote the
+      declaration and proved by nothing, and a reader deciding how carefully to
+      check a call wants to be told that without having to go and look. -}
+  | DocForeign !Text
   deriving stock (Eq, Ord, Show)
 
 {-| @Doc.Entry — one documented name.
@@ -119,6 +128,22 @@ buildIndex tokens types moduleValue =
     ImplDeclaration value -> memberEntries (implMember value) declarationSpan (implFunctions value)
     MacroDeclaration value ->
       [make lowerBound (locatedValue (macroName value)) DocMacro declarationSpan (locatedValue (macroName value))]
+    {-| A foreign declaration is the only description of those functions that
+        exists, so each one carries its own entry: there is no body to read
+        instead and nowhere else the documentation could live. -}
+    ForeignDeclaration value ->
+      snd
+        ( List.mapAccumL
+            ( \previousEnd (Located functionSpan function) ->
+                ( unOffset (spanEnd functionSpan)
+                , make previousEnd (locatedValue (foreignName function))
+                    (DocForeign (locatedValue (foreignLibrary value)))
+                    functionSpan (locatedValue (foreignName function))
+                )
+            )
+            (unOffset (spanStart declarationSpan))
+            (foreignFunctions value)
+        )
     InvalidDeclaration -> []
 
   {-| A member's documentation is bounded by its enclosing declaration rather
@@ -278,6 +303,7 @@ kindLabel kind = case kind of
   DocType -> "type"
   DocTrait -> "trait"
   DocMacro -> "macro"
+  DocForeign _ -> "foreign"
 
 {-| One line, the way a search result lists it: the name, its type, and where it
     came from. -}

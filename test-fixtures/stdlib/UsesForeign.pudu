@@ -1,0 +1,55 @@
+module UsesForeign
+
+/// A library written elsewhere, called from here.
+///
+/// The functions are the C library's own, which every platform already has and
+/// every platform files under a different name — so `"c"` asks the running
+/// program for its own symbols rather than naming a file that exists on one
+/// machine. What is being checked is the boundary rather than the arithmetic:
+/// that text, a narrow integer, and two doubles each arrive as themselves.
+foreign "c" version "1" {
+  fn strlen(text: Str) -> Int64
+  fn abs(value: Int32) -> Int32
+  fn labs(value: Int64) -> Int64
+  fn pow(base: Float64, exponent: Float64) -> Float64
+  fn sqrt(value: Float64) -> Float64
+  fn isalpha(code: Int32) -> Int32
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // Every call needs the capability, because the signature above is asserted
+  // rather than proved and a wrong one is a corrupted stack rather than a
+  // diagnostic. That is what unsafe already means here.
+  unsafe(foreign) {
+    // Text crosses as bytes ending in a nought, copied for the call.
+    if strlen("raylib") == 6i64 { held = held + 1 }
+    if strlen("") == 0i64 { held = held + 1 }
+    if strlen("a longer piece of text") == 22i64 { held = held + 1 }
+
+    // A narrow integer crosses at the width the declaration named, and comes
+    // back at it.
+    if abs(-42i32) == 42i32 { held = held + 1 }
+    if abs(0i32) == 0i32 { held = held + 1 }
+    if abs(7i32) == 7i32 { held = held + 1 }
+
+    // A wide one is a different function with a different symbol, which is the
+    // point of the width being in the declaration rather than guessed.
+    if labs(-9000000000i64) == 9000000000i64 { held = held + 1 }
+
+    // Doubles cross in their own registers, which is the case a hand-rolled
+    // boundary gets wrong first.
+    if pow(2.0f64, 10.0f64) == 1024.0f64 { held = held + 1 }
+    if pow(3.0f64, 2.0f64) == 9.0f64 { held = held + 1 }
+    if sqrt(144.0f64) == 12.0f64 { held = held + 1 }
+
+    // And a mixture, since arguments of different classes are placed by
+    // different rules and an argument counted into the wrong one arrives as
+    // whatever was in that register.
+    if isalpha(65i32) != 0i32 { held = held + 1 }
+    if isalpha(48i32) == 0i32 { held = held + 1 }
+  }
+
+  held
+}

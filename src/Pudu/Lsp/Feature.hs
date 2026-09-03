@@ -121,6 +121,7 @@ kindText kind = case kind of
   DocType -> "type"
   DocTrait -> "trait"
   DocMacro -> "macro"
+  DocForeign library -> "foreign function from " <> library <> ", asserted rather than proved"
 
 locationOf :: Text -> Text -> DocEntry -> Json
 locationOf uri content entry =
@@ -166,6 +167,7 @@ symbolKind kind = case kind of
   DocType -> 23
   DocTrait -> 11
   DocMacro -> 12
+  DocForeign _ -> 12
 
 {-| Everything the file declares, offered as completions.
 
@@ -197,3 +199,4 @@ completionKind kind = case kind of
   DocType -> 22
   DocTrait -> 8
   DocMacro -> 3
+  DocForeign _ -> 3
