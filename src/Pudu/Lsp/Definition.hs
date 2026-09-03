@@ -2,19 +2,23 @@
 module Pudu.Lsp.Definition (definitionAt) where
 
 import Data.Text (Text)
-import Pudu.Doc (DocEntry (..), DocIndex (..))
 import Pudu.Lsp.Documents (Analysis (..))
-import Pudu.Lsp.Feature (locationOf, wordAt)
+import Pudu.Lsp.Feature (rangeOfOffsets, symbolAt)
 import Pudu.Lsp.Json (Json (..))
+import Pudu.Lsp.Protocol (rangeJson)
+import Pudu.Semantic.Symbol (Symbol (..))
+import Pudu.Source (spanEnd, spanStart, unOffset)
 
 definitionAt :: Text -> Analysis -> Int -> Json
 definitionAt uri value offset =
-  case wordAt (analysisText value) offset >>= declarationNamed (analysisIndex value) of
+  case analysisResolution value >>= (\resolution -> symbolAt resolution offset) >>= symbolSpan of
     Nothing -> JsonNull
-    Just entry -> locationOf uri (analysisText value) entry
-
-declarationNamed :: DocIndex -> Text -> Maybe DocEntry
-declarationNamed index name =
-  case [entry | entry <- indexEntries index, docName entry == name] of
-    entry : _ -> Just entry
-    [] -> Nothing
+    Just definition ->
+      JsonObject
+        [ ("uri", JsonText uri)
+        , ( "range"
+          , rangeJson
+              (rangeOfOffsets (analysisText value)
+                (unOffset (spanStart definition)) (unOffset (spanEnd definition)))
+          )
+        ]

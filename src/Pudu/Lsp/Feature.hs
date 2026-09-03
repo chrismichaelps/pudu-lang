@@ -8,6 +8,8 @@ module Pudu.Lsp.Feature
   , offsetAt
   , positionAt
   , rangeOfOffsets
+  , entryForSymbol
+  , symbolAt
   , wordAt
   ) where
 
@@ -19,6 +21,9 @@ import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Doc.Signature (renderSignature)
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (Position (..), Range (..), rangeJson)
+import Pudu.Semantic.Resolve (Resolution (..))
+import Pudu.Semantic.Symbol (Reference (..), Symbol (..))
+import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 
 {-| The offset in scalars that an editor position names.
 
@@ -80,6 +85,45 @@ entryAt index offset =
     let (start, end) = docSpan entry
      in offset >= start && offset <= end
   width entry = let (start, end) = docSpan entry in end - start
+
+{-| The resolved declaration or reference under a scalar offset. -}
+symbolAt :: Resolution -> Int -> Maybe Symbol
+symbolAt resolution offset = do
+  identifier <- case [referenceSymbol reference | reference <- resolutionReferences resolution
+    , coversSpan offset (referenceSpan reference)] of
+      found : _ -> Just found
+      [] -> symbolId <$> firstCovering (resolutionSymbols resolution)
+  firstMatching identifier (resolutionSymbols resolution)
+ where
+  firstCovering symbols = case [symbol | symbol <- symbols
+    , maybe False (coversSpan offset) (symbolSpan symbol)] of
+      found : _ -> Just found
+      [] -> Nothing
+  firstMatching identifier symbols = case [symbol | symbol <- symbols, symbolId symbol == identifier] of
+    found : _ -> Just found
+    [] -> Nothing
+
+{-| The documentation entry belonging to one resolved declaration symbol. -}
+entryForSymbol :: DocIndex -> Symbol -> Maybe DocEntry
+entryForSymbol index symbol = do
+  definition <- symbolSpan symbol
+  let start = unOffset (spanStart definition)
+      candidates =
+        [ entry
+        | entry <- indexEntries index
+        , docName entry == symbolName symbol
+        , let (entryStart, entryEnd) = docSpan entry
+        , start >= entryStart && start <= entryEnd
+        ]
+  case sortOn entryWidth candidates of
+    found : _ -> Just found
+    [] -> Nothing
+ where
+  entryWidth entry = let (start, end) = docSpan entry in end - start
+
+coversSpan :: Int -> Span -> Bool
+coversSpan offset spanValue =
+  offset >= unOffset (spanStart spanValue) && offset <= unOffset (spanEnd spanValue)
 
 {-| The identifier the cursor is inside, which is what a reader asking for a
     definition is pointing at. -}

@@ -18,11 +18,11 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameSegments)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree (TypeSyntax (..))
 import Data.String (fromString)
 import Pudu.Type.Value (Type (..))
-import qualified Data.List.NonEmpty as NonEmpty
+import Data.List.NonEmpty (NonEmpty (..))
 
 {-| One value's representation on the other side.
 
@@ -55,7 +55,7 @@ data Crossing
 crossingFor :: Set Text -> Located TypeSyntax -> Maybe Crossing
 crossingFor handles (Located _ syntax) = case syntax of
   UnitType -> Just NothingCrossing
-  NamedType path [] -> named (NonEmpty.last (moduleNameSegments path))
+  NamedType (ModuleName (name :| [])) [] -> named name
   _ -> Nothing
  where
   named name

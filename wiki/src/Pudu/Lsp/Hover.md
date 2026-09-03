@@ -27,7 +27,8 @@ hoverAt :: Analysis -> Int -> Json
 ### Governance
 
 - The narrowest compiler-recorded expression type answers ordinary names and expressions.
-- A foreign function name is answered from its documentation entry first so its inferred signature
+- A foreign function is answered from its documentation entry only when the resolver says the
+  declaration or reference under the cursor has that exact symbol identity. Its inferred signature
   remains visible beside the named library and the fact that the signature is asserted, not proved.
 - A declaration entry is a fallback only when no expression type answers; whitespace returns null.
 - A call-site hover carries no declaration range because that range is elsewhere in the document.
@@ -39,8 +40,8 @@ hoverAt :: Analysis -> Int -> Json
 
 ## Algorithm
 
-Read the word at the offset, prefer a matching foreign entry, otherwise read the narrowest inferred
-type, then fall back to the declaration whose span contains the offset.
+Resolve the declaration/reference at the offset, select foreign provenance only for that symbol,
+otherwise read the narrowest inferred type, then fall back to the declaration containing the offset.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -54,6 +55,9 @@ type, then fall back to the declaration whose span contains the offset.
 - **Q:** Return the foreign declaration's range at a call site? **A:** No. _Rationale:_ a hover range
   describes the selected source under the cursor, not a definition elsewhere. _Rejected:_ attaching
   the declaration span to uses.
+- **Q:** Is equal source spelling enough to attach foreign provenance? **A:** No. _Rationale:_ a
+  parameter or local may shadow that name and has a different resolved identity. _Rejected:_ first
+  documentation entry whose text matches the cursor word.
 
 ## Referenced by
 

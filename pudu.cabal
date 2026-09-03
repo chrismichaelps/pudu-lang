@@ -52,6 +52,7 @@ library
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Foreign
+    Pudu.Eval.Method
     Pudu.Eval.Handle
     Pudu.Eval.Hash
     Pudu.Eval.HashMap
@@ -82,6 +83,7 @@ library
     Pudu.Frontend.Parser.Declaration.Block
     Pudu.Foreign.Call
     Pudu.Foreign.Crossing
+    Pudu.Foreign.Ownership
     Pudu.Frontend.Parser.Declaration.Foreign
     Pudu.Frontend.Parser.Declaration.Function
     Pudu.Frontend.Parser.Declaration.Generic

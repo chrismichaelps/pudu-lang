@@ -39,6 +39,8 @@ data Declaration
   | TypeDeclaration !TypeDeclarationValue
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
+  | MacroDeclaration !Macro
+  | ForeignDeclaration !Foreign
   | InvalidDeclaration
 data Foreign = Foreign
   { foreignVisibility :: !Visibility, foreignLibrary :: !(Located Text)
@@ -50,12 +52,14 @@ data ForeignFunction = ForeignFunction
   , foreignReleasedBy :: !(Maybe (Located Text)) }
 data Function = Function
   { functionVisibility :: !Visibility, functionAsync :: !Bool
+  , functionUnsafe :: !(Maybe [Located Capability]), functionComptime :: !Bool
   , functionName :: !(Located Text), functionTypeParams :: ![Located TypeParam]
   , functionParameters :: ![Located Parameter], functionReturn :: !(Maybe (Located TypeSyntax))
   , functionConstraints :: ![Located Constraint]
   , functionBody :: !(Maybe (Located FunctionBody)) }
 data TypeParam = TypeParam
-  { typeParamName :: !(Located Text), typeParamBounds :: ![Located TypeSyntax] }
+  { typeParamName :: !(Located Text), typeParamArity :: !Int
+  , typeParamBounds :: ![Located TypeSyntax] }
 data Constraint = Constraint
   { constraintSubject :: !(Located Text), constraintBounds :: ![Located TypeSyntax] }
 data TypeDeclarationValue = TypeDeclarationValue
@@ -82,7 +86,8 @@ data Parameter = Parameter
   { parameterName :: !(Located Text), parameterType :: !(Maybe (Located TypeSyntax))
   , parameterDefault :: !(Maybe (Located Expression)) }
 data TypeSyntax
-  = NamedType !ModuleName ![Located TypeSyntax] | ReferenceType !Bool !(Located TypeSyntax)
+  = NamedType !ModuleName ![Located TypeSyntax] | DynamicType !ModuleName
+  | ReferenceType !Bool !(Located TypeSyntax)
   | TupleType ![Located TypeSyntax] | FunctionType !Bool ![Located TypeSyntax] !(Located TypeSyntax)
   | UnitType | InvalidType
 data FunctionBody = BlockBody !(Located Block) | ExpressionBody !(Located Expression)

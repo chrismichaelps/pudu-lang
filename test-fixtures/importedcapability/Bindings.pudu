@@ -1,0 +1,18 @@
+module Bindings
+
+/// A library written elsewhere, in a module of its own.
+///
+/// This is the arrangement [[ADR-0018]] recommends: raw bindings in one place,
+/// reached from anywhere. Which makes it the arrangement the capability rule
+/// has to survive — a requirement that stopped at the import would hold
+/// everywhere except where bindings actually live.
+export foreign "c" {
+  fn measure symbol "strlen" (text: Str) -> Int64
+}
+
+/// An ordinary unsafe function, to show the rule is about the declaration
+/// rather than about being foreign.
+export unsafe(raw) fn asserted(value: Int) -> Int { value + 1 }
+
+/// An ordinary function, which a compile-time body may not call.
+export fn ordinary(value: Int) -> Int { value + 1 }

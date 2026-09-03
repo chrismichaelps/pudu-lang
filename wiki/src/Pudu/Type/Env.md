@@ -45,6 +45,11 @@ The exported signatures are the module header's export list.
 
 - **This is over the 500-line default deliberately.** It is seventy-three definitions with a median of seven lines, more than fifty of them accessors over one record. Splitting it means either exporting the state's representation so a second module can reach it, or writing the accessors twice — both trade the encapsulation that makes the state safe for a smaller number. The limit is there to stop a module holding several subjects; this one holds exactly one.
 
+- **A second name for a function inherits the first one's restrictions.** `inheritRestrictions` is
+  how a qualifier or an alias keeps what the declaration asked for: the tables are keyed by the
+  spelling a call resolves against, so a value bound under two names needs its restrictions recorded
+  under both or the second one is unguarded.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].

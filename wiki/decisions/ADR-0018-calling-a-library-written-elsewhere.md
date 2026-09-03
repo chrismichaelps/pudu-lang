@@ -96,7 +96,10 @@ foreign "raylib" {
 `owned … by …` names the function that releases it. The release takes exactly that handle and
 returns nothing. The checker therefore distinguishes a `Texture` from every other address-shaped
 value, while the runtime records each live address and refuses null results, use after release,
-release of an unowned address, and a second release before foreign code runs. A handle result
+release of an unowned address, and a second release before foreign code runs. A native call leases
+each handle for its full duration, so a concurrent release cannot destroy an address while native
+code uses it. Each evaluator run owns a separate resource store and invokes the declared native
+release for every still-live handle on success, early return, or runtime failure. A handle result
 without `owned` remains refused until borrowed lifetimes have a representation; calling it
 "borrowed" without being able to bound that borrow would be a promise the implementation cannot
 keep. The alternative — every foreign pointer looking alike and a comment saying which must be
@@ -130,7 +133,9 @@ is a different size on some machine somebody runs.
 
 **An opaque owned handle is on this list; an arbitrary pointer is not.** A handle is declared by
 `type Name` inside its foreign block, crosses as one machine address, cannot be inspected, and is
-not interchangeable with a handle of another declared name. `Ptr[T]`, borrowed handles, nullable
+not interchangeable with a handle of another declared name. Its spelling in the foreign signature
+must be unqualified; `Other.Name` is another module's nominal type and is refused even when this
+block declares the same basename. `Ptr[T]`, borrowed handles, nullable
 pointers, and records crossing by value remain later slices because each needs a lifetime, absence,
 or layout rule that an opaque owned address does not.
 

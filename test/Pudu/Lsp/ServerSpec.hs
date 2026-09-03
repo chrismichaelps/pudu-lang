@@ -25,6 +25,7 @@ serverProperties =
   , ("the outline lists what the file declares", testSymbols)
   , ("completion offers every documented name", testCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
+  , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
   , ("formatting replaces the document in one edit", testFormatting)
   , ("an unknown request is refused rather than ignored", testUnknownRequest)
   , ("a notification is never answered", testNotificationSilence)
@@ -63,6 +64,18 @@ foreignDemo =
     , "}"
     , ""
     , "fn caller(box: Box) -> Int32 { unsafe(foreign) { readBox(box) } }"
+    ]
+
+foreignShadowDemo :: Text
+foreignShadowDemo =
+  Text.unlines
+    [ "module Demo"
+    , ""
+    , "foreign \"c\" {"
+    , "  fn readBox symbol \"abs\"(value: Int32) -> Int32"
+    , "}"
+    , ""
+    , "fn caller(readBox: Int32) -> Int32 { readBox }"
     ]
 
 {-| The name of the document under test.
@@ -230,6 +243,23 @@ testForeignTooling = do
       any (== Just expected) [lookupField "label" member >>= textOf | member <- members]
         || any (== Just expected) [lookupField "name" member >>= textOf | member <- members]
     _ -> False
+
+testForeignShadowing :: IO Property
+testForeignShadowing = do
+  documents <- opened foreignShadowDemo
+  let shown = request "textDocument/hover" (atPosition 6 40) documents
+      hoverBody = shown >>= lookupField "contents" >>= lookupField "value" >>= textOf
+      found = request "textDocument/definition" (atPosition 6 40) documents
+      definitionCharacter =
+        found >>= lookupField "range" >>= lookupField "start" >>= lookupField "character"
+  pure $ conjoin
+    [ counterexample "the shadowing parameter keeps its inferred type"
+        (property (maybe False (Text.isInfixOf "readBox : Int32") hoverBody))
+    , counterexample "the shadowing parameter is not labelled foreign"
+        (property (maybe True (not . Text.isInfixOf "asserted rather than proved") hoverBody))
+    , counterexample "definition resolves to the parameter, not the foreign declaration"
+        (definitionCharacter === Just (JsonNumber 10))
+    ]
 
 {-| One edit rather than a computed minimal set: the formatter only moves
     whitespace, so replacing everything cannot change the program. -}

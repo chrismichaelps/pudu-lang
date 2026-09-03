@@ -10,9 +10,7 @@ module Pudu.Type.Check.Expression
   ) where
 
 import Control.Monad (foldM, unless)
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
 import qualified Pudu.Frontend.Syntax.Tree as Tree
@@ -49,6 +47,7 @@ import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
   , checkUnsafeCall
+  , dottedName
   , reportUnusedCapabilities
   )
 import Pudu.Type.Check.Call
@@ -392,15 +391,6 @@ checkArms around declared rigid spanValue subjectType arms = case arms of
     next : remaining -> do
       unified <- unify spanValue current next
       foldUnify unified remaining
-
-{-| A chain of names written as a path or as member accesses, joined back into
-    the dotted name it stands for. Anything else is not a name. -}
-dottedName :: Expression -> Maybe Text
-dottedName expression = case expression of
-  NameExpression names -> Just (Text.intercalate "." (NonEmpty.toList names))
-  MemberExpression target member ->
-    (\prefix -> prefix <> "." <> locatedValue member) <$> dottedName (locatedValue target)
-  _ -> Nothing
 
 {-| Type a function literal.
 

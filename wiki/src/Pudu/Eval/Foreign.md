@@ -40,10 +40,10 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   installed and the usual remedy is to install it.
 - **A handle is opaque and nominal.** Only a runtime handle bearing the crossing's declared name may
   pass, and its address is never exposed as an integer.
-- **Ownership is checked before entering foreign code.** Null owned results are refused; ordinary
-  handle uses require a live address; release atomically removes that address so a repeated release
-  cannot call the library twice. A call-setup failure restores the claim because the release did not
-  run.
+- **Ownership covers the complete native call.** Null owned results are refused; ordinary handle
+  uses acquire atomic leases held until native code returns; release waits for leases and removes
+  the claim before calling the destructor. A call-setup failure restores a release claim because the
+  destructor did not run. A producer records the declared native release action for runtime cleanup.
 
 ### Linkage
 
@@ -63,6 +63,9 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 - **Q:** Let a release function decide whether a handle is valid? **A:** No. _Rationale:_ calling a
   destructor twice is already undefined behaviour; validation after the call is too late.
   _Rejected:_ foreign-side double-release detection as the safety boundary.
+- **Q:** Check liveness and then call after dropping the ownership lock? **A:** No. _Rationale:_ a
+  concurrent release could free the address in that gap. _Rejected:_ membership checks without a
+  lease spanning the call.
 
 ## Referenced by
 

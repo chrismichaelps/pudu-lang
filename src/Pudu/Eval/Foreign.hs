@@ -12,6 +12,7 @@ import Data.Maybe (fromMaybe)
 import Data.Int (Int64)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Foreign.Ptr (Ptr)
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -19,20 +20,25 @@ import Pudu.Diagnostic
   , mkDiagnosticCode
   , withHelp
   )
-import Pudu.Eval.Env (Evaluator, abortAt, performEffect)
+import Pudu.Eval.Env (Evaluator, abortAt, currentForeignStore, performEffect)
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..), defaultIntegerKind)
-import Pudu.Eval.Value (ForeignBinding (..), Value (..))
+import Pudu.Eval.Value (ForeignBinding (..), ForeignRelease (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
   , callSymbol
-  , claimOwned
   , findSymbol
   , openLibrary
-  , ownsAddress
-  , releaseOwned
   )
 import Pudu.Foreign.Crossing (Crossing (..), crossingName, fitsCrossing)
+import Pudu.Foreign.Ownership
+  ( ForeignResource
+  , ForeignStore
+  , claimOwned
+  , restoreOwned
+  , takeOwned
+  , withOwned
+  )
 import Pudu.Source (Span)
 
 {-| Make the call the binding describes.
@@ -44,6 +50,7 @@ import Pudu.Source (Span)
 callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 callForeign spanValue binding values = do
   crossed <- crossArguments spanValue binding values
+  store <- currentForeignStore
   opened <-
     performEffect (refusal spanValue) (openLibrary (foreignBindingLibrary binding))
   case opened of
@@ -54,15 +61,33 @@ callForeign spanValue binding values = do
       case found of
         Left problem -> abortForeign spanValue binding problem
         Right symbol -> do
-          released <- prepareHandles spanValue binding crossed
-          produced <-
-            performEffect (refusal spanValue)
-              (callSymbol symbol crossed (foreignBindingResult binding))
-          case produced of
-            Left problem -> do
-              restoreReleased spanValue released
+          released <- prepareHandles spanValue binding store crossed
+          attempted <- invoke spanValue binding store symbol crossed
+          case attempted of
+            Nothing -> deadHandle spanValue binding (firstHandleName crossed)
+            Just (Left problem) -> do
+              restoreReleased spanValue store released
               abortForeign spanValue binding problem
-            Right result -> receive spanValue binding result
+            Just (Right result) -> receive spanValue binding store result
+
+invoke
+  :: Span
+  -> ForeignBinding
+  -> ForeignStore
+  -> Ptr ()
+  -> [(Crossing, CrossedValue)]
+  -> Evaluator (Maybe (Either Text CrossedValue))
+invoke spanValue binding store symbol arguments =
+  case foreignBindingReleases binding of
+    Just _ -> Just <$> perform
+    Nothing ->
+      performEffect (refusal spanValue)
+        (withOwned store (map snd (handleAddresses arguments))
+          (callSymbol symbol arguments (foreignBindingResult binding)))
+ where
+  perform =
+    performEffect (refusal spanValue)
+      (callSymbol symbol arguments (foreignBindingResult binding))
 
 {-| Validate handle liveness immediately before control crosses the boundary.
 
@@ -73,28 +98,23 @@ callForeign spanValue binding values = do
 prepareHandles
   :: Span
   -> ForeignBinding
+  -> ForeignStore
   -> [(Crossing, CrossedValue)]
-  -> Evaluator (Maybe Int64)
-prepareHandles spanValue binding arguments =
+  -> Evaluator (Maybe (Int64, ForeignResource))
+prepareHandles spanValue binding store arguments =
   case foreignBindingReleases binding of
     Just expected -> case handleAddresses arguments of
       [(actual, address)]
         | actual == expected -> do
-            released <- performEffect (refusal spanValue) (releaseOwned address)
-            if released
-              then pure (Just address)
-              else deadHandle spanValue binding actual
+            released <- performEffect (refusal spanValue) (takeOwned store address)
+            case released of
+              Just resource -> pure (Just (address, resource))
+              Nothing -> deadHandle spanValue binding actual
       _ ->
         abortAt (Just spanValue) "E7022"
           (foreignBindingSymbol binding <> " cannot release this handle")
           (Just "pass one live handle of the type named by its foreign declaration")
-    Nothing -> do
-      live <-
-        performEffect (refusal spanValue)
-          (mapM (ownsAddress . snd) (handleAddresses arguments))
-      case [name | ((name, _), False) <- zip (handleAddresses arguments) live] of
-        name : _ -> deadHandle spanValue binding name
-        [] -> pure Nothing
+    Nothing -> pure Nothing
 
 handleAddresses :: [(Crossing, CrossedValue)] -> [(Text, Int64)]
 handleAddresses arguments =
@@ -102,11 +122,15 @@ handleAddresses arguments =
   | (_, CrossedHandle name address) <- arguments
   ]
 
-restoreReleased :: Span -> Maybe Int64 -> Evaluator ()
-restoreReleased _ Nothing = pure ()
-restoreReleased spanValue (Just address) = do
-  _ <- performEffect (refusal spanValue) (claimOwned address)
-  pure ()
+restoreReleased :: Span -> ForeignStore -> Maybe (Int64, ForeignResource) -> Evaluator ()
+restoreReleased _ _ Nothing = pure ()
+restoreReleased spanValue store (Just (address, resource)) =
+  performEffect (refusal spanValue) (restoreOwned store address resource)
+
+firstHandleName :: [(Crossing, CrossedValue)] -> Text
+firstHandleName arguments = case handleAddresses arguments of
+  (name, _) : _ -> name
+  [] -> "foreign handle"
 
 deadHandle :: Span -> ForeignBinding -> Text -> Evaluator a
 deadHandle spanValue binding name =
@@ -185,8 +209,8 @@ isIntegral crossing = case crossing of
     A width goes out and an ordinary integer comes back: the declaration decides
     how much of a number crosses, and nothing above the boundary carries a
     machine width it did not ask for. -}
-receive :: Span -> ForeignBinding -> CrossedValue -> Evaluator Value
-receive spanValue binding produced =
+receive :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
+receive spanValue binding store produced =
   case (foreignBindingResult binding, produced) of
     (NothingCrossing, _) -> pure UnitValue
     (BooleanCrossing, CrossedInteger held) -> pure (BoolValue (held /= 0))
@@ -198,22 +222,37 @@ receive spanValue binding produced =
           abortAt (Just spanValue) "E7020"
             (foreignBindingSymbol binding <> " returned a null " <> name)
             (Just "an owned foreign result must name a live object")
-      | foreignBindingReleasedBy binding == Nothing ->
-          foreignResultMismatch spanValue binding
-      | otherwise -> do
-          fresh <- performEffect (refusal spanValue) (claimOwned address)
-          if fresh
-            then pure (ForeignHandleValue name address)
-            else
-              abortAt (Just spanValue) "E7021"
-                (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")
-                (Just "an owned foreign result must transfer one new ownership claim")
+      | otherwise -> case foreignBindingReleasedBy binding of
+          Nothing -> foreignResultMismatch spanValue binding
+          Just release -> do
+            fresh <-
+              performEffect (refusal spanValue)
+                (claimOwned store address (releaseHandle release name address))
+            if fresh
+              then pure (ForeignHandleValue name address)
+              else
+                abortAt (Just spanValue) "E7021"
+                  (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")
+                  (Just "an owned foreign result must transfer one new ownership claim")
     (_, CrossedInteger held) ->
       pure (IntValue (kindOf (foreignBindingResult binding)) (fromIntegral held))
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (TextCrossing, CrossedText written) -> pure (StrValue written)
     _ -> foreignResultMismatch spanValue binding
+
+releaseHandle :: ForeignRelease -> Text -> Int64 -> IO ()
+releaseHandle release name address = do
+  opened <- openLibrary (foreignReleaseLibrary release)
+  case opened of
+    Left _ -> pure ()
+    Right handle -> do
+      found <- findSymbol handle (foreignReleaseSymbol release)
+      case found of
+        Left _ -> pure ()
+        Right symbol -> do
+          _ <- callSymbol symbol [(HandleCrossing name, CrossedHandle name address)] NothingCrossing
+          pure ()
 
 foreignResultMismatch :: Span -> ForeignBinding -> Evaluator a
 foreignResultMismatch spanValue binding =

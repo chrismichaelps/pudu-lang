@@ -1,6 +1,9 @@
 module Pudu.Compiler.ProgramSpec (programProperties) where
 
 import Data.Text (Text)
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, threadDelay, tryTakeMVar)
+import Data.IORef (modifyIORef', newIORef, readIORef)
+import Data.Maybe (isJust, isNothing)
 import qualified Data.Text as Text
 import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as TextIO
@@ -19,6 +22,14 @@ import Pudu.Eval.Render (renderValue)
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText, diagnosticHelp
   , diagnosticMessage)
 import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Foreign.Ownership
+  ( claimOwned
+  , closeForeignStore
+  , newForeignStore
+  , restoreOwned
+  , takeOwned
+  , withOwned
+  )
 import Pudu.Repl.Session
   ( EntryResult (..)
   , Session (..)
@@ -26,7 +37,7 @@ import Pudu.Repl.Session
   , loadModule
   , submitEntry
   )
-import Test.QuickCheck (Property, conjoin, counterexample, (===))
+import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 programProperties :: [(String, IO Property)]
 programProperties =
@@ -40,6 +51,7 @@ programProperties =
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
   , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)
+  , ("foreign ownership serializes release and call use", testForeignOwnershipStore)
   ]
 
 foreign import ccall unsafe "pudu_ffi_cpp_anchor"
@@ -47,6 +59,9 @@ foreign import ccall unsafe "pudu_ffi_cpp_anchor"
 
 foreign import ccall unsafe "pudu_ffi_cpp_delete_count"
   cppDeleteCount :: IO CInt
+
+foreign import ccall unsafe "pudu_ffi_cpp_active_count"
+  cppActiveCount :: IO CInt
 
 testForeignHandles :: IO Property
 testForeignHandles = do
@@ -63,6 +78,15 @@ testForeignHandles = do
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
+  qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
+  importedCapability <- codes "test-fixtures/importedcapability/Main.pudu"
+  beforeCleanup <- cppDeleteCount
+  CInt activeBefore <- cppActiveCount
+  cleanupSuccess <- runEntry "test-fixtures/stdlib/UsesForeignHandleCleanup.pudu"
+  cleanupReturn <- runEntry "test-fixtures/stdlib/UsesForeignHandleEarlyReturn.pudu"
+  cleanupFailure <- runtimeCodes "test-fixtures/stdlib/RejectsAfterForeignHandleCleanup.pudu"
+  afterCleanup <- cppDeleteCount
+  CInt activeAfter <- cppActiveCount
   pure $ conjoin
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
     , counterexample "a C++ object crosses as an opaque handle and is read and released"
@@ -87,6 +111,62 @@ testForeignHandles = do
         (wrongHandle === ["E3001"])
     , counterexample "an empty native symbol is refused at its declaration"
         (emptySymbol === ["E3068"])
+    , counterexample "a qualified same-basename type is not a block-local handle"
+        (qualifiedHandle === ["E3063"])
+    {-| A restriction follows the function rather than the spelling that reached
+        it. Three names for one unsafe declaration — through its module, through
+        an alias, and selected into scope — each require what it asked for, and
+        a compile-time body cannot call an imported ordinary function. Before
+        this, every one of them was silently exempt, so the boundary held inside
+        a module and dissolved at the import — which is where bindings live. -}
+    , counterexample "an imported declaration keeps the restrictions it was declared under"
+        (importedCapability === ["E3023", "E3023", "E3023", "E3023", "E3023", "E3025"])
+    , counterexample "runtime teardown preserves a successful result"
+        (cleanupSuccess === Just "1")
+    , counterexample "runtime teardown preserves an early-return result"
+        (cleanupReturn === Just "1")
+    , counterexample "runtime teardown also follows an aborted evaluation"
+        (cleanupFailure === ["E7007"])
+    , counterexample "all three abandoned resources run their declared destructor"
+        (afterCleanup - beforeCleanup === 3)
+    , counterexample "no native object remains live after any evaluator exit"
+        (activeAfter === activeBefore)
+    ]
+
+testForeignOwnershipStore :: IO Property
+testForeignOwnershipStore = do
+  store <- newForeignStore
+  cleanupCount <- newIORef (0 :: Int)
+  claimed <- claimOwned store 77 (modifyIORef' cleanupCount (+ 1))
+  entered <- newEmptyMVar
+  finishUse <- newEmptyMVar
+  useFinished <- newEmptyMVar
+  _ <- forkIO $ do
+    result <- withOwned store [77] (putMVar entered () >> takeMVar finishUse)
+    putMVar useFinished (isJust result)
+  takeMVar entered
+  releaseStarted <- newEmptyMVar
+  releaseResult <- newEmptyMVar
+  _ <- forkIO $ do
+    putMVar releaseStarted ()
+    takeOwned store 77 >>= putMVar releaseResult
+  takeMVar releaseStarted
+  threadDelay 10000
+  premature <- tryTakeMVar releaseResult
+  putMVar finishUse ()
+  leaseCompleted <- takeMVar useFinished
+  released <- takeMVar releaseResult
+  case released of
+    Nothing -> pure ()
+    Just resource -> restoreOwned store 77 resource
+  closeForeignStore store
+  cleaned <- readIORef cleanupCount
+  pure $ conjoin
+    [ counterexample "the address is claimed once" (claimed === True)
+    , counterexample "release waits while native use holds a lease" (property (isNothing premature))
+    , counterexample "the native use completes before release takes ownership" (leaseCompleted === True)
+    , counterexample "release receives the resource after the lease closes" (property (isJust released))
+    , counterexample "teardown invokes the restored cleanup once" (cleaned === 1)
     ]
 
 {-| A qualified type name is judged only against a module the compiler read.

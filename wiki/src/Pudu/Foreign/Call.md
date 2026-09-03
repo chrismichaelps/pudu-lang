@@ -31,9 +31,6 @@ openLibrary :: Text -> IO (Either Text ForeignHandle)
 findSymbol  :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
 callSymbol  :: Ptr () -> [(Crossing, CrossedValue)] -> Crossing -> IO (Either Text CrossedValue)
 kindCode    :: Crossing -> Word8
-claimOwned  :: Int64 -> IO Bool
-ownsAddress :: Int64 -> IO Bool
-releaseOwned :: Int64 -> IO Bool
 ```
 
 ### Governance
@@ -53,9 +50,8 @@ releaseOwned :: Int64 -> IO Bool
   detect that.
 - **The kind codes are shared with the C file and are not to be reordered.** One side knows the
   declaration and the other knows the machine; the codes are the only thing they agree on.
-- **Owned addresses are changed atomically.** Claiming an address already live is refused, checking
-  an ordinary use does not consume it, and preparing a release consumes it before foreign code can
-  observe a second release.
+- Resource lifetime is delegated to [[Foreign Ownership]]. This module opens libraries, resolves
+  symbols, and performs calls; it does not keep process-global ownership state.
 - **A signature that cannot be assembled comes back as a value.** It is the one failure at this
   boundary that is recoverable, so it is reported rather than crashed on.
 
@@ -79,9 +75,9 @@ releaseOwned :: Int64 -> IO Bool
 - **Q:** Close a library when nothing is using it? **A:** No. _Rationale:_ nothing
   here can know that, and closing one a call is about to use is worse than
   keeping it for the life of the program. _Rejected:_ reference counting handles.
-- **Q:** Track ownership in Pudu source as an integer set? **A:** No. _Rationale:_ the address must
-  never become arithmetic-capable, and concurrent evaluator calls need one atomic decision before
-  entering the library. _Rejected:_ exposed integer handles; check-then-delete in two operations.
+- **Q:** Keep ownership beside the process-global opened-library cache? **A:** No. _Rationale:_
+  libraries may be shared, but resource claims belong to one evaluation and must be torn down with
+  it. _Rejected:_ a process-global address set.
 
 ## Referenced by
 

@@ -40,6 +40,7 @@ import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
 import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
+import Pudu.Foreign.Ownership (closeForeignStore, newForeignStore)
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
   , evaluateFor
@@ -110,8 +111,9 @@ withRuntime action =
   bracket newHandleStore closeHandleStore $ \handles ->
     bracket newSocketStore closeSocketStore $ \sockets ->
       bracket newTlsStore closeTlsStore $ \secured ->
-        bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
-          action (emptyEnv handles sockets secured concurrent)
+        bracket newForeignStore closeForeignStore $ \foreignStore ->
+          bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
+            action (emptyEnv handles sockets secured concurrent foreignStore)
 
 {-| What a finished evaluation answers with. A control transfer that reached the
     top is the value it carried; only an abort has nothing to answer. -}

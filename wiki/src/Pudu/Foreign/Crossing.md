@@ -47,9 +47,9 @@ crossableNames :: Text
   keeps running with a value it never computed.
 - **The names are in one place** so a diagnostic can offer the whole list rather than a guess about
   which one was meant.
-- **Handle names come from the enclosing block.** A misspelled handle is not silently admitted as a
-  second address type, and two resources cannot become interchangeable merely because both are
-  represented by addresses.
+- **Handle names are unqualified and come from the enclosing block.** A qualified `Other.Box` is
+  never reduced to `Box`; scalar names may be unqualified only as well. A misspelled or qualified
+  handle is refused rather than laundered into the block's own nominal type.
 
 ### Linkage
 
@@ -66,6 +66,9 @@ crossableNames :: Text
 - **Q:** Represent a handle as an integer? **A:** No. _Rationale:_ its address-shaped storage is not
   permission to calculate with it, and its declared name prevents one resource from being passed as
   another. _Rejected:_ exposing addresses as `Int64`; one universal pointer type.
+- **Q:** Compare only the final segment of a foreign type path? **A:** No. _Rationale:_ `Other.Box`
+  and this block's `Box` are different nominal types even when their basenames match. _Rejected:_
+  qualifier erasure at the ABI boundary.
 
 ## Referenced by
 

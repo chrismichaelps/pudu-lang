@@ -10,7 +10,6 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Pudu.Foreign.Crossing (Crossing (NothingCrossing), crossingFor)
@@ -28,6 +27,7 @@ import Pudu.Eval.Value
   , builtinName
   , Closure (..)
   , ForeignBinding (..)
+  , ForeignRelease (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -138,7 +138,14 @@ installForeign library (Located _ function) =
               ]
           , foreignBindingResult =
               fromMaybe NothingCrossing (crossingFor handles (foreignResult function))
-          , foreignBindingReleasedBy = locatedValue <$> foreignReleasedBy function
+          , foreignBindingReleasedBy = do
+              named <- locatedValue <$> foreignReleasedBy function
+              symbol <- Map.lookup named (releaseSymbolsOf library)
+              pure
+                ForeignRelease
+                  { foreignReleaseLibrary = locatedValue (foreignLibrary library)
+                  , foreignReleaseSymbol = symbol
+                  }
           , foreignBindingReleases = Map.lookup name (releasesOf library)
           }
     )
@@ -164,10 +171,19 @@ releasesOf library =
   known = Set.fromList (map locatedValue (foreignTypes library))
   isHandleName = (`Set.member` known)
   handleName (Located _ syntax) = case syntax of
-    NamedType path [] -> NonEmpty.last segments
-     where
-      ModuleName segments = path
+    NamedType (ModuleName (name :| [])) [] -> name
     _ -> ""
+
+{-| Local release name to exact loader symbol. The `by` clause is local Pudu
+    syntax, while teardown must invoke the same mapped symbol as an explicit
+    call to that release declaration. -}
+releaseSymbolsOf :: Foreign -> Map Text Text
+releaseSymbolsOf library =
+  Map.fromList
+    [ (name, maybe name locatedValue (foreignSymbol function))
+    | Located _ function <- foreignFunctions library
+    , let name = locatedValue (foreignName function)
+    ]
 
 {-| An implementation's functions are installed under a key naming the type they
     implement for, so a member access on a value of that type finds them. -}

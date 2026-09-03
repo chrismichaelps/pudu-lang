@@ -17,6 +17,7 @@ module Pudu.Type.Env
   , withComptime
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
+  , inheritRestrictions
   , useCapability
   , useUnsafeRegion
   , CheckerProducts (..)
@@ -793,6 +794,25 @@ recordUnsafeFunction name capabilities =
 unsafeFunctionCapabilities :: Text -> Checker (Maybe [Capability])
 unsafeFunctionCapabilities name =
   Checker $ \state -> (Map.lookup name (stateUnsafeFunctions state), state)
+
+{-| Give a second name for a function the restrictions the first one carries.
+
+    A name reached through its module is the same function as the name reached
+    directly, and what it is allowed to do cannot depend on how it was spelled.
+    Without this, an unsafe function stopped being unsafe the moment it was
+    imported, and a compile-time one stopped being compile-time — the boundary
+    held inside a module and dissolved at its edge, which is the edge that
+    matters. -}
+inheritRestrictions :: Text -> Text -> Checker ()
+inheritRestrictions from to =
+  Checker $ \state ->
+    let carried = case Map.lookup from (stateUnsafeFunctions state) of
+          Just capabilities -> Map.insert to capabilities (stateUnsafeFunctions state)
+          Nothing -> stateUnsafeFunctions state
+        folded
+          | from `elem` stateComptimeFunctions state = to : stateComptimeFunctions state
+          | otherwise = stateComptimeFunctions state
+     in ((), state{stateUnsafeFunctions = carried, stateComptimeFunctions = folded})
 
 {-| Whether this span has already carried a diagnostic of its own.
 

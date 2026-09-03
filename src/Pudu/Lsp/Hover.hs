@@ -2,9 +2,16 @@
 module Pudu.Lsp.Hover (hoverAt) where
 
 import qualified Data.Text as Text
-import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
+import Pudu.Doc (DocEntry (..), DocKind (..))
 import Pudu.Lsp.Documents (Analysis (..))
-import Pudu.Lsp.Feature (entryAt, hoverContents, rangeOfOffsets, wordAt)
+import Pudu.Lsp.Feature
+  ( entryAt
+  , entryForSymbol
+  , hoverContents
+  , rangeOfOffsets
+  , symbolAt
+  , wordAt
+  )
 import Pudu.Lsp.Json (Json (..))
 import Pudu.Lsp.Protocol (rangeJson)
 import Pudu.Type (narrowestAt, renderType)
@@ -28,17 +35,12 @@ hoverAt value offset = case foreignNameAt value offset of
 
 foreignNameAt :: Analysis -> Int -> Maybe DocEntry
 foreignNameAt value offset = do
-  name <- wordAt (analysisText value) offset
-  entry <- declarationNamed (analysisIndex value) name
+  resolution <- analysisResolution value
+  symbol <- symbolAt resolution offset
+  entry <- entryForSymbol (analysisIndex value) symbol
   case docKind entry of
     DocForeign _ -> Just entry
     _ -> Nothing
-
-declarationNamed :: DocIndex -> Text.Text -> Maybe DocEntry
-declarationNamed index name =
-  case [entry | entry <- indexEntries index, docName entry == name] of
-    entry : _ -> Just entry
-    [] -> Nothing
 
 hoverEntry :: Maybe (Int, Int) -> Analysis -> DocEntry -> Json
 hoverEntry selected value entry =

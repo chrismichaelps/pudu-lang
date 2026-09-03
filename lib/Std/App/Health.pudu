@@ -78,10 +78,24 @@ export fn flagging(base: &Reading, name: Str, held: Bool) -> Reading {
 }
 
 /// A count the reading holds, or zero.
-export fn countOf(held: &Reading, name: Str) -> Int { Map.getOr(&held.counts, name, 0) }
+///
+/// Declared comptime because a liveness judgement is, and a compile-time body
+/// may only call compile-time functions — which is what makes that guarantee
+/// transitive rather than a promise each function makes about itself.
+export comptime fn countOf(held: &Reading, name: Str) -> Int {
+  match held.counts.get(name) {
+    case Some(found) => found
+    case None => 0
+  }
+}
 
 /// A flag the reading holds, or false.
-export fn flagOf(held: &Reading, name: Str) -> Bool { Map.getOr(&held.flags, name, false) }
+export comptime fn flagOf(held: &Reading, name: Str) -> Bool {
+  match held.flags.get(name) {
+    case Some(found) => found
+    case None => false
+  }
+}
 
 /// A liveness check.
 export fn liveness(name: Str, judge: fn(Reading) -> Verdict) -> Liveness {

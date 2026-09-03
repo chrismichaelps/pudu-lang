@@ -5,6 +5,7 @@ module Pudu.Type.Check.Safety
   , comptimeBuiltins
   , reportUnusedCapabilities
   , requireComptimePurity
+  , dottedName
   ) where
 
 import Control.Monad (unless, when)
@@ -29,6 +30,7 @@ import Pudu.Type.Env
   , warn
   , isComptimeFunction
   , inComptime
+  , lookupName
   , report
   )
 
@@ -59,15 +61,25 @@ requireComptimePurity value
 checkComptimeCall :: Span -> Located Expression -> Checker ()
 checkComptimeCall spanValue callee = do
   inside <- inComptime
-  when inside $ case locatedValue callee of
-    NameExpression (name NonEmpty.:| []) -> do
+  when inside $ case dottedName (locatedValue callee) of
+    Just name -> do
       comptime <- isComptimeFunction name
       builtin <- pure (name `elem` comptimeBuiltins)
-      unless (comptime || builtin) $
+      {-| A dotted callee is only judged when the whole path names something.
+
+          `Health.flagOf` is bound under that spelling and is a call this rule
+          is about; `reading.counts` is a field of a value and is not, and
+          neither is a built-in method on one. Asking whether the path binds
+          tells the two apart without a second notion of what a module is. -}
+      declared <- if comptime || builtin then pure True else isDeclaredName name
+      unless (comptime || builtin || not declared) $
         report "E3025" spanValue
           ("comptime function cannot call " <> name)
           (Just "declare the callee comptime, or move the call out of compile-time code")
     _ -> pure ()
+
+isDeclaredName :: Text -> Checker Bool
+isDeclaredName name = maybe False (const True) <$> lookupName name
 
 {-| Names a compile-time body may reach that are not user declarations. -}
 comptimeBuiltins :: [Text]
@@ -107,8 +119,8 @@ capabilityName capability = case capability of
     is open; a declaration that names capabilities requires each of them, which
     is what makes the requirement auditable rather than all-or-nothing. -}
 checkUnsafeCall :: Span -> Located Expression -> Checker ()
-checkUnsafeCall spanValue callee = case locatedValue callee of
-  NameExpression (name NonEmpty.:| []) -> do
+checkUnsafeCall spanValue callee = case dottedName (locatedValue callee) of
+  Just name -> do
     declaredCapabilities <- unsafeFunctionCapabilities name
     case declaredCapabilities of
       Nothing -> pure ()
@@ -121,7 +133,23 @@ checkUnsafeCall spanValue callee = case locatedValue callee of
               ("unsafe function " <> name <> " called outside an unsafe region")
               (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
       Just required -> mapM_ (requireCapability spanValue name) required
-  _ -> pure ()
+  Nothing -> pure ()
+
+{-| A chain of names, written as a path or as member accesses, joined back into
+    the dotted name it stands for. Anything else is not a name.
+
+    The dotted spelling is the key the checker binds a name under, so asking
+    about `Bindings.open` finds the same declaration the call resolves against.
+    A qualified call arrives here as member access rather than as a path, and
+    matching only the undotted form was how an unsafe function stopped being
+    unsafe the moment it was reached through its module — which is the
+    arrangement this library recommends for bindings. -}
+dottedName :: Expression -> Maybe Text
+dottedName expression = case expression of
+  NameExpression names -> Just (Text.intercalate "." (NonEmpty.toList names))
+  MemberExpression target member ->
+    (\prefix -> prefix <> "." <> locatedValue member) <$> dottedName (locatedValue target)
+  _ -> Nothing
 
 requireCapability :: Span -> Text -> Capability -> Checker ()
 requireCapability spanValue name capability = do

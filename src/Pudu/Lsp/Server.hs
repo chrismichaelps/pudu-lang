@@ -98,6 +98,7 @@ analyse uri content = do
       , analysisSource = source
       , analysisDiagnostics = programDiagnostics program
       , analysisIndex = programDocs program
+      , analysisResolution = rootCompileResult program >>= compileResolution
       , analysisTypes = rootCompileResult program >>= compileTypes
       }
 

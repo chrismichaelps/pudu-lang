@@ -25,13 +25,14 @@ definitionAt :: Text -> Analysis -> Int -> Json
 
 ## Governance
 
-- Definition lookup uses the source word at the cursor and the compiler-built declaration index.
+- Definition lookup uses the resolver's symbol identity at the cursor and maps that symbol's span to
+  the compiler-built declaration index; equal spelling is never identity.
 - Missing words and declarations answer null; no location is guessed.
 
 ## Algorithm
 
-Find the cursor word, select the first source-ordered declaration with that name, and render its
-document location.
+Find the resolved declaration or reference at the cursor, select the indexed declaration containing
+that symbol's defining span, and render its document location.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -42,6 +43,8 @@ document location.
 - **Q:** Search files when the index has no match? **A:** No. _Rationale:_ the loaded compiler graph
   is authoritative; guessing by text can jump to a different declaration. _Rejected:_ workspace
   text search fallback.
+- **Q:** Pick the first declaration sharing the cursor word? **A:** No. _Rationale:_ lexical
+  shadowing gives equal text different identities. _Rejected:_ text-only definition lookup.
 
 ## Referenced by
 

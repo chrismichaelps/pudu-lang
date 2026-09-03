@@ -53,8 +53,9 @@ evaluateModule :: Module -> EvalOutcome
   refusal, naming the boundary rather than the operation, because every operation behind it is
   refused for one reason.
 - Every run allocates an isolated resource set and tears down only that set on every exit path.
-  Concurrent evaluations in one host process therefore cannot close one another's files, sockets,
-  or synchronization objects.
+  Concurrent evaluations in one host process therefore cannot close one another's foreign handles,
+  files, sockets, or synchronization objects. Child tasks stop before foreign teardown, and each
+  unreleased owned foreign handle runs its declared destructor exactly once.
 - Every effect answers with `Result[T, Str]`. `exit` is the only one that does not, because a
   program that asked to stop has nothing left to decide.
 
@@ -156,6 +157,9 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 - **Q:** Use process-global resource registries? **A:** No. _Rationale:_ teardown belongs to the run
   that acquired the resource, and global clearing races with other embedded runs. _Rejected:_ a
   global evaluation mutex, which would make independent programs block one another.
+- **Q:** Leave foreign handles alive when evaluation returns or aborts? **A:** No. _Rationale:_ an
+  owned result promises deterministic cleanup across every exit path. _Rejected:_ relying on process
+  exit or requiring every branch to remember an explicit destructor call.
 
 ## Variants
 

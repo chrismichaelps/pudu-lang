@@ -18,6 +18,7 @@ module Pudu.Eval.Env
   , captureEnvironment
   , currentFrame
   , currentConcurrentStore
+  , currentForeignStore
   , currentHandleStore
   , currentSocketStore
   , currentTlsStore
@@ -60,6 +61,7 @@ import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Socket (SocketStore)
 import Pudu.Eval.Tls (TlsStore)
 import Pudu.Eval.Value (Value (..))
+import Pudu.Foreign.Ownership (ForeignStore)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Pudu.Source (Span)
 
@@ -82,6 +84,7 @@ data Env = Env
   , envSocketStore :: !SocketStore
   , envTlsStore :: !TlsStore
   , envConcurrentStore :: !ConcurrentStore
+  , envForeignStore :: !ForeignStore
   }
 
 currentHandleStore :: Evaluator HandleStore
@@ -95,6 +98,9 @@ currentTlsStore = Evaluator $ \env -> pure (Done (envTlsStore env) env)
 
 currentConcurrentStore :: Evaluator ConcurrentStore
 currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env) env)
+
+currentForeignStore :: Evaluator ForeignStore
+currentForeignStore = Evaluator $ \env -> pure (Done (envForeignStore env) env)
 
 {-| Open a structured task scope. Every child started inside it is recorded so
     the scope can join them before it yields. -}
@@ -245,8 +251,8 @@ catchUnwind (Evaluator action) =
       Unwound transfer next -> Done (Left transfer) next
       Aborted stop -> Aborted stop
 
-emptyEnv :: HandleStore -> SocketStore -> TlsStore -> ConcurrentStore -> Env
-emptyEnv handles sockets secured concurrent =
+emptyEnv :: HandleStore -> SocketStore -> TlsStore -> ConcurrentStore -> ForeignStore -> Env
+emptyEnv handles sockets secured concurrent foreignStore =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
@@ -260,6 +266,7 @@ emptyEnv handles sockets secured concurrent =
     , envSocketStore = sockets
     , envTlsStore = secured
     , envConcurrentStore = concurrent
+    , envForeignStore = foreignStore
     }
 
 bind :: Text -> Value -> Evaluator ()

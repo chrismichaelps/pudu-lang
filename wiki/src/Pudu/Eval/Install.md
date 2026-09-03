@@ -53,6 +53,9 @@ lastSegmentOf    :: NonEmpty Text -> Text
 - A foreign binding keeps its idiomatic local name as the environment key and the explicitly mapped
   native symbol, when present, as the dynamic-loader key. Release ownership is still related by
   local declaration names, so a foreign spelling never leaks into name resolution.
+- An owned producer resolves its `by` name to the release declaration's exact native symbol while
+  the block is installed. Runtime teardown therefore calls what the declaration mapped, not a local
+  spelling or naming convention.
 
 ### Linkage
 
@@ -69,6 +72,13 @@ against it, then evaluate each constant in declaration order.
 - No evaluation of anything but a constant's initialiser, and that only through the capability.
 - No installing a constant before the functions it may call.
 - No typing decisions.
+
+## Grill Log
+
+- **Q:** Look up a release by local name during teardown? **A:** No; resolve its native symbol while
+  installing the foreign block. _Rationale:_ `symbol "MemFree"` proves local and native names may
+  differ, and cleanup must call the same declaration explicit release calls. _Rejected:_ guessing
+  the exported symbol from the Pudu name.
 
 ## Referenced by
 

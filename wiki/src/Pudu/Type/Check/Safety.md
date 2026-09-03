@@ -48,6 +48,16 @@ reportUnusedCapabilities :: Span -> Checker ()
   leaving a function's implied region reports nothing. Only an explicit `unsafe { ... }` that grants
   more than it uses earns a warning.
 
+- **A callee is judged by the whole path it was written as.** `Bindings.open` and `open` are the
+  same function, and what it may do cannot depend on which spelling reached it. Matching only an
+  undotted name was how an unsafe function stopped being unsafe the moment it was reached through
+  its module — which is exactly the arrangement [[ADR-0018 Calling a Library Written Elsewhere]]
+  recommends for bindings, so the boundary dissolved precisely where it was meant to hold.
+- **A dotted callee is judged for compile-time purity only when the whole path binds something.**
+  `Health.flagOf` is bound under that spelling and is a call this rule is about; `reading.counts` is
+  a field of a value, and a built-in method on one is not a declaration at all. Asking whether the
+  path binds tells the two apart without inventing a second notion of what a module is.
+
 ### A note on this module's shape
 
 These are **two direct-name implementations of one intended idea** — checking what a body may reach

@@ -31,7 +31,10 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindName
   , emptyDeclared
+  , inheritRestrictions
   , lookupName
+  , recordComptimeFunction
+  , recordUnsafeFunction
   )
 import Pudu.Type.Formation
   ( collectDeclaredFrom
@@ -89,9 +92,16 @@ declareImportedTypes declared imported = do
   available = Map.fromList [(interfaceModule value, value) | value <- interfaces]
   traits = Map.unionsWith (<>) (map interfaceTraits interfaces)
   defaults = foldMap interfaceDefaults interfaces
+  {-| The name this module reaches an imported value by, which an alias makes
+      different from the name the value was declared under.
+
+      The restrictions follow the binding for the same reason they follow the
+      module qualifier: renaming a function at the import is a change of
+      spelling, not a change of what it is allowed to do. -}
   bindImportedValue (localName, canonicalName) = do
     found <- lookupName canonicalName
     maybe (pure ()) (bindName localName) found
+    inheritRestrictions canonicalName localName
 
 declareInterface
   :: DeclaredTypes
@@ -133,9 +143,15 @@ declareInterface declared visibleTraits available traits defaults value = do
         _ -> pure ()
     _ -> pure ()
 
+  {-| The same function under the name its module gives it.
+
+      The restrictions follow the binding, because what a function may do cannot
+      depend on whether it was reached directly or through its module. -}
   publishValue name = do
     found <- lookupName name
-    maybe (pure ()) (bindName (moduleNameText (interfaceModule value) <> "." <> name)) found
+    let qualified = moduleNameText (interfaceModule value) <> "." <> name
+    maybe (pure ()) (bindName qualified) found
+    inheritRestrictions name qualified
 
   declareImportedBinding (name, syntax) = do
     formed <- formType interfaceDeclared [] syntax
@@ -210,13 +226,25 @@ lastSegment value = case reverse (Text.splitOn "." value) of
   first : _ -> first
   [] -> value
 
+{-| An imported signature, with the restrictions it was declared under.
+
+    The restrictions travel with it because they are properties of the function
+    rather than of the file it was written in. Without them an unsafe function
+    became ordinary the moment it was imported, which made the boundary hold
+    everywhere except across the edge it exists to guard — and putting bindings
+    in a module of their own is the arrangement this library recommends. -}
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
   let rigid = functionRigid value
+      name = locatedValue (functionName value)
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
-  bindName (locatedValue (functionName value))
+  bindName name
     (polytype rigid (declareBounds declared value) (FunctionTypeValue (functionAsync value) inputs result))
+  case functionUnsafe value of
+    Nothing -> pure ()
+    Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)
+  when (functionComptime value) (recordComptimeFunction name)
 
 declareConstructors :: DeclaredTypes -> Tree.TypeDeclarationValue -> Checker ()
 declareConstructors declared value = case locatedValue (Tree.typeDefinition value) of

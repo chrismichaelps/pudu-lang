@@ -37,6 +37,13 @@ declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 - One canonical trait table is built across all imported interfaces before implementations are installed, so a default and its implementation may live in different modules.
 - Installing a second visible trait method for the same concrete target/member reports `E3013` instead of overwriting the first scheme.
 - The caller collects local declarations only after this outer environment exists.
+- **An imported signature carries the restrictions it was declared under.** Unsafe capabilities and
+  compile-time purity are properties of the function, not of the file it was written in. Without
+  this an unsafe function became ordinary on import and a `comptime` one lost its transitive
+  guarantee, so both boundaries held inside a module and dissolved at its edge.
+- **Every name a value is reached by inherits those restrictions.** A module qualifier and an import
+  alias are spellings, not different functions, so `Bindings.open`, `B.open`, and a selected `open`
+  all require what the declaration asked for.
 
 ## Linkage
 
