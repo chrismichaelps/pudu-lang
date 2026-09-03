@@ -51,6 +51,20 @@ itself" wants one place to look rather than a search. The declared name is what 
 asked for, not a path — a path is a claim about somebody else's machine, which this library has
 refused everywhere else.
 
+**The name used by Pudu and the symbol exported by the library may be stated separately.** A
+declaration normally uses its local name as the symbol. When another ecosystem's naming convention
+cannot be a Pudu value name, `symbol "ExactForeignName"` records the exact lookup without weakening
+Pudu's naming rules:
+
+```pudu
+fn memAlloc symbol "MemAlloc"(size: UInt32) -> owned Allocation by memFree
+fn memFree symbol "MemFree"(memory: Allocation) -> ()
+```
+
+Calls, releases, completion, hover, and definitions use the local names. Only the dynamic-loader
+lookup uses the symbol string. An empty symbol is refused at the declaration because no C ABI can
+export a useful unnamed function.
+
 **The types that may cross are a stated, small set, and they are this language's own types.** The
 integer widths, the two floating widths, a boolean, text, and nothing. `Int32` is already a type
 here, not a spelling invented for the boundary, so a foreign signature is an ordinary signature: it
@@ -228,6 +242,15 @@ The opaque-handle slice is checked against a small C++ implementation exported t
 `extern "C"`: construction, typed use, release, null-result refusal, and double-release refusal all
 cross the same libffi boundary as an installed library. The declaration's own failures and the
 editor's inferred signatures and foreign provenance are checked alongside it.
+
+A second integration check calls an installed Raylib 6 shared library without creating a window.
+`getRandomValue(7, 7)` mapped to `GetRandomValue` proves a scalar call against a third-party C ABI,
+while `memAlloc` mapped to `MemAlloc`, returning an `owned Allocation by memFree`, and the subsequent release prove that the same opaque-handle path
+works with a real ecosystem library rather than only the repository fixture. The workflow pins the
+Raylib source commit and builds a shared library. It runs on FFI-affecting pull requests as well as
+on a schedule and manual dispatch, but remains separate from the deterministic suite because
+downloading and compiling somebody else's release is interoperability evidence, not a unit-test
+dependency.
 
 ## Referenced by
 

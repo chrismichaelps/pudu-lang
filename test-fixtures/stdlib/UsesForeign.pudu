@@ -9,7 +9,7 @@ module UsesForeign
 /// that text, a narrow integer, and two doubles each arrive as themselves.
 foreign "c" version "1" {
   fn strlen(text: Str) -> Int64
-  fn abs(value: Int32) -> Int32
+  fn absolute symbol "abs" (value: Int32) -> Int32
   fn labs(value: Int64) -> Int64
   fn pow(base: Float64, exponent: Float64) -> Float64
   fn sqrt(value: Float64) -> Float64
@@ -30,9 +30,9 @@ export fn main() -> Int {
 
     // A narrow integer crosses at the width the declaration named, and comes
     // back at it.
-    if abs(-42i32) == 42i32 { held = held + 1 }
-    if abs(0i32) == 0i32 { held = held + 1 }
-    if abs(7i32) == 7i32 { held = held + 1 }
+    if absolute(-42i32) == 42i32 { held = held + 1 }
+    if absolute(0i32) == 0i32 { held = held + 1 }
+    if absolute(7i32) == 7i32 { held = held + 1 }
 
     // A wide one is a different function with a different symbol, which is the
     // point of the width being in the declaration rather than guessed.

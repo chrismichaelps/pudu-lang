@@ -48,10 +48,10 @@ const foreignSource = [
   'export foreign "c" {',
   "  type Box",
   "  fn create(value: Int32) -> owned Box by destroy",
-  "  fn read(box: Box) -> Int32",
+  '  fn readBox symbol "read"(box: Box) -> Int32',
   "  fn destroy(box: Box) -> ()",
   "}",
-  "fn inspect(box: Box) -> Int32 { unsafe(foreign) { read(box) } }",
+  "fn inspect(box: Box) -> Int32 { unsafe(foreign) { readBox(box) } }",
   "",
 ].join("\n");
 

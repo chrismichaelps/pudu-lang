@@ -120,6 +120,7 @@ parseForeignFunction = do
   start <- peekToken
   _ <- expectKeyword KwFn "to start a foreign function"
   name <- expectValueIdentifier "after fn"
+  symbol <- parseSymbol
   _ <- expectSymbol "(" "before the parameter list"
   parameters <- parseParameters []
   _ <- expectSymbol ")" "after the parameter list"
@@ -133,12 +134,23 @@ parseForeignFunction = do
         ( Located (mergedOrLeft (tokenSpan start) (locatedSpan result))
             ForeignFunction
               { foreignName = name
+              , foreignSymbol = symbol
               , foreignParameters = parameters
               , foreignResult = result
               , foreignReleasedBy = released
               }
         )
     )
+
+{-| The exact native spelling, when its library does not use Pudu's naming
+    convention. Keeping this separate lets a Raylib `MemAlloc` remain the
+    idiomatic local `memAlloc` without guessing or rewriting either name. -}
+parseSymbol :: Parser (Maybe (Located Text))
+parseSymbol = do
+  keyword <- matchWord "symbol"
+  case keyword of
+    Nothing -> pure Nothing
+    Just _ -> Just <$> expectStringLiteral "after symbol"
 
 {-| What releases an owned result.
 
@@ -169,8 +181,8 @@ expectStringLiteral purpose = do
 
 {-| A word that means something only here.
 
-    `version`, `owned`, and `by` are ordinary names everywhere else in a
-    program, and reserving three common words for one declaration form would
+    `version`, `symbol`, `owned`, and `by` are ordinary names everywhere else in a
+    program, and reserving four common words for one declaration form would
     cost every program that used them for anything. They are recognised in the
     positions where nothing else may appear. -}
 matchWord :: Text -> Parser (Maybe Token)

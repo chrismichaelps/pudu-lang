@@ -131,7 +131,7 @@ installForeign library (Located _ function) =
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
-          , foreignBindingSymbol = name
+          , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
               [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles)
               | Located _ parameter <- foreignParameters function

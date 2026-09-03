@@ -58,11 +58,11 @@ foreignDemo =
     , "foreign \"c\" {"
     , "  type Box"
     , "  fn pudu_ffi_cpp_box_new(value: Int32) -> owned Box by pudu_ffi_cpp_box_delete"
-    , "  fn pudu_ffi_cpp_box_read(box: Box) -> Int32"
+    , "  fn readBox symbol \"pudu_ffi_cpp_box_read\"(box: Box) -> Int32"
     , "  fn pudu_ffi_cpp_box_delete(box: Box) -> ()"
     , "}"
     , ""
-    , "fn caller(box: Box) -> Int32 { unsafe(foreign) { pudu_ffi_cpp_box_read(box) } }"
+    , "fn caller(box: Box) -> Int32 { unsafe(foreign) { readBox(box) } }"
     ]
 
 {-| The name of the document under test.
@@ -204,9 +204,9 @@ testCompletion = do
 testForeignTooling :: IO Property
 testForeignTooling = do
   documents <- opened foreignDemo
-  let shown = request "textDocument/hover" (atPosition 9 60) documents
+  let shown = request "textDocument/hover" (atPosition 9 52) documents
       hoverBody = shown >>= lookupField "contents" >>= lookupField "value" >>= textOf
-      found = request "textDocument/definition" (atPosition 9 60) documents
+      found = request "textDocument/definition" (atPosition 9 52) documents
       definitionLine = found >>= lookupField "range" >>= lookupField "start" >>= lookupField "line"
       listed = request "textDocument/documentSymbol" wholeDocument documents
       offered = request "textDocument/completion" wholeDocument documents
@@ -221,8 +221,8 @@ testForeignTooling = do
         (property (containsLabel "Box" listed))
     , counterexample "completion contains the opaque handle type"
         (property (containsLabel "Box" offered))
-    , counterexample "completion contains the foreign function"
-        (property (containsLabel "pudu_ffi_cpp_box_read" offered))
+    , counterexample "completion contains the local name of a mapped foreign function"
+        (property (containsLabel "readBox" offered))
     ]
  where
   containsLabel expected value = case value of

@@ -335,6 +335,9 @@ data Foreign = Foreign
     than a diagnostic — which is why reaching one needs `unsafe`. -}
 data ForeignFunction = ForeignFunction
   { foreignName :: !(Located Text)
+  {-| The exact symbol the library exports when it differs from the local
+      value name. Tooling and calls keep the local name; only lookup reads this. -}
+  , foreignSymbol :: !(Maybe (Located Text))
   , foreignParameters :: ![Located Parameter]
   , foreignResult :: !(Located TypeSyntax)
   {-| The function that releases what this one returns, when what it returns

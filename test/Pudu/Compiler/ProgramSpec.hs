@@ -62,6 +62,7 @@ testForeignHandles = do
   borrowed <- codes "test-fixtures/stdlib/RejectsBorrowedForeignHandle.pudu"
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
+  emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   pure $ conjoin
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
     , counterexample "a C++ object crosses as an opaque handle and is read and released"
@@ -84,6 +85,8 @@ testForeignHandles = do
         (badRelease === ["E3067"])
     , counterexample "nominal handles cannot cross as another declared handle"
         (wrongHandle === ["E3001"])
+    , counterexample "an empty native symbol is refused at its declaration"
+        (emptySymbol === ["E3068"])
     ]
 
 {-| A qualified type name is judged only against a module the compiler read.

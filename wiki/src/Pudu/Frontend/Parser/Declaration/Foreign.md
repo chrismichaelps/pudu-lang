@@ -29,7 +29,7 @@ parseForeign :: Visibility -> Parser (Located Declaration)
 
 - **The block is the unit.** The library is what its functions share: it is opened once, its version
   is one fact, and what a program reaches outside itself is one place to look rather than a search.
-- **`foreign`, `version`, `owned`, and `by` are contextual.** They start or continue this
+- **`foreign`, `version`, `symbol`, `owned`, and `by` are contextual.** They start or continue this
   declaration and are ordinary names everywhere else. Reserving four common words to add one
   declaration form would break every program that had used them, and a language that charges its own
   users a rename for a feature has chosen the feature over them.
@@ -37,6 +37,9 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   this program, and a string is where a reader already expects something from outside.
 - **A version is recorded rather than enforced.** Nothing here fetches or verifies a library, and a
   check this cannot perform would be a claim rather than a check.
+- **`symbol "ExactName"` is an optional lookup spelling after the local name.** It admits C APIs
+  such as Raylib without admitting their upper-initial names into Pudu's value namespace. The
+  parser retains both spellings; it does not conflate editor identity with loader identity.
 - **An owned result that names no release is refused here**, rather than leaking later. The reason
   ownership is in the declaration is that it can be checked where it is written.
 - **A block-local `type Name` declares an opaque handle.** It has no fields or constructors because
@@ -59,6 +62,9 @@ parseForeign :: Visibility -> Parser (Located Declaration)
   outside are one thing repeated on every line, and a reader auditing what a
   program touches would have to find them all. _Rejected:_ per-function
   annotations.
+- **Q:** Permit the foreign spelling directly as the Pudu name? **A:** No. _Rationale:_ one imported
+  library should not suspend the language's naming grammar for every caller and editor feature.
+  _Rejected:_ upper-initial value identifiers inside foreign blocks.
 
 ## Referenced by
 

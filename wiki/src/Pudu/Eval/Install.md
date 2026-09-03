@@ -50,6 +50,9 @@ lastSegmentOf    :: NonEmpty Text -> Text
 - A foreign binding retains the block-local handle crossings, whether its result is owned, and
   whether it is the declared release for a handle. The evaluator therefore does not rediscover
   ownership from function names at call time.
+- A foreign binding keeps its idiomatic local name as the environment key and the explicitly mapped
+  native symbol, when present, as the dynamic-loader key. Release ownership is still related by
+  local declaration names, so a foreign spelling never leaks into name resolution.
 
 ### Linkage
 

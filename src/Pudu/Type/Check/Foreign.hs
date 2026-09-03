@@ -15,6 +15,7 @@ import Control.Monad (unless, when)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Pudu.Foreign.Crossing (Crossing (..), crossableNames, crossingFor, crossingType)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -88,6 +89,12 @@ checkForeign value = mapM_ (checkOne handles declared) (foreignFunctions value)
 
 checkOne :: Set.Set Text -> Map.Map Text ForeignFunction -> Located ForeignFunction -> Checker ()
 checkOne handles declared (Located _ function) = do
+  case foreignSymbol function of
+    Just (Located spanValue symbol) | Text.null symbol ->
+      report "E3068" spanValue
+        "a foreign symbol cannot be empty"
+        (Just "write the exact function name exported by the library")
+    _ -> pure ()
   mapM_ (checkParameter handles) (foreignParameters function)
   refuseUncrossable (locatedSpan (foreignResult function)) result
   checkOwnership declared function result

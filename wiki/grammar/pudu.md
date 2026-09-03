@@ -345,13 +345,14 @@ function_decl    = "unsafe", capabilities?, ... ;
 foreign_decl     = "export"?, "foreign", string, ("version", string)?,
                    "{", (foreign_type | foreign_fn)*, "}" ;
 foreign_type     = "type", upper_identifier ;
-foreign_fn       = "fn", identifier, "(", parameters?, ")",
+foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
                    ("->", "owned"?, type, ("by", identifier)?)? ;
 ```
 
-- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `owned`, and `by`. Reserving four common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
+- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
 - A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
 - `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.
+- A function ordinarily looks up a symbol with the same spelling as its Pudu name. `symbol "ExactName"` maps an idiomatic local value name to the exact exported symbol when the library's naming convention cannot be written as a Pudu value identifier. The mapping changes only lookup; calls, release declarations, and editor features use the local name. An empty symbol is refused.
 - The types that may cross are stated: `Int8` `Int16` `Int32` `Int64`, `UInt8` `UInt16` `UInt32` `UInt64`, `Float32` `Float64`, `Bool`, `Str`, `()`, and an opaque handle type declared by the same block. These are the language's own types, so a foreign signature is an ordinary signature and a caller passing the wrong width or handle kind is told so by the ordinary checker. Anything else is refused at the declaration, which is the point of stating the list.
 - `Str` crosses as bytes ending in a nought, copied for the call and freed after. Text containing a nought is refused, because the other side reads to the first one and would see less than the text says.
 - An integer that does not fit the width it crosses as is refused rather than wrapped. Silent wraparound at this boundary is how a program calling a library keeps running with a value it never computed.

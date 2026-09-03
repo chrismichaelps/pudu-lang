@@ -42,6 +42,8 @@ foreignHandles :: Foreign -> Set Text
   handle result, an owned non-handle result, an absent release, and a release whose declaration is
   missing or does not take exactly the produced handle and return `()`. A signature that disagrees
   with the binary remains unverifiable and is why calls require `unsafe(foreign)`.
+- **An explicitly mapped native symbol must not be empty.** Empty lookup is always a declaration
+  defect and is reported as `E3068` before the platform loader is involved.
 
 ### Linkage
 
@@ -62,6 +64,9 @@ foreignHandles :: Foreign -> Set Text
 - **Q:** Admit a borrowed handle now? **A:** No. _Rationale:_ the checker has no foreign lifetime to
   attach it to, so accepting one would permit storage after the library invalidates it. _Rejected:_
   treating an unowned handle like a process-lifetime pointer.
+- **Q:** Validate that the named symbol exists during checking? **A:** No. _Rationale:_ checking must
+  not depend on what happens to be installed on the compiler's machine; existence is an integration
+  property at execution. _Rejected:_ loading libraries during type checking.
 
 ## Referenced by
 
