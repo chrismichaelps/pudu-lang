@@ -92,6 +92,17 @@ export fn main() -> Int {
   if App.stageNames(&base) == [] { held = held + 1 }
   if Config.wholeOr(&App.configOf(&base), "server.port", 0) == 9000 { held = held + 1 }
 
+  // The stages an application holds are readable as values, and its routes can
+  // be replaced without rebuilding the rest of it.
+  if App.stagesOf(&base).length() == 0 { held = held + 1 }
+  let rerouted = App.serving(&base, &Route.routing(&[Route.get("/other", healthy)]))
+  if Route.dispatch(&App.routerOf(&rerouted), requestFor("/other")).status.code == 200 {
+    held = held + 1
+  }
+  if Route.dispatch(&App.routerOf(&rerouted), requestFor("/health")).status.code == 404 {
+    held = held + 1
+  }
+
   // Its routes answer without a connection, which is what lets a handler be
   // checked at all.
   if Route.dispatch(&App.routerOf(&base), requestFor("/health")).body == "ok" { held = held + 1 }

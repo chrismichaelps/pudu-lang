@@ -132,6 +132,18 @@ export fn main() -> Int {
   // not close its own head.
   if Html.render(&Html.title("a < b")) == "<title>a &lt; b</title>" { held = held + 1 }
 
+  // An element named directly, for the ones this module does not name itself.
+  if Html.render(&Html.element("aside", &[("role", "note")], &[Html.text("x")]))
+    == "<aside role=\"note\">x</aside>"
+  {
+    held = held + 1
+  }
+  if Html.render(&Html.link(&[("rel", "stylesheet"), ("href", "/a.css")]))
+    == "<link rel=\"stylesheet\" href=\"/a.css\" />"
+  {
+    held = held + 1
+  }
+
   // Two renders of equal views are equal, which is what lets a page be
   // compared in a test rather than matched against a pattern.
   if Html.render(&nested) == Html.render(&nested) { held = held + 1 }

@@ -233,6 +233,22 @@ export fn main() -> Int {
   if headerOf(&Guard.redirect(302, "/next", &[]), "Location") == "/next" { held = held + 1 }
   if Guard.redirect(302, "https://evil.example", &[]).status.code == 400 { held = held + 1 }
 
+  // A sharing permitting different methods says so.
+  let widened = Guard.allowing(&sharing, &["GET", "DELETE"])
+  let widenedRoutes = wrapped(&routed, Guard.shared(&widened))
+  if headerOf(&widenedRoutes(requestFor(Http.Get, "/x", &[("Origin", "https://friend.example")])), "Access-Control-Allow-Methods")
+    == "GET, DELETE"
+  {
+    held = held + 1
+  }
+
+  // The identity a request carries is readable on its own, for a step that
+  // wants it before deciding anything.
+  if Guard.identityOf(&requestFor(Http.Get, "/x", &[("X-Request-Id", "abc")])) == "abc" {
+    held = held + 1
+  }
+  if !Guard.identityOf(&requestFor(Http.Get, "/x", &[])).isEmpty() { held = held + 1 }
+
   // The standard set is every step, so a service is protected before its
   // author has thought about any of this.
   if Guard.standard(&Guard.shareNothing()).length() == 4 { held = held + 1 }

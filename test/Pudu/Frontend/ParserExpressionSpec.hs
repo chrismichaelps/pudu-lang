@@ -586,6 +586,9 @@ shape (Located _ expression) = case expression of
     locatedValue name <> "!(" <> Text.intercalate "," (map shape arguments) <> ")"
   RecordExpression path fields ->
     moduleNameText path <> "{" <> Text.intercalate "," (map fieldInitShape fields) <> "}"
+  RecordUpdateExpression path source fields ->
+    moduleNameText path <> "{.." <> shape source
+      <> "," <> Text.intercalate "," (map fieldInitShape fields) <> "}"
   InvalidExpression -> "invalid"
 
 fieldInitShape :: Located FieldInit -> Text

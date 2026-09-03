@@ -55,6 +55,8 @@ emptySets located@(Located _ expression) = case expression of
   TypeApplication target _ -> descend [target]
   RecordExpression _ fields ->
     descend [value | Located _ field <- fields, Just value <- [fieldInitValue field]]
+  RecordUpdateExpression _ source fields ->
+    descend (source : [value | Located _ field <- fields, Just value <- [fieldInitValue field]])
   BlockExpression block -> blockEmptySets block
   IfExpression condition thenBlock elseBranch ->
     descend (condition : maybe [] pure elseBranch) <> blockEmptySets thenBlock

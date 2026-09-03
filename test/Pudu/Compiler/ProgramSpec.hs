@@ -263,6 +263,8 @@ testProgramEvaluation = do
   submitted <- runEntry "test-fixtures/stdlib/UsesBind.pudu"
   columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
+  shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
+  altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -443,14 +445,14 @@ testProgramEvaluation = do
         up when one of them refuses to. -}
     , counterexample
         "an application is a value that starts and stops in a written order"
-        (wired === Just "43")
+        (wired === Just "46")
     {-| That placing text in a page cannot place markup in one: a script
         written into text renders as that text, a quote inside an attribute
         does not end the value and start another, and the ampersand is written
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "34")
+        (markup === Just "36")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than
@@ -468,7 +470,7 @@ testProgramEvaluation = do
         encoded ascent, and an address only the server can reach. -}
     , counterexample
         "the web layer refuses what it is supposed to refuse"
-        (refused === Just "73")
+        (refused === Just "76")
     {-| That what a schema change should do is decided without a database: a
         migration edited after it was applied stops everything, because both
         databases report the same version from then on and nothing later can
@@ -504,7 +506,7 @@ testProgramEvaluation = do
         because doing that one route at a time maps the model. -}
     , counterexample
         "a route states what it requires or it is not a route"
-        (permitted === Just "46")
+        (permitted === Just "48")
     {-| That a client bounds what a request may cost and where it may go: an
         address the network trusts is refused unless the caller named it, and
         refused again at every redirect rather than only at the first, since a
@@ -602,6 +604,23 @@ testProgramEvaluation = do
     , counterexample
         "a loaded value is a value, and children load for many parents at once"
         (kept === Just "32")
+    {-| That a statement of real shape holds together: every join, grouping, an
+        aggregate, a condition on the group, ordering that says where nothing
+        sorts, set operations, a named result, and row locking — composed into
+        the shape a report takes, with the clauses in the order the language
+        reads them and every value still a parameter however large it grew. -}
+    , counterexample
+        "a query written as one value keeps its values out of its text"
+        (shaped === Just "60")
+    {-| That a record may be written as another record with some fields
+        different. Without it, changing one field of a ten-field record means
+        writing the other nine out — nine chances to copy one wrong, with the
+        field the expression is actually about invisible among them. The base
+        is untouched, the declared field order survives either spelling, and a
+        record written whole equals one written as a change. -}
+    , counterexample
+        "a record may be written as a change to another"
+        (altered === Just "22")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

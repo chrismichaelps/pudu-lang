@@ -11,7 +11,23 @@ import Std.Text as Text
 /// from outside is in `values`, and there is no call that moves one into the
 /// other — which is what makes an injection unrepresentable here rather than
 /// prevented by a rule someone remembers at every call site.
-export type Statement = { text: Str, values: Array[Option[Str]] }
+/// One piece of a statement: text the program wrote, or the place a value goes.
+///
+/// A placeholder is a part rather than text reading `$3`, and that is what
+/// makes joining two statements cost nothing. Written into the text, a
+/// placeholder has to be found again and renumbered whenever a statement is
+/// put after another — which means scanning every character of it, on every
+/// join. Kept as a part, the numbers are never written until the text is
+/// asked for, and then they are written once, in order.
+export type Part
+  = Literal(Str)
+  | Placeholder
+
+/// The parts are held rather than one text, because a statement is built a
+/// clause at a time and appending to text copies everything built so far — so
+/// a statement assembled from many pieces cost the square of its length. They
+/// are joined once, when the text is asked for.
+export type Statement = { parts: Array[Part], values: Array[Option[Str]] }
 
 /// Why a statement would not be built.
 export type QueryError
@@ -33,16 +49,48 @@ const NAME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
 const DIGITS: Str = "0123456789"
 
 /// A statement with nothing in it.
-export fn empty() -> Statement { Statement{text: "", values: []} }
+export fn empty() -> Statement { Statement{parts: [], values: []} }
 
 /// A statement from text the program wrote, carrying no values.
 ///
 /// For the parts a builder does not cover. Values still travel separately —
 /// there is no door here that takes them any other way.
-export fn text(source: Str) -> Statement { Statement{text: source, values: []} }
+export fn text(source: Str) -> Statement {
+  Statement{parts: if source.isEmpty() { [] } else { [Literal(source)] }, values: []}
+}
 
 /// The text a statement holds, which a program may read before running it.
-export fn textOf(held: &Statement) -> Str { held.text }
+export fn textOf(held: &Statement) -> Str {
+  var pieces: Array[Str] = []
+  var placeholder = 0
+  var previous = ""
+  for part in held.parts {
+    let piece = match part {
+      case Literal(source) => source
+      case Placeholder => {
+        placeholder = placeholder + 1
+        "$" + show(placeholder)
+      }
+    }
+    if !piece.isEmpty() {
+      if pieces.length() > 0 && spaced(previous, piece) { pieces = pieces.push(" ") }
+      pieces = pieces.push(piece)
+      previous = piece
+    }
+  }
+  pieces.join("")
+}
+
+/// Whether two pieces need a space between them.
+///
+/// Punctuation binds to what it is beside: an opening bracket to what follows
+/// it, a comma and a closing bracket to what precedes. Without this the text
+/// still runs, because the database does not care — but it is read by people
+/// during an incident, and `in ( $1 , $2 )` is read more slowly than
+/// `in ($1, $2)`.
+fn spaced(before: Str, after: Str) -> Bool {
+  !before.endsWith("(") && !after.startsWith(")") && !after.startsWith(",")
+}
 
 /// The values that travel beside it.
 export fn valuesOf(held: &Statement) -> Array[Option[Str]] { held.values }
@@ -52,9 +100,14 @@ export fn valueCount(held: &Statement) -> Int { held.values.length() }
 
 /// Two statements one after the other, with the second's placeholders
 /// renumbered to follow the first's.
+/// Two statements one after the other.
+///
+/// Nothing is renumbered and nothing is scanned: the placeholders are parts,
+/// so putting one statement after another is putting its parts after the
+/// other's, and the numbers are written when the text is.
 export fn then(left: &Statement, right: &Statement) -> Statement {
   Statement {
-    text: joinedText(left.text, renumbered(right.text, left.values.length())),
+    parts: left.parts.concat(right.parts),
     values: left.values.concat(right.values)
   }
 }
@@ -66,7 +119,7 @@ export fn then(left: &Statement, right: &Statement) -> Statement {
 /// correspond to a value they supplied.
 export fn withValue(base: &Statement, fragment: Str, value: Option[Str]) -> Statement {
   Statement {
-    text: joinedText(base.text, fragment + " $" + show(base.values.length() + 1)),
+    parts: base.parts.push(Literal(fragment)).push(Placeholder),
     values: base.values.push(value)
   }
 }
@@ -92,6 +145,28 @@ export fn name(candidate: Str) -> Result[Str, QueryError] {
       }
       if good { Ok(candidate) } else { Err(BadName(candidate)) }
     }
+  }
+}
+
+/// A name that may carry the table it belongs to.
+///
+/// Needed wherever a statement reaches more than one table: once a join is in
+/// play, every condition names its column with the table, and a check that
+/// admitted only a bare name would refuse every one of them. Each part is
+/// checked separately rather than the whole against a looser rule, because a
+/// rule loose enough to admit a dot is loose enough to admit what follows one.
+export fn qualifiedName(candidate: Str) -> Result[Str, QueryError] {
+  let parts = candidate.split(".")
+  if parts.length() > 2 {
+    Err(BadName(candidate))
+  } else {
+    var index = 0
+    var refused = false
+    while index < parts.length() && !refused {
+      if let Err(_) = name(parts[index]) { refused = true }
+      index = index + 1
+    }
+    if refused { Err(BadName(candidate)) } else { Ok(candidate) }
   }
 }
 
@@ -146,7 +221,7 @@ export fn matching(
   comparison: Str,
   value: Option[Str]
 ) -> Result[Statement, QueryError] {
-  let checkedColumn = name(column) ?
+  let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
   Ok(withValue(base, "where " + checkedColumn + " " + checkedOperator, value))
 }
@@ -158,7 +233,7 @@ export fn also(
   comparison: Str,
   value: Option[Str]
 ) -> Result[Statement, QueryError] {
-  let checkedColumn = name(column) ?
+  let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
   Ok(withValue(base, "and " + checkedColumn + " " + checkedOperator, value))
 }
@@ -170,7 +245,7 @@ export fn either(
   comparison: Str,
   value: Option[Str]
 ) -> Result[Statement, QueryError] {
-  let checkedColumn = name(column) ?
+  let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
   Ok(withValue(base, "or " + checkedColumn + " " + checkedOperator, value))
 }
@@ -184,37 +259,37 @@ export fn matchingOneOf(
   column: Str,
   values: &Array[Option[Str]]
 ) -> Result[Statement, QueryError] {
-  let checkedColumn = name(column) ?
+  let checkedColumn = qualifiedName(column) ?
   if values.length() == 0 {
     // Nothing is in an empty list, and saying so is better than building a
     // statement the database refuses to parse.
-    Ok(Statement{text: joinedText(base.text, "where false"), values: base.values})
+    Ok(Statement{parts: base.parts.push(Literal("where false")), values: base.values})
   } else {
-    var built = *base
-    var listed = ""
+    var parts = base.parts.push(Literal("where " + checkedColumn + " in ("))
+    var held = base.values
     var index = 0
     while index < values.length() {
-      if index > 0 { listed = listed + ", " }
-      listed = listed + "$" + show(built.values.length() + 1)
-      built = Statement{text: built.text, values: built.values.push(values[index])}
+      if index > 0 { parts = parts.push(Literal(",")) }
+      parts = parts.push(Placeholder)
+      held = held.push(values[index])
       index = index + 1
     }
-    Ok(Statement{text: joinedText(built.text, "where " + checkedColumn + " in (" + listed + ")"), values: built.values})
+    Ok(Statement{parts: parts.push(Literal(")")), values: held})
   }
 }
 
 /// A condition that a column holds nothing.
 export fn matchingMissing(base: &Statement, column: Str) -> Result[Statement, QueryError] {
-  let checked = name(column) ?
-  Ok(Statement{text: joinedText(base.text, "where " + checked + " is null"), values: base.values})
+  let checked = qualifiedName(column) ?
+  Ok(Statement{parts: base.parts.push(Literal("where " + checked + " is null")), values: base.values})
 }
 
 /// The order rows come back in.
 export fn orderBy(base: &Statement, column: Str, descending: Bool) -> Result[Statement, QueryError] {
-  let checked = name(column) ?
+  let checked = qualifiedName(column) ?
   Ok(
     Statement {
-      text: joinedText(base.text, "order by " + checked + if descending { " desc" } else { " asc" }),
+      parts: base.parts.push(Literal("order by " + checked + if descending { " desc" } else { " asc" })),
       values: base.values
     }
   )
@@ -226,12 +301,12 @@ export fn orderBy(base: &Statement, column: Str, descending: Bool) -> Result[Sta
 /// a database plans better when it knows it. It is a whole number by its type,
 /// so nothing else can arrive here.
 export fn limit(base: &Statement, count: Int) -> Statement {
-  Statement{text: joinedText(base.text, "limit " + show(count)), values: base.values}
+  Statement{parts: base.parts.push(Literal("limit " + show(count))), values: base.values}
 }
 
 /// Starting after this many rows.
 export fn offset(base: &Statement, count: Int) -> Statement {
-  Statement{text: joinedText(base.text, "offset " + show(count)), values: base.values}
+  Statement{parts: base.parts.push(Literal("offset " + show(count))), values: base.values}
 }
 
 /// A row added to a table, from the columns and the values that fill them.
@@ -242,25 +317,21 @@ export fn insert(
 ) -> Result[Statement, QueryError] {
   let checkedTable = name(table) ?
   if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
-  var listed = ""
-  var placeholders = ""
+  var listed: Array[Str] = []
   var index = 0
   while index < columns.length() {
     let checked = name(columns[index]) ?
-    if index > 0 {
-      listed = listed + ", "
-      placeholders = placeholders + ", "
-    }
-    listed = listed + checked
-    placeholders = placeholders + "$" + show(index + 1)
+    listed = listed.push(checked)
     index = index + 1
   }
-  Ok(
-    Statement {
-      text: "insert into " + checkedTable + " (" + listed + ") values (" + placeholders + ")",
-      values: *values
-    }
-  )
+  var parts: Array[Part] = [Literal("insert into " + checkedTable + " (" + listed.join(", ") + ") values (")]
+  var place = 0
+  while place < columns.length() {
+    if place > 0 { parts = parts.push(Literal(",")) }
+    parts = parts.push(Placeholder)
+    place = place + 1
+  }
+  Ok(Statement{parts: parts.push(Literal(")")), values: *values})
 }
 
 /// Columns of a table set to new values.
@@ -274,15 +345,15 @@ export fn update(
 ) -> Result[Statement, QueryError] {
   let checkedTable = name(table) ?
   if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
-  var assignments = ""
+  var parts: Array[Part] = [Literal("update " + checkedTable + " set")]
   var index = 0
   while index < columns.length() {
     let checked = name(columns[index]) ?
-    if index > 0 { assignments = assignments + ", " }
-    assignments = assignments + checked + " = $" + show(index + 1)
+    parts = parts.push(Literal(if index > 0 { ", " + checked + " =" } else { checked + " =" }))
+    parts = parts.push(Placeholder)
     index = index + 1
   }
-  Ok(Statement{text: "update " + checkedTable + " set " + assignments, values: *values})
+  Ok(Statement{parts: parts, values: *values})
 }
 
 /// Rows removed from a table.
@@ -304,7 +375,7 @@ export fn returning(base: &Statement, columns: &Array[Str]) -> Result[Statement,
   if listed.isEmpty() {
     Err(Empty)
   } else {
-    Ok(Statement{text: joinedText(base.text, "returning " + listed), values: base.values})
+    Ok(Statement{parts: base.parts.push(Literal("returning " + listed)), values: base.values})
   }
 }
 
@@ -315,47 +386,6 @@ export fn explain(problem: &QueryError) -> Str {
     "that is not a name a statement may hold: " + candidate
     case BadOperator(candidate) => "that is not a comparison this builds: " + candidate
     case Empty => "the statement names nothing to act on"
-  }
-}
-
-fn joinedText(left: Str, right: Str) -> Str {
-  if left.isEmpty() { right } else { left + " " + right }
-}
-
-/// A fragment's placeholders moved along by however many already exist.
-///
-/// Only the numbers this module wrote are moved: the count is carried in the
-/// statement rather than read back out of the text, so a placeholder that
-/// appears inside a value is never one of them, because a value is never in
-/// the text.
-fn renumbered(source: Str, by: Int) -> Str {
-  if by == 0 {
-    source
-  } else {
-    var built = ""
-    var index = 0
-    while index < source.length() {
-      let character = source.slice(index, index + 1)
-      if character == "$" {
-        var digits = ""
-        var ahead = index + 1
-        while ahead < source.length() && DIGITS.contains(source.slice(ahead, ahead + 1)) {
-          digits = digits + source.slice(ahead, ahead + 1)
-          ahead = ahead + 1
-        }
-        if digits.isEmpty() {
-          built = built + character
-          index = index + 1
-        } else {
-          built = built + "$" + show(Option.unwrapOr(Text.countOf(digits), 0) + by)
-          index = ahead
-        }
-      } else {
-        built = built + character
-        index = index + 1
-      }
-    }
-    built
   }
 }
 
@@ -419,7 +449,7 @@ export fn orOn[T: Schema.Bindable](
 /// A condition that a column holds nothing.
 export fn missingOn[T](base: &Statement, column: &Schema.Column[T]) -> Statement {
   Statement {
-    text: joinedText(base.text, "where " + Schema.nameOf(column) + " is null"),
+    parts: base.parts.push(Literal("where " + Schema.nameOf(column) + " is null")),
     values: base.values
   }
 }
@@ -427,10 +457,43 @@ export fn missingOn[T](base: &Statement, column: &Schema.Column[T]) -> Statement
 /// The order rows come back in, by a column the compiler knows.
 export fn orderOn[T](base: &Statement, column: &Schema.Column[T], descending: Bool) -> Statement {
   Statement {
-    text: joinedText(
-      base.text,
-      "order by " + Schema.nameOf(column) + if descending { " desc" } else { " asc" }
-    ),
+    parts: base.parts.push(Literal(
+        "order by " + Schema.nameOf(column) + if descending { " desc" } else { " asc" }
+      )),
     values: base.values
   }
+}
+
+/// Two results together, with the second's values following the first's.
+export fn union(left: &Statement, right: &Statement, keepingDuplicates: Bool) -> Statement {
+  combined(left, right, if keepingDuplicates { "union all" } else { "union" })
+}
+
+/// The rows in both.
+export fn intersect(left: &Statement, right: &Statement) -> Statement {
+  combined(left, right, "intersect")
+}
+
+/// The rows in the first and not the second.
+export fn except(left: &Statement, right: &Statement) -> Statement {
+  combined(left, right, "except")
+}
+
+fn combined(left: &Statement, right: &Statement, word: Str) -> Statement {
+  then(&then(left, &text(word)), right)
+}
+
+/// A named result the rest of a statement reads from.
+export fn withQuery(
+  named: Str,
+  body: &Statement,
+  rest: &Statement
+) -> Result[Statement, QueryError] {
+  let checked = name(named) ?
+  Ok(
+    then(
+        &text("with " + checked + " as ("),
+        &then(body, &then(&text(")"), rest))
+    )
+  )
 }

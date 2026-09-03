@@ -25,6 +25,7 @@ tags: [moc, module, stdlib]
 - [[Std Tls]] — connections whose contents only the two ends can read.
 - [[Std Db Protocol]] — PostgreSQL v3 wire framing and fields.
 - [[Std Db Schema]] — columns as names the compiler knows, so an editor offers them.
+- [[Std Db Query Shape]] — putting a statement together out of more than one table.
 - [[Std Db Store]] — a program's own values kept and read back, with nothing left unread.
 - [[Std Db Repository]] — rows as the program's own values, naming the column when one is wrong.
 - [[Std Db Query]] — statements in which a value cannot become part of what runs.

@@ -9,6 +9,7 @@ module Pudu.Type.Check.Record
   ( CheckValue (..)
   , namedVariantShape
   , recordType
+  , recordUpdateType
   ) where
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -111,6 +112,47 @@ recordType checking declared rigid spanValue path fields = do
     A variant is present here only when its declaration gave names. The names
     sit over the same positional payload a bare `Circle(Int)` would carry, so
     nothing downstream needs to know which spelling was used. -}
+
+{-| A record that is another record with some fields different.
+
+    The base must already be the record being written, and each named field is
+    checked against that field's declared type exactly as a construction's is.
+    Nothing is required to be present: what is not written is what the base
+    held, which is the whole point — an update names the fields it changes and
+    a reader sees only those. -}
+recordUpdateType
+  :: CheckValue
+  -> DeclaredTypes
+  -> [(Text, Int)]
+  -> Span
+  -> ModuleName
+  -> Located Expression
+  -> [Located FieldInit]
+  -> Checker Type
+recordUpdateType checking declared rigid spanValue path source fields = do
+  let name = NonEmpty.last (moduleNameSegments path)
+      identity = Map.findWithDefault (NominalId Nothing (moduleNameText path))
+        (moduleNameText path) (declaredNames declared)
+  declaredFieldTypes <- lookupField identity
+  case declaredFieldTypes of
+    Nothing -> do
+      report "E3007" spanValue (name <> " is not a record type")
+        (Just "a record may only be updated from a type that declares fields")
+      _ <- valueOf checking declared rigid source
+      mapM_ (checkFieldInit checking declared rigid) fields
+      pure ErrorType
+    Just declaredFields' -> do
+      parameters <- maybe [] id <$> lookupTypeParams identity
+      replacements <- freshFor parameters
+      let updated = NominalType identity (map snd replacements)
+          expected =
+            [ (fieldName, substituteRigid replacements fieldType)
+            | (fieldName, fieldType) <- declaredFields'
+            ]
+      actual <- valueOf checking declared rigid source
+      _ <- unify (locatedSpan source) updated actual
+      mapM_ (checkField checking declared rigid expected) fields
+      pure updated
 
 {-| A variant's payload paired with the names it declared for it.
 

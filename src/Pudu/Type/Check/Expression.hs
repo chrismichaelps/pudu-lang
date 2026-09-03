@@ -60,6 +60,8 @@ import Pudu.Type.Check.Call
 import Pudu.Type.Check.Record
   ( CheckValue (..)
   , recordType
+  , recordUpdateType
+  , recordUpdateType
   )
 import Pudu.Type.Check.Rule
   ( awaitType
@@ -201,6 +203,8 @@ inferExpression around declared rigid spanValue expression = case expression of
     reportUnusedCapabilities spanValue
     pure bodyType
   RecordExpression path fields -> recordType (checkValue around) declared rigid spanValue path fields
+  RecordUpdateExpression path source fields ->
+    recordUpdateType (checkValue around) declared rigid spanValue path source fields
   BlockExpression block -> aroundBlock around declared rigid block
   IfExpression condition thenBlock elseBranch -> do
     conditionCheckpoint <- integerLiteralCheckpoint

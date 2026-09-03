@@ -261,6 +261,22 @@ evaluateHere (Located spanValue expression) = case expression of
   RecordExpression path fields -> do
     values <- mapM (evaluateFieldInit spanValue) fields
     pure (RecordValue (lastPathSegment path) values)
+  {-| A record that is another record with some fields different.
+
+      The base is evaluated first and its fields kept in the order it declared
+      them, so an update does not reorder what it did not mention — two records
+      of one type compare and render the same whether either was written
+      whole or as a change to the other. -}
+  RecordUpdateExpression path source fields -> do
+    base <- evaluate source
+    written <- mapM (evaluateFieldInit spanValue) fields
+    case base of
+      RecordValue heldName held ->
+        pure (RecordValue heldName [(name, maybe value id (lookup name written)) | (name, value) <- held])
+      _ ->
+        abortAt (Just spanValue) "E7001"
+          (lastPathSegment path <> " can only be updated from a record of the same type")
+          Nothing
   BlockExpression block -> evaluateBlock block
   IfExpression condition thenBlock elseBranch -> do
     test <- evaluate condition

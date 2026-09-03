@@ -1,0 +1,77 @@
+module UsesRecordUpdate
+
+/// A record with enough fields that writing them all out to change one would
+/// be the thing this syntax exists to avoid.
+type Settings = {
+  host: Str,
+  port: Int,
+  secure: Bool,
+  retries: Int,
+  name: Str
+}
+
+type Boxed[T] = { held: T, count: Int }
+
+/// What writing a record as a change to another promises.
+export fn main() -> Int {
+  var held = 0
+
+  let base = Settings{host: "localhost", port: 80, secure: false, retries: 3, name: "shop"}
+
+  // One field different, and the expression says which one.
+  let secured = Settings { .. base, secure: true }
+  if secured.secure { held = held + 1 }
+  if secured.host == "localhost" { held = held + 1 }
+  if secured.port == 80 { held = held + 1 }
+  if secured.retries == 3 { held = held + 1 }
+  if secured.name == "shop" { held = held + 1 }
+
+  // The record it was based on is untouched, because a record is a value.
+  if !base.secure { held = held + 1 }
+
+  // Several fields at once, in one expression.
+  let moved = Settings { .. base, host: "example.com", port: 443, secure: true }
+  if moved.host == "example.com" { held = held + 1 }
+  if moved.port == 443 { held = held + 1 }
+  if moved.secure { held = held + 1 }
+  if moved.retries == 3 { held = held + 1 }
+
+  // Changes compose, each reading as the one thing it changes.
+  let twice = Settings { .. Settings { .. base, port: 8080 }, retries: 5 }
+  if twice.port == 8080 { held = held + 1 }
+  if twice.retries == 5 { held = held + 1 }
+  if twice.host == "localhost" { held = held + 1 }
+
+  // A record written whole and one written as a change are the same record,
+  // so the order fields were declared in survives either spelling.
+  let whole = Settings{host: "localhost", port: 80, secure: true, retries: 3, name: "shop"}
+  if whole == secured { held = held + 1 }
+  if show(whole) == show(secured) { held = held + 1 }
+
+  // Changing nothing gives back what it was handed.
+  let same = Settings { .. base, port: 80 }
+  if same == base { held = held + 1 }
+
+  // The base may be any expression that answers a record of that type.
+  let fromCall = Settings { .. defaults(), name: "other" }
+  if fromCall.name == "other" { held = held + 1 }
+  if fromCall.port == 80 { held = held + 1 }
+
+  // A generic record keeps its argument through an update.
+  let boxed = Boxed{held: "text", count: 1}
+  let counted = Boxed { .. boxed, count: 2 }
+  if counted.count == 2 { held = held + 1 }
+  if counted.held == "text" { held = held + 1 }
+  if counted.held.length() == 4 { held = held + 1 }
+
+  // A record built inside another update is still just a value.
+  let inner = Boxed{held: 1, count: 0}
+  let nested = Boxed { .. inner, count: 9 }
+  if nested.held == 1 && nested.count == 9 { held = held + 1 }
+
+  held
+}
+
+fn defaults() -> Settings {
+  Settings{host: "localhost", port: 80, secure: false, retries: 3, name: "shop"}
+}

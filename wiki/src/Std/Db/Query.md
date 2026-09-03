@@ -37,7 +37,18 @@ own output has re-entered the problem it exists to avoid.
 
 **A statement is a value and running it is somewhere else.** So the whole of this module is checked
 by comparing text and parameters, and a program can see what it is about to run.
+**A statement holds its parts, not one text.** A statement is built a clause at a time, and
+appending to text copies everything built so far — so one assembled from many pieces cost the square
+of its length, which is exactly the shape a report generator produces. The parts are joined once,
+when the text is asked for: three thousand appended clauses now cost what three thousand appends
+should, and the join at the end is a single pass.
+
 ## Grill Log
+
+- **Q:** Hold the statement as the text built so far? **A:** No; hold its parts and join once.
+  _Rationale:_ appending to text copies what is already there, so a statement built a clause at a
+  time costs the square of its length, and building a statement a clause at a time is the whole
+  point of a builder. _Rejected:_ incremental text.
 - **Q:** Offer a call that takes a finished statement as text, for what the builder does not cover?
   **A:** Yes, and it takes no values through the same door — a caller with a statement of their own
   passes it and its parameters separately, exactly as here. _Rationale:_ a builder that cannot

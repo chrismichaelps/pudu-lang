@@ -5,6 +5,7 @@ import Std.App.Access {Anyone, Forbidden, HoldingAll, HoldingAny, HoldingRole, J
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
+import Std.Option as Option
 
 /// What authorisation promises.
 ///
@@ -54,6 +55,10 @@ export fn main() -> Int {
   if Access.decide(&named, &reader) == Permitted { held = held + 1 }
   if !Access.permits(&Access.decide(&named, &admin)) { held = held + 1 }
   if Access.decide(&named, &nobody) == Unidentified { held = held + 1 }
+
+  // What is known about a principal beyond the roles they hold.
+  if Option.unwrapOr(Access.attributeOf(&owner, "tenant"), "") == "acme" { held = held + 1 }
+  if Option.isNone(&Access.attributeOf(&owner, "absent")) { held = held + 1 }
 
   // What is known about a principal, and what they hold.
   if Access.holds(&admin, "admin") { held = held + 1 }

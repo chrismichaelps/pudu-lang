@@ -1,0 +1,227 @@
+module UsesQueryShape
+
+import Std.Db.Query {BadName, Empty}
+import Std.Db.Query as Query
+import Std.Db.Query.Shape {ForUpdate, NoLocking, SkipLocked}
+import Std.Db.Query.Shape as Shape
+import Std.Result as Result
+
+/// What a query written as one value promises.
+///
+/// The claim under test is that the whole of a query is visible at once and
+/// still cannot carry a value in its text — and that the clauses come out in
+/// the order the language reads them, however the record was written down.
+export fn main() -> Int {
+  var held = 0
+
+  // The shape a report actually takes, written the way it is thought of: what
+  // it reads, what it answers with, what it joins, what it keeps, how it
+  // groups, what it orders by, and what it holds.
+  let report = Shape.Select {
+    from: "orders",
+    columns: [
+      Shape.pick("customers.name"),
+      Shape.under(&Shape.over("sum", "orders.total"), "spent")
+    ],
+    joins: [Shape.inner("customers", "orders.customer_id", "customers.id")],
+    conditions: [Shape.is("orders.status", "=", "paid")],
+    groupBy: ["customers.name"],
+    having: [Shape.is("sum(orders.total)", ">", "1000")],
+    orderBy: [Shape.descending("customers.name")],
+    bound: Shape.page(20, 40),
+    distinct: false,
+    locking: SkipLocked
+  }
+  let statement = orEmpty(Shape.select(&report))
+  let written = Query.textOf(&statement)
+
+  if written.contains("select customers.name, sum(orders.total) as spent from orders") {
+    held = held + 1
+  }
+  if written.contains("join customers on orders.customer_id = customers.id") { held = held + 1 }
+  if written.contains("where orders.status = $1") { held = held + 1 }
+  if written.contains("group by customers.name") { held = held + 1 }
+  if written.contains("having sum(orders.total) > $2") { held = held + 1 }
+  if written.contains("order by customers.name desc nulls last") { held = held + 1 }
+  if written.contains("limit 20") && written.contains("offset 40") { held = held + 1 }
+  if written.contains("for update skip locked") { held = held + 1 }
+
+  // Every clause in the order the language reads them.
+  if written.indexOf("join") < written.indexOf("where") { held = held + 1 }
+  if written.indexOf("where") < written.indexOf("group by") { held = held + 1 }
+  if written.indexOf("group by") < written.indexOf("having") { held = held + 1 }
+  if written.indexOf("having") < written.indexOf("order by") { held = held + 1 }
+  if written.indexOf("order by") < written.indexOf("limit") { held = held + 1 }
+  if written.indexOf("limit") < written.indexOf("for update") { held = held + 1 }
+
+  // However large it grew, every value that came from outside is a parameter.
+  if !written.contains("paid") { held = held + 1 }
+  if !written.contains("1000") { held = held + 1 }
+  if Query.valuesOf(&statement) == [Some("paid"), Some("1000")] { held = held + 1 }
+
+  // The smallest query there is, for which nothing has to be written down.
+  if Query.textOf(&orEmpty(Shape.select(&Shape.everythingFrom("users"))))
+    == "select * from users"
+  {
+    held = held + 1
+  }
+
+  // Several conditions read as one clause joined by and, in the order given.
+  let filtered = over(&[
+      Shape.is("active", "=", "true"),
+      Shape.is("age", ">", "18"),
+      Shape.isPresent("name")
+    ])
+  if Query.textOf(&orEmpty(Shape.select(&filtered)))
+    == "select * from users where active = $1 and age > $2 and name is not null"
+  {
+    held = held + 1
+  }
+  if Query.valueCount(&orEmpty(Shape.select(&filtered))) == 2 { held = held + 1 }
+
+  // A column holding nothing, and one holding something.
+  if conditionText(Shape.isMissing("deleted_at")).contains("where deleted_at is null") {
+    held = held + 1
+  }
+  if conditionText(Shape.isPresent("email")).contains("where email is not null") {
+    held = held + 1
+  }
+
+  // A list of values, each its own parameter, so a list from outside cannot
+  // become part of the text however long it is.
+  let among = over(&[Shape.isOneOf("id", &[Some("1"), Some("2"), Some("3")])])
+  if Query.textOf(&orEmpty(Shape.select(&among))).contains("where id in ($1, $2, $3)") {
+    held = held + 1
+  }
+  if Query.valueCount(&orEmpty(Shape.select(&among))) == 3 { held = held + 1 }
+
+  // Nothing is in an empty list, which is said rather than built into a
+  // statement the database would refuse to parse.
+  if conditionText(Shape.isOneOf("id", &[])).contains("where false") { held = held + 1 }
+
+  // Every kind of join writes what it means.
+  if joinText(Shape.inner("c", "o.c_id", "c.id")).contains("join c on o.c_id = c.id") {
+    held = held + 1
+  }
+  if joinText(Shape.leftJoin("c", "o.c_id", "c.id")).contains("left join c") { held = held + 1 }
+  if joinText(Shape.rightJoin("c", "o.c_id", "c.id")).contains("right join c") { held = held + 1 }
+  if joinText(Shape.fullJoin("c", "o.c_id", "c.id")).contains("full join c") { held = held + 1 }
+  if joinText(Shape.crossJoin("c")).contains("cross join c") { held = held + 1 }
+
+  // Duplicates removed, and a count of rows.
+  if Query.textOf(&orEmpty(Shape.select(&answering(&[Shape.pick("name")], true))))
+    == "select distinct name from users"
+  {
+    held = held + 1
+  }
+  if Query.textOf(&orEmpty(Shape.select(&answering(&[Shape.howMany()], false))))
+    == "select count(*) from users"
+  {
+    held = held + 1
+  }
+
+  // Ordering says where the rows holding nothing go, both ways.
+  if orderText(Shape.ascending("name")).contains("name asc nulls last") { held = held + 1 }
+  if orderText(Shape.ordered("name", false, true)).contains("name asc nulls first") {
+    held = held + 1
+  }
+
+  // How much of a result is wanted.
+  if boundText(Shape.first(5)).contains("limit 5") { held = held + 1 }
+  if !boundText(Shape.unbounded()).contains("limit") { held = held + 1 }
+  if boundText(Shape.page(10, 30)).contains("offset 30") { held = held + 1 }
+
+  // Rows held for this transaction, and rows another worker holds skipped —
+  // which is what a queue wants.
+  if lockedText(ForUpdate).contains("for update") { held = held + 1 }
+  if !lockedText(NoLocking).contains("for update") { held = held + 1 }
+
+  // Everything that could be a name is checked, in one place, whatever part of
+  // the record it was written in.
+  if let Err(_) = Shape.select(&Shape.everythingFrom("users; drop table users")) {
+    held = held + 1
+  }
+  if let Err(_) = Shape.select(&over(&[Shape.is("name); drop table x; --", "=", "a")])) {
+    held = held + 1
+  }
+  if let Err(_) = Shape.select(&over(&[Shape.is("name", "= 1 or 1", "a")])) { held = held + 1 }
+  if let Err(_) = Shape.select(&answering(&[Shape.pick("n); drop table users; --")], false)) {
+    held = held + 1
+  }
+  if let Err(_) = Shape.select(&answering(&[Shape.over("evil", "name")], false)) {
+    held = held + 1
+  }
+  if let Err(_) = Shape.select(&grouping(&["name; drop table users"])) { held = held + 1 }
+  if let Err(_) = Shape.select(&ordering(Shape.ascending("name; drop table x"))) {
+    held = held + 1
+  }
+  if let Err(_) = Shape.select(&joined(Shape.inner("c; drop table x", "a", "b"))) {
+    held = held + 1
+  }
+  if let Err(Empty) = Shape.select(&answering(&[], false)) { held = held + 1 }
+
+  // A name carrying its table is admitted; one carrying more is not.
+  if Result.unwrapOr(Shape.qualifiedName("orders.id"), "") == "orders.id" { held = held + 1 }
+  if let Err(BadName(_)) = Shape.qualifiedName("a.b.c") { held = held + 1 }
+
+  // Two results together, with the second's values following the first's.
+  let cheap = orEmpty(Shape.select(&over(&[Shape.is("total", "<", "10")])))
+  let dear = orEmpty(Shape.select(&over(&[Shape.is("total", ">", "100")])))
+  let both = Query.union(&cheap, &dear, false)
+  if Query.textOf(&both).contains("union") { held = held + 1 }
+  if Query.textOf(&both).contains("total < $1") && Query.textOf(&both).contains("total > $2") {
+    held = held + 1
+  }
+  if Query.valueCount(&both) == 2 { held = held + 1 }
+  if Query.textOf(&Query.union(&cheap, &dear, true)).contains("union all") { held = held + 1 }
+  if Query.textOf(&Query.intersect(&cheap, &dear)).contains("intersect") { held = held + 1 }
+  if Query.textOf(&Query.except(&cheap, &dear)).contains("except") { held = held + 1 }
+
+  // A named result the rest of a statement reads from.
+  let named = orEmpty(Query.withQuery("big", &dear, &orEmpty(Query.from("big"))))
+  if Query.textOf(&named).contains("with big as (") { held = held + 1 }
+  if Query.textOf(&named).contains("select * from big") { held = held + 1 }
+  if Query.valueCount(&named) == 1 { held = held + 1 }
+  if let Err(_) = Query.withQuery("big; drop table x", &dear, &dear) { held = held + 1 }
+
+  held
+}
+
+fn orEmpty(outcome: Result[Query.Statement, Query.QueryError]) -> Query.Statement {
+  Result.unwrapOr(outcome, Query.empty())
+}
+
+/// The text a query comes out as.
+fn statementText(query: &Shape.Select) -> Str { Query.textOf(&orEmpty(Shape.select(query))) }
+
+/// Everything from users, which every check below changes one part of.
+fn users() -> Shape.Select { Shape.everythingFrom("users") }
+
+fn over(conditions: &Array[Shape.Condition]) -> Shape.Select {
+  Shape.keeping(&users(), conditions)
+}
+
+fn answering(columns: &Array[Shape.Selected], distinct: Bool) -> Shape.Select {
+  let chosen = Shape.answering(&users(), columns)
+  if distinct { Shape.distinctly(&chosen) } else { chosen }
+}
+
+fn grouping(columns: &Array[Str]) -> Shape.Select { Shape.gatheredBy(&users(), columns) }
+
+fn ordering(held: Shape.Ordering) -> Shape.Select { Shape.inOrder(&users(), &[held]) }
+
+fn joined(held: Shape.Join) -> Shape.Select {
+  Shape.alongside(&Shape.everythingFrom("orders"), &[held])
+}
+
+fn conditionText(held: Shape.Condition) -> Str { statementText(&over(&[held])) }
+
+fn joinText(held: Shape.Join) -> Str { statementText(&joined(held)) }
+
+fn orderText(held: Shape.Ordering) -> Str { statementText(&ordering(held)) }
+
+fn boundText(bound: Shape.Bound) -> Str { statementText(&Shape.bounded(&users(), bound)) }
+
+fn lockedText(locking: Shape.Locking) -> Str {
+  statementText(&Shape.locked(&users(), locking))
+}

@@ -206,10 +206,6 @@ export fn escape(content: Str) -> Str {
 /// one worth making cheap.
 const ESCAPABLE: Str = "&<>\"'"
 
-/// An attribute value, which escapes both kinds of quote because which one
-/// surrounds it is not something the value can know.
-export fn escapeAttribute(value: Str) -> Str { escape(value) }
-
 const ESCAPES: Map[Str, Str] = mapOf([
     ("&", "&amp;"),
     ("<", "&lt;"),
@@ -240,7 +236,7 @@ fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Htm
 fn renderAttributes(attributes: &Array[(Str, Str)]) -> Str {
   var pieces: Array[Str] = []
   for entry in attributes {
-    pieces = pieces.push(" " + entry[0] + "=\"" + escapeAttribute(entry[1]) + "\"")
+    pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
   }
   pieces.join("")
 }

@@ -335,6 +335,10 @@ walkExpression (Located spanValue expression) = case expression of
   RecordExpression path fields -> do
     resolveConstructorPath spanValue path
     mapM_ walkFieldInit fields
+  RecordUpdateExpression path source fields -> do
+    resolveConstructorPath spanValue path
+    walkExpression source
+    mapM_ walkFieldInit fields
   BlockExpression block -> walkBlock block
   IfExpression condition thenBlock elseBranch -> do
     walkExpression condition

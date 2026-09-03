@@ -158,7 +158,7 @@ field_pattern    = lower_ident, (":", pattern)? ;
 tuple_expr       = "(", expression, ",", (expression, (",", expression)*, ","?)?, ")" ;
 array_expr       = "[", (expression, (",", expression)*, ","?)?, "]" ;
 set_expr         = "#", "{", (expression, (",", expression)*, ","?)?, "}" ;
-record_expr      = module_path_or_type, "{", field_init, (",", field_init)*, ","?, "}" ;
+record_expr      = module_path_or_type, "{", (".." , expression, ",")?, field_init, (",", field_init)*, ","?, "}" ;
 field_init       = lower_ident, (":", expression)? ;
 if_expr          = "if", expression, block, ("else", (if_expr | if_let_expr | block))? ;
 if_let_expr      = "if", "let", pattern, "=", expression, block,
@@ -190,6 +190,7 @@ for_expr         = loop_label?, "for", pattern, "in", expression, block ;
 - **A type a module does not declare is `E3035`**, the same mistake for a type that `E3033` is for a value. Only the head of a type path is resolved — a later segment selects through a module, and that needs types to decide — so an unfound qualified name used to become a nominal type of its own named after what was written, and `M.Map[Str, Int]` was a different type from `Map[Str, Int]`. The rule is applied only where the module named was actually read, because a type a module really declares is indistinguishable from one it does not when its interface was never available.
 - Declaring the same member in two traits for one type is legal. Only an unqualified call has to choose, and that call is rejected until it is written qualified.
 - A record is built by naming its type and its fields: `User{id: 1, name: n}`. A field written without `:` takes the value of the binding with the same name, mirroring the record pattern's shorthand.
+- A record may instead be written as another record with some fields different: `User{..existing, name: n}`. The base comes first, must already be that record type, and the fields that follow replace what it held; every field not written keeps the base's value. Without this, changing one field of a ten-field record means writing the other nine out, and those nine are nine chances to copy one wrong while the field the expression is actually about is invisible among them. The leading `..` is the token a range uses, which is unambiguous here because no range is admissible in field position. The order of the fields is the order the type declared them, whichever way the record was written, so two equal records compare and render alike.
 - A record construction is not admitted directly in the condition of `if` or `while`, the scrutinee of `match`, or the iterated expression of `for`, because `if READY { ... }` would otherwise be ambiguous with a block. Parenthesize the construction to use one there.
 - A parenthesized expression groups; adding a comma makes it a tuple, and `(e,)` is the one-member tuple. This mirrors the type grammar, where `(T)` groups and `(T,)` is a tuple.
 - `while` and `for` are expressions of type `()`; `loop` has the type its `break` statements carry, and `Never` when it has none. Their bodies are blocks, and `break`/`continue` are statements valid only inside them.

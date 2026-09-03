@@ -1,0 +1,489 @@
+module Std.Db.Query.Shape
+
+import Std.Db.Query {BadName, BadOperator, Empty, QueryError, Statement}
+import Std.Db.Query as Query
+import Std.Db.Schema as Schema
+import Std.Map as Map
+import Std.Set as Set
+
+/// One thing a statement answers with.
+export type Selected = { written: Str }
+
+/// How two tables are put beside one another.
+export type Joining
+  = Inner
+  | LeftOuter
+  | RightOuter
+  | FullOuter
+  | Cross
+
+/// A table put beside the one a statement reads from.
+export type Join = { kind: Joining, table: Str, leftColumn: Str, rightColumn: Str }
+
+/// What a condition asks.
+export type Test
+  = Compares
+  | Missing
+  | Present
+  | AmongThese
+
+/// One condition, on a row or on a group.
+export type Condition = {
+  column: Str,
+  comparison: Str,
+  value: Option[Str],
+  values: Array[Option[Str]],
+  test: Test
+}
+
+/// One column a result is ordered by, and where the rows holding nothing go.
+export type Ordering = { column: Str, descending: Bool, nothingFirst: Bool }
+
+/// How much of a result is wanted. Nothing for either means all of it.
+export type Bound = { limit: Int, offset: Int }
+
+/// Whether the rows a statement reads are held for this transaction.
+export type Locking
+  = NoLocking
+  | ForUpdate
+  | SkipLocked
+
+/// A whole query, written as one value.
+///
+/// Every part is visible at once, which is the point. A query assembled by
+/// calls that each take the last one reads inside out: the thing a reader
+/// wants first — what it reads from and what it answers with — ends up
+/// furthest in, and the shape of the query is the shape of the nesting rather
+/// than anything about the query. Written this way it reads in the order it is
+/// thought of, and the parts a query does not need are empty rather than
+/// absent.
+export type Select = {
+  from: Str,
+  columns: Array[Selected],
+  joins: Array[Join],
+  conditions: Array[Condition],
+  groupBy: Array[Str],
+  having: Array[Condition],
+  orderBy: Array[Ordering],
+  bound: Bound,
+  distinct: Bool,
+  locking: Locking
+}
+
+/// The aggregates a statement may compute.
+///
+/// A stated set for the same reason the comparisons are one: an aggregate
+/// taken from outside is as dangerous as a name taken from outside, and there
+/// are few enough of them that naming them costs nothing.
+const AGGREGATES: Set[Str] = setOf(["count", "sum", "avg", "min", "max"])
+
+/// How each join is written.
+const JOIN_WORDS: Map[Joining, Str] = mapOf([
+    (Inner, "join"),
+    (LeftOuter, "left join"),
+    (RightOuter, "right join"),
+    (FullOuter, "full join"),
+    (Cross, "cross join")
+  ])
+
+/// Everything from a table, which is the smallest query there is.
+export fn everythingFrom(table: Str) -> Select {
+  Select {
+    from: table,
+    columns: [everything()],
+    joins: [],
+    conditions: [],
+    groupBy: [],
+    having: [],
+    orderBy: [],
+    bound: unbounded(),
+    distinct: false,
+    locking: NoLocking
+  }
+}
+
+/// A whole query as a statement, or the first thing wrong with it.
+///
+/// The clauses are written in the order the language reads them, so what is
+/// built is what runs rather than something a server has to be lenient about.
+/// Everything that could be a name is checked here, in one place, rather than
+/// at each of the calls that put the query together.
+export fn select(query: &Select) -> Result[Statement, QueryError] {
+  let table = Query.name(query.from) ?
+  let chosen = columnList(&query.columns) ?
+  var built = Query.text(
+    (if query.distinct { "select distinct " } else { "select " }) + chosen + " from " + table
+  )
+  built = withJoins(&built, &query.joins) ?
+  built = withConditions(&built, &query.conditions, "where", "and") ?
+  built = withGrouping(&built, &query.groupBy) ?
+  built = withConditions(&built, &query.having, "having", "and") ?
+  built = withOrdering(&built, &query.orderBy) ?
+  built = withBound(&built, &query.bound)
+  Ok(withLocking(&built, query.locking))
+}
+
+/// A column a statement answers with.
+export fn pick(column: Str) -> Selected { Selected{written: column} }
+
+/// Everything, which names nothing and so needs no checking.
+export fn everything() -> Selected { Selected{written: "*"} }
+
+/// An aggregate over a column.
+export fn over(aggregate: Str, column: Str) -> Selected {
+  Selected{written: aggregate + "(" + column + ")"}
+}
+
+/// How many rows there are.
+export fn howMany() -> Selected { Selected{written: "count(*)"} }
+
+/// The same thing, answering under a name of its own.
+export fn under(item: &Selected, alias: Str) -> Selected {
+  Selected{written: item.written + " as " + alias}
+}
+
+/// How one of them is written.
+export fn selectedText(item: &Selected) -> Str { item.written }
+
+/// A table joined where two columns agree.
+export fn inner(table: Str, leftColumn: Str, rightColumn: Str) -> Join {
+  Join{kind: Inner, table: table, leftColumn: leftColumn, rightColumn: rightColumn}
+}
+
+/// The same, keeping rows of the first table that match nothing.
+export fn leftJoin(table: Str, leftColumn: Str, rightColumn: Str) -> Join {
+  Join{kind: LeftOuter, table: table, leftColumn: leftColumn, rightColumn: rightColumn}
+}
+
+/// The same, the other way about.
+export fn rightJoin(table: Str, leftColumn: Str, rightColumn: Str) -> Join {
+  Join{kind: RightOuter, table: table, leftColumn: leftColumn, rightColumn: rightColumn}
+}
+
+/// The same, keeping the rows of both that match nothing.
+export fn fullJoin(table: Str, leftColumn: Str, rightColumn: Str) -> Join {
+  Join{kind: FullOuter, table: table, leftColumn: leftColumn, rightColumn: rightColumn}
+}
+
+/// Every row of one table beside every row of another.
+export fn crossJoin(table: Str) -> Join {
+  Join{kind: Cross, table: table, leftColumn: "", rightColumn: ""}
+}
+
+/// A join on two columns whose types must agree, so joining a column of text
+/// to one of numbers does not compile.
+export fn joinOn[K](
+  kind: Joining,
+  leftColumn: &Schema.Column[K],
+  rightColumn: &Schema.Column[K]
+) -> Join {
+  Join {
+    kind: kind,
+    table: Schema.tableOf(rightColumn),
+    leftColumn: Schema.qualified(leftColumn),
+    rightColumn: Schema.qualified(rightColumn)
+  }
+}
+
+/// A column compared against a value, which travels as a parameter.
+export fn is(column: Str, comparison: Str, value: Str) -> Condition {
+  Condition{column: column, comparison: comparison, value: Some(value), values: [], test: Compares}
+}
+
+/// The same, where the value may be absent.
+export fn isValue(column: Str, comparison: Str, value: Option[Str]) -> Condition {
+  Condition{column: column, comparison: comparison, value: value, values: [], test: Compares}
+}
+
+/// A column holding nothing.
+export fn isMissing(column: Str) -> Condition {
+  Condition{column: column, comparison: "=", value: None, values: [], test: Missing}
+}
+
+/// A column holding something.
+export fn isPresent(column: Str) -> Condition {
+  Condition{column: column, comparison: "=", value: None, values: [], test: Present}
+}
+
+/// A column that is one of several values, each its own parameter, so a list
+/// from outside cannot become part of the text however long it is.
+export fn isOneOf(column: Str, values: &Array[Option[Str]]) -> Condition {
+  Condition{column: column, comparison: "=", value: None, values: *values, test: AmongThese}
+}
+
+/// Rows ordered by a column, with the ones holding nothing last.
+export fn ascending(column: Str) -> Ordering {
+  Ordering{column: column, descending: false, nothingFirst: false}
+}
+
+/// The same, largest first.
+export fn descending(column: Str) -> Ordering {
+  Ordering{column: column, descending: true, nothingFirst: false}
+}
+
+/// The same, saying where the rows holding nothing go.
+///
+/// Stated rather than left to the server's default, because that default
+/// differs by direction and a page that reorders itself when a column becomes
+/// nullable is a bug nobody looks for.
+export fn ordered(column: Str, largestFirst: Bool, nothingFirst: Bool) -> Ordering {
+  Ordering{column: column, descending: largestFirst, nothingFirst: nothingFirst}
+}
+
+/// All of a result.
+export fn unbounded() -> Bound { Bound{limit: 0, offset: 0} }
+
+/// At most this many rows.
+export fn first(count: Int) -> Bound { Bound{limit: count, offset: 0} }
+
+/// One page of a result.
+export fn page(count: Int, skipping: Int) -> Bound { Bound{limit: count, offset: skipping} }
+
+/// A name that may carry the table it belongs to.
+export fn qualifiedName(candidate: Str) -> Result[Str, QueryError] {
+  Query.qualifiedName(candidate)
+}
+
+fn columnList(columns: &Array[Selected]) -> Result[Str, QueryError] {
+  if columns.length() == 0 {
+    Err(Empty)
+  } else {
+    var listed: Array[Str] = []
+    for item in columns {
+      let checked = checkedSelected(&item) ?
+      listed = listed.push(checked)
+    }
+    Ok(listed.join(", "))
+  }
+}
+
+/// One answered thing, checked.
+///
+/// An aggregate is checked in both parts and everything else as a name, so
+/// nothing reaches the text unexamined however it was put together.
+fn checkedSelected(item: &Selected) -> Result[Str, QueryError] {
+  let written = item.written
+  if written == "*" {
+    Ok(written)
+  } else {
+    let mark = written.indexOf("(")
+    if mark < 0 { aliasChecked(written) } else { aggregateChecked(written, mark) }
+  }
+}
+
+fn aggregateChecked(written: Str, mark: Int) -> Result[Str, QueryError] {
+  let named = written.take(mark).trim().toLower()
+  if !Set.contains(&AGGREGATES, named) {
+    Err(BadOperator(written))
+  } else {
+    let rest = written.drop(mark + 1)
+    let closing = rest.indexOf(")")
+    if closing < 0 {
+      Err(BadName(written))
+    } else {
+      let inside = rest.take(closing).trim()
+      if inside != "*" { qualifiedName(inside) ? }
+      let after = rest.drop(closing + 1).trim()
+      if after.isEmpty() { Ok(written) } else { aliasOnly(after, written) }
+    }
+  }
+}
+
+/// A name answering under another, or a plain one.
+fn aliasChecked(written: Str) -> Result[Str, QueryError] {
+  let mark = written.toLower().indexOf(" as ")
+  if mark < 0 {
+    qualifiedName(written)
+  } else {
+    qualifiedName(written.take(mark).trim()) ?
+    Query.name(written.drop(mark + 4).trim()) ?
+    Ok(written)
+  }
+}
+
+/// The part after an aggregate, which may only be a name to answer under.
+fn aliasOnly(after: Str, whole: Str) -> Result[Str, QueryError] {
+  if !after.toLower().startsWith("as ") {
+    Err(BadName(whole))
+  } else {
+    Query.name(after.drop(3).trim()) ?
+    Ok(whole)
+  }
+}
+
+fn withJoins(base: &Statement, joins: &Array[Join]) -> Result[Statement, QueryError] {
+  var built = *base
+  for held in joins {
+    let table = Query.name(held.table) ?
+    let word = Map.getOr(&JOIN_WORDS, held.kind, "join")
+    if held.kind == Cross {
+      built = Query.then(&built, &Query.text(word + " " + table))
+    } else {
+      let leftColumn = qualifiedName(held.leftColumn) ?
+      let rightColumn = qualifiedName(held.rightColumn) ?
+      built = Query.then(
+          &built,
+          &Query.text(word + " " + table + " on " + leftColumn + " = " + rightColumn)
+      )
+    }
+  }
+  Ok(built)
+}
+
+fn withConditions(
+  base: &Statement,
+  conditions: &Array[Condition],
+  opening: Str,
+  joining: Str
+) -> Result[Statement, QueryError] {
+  var built = *base
+  var index = 0
+  while index < conditions.length() {
+    built = withCondition(&built, &conditions[index], if index == 0 { opening } else { joining }) ?
+    index = index + 1
+  }
+  Ok(built)
+}
+
+fn withCondition(base: &Statement, held: &Condition, word: Str) -> Result[Statement, QueryError] {
+  let column = conditionColumn(held.column) ?
+  match held.test {
+    case Missing => Ok(Query.then(base, &Query.text(word + " " + column + " is null")))
+    case Present => Ok(Query.then(base, &Query.text(word + " " + column + " is not null")))
+    case AmongThese => Ok(amongThese(base, column, &held.values, word))
+    case Compares => {
+      let comparison = Query.operator(held.comparison) ?
+      Ok(Query.withValue(base, word + " " + column + " " + comparison, held.value))
+    }
+  }
+}
+
+/// A condition's column, which may be an aggregate when the condition is on a
+/// group rather than on a row.
+fn conditionColumn(written: Str) -> Result[Str, QueryError] {
+  if written.contains("(") {
+    checkedSelected(&Selected{written: written})
+  } else {
+    qualifiedName(written)
+  }
+}
+
+fn amongThese(
+  base: &Statement,
+  column: Str,
+  values: &Array[Option[Str]],
+  word: Str
+) -> Statement {
+  if values.length() == 0 {
+    Query.then(base, &Query.text(word + " false"))
+  } else {
+    var built = Query.then(base, &Query.text(word + " " + column + " in ("))
+    var index = 0
+    while index < values.length() {
+      if index > 0 { built = Query.then(&built, &Query.text(",")) }
+      built = Query.withValue(&built, "", values[index])
+      index = index + 1
+    }
+    Query.then(&built, &Query.text(")"))
+  }
+}
+
+fn withGrouping(base: &Statement, columns: &Array[Str]) -> Result[Statement, QueryError] {
+  if columns.length() == 0 {
+    Ok(*base)
+  } else {
+    var listed: Array[Str] = []
+    for column in columns {
+      let checked = qualifiedName(column) ?
+      listed = listed.push(checked)
+    }
+    Ok(Query.then(base, &Query.text("group by " + listed.join(", "))))
+  }
+}
+
+fn withOrdering(base: &Statement, ordering: &Array[Ordering]) -> Result[Statement, QueryError] {
+  if ordering.length() == 0 {
+    Ok(*base)
+  } else {
+    var listed: Array[Str] = []
+    for held in ordering {
+      let checked = qualifiedName(held.column) ?
+      listed = listed.push(
+        checked + (if held.descending { " desc" } else { " asc" })
+          + (if held.nothingFirst { " nulls first" } else { " nulls last" })
+      )
+    }
+    Ok(Query.then(base, &Query.text("order by " + listed.join(", "))))
+  }
+}
+
+fn withBound(base: &Statement, bound: &Bound) -> Statement {
+  var built = *base
+  if bound.limit > 0 { built = Query.limit(&built, bound.limit) }
+  if bound.offset > 0 { built = Query.offset(&built, bound.offset) }
+  built
+}
+
+fn withLocking(base: &Statement, locking: Locking) -> Statement {
+  match locking {
+    case NoLocking => *base
+    case ForUpdate => Query.then(base, &Query.text("for update"))
+    case SkipLocked => Query.then(base, &Query.text("for update skip locked"))
+  }
+}
+
+/// A query with one part changed.
+///
+/// These exist so that changing one thing about a query looks like changing
+/// one thing. They are also what a program needs when a query is not known in
+/// advance: a search screen adding a filter for each thing the reader typed
+/// builds it exactly this way.
+export fn answering(base: &Select, columns: &Array[Selected]) -> Select {
+  Select { .. *base, columns: *columns }
+}
+
+/// The same query, reading from another table beside its own.
+export fn alongside(base: &Select, joins: &Array[Join]) -> Select {
+  Select { .. *base, joins: *joins }
+}
+
+/// The same query, keeping only the rows these conditions describe.
+export fn keeping(base: &Select, conditions: &Array[Condition]) -> Select {
+  Select { .. *base, conditions: *conditions }
+}
+
+/// The same query, with one more condition than it had.
+///
+/// What a search screen wants: a filter is added for each thing the reader
+/// typed, and nothing else about the query changes.
+export fn andKeeping(base: &Select, condition: Condition) -> Select {
+  Select { .. *base, conditions: base.conditions.push(condition) }
+}
+
+/// The same query, gathered by these columns.
+export fn gatheredBy(base: &Select, columns: &Array[Str]) -> Select {
+  Select { .. *base, groupBy: *columns }
+}
+
+/// The same query, keeping only the groups these conditions describe.
+export fn keepingGroups(base: &Select, conditions: &Array[Condition]) -> Select {
+  Select { .. *base, having: *conditions }
+}
+
+/// The same query, in this order.
+export fn inOrder(base: &Select, orderBy: &Array[Ordering]) -> Select {
+  Select { .. *base, orderBy: *orderBy }
+}
+
+/// The same query, this much of it.
+export fn bounded(base: &Select, bound: Bound) -> Select {
+  Select { .. *base, bound: bound }
+}
+
+/// The same query, with duplicate rows removed.
+export fn distinctly(base: &Select) -> Select { Select { .. *base, distinct: true } }
+
+/// The same query, holding the rows it reads.
+export fn locked(base: &Select, locking: Locking) -> Select {
+  Select { .. *base, locking: locking }
+}

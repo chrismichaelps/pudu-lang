@@ -338,6 +338,14 @@ data Expression
   | LambdaExpression !Function
   | TypeApplication !(Located Expression) ![Located TypeSyntax]
   | RecordExpression !ModuleName ![Located FieldInit]
+  {-| A record that is another record with some fields different.
+
+      The language has no other way to say it, and without one, changing a
+      single field of a ten-field record means writing the other nine out —
+      which is not merely tedious: the nine that were copied are nine chances
+      to copy one wrong, and a reader cannot see which field the expression is
+      actually about. -}
+  | RecordUpdateExpression !ModuleName !(Located Expression) ![Located FieldInit]
   | BlockExpression !(Located Block)
   | IfExpression !(Located Expression) !(Located Block) !(Maybe (Located Expression))
   | IfLetExpression !(Located Pattern) !(Located Expression) !(Located Block)

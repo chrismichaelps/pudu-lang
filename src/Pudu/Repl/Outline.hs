@@ -92,6 +92,9 @@ outlineExpression (Located _ expression) = case expression of
       <> " { " <> Text.intercalate "; " (outlineBlock body) <> " }"
   RecordExpression path fields ->
     moduleNameText path <> "{" <> Text.intercalate ", " (map outlineFieldInit fields) <> "}"
+  RecordUpdateExpression path source fields ->
+    moduleNameText path <> "{.." <> outlineExpression source
+      <> ", " <> Text.intercalate ", " (map outlineFieldInit fields) <> "}"
   BlockExpression block -> "{ " <> Text.intercalate "; " (outlineBlock block) <> " }"
   IfExpression condition _ elseBranch ->
     "if " <> outlineExpression condition

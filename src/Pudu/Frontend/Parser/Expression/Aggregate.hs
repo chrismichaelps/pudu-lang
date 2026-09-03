@@ -128,11 +128,28 @@ parseRecordExpression :: ExpressionParsers -> BlockParser -> Parser (Located Exp
 parseRecordExpression parsers blockParser = do
   path <- parseModuleName
   _ <- expectSymbol "{" "to start the record fields"
+  {-| A leading `..` says the record is another one with some fields changed.
+
+      The token already means a range elsewhere, and there is no reading of a
+      range in field position, so it needs no spelling of its own. -}
+  leading <- peekKind
+  base <-
+    if isSymbol ".." leading
+      then do
+        _ <- expectSymbol ".." "to start the record this one is based on"
+        source <- expressionOf parsers blockParser
+        _ <- expectSymbol "," "to separate the base record from the fields"
+        pure (Just source)
+      else pure Nothing
   fields <- withRecords (parseFieldInits parsers blockParser [])
   closing <- expectSymbol "}" "to close the record fields"
+  let wholeSpan = mergedOrLeft (locatedSpan path) (tokenSpan closing)
   pure
-    ( Located (mergedOrLeft (locatedSpan path) (tokenSpan closing))
-        (RecordExpression (locatedValue path) fields)
+    ( Located wholeSpan
+        ( case base of
+            Nothing -> RecordExpression (locatedValue path) fields
+            Just source -> RecordUpdateExpression (locatedValue path) source fields
+        )
     )
 
 parseFieldInits :: ExpressionParsers -> BlockParser -> [Located FieldInit] -> Parser [Located FieldInit]

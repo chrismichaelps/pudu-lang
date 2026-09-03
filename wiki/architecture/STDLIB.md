@@ -304,6 +304,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Http.Server.Reply` | 7 | the responses a handler builds without a request, provisional |
 | `Std.Db.Protocol` | 24 | PostgreSQL v3 framing, authentication fields, rows, and binding, provisional |
 | `Std.Db.Schema` | 11 | typed columns and comparisons, completed by the editor |
+| `Std.Db.Query.Shape` | 24 | joins, grouping, set operations, and locking |
 | `Std.Db.Store` | 22 | values kept and read back; relations loaded for many parents at once |
 | `Std.Db.Repository` | 17 | typed row reads, row-count contracts, repositories as values |
 | `Std.Db.Query` | 22 | statements built so a value can only ever be a parameter |
