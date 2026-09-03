@@ -1,0 +1,179 @@
+module Std.Mail
+
+import Std.Set as Set
+
+/// Somewhere a message goes, checked.
+///
+/// There is no way to make one except through a call that looked at it, which
+/// is the arrangement the rest of this library uses wherever text from outside
+/// reaches a format with structure.
+export type Address = { written: Str }
+
+/// A message a program sends.
+///
+/// The blind list is kept apart from the others rather than marked within one
+/// list, so nothing that builds headers has to remember to filter it. That is
+/// the failure worth designing out: every recipient seeing who else was
+/// copied is not noticed until after it has happened.
+export type Message = {
+  from: Address,
+  to: Array[Address],
+  copies: Array[Address],
+  blindCopies: Array[Address],
+  subject: Str,
+  body: Str
+}
+
+/// Why something could not be sent.
+export type MailError
+  = NotAnAddress(Str)
+  | HeaderBreak(Str)
+  | NoRecipient
+
+/// The characters that would end a header and begin another.
+const BREAKS: Set[Str] = setOf(["\r", "\n"])
+
+/// An address, checked.
+///
+/// A break here lets whoever supplied it write headers of their own — another
+/// recipient, another sender, or a whole second message. Refused rather than
+/// stripped, because stripping guesses at what was meant and hands back
+/// something the caller believes carries what they gave it.
+export fn address(written: Str) -> Result[Address, MailError] {
+  let trimmed = written.trim()
+  if hasBreak(trimmed) {
+    Err(HeaderBreak(written))
+  } else {
+    let at = trimmed.indexOf("@")
+    if at <= 0 || at == trimmed.length() - 1 {
+      Err(NotAnAddress(written))
+    } else {
+      if trimmed.contains(" ") || trimmed.drop(at + 1).contains("@") {
+        Err(NotAnAddress(written))
+      } else {
+        Ok(Address{written: trimmed})
+      }
+    }
+  }
+}
+
+/// How an address is written.
+export fn addressText(held: &Address) -> Str { held.written }
+
+/// A message from somebody to somebody, about something.
+export fn message(from: &Address, to: &Address, subject: Str, body: Str) -> Result[Message, MailError] {
+  if hasBreak(subject) {
+    Err(HeaderBreak(subject))
+  } else {
+    Ok(
+      Message {
+        from: *from,
+        to: [*to],
+        copies: [],
+        blindCopies: [],
+        subject: subject,
+        body: body
+      }
+    )
+  }
+}
+
+/// The same, with one more recipient.
+export fn andTo(base: &Message, held: &Address) -> Message {
+  Message{..*base, to: base.to.push(*held)}
+}
+
+/// The same, copying somebody the others can see.
+export fn copying(base: &Message, held: &Address) -> Message {
+  Message{..*base, copies: base.copies.push(*held)}
+}
+
+/// The same, copying somebody the others cannot see.
+///
+/// This one reaches the envelope and never the headers, which is what stops
+/// the list being disclosed.
+export fn copyingBlind(base: &Message, held: &Address) -> Message {
+  Message{..*base, blindCopies: base.blindCopies.push(*held)}
+}
+
+/// Every address a server must be given, which is not the same list the
+/// headers name.
+export fn envelope(held: &Message) -> Array[Address] {
+  held.to.concat(held.copies).concat(held.blindCopies)
+}
+
+/// The headers a message carries.
+///
+/// Built from the visible recipients only. A program cannot write the blind
+/// list here by forgetting something, because nothing it can call does that.
+export fn headers(held: &Message) -> Array[(Str, Str)] {
+  var found = [("From", held.from.written), ("To", joined(&held.to))]
+  if held.copies.length() > 0 { found = found.push(("Cc", joined(&held.copies))) }
+  found.push(("Subject", held.subject)).push(("MIME-Version", "1.0"))
+    .push(("Content-Type", "text/plain; charset=utf-8"))
+}
+
+/// Whether a message can be sent at all.
+export fn sendable(held: &Message) -> Result[(), MailError] {
+  if envelope(held).length() == 0 {
+    Err(NoRecipient)
+  } else {
+    if hasBreak(held.subject) { Err(HeaderBreak(held.subject)) } else { Ok(()) }
+  }
+}
+
+/// What goes on the wire.
+///
+/// A line of the body that is a lone full stop would end the message, so every
+/// such line gains a second stop, which the receiving end removes. That is a
+/// property of the format rather than of the message, and a caller who has not
+/// read the format has no reason to know it.
+export fn render(held: &Message) -> Str {
+  var written = ""
+  for entry in headers(held) { written = written + entry[0] + ": " + entry[1] + "\r\n" }
+  written + "\r\n" + stuffed(held.body)
+}
+
+/// A body with the lines that would end it escaped.
+export fn stuffed(body: Str) -> Str {
+  var lines: Array[Str] = []
+  for line in body.replace("\r\n", "\n").split("\n") {
+    lines = lines.push(if line.startsWith(".") { "." + line } else { line })
+  }
+  lines.join("\r\n")
+}
+
+/// How many people a message reaches.
+export fn recipientCount(held: &Message) -> Int { envelope(held).length() }
+
+/// Whether anybody is copied without the others knowing.
+export fn hasBlindCopies(held: &Message) -> Bool { held.blindCopies.length() > 0 }
+
+/// What a refusal says.
+///
+/// A refusal never repeats what it refused, for the same reason a validation
+/// failure does not: the sender knows what they gave, and repeating it carries
+/// whatever was in it somewhere else.
+export fn explain(problem: &MailError) -> Str {
+  match problem {
+    case NotAnAddress(_written) => "that is not an address a message can be sent to"
+    case HeaderBreak(_written) => "that carries a line break, which would begin another header"
+    case NoRecipient => "the message names nobody to send it to"
+  }
+}
+
+fn hasBreak(value: Str) -> Bool {
+  var found = false
+  var index = 0
+  while index < value.length() && !found {
+    if Set.contains(&BREAKS, value.slice(index, index + 1)) { found = true }
+    index = index + 1
+  }
+  found
+}
+
+fn joined(addresses: &Array[Address]) -> Str {
+  var written: Array[Str] = []
+  for one in addresses { written = written.push(one.written) }
+  written.join(", ")
+}

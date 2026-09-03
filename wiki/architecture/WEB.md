@@ -155,7 +155,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
 | Background work outside a request? | **Ready** for scheduling, **Absent** for queues. | [[Std App Work]]: jobs as values, both interval kinds, no overlapping runs, and a failure recorded rather than fatal. A durable queue is still absent. |
 | Feature flags? | **Absent** | A setting can stand in for one. |
-| Sending mail? | **Absent** | No transport. |
+| Sending mail? | **Partial** | [[Std Mail]] builds a message that refuses header injection and keeps blind copies out of the headers, and renders what goes on the wire. The transport that carries it is not written. |
 | Data protection and the right to erasure? | **Absent** | A program's own concern; nothing here helps or hinders. |
 | A package ecosystem to get any of this from? | **Absent** | Designed in [[architecture/PACKAGES]] and deliberately not half-built: a resolver and archive extractor that are partly there is where a supply chain is compromised. |
 

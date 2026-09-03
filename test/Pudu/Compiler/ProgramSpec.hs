@@ -272,6 +272,7 @@ testProgramEvaluation = do
   scheduled <- runEntry "test-fixtures/stdlib/UsesWork.pudu"
   spoken <- runEntry "test-fixtures/stdlib/UsesLocale.pudu"
   cached <- runEntry "test-fixtures/stdlib/UsesCache.pudu"
+  posted <- runEntry "test-fixtures/stdlib/UsesMail.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -699,6 +700,16 @@ testProgramEvaluation = do
     , counterexample
         "a lookup says whether what it found is still fresh"
         (cached === Just "50")
+    {-| That a message cannot carry more than it says. A line break in an
+        address or a subject would let whoever supplied it write headers of
+        their own, which is how bulk mail is sent through somebody else's
+        contact form; it is refused rather than stripped. Whoever is copied
+        without the others knowing reaches the envelope and never the headers,
+        so the disclosure nobody notices until afterwards has nothing that
+        could produce it. A body line that would end the message is escaped. -}
+    , counterexample
+        "a message cannot carry more than it says"
+        (posted === Just "46")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

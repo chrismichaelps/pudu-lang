@@ -37,6 +37,7 @@ tags: [moc, module, stdlib]
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
+- [[Std Mail]] — a message a program sends, which cannot carry more than it says.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.
 - [[Std App Locale]] — saying the same thing in the language the reader asked for.
 - [[Std App Work]] — the work a service does when nobody asked.
