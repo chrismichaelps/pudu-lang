@@ -269,6 +269,7 @@ testProgramEvaluation = do
   remembered <- runEntry "test-fixtures/stdlib/UsesSession.pudu"
   uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
   followed <- runEntry "test-fixtures/stdlib/UsesTrace.pudu"
+  scheduled <- runEntry "test-fixtures/stdlib/UsesWork.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -456,7 +457,7 @@ testProgramEvaluation = do
         before the rest so an entity arrives once rather than twice. -}
     , counterexample
         "text placed in a page stays text"
-        (markup === Just "36")
+        (markup === Just "60")
     {-| That a screen is a function from state to view, so the difference
         between two renders is exactly the difference the state made: an
         element that became a different element is replaced whole rather than
@@ -666,6 +667,16 @@ testProgramEvaluation = do
     , counterexample
         "a piece of work can be followed across the services that touched it"
         (followed === Just "48")
+    {-| That work a service does unasked is a value: which jobs are due is a
+        pure function of the schedule and the moment, so an hourly job is
+        checked in a millisecond. A job still running does not start a second
+        and the skipped turn is counted; a job that fails is recorded and stays
+        scheduled, because one bad night must not leave a nightly job silently
+        dead; and it waits for its next turn rather than retrying at once,
+        which would turn one failing dependency into a loop against it. -}
+    , counterexample
+        "a job that fails is recorded and runs again"
+        (scheduled === Just "35")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new

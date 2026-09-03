@@ -136,7 +136,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 
 | Question | Verdict | Where it stands |
 |---|---|---|
-| Cross-site scripting? | **Ready** | Not representable in [[Std Html]]. |
+| Cross-site scripting? | **Ready** | Not representable in [[Std Html]] — for text, for destinations, and for event handlers. Escaping alone covers only the first, which is where template engines stop. |
 | Cross-site request forgery? | **Ready** | Provenance is checked before a token is: a state-changing request from another site, or from one that will not say, is refused. |
 | Request smuggling? | **Ready** | A message that states its length two ways is refused. There is no precedence rule, so there is no difference between readers to exploit. |
 | Transport security? | **Ready** | [[Std Tls]]. Verification is not a parameter. |
@@ -153,7 +153,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Accessible markup? | **Partial** | Any attribute can be written, and an image requires its description at the call. Nothing checks the rest. |
 | Multi-tenancy? | **Partial** | [[Std App Access]] decides on an attribute of the principal, so a per-tenant requirement is expressible. Nothing separates tenants' data or bounds their limits. |
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
-| Background work outside a request? | **Partial** | [[Std Concurrent]] starts workers; there is no queue, no retry, no schedule. |
+| Background work outside a request? | **Ready** for scheduling, **Absent** for queues. | [[Std App Work]]: jobs as values, both interval kinds, no overlapping runs, and a failure recorded rather than fatal. A durable queue is still absent. |
 | Feature flags? | **Absent** | A setting can stand in for one. |
 | Sending mail? | **Absent** | No transport. |
 | Data protection and the right to erasure? | **Absent** | A program's own concern; nothing here helps or hinders. |

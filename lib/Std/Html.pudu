@@ -1,5 +1,6 @@
 module Std.Html
 
+import Std.Option as Option
 import Std.Set as Set
 
 /// A page, as a value.
@@ -19,6 +20,30 @@ export type Html
   | Text(Str)
   | Fragment(Array[Html])
   | Trusted(Str)
+
+/// A destination an attribute may carry.
+///
+/// There is no way to make one except through a call that checked it, which is
+/// the same arrangement text has and for the same reason. Escaping text does
+/// nothing for a destination: `href="javascript:..."` contains no character
+/// that escaping touches, and it runs. A page builder that escapes text and
+/// takes any string as a destination has closed one door and left the other
+/// open — which is where the established template engines are.
+export type Destination = { written: Str }
+
+/// Why a destination or an attribute was refused.
+export type Unsafe
+  = BadScheme(Str)
+  | Handler(Str)
+  | Control(Str)
+
+/// The schemes a destination may name.
+///
+/// A stated set rather than a list of refusals, because the refusals are the
+/// ones somebody thought of and the permissions are the ones that work. What
+/// is not here is refused, so a scheme invented next year is refused until
+/// somebody decides otherwise.
+const PERMITTED_SCHEMES: Set[Str] = setOf(["http", "https", "mailto", "tel", "ftp"])
 
 /// The elements written without a closing tag.
 ///
@@ -129,12 +154,12 @@ export fn heading(level: Int, attributes: &Array[(Str, Str)], children: &Array[H
   Element("h" + show(bounded), *attributes, *children)
 }
 
-export fn anchor(href: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
-  Element("a", attributes.push(("href", href)), *children)
+export fn anchor(href: &Destination, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
+  Element("a", attributes.push(("href", href.written)), *children)
 }
 
-export fn image(src: Str, description: Str, attributes: &Array[(Str, Str)]) -> Html {
-  Element("img", attributes.push(("src", src)).push(("alt", description)), [])
+export fn image(src: &Destination, description: Str, attributes: &Array[(Str, Str)]) -> Html {
+  Element("img", attributes.push(("src", src.written)).push(("alt", description)), [])
 }
 
 export fn list(ordered: Bool, attributes: &Array[(Str, Str)], items: &Array[Html]) -> Html {
@@ -143,8 +168,8 @@ export fn list(ordered: Bool, attributes: &Array[(Str, Str)], items: &Array[Html
   Element(if ordered { "ol" } else { "ul" }, *attributes, built)
 }
 
-export fn form(action: Str, method: Str, children: &Array[Html]) -> Html {
-  Element("form", [("action", action), ("method", method)], *children)
+export fn form(action: &Destination, method: Str, children: &Array[Html]) -> Html {
+  Element("form", [("action", action.written), ("method", method)], *children)
 }
 
 export fn input(attributes: &Array[(Str, Str)]) -> Html { Element("input", *attributes, []) }
@@ -161,6 +186,108 @@ export fn row(cells: &Array[Html]) -> Html { Element("tr", [], *cells) }
 
 export fn cell(heads: Bool, children: &Array[Html]) -> Html {
   Element(if heads { "th" } else { "td" }, [], *children)
+}
+
+/// A destination, checked, or the reason it is refused.
+///
+/// A path within this site is always admitted. Anything naming a scheme must
+/// name one of the few that carry a destination rather than a program. Nothing
+/// is unescaped first: what arrives is what was written, and undoing an
+/// encoding before checking is how a check is bypassed.
+export fn destination(written: Str) -> Result[Destination, Unsafe] {
+  let trimmed = written.trim()
+  if hasControl(trimmed) {
+    Err(Control(written))
+  } else {
+    let mark = schemeEnd(trimmed)
+    if mark < 0 {
+      Ok(Destination{written: trimmed})
+    } else {
+      let scheme = trimmed.take(mark).toLower()
+      if Set.contains(&PERMITTED_SCHEMES, scheme) {
+        Ok(Destination{written: trimmed})
+      } else {
+        Err(BadScheme(scheme))
+      }
+    }
+  }
+}
+
+/// A destination within this site, which names no scheme and so needs no
+/// scheme check.
+export fn here(path: Str) -> Result[Destination, Unsafe] { destination(if path.startsWith("/") { path } else { "/" + path }) }
+
+/// A destination the caller has taken responsibility for.
+///
+/// The only way an unchecked destination is written, named so it cannot be
+/// reached by accident and appears in the source where somebody chose it.
+export fn trustedDestination(written: Str) -> Destination { Destination{written: written} }
+
+/// How a destination is written.
+export fn destinationText(held: &Destination) -> Str { held.written }
+
+/// An attribute, checked.
+///
+/// An attribute whose name begins the way a handler's does is refused
+/// outright: its value is a program, not text, and no amount of escaping makes
+/// a program safe. A page needing behaviour attaches it from a script the page
+/// loaded, which is what a policy permitting only the page's own origin is
+/// for.
+export fn attribute(name: Str, value: Str) -> Result[(Str, Str), Unsafe] {
+  let lowered = name.trim().toLower()
+  if lowered.startsWith("on") {
+    Err(Handler(name))
+  } else {
+    if hasControl(name) || hasControl(value) { Err(Control(name)) } else { Ok((name, value)) }
+  }
+}
+
+/// Whether an attribute name is one whose value would be a program.
+export fn isHandler(name: Str) -> Bool { name.trim().toLower().startsWith("on") }
+
+/// Where a scheme ends in a destination, or nothing when it names none.
+///
+/// A colon after anything that is not a name is not a scheme — `/a:b` is a
+/// path — so only a leading run of scheme characters counts.
+fn schemeEnd(written: Str) -> Int {
+  var index = 0
+  var found = -1
+  var going = true
+  while index < written.length() && going {
+    let character = written.slice(index, index + 1)
+    if character == ":" {
+      found = index
+      going = false
+    } else {
+      if !SCHEME_CHARACTERS.contains(character.toLower()) { going = false }
+    }
+    index = index + 1
+  }
+  found
+}
+
+const SCHEME_CHARACTERS: Str = "abcdefghijklmnopqrstuvwxyz0123456789+-."
+
+/// Whether text carries a character that would break out of where it is
+/// written, including the ones that are invisible.
+fn hasControl(value: Str) -> Bool {
+  var found = false
+  var index = 0
+  while index < value.length() && !found {
+    let character = value.slice(index, index + 1)
+    if character == "\n" || character == "\r" || character == "\t" { found = true }
+    index = index + 1
+  }
+  found
+}
+
+/// What a refusal says.
+export fn explainUnsafe(problem: &Unsafe) -> Str {
+  match problem {
+    case BadScheme(scheme) => "a destination may not name the scheme " + scheme
+    case Handler(_name) => "an attribute whose value would be a program is not written here"
+    case Control(_name) => "that carries a character which would break out of where it is written"
+  }
 }
 
 /// A view as markup.
@@ -233,10 +360,18 @@ fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Htm
   }
 }
 
+/// The attributes of an element, written.
+///
+/// An attribute whose value would be a program is not written, whatever put it
+/// there. This is a backstop rather than the defence — `attribute` refuses one
+/// where a program writes it — but a backstop that drops is better than a page
+/// that runs what somebody smuggled into a record.
 fn renderAttributes(attributes: &Array[(Str, Str)]) -> Str {
   var pieces: Array[Str] = []
   for entry in attributes {
-    pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
+    if !isHandler(entry[0]) {
+      pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
+    }
   }
   pieces.join("")
 }

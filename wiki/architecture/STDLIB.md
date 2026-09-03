@@ -290,6 +290,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
+| `Std.App.Work` | 20 | scheduled work as a value; skips, failures, and both intervals |
 | `Std.App.Trace` | 22 | trace continuation, spans, and the header they travel in |
 | `Std.App.Session` | 23 | names from entropy, reissued on privilege change, two bounds |
 | `Std.App.Password` | 11 | work factor carried with the digest; per-password salt |

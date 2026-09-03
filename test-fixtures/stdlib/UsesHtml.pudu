@@ -1,6 +1,8 @@
 module UsesHtml
 
+import Std.Html {BadScheme, Control, Handler}
 import Std.Html as Html
+import Std.Result as Result
 
 /// What a page promises.
 ///
@@ -17,8 +19,8 @@ export fn main() -> Int {
   }
 
   // An element written without a closing tag is written without one.
-  if Html.render(&Html.image("a.png", "a picture", &[]))
-    == "<img src=\"a.png\" alt=\"a picture\" />"
+  if Html.render(&Html.image(&at("a.png"), "a picture", &[]))
+    == "<img src=\"/a.png\" alt=\"a picture\" />"
   {
     held = held + 1
   }
@@ -104,7 +106,7 @@ export fn main() -> Int {
   }
 
   // A form and the controls inside it.
-  if Html.render(&Html.form("/users", "post", &[Html.input(&[("name", "who")])]))
+  if Html.render(&Html.form(&at("/users"), "post", &[Html.input(&[("name", "who")])]))
     == "<form action=\"/users\" method=\"post\"><input name=\"who\" /></form>"
   {
     held = held + 1
@@ -117,7 +119,7 @@ export fn main() -> Int {
 
   // A link carries its destination, and an anchor keeps the attributes it was
   // also given.
-  if Html.render(&Html.anchor("/here", &[Html.classes(&["x"])], &[Html.text("go")]))
+  if Html.render(&Html.anchor(&at("/here"), &[Html.classes(&["x"])], &[Html.text("go")]))
     == "<a class=\"x\" href=\"/here\">go</a>"
   {
     held = held + 1
@@ -144,9 +146,69 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // Escaping text does nothing for a destination: a script URL contains no
+  // character escaping touches, and it runs. So a destination is checked, and
+  // there is no way to write one that was not.
+  if let Err(BadScheme(_)) = Html.destination("javascript:steal()") { held = held + 1 }
+  if let Err(BadScheme(_)) = Html.destination("JaVaScRiPt:steal()") { held = held + 1 }
+  if let Err(BadScheme(_)) = Html.destination("vbscript:steal()") { held = held + 1 }
+  if let Err(BadScheme(_)) = Html.destination("data:text/html,<script>steal()</script>") {
+    held = held + 1
+  }
+
+  // Including the ones written to slip past a reader rather than a checker.
+  if let Err(Control(_)) = Html.destination("java\nscript:steal()") { held = held + 1 }
+  if let Err(Control(_)) = Html.destination("java\tscript:steal()") { held = held + 1 }
+
+  // And the ordinary destinations are admitted, because a check that refuses
+  // real links has not been tested.
+  if Result.isOk(&Html.destination("https://example.com/a?b=1")) { held = held + 1 }
+  if Result.isOk(&Html.destination("http://example.com")) { held = held + 1 }
+  if Result.isOk(&Html.destination("mailto:someone@example.com")) { held = held + 1 }
+  if Result.isOk(&Html.destination("tel:+15550100")) { held = held + 1 }
+  if Result.isOk(&Html.destination("/account?tab=1")) { held = held + 1 }
+  if Result.isOk(&Html.destination("../sibling")) { held = held + 1 }
+
+  // A colon inside a path is not a scheme.
+  if Result.isOk(&Html.destination("/a:b/c")) { held = held + 1 }
+
+  // A destination within this site is written as one.
+  if Html.destinationText(&at("account")) == "/account" { held = held + 1 }
+  if Html.destinationText(&at("/account")) == "/account" { held = held + 1 }
+
+  // An attribute whose value would be a program is refused. No escaping makes
+  // a program safe, so there is nothing to escape it into.
+  if let Err(Handler(_)) = Html.attribute("onclick", "steal()") { held = held + 1 }
+  if let Err(Handler(_)) = Html.attribute("ONERROR", "steal()") { held = held + 1 }
+  if Html.isHandler("onload") { held = held + 1 }
+  if !Html.isHandler("class") { held = held + 1 }
+  if Result.isOk(&Html.attribute("class", "card")) { held = held + 1 }
+  if Result.isOk(&Html.attribute("data-id", "7")) { held = held + 1 }
+
+  // And one that reached a record some other way is not written, which is a
+  // backstop rather than the defence.
+  if Html.render(&Html.div(&[("onclick", "steal()")], &[Html.text("x")])) == "<div>x</div>" {
+    held = held + 1
+  }
+  if !Html.render(&Html.div(&[("onclick", "steal()")], &[])).contains("steal") { held = held + 1 }
+
+  // A destination the caller took responsibility for is written as it stands,
+  // and the word they used is in their source.
+  if Html.destinationText(&Html.trustedDestination("javascript:void(0)"))
+    == "javascript:void(0)"
+  {
+    held = held + 1
+  }
+
   // Two renders of equal views are equal, which is what lets a page be
   // compared in a test rather than matched against a pattern.
   if Html.render(&nested) == Html.render(&nested) { held = held + 1 }
 
   held
+}
+
+/// A destination within this site, for the checks that are not about
+/// destinations.
+fn at(path: Str) -> Html.Destination {
+  Result.unwrapOr(Html.here(path), Html.trustedDestination("/"))
 }

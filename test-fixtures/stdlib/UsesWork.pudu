@@ -1,0 +1,160 @@
+module UsesWork
+
+import Std.App.Work {After, EveryFromEnd, EveryFromStart}
+import Std.App.Work as Work
+import Std.Option as Option
+import Std.Sync as Sync
+
+/// What a schedule promises.
+///
+/// Every check here is a comparison of values at a stated moment. Nothing
+/// waits: an hourly job is checked in a millisecond, which is only possible
+/// because the clock is given rather than read.
+export fn main() -> Int {
+  var held = 0
+
+  let counter = Sync.cell(0)
+
+  // A schedule is jobs, and can be read before it runs.
+  let plan = Work.schedule(&[
+      Work.job("sweep", EveryFromEnd(100), counting(counter)),
+      Work.job("report", EveryFromStart(1000), counting(counter)),
+      Work.job("warm", After(50), counting(counter))
+    ])
+  if Work.names(&plan) == ["sweep", "report", "warm"] { held = held + 1 }
+  if Work.jobsOf(&plan).length() == 3 { held = held + 1 }
+  if Work.names(&Work.nothing()) == [] { held = held + 1 }
+  if Work.names(&Work.also(&Work.nothing(), Work.job("x", After(1), counting(counter)))) == ["x"] {
+    held = held + 1
+  }
+
+  // Which jobs are due is a pure function of the schedule and the moment.
+  if Work.dueAt(&plan, 0) == [] { held = held + 1 }
+  if Work.dueAt(&plan, 60) == ["warm"] { held = held + 1 }
+  if Work.dueAt(&plan, 120) == ["sweep", "warm"] { held = held + 1 }
+  if Work.dueAt(&plan, 1200) == ["sweep", "report", "warm"] { held = held + 1 }
+
+  // Running what is due records what happened, and the schedule that follows
+  // is a new value — the one before is still there to compare against.
+  let after = Work.runDue(&plan, 120, at(200))
+  if Option.unwrapOr(Work.recordOf(&after, "sweep"), Work.nothingYet()).runs == 1 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Work.recordOf(&after, "warm"), Work.nothingYet()).runs == 1 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Work.recordOf(&after, "report"), Work.nothingYet()).runs == 0 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Work.recordOf(&plan, "sweep"), Work.nothingYet()).runs == 0 {
+    held = held + 1
+  }
+
+  // And how long it took, from the clock the caller gave.
+  if Option.unwrapOr(Work.recordOf(&after, "sweep"), Work.nothingYet()).lastTook == 80 {
+    held = held + 1
+  }
+
+  // A job that runs once does not run again.
+  if !Work.dueAt(&after, 5000).contains("warm") { held = held + 1 }
+
+  // Where the interval is measured from is stated per job, because the two are
+  // different. Measured from the end, a job that overran runs less often.
+  let overran = Work.runDue(
+      &Work.schedule(&[Work.job("slow", EveryFromEnd(100), counting(counter))]),
+    100,
+    at(500)
+  )
+  if !Work.dueAt(&overran, 550).contains("slow") { held = held + 1 }
+  if Work.dueAt(&overran, 600).contains("slow") { held = held + 1 }
+
+  // Measured from the start, it keeps its cadence.
+  let paced = Work.runDue(
+      &Work.schedule(&[Work.job("paced", EveryFromStart(100), counting(counter))]),
+    100,
+    at(500)
+  )
+  if Work.dueAt(&paced, 200).contains("paced") { held = held + 1 }
+
+  // A job still running when its next turn arrives does not start a second:
+  // two runs of a job that writes is a race nobody designed, and it shows up
+  // as duplicated work rather than as an error.
+  let busy = Work.started(
+      &Work.schedule(&[Work.job("busy", EveryFromEnd(10), counting(counter))]),
+    "busy"
+  )
+  let skippedOnce = Work.runDue(&busy, 100, at(100))
+  if Option.unwrapOr(Work.recordOf(&skippedOnce, "busy"), Work.nothingYet()).runs == 0 {
+    held = held + 1
+  }
+
+  // And the skip is counted, so a job that never finishes in time is visible
+  // rather than merely slow.
+  if Option.unwrapOr(Work.recordOf(&skippedOnce, "busy"), Work.nothingYet()).skips == 1 {
+    held = held + 1
+  }
+
+  // Once it has finished, it runs again.
+  let freed = Work.runDue(&Work.ended(&skippedOnce, "busy"), 200, at(210))
+  if Option.unwrapOr(Work.recordOf(&freed, "busy"), Work.nothingYet()).runs == 1 {
+    held = held + 1
+  }
+
+  // A job that fails is recorded and stays scheduled. One bad night is not a
+  // reason for a nightly job to be silently dead until somebody notices its
+  // output stopped.
+  let failing = Work.schedule(&[Work.job("fragile", EveryFromEnd(100), refusing)])
+  let once = Work.runDue(&failing, 100, at(110))
+  let record = Option.unwrapOr(Work.recordOf(&once, "fragile"), Work.nothingYet())
+  if record.runs == 1 { held = held + 1 }
+  if Work.failuresOf(&record) == 1 { held = held + 1 }
+  if Work.everFailed(&record) { held = held + 1 }
+  if Option.unwrapOr(Work.lastFailureOf(&record), "") == "the database was restarting" {
+    held = held + 1
+  }
+
+  // Still scheduled, and it runs again at its next turn rather than being
+  // retried immediately — which would turn one failing dependency into a tight
+  // loop against it.
+  if !Work.dueAt(&once, 150).contains("fragile") { held = held + 1 }
+  if Work.dueAt(&once, 250).contains("fragile") { held = held + 1 }
+  let twice = Work.runDue(&once, 250, at(260))
+  if Option.unwrapOr(Work.recordOf(&twice, "fragile"), Work.nothingYet()).runs == 2 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Work.recordOf(&twice, "fragile"), Work.nothingYet()).failures == 2 {
+    held = held + 1
+  }
+
+  // A job that has not failed says so rather than saying it failed with
+  // nothing.
+  if Option.isNone(&Work.lastFailureOf(&Work.nothingYet())) { held = held + 1 }
+  if !Work.everFailed(&Work.nothingYet()) { held = held + 1 }
+
+  // The work really ran, which is what the counter is for.
+  if Sync.get(&counter) != Ok(0) { held = held + 1 }
+
+  // A schedule reports what it has been doing, one line per job.
+  let written = Work.render(&twice)
+  if written.contains("fragile: ran 2, failed 2") { held = held + 1 }
+  if written.contains("the database was restarting") { held = held + 1 }
+  if Work.render(&Work.nothing()).isEmpty() { held = held + 1 }
+  if Work.render(&plan).split("\n").length() == 3 { held = held + 1 }
+
+  held
+}
+
+/// A job that records that it ran.
+fn counting(into: Sync.Cell[Int]) -> fn() -> Result[(), Str] {
+  fn() -> Result[(), Str] {
+    let _kept = Sync.set(&into, Result.unwrapOr(Sync.get(&into), 0) + 1)
+    Ok(())
+  }
+}
+
+/// A job that fails the way a real one does: for a reason, and not forever.
+fn refusing() -> Result[(), Str] { Err("the database was restarting") }
+
+/// A clock that says the work ended at a stated moment, so a duration is a
+/// comparison rather than a wait.
+fn at(moment: Int) -> fn() -> Int { fn() -> Int { moment } }

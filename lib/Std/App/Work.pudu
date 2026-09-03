@@ -1,0 +1,208 @@
+module Std.App.Work
+
+import Std.Option as Option
+
+/// When a job is due again.
+///
+/// The two intervals are both here because they answer different needs, and a
+/// scheduler offering one is wrong for half the jobs it is given. Measured
+/// from the end, a job that overruns simply runs less often; measured from the
+/// start, it keeps its cadence and the skipped turns absorb the overrun.
+export type Due
+  = After(Int)
+  | EveryFromEnd(Int)
+  | EveryFromStart(Int)
+
+/// What a job has done so far.
+///
+/// Kept beside the job rather than somewhere else, so asking what a schedule
+/// has been doing is reading a value rather than correlating two.
+export type Record = {
+  runs: Int,
+  failures: Int,
+  skips: Int,
+  lastBegan: Int,
+  lastEnded: Int,
+  lastTook: Int,
+  lastFailure: Str
+}
+
+/// One thing a service does when nobody asked.
+export type Job = {
+  name: Str,
+  due: Due,
+  work: fn() -> Result[(), Str],
+  running: Bool,
+  history: Record
+}
+
+/// The work a service does on its own.
+export type Schedule = { jobs: Array[Job] }
+
+/// Nothing recorded yet.
+export fn nothingYet() -> Record {
+  Record{runs: 0, failures: 0, skips: 0, lastBegan: 0, lastEnded: 0, lastTook: 0, lastFailure: ""}
+}
+
+/// A job from its parts.
+export fn job(name: Str, due: Due, work: fn() -> Result[(), Str]) -> Job {
+  Job{name: name, due: due, work: work, running: false, history: nothingYet()}
+}
+
+/// A schedule of jobs.
+export fn schedule(jobs: &Array[Job]) -> Schedule { Schedule{jobs: *jobs} }
+
+/// Nothing scheduled.
+export fn nothing() -> Schedule { Schedule{jobs: []} }
+
+/// The schedule with one more job.
+export fn also(base: &Schedule, added: Job) -> Schedule {
+  Schedule{jobs: base.jobs.push(added)}
+}
+
+/// What the schedule holds.
+export fn jobsOf(held: &Schedule) -> Array[Job] { held.jobs }
+
+/// The names of the jobs, so a program can report what it does unasked.
+export fn names(held: &Schedule) -> Array[Str] {
+  var found: Array[Str] = []
+  for one in held.jobs { found = found.push(one.name) }
+  found
+}
+
+/// What one job has done.
+export fn recordOf(held: &Schedule, name: Str) -> Option[Record] {
+  var found: Option[Record] = None
+  for one in held.jobs { if one.name == name { found = Some(one.history) } }
+  found
+}
+
+/// The names of the jobs due at a moment.
+///
+/// A pure function of the schedule and the moment, so an hourly job is checked
+/// in a millisecond rather than in an hour.
+export fn dueAt(held: &Schedule, now: Int) -> Array[Str] {
+  var found: Array[Str] = []
+  for one in held.jobs { if isDue(&one, now) { found = found.push(one.name) } }
+  found
+}
+
+/// Whether one job is due.
+///
+/// A job that has never run is due once its first delay has passed, measured
+/// from the start of time the caller is counting from — which for a service is
+/// when it started.
+export fn isDue(one: &Job, now: Int) -> Bool {
+  match one.due {
+    case After(delay) => one.history.runs == 0 && now >= delay
+    case EveryFromEnd(interval) => now - lastPoint(one, false) >= interval
+    case EveryFromStart(interval) => now - lastPoint(one, true) >= interval
+  }
+}
+
+/// The moment an interval is measured from.
+fn lastPoint(one: &Job, fromStart: Bool) -> Int {
+  if one.history.runs == 0 {
+    0
+  } else {
+    if fromStart { one.history.lastBegan } else { one.history.lastEnded }
+  }
+}
+
+/// The schedule after running everything due at a moment.
+///
+/// A job already running does not start a second: two runs of a job that
+/// writes is a race nobody designed, and it shows up as duplicated work rather
+/// than as an error. The skipped turn is counted, so a job that never finishes
+/// in time is visible rather than merely slow.
+export fn runDue(held: &Schedule, now: Int, ending: fn() -> Int) -> Schedule {
+  var after: Array[Job] = []
+  for one in held.jobs {
+    if !isDue(&one, now) {
+      after = after.push(one)
+    } else {
+      if one.running { after = after.push(skipped(&one)) } else { after = after.push(ran(&one, now, ending)) }
+    }
+  }
+  Schedule{jobs: after}
+}
+
+/// One job, run.
+///
+/// A failure is recorded and the job stays scheduled: one bad night is not a
+/// reason for a nightly job to be silently dead until somebody notices its
+/// output stopped.
+fn ran(one: &Job, now: Int, ending: fn() -> Int) -> Job {
+  let outcome = (one.work)()
+  let finished = ending()
+  let failure = if let Err(reason) = outcome { reason } else { "" }
+  Job {
+      ..*one,
+    history: Record {
+      runs: one.history.runs + 1,
+      failures: one.history.failures + (if failure.isEmpty() { 0 } else { 1 }),
+      skips: one.history.skips,
+      lastBegan: now,
+      lastEnded: finished,
+      lastTook: finished - now,
+      lastFailure: failure
+    }
+  }
+}
+
+/// One job, skipped because the last run had not finished.
+fn skipped(one: &Job) -> Job {
+  Job{..*one, history: Record{..one.history, skips: one.history.skips + 1}}
+}
+
+/// The schedule with one job marked as running, for a caller driving jobs on
+/// workers of its own.
+export fn started(held: &Schedule, name: Str) -> Schedule {
+  Schedule{jobs: withJob(&held.jobs, name, fn(one: Job) -> Job { Job{..one, running: true} })}
+}
+
+/// The same, marked as finished.
+export fn ended(held: &Schedule, name: Str) -> Schedule {
+  Schedule{jobs: withJob(&held.jobs, name, fn(one: Job) -> Job { Job{..one, running: false} })}
+}
+
+fn withJob(jobs: &Array[Job], name: Str, alter: fn(Job) -> Job) -> Array[Job] {
+  var after: Array[Job] = []
+  for one in jobs { after = after.push(if one.name == name { alter(one) } else { one }) }
+  after
+}
+
+/// How many times a job ran.
+export fn runsOf(held: &Record) -> Int { held.runs }
+
+/// How many of those failed.
+export fn failuresOf(held: &Record) -> Int { held.failures }
+
+/// How many turns were skipped because the last run had not finished.
+export fn skipsOf(held: &Record) -> Int { held.skips }
+
+/// How long the last run took.
+export fn lastTookOf(held: &Record) -> Int { held.lastTook }
+
+/// What it last said when it failed, or nothing when it has not.
+export fn lastFailureOf(held: &Record) -> Option[Str] {
+  if held.lastFailure.isEmpty() { None } else { Some(held.lastFailure) }
+}
+
+/// Whether a job has ever failed.
+export fn everFailed(held: &Record) -> Bool { held.failures > 0 }
+
+/// What a schedule has been doing, one line per job.
+export fn render(held: &Schedule) -> Str {
+  var built = ""
+  var index = 0
+  while index < held.jobs.length() {
+    let one = held.jobs[index]
+    if index > 0 { built = built + "\n" }
+    built = built + one.name + ": ran " + show(one.history.runs) + ", failed "
+      + show(one.history.failures) + ", skipped " + show(one.history.skips)
+    if !one.history.lastFailure.isEmpty() { built = built + " (" + one.history.lastFailure + ")" }
+    index = index + 1
+  }
+  built
+}
