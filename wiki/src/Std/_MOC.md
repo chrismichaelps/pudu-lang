@@ -37,6 +37,7 @@ tags: [moc, module, stdlib]
 - [[Std Validate]] — saying what is wrong with everything that is wrong, once.
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
+- [[Std App Password]] — a password kept in a form that proves it without holding it.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.

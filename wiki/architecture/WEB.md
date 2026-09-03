@@ -140,7 +140,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Cross-site request forgery? | **Ready** | Provenance is checked before a token is: a state-changing request from another site, or from one that will not say, is refused. |
 | Request smuggling? | **Ready** | A message that states its length two ways is refused. There is no precedence rule, so there is no difference between readers to exploit. |
 | Transport security? | **Ready** | [[Std Tls]]. Verification is not a parameter. |
-| Authentication? | **Absent** | The protocol vocabulary exists in [[Std Http]]. Sessions, password storage, and multi-factor do not. |
+| Authentication? | **Partial** | [[Std App Password]] stores a password so it proves itself later without being held, carrying the work factor it was made with so raising it locks nobody out. Sessions and multi-factor are still absent. |
 | Authorisation? | **Ready** | [[Std App Access]]. A requirement is given in the same call as the handler and there is no call that omits it, so a route needing nothing and a route somebody forgot stop being the same line. A program can list what every route requires. |
 | Secrets handling? | **Partial** | Settings can hold one; nothing marks it as one, so nothing stops it being logged. |
 | Audit trail? | **Absent** | Not designed. |

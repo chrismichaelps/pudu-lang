@@ -51,6 +51,58 @@ const DIGITS: Str = "0123456789"
 /// A statement with nothing in it.
 export fn empty() -> Statement { Statement{parts: [], values: []} }
 
+/// A statement written out in full, with its values beside it.
+///
+/// The way out. A builder that cannot express something forces a way around
+/// it, and the way around should keep values apart rather than abandoning the
+/// property the builder exists for — so this takes the text and the values
+/// separately, exactly as everything else here does. Anything the language can
+/// say goes through here: window functions, recursive traversal, a call to a
+/// function the database defines, a statement somebody tuned by hand.
+///
+/// The placeholders written in the text are read and held as parts, so a
+/// statement written this way can still be put after another one and have its
+/// numbering come out right. Written as text and left alone, `$1` in the
+/// second of two statements would still say `$1` after the first had already
+/// used it.
+export fn raw(source: Str, values: &Array[Option[Str]]) -> Statement {
+  Statement{parts: partsOf(source), values: *values}
+}
+
+/// The parts of written text: what is between the placeholders, and the
+/// placeholders.
+fn partsOf(source: Str) -> Array[Part] {
+  var parts: Array[Part] = []
+  var literal = ""
+  var index = 0
+  while index < source.length() {
+    let character = source.slice(index, index + 1)
+    if character != "$" {
+      literal = literal + character
+      index = index + 1
+    } else {
+      var ahead = index + 1
+      var digits = ""
+      while ahead < source.length() && DIGITS.contains(source.slice(ahead, ahead + 1)) {
+        digits = digits + source.slice(ahead, ahead + 1)
+        ahead = ahead + 1
+      }
+      if digits.isEmpty() {
+        literal = literal + character
+        index = index + 1
+      } else {
+        if !literal.isEmpty() {
+          parts = parts.push(Literal(literal))
+          literal = ""
+        }
+        parts = parts.push(Placeholder)
+        index = ahead
+      }
+    }
+  }
+  if literal.isEmpty() { parts } else { parts.push(Literal(literal)) }
+}
+
 /// A statement from text the program wrote, carrying no values.
 ///
 /// For the parts a builder does not cover. Values still travel separately —
@@ -89,7 +141,8 @@ export fn textOf(held: &Statement) -> Str {
 /// during an incident, and `in ( $1 , $2 )` is read more slowly than
 /// `in ($1, $2)`.
 fn spaced(before: Str, after: Str) -> Bool {
-  !before.endsWith("(") && !after.startsWith(")") && !after.startsWith(",")
+  !before.endsWith("(") && !before.endsWith(" ") && !after.startsWith(")")
+    && !after.startsWith(",") && !after.startsWith(" ")
 }
 
 /// The values that travel beside it.

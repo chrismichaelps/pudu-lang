@@ -265,6 +265,7 @@ testProgramEvaluation = do
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
+  proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
@@ -621,6 +622,16 @@ testProgramEvaluation = do
     , counterexample
         "a record may be written as a change to another"
         (altered === Just "22")
+    {-| That a password is kept in a form which proves it later without
+        holding it, and that the form carries the settings it was made with —
+        so raising the work factor does not invalidate what is already stored,
+        which is why a work factor kept elsewhere never gets raised. Every
+        password gets its own salt, a form that cannot be read is a failure
+        rather than one that matches nothing, and no refusal repeats the
+        password it was given. -}
+    , counterexample
+        "a stored password proves itself without being held"
+        (proved === Just "40")
     {-| The obligations [[ADR-0015]] places on a hash map: a key type whose
         hash tells nothing apart is still kept distinct by its equality, a
         replaced value keeps its position while a re-inserted key takes a new
