@@ -14,7 +14,8 @@ import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Capability (..)
+  ( Foreign (..)
+  , Capability (..)
   , Declaration (..)
   , FieldDeclaration (..)
   , Function (..)
@@ -308,6 +309,8 @@ declarationSummary moduleValue =
     ImplDeclaration value ->
       "impl " <> renderType (implTrait value) <> " for " <> renderType (implTarget value)
     MacroDeclaration value -> "macro " <> locatedValue (macroName value)
+    ForeignDeclaration value ->
+      "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
     InvalidDeclaration -> "<invalid declaration>"
 
   bindingWord kind = case kind of

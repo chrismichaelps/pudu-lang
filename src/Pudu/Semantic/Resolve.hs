@@ -193,6 +193,7 @@ collectDeclaration (Located _ declaration) = case declaration of
     declareNamed TypeSpace ModuleOrigin (traitVisibility value) False (traitName value)
   ImplDeclaration _ -> pure ()
   MacroDeclaration _ -> pure ()
+  ForeignDeclaration _ -> pure ()
   InvalidDeclaration -> pure ()
 
 {-| Variants live in their type's namespace, so they are recorded as symbols but
@@ -226,6 +227,7 @@ walkDeclaration (Located _ declaration) = case declaration of
     mapM_ walkConstraint (implConstraints value)
     mapM_ (\member -> walkFunction (locatedValue member)) (implFunctions value)
   MacroDeclaration _ -> pure ()
+  ForeignDeclaration _ -> pure ()
   InvalidDeclaration -> pure ()
 
 {-| A parameter is visible to the defaults of later parameters and to the body,

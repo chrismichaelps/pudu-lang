@@ -12,6 +12,8 @@ module Pudu.Frontend.Syntax.Tree
   , Function (..)
   , lambdaName
   , FunctionBody (..)
+  , Foreign (..)
+  , ForeignFunction (..)
   , Impl (..)
   , Import (..)
   , Literal (..)
@@ -89,6 +91,12 @@ data Declaration
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
   | MacroDeclaration !Macro
+  {-| A library written elsewhere, and the functions this program calls in it.
+
+      Declared in a block because the library is what they share: it is opened
+      once, its version is one fact, and what a program reaches outside itself
+      is one place to look. -}
+  | ForeignDeclaration !Foreign
   | InvalidDeclaration
   deriving stock (Eq, Show)
 
@@ -304,6 +312,33 @@ data FieldPattern = FieldPattern
 
 {-| @Program.Syntax.FieldInit — one field of a record construction; an absent
     value takes the binding with the field's own name. -}
+{-| A library written elsewhere. -}
+data Foreign = Foreign
+  { foreignVisibility :: !Visibility
+  , foreignLibrary :: !(Located Text)
+  {-| The version the declaration expects, where it names one. Recorded rather
+      than enforced: nothing here fetches or verifies a library, and claiming
+      to check a version this cannot see would be worse than saying nothing. -}
+  , foreignVersion :: !(Maybe (Located Text))
+  , foreignFunctions :: ![Located ForeignFunction]
+  }
+  deriving stock (Eq, Show)
+
+{-| One function in a foreign library, as this program asserts its shape.
+
+    The assertion is unverifiable — a wrong width is a corrupted stack rather
+    than a diagnostic — which is why reaching one needs `unsafe`. -}
+data ForeignFunction = ForeignFunction
+  { foreignName :: !(Located Text)
+  , foreignParameters :: ![Located Parameter]
+  , foreignResult :: !(Located TypeSyntax)
+  {-| The function that releases what this one returns, when what it returns
+      must be released. A returned pointer is borrowed unless this names its
+      release, so an owned value carries what frees it. -}
+  , foreignReleasedBy :: !(Maybe (Located Text))
+  }
+  deriving stock (Eq, Show)
+
 data FieldInit = FieldInit
   { fieldInitName :: !(Located Text)
   , fieldInitValue :: !(Maybe (Located Expression))

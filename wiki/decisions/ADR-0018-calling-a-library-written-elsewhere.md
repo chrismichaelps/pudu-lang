@@ -83,6 +83,76 @@ foreign declarations belong inside that boundary rather than beside it.
 silently narrow. The boundary is where a mistake is expensive, so it is the last place to guess at
 what somebody meant.
 
+## What crosses, exactly
+
+The mapping is stated rather than inferred, and the widths are explicit. C's own `int` is not a
+width — it is thirty-two bits nearly everywhere and that is a habit rather than a promise — so a
+declaration names `I32` and never `Int`. The same for `size_t`, `long`, and an enum, each of which
+is a different size on some machine somebody runs.
+
+| Declared | What crosses | Notes |
+|---|---|---|
+| `I8` `I16` `I32` `I64` `U8` `U16` `U32` `U64` | the integer of that exact width | never a C `int`; the width is the declaration's job |
+| `F32` `F64` | the two floating widths | |
+| `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
+| `CText` | a pointer to bytes ending in a nought | borrowed for the call unless declared `owned` |
+| `Ptr[T]` | an address | opaque; nothing is read through it without a further declaration |
+| `Opt[Ptr[T]]` | an address that may be nought | the only place a nought crosses, and it becomes `None` here |
+| a record of the above | by value | admitted only when every field is admitted |
+| `()` | nothing | a function returning nothing |
+
+Everything else is refused at the declaration, which is the point of stating the list: a type that
+cannot cross is a diagnostic where it is written rather than a fault when it is called.
+
+**A pointer that may be absent says so.** C has one representation for "no answer" and "the answer is
+address zero", and a declaration that does not distinguish them turns the first into a crash on the
+next use. `Opt[Ptr[T]]` is how a nought is admitted, and it becomes `None` before it leaves the
+boundary — which is what the language already required of `null`.
+
+## On C++ specifically, which is not the same question
+
+A library written in C is callable. A library written in C++ is not, and saying otherwise would be
+a comfortable lie:
+
+- **Its symbol names are not its function names.** A C++ compiler encodes the parameter types into
+  the symbol, so `Shape::area(int)` is not findable under any name a person would write, and the
+  encoding differs between compilers. Nothing here guesses at one.
+- **A method needs an object, and an object needs a layout** — which is decided by the compiler that
+  built it, including where its virtual table sits.
+- **A template has no symbol until something instantiates it**, so a header full of them exports
+  nothing to find.
+- **An exception crossing this boundary is undefined**, not merely unsupported.
+
+What is callable is the C-compatible surface a C++ library chooses to present — the part declared
+`extern "C"`, whose names are its names and whose arguments are plain values. Every language that
+calls into C++ does this, and the ones that appear not to are generating that surface for you.
+
+So: raylib is a C library and is reachable as it stands. A C++ library is reachable through the
+surface it exports for the purpose, or through a small C file somebody writes to present one. That
+is the honest position, and it is better to say it than to ship something that works for the first
+example and fails on the second.
+
+## What the editor must know
+
+A declaration is the only description of a foreign function that exists — there is no body to read
+and no definition to jump to elsewhere — which makes it more important here than for ordinary code,
+not less:
+
+- **Its signature is what hover shows**, and hover says it is foreign. A reader looking at a call
+  should learn from the editor that the type is asserted rather than proved, because that is the
+  thing that decides how carefully they check it.
+- **Completion offers the names in the block**, with their signatures, since nothing else in the
+  program mentions them.
+- **Going to the definition goes to the declaration.** It is the definition, as far as this program
+  is concerned.
+- **The declaration carries its own diagnostics**: a type that cannot cross, an owned result that
+  names no release, a release that is not declared in the same library. Each is caught where it is
+  written rather than where it is called.
+
+Because the declaration is checked and typed like any other signature, all of this falls out of the
+existing machinery rather than needing a second one — which is the argument for putting it in the
+source rather than in a file beside it.
+
 ## Consequences
 
 A program can reach the libraries that already exist, and the reach is visible: every foreign block

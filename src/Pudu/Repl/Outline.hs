@@ -11,7 +11,9 @@ import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Frontend.Syntax.Tree
-  ( Function (..)
+  ( Foreign (..)
+  , ForeignFunction (..)
+  , Function (..)
   , Parameter (..)
   , Block (..)
   , Capability (..)
@@ -58,6 +60,9 @@ outlineDeclaration (Located _ declaration) = case declaration of
   TraitDeclaration _ -> "trait"
   ImplDeclaration _ -> "impl"
   MacroDeclaration value -> "macro " <> locatedValue (macroName value)
+  ForeignDeclaration value ->
+    "foreign " <> Text.pack (show (locatedValue (foreignLibrary value)))
+      <> " { " <> Text.intercalate "; " (map foreignOutline (foreignFunctions value)) <> " }"
   InvalidDeclaration -> "invalid"
 
 outlineExpression :: Located Expression -> Text
@@ -178,3 +183,7 @@ outlineLiteral literal = case literal of
   CharValue value -> "'" <> Text.singleton value <> "'"
   BoolValue value -> if value then "true" else "false"
   NullValue -> "null"
+
+{-| One foreign function, as an outline shows it. -}
+foreignOutline :: Located ForeignFunction -> Text
+foreignOutline (Located _ value) = locatedValue (foreignName value)
