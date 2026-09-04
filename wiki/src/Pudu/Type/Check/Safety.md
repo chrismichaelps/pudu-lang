@@ -33,6 +33,14 @@ reportUnusedCapabilities :: Span -> Checker ()
 
 ### Governance
 
+- **A call that leaves out an argument is refused here rather than by the call rule.** The rule sees
+  a function type, which records what each parameter takes and not whether it must be supplied; the
+  count that decides it belongs to the declaration. Too many stays with the call rule, which knows
+  the total from the type alone.
+- **A declaration is identified by how many parameters it writes.** The table is keyed by a bare
+  name, and a parameter may carry the name of a declaration elsewhere. Checking a one-argument
+  predicate against a two-argument declaration of the same name refused correct code.
+
 - A `comptime` body may directly call only another named `comptime` function or a closed allowlist
   of prelude names. The check recognizes an unqualified `NameExpression`; function values do not
   carry `comptime` metadata, so aliases and higher-order calls are not checked transitively.
