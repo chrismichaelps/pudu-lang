@@ -68,6 +68,7 @@ foreign import ccall unsafe "pudu_ffi_cpp_active_count"
 
 testTypeNamesAreNotValues :: IO Property
 testTypeNamesAreNotValues = do
+  missing <- codes "test-fixtures/stdlib/RejectsMissingArgument.pudu"
   values <- codes "test-fixtures/stdlib/RejectsTypeAsValue.pudu"
   members <- codes "test-fixtures/stdlib/RejectsTypeMember.pudu"
   pure $ conjoin
@@ -75,6 +76,12 @@ testTypeNamesAreNotValues = do
         (values === replicate 6 "E2010")
     , counterexample "non-variant members through every type category are refused precisely"
         (members === replicate 3 "E3034")
+    , counterexample
+        ( "a call missing an argument is refused where it is written, while a "
+            <> "default may still be omitted and a parameter is not the declaration "
+            <> "it shares a name with"
+        )
+        (missing === ["W2001", "E3003", "E3003"])
     ]
 
 

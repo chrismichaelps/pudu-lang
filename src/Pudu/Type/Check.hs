@@ -36,6 +36,7 @@ import Pudu.Type.Env
   , leaveUnsafe
   , recordUnsafeFunction
   , recordComptimeFunction
+  , recordRequiredArity
   , withComptime
   , lookupName
   , recordExpression
@@ -176,6 +177,8 @@ declareFunction declared value = do
     Just capabilities ->
       recordUnsafeFunction (locatedValue (functionName value)) (map locatedValue capabilities)
   recordComptimeFunction (locatedValue (functionName value)) (functionComptime value)
+  recordRequiredArity (locatedValue (functionName value))
+    (Tree.requiredParameterCount value, length (functionParameters value))
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}

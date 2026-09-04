@@ -1,0 +1,35 @@
+module RejectsMissingArgument
+
+/// A call that leaves out an argument is a mistake where it is written, not a
+/// fault when it runs. A parameter with a default may still be omitted, and a
+/// name that belongs to a parameter here is not the declaration it shares a
+/// spelling with.
+foreign "c" {
+  fn writeSum symbol "pudu_ffi_cpp_write_sum" (left: Int32, right: Int32, total: Int32) -> Int32
+}
+
+fn add(left: Int, right: Int) -> Int { left + right }
+
+fn greet(name: Str, times: Int = 2) -> Int { times + name.length() }
+
+fn holds(item: Int, limit: Int) -> Bool { item < limit }
+
+/// The predicate is a parameter that shares its name with the declaration
+/// above, and takes one argument rather than two.
+fn anyOf(items: Array[Int], holds: fn(Int) -> Bool) -> Bool {
+  for item in items {
+    if holds(item) { return true }
+  }
+  false
+}
+
+export fn main() -> Int {
+  let short = add(1)
+  let defaulted = greet("a")
+  let shadowed = anyOf([1, 2], fn(value: Int) -> Bool => value > 1)
+  let compared = holds(1, 2)
+  unsafe(foreign) {
+    let missing = writeSum(10i32)
+  }
+  defaulted
+}
