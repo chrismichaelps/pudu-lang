@@ -51,6 +51,7 @@ programProperties =
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)
   , ("a module cannot lend its name to a type it does not declare", testQualifiedTypeNames)
+  , ("a type-only name cannot masquerade as a runtime value", testTypeNamesAreNotValues)
   , ("opaque handles cross a real C++ boundary with one release", testForeignHandles)
   , ("foreign ownership serializes release and call use", testForeignOwnershipStore)
   , ("foreign teardown ends even while a native call is inside", testForeignTeardownEnds)
@@ -64,6 +65,17 @@ foreign import ccall unsafe "pudu_ffi_cpp_delete_count"
 
 foreign import ccall unsafe "pudu_ffi_cpp_active_count"
   cppActiveCount :: IO CInt
+
+testTypeNamesAreNotValues :: IO Property
+testTypeNamesAreNotValues = do
+  values <- codes "test-fixtures/stdlib/RejectsTypeAsValue.pudu"
+  members <- codes "test-fixtures/stdlib/RejectsTypeMember.pudu"
+  pure $ conjoin
+    [ counterexample "wired-in, prelude, and declared types are not bare or callable values"
+        (values === replicate 6 "E2010")
+    , counterexample "non-variant members through every type category are refused precisely"
+        (members === replicate 3 "E3034")
+    ]
 
 
 

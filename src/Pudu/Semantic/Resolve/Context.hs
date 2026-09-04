@@ -11,6 +11,7 @@ module Pudu.Semantic.Resolve.Context
   , outsideLoops
   , recordVariantSymbol
   , resolveLoopTarget
+  , resolveExpressionName
   , resolveTypeName
   , resolveValueName
   , runResolver
@@ -254,6 +255,33 @@ resolveValueName spanValue name = do
       emit "E2012" Error spanValue ("ambiguous variant name " <> name)
         (Just "qualify the variant with its type, as in Type.Variant")
     else resolveUnambiguous spanValue name
+
+{-| Resolve a name that must itself produce a runtime value.
+
+    Constructor paths use the more permissive operation above because their
+    first segment intentionally names a type. A plain expression has no such
+    reading: recording a type reference here would let checking succeed even
+    though evaluation has no value binding to read. -}
+resolveExpressionName :: Span -> Text -> Resolver ()
+resolveExpressionName spanValue name = do
+  ambiguous <- isAmbiguous name
+  if ambiguous
+    then
+      emit "E2012" Error spanValue ("ambiguous variant name " <> name)
+        (Just "qualify the variant with its type, as in Type.Variant")
+    else do
+      value <- lookupCurrent ValueSpace name
+      case value of
+        Just symbol -> recordReference (Reference spanValue (symbolId symbol))
+        Nothing -> do
+          typeSymbol <- lookupCurrent TypeSpace name
+          case typeSymbol of
+            Just _ ->
+              emit "E2010" Error spanValue (name <> " is a type, not a value")
+                (Just "use the type in an annotation or construct one of its values")
+            Nothing ->
+              emit "E2010" Error spanValue ("unresolved value name " <> name)
+                (Just "declare the name, import it, or check the spelling")
 
 isAmbiguous :: Text -> Resolver Bool
 isAmbiguous name = Resolver $ \state -> (name `elem` stateAmbiguous state, state)

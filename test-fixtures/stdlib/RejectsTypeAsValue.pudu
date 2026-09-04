@@ -1,0 +1,21 @@
+module RejectsTypeAsValue
+
+type Local = { value: Int }
+
+fn bareBuiltin() -> Int {
+  let value = Int32
+  0
+}
+fn barePrelude() -> Int {
+  let value = Sync
+  0
+}
+fn bareDeclared() -> Int {
+  let value = Local
+  0
+}
+fn callBuiltin() -> Int { Int32(1) }
+fn callPrelude() -> Int { Sync(1) }
+fn callDeclared() -> Int { Local(1) }
+
+export fn main() -> Int { 0 }

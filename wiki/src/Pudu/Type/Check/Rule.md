@@ -79,7 +79,7 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Linkage
 
-- **Requires:** [[Float Literal]], [[Integer Literal]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
+- **Requires:** [[Float Literal]], [[Integer Literal]], [[Semantic Prelude]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
@@ -107,6 +107,9 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   member fires only when something already binds beneath the qualifier — and nothing binds beneath a
   type that declares no variants. So `Int.toInt32`, `Thing.missing`, a variant that does not exist,
   and a module that was never imported all compiled and died where they ran.
+- The same membership test includes the implicit prelude's type-only names. `Sync.cell` without an
+  import is therefore a member on the prelude trait `Sync`, not a module access that may be deferred;
+  it receives the same `E3034` as a member written through a wired-in or locally declared type.
 
 ## Grill Log
 
@@ -121,6 +124,10 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - **Q:** Should `callType` guess channels for an unresolved async result variable? **A:** No; async declarations are complete contracts before calls are typed. _Rationale:_ a later `Result[S, E]` solution cannot retroactively split a previously guessed `Task[result, Never]`. _Rejected:_ declaration-order-dependent normalization; deferred ad-hoc rewriting.
 - **Q:** Give every integer literal `Int` here? **A:** No; register a fresh literal variable and let context solve it. _Rationale:_ the checker must admit every declared width without inventing conversions, and only the constraint finalizer has both the selected type and mathematical value. _Rejected:_ eager `Int`; numeric widening hidden in unification.
 - **Q:** Defer floats like integers? **A:** No; unsuffixed float syntax is explicitly `Float64` and `f32` is the visible narrowing operation. _Rationale:_ unlike exact integers, a decimal-to-binary conversion already chooses precision and can lose information. _Rejected:_ contextual `Float32`; silently narrowing an unsuffixed literal.
+- **Q:** Treat an implicit-prelude type as an unknown module when a member follows it? **A:** No.
+  _Rationale:_ resolution already identified the type and the checker can name the precise mistake;
+  pretending it might be a module recreates the check/run divergence. _Rejected:_ silent fallback;
+  a generic missing-export diagnostic.
 
 ## Referenced by
 

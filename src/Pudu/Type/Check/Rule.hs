@@ -27,6 +27,7 @@ import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.FloatLiteral
   ( ParsedFloat (..), floatWidthType, parseFloatLiteral )
 import Pudu.Source (Span)
+import Pudu.Semantic.Prelude (preludeTypeNames)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
@@ -192,6 +193,7 @@ namesType declared owner =
   Map.member owner (declaredNames declared)
     || Map.member owner (declaredAliases declared)
     || owner `elem` builtinTypeNames
+    || owner `elem` preludeTypeNames
 
 {-| Whether the type this name gives declares that variant.
 
