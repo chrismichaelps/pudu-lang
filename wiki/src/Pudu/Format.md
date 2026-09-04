@@ -32,6 +32,11 @@ formatText   :: Source -> Text
 
 ### Governance
 
+- **A line's own first token decides its indentation, except where it cannot.** A parameter list
+  wrapped onto its own line opens with `(`, which also begins a statement; the line above is what
+  separates them, a declaration that named a function and never opened its parameters being no
+  statement at all.
+
 - **Lines are never joined or split.** A newline delimits a statement in this language, so moving
   one moves a statement boundary: `a\nb` is two statements and `a b` is a syntax error. A formatter
   that reflowed would be rewriting programs rather than laying them out. Everything the formatter

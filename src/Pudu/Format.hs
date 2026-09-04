@@ -125,17 +125,17 @@ group ((firstLine, firstPiece) : rest) = go firstLine [firstPiece] rest
     closing, not the level inside it, so the closer lines up with the line that
     opened it. -}
 indentLines :: [(Bool, [Piece])] -> [Line]
-indentLines = go 0
+indentLines = go 0 []
  where
-  go _ [] = []
-  go depth ((blank, pieces) : rest)
-    | blank = Line 0 [] : go depth rest
+  go _ _ [] = []
+  go depth above ((blank, pieces) : rest)
+    | blank = Line 0 [] : go depth above rest
     | otherwise =
         let opened = sum (map delta pieces)
             leading = if startsClosed pieces then 1 else 0
-            carried = if continues pieces then 1 else 0
+            carried = if continues pieces || resumes above pieces then 1 else 0
             indent = max 0 (depth - leading + carried)
-         in Line indent pieces : go (max 0 (depth + opened)) rest
+         in Line indent pieces : go (max 0 (depth + opened)) pieces rest
   delta piece = case piece of
     CommentPiece _ -> 0
     TokenPiece token -> case tokenKind token of
@@ -173,6 +173,33 @@ indentLines = go 0
       Keyword KwElse -> True
       _ -> False
     _ -> False
+
+  {-| Whether this line finishes a declaration the line above began.
+
+      A parameter list wrapped onto its own line opens with `(`, which can also
+      begin a statement, so the first token cannot decide it alone. What decides
+      it is the line above: a declaration that named a function and never opened
+      its parameters is not a statement, and what follows belongs to it. Read as
+      a statement it sat at the margin, where a reader looking for the next
+      declaration finds it instead. -}
+  resumes above pieces = startsOpen pieces && awaitingParameters above
+  startsOpen ps = case dropWhile isComment ps of
+    TokenPiece token : _ -> case tokenKind token of
+      Symbol symbol -> symbol == SymLeftParen
+      _ -> False
+    _ -> False
+  awaitingParameters ps =
+    declares (dropWhile isComment ps) && not (any isLeftParen ps)
+   where
+    declares tokens = case tokens of
+      TokenPiece token : more -> case tokenKind token of
+        Keyword KwFn -> True
+        Keyword KwExport -> declares more
+        _ -> False
+      _ -> False
+    isLeftParen piece = case piece of
+      TokenPiece token -> tokenKind token == Symbol SymLeftParen
+      _ -> False
 
 openers :: [SymbolKind]
 openers = [SymLeftBrace, SymLeftParen, SymLeftBracket]
