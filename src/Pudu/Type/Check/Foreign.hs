@@ -188,6 +188,18 @@ checkOne layouts handles declared (Located functionSpan function) = do
         (Just "write the exact function name exported by the library")
     _ -> pure ()
   mapM_ (checkParameter layouts handles declared) (foreignParameters function)
+  {-| A run of bytes a library allocated is a resource: it has a length that
+      arrives beside it and a release that frees it, and a declaration cannot
+      yet say either. Refused where it is written rather than answered with
+      storage nobody owns. -}
+  when (result == Just BytesCrossing) $
+    report "E3073" (locatedSpan (foreignResult function))
+      "a foreign result cannot be Bytes"
+      ( Just
+          ( "a run of bytes a library allocated needs a length and a release; "
+              <> "declare what it hands back another way"
+          )
+      )
   refuseUncrossable layouts (foreignResult function) result
   checkOwnership declared function result
  where

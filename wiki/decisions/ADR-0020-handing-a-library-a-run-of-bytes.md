@@ -1,6 +1,6 @@
 ---
 type: decision
-status: PROPOSED
+status: ACCEPTED
 date: 2026-09-04
 tags: [decision, language, ffi, foreign, bytes]
 aliases: [ADR-0020-handing-a-library-a-run-of-bytes]

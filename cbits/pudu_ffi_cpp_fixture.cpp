@@ -190,4 +190,23 @@ extern "C" std::int32_t pudu_ffi_cpp_write_sum(std::int32_t left, std::int32_t r
   return left - right;
 }
 
+/* A run of bytes the library only reads. The sum is over every byte, so a
+ * crossing that truncated or misaligned the run answers differently rather than
+ * plausibly, and noughts inside it are counted like any other byte — which is
+ * the difference between a run of bytes and a piece of text. */
+extern "C" std::int32_t pudu_ffi_cpp_byte_sum(const unsigned char *data, std::int32_t length) {
+  std::int32_t total = 0;
+  for (std::int32_t index = 0; index < length; index++) {
+    total += data[index];
+  }
+  return total;
+}
+
+/* Whether the address is one the library may read at all. A run of no bytes is
+ * still a place, and a library given nought instead would fault on a length it
+ * was told was zero. */
+extern "C" bool pudu_ffi_cpp_byte_address(const unsigned char *data, std::int32_t) {
+  return data != nullptr;
+}
+
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }

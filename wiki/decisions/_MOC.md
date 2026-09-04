@@ -5,7 +5,7 @@ tags: [moc, adr]
 
 # Decision Map
 
-- [[ADR-0020-handing-a-library-a-run-of-bytes]] — proposed: a run of bytes a library only reads crosses as `Bytes`, which is most of what "buffers" means; the runs a library writes into or allocates keep their own ownership and lifetime questions.
+- [[ADR-0020-handing-a-library-a-run-of-bytes]] — accepted: a run of bytes a library only reads crosses as `Bytes`, which is most of what "buffers" means; the runs a library writes into or allocates keep their own ownership and lifetime questions.
 - [[ADR-0019-getting-a-value-back-out-of-a-library]] — accepted: output slots return beside the
   native result, pointer absence is explicit, and scalar initialization is an unsafe contract rather
   than a zero-value guess.

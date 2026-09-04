@@ -198,6 +198,9 @@ crossOne spanValue binding crossing value = case (crossing, value) of
           )
     | otherwise -> pure (crossing, CrossedText written)
   (FloatingCrossing _, FloatValue _ held) -> pure (crossing, CrossedDouble held)
+  {-| The run is lent, not given: the library reads it for the length of the
+      call, and the value it belongs to outlives that. Nothing is copied. -}
+  (BytesCrossing, BytesValue held) -> pure (crossing, CrossedBytes held)
   (BooleanCrossing, BoolValue held) -> pure (crossing, CrossedInteger (if held then 1 else 0))
   (HandleCrossing expected, ForeignHandleValue actual address)
     | expected == actual -> pure (crossing, CrossedHandle actual address)
@@ -369,6 +372,18 @@ receive spanValue binding store produced =
         )
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
+    {-| A run of bytes the library allocated is a resource, with a length that
+        arrives beside it and a release that frees it. None of that is written
+        in a declaration yet, so a result declared `Bytes` is refused here
+        rather than answered with storage nobody owns. -}
+    (BytesCrossing, _) ->
+      abortAt (Just spanValue) "E7026"
+        (foreignBindingSymbol binding <> " cannot return Bytes")
+        ( Just
+            ( "a run of bytes a library allocated needs a length and a release; "
+                <> "declare what it hands back another way"
+            )
+        )
     (TextCrossing, CrossedText written) -> pure (StrValue written)
     (TextCrossing, CrossedNoText) ->
       abortAt (Just spanValue) "E7024"
