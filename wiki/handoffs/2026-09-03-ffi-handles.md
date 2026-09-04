@@ -50,14 +50,52 @@ and resolver-identity-based hover/definition selection.
 - A named third-party library must be proven through the platform loader, not only through symbols
   linked into the test executable; the Raylib proof must not require a display server.
 - A qualified type can never become a block-local handle by sharing its basename.
+- A declared restriction travels with the function rather than with the spelling that reached it:
+  through a module qualifier, an import alias, a selected import, a variable, and a parameter.
+- Teardown ends. What nobody is inside runs its declared release; what somebody is inside keeps its
+  claim and is not freed under them.
 - A handle stays leased from the last liveness decision until native code returns; release waits.
 - Every still-live owned handle runs its declared release when the evaluator exits on any path.
 - Hover and definition attach foreign provenance by resolved symbol identity, never by spelling.
 
 ## Exact next action
 
-Resolve every P1 review finding with regressions, rerun focused and full gates, obtain re-review, and
-merge PR #201 to `dev` when both reviewers approve.
+Obtain independent review of PR #201 and merge to `dev` on approval. Every P1 finding is resolved
+with a regression, every gate passes locally and on both CI jobs, and the branch is mergeable and
+clean. The review gate is the only thing outstanding, and the implementer cannot satisfy it.
+
+## What the review corrections turned up beyond the findings
+
+Closing the qualified-handle finding meant writing a cross-module binding program, and each thing
+that program exposed led to the next:
+
+1. **An imported declaration lost the restrictions it was declared under.** An `unsafe` function
+   became ordinary on import; a `comptime` one lost its transitive guarantee. The boundary held
+   inside a module and dissolved at the edge — the edge where [[ADR-0018 Calling a Library Written
+   Elsewhere]] recommends bindings live.
+2. **A restriction still travelled with the name rather than the value.** Stored in a variable or
+   handed to a parameter, an unsafe function became an ordinary one. It is in the type now, and
+   `unsafe(raw) fn(Int) -> Int` is a type a parameter can accept — without that half the feature
+   would be closed by being unwritable.
+3. **Teardown waited without bound.** A program whose foreign call never returned would hang on exit
+   with nothing said.
+4. **The compile-time rule was too strict, not too loose.** It refused every callee it could not
+   name, which included every parameter, so higher-order compile-time code was unwritable — and it
+   bought no guarantee, because an effect reached while folding is refused where it happens.
+
+## Known limitations, stated rather than implied
+
+- **A trait or implementation member cannot be declared `unsafe`.** The parser refuses it, so there
+  is no laundering route through a trait; what there is instead is no way to say that a trait method
+  requires a capability. The arrangement to use is the one the rest of this design recommends
+  anyway: an ordinary trait member whose implementation opens the region it needs, leaving callers
+  of the trait needing nothing.
+- **Capability sets match exactly, and there are no capability variables.** One wrapper cannot serve
+  `raw` and `foreign` callers alike; it is written once per set. [[ADR-0009 Effects in the Type]]
+  owns that question.
+- **A pointer, a nullable pointer, a record crossing by value, and callbacks do not cross yet.**
+- **`comptime` is carried by name rather than by type**, which is sound because the fold refuses what
+  it cannot evaluate, but means the early diagnostic covers declared functions only.
 
 ## Validation evidence
 
