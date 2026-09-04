@@ -1,6 +1,7 @@
 {-| @Type.Formation.Module — forms types from type syntax -}
 module Pudu.Type.Formation
-  ( collectDeclared
+  ( builtinTypeNames
+  , collectDeclared
   , collectDeclaredFrom
   , declaredParameterType
   , formType
