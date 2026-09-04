@@ -184,7 +184,7 @@ export fn counting(
   let named = render(held)
   let existing = Map.getOr(&base.forms, named, Map.empty())
   Catalogue {
-      ..*base,
+    ..*base,
     forms: Map.insert(&base.forms, named, Map.insert(&existing, key, Map.fromPairs(byQuantity)))
   }
 }

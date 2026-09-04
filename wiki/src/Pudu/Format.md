@@ -100,6 +100,12 @@ layout, where a line is already a unit.
 - No line reflowing, no token insertion or deletion, no reordering except whole import lines.
 - No rewriting of a file that did not lex.
 
+- **A line opening with `..` is a field, not a continuation.** A record written as a change to another
+  begins with the spread, and read as a continuation it sat one level deeper than the fields beside
+  it — saying the two are not siblings when they are. Idempotence and token preservation both held
+  while it was wrong, because neither looks at shape; four places in the standard library carried the
+  misalignment.
+
 ## Grill Log
 
 - **Q:** Why format from tokens rather than by printing the parsed tree? **A:** Because a tree loses

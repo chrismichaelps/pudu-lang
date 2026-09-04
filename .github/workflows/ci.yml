@@ -41,7 +41,7 @@ jobs:
         timeout-minutes: 12
         run: cabal test all --enable-optimization=2 --test-show-details=direct
       - name: Verify every committed Pudu file is formatted
-        run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures -name '*.pudu')
+        run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures examples -name '*.pudu')
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       - name: Verify the language server answers a real session

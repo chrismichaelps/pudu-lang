@@ -99,7 +99,7 @@ export fn peek[K, V](base: &Cache[K, V], key: K, now: Int) -> Found[V] {
 /// The cache with an answer kept.
 export fn keeping[K, V](base: &Cache[K, V], key: K, value: V, now: Int) -> Cache[K, V] {
   Cache {
-      ..*base,
+    ..*base,
     entries: Lru.put(&base.entries, key, Entry{held: Some(value), until: now + base.lifetime})
   }
 }
@@ -111,7 +111,7 @@ export fn keeping[K, V](base: &Cache[K, V], key: K, value: V, now: Int) -> Cache
 /// likely to start existing.
 export fn keepingAbsence[K, V](base: &Cache[K, V], key: K, now: Int) -> Cache[K, V] {
   Cache {
-      ..*base,
+    ..*base,
     entries: Lru.put(&base.entries, key, Entry{held: None, until: now + base.absentLifetime})
   }
 }

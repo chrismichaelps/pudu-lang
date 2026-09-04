@@ -137,7 +137,7 @@ fn ran(one: &Job, now: Int, ending: fn() -> Int) -> Job {
   let finished = ending()
   let failure = if let Err(reason) = outcome { reason } else { "" }
   Job {
-      ..*one,
+    ..*one,
     history: Record {
       runs: one.history.runs + 1,
       failures: one.history.failures + (if failure.isEmpty() { 0 } else { 1 }),
