@@ -20,6 +20,7 @@ module Pudu.Foreign.Call
 
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Unsafe as Unsafe
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int32, Int64)
 import qualified Data.Map.Strict as Map
@@ -212,6 +213,11 @@ data CrossedValue
   | CrossedHandle !Text !Int64
   {-| A record crossing by value, its fields in the declaration's order. -}
   | CrossedRecord !Text ![(Text, CrossedValue)]
+  {-| A run of bytes on its way out, still the program's own storage.
+
+      Carried rather than copied: the library reads it during the call and the
+      call ends, so what goes across is the address the value already had. -}
+  | CrossedBytes !ByteString.ByteString
   {-| A nought where text was declared.
 
       Its own answer rather than an empty string, because those are different
@@ -251,6 +257,7 @@ kindCode crossing = case crossing of
   TextCrossing -> 11
   NothingCrossing -> 12
   HandleCrossing _ -> 13
+  BytesCrossing -> 15
   RecordCrossing _ _ -> 14
 
 {-| Make the call.
@@ -276,8 +283,8 @@ callSymbol
   -> Crossing
   -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
 callSymbol symbol supplied result =
-  withMany ByteString.useAsCString (map encodedText arguments) $ \strings ->
-    withMany ByteString.useAsCString (map encodedText fields) $ \fieldStrings -> do
+  withMany borrowedBytes (map sentBytes arguments) $ \strings ->
+    withMany borrowedBytes (map sentBytes fields) $ \fieldStrings -> do
       let kinds = map (kindCode . fst) arguments
           slotKinds =
             [ if isSlot then kindCode crossing else kindCode NothingCrossing
@@ -374,9 +381,19 @@ callSymbol symbol supplied result =
     | ((crossing, value), isSlot) <- zip arguments written
     ]
   fields = concat flattened
-  encodedText (_, value) = case value of
-    CrossedText text -> TextEncoding.encodeUtf8 text
-    _ -> ByteString.empty
+  {-| What each argument hands the other side as an address.
+
+      Text is encoded here and freed after, because the other side reads to a
+      nought this side has to add. A run of bytes is already what it will be, so
+      it is lent rather than copied — the difference between handing a library a
+      gigabyte and making a second one first. -}
+  sentBytes (crossing, value) = case (crossing, value) of
+    (_, CrossedText text) -> (True, TextEncoding.encodeUtf8 text)
+    (_, CrossedBytes held) -> (False, held)
+    _ -> (True, ByteString.empty)
+  borrowedBytes (copied, held) action
+    | copied = ByteString.useAsCString held action
+    | otherwise = Unsafe.unsafeUseAsCString held action
   integerOf (_, value) = case value of
     CrossedInteger held -> held
     CrossedHandle _ held -> held

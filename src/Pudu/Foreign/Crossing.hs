@@ -48,6 +48,13 @@ data Crossing
   | FloatingCrossing !Int
   | BooleanCrossing
   | TextCrossing
+  {-| A run of bytes the library reads, and only reads.
+
+      Pudu's own storage, handed over as an address for the length of the call
+      and no longer. The length travels as an ordinary argument because in C it
+      is one: a run of bytes carries no terminator, so the library is told how
+      far to read the way its other callers tell it. -}
+  | BytesCrossing
   {-| An address the library hands back, under the name its own block gave it.
 
       Opaque: nothing here reads through it, and the name is carried so a
@@ -129,6 +136,9 @@ crossingFor handles layouts = crossingAt Set.empty
       case crossing of
         NothingCrossing -> Nothing
         HandleCrossing _ -> Nothing
+        {-| A record crosses as the leaves it flattens to, and a run of bytes is
+            not a leaf: it is an address and a length that no field names. -}
+        BytesCrossing -> Nothing
         _ -> Just (label, crossing)
 
   scalar name = case name of
@@ -144,6 +154,7 @@ crossingFor handles layouts = crossingAt Set.empty
     "Float64" -> Just (FloatingCrossing 64)
     "Bool" -> Just BooleanCrossing
     "Str" -> Just TextCrossing
+    "Bytes" -> Just BytesCrossing
     _ -> Nothing
 
 {-| What the declaration wrote, for a diagnostic to name back. -}
@@ -154,6 +165,7 @@ crossingName crossing = case crossing of
   FloatingCrossing width -> "Float" <> Text.pack (show width)
   BooleanCrossing -> "Bool"
   TextCrossing -> "Str"
+  BytesCrossing -> "Bytes"
   HandleCrossing name -> name
   RecordCrossing name _ -> name
   NothingCrossing -> "()"
@@ -184,5 +196,5 @@ fitsCrossing crossing value = case crossing of
 {-| The names a declaration may write, for a diagnostic to offer. -}
 crossableNames :: Text
 crossableNames =
-  "Int8 Int16 Int32 Int64, UInt8 UInt16 UInt32 UInt64, Float32 Float64, Bool, Str, (), "
+  "Int8 Int16 Int32 Int64, UInt8 UInt16 UInt32 UInt64, Float32 Float64, Bool, Str, Bytes, (), "
     <> "and a type the block itself declares"

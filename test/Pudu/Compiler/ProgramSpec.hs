@@ -96,6 +96,7 @@ testForeignHandles = do
   text <- runEntry "test-fixtures/stdlib/UsesForeignText.pudu"
   crossings <- runEntry "test-fixtures/stdlib/UsesForeignCrossings.pudu"
   slots <- runEntry "test-fixtures/stdlib/UsesForeignSlots.pudu"
+  bytes <- runEntry "test-fixtures/stdlib/UsesForeignBytes.pudu"
   noText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignTextNone.pudu"
   invalidText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8.pudu"
   missingRecordText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignRecordNoText.pudu"
@@ -126,6 +127,8 @@ testForeignHandles = do
   CInt activeAfter <- cppActiveCount
   pure $ conjoin
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
+    , counterexample "a run of bytes is lent whole, noughts and emptiness included"
+        (bytes === Just "6")
     , counterexample "a library writes scalars, text, records and resources through slots"
         (slots === Just "17")
     , counterexample "a C++ object crosses as an opaque handle and is read and released"

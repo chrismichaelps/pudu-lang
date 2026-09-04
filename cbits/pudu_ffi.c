@@ -38,7 +38,11 @@ enum pudu_kind {
    * struct is the one shape whose bytes this side must lay out: where a field
    * sits inside one is the platform's rule, not the caller's, and a caller that
    * guessed would be writing into the wrong offsets on some machine. */
-  PUDU_STRUCT = 14
+  PUDU_STRUCT = 14,
+  /* A run of bytes the library reads. An address like any other here; what
+   * makes it different is above, where the storage it names belongs to a value
+   * that outlives the call and is not copied to get here. */
+  PUDU_BYTES = 15
 };
 
 #define PUDU_MAX_ARGUMENTS 32
@@ -95,6 +99,7 @@ static ffi_type *type_for(uint8_t kind) {
   case PUDU_BOOL:
     return &ffi_type_uint8;
   case PUDU_TEXT:
+  case PUDU_BYTES:
   case PUDU_HANDLE:
     return &ffi_type_pointer;
   case PUDU_VOID:
@@ -162,6 +167,7 @@ static int place_field(unsigned char *storage, size_t offset, uint8_t kind, int6
     *(double *)slot = floating;
     return 0;
   case PUDU_TEXT:
+  case PUDU_BYTES:
     *(void **)slot = pointer;
     return 0;
   case PUDU_HANDLE:
@@ -213,6 +219,7 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
     *floating = *(const double *)slot;
     return 0;
   case PUDU_TEXT:
+  case PUDU_BYTES:
   case PUDU_HANDLE:
     *integer = (int64_t)(intptr_t)(*(void *const *)slot);
     return 0;
@@ -389,6 +396,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
       slots[index].f64 = doubles[index];
       break;
     case PUDU_TEXT:
+    case PUDU_BYTES:
       slots[index].pointer = pointers[index];
       break;
     /* A handle arrives as the address it was handed back as, which is why it
