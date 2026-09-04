@@ -28,8 +28,8 @@ aliases: [2026-09-04-type-as-value]
 
 ## Exact next action
 
-Commit and push the complete issue #214 slice, open its PR to `dev`, obtain independent Language
-Architect and Forensic Guardian approvals, and merge after fresh green GitHub checks.
+Resolve the independent review findings, obtain both re-approvals, and merge green PR #215 into
+`dev`.
 
 ## Validation plan
 
@@ -61,4 +61,4 @@ Architect and Forensic Guardian approvals, and merge after fresh green GitHub ch
 
 ## Referenced by
 
-[[handoffs/_MOC]] · [[Name Resolution]] · [[Resolve Context]] · [[Type Check Rule]]
+[[handoffs/_MOC]]

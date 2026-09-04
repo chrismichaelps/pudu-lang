@@ -79,7 +79,7 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 ### Linkage
 
-- **Requires:** [[Float Literal]], [[Integer Literal]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
+- **Requires:** [[Float Literal]], [[Integer Literal]], [[Semantic Prelude]], [[Type Env]], [[Type Unify]], [[Type Value]], [[Syntax Tree]].
 - **Consumed by:** [[Type Check]].
 
 ## Algorithm
