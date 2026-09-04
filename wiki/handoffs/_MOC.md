@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-04-type-as-value]] — issue #214 repair for type-only symbols accepted as runtime
+  values, preserving record and variant constructor paths.
 - [[2026-09-04-crossing-coverage]] — exact ABI coverage for every currently admitted scalar and
   flat-record foreign shape; issue #204.
 

@@ -68,6 +68,9 @@ Supporting judgements:
 
 - Resolution is lexical, deterministic, and independent of import order.
 - Local value names shadow module declarations; type and value namespaces are distinct; variants live in their type namespace but can be imported explicitly.
+- A value expression must resolve to a value binding. Type-namespace fallback exists only while
+  resolving a constructor or qualified member path; a bare or called type name reports `E2010`
+  before typing, and a non-variant member through a type reports `E3034` during typing.
 - Imports never re-export implicitly.
 - Ambiguous unqualified references are errors with related spans for every candidate.
 - Trait method lookup considers inherent methods first, then in-scope traits; multiple applicable trait methods require qualification.
@@ -248,6 +251,9 @@ These obligations require executable property/conformance tests now and mechaniz
 
 - **0.6.0-draft · 2026-09-03:** Added opaque nominal foreign handles, explicit same-block release ownership, pre-dispatch liveness refusals, reusable exported binding modules with canonical handle identity, and C++ interoperability through `extern "C"` only. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft · 2026-09-04:** Made every admitted scalar and flat-record foreign crossing exact: full-domain `UInt64`, locale-independent UTF-8 text fields and results, result-only unit, and declaration-time bridge capacity checks. See [[ADR-0018-calling-a-library-written-elsewhere]].
+- **0.6.1-draft clarification · 2026-09-04:** Restored the existing namespace rule at expression
+  heads: type-only names no longer masquerade as runtime values, while constructor and qualified
+  variant paths retain their deliberate type lookup. This changes no conforming program.
 - **0.5.0-draft · 2026-08-31:** Added ordered Set literals and Set-only membership expressions, preserving source-order evaluation, key-order identity, contextual typing for the empty literal, and the existing `E7008` key-order boundary. See [[ADR-0013-ordered-set-literals-and-membership]].
 - **0.4.0-draft · 2026-08-29:** Corrected resultless direct-transfer blocks to preserve `Never`, admitting previously rejected joins without changing runtime behavior or diagnostics for genuine fallthrough. See [[ADR-0012-diverging-blocks-preserve-never]].
 - **0.3.0-draft · 2026-08-28:** Added `?` propagation for both `Result` and `Option`, refutable `let … else`, `while let`, and `W3003` for failure arms that only reconstruct their carrier. See [[ADR-0011-propagation-over-re-matching]].

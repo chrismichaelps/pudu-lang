@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-04 · [[Name Resolution]], [[Resolve Context]], [[Type Check Rule]] · refuse a type where
+  a runtime value was written. Value resolution deliberately fell through to the type namespace so
+  constructor paths could begin with their declaring type, but the same fallback admitted bare and
+  called names such as `Int32` and `Sync`; checking stayed silent and evaluation found no binding.
+  Plain expression heads now require a value while record and variant constructor paths keep the
+  fallback. Members through implicit-prelude types join wired-in and declared types under `E3034`,
+  so forgetting `import Std.Sync as Sync` cannot become valid merely because another dependency
+  happened to load that module · risk MEDIUM · semantic 0.6.1-draft clarification · depth
+  DEEP→DEEP · issue #214
+
 - 2026-09-04 · [[Type Check Rule]], [[Type Formation]] · refuse a member a type does not have. A type is written before a dot for one thing — a variant it declares — and anything else after the dot was accepted in silence, because the check for a module's missing member fires only when something already binds beneath the qualifier and nothing binds beneath a type that declares no variants. So a nonexistent variant, a member on a record, a method reached through a built-in type, and a module that was never imported all compiled and failed where they ran. Two committed fixtures were relying on it: one reached `Int64.toInt`, which does not exist, and one reached `Result.unwrapOr` without importing `Std.Result`, resolving only because the evaluator sees a dependency's frame where the checker does not · risk MEDIUM · depth MEDIUM · issue #208
 
 - 2026-09-04 · [[Foreign Crossing]], [[Foreign Call]], [[Eval Foreign]], [[ADR-0018 Calling a Library Written Elsewhere]] · let a record hold records. A camera holds two points and a font holds a texture, so a boundary admitting only flat records admitted almost none of what a library passes about — of raylib's five hundred and forty-eight functions, forty-eight per cent were reachable before this and fifty-two per cent are now — twenty more, which is fewer than the fifty estimated, because a font, a sound, and a piece of music hold pointers as well as nesting and stay blocked on the pointer question. What crosses is the leaves a record flattens to, in declaration order, which is the same description the platform derives for the nesting itself; both calling conventions this targets classify a struct by its flattened scalar sequence with its size and alignment, and a nested struct's alignment propagates to its members. That equivalence was measured against a C++ surface before anything was built on it — a record of two records, a record whose nesting sits between fields needing padding, and a record returned by value — so the bridge itself needed no change. A record reached from inside itself is refused where it is written, having no end to its leaves · risk HIGH · depth DEEP → DEEP · issue #209

@@ -18,6 +18,7 @@ resolveProperties =
   , ("parameters and defaults resolve left to right", testParameters)
   , ("duplicate declarations report E2001 with the first span", testDuplicates)
   , ("unresolved names report E2010 and E2011", testUnresolved)
+  , ("type-only names are not runtime values", testTypeOnlyValues)
   , ("generic parameters and Self resolve inside their declaration", testGenerics)
   , ("patterns bind names for their arm only", testPatterns)
   , ("shadowing warns only for the documented origins", testShadowing)
@@ -160,6 +161,39 @@ testUnresolved = do
   pure $ conjoin
     [ codes value === ["E2010"]
     , codes typeName === ["E2011"]
+    ]
+
+testTypeOnlyValues :: IO Property
+testTypeOnlyValues = do
+  builtin <- resolve
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let value = Int32"
+    , "  0"
+    , "}"
+    ]
+  prelude <- resolve ["module M", "fn run() -> Int { Sync(1) }"]
+  declared <- resolve
+    [ "module M"
+    , "type Local = { value: Int }"
+    , "fn run() -> Int { Local(1) }"
+    ]
+  record <- resolve
+    [ "module M"
+    , "type Point = { x: Int }"
+    , "fn run() -> Point { Point { x: 1 } }"
+    ]
+  variant <- resolve
+    [ "module M"
+    , "type Shape = Circle | Square"
+    , "fn run() -> Shape { Shape.Circle }"
+    ]
+  pure $ conjoin
+    [ counterexample "a wired-in type is not a value" (codes builtin === ["E2010"])
+    , counterexample "an implicit-prelude type is not callable" (codes prelude === ["E2010"])
+    , counterexample "a declared type is not callable" (codes declared === ["E2010"])
+    , counterexample "record construction keeps its type head" (codes record === [])
+    , counterexample "qualified variants keep their type head" (codes variant === [])
     ]
 
 testGenerics :: IO Property

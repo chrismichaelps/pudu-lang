@@ -42,6 +42,7 @@ declareNamed          :: Namespace -> SymbolOrigin -> Visibility -> Bool -> Loca
 recordVariantSymbol   :: Located Text -> Resolver ()
 markAmbiguousVariant  :: Text -> Resolver ()
 resolveValueName :: Span -> Text -> Resolver ()
+resolveExpressionName :: Span -> Text -> Resolver ()
 resolveTypeName  :: Span -> Text -> Resolver ()
 ```
 
@@ -58,6 +59,10 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 - `declareNamed` is the general introduction path. It delegates to `introduce`, which reports a same-frame duplicate as `E2001` with the earlier declaration attached as a related span, and an outer shadow as `W2001` only when the displaced binding is one the language warns about — a `var`, parameter, import, or type name. An immutable local shadowing another immutable local is silent and legal.
 - `recordVariantSymbol` binds a variant as a value name so an unqualified variant resolves while its spelling is unambiguous; `markAmbiguousVariant` records that two types share a spelling so a later use reports `E2012` and asks for qualification rather than resolving to whichever declaration was seen last.
 - `resolveValueName` checks ambiguity first: an ambiguous variant spelling reports `E2012` once and does not resolve. Otherwise it looks in the value namespace and falls through to the type namespace, which is how a qualified path such as `Outcome.Ok` reaches its declaring type. An unresolved value name reports `E2010`.
+- `resolveExpressionName` is the stricter value-position operation. It accepts only a value binding;
+  a name found solely in the type namespace reports `E2010` with help that it is a type rather than
+  recording a reference that evaluation cannot satisfy. Constructor paths keep using
+  `resolveValueName`, because their leading type is intentional.
 - `resolveTypeName` looks in the type namespace only; an unresolved type name reports `E2011`. There is no value-to-type fallthrough, because a type position never names a value.
 - `freshId` is the sole source of `SymbolId` values, so every symbol has a unique identity and every reference points at exactly one symbol.
 - A recovered `InvalidDeclaration`, `InvalidExpression`, or `InvalidPattern` never reaches these primitives, so a parse error cannot produce a second resolution diagnostic for the same defect.
@@ -82,6 +87,8 @@ resolveTypeName  :: Span -> Text -> Resolver ()
 - A duplicate in the same frame reports `E2001` with the first declaration's span as a related note; a shadow across frames warns `W2001` only for the origins [[architecture/SEMANTICS]] lists, so an immutable-over-immutable shadow is silent.
 - A variant marked ambiguous before any body is walked reports `E2012` at every use, so qualification is required consistently rather than depending on declaration order.
 - A value name that is also a type name resolves in the value namespace first, which is why an unqualified variant (a value) and its type (in the type namespace) do not collide.
+- A bare type name in an expression is not rescued by the value-to-type fallback used for
+  constructor qualification; it is refused before typing so `check` and `run` cannot diverge.
 - `ResolverProducts` is produced exactly once per module; a partial run is impossible because `runResolver` runs the full action from `initialState` to completion.
 
 ## Depth
@@ -94,6 +101,10 @@ DEPTH 0.72 (DEEP). It hides the monad threading, the four accumulators, the dupl
 - **Q:** Separate the context/state primitives from the walk, or keep them in the facade? **A:** Separate. _Rationale:_ the facade's responsibility is the walk order and the policy decisions about what each declaration form binds; the state threading and conflict classification are a distinct concern that grew past the facade's clarity budget. Splitting keeps the facade readable and the primitives testable in isolation. _Rejected:_ inlining everything in `Resolve.hs`, which would push the facade past the 500-line delivery limit and entangle walk order with monad mechanics.
 - **Q:** Should `runResolver` sort diagnostics, or leave that to the consumer? **A:** Sort here, once. _Rationale:_ the diagnostic model's ordering contract is total and deterministic; sorting at the single exit guarantees every consumer sees the same order without re-sorting or risking divergence. _Rejected:_ deferring sort to [[Name Resolution]] or to [[Compiler Pipeline]].
 - **Q:** Should an ambiguous variant resolve to the first declaration seen? **A:** No; report `E2012`. _Rationale:_ picking one silently would make the resolved symbol depend on declaration order, which the two-pass design exists to avoid, and a later refactor would silently change meaning. _Rejected:_ first-wins; last-wins; a warning that still resolves.
+- **Q:** Use one permissive operation for value expressions and constructor paths? **A:** No.
+  _Rationale:_ a constructor path deliberately starts with a type, while a bare expression must
+  produce a runtime value; sharing the type fallback made type-only symbols pass checking and fail
+  in evaluation. _Rejected:_ type-to-value fallback in every expression position.
 
 ## Variants
 

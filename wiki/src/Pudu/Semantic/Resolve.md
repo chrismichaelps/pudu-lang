@@ -41,6 +41,10 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 - Duplicate declarations in one frame report `E2001` with a related span pointing at the first declaration.
 - An unresolved value name reports `E2010`; an unresolved type name reports `E2011`. Each is reported at the offending segment, once.
 - Only the first segment of a dotted path is resolved. Later segments are field, member, or variant selections whose meaning requires types, so resolution neither invents nor rejects them.
+- A plain value expression resolves its head in the value namespace only. The type-namespace
+  fallback is reserved for constructor and member qualification, where `Point { ... }` and
+  `Shape.Circle` intentionally begin with a type. A bare or called type therefore reports `E2010`
+  instead of passing `check` and reaching evaluation as an undefined value.
 - Imports never re-export. With no export index, `resolveModule` retains isolated-source opaque imports for compatibility. In a loaded program, `resolveModuleWith` delegates to [[Semantic Interface]]: selections bind only exported namespaces, bare/aliased imports bind one qualifier, and private or absent selections report `E2013`.
 - Variants live in their type's namespace, so an unqualified variant name does not resolve unless it was imported explicitly; `Result.Ok` resolves through its type. This follows [[architecture/SEMANTICS]] rather than adding an implicit local re-export.
 - Shadowing a `var`, a parameter, an import, or a type name warns with `W2001`; an immutable local shadowing another immutable local is silent and legal. Borrow-sensitive shadowing rules belong to ownership checking.
@@ -74,6 +78,8 @@ Push the builtin frame, collect module declarations and imports into the module 
 - The same arm-local rule applies to `if let`: its pattern bindings cannot escape into else or the
   containing block.
 - A generic parameter shadows a module type of the same name for the declaration that introduced it.
+- A type and a value may share one spelling; the value wins in expression position. If only the
+  type exists, the expression is rejected without disturbing record and variant constructor paths.
 
 ## Depth
 
@@ -84,6 +90,10 @@ DEPTH 0.84 (DEEP). One entry point hides collection order, namespace policy, sco
 - **Q:** One pass or two? **A:** Two: collect module declarations, then walk bodies. _Rationale:_ [[architecture/SEMANTICS]] requires order independence at module scope, which a single forward pass cannot provide. _Rejected:_ single-pass with forward declarations; lazy fixpoint resolution.
 - **Q:** Should an unqualified variant resolve to a locally declared variant? **A:** No. _Rationale:_ variants live in their type's namespace, and inventing a local re-export would make resolution disagree with the normative rule and with cross-module behavior. _Rejected:_ implicit variant import; ambiguity-tolerant lookup.
 - **Q:** What happens to the second and later segments of a path? **A:** They are left unresolved by design. _Rationale:_ member and variant selection needs the receiver's type; guessing here would produce errors that typing would have to contradict. _Rejected:_ resolving segments against the module table; rejecting unknown members.
+- **Q:** Should a plain expression fall through from the value namespace to the type namespace?
+  **A:** No. _Rationale:_ a type produces no runtime binding, so recording it as a value reference
+  makes a checked program fail during evaluation. _Rejected:_ preserving the constructor-path
+  convenience in ordinary value positions; repairing the divergence in the evaluator.
 - **Q:** Error or warning for shadowing? **A:** Warning `W2001` for the origins [[architecture/SEMANTICS]] lists, silence otherwise. _Rationale:_ the rule is stated as a lint that may harden later, and hardening it now would reject valid programs. _Rejected:_ hard error; unconditional warning on every shadow.
 - **Q:** Do imports resolve to real symbols? **A:** They become opaque external symbols in both namespaces. _Rationale:_ no cross-module loading exists yet, and treating an imported name as unresolved would flood every real program with errors. _Rejected:_ resolving imports against the filesystem; ignoring imports entirely.
 - **Q:** What changes once a program export index exists? **A:** Imports bind authoritative exported namespaces and module qualifiers; the opaque behavior remains only for isolated `runCompile`. _Rationale:_ loaded interfaces make privacy decidable without IO. _Rejected:_ continuing to guess both namespaces; filesystem lookup in resolution.

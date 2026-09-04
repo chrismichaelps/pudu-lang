@@ -61,6 +61,7 @@ import Pudu.Semantic.Resolve.Context
   , insideLoop
   , outsideLoops
   , recordVariantSymbol
+  , resolveExpressionName
   , resolveLoopTarget
   , resolveTypeName
   , resolveValueName
@@ -345,7 +346,7 @@ walkExpression (Located spanValue expression) = case expression of
   UnaryExpression _ operand -> walkExpression operand
   BinaryExpression left _ right -> walkExpression left >> walkExpression right
   CallExpression callee arguments -> walkExpression callee >> mapM_ walkExpression arguments
-  MemberExpression target _ -> walkExpression target
+  MemberExpression target _ -> walkMemberTarget target
   IndexExpression target index -> walkExpression target >> walkExpression index
   TryExpression target -> walkExpression target
   AwaitExpression target -> walkExpression target
@@ -451,7 +452,15 @@ walkType (Located typeSpan value) = case value of
     field, or variant selections whose meaning requires types, so resolution
     neither invents nor rejects them. -}
 resolveHead :: Span -> NonEmpty Text -> Resolver ()
-resolveHead spanValue (first :| _) = resolveValueName spanValue first
+resolveHead spanValue (first :| _) = resolveExpressionName spanValue first
+
+{-| A member may qualify a variant with its type, so its bare target retains
+    the type fallback that an ordinary value expression deliberately rejects.
+    A computed target is still an ordinary expression and is walked normally. -}
+walkMemberTarget :: Located Expression -> Resolver ()
+walkMemberTarget target@(Located spanValue expression) = case expression of
+  NameExpression (first :| _) -> resolveValueName spanValue first
+  _ -> walkExpression target
 
 {-| A constructor path resolves like any value name: an unqualified variant is
     a value binding, and a qualified path such as `Shape.Circle` reaches its
