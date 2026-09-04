@@ -27,8 +27,7 @@ import Pudu.Eval.Value (ForeignBinding (..), ForeignRelease (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
   , callSymbol
-  , findSymbol
-  , openLibrary
+  , resolveSymbol
   )
 import Pudu.Foreign.Crossing (Crossing (..), crossingName, fitsCrossing)
 import Pudu.Foreign.Ownership
@@ -51,24 +50,20 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 callForeign spanValue binding values = do
   crossed <- crossArguments spanValue binding values
   store <- currentForeignStore
-  opened <-
-    performEffect (refusal spanValue) (openLibrary (foreignBindingLibrary binding))
-  case opened of
+  found <-
+    performEffect (refusal spanValue)
+      (resolveSymbol (foreignBindingLibrary binding) (foreignBindingSymbol binding))
+  case found of
     Left problem -> abortForeign spanValue binding problem
-    Right handle -> do
-      found <-
-        performEffect (refusal spanValue) (findSymbol handle (foreignBindingSymbol binding))
-      case found of
-        Left problem -> abortForeign spanValue binding problem
-        Right symbol -> do
-          released <- prepareHandles spanValue binding store crossed
-          attempted <- invoke spanValue binding store symbol crossed
-          case attempted of
-            Nothing -> deadHandle spanValue binding (firstHandleName crossed)
-            Just (Left problem) -> do
-              restoreReleased spanValue store released
-              abortForeign spanValue binding problem
-            Just (Right result) -> receive spanValue binding store result
+    Right symbol -> do
+      released <- prepareHandles spanValue binding store crossed
+      attempted <- invoke spanValue binding store symbol crossed
+      case attempted of
+        Nothing -> deadHandle spanValue binding (firstHandleName crossed)
+        Just (Left problem) -> do
+          restoreReleased spanValue store released
+          abortForeign spanValue binding problem
+        Just (Right result) -> receive spanValue binding store result
 
 invoke
   :: Span
@@ -243,16 +238,12 @@ receive spanValue binding store produced =
 
 releaseHandle :: ForeignRelease -> Text -> Int64 -> IO ()
 releaseHandle release name address = do
-  opened <- openLibrary (foreignReleaseLibrary release)
-  case opened of
+  found <- resolveSymbol (foreignReleaseLibrary release) (foreignReleaseSymbol release)
+  case found of
     Left _ -> pure ()
-    Right handle -> do
-      found <- findSymbol handle (foreignReleaseSymbol release)
-      case found of
-        Left _ -> pure ()
-        Right symbol -> do
-          _ <- callSymbol symbol [(HandleCrossing name, CrossedHandle name address)] NothingCrossing
-          pure ()
+    Right symbol -> do
+      _ <- callSymbol symbol [(HandleCrossing name, CrossedHandle name address)] NothingCrossing
+      pure ()
 
 foreignResultMismatch :: Span -> ForeignBinding -> Evaluator a
 foreignResultMismatch spanValue binding =

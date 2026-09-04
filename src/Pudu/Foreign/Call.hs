@@ -10,6 +10,7 @@
 module Pudu.Foreign.Call
   ( ForeignHandle
   , openLibrary
+  , resolveSymbol
   , findSymbol
   , callSymbol
   , CrossedValue (..)
@@ -17,6 +18,7 @@ module Pudu.Foreign.Call
   ) where
 
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
+import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -126,6 +128,48 @@ tryCandidates (candidate : rest) = do
                 )
             )
     else pure (Right (ForeignHandle handle))
+
+{-| Every symbol resolved so far, by the library and the name it was found
+    under.
+
+    A call used to ask the dynamic linker for its function every time it ran.
+    That is a hash lookup through the linker's tables and a fresh
+    nought-terminated copy of the name to hand it, paid once per call in a loop
+    that may run millions of times — a game's draw call is the ordinary case
+    here, not the exotic one.
+
+    An address, once found, does not change for the life of the process. So it
+    is remembered, and the read is lock-free: two threads racing to resolve the
+    same symbol both call the linker and both write the same address, which
+    costs one redundant lookup and no correctness. Taking a lock to prevent that
+    would put a lock on the hot path to save work that is already rare. -}
+resolvedSymbols :: IORef (Map.Map (Text, Text) (Ptr ()))
+resolvedSymbols = unsafePerformIO (newIORef Map.empty)
+{-# NOINLINE resolvedSymbols #-}
+
+{-| The address of one function in one library, found once.
+
+    Opening the library is part of what is remembered, so a call that hits does
+    not touch the opened-library table either. -}
+resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
+resolveSymbol library symbol = do
+  remembered <- readIORef resolvedSymbols
+  case Map.lookup key remembered of
+    Just found -> pure (Right found)
+    Nothing -> do
+      opened <- openLibrary library
+      case opened of
+        Left problem -> pure (Left problem)
+        Right handle -> do
+          found <- findSymbol handle symbol
+          case found of
+            Left problem -> pure (Left problem)
+            Right address -> do
+              atomicModifyIORef' resolvedSymbols
+                (\table -> (Map.insert key address table, ()))
+              pure (Right address)
+ where
+  key = (library, symbol)
 
 {-| Find one function in an opened library. -}
 findSymbol :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
