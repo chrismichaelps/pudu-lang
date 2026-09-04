@@ -30,8 +30,11 @@ import Pudu.Source (Span)
 import Pudu.IntegerLiteral
   ( ParsedInteger (..), integerSuffixType, parseIntegerLiteral )
 import Pudu.Frontend.Syntax.Tree (Capability (..))
+import qualified Data.Map.Strict as Map
+import Pudu.Type.Formation (builtinTypeNames)
 import Pudu.Type.Env
   ( Checker
+  , DeclaredTypes (..)
   , useCapability
   , insideUnsafe
   , useUnsafeRegion
@@ -140,8 +143,8 @@ nameType spanValue names = do
     qualifier that binds *something* is a module, and then a member it does not
     export is the mistake — reported here rather than left to become an
     `undefined name` at run time naming the alias instead of the member. -}
-qualifiedMemberType :: Span -> Tree.Expression -> Text -> Checker (Maybe Type)
-qualifiedMemberType spanValue target member = case target of
+qualifiedMemberType :: DeclaredTypes -> Span -> Tree.Expression -> Text -> Checker (Maybe Type)
+qualifiedMemberType declared spanValue target member = case target of
   Tree.NameExpression names -> do
     let owner = Text.intercalate "." (NonEmpty.toList names)
     found <- lookupName (owner <> "." <> member)
@@ -156,8 +159,51 @@ qualifiedMemberType spanValue target member = case target of
             report "E3033" spanValue (owner <> " exports no " <> member)
               (Just (missingMemberHelp owner member (unqualified /= Nothing)))
             pure (Just ErrorType)
-          else pure Nothing
+          else
+            {-| A qualifier that names a type, and a member the type does not
+                have.
+
+                A type is reached through for one thing only: a variant it
+                declares. It has no members of its own, so anything else
+                written after the dot is a mistake — and one that stayed silent
+                here, because nothing binds beneath a type that declares no
+                variants, so the check above had nothing to go on. A built-in
+                method reads as this shape too, which is why the help says
+                where it actually lives. -}
+            if selfIsValue == Nothing && namesType declared owner
+                 && not (declaresVariant declared owner member)
+              then do
+                report "E3034" spanValue (owner <> " has no " <> member)
+                  ( Just
+                      ( "a type is written before a dot only to name a variant it declares; "
+                          <> "a method is called on the value rather than through its type"
+                      )
+                  )
+                pure (Just ErrorType)
+              else pure Nothing
   _ -> pure Nothing
+
+{-| Whether this name is a type this program knows.
+
+    The declared ones and the ones the language provides, which are written
+    without a qualifier and belong to no module. -}
+namesType :: DeclaredTypes -> Text -> Bool
+namesType declared owner =
+  Map.member owner (declaredNames declared)
+    || Map.member owner (declaredAliases declared)
+    || owner `elem` builtinTypeNames
+
+{-| Whether the type this name gives declares that variant.
+
+    The one thing a type may be written before a dot for. A variant of a type
+    the program declared is reached this way on purpose, so it is the case the
+    refusal above has to let through. -}
+declaresVariant :: DeclaredTypes -> Text -> Text -> Bool
+declaresVariant declared owner member = case Map.lookup owner (declaredNames declared) of
+  Nothing -> False
+  Just identity -> case Map.lookup identity (declaredOwners declared) of
+    Nothing -> False
+    Just variants -> member `elem` variants
 
 {-| Refuse a variant that named its payload where a value was wanted.
 

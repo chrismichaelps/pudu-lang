@@ -1,5 +1,6 @@
 module Main
 
+import Std.Option as Option
 import Bindings
 import Bindings as B
 import Bindings {asserted}
@@ -15,7 +16,9 @@ export fn main() -> Int {
   let raised = asserted(1)
   let aliased = B.asserted(2)
   let qualified = Bindings.asserted(3)
-  Int64.toInt(counted) + Int64.toInt(renamed) + raised + aliased + qualified
+  Option.unwrapOr(convertInteger[Int](counted), 0)
+    + Option.unwrapOr(convertInteger[Int](renamed), 0)
+    + raised + aliased + qualified
 }
 
 /// A compile-time body may not call an imported ordinary function, for the

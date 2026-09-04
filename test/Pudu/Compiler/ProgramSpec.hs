@@ -93,6 +93,7 @@ testForeignHandles = do
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
   importedCapability <- codes "test-fixtures/importedcapability/Main.pudu"
+  typeMembers <- codes "test-fixtures/typemember/Main.pudu"
   carriedCapability <- runEntry "test-fixtures/capabilitytype/Main.pudu"
   escapedCapability <- codes "test-fixtures/capabilityescape/Main.pudu"
   higherComptime <- runEntry "test-fixtures/comptimehigher/Main.pudu"
@@ -196,6 +197,16 @@ testForeignHandles = do
         that cannot fold is still refused early, where the diagnostic is best. -}
     , counterexample "a compile-time function may call the function it was given"
         (higherComptime === Just "3")
+    {-| A type is written before a dot for one thing: a variant it declares.
+        Anything else was silent, because nothing binds beneath a type that
+        declares no variants and the check for a module's missing member had
+        nothing to go on. So a nonexistent variant, a member on a record, a
+        method reached through a built-in type, and a module that was never
+        imported all compiled and died where they ran. The variant a type does
+        declare still passes, which is the case the refusal has to let
+        through. -}
+    , counterexample "a member a type does not have is refused where it is written"
+        (typeMembers === ["E3034", "E3034", "E3034", "E3034"])
     , counterexample "an imported declaration keeps the restrictions it was declared under"
         (importedCapability === ["E3023", "E3023", "E3023", "E3023", "E3023", "E3025"])
     , counterexample "runtime teardown preserves a successful result"

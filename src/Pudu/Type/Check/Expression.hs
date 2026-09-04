@@ -144,7 +144,7 @@ inferExpression around declared rigid spanValue expression = case expression of
     refused <- namedVariantAsValue spanValue (locatedValue member)
     qualified <- case refused of
       Just value -> pure (Just value)
-      Nothing -> qualifiedMemberType spanValue (locatedValue target) (locatedValue member)
+      Nothing -> qualifiedMemberType declared spanValue (locatedValue target) (locatedValue member)
     case qualified of
       Just value -> pure value
       Nothing -> do

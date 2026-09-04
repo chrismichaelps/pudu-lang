@@ -65,7 +65,7 @@ checkCallee checker declared rigid located@(Located calleeSpan expression) = cas
         named <- qualifiedByName declared calleeSpan (locatedValue target) (locatedValue member)
         qualified <- case named of
           Just found -> pure (Just found)
-          Nothing -> qualifiedMemberType calleeSpan (locatedValue target) (locatedValue member)
+          Nothing -> qualifiedMemberType declared calleeSpan (locatedValue target) (locatedValue member)
         case qualified of
           Just instantiated -> do
             recordExpression calleeSpan instantiated

@@ -102,6 +102,12 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 
 DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies them.
 
+- **A type is written before a dot for one thing: a variant it declares.** A member it does not have
+  is refused where it is written. That case was silent, because the check for a module's missing
+  member fires only when something already binds beneath the qualifier — and nothing binds beneath a
+  type that declares no variants. So `Int.toInt32`, `Thing.missing`, a variant that does not exist,
+  and a module that was never imported all compiled and died where they ran.
+
 ## Grill Log
 
 - **Q:** Type membership by calling `Set.contains`? **A:** No. _Rationale:_ surface operators are

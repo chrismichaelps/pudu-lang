@@ -3,6 +3,7 @@ module UsesWork
 import Std.App.Work {After, EveryFromEnd, EveryFromStart}
 import Std.App.Work as Work
 import Std.Option as Option
+import Std.Result as Result
 import Std.Sync as Sync
 
 /// What a schedule promises.
