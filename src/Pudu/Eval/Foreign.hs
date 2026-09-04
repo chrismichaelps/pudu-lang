@@ -9,6 +9,8 @@ module Pudu.Eval.Foreign
   ) where
 
 import Data.Maybe (fromMaybe)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Int (Int64)
 import Data.Word (Word64)
 import Data.Text (Text)
@@ -64,7 +66,9 @@ callForeign spanValue binding values = do
       case attempted of
         Nothing -> deadHandle spanValue binding (firstHandleName crossed)
         Just (Left problem) -> do
-          restoreReleased spanValue store released
+          case problem of
+            PostCallFailure _ handles -> cleanupFailedOutputs spanValue binding store handles
+            _ -> restoreReleased spanValue store released
           abortForeignCall spanValue binding problem
         Just (Right (produced, written)) ->
           answer spanValue binding store produced written
@@ -282,29 +286,70 @@ answer spanValue binding store produced written
   | otherwise = do
       claimed <-
         performEffect (refusal spanValue)
-          (claimAllOwned store (fresh <> resultFresh))
+          (claimAllOwned store [(address, releaseHandle release name address)
+            | (address, name, release) <- fresh <> resultFresh])
       case claimed of
-        _ : _ -> do
-          performEffect (refusal spanValue) (mapM_ snd (fresh <> resultFresh))
+        Left protected -> do
+          performEffect (refusal spanValue)
+            (cleanupUnclaimed protected (fresh <> resultFresh))
           abortAt (Just spanValue) "E7021"
-            (foreignBindingSymbol binding <> " handed back something already owned")
+            (foreignBindingSymbol binding <> " handed back duplicate or already owned resources")
             (Just "an owned foreign value must transfer one new ownership claim")
-        [] -> do
+        Right () -> do
           native <- receiveClaimed spanValue binding store produced
           slots <- mapM (uncurry (receiveSlot spanValue binding)) (zip described written)
           pure (TupleValue (native : slots))
  where
   described = slotDescriptions binding
   fresh =
-    [ (address, releaseHandle release name address)
+    [ (address, name, release)
     | (Just slot, Just (CrossedHandle name address)) <- zip (map Just described) written
     , address /= 0
     , Just release <- [foreignSlotReleasedBy slot]
     ]
   resultFresh = case (foreignBindingResult binding, produced, foreignBindingReleasedBy binding) of
     (HandleCrossing name, CrossedHandle _ address, Just release)
-      | address /= 0 -> [(address, releaseHandle release name address)]
+      | address /= 0 -> [(address, name, release)]
     _ -> []
+
+{-| Retain ownership obligations even when native text conversion failed. -}
+cleanupFailedOutputs :: Span -> ForeignBinding -> ForeignStore -> [(Text, Int64)] -> Evaluator ()
+cleanupFailedOutputs spanValue binding store handles =
+  performEffect (refusal spanValue) $ do
+    let declarations =
+          [(name, release) | HandleCrossing name <- [foreignBindingResult binding]
+                           , Just release <- [foreignBindingReleasedBy binding]]
+          <> [(name, release) | slot <- slotDescriptions binding
+                             , HandleCrossing name <- [foreignSlotCrossing slot]
+                             , Just release <- [foreignSlotReleasedBy slot]]
+        candidates = [(address, name, release) | (name, address) <- handles
+                      , release <- Set.toList (Set.fromList
+                          [(foreignReleaseLibrary r, foreignReleaseSymbol r)
+                          | (declared, r) <- declarations, declared == name])
+                      ]
+        resources = [(address, name, ForeignRelease library symbol)
+                    | (address, name, (library, symbol)) <- candidates]
+    claimed <- claimAllOwned store
+      [(address, releaseHandle release name address) | (address, name, release) <- resources]
+    case claimed of
+      Left protected -> cleanupUnclaimed protected resources
+      Right () -> mapM_ (\(address, name, release) -> do
+        taken <- takeOwned store address
+        case taken of
+          Nothing -> pure ()
+          Just _ -> releaseHandle release name address) resources
+
+{-| Protected addresses and conflicting destructors never enter cleanup. -}
+cleanupUnclaimed :: [Int64] -> [(Int64, Text, ForeignRelease)] -> IO ()
+cleanupUnclaimed protected resources = mapM_ cleanup (Map.toList grouped)
+ where
+  held = Set.fromList protected
+  grouped = Map.fromListWith (<>)
+    [(address, [(name, release)]) | (address, name, release) <- resources]
+  cleanup (address, obligations) = case obligations of
+    first@(name, release) : rest
+      | Set.notMember address held && all (== first) rest -> releaseHandle release name address
+    _ -> pure ()
 
 {-| The slots this binding declares, in order. -}
 slotDescriptions :: ForeignBinding -> [ForeignSlot]
@@ -474,6 +519,7 @@ abortForeign spanValue binding problem =
 abortForeignCall :: Span -> ForeignBinding -> ForeignCallFailure -> Evaluator a
 abortForeignCall spanValue binding failure = case failure of
   CallAssemblyFailure problem -> abortForeign spanValue binding problem
+  PostCallFailure problem _ -> abortForeignCall spanValue binding problem
   InvalidReturnedText ->
     abortAt (Just spanValue) "E7025"
       (foreignBindingSymbol binding <> " returned text that is not valid UTF-8")

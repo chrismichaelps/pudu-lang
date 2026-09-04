@@ -79,6 +79,32 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   silently changes data at the least trustworthy boundary. _Rejected:_ lossy decoding; host
   exceptions escaping the evaluator.
 
+
+## Rejected output batches
+
+A failed claim never destroys an address already held by the store. Fresh outputs are grouped by
+address and cleaned once only when all occurrences agree on canonical handle type, release library,
+and release symbol. Conflicting obligations are left unfreed rather than invoking an arbitrary
+destructor. Duplicate products are rejected even when their obligations agree.
+
+### Resolved Grill
+
+- **Q:** Release every output after a batch refusal? **A:** No. Preserve protected addresses and
+  group fresh candidates by their complete release obligation before cleanup. A failed claim does
+  not transfer ownership of an already-held address to its caller.
+
+## Conversion-failure cleanup
+
+Post-call failures retain produced handle addresses. The evaluator resolves their release obligations
+from the binding and settles the batch before reporting the original conversion diagnostic. Existing
+claims are protected and ambiguous obligations remain unfreed. Fresh, unambiguous resources are
+released once, including resources produced beside invalid UTF-8.
+
+### Resolved Grill
+
+- **Q:** Wait for a successful text conversion to discover ownership? **A:** No; the native bridge
+  retains raw handle outputs even when conversion fails.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]

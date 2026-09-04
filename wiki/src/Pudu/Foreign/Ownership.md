@@ -29,6 +29,7 @@ data ForeignResource
 newForeignStore   :: IO ForeignStore
 closeForeignStore :: ForeignStore -> IO ()
 claimOwned        :: ForeignStore -> Int64 -> IO () -> IO Bool
+claimAllOwned     :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] ())
 withOwned         :: ForeignStore -> [Int64] -> IO a -> IO (Maybe a)
 takeOwned         :: ForeignStore -> Int64 -> IO (Maybe ForeignResource)
 restoreOwned      :: ForeignStore -> Int64 -> ForeignResource -> IO ()
@@ -97,6 +98,20 @@ all leases reach zero, then performs cleanup outside STM.
 - **Q:** Require every program path to call the destructor explicitly? **A:** No; retain explicit
   early release but clean remaining claims at runtime exit. _Rationale:_ returns and runtime failures
   must not leak native resources. _Rejected:_ comments or convention as cleanup proof.
+
+
+## Batch-claim failure contract
+
+`claimAllOwned :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] ())`
+claims the complete batch only when all addresses are distinct and absent. `Left` contains
+only addresses already protected by the store; it may be empty when the batch repeats a fresh
+address. A failed batch inserts nothing. Cleanup actions are not comparable ownership identities.
+
+### Resolved Grill
+
+- **Q:** Coalesce duplicate products silently? **A:** No; refuse the complete batch. The caller
+  has the canonical type and destructor metadata needed to decide which fresh products can be
+  cleaned safely. Existing claims never become cleanup candidates.
 
 ## Referenced by
 

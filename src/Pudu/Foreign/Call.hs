@@ -234,6 +234,7 @@ data CrossedValue
 data ForeignCallFailure
   = CallAssemblyFailure !Text
   | InvalidReturnedText
+  | PostCallFailure !ForeignCallFailure ![(Text, Int64)]
   deriving stock (Eq, Show)
 
 {-| The code the other side reads for a kind.
@@ -335,6 +336,16 @@ callSymbol symbol supplied result =
                                               if code /= 0
                                                 then pure (Left (refusal code))
                                                 else do
+                                                  rawResult <- case result of
+                                                    HandleCrossing _ -> peek producedInteger
+                                                    _ -> pure 0
+                                                  rawSlots <- peekArray (length arguments) slotIntegers
+                                                  let owned =
+                                                        [(name, rawResult) | HandleCrossing name <- [result], rawResult /= 0]
+                                                        <> [(name, address)
+                                                           | ((HandleCrossing name, _), True, address) <- zip3 arguments written rawSlots
+                                                           , address /= 0]
+                                                      preserve problem = PostCallFailure problem owned
                                                   answered <- case result of
                                                     RecordCrossing _ _ -> do
                                                       producedIntegers <- peekArray resultCount producedFieldIntegers
@@ -347,7 +358,7 @@ callSymbol symbol supplied result =
                                                       CDouble asDouble <- peek producedDouble
                                                       received result asInteger asDouble
                                                   case answered of
-                                                    Left problem -> pure (Left problem)
+                                                    Left problem -> pure (Left (preserve problem))
                                                     Right value -> do
                                                       slotIntegersBack <-
                                                         peekArray (max 1 (length arguments)) slotIntegers
@@ -362,7 +373,9 @@ callSymbol symbol supplied result =
                                                           slotIntegersBack (map unwrapDouble slotDoublesBack)
                                                           slotFieldIntegersBack
                                                           (map unwrapDouble slotFieldDoublesBack)
-                                                      pure (fmap ((,) value) taken)
+                                                      pure $ case taken of
+                                                        Left problem -> Left (preserve problem)
+                                                        Right slots -> Right (value, slots)
  where
   arguments = [(crossing, value) | (crossing, _, value) <- supplied]
   written = [isSlot | (_, isSlot, _) <- supplied]

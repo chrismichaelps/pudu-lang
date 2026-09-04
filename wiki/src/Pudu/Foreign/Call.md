@@ -27,14 +27,15 @@ resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
 
 data ForeignHandle
 data ForeignCallFailure = CallAssemblyFailure !Text | InvalidReturnedText
+                        | PostCallFailure !ForeignCallFailure ![(Text, Int64)]
 data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText !Text
                   | CrossedHandle !Text !Int64 | CrossedRecord !Text ![(Text, CrossedValue)]
                   | CrossedNoText
 
 openLibrary :: Text -> IO (Either Text ForeignHandle)
 findSymbol  :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
-callSymbol  :: Ptr () -> [(Crossing, CrossedValue)] -> Crossing
-            -> IO (Either ForeignCallFailure CrossedValue)
+callSymbol  :: Ptr () -> [(Crossing, Bool, CrossedValue)] -> Crossing
+            -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
 kindCode    :: Crossing -> Word8
 ```
 
@@ -105,6 +106,17 @@ kindCode    :: Crossing -> Word8
 - **Q:** Decode returned bytes with the process locale? **A:** No. _Rationale:_ Pudu source and
   strings are Unicode, and the same library call must not mean different text because one host was
   started under a different locale. _Rejected:_ locale-dependent `CString` conversion; lossy UTF-8.
+
+## Post-call conversion failures
+
+`PostCallFailure ForeignCallFailure [(Text, Int64)]` retains every non-null top-level
+handle produced by the native result or slots. The bridge captures these addresses before decoding
+any returned text. This lets the evaluator discharge ownership even when UTF-8 decoding fails.
+
+### Resolved Grill
+
+- **Q:** Discard raw outputs on invalid text? **A:** No; preserve resource addresses on the failure
+  path. Text validity cannot erase a native release obligation.
 
 ## Referenced by
 
