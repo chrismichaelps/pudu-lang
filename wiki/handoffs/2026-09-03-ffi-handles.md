@@ -93,7 +93,7 @@ that program exposed led to the next:
 - **Capability sets match exactly, and there are no capability variables.** One wrapper cannot serve
   `raw` and `foreign` callers alike; it is written once per set. [[ADR-0009 Effects in the Type]]
   owns that question.
-- **A pointer, a nullable pointer, a record crossing by value, and callbacks do not cross yet.**
+- **A pointer, a nullable pointer, and callbacks do not cross yet.** A record crosses by value, one level deep, declared beside the block that names it.
 - **`comptime` is carried by name rather than by type**, which is sound because the fold refuses what
   it cannot evaluate, but means the early diagnostic covers declared functions only.
 
@@ -102,7 +102,7 @@ that program exposed led to the next:
 - Optimized `cabal build all --enable-optimization=2 --ghc-options='-Werror'`: pass.
 - Optimized unfiltered `cabal test all --enable-optimization=2 --test-show-details=direct`: pass.
 - Repository-wide Pudu formatter check: pass.
-- Diagnostic-code uniqueness: 122 codes across 128 sources, pass.
+- Diagnostic-code uniqueness: 123 codes across 129 sources, pass.
 - Real stdio LSP compatibility session: 14 frames, foreign handle and provenance assertions pass.
 - Real stdio LSP robustness session: nine cases, seven contained and two correctly fatal framing
   failures, pass.

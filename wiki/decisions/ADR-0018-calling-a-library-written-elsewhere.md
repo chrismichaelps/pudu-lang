@@ -128,6 +128,7 @@ is a different size on some machine somebody runs.
 | `Float32` `Float64` | the two floating widths | placed in their own registers, which is the case a boundary assembled by hand gets wrong first |
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
 | `Str` | a pointer to bytes ending in a nought | copied for the call and freed after; text containing a nought is refused, since the other side would read less than the text says |
+| a record of the above | by value, in the order its declaration writes the fields | one level; where each field sits inside it is asked of the platform, not calculated here |
 | `()` | nothing | a function returning nothing |
 | a block-local opaque type | one owned address | nominal, non-null, and released only by the declared function |
 

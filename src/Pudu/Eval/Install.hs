@@ -12,7 +12,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Foreign.Crossing (Crossing (NothingCrossing), crossingFor)
+import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -61,7 +61,8 @@ loadDeclarations :: Evaluate -> [Located Declaration] -> Evaluator ()
 loadDeclarations evaluateWith declarations = do
   installBuiltinConstructors
   let traits = traitTable declarations
-  mapM_ (installDeclaration traits) declarations
+      layouts = recordLayouts declarations
+  mapM_ (installDeclaration traits layouts) declarations
   mapM_ (initializeDeclaration evaluateWith) declarations
 
 {-| Trait members by trait name, so an implementation inherits the defaults it
@@ -108,15 +109,16 @@ installBuiltinConstructors = do
   bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
-installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
-installDeclaration traits (Located _ declaration) = case declaration of
+installDeclaration
+  :: Map Text [Located Function] -> RecordLayouts -> Located Declaration -> Evaluator ()
+installDeclaration traits layouts (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
       (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
-  ForeignDeclaration value -> mapM_ (installForeign value) (foreignFunctions value)
+  ForeignDeclaration value -> mapM_ (installForeign layouts value) (foreignFunctions value)
   _ -> pure ()
 
 {-| One foreign function becomes a value under its own name.
@@ -125,19 +127,19 @@ installDeclaration traits (Located _ declaration) = case declaration of
     runs: the library, the symbol, and how each value crosses. A call is then a
     call, and a declaration that could not be resolved into one has already been
     reported by the checker. -}
-installForeign :: Foreign -> Located ForeignFunction -> Evaluator ()
-installForeign library (Located _ function) =
+installForeign :: RecordLayouts -> Foreign -> Located ForeignFunction -> Evaluator ()
+installForeign layouts library (Located _ function) =
   bind name
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
           , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
-              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles)
+              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles layouts)
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingResult =
-              fromMaybe NothingCrossing (crossingFor handles (foreignResult function))
+              fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function))
           , foreignBindingReleasedBy = do
               named <- locatedValue <$> foreignReleasedBy function
               symbol <- Map.lookup named (releaseSymbolsOf library)

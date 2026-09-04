@@ -19,6 +19,7 @@ import Pudu.Frontend.Syntax.Tree
   , TypeParam (..)
   )
 import qualified Pudu.Frontend.Syntax.Tree as Tree
+import Pudu.Foreign.Crossing (recordLayouts)
 import Pudu.Type.Check.Foreign (declareForeign)
 import Pudu.Type.Check.Method
   ( declareInterfaceMethods
@@ -117,6 +118,11 @@ declareInterface declared visibleTraits available traits defaults value = do
   mapM_ (declareOne traits) declarations
   mapM_ declareImportedBinding (interfaceBindings value)
  where
+  {-| A record crossing by value must be declared beside the block that names
+      it, so the layouts an interface contributes are its own. -}
+  interfaceLayouts =
+    recordLayouts (interfacePrivateDeclarations value <> interfaceDeclarations value)
+
   interfaceDeclared = declared
     { declaredNames = interfaceNames available value <> declaredNames declared
     , declaredAliases = interfaceAliases declared value <> declaredAliases declared
@@ -132,7 +138,7 @@ declareInterface declared visibleTraits available traits defaults value = do
         _ -> pure ()
     TraitDeclaration trait -> declareTraitMembers interfaceDeclared trait
     ForeignDeclaration foreignValue -> do
-      declareForeign interfaceDeclared foreignValue
+      declareForeign interfaceDeclared interfaceLayouts foreignValue
       mapM_ (publishValue . locatedValue . Tree.foreignName . locatedValue)
         (Tree.foreignFunctions foreignValue)
     ImplDeclaration implementation -> do

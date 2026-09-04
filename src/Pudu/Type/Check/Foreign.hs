@@ -16,7 +16,13 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Foreign.Crossing (Crossing (..), crossableNames, crossingFor, crossingType)
+import Pudu.Foreign.Crossing
+  ( Crossing (..)
+  , RecordLayouts
+  , crossableNames
+  , crossingFor
+  , crossingType
+  )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
   ( Capability (ForeignCapability)
@@ -42,14 +48,15 @@ foreignHandles value = Set.fromList (map locatedValue (foreignTypes value))
     call is checked, hover shows the signature, and going to the definition
     arrives at the declaration — which is the definition, as far as this program
     is concerned. -}
-declareForeign :: DeclaredTypes -> Foreign -> Checker ()
-declareForeign declared value =
-  mapM_ (declareOne declared (foreignHandles value)) (foreignFunctions value)
+declareForeign :: DeclaredTypes -> RecordLayouts -> Foreign -> Checker ()
+declareForeign declared layouts value =
+  mapM_ (declareOne declared layouts (foreignHandles value)) (foreignFunctions value)
 
-declareOne :: DeclaredTypes -> Set.Set Text -> Located ForeignFunction -> Checker ()
-declareOne declared handles (Located _ function) = do
-  inputs <- mapM (parameterCrossing declared handles) (foreignParameters function)
-  result <- formedCrossing declared handles (foreignResult function)
+declareOne
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignFunction -> Checker ()
+declareOne declared layouts handles (Located _ function) = do
+  inputs <- mapM (parameterCrossing declared layouts handles) (foreignParameters function)
+  result <- formedCrossing declared layouts handles (foreignResult function)
   let name = locatedValue (foreignName function)
   {-| Every foreign function requires the capability, and requires it in its
       own type, so a binding stored in a variable or passed on still asks for
@@ -65,16 +72,22 @@ declareOne declared handles (Located _ function) = do
       already has a word for an assertion of that kind. -}
   recordUnsafeFunction name [ForeignCapability]
 
-parameterCrossing :: DeclaredTypes -> Set.Set Text -> Located Parameter -> Checker Type
-parameterCrossing declared handles (Located _ parameter) =
+parameterCrossing
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located Parameter -> Checker Type
+parameterCrossing declared layouts handles (Located _ parameter) =
   case parameterType parameter of
-    Just written -> formedCrossing declared handles written
+    Just written -> formedCrossing declared layouts handles written
     Nothing -> pure ErrorType
 
-formedCrossing :: DeclaredTypes -> Set.Set Text -> Located TypeSyntax -> Checker Type
-formedCrossing declared handles written =
-  case crossingFor handles written of
+formedCrossing
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located TypeSyntax -> Checker Type
+formedCrossing declared layouts handles written =
+  case crossingFor handles layouts written of
+    {-| A handle and a record are both nominal types of this program, so their
+        formed type is the ordinary one and a caller builds and reads one the
+        ordinary way. -}
     Just (HandleCrossing _) -> formType declared [] written
+    Just (RecordCrossing _ _) -> formType declared [] written
     Just crossing -> pure (crossingType crossing)
     Nothing -> pure ErrorType
 
@@ -85,8 +98,8 @@ formedCrossing declared handles written =
     that is not declared in this library. The fifth — a signature that does not
     match what the library actually exports — is the one nothing can catch,
     which is why the other four are worth catching. -}
-checkForeign :: Foreign -> Checker ()
-checkForeign value = mapM_ (checkOne handles declared) (foreignFunctions value)
+checkForeign :: RecordLayouts -> Foreign -> Checker ()
+checkForeign layouts value = mapM_ (checkOne layouts handles declared) (foreignFunctions value)
  where
   handles = foreignHandles value
   declared =
@@ -95,29 +108,34 @@ checkForeign value = mapM_ (checkOne handles declared) (foreignFunctions value)
       | Located _ function <- foreignFunctions value
       ]
 
-checkOne :: Set.Set Text -> Map.Map Text ForeignFunction -> Located ForeignFunction -> Checker ()
-checkOne handles declared (Located _ function) = do
+checkOne
+  :: RecordLayouts
+  -> Set.Set Text
+  -> Map.Map Text ForeignFunction
+  -> Located ForeignFunction
+  -> Checker ()
+checkOne layouts handles declared (Located _ function) = do
   case foreignSymbol function of
     Just (Located spanValue symbol) | Text.null symbol ->
       report "E3068" spanValue
         "a foreign symbol cannot be empty"
         (Just "write the exact function name exported by the library")
     _ -> pure ()
-  mapM_ (checkParameter handles) (foreignParameters function)
+  mapM_ (checkParameter layouts handles) (foreignParameters function)
   refuseUncrossable (locatedSpan (foreignResult function)) result
   checkOwnership declared function result
  where
-  result = crossingFor handles (foreignResult function)
+  result = crossingFor handles layouts (foreignResult function)
 
-checkParameter :: Set.Set Text -> Located Parameter -> Checker ()
-checkParameter handles (Located spanValue parameter) = case parameterType parameter of
+checkParameter :: RecordLayouts -> Set.Set Text -> Located Parameter -> Checker ()
+checkParameter layouts handles (Located spanValue parameter) = case parameterType parameter of
   Nothing ->
     report "E3062" spanValue
       ( "foreign parameter " <> locatedValue (parameterName parameter)
           <> " names no type"
       )
       (Just "give every foreign parameter a type; nothing here can be inferred")
-  Just written -> refuseUncrossable (locatedSpan written) (crossingFor handles written)
+  Just written -> refuseUncrossable (locatedSpan written) (crossingFor handles layouts written)
 
 refuseUncrossable :: Span -> Maybe Crossing -> Checker ()
 refuseUncrossable spanValue crossing = case crossing of
@@ -174,11 +192,12 @@ checkReleaseShape spanValue handle release =
  where
   parameterMatches = case foreignParameters release of
     [Located _ parameter] -> case parameterType parameter of
-      Just written -> crossingFor (Set.singleton handle) written == Just (HandleCrossing handle)
+      Just written ->
+        crossingFor (Set.singleton handle) Map.empty written == Just (HandleCrossing handle)
       Nothing -> False
     _ -> False
   resultMatches =
-    crossingFor (Set.singleton handle) (foreignResult release) == Just NothingCrossing
+    crossingFor (Set.singleton handle) Map.empty (foreignResult release) == Just NothingCrossing
 
 isHandle :: Maybe Crossing -> Bool
 isHandle crossing = case crossing of

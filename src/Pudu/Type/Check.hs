@@ -94,6 +94,7 @@ import Pudu.Type.Value
   , Type (..)
   )
 import Pudu.Type.Interface (ImportTypes)
+import Pudu.Foreign.Crossing (RecordLayouts, recordLayouts)
 import Pudu.Type.Check.Foreign (checkForeign, declareForeign)
 import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
@@ -135,16 +136,21 @@ checkUnit imported moduleValue = do
   declareBuiltinConstructors
   declareImportedTypes declared imported
   let traits = traitTable declared (moduleDeclarations moduleValue)
-  mapM_ (declareSignature declared traits) (moduleDeclarations moduleValue)
+  let layouts = recordLayouts (moduleDeclarations moduleValue)
+  mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
-  mapM_ (checkDeclaration declared) (moduleDeclarations moduleValue)
+  mapM_ (checkDeclaration declared layouts) (moduleDeclarations moduleValue)
   finalizeIntegerLiterals
   dischargeObligations
 
 {-| Give every module-scope declaration a type before bodies are checked. -}
 declareSignature
-  :: DeclaredTypes -> Map.Map NominalId [Located Function] -> Located Declaration -> Checker ()
-declareSignature declared traits (Located _ declaration) = case declaration of
+  :: DeclaredTypes
+  -> RecordLayouts
+  -> Map.Map NominalId [Located Function]
+  -> Located Declaration
+  -> Checker ()
+declareSignature declared layouts traits (Located _ declaration) = case declaration of
   BindingDeclaration _ _ name annotation _ -> do
     formed <- formOptionalType declared [] annotation
     bindName (locatedValue name) (monotype formed)
@@ -152,7 +158,7 @@ declareSignature declared traits (Located _ declaration) = case declaration of
   TypeDeclaration value -> declareConstructors declared value
   ImplDeclaration value -> declareMethods declared traits value
   TraitDeclaration value -> declareTraitMembers declared value
-  ForeignDeclaration value -> declareForeign declared value
+  ForeignDeclaration value -> declareForeign declared layouts value
   _ -> pure ()
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
@@ -199,8 +205,8 @@ variantPayload declared rigid variant = case Tree.variantPayload variant of
   Tree.RecordPayload fields ->
     mapM (\(Located _ field) -> formType declared rigid (Tree.fieldType field)) fields
 
-checkDeclaration :: DeclaredTypes -> Located Declaration -> Checker ()
-checkDeclaration declared (Located _ declaration) = case declaration of
+checkDeclaration :: DeclaredTypes -> RecordLayouts -> Located Declaration -> Checker ()
+checkDeclaration declared layouts (Located _ declaration) = case declaration of
   BindingDeclaration visibility _ name annotation value -> do
     when (visibility == Exported && annotation == Nothing) $
       report "E3010" (locatedSpan name)
@@ -227,7 +233,7 @@ checkDeclaration declared (Located _ declaration) = case declaration of
       mapM_
         (checkMember (implAliases declared value) (implRigid value) (implBounds declared value) Nothing)
         (implFunctions value)
-  ForeignDeclaration value -> checkForeign value
+  ForeignDeclaration value -> checkForeign layouts value
   _ -> pure ()
 
 checkFunctionWith
@@ -315,7 +321,9 @@ statementNeeds :: StatementNeeds
 statementNeeds =
   StatementNeeds
     { statementExpression = checkExpression
-    , statementDeclaration = checkDeclaration
+    {-| A declaration inside a block has no module records to consult, and a
+        foreign block is not one of the forms that may appear there. -}
+    , statementDeclaration = \declared -> checkDeclaration declared Map.empty
     , statementFunction = checkFunctionWith
     }
 

@@ -70,6 +70,8 @@ testForeignHandles = do
   CInt anchor <- cppFixtureAnchor
   successful <- runEntry "test-fixtures/stdlib/UsesForeignHandles.pudu"
   imported <- runEntry "test-fixtures/foreignmodule/Main.pudu"
+  records <- runEntry "test-fixtures/stdlib/UsesForeignRecords.pudu"
+  refusedRecords <- codes "test-fixtures/foreignrecords/Main.pudu"
   beforeDouble <- cppDeleteCount
   doubleRelease <- runtimeCodes "test-fixtures/stdlib/RejectsForeignDoubleRelease.pudu"
   afterDouble <- cppDeleteCount
@@ -96,6 +98,22 @@ testForeignHandles = do
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
     , counterexample "a C++ object crosses as an opaque handle and is read and released"
         (successful === Just "2")
+    {-| A record crossing by value, which is how nearly every library worth
+        calling passes a colour, a point, or a rectangle. Four bytes packed into
+        a register on the way out and read back field by field; a record of two
+        classes with padding between them, both directions; and fields written
+        in an order the declaration did not use, which still cross in the order
+        it did. Where a field sits inside a record is asked of the platform
+        rather than calculated here, because a calculation would be right on the
+        machine it was written for. -}
+    , counterexample "a record crosses a foreign boundary by value"
+        (records === Just "12")
+    {-| One level, stated rather than discovered. A record of records and a
+        record with a field that cannot cross are both refused at the
+        declaration, where a reader can see why, rather than at a call where the
+        answer would be a fault. -}
+    , counterexample "a nested record and an uncrossable field are refused where they are written"
+        (refusedRecords === ["E3063", "E3063"])
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"

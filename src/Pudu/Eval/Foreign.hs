@@ -172,6 +172,14 @@ crossOne spanValue binding crossing value = case (crossing, value) of
   (BooleanCrossing, BoolValue held) -> pure (crossing, CrossedInteger (if held then 1 else 0))
   (HandleCrossing expected, ForeignHandleValue actual address)
     | expected == actual -> pure (crossing, CrossedHandle actual address)
+  {-| A record crosses by value, field by field, in the order its declaration
+      wrote them. The value's own fields are matched by name rather than by
+      position, so a record built with its fields written in another order still
+      crosses as the declaration says it does. -}
+  (RecordCrossing name declared, RecordValue actual held)
+    | name == actual -> do
+        fields <- mapM (crossField spanValue binding name held) declared
+        pure (crossing, CrossedRecord name fields)
   (_, IntValue _ held)
     | isIntegral crossing ->
         if fitsCrossing crossing held
@@ -192,6 +200,24 @@ crossOne spanValue binding crossing value = case (crossing, value) of
           <> " is not the " <> crossingName crossing <> " it crosses as"
       )
       (Just "pass what the foreign declaration names")
+
+{-| One field of a record on its way across. -}
+crossField
+  :: Span
+  -> ForeignBinding
+  -> Text
+  -> [(Text, Value)]
+  -> (Text, Crossing)
+  -> Evaluator (Text, CrossedValue)
+crossField spanValue binding record held (label, crossing) =
+  case lookup label held of
+    Nothing ->
+      abortAt (Just spanValue) "E7023"
+        (record <> " has no " <> label <> " to cross")
+        (Just "a record crossing a foreign boundary carries every field its declaration names")
+    Just value -> do
+      (_, crossed) <- crossOne spanValue binding crossing value
+      pure (label, crossed)
 
 isIntegral :: Crossing -> Bool
 isIntegral crossing = case crossing of
@@ -234,6 +260,13 @@ receive spanValue binding store produced =
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (TextCrossing, CrossedText written) -> pure (StrValue written)
+    (RecordCrossing name declared, CrossedRecord _ produced) ->
+      pure
+        ( RecordValue name
+            [ (label, receivedField fieldCrossing value)
+            | ((label, fieldCrossing), (_, value)) <- zip declared produced
+            ]
+        )
     _ -> foreignResultMismatch spanValue binding
 
 releaseHandle :: ForeignRelease -> Text -> Int64 -> IO ()
@@ -256,6 +289,17 @@ kindOf crossing = case crossing of
   SignedCrossing width -> SignedKind width
   UnsignedCrossing width -> UnsignedKind width
   _ -> defaultIntegerKind
+
+{-| One field of a record the library returned. -}
+receivedField :: Crossing -> CrossedValue -> Value
+receivedField crossing produced = case (crossing, produced) of
+  (BooleanCrossing, CrossedInteger held) -> BoolValue (held /= 0)
+  (FloatingCrossing _, CrossedDouble held) -> FloatValue (widthOf crossing) held
+  (TextCrossing, CrossedText written) -> StrValue written
+  (HandleCrossing name, CrossedHandle _ address) -> ForeignHandleValue name address
+  (_, CrossedInteger held) -> IntValue (kindOf crossing) (fromIntegral held)
+  (_, CrossedDouble held) -> FloatValue (widthOf crossing) held
+  _ -> UnitValue
 
 widthOf :: Crossing -> FloatWidth
 widthOf crossing = case crossing of

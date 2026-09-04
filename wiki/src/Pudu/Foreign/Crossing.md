@@ -51,6 +51,14 @@ crossableNames :: Text
   never reduced to `Box`; scalar names may be unqualified only as well. A misspelled or qualified
   handle is refused rather than laundered into the block's own nominal type.
 
+- **A record crosses by value and is an ordinary record.** What a library passes about is its
+  colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
+  The declaration names a record this program already has; it crosses when every field crosses, one
+  level deep, and the fields travel in the order the declaration wrote them.
+- **The layout is the platform's answer.** Only names and widths are carried across; where each
+  field sits inside the record is asked for on the other side. A calculation here would be right on
+  the machine it was written for and silently wrong on the next.
+
 ### Linkage
 
 - **Requires:** [[Pudu Type]], [[Pudu Syntax Tree]].

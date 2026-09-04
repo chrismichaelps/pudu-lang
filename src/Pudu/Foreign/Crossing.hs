@@ -10,6 +10,8 @@ module Pudu.Foreign.Crossing
   , crossingName
   , crossingType
   , crossableNames
+  , RecordLayouts
+  , recordLayouts
   , fitsCrossing
   ) where
 
@@ -19,7 +21,14 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
-import Pudu.Frontend.Syntax.Tree (TypeSyntax (..))
+import qualified Data.Map.Strict as Map
+import Pudu.Frontend.Syntax.Tree
+  ( Declaration (..)
+  , FieldDeclaration (..)
+  , TypeDeclarationValue (..)
+  , TypeDefinition (..)
+  , TypeSyntax (..)
+  )
 import Data.String (fromString)
 import Pudu.Type.Value (Type (..))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -44,23 +53,65 @@ data Crossing
       not interchangeable, and one address type for all of them turns a mistake
       the checker could catch into one the library reports by failing. -}
   | HandleCrossing !Text
+  {-| A record crossing by value, under its name and with its fields in the
+      order the declaration wrote them.
+
+      Where a field sits inside the record is the platform's answer rather than
+      this one's, so only the names and widths are carried here; the boundary
+      asks for the offsets when it lays the bytes out. -}
+  | RecordCrossing !Text ![(Text, Crossing)]
   | NothingCrossing
   deriving stock (Eq, Show)
+
+{-| The records a module declares, by name, with their fields in order.
+
+    Built from the same declarations the checker and the evaluator each already
+    walk, so both see one layout and neither has to be told about the other. -}
+type RecordLayouts = Map.Map Text [(Text, Located TypeSyntax)]
+
+recordLayouts :: [Located Declaration] -> RecordLayouts
+recordLayouts declarations =
+  Map.fromList
+    [ (locatedValue (typeName value), fields)
+    | Located _ (TypeDeclaration value) <- declarations
+    , RecordDefinition declared <- [locatedValue (typeDefinition value)]
+    , let fields =
+            [ (locatedValue (fieldName field), fieldType field)
+            | Located _ field <- declared
+            ]
+    ]
 
 {-| The crossing a declared type describes, where it describes one.
 
     Anything absent from this is refused at the declaration, which is the point
     of stating it: a type that cannot cross is a diagnostic where it is written
     rather than a fault where it is called. -}
-crossingFor :: Set Text -> Located TypeSyntax -> Maybe Crossing
-crossingFor handles (Located _ syntax) = case syntax of
-  UnitType -> Just NothingCrossing
-  NamedType (ModuleName (name :| [])) [] -> named name
-  _ -> Nothing
+crossingFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
+crossingFor handles layouts = crossingAt True
  where
-  named name
+  crossingAt nestable (Located _ syntax) = case syntax of
+    UnitType -> Just NothingCrossing
+    NamedType (ModuleName (name :| [])) [] -> named nestable name
+    _ -> Nothing
+
+  {-| A record's fields are themselves crossable and are not themselves records.
+
+      One level, and stated rather than discovered: a colour, a point, and a
+      rectangle are flat records of numbers, and admitting nesting would mean
+      carrying a recursive description across the boundary for a case that is
+      rare and whose failure is silent. A nested record is refused where it is
+      written. -}
+  named nestable name
     | Set.member name handles = Just (HandleCrossing name)
-    | otherwise = case name of
+    | Just fields <- Map.lookup name layouts =
+        if not nestable || null fields
+          then Nothing
+          else RecordCrossing name <$> traverse field fields
+    | otherwise = scalar name
+   where
+    field (label, written) = (,) label <$> crossingAt False written
+
+  scalar name = case name of
     "Int8" -> Just (SignedCrossing 8)
     "Int16" -> Just (SignedCrossing 16)
     "Int32" -> Just (SignedCrossing 32)
@@ -84,6 +135,7 @@ crossingName crossing = case crossing of
   BooleanCrossing -> "Bool"
   TextCrossing -> "Str"
   HandleCrossing name -> name
+  RecordCrossing name _ -> name
   NothingCrossing -> "()"
 
 {-| The type a crossed value has on this side.
