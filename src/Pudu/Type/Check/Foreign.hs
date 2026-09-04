@@ -32,7 +32,7 @@ import Pudu.Frontend.Syntax.Tree
   ( Capability (ForeignCapability)
   , Foreign (..)
   , ForeignFunction (..)
-  , Parameter (..)
+  , ForeignParameter (..)
   , TypeSyntax (..)
   )
 import Pudu.Source (Span)
@@ -59,9 +59,11 @@ declareForeign declared layouts value =
 declareOne
   :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignFunction -> Checker ()
 declareOne declared layouts handles (Located _ function) = do
-  inputs <- mapM (parameterCrossing declared layouts handles) (foreignParameters function)
-  result <- formedCrossing declared layouts handles (foreignResult function)
-  let name = locatedValue (foreignName function)
+  inputs <- mapM (parameterCrossing declared layouts handles) (ordinaryOf function)
+  native <- formedCrossing declared layouts handles (foreignResult function)
+  written <- mapM (slotAnswer declared layouts handles) (slotsOf function)
+  let result = answeredType native written
+      name = locatedValue (foreignName function)
   {-| Every foreign function requires the capability, and requires it in its
       own type, so a binding stored in a variable or passed on still asks for
       it wherever it is finally called. -}
@@ -76,10 +78,62 @@ declareOne declared layouts handles (Located _ function) = do
       already has a word for an assertion of that kind. -}
   recordUnsafeFunction name [ForeignCapability]
 
+{-| The parameters a caller supplies, and the ones the library writes.
+
+    A slot is a native argument and not a Pudu one, so the two lists are what
+    every phase after this asks for: the caller's arguments come from the first,
+    the answer's shape from the second. -}
+ordinaryOf :: ForeignFunction -> [Located ForeignParameter]
+ordinaryOf function =
+  [ parameter
+  | parameter <- foreignParameters function
+  , not (foreignParameterOut (locatedValue parameter))
+  ]
+
+slotsOf :: ForeignFunction -> [Located ForeignParameter]
+slotsOf function =
+  [ parameter
+  | parameter <- foreignParameters function
+  , foreignParameterOut (locatedValue parameter)
+  ]
+
+{-| What a call answers with.
+
+    Without slots, the result the declaration wrote. With them, one tuple whose
+    first member is that result and whose rest are the slots in source order.
+    The native result stays present even when it is unit, so that adding a
+    status later does not move every slot and nothing reading these signatures
+    needs a special case for whether the result carries information. -}
+answeredType :: Type -> [Type] -> Type
+answeredType native written = case written of
+  [] -> native
+  _ -> TupleTypeValue (native : written)
+
+{-| The type one slot contributes to the answer.
+
+    A pointer-shaped slot answers `Option`, because null is an absence a pointer
+    really carries and most of these functions leave the cell untouched when
+    they fail. A scalar or record slot answers its own type: a written zero and
+    an unwritten cell leave the same bytes, so optionality there would be
+    invented rather than observed. -}
+slotAnswer
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignParameter -> Checker Type
+slotAnswer declared layouts handles (Located _ parameter) =
+  case foreignParameterType parameter of
+    Nothing -> pure ErrorType
+    Just written -> do
+      formed <- formedCrossing declared layouts handles written
+      pure
+        ( case crossingFor handles layouts written of
+            Just TextCrossing -> NominalType "Option" [formed]
+            Just (HandleCrossing _) -> NominalType "Option" [formed]
+            _ -> formed
+        )
+
 parameterCrossing
-  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located Parameter -> Checker Type
+  :: DeclaredTypes -> RecordLayouts -> Set.Set Text -> Located ForeignParameter -> Checker Type
 parameterCrossing declared layouts handles (Located _ parameter) =
-  case parameterType parameter of
+  case foreignParameterType parameter of
     Just written -> formedCrossing declared layouts handles written
     Nothing -> pure ErrorType
 
@@ -129,26 +183,82 @@ checkOne layouts handles declared (Located functionSpan function) = do
         "a foreign symbol cannot be empty"
         (Just "write the exact function name exported by the library")
     _ -> pure ()
-  mapM_ (checkParameter layouts handles) (foreignParameters function)
+  mapM_ (checkParameter layouts handles declared) (foreignParameters function)
   refuseUncrossable layouts (foreignResult function) result
   checkOwnership declared function result
  where
   result = crossingFor handles layouts (foreignResult function)
 
-checkParameter :: RecordLayouts -> Set.Set Text -> Located Parameter -> Checker ()
-checkParameter layouts handles (Located spanValue parameter) = case parameterType parameter of
-  Nothing ->
-    report "E3062" spanValue
-      ( "foreign parameter " <> locatedValue (parameterName parameter)
-          <> " names no type"
-      )
-      (Just "give every foreign parameter a type; nothing here can be inferred")
-  Just written -> case crossingFor handles layouts written of
-    Just NothingCrossing ->
-      report "E3070" (locatedSpan written)
-        "a foreign parameter cannot be ()"
-        (Just "() describes a function returning no value; it is not an argument value")
-    crossing -> refuseUncrossable layouts written crossing
+checkParameter
+  :: RecordLayouts
+  -> Set.Set Text
+  -> Map.Map Text ForeignFunction
+  -> Located ForeignParameter
+  -> Checker ()
+checkParameter layouts handles declared (Located spanValue parameter) =
+  case foreignParameterType parameter of
+    Nothing ->
+      report "E3062" spanValue
+        ( "foreign parameter " <> locatedValue (foreignParameterName parameter)
+            <> " names no type"
+        )
+        (Just "give every foreign parameter a type; nothing here can be inferred")
+    Just written -> do
+      case crossingFor handles layouts written of
+        Just NothingCrossing ->
+          report "E3070" (locatedSpan written)
+            "a foreign parameter cannot be ()"
+            (Just "() describes a function returning no value; it is not an argument value")
+        crossing -> do
+          refuseUncrossable layouts written crossing
+          checkSlotOwnership declared spanValue parameter crossing
+
+{-| What ownership a slot must carry, and what an ordinary parameter may not.
+
+    A handle a library writes into a slot is a resource the program now holds,
+    so the same rule the result follows applies: it is owned, and it names the
+    release. An ordinary parameter owns nothing — the caller already had the
+    value and passing it transfers nothing — so `owned` on one is a claim the
+    boundary would not honour. -}
+checkSlotOwnership
+  :: Map.Map Text ForeignFunction
+  -> Span
+  -> ForeignParameter
+  -> Maybe Crossing
+  -> Checker ()
+checkSlotOwnership declared spanValue parameter crossing
+  | not (foreignParameterOut parameter) =
+      when (foreignParameterOwned parameter) $
+        report "E3072" spanValue
+          "only an output slot may be owned"
+          ( Just
+              ( "a parameter the caller supplies was already theirs; write out "
+                  <> locatedValue (foreignParameterName parameter)
+                  <> " if the library writes it"
+              )
+          )
+  | isHandle crossing && not (foreignParameterOwned parameter) =
+      report "E3066" spanValue
+        "a foreign handle slot must be owned"
+        (Just "write owned Handle by release; borrowed foreign lifetimes are not represented yet")
+  | foreignParameterOwned parameter && not (isHandle crossing) =
+      report "E3065" spanValue
+        "only something this library hands back can be owned"
+        ( Just
+            ( "declare the slot as a type the block itself declares; a number "
+                <> "or a piece of text is copied here and there is nothing to release"
+            )
+        )
+  | otherwise = case foreignParameterReleasedBy parameter of
+      Nothing -> pure ()
+      Just (Located releaseSpan name) -> case Map.lookup name declared of
+        Nothing ->
+          report "E3064" releaseSpan
+            ("this library declares no " <> name <> " to release with")
+            (Just "declare the release in the same foreign block as what it frees")
+        Just release -> case crossing of
+          Just (HandleCrossing handle) -> checkReleaseShape releaseSpan handle release
+          _ -> pure ()
 
 refuseUncrossable :: RecordLayouts -> Located TypeSyntax -> Maybe Crossing -> Checker ()
 refuseUncrossable layouts written crossing = case crossing of
@@ -217,10 +327,11 @@ checkReleaseShape spanValue handle release =
         <> handle <> ") -> ()"))
  where
   parameterMatches = case foreignParameters release of
-    [Located _ parameter] -> case parameterType parameter of
-      Just written ->
-        crossingFor (Set.singleton handle) Map.empty written == Just (HandleCrossing handle)
-      Nothing -> False
+    [Located _ parameter]
+      | not (foreignParameterOut parameter) -> case foreignParameterType parameter of
+          Just written ->
+            crossingFor (Set.singleton handle) Map.empty written == Just (HandleCrossing handle)
+          Nothing -> False
     _ -> False
   resultMatches =
     crossingFor (Set.singleton handle) Map.empty (foreignResult release) == Just NothingCrossing

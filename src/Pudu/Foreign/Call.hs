@@ -259,15 +259,30 @@ kindCode crossing = case crossing of
     after, which is what "borrowed for the call" means: a library that keeps the
     pointer is a library whose declaration is wrong, and no arrangement here can
     detect that. -}
+{-| Make one call.
+
+    Each argument carries how it crosses and, when the library writes it rather
+    than reading it, nothing for the caller to supply. A slot's crossing
+    describes what the library leaves behind, so the same table answers both
+    directions and the bridge is told which positions are which.
+
+    The answer is the native result and what each slot received, in declaration
+    order. A pointer slot the library never wrote answers with nothing, which is
+    the absence a pointer carries; every other slot answers with a value,
+    because a scalar's storage cannot say whether it was written. -}
 callSymbol
   :: Ptr ()
-  -> [(Crossing, CrossedValue)]
+  -> [(Crossing, Bool, CrossedValue)]
   -> Crossing
-  -> IO (Either ForeignCallFailure CrossedValue)
-callSymbol symbol arguments result =
+  -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
+callSymbol symbol supplied result =
   withMany ByteString.useAsCString (map encodedText arguments) $ \strings ->
     withMany ByteString.useAsCString (map encodedText fields) $ \fieldStrings -> do
       let kinds = map (kindCode . fst) arguments
+          slotKinds =
+            [ if isSlot then kindCode crossing else kindCode NothingCrossing
+            | ((crossing, _), isSlot) <- zip arguments written
+            ]
           integers = map integerOf arguments
           doubles = map doubleOf arguments
           {-| Each argument's fields laid end to end, with the slice belonging to
@@ -292,32 +307,58 @@ callSymbol symbol arguments result =
                       withArray (orOne 0 (map CDouble fieldDoubles)) $ \fieldDoubleArray ->
                         withArray (orOne nullPtr fieldStrings) $ \fieldStringArray ->
                           withArray (orOne 0 resultKinds) $ \resultKindArray ->
-                            alloca $ \producedInteger ->
-                              alloca $ \producedDouble ->
-                                allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
-                                  allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
-                                    code <-
-                                      c_call symbol (fromIntegral (length arguments)) kindArray
-                                        integerArray doubleArray stringArray startArray countArray
-                                        fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
-                                        nullPtr nullPtr nullPtr nullPtr nullPtr
-                                        (kindCode result) (fromIntegral resultCount) resultKindArray
-                                        producedInteger producedDouble producedFieldIntegers
-                                        producedFieldDoubles
-                                    if code /= 0
-                                      then pure (Left (refusal code))
-                                      else case result of
-                                        RecordCrossing _ _ -> do
-                                          producedIntegers <- peekArray resultCount producedFieldIntegers
-                                          producedDoubles <- peekArray resultCount producedFieldDoubles
-                                          rebuilt <- rebuildRecord result
-                                            (zip producedIntegers (map unwrapDouble producedDoubles))
-                                          pure (fmap fst rebuilt)
-                                        _ -> do
-                                          asInteger <- peek producedInteger
-                                          CDouble asDouble <- peek producedDouble
-                                          received result asInteger asDouble
+                            withArray slotKinds $ \slotKindArray ->
+                              allocaArray (max 1 (length arguments)) $ \slotIntegers ->
+                                allocaArray (max 1 (length arguments)) $ \slotDoubles ->
+                                  allocaArray (max 1 (length fields)) $ \slotFieldIntegers ->
+                                    allocaArray (max 1 (length fields)) $ \slotFieldDoubles ->
+                                      alloca $ \producedInteger ->
+                                        alloca $ \producedDouble ->
+                                          allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
+                                            allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
+                                              code <-
+                                                c_call symbol (fromIntegral (length arguments)) kindArray
+                                                  integerArray doubleArray stringArray startArray countArray
+                                                  fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
+                                                  slotKindArray slotIntegers slotDoubles
+                                                  slotFieldIntegers slotFieldDoubles
+                                                  (kindCode result) (fromIntegral resultCount) resultKindArray
+                                                  producedInteger producedDouble producedFieldIntegers
+                                                  producedFieldDoubles
+                                              if code /= 0
+                                                then pure (Left (refusal code))
+                                                else do
+                                                  answered <- case result of
+                                                    RecordCrossing _ _ -> do
+                                                      producedIntegers <- peekArray resultCount producedFieldIntegers
+                                                      producedDoubles <- peekArray resultCount producedFieldDoubles
+                                                      rebuilt <- rebuildRecord result
+                                                        (zip producedIntegers (map unwrapDouble producedDoubles))
+                                                      pure (fmap fst rebuilt)
+                                                    _ -> do
+                                                      asInteger <- peek producedInteger
+                                                      CDouble asDouble <- peek producedDouble
+                                                      received result asInteger asDouble
+                                                  case answered of
+                                                    Left problem -> pure (Left problem)
+                                                    Right value -> do
+                                                      slotIntegersBack <-
+                                                        peekArray (max 1 (length arguments)) slotIntegers
+                                                      slotDoublesBack <-
+                                                        peekArray (max 1 (length arguments)) slotDoubles
+                                                      slotFieldIntegersBack <-
+                                                        peekArray (max 1 (length fields)) slotFieldIntegers
+                                                      slotFieldDoublesBack <-
+                                                        peekArray (max 1 (length fields)) slotFieldDoubles
+                                                      taken <-
+                                                        takeSlots arguments written sliceStart sliceCount
+                                                          slotIntegersBack (map unwrapDouble slotDoublesBack)
+                                                          slotFieldIntegersBack
+                                                          (map unwrapDouble slotFieldDoublesBack)
+                                                      pure (fmap ((,) value) taken)
  where
+  arguments = [(crossing, value) | (crossing, _, value) <- supplied]
+  written = [isSlot | (_, isSlot, _) <- supplied]
   {-| An empty array still needs an address to pass, so an unused one carries a
       single filler the other side never reads: every count that would reach it
       is zero. The filler is a real value rather than an undefined one, because
@@ -326,10 +367,15 @@ callSymbol symbol arguments result =
 
   unwrapDouble (CDouble held) = held
 
-  flattened = map (uncurry recordFields) arguments
+  {-| A slot's fields are described but never sent: the library writes them, so
+      only their kinds and their place in the buffer matter here. -}
+  flattened =
+    [ if isSlot then slotLeaves crossing else recordFields crossing value
+    | ((crossing, value), isSlot) <- zip arguments written
+    ]
   fields = concat flattened
   encodedText (_, value) = case value of
-    CrossedText written -> TextEncoding.encodeUtf8 written
+    CrossedText text -> TextEncoding.encodeUtf8 text
     _ -> ByteString.empty
   integerOf (_, value) = case value of
     CrossedInteger held -> held
@@ -338,6 +384,68 @@ callSymbol symbol arguments result =
   doubleOf (_, value) = case value of
     CrossedDouble held -> held
     _ -> 0
+
+{-| The leaves of a record a library writes into a slot.
+
+    The same flattening a record argument uses, with nothing in the values: what
+    goes out is the shape, and what comes back is read from the storage the
+    bridge owned for the call. -}
+slotLeaves :: Crossing -> [(Crossing, CrossedValue)]
+slotLeaves crossing = case crossing of
+  RecordCrossing _ _ -> [(leaf, CrossedInteger 0) | leaf <- leafCrossings crossing]
+  _ -> []
+
+leafCrossings :: Crossing -> [Crossing]
+leafCrossings crossing = case crossing of
+  RecordCrossing _ declared -> concatMap (leafCrossings . snd) declared
+  _ -> [crossing]
+
+{-| What each slot received, in declaration order.
+
+    A pointer left as the bridge zeroed it answers with nothing, because that is
+    the absence a pointer represents. Everything else answers with a value: a
+    scalar's storage reads back the same whether the library wrote a zero or
+    wrote nothing, and inventing an absence from that would be a guess. -}
+takeSlots
+  :: [(Crossing, CrossedValue)]
+  -> [Bool]
+  -> [Int32]
+  -> [Int32]
+  -> [Int64]
+  -> [Double]
+  -> [Int64]
+  -> [Double]
+  -> IO (Either ForeignCallFailure [Maybe CrossedValue])
+takeSlots arguments written starts counts integers doubles fieldIntegers fieldDoubles =
+  collect (zip4 (map fst arguments) written starts counts) integers doubles []
+ where
+  zip4 (a : as) (b : bs) (c : cs) (d : ds) = (a, b, c, d) : zip4 as bs cs ds
+  zip4 _ _ _ _ = []
+  collect [] _ _ taken = pure (Right (reverse taken))
+  collect ((crossing, isSlot, start, count) : rest) (asInteger : moreIntegers)
+    (asDouble : moreDoubles) taken
+      | not isSlot = collect rest moreIntegers moreDoubles taken
+      | otherwise = case crossing of
+          RecordCrossing _ _ -> do
+            let sliced :: [a] -> [a]
+                sliced values = take (fromIntegral count) (drop (fromIntegral start) values)
+            rebuilt <-
+              rebuildRecord crossing (zip (sliced fieldIntegers) (sliced fieldDoubles))
+            case rebuilt of
+              Left problem -> pure (Left problem)
+              Right (value, _) -> collect rest moreIntegers moreDoubles (Just value : taken)
+          _ -> do
+            one <- receivedSlot crossing asInteger asDouble
+            case one of
+              Left problem -> pure (Left problem)
+              Right value -> collect rest moreIntegers moreDoubles (value : taken)
+  collect _ _ _ taken = pure (Right (reverse taken))
+
+receivedSlot :: Crossing -> Int64 -> Double -> IO (Either ForeignCallFailure (Maybe CrossedValue))
+receivedSlot crossing asInteger asDouble = case crossing of
+  TextCrossing | asInteger == 0 -> pure (Right Nothing)
+  HandleCrossing _ | asInteger == 0 -> pure (Right Nothing)
+  _ -> fmap (fmap Just) (received crossing asInteger asDouble)
 
 received :: Crossing -> Int64 -> Double -> IO (Either ForeignCallFailure CrossedValue)
 received crossing asInteger asDouble = case crossing of

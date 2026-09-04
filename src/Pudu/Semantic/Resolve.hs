@@ -20,6 +20,7 @@ import Pudu.Frontend.Syntax.Tree
   , FieldPattern (..)
   , Foreign (..)
   , ForeignFunction (..)
+  , ForeignParameter (..)
   , Function (..)
   , FunctionBody (..)
   , Impl (..)
@@ -253,7 +254,7 @@ walkDeclaration (Located _ declaration) = case declaration of
     walk: the body is somebody else's. -}
 walkForeignFunction :: ForeignFunction -> Resolver ()
 walkForeignFunction function = do
-  mapM_ (mapM_ walkType . parameterType . locatedValue) (foreignParameters function)
+  mapM_ (mapM_ walkType . foreignParameterType . locatedValue) (foreignParameters function)
   walkType (foreignResult function)
 
 {-| A parameter is visible to the defaults of later parameters and to the body,

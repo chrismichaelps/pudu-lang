@@ -20,6 +20,7 @@ module Pudu.Eval.Value
   , Value (..)
   , ForeignBinding (..)
   , ForeignRelease (..)
+  , ForeignSlot (..)
   , OrdValue (..)
   , compareValues
   , arrayMethodName
@@ -123,7 +124,12 @@ data Value
 data ForeignBinding = ForeignBinding
   { foreignBindingLibrary :: !Text
   , foreignBindingSymbol :: !Text
+  {-| How every native argument crosses, slots included: the bridge needs a kind
+      for each position whether the value is sent or written back. -}
   , foreignBindingArguments :: ![Crossing]
+  {-| Which of those positions the library writes rather than reads, in the same
+      order. An ordinary argument carries nothing here. -}
+  , foreignBindingSlots :: ![Maybe ForeignSlot]
   , foreignBindingResult :: !Crossing
   , foreignBindingReleasedBy :: !(Maybe ForeignRelease)
   {-| The handle type this function releases, when it is a release.
@@ -131,6 +137,18 @@ data ForeignBinding = ForeignBinding
       Known from the declaration rather than guessed at the call: a release is
       whatever some function in the same block named after `by`. -}
   , foreignBindingReleases :: !(Maybe Text)
+  }
+  deriving stock (Eq, Show)
+
+{-| One argument the library writes rather than reads.
+
+    Carries what the slot answers with rather than what the caller sends: the
+    handle type when it is a handle, so the address it receives can be claimed
+    under the same name a direct result would be, and the destructor that claim
+    retains. -}
+data ForeignSlot = ForeignSlot
+  { foreignSlotCrossing :: !Crossing
+  , foreignSlotReleasedBy :: !(Maybe ForeignRelease)
   }
   deriving stock (Eq, Show)
 

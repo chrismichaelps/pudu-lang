@@ -1,0 +1,92 @@
+module UsesForeignSlots
+
+/// A library that writes what it made through storage the caller supplied,
+/// which is how most C libraries hand back a resource. The status says whether
+/// it worked; the slot carries the thing itself.
+type Mixed = { tag: UInt8, x: Float32, y: Float32, weight: Float64 }
+
+foreign "c" {
+  type Box
+
+  fn openBox symbol "pudu_ffi_cpp_open_box" (request: Int32, out box: owned Box by deleteBox) -> Int32
+  fn deleteBox symbol "pudu_ffi_cpp_box_delete" (box: Box) -> ()
+  fn readBox symbol "pudu_ffi_cpp_box_read" (box: Box) -> Int32
+
+  fn writeCount symbol "pudu_ffi_cpp_write_i32" (out count: Int32) -> ()
+  fn writeZero symbol "pudu_ffi_cpp_write_zero" (out count: Int32) -> ()
+  fn writeWeight symbol "pudu_ffi_cpp_write_f64" (out weight: Float64) -> ()
+  fn writeText symbol "pudu_ffi_cpp_write_text" (out label: Str) -> ()
+  fn writeNothing symbol "pudu_ffi_cpp_write_nothing" (out label: Str) -> ()
+  fn writeMixed symbol "pudu_ffi_cpp_write_mixed" (out shape: Mixed) -> ()
+  fn writeSum symbol "pudu_ffi_cpp_write_sum" (left: Int32, right: Int32, out total: Int32) -> Int32
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    // A scalar slot answers beside the result, which is unit here.
+    let counted = writeCount()
+    if counted[1] == 42i32 { held = held + 1 }
+
+    // A written zero is a value. Nothing distinguishes it from a cell the
+    // library left alone, so the declaration's assertion is what stands.
+    let zeroed = writeZero()
+    if zeroed[1] == 0i32 { held = held + 1 }
+
+    let weighed = writeWeight()
+    if weighed[1] == 2.5f64 { held = held + 1 }
+
+    // A pointer slot answers Option, because null is an absence a pointer
+    // really carries.
+    let labelled = writeText()
+    if labelled[1] == Some("héllø 🐧") { held = held + 1 }
+
+    let missing = writeNothing()
+    if missing[1] == None { held = held + 1 }
+
+    // A record slot is read at the platform's own offsets.
+    let written = writeMixed()
+    let shape = written[1]
+    if shape.tag == 7u8 { held = held + 1 }
+    if shape.x == 1.5f32 { held = held + 1 }
+    if shape.y == -2.25f32 { held = held + 1 }
+    if shape.weight == 0.125f64 { held = held + 1 }
+
+    // Ordinary arguments and a slot travel in one call, and the native result
+    // comes first.
+    let summed = writeSum(10i32, 4i32)
+    if summed[0] == 6i32 { held = held + 1 }
+    if summed[1] == 14i32 { held = held + 1 }
+
+    // A resource arriving through a slot is owned, and reading it works the
+    // way reading any handle does.
+    let opened = openBox(0i32)
+    if opened[0] == 0i32 { held = held + 1 }
+    match opened[1] {
+      case Some(box) => {
+        if readBox(box) == 21i32 { held = held + 1 }
+        deleteBox(box)
+      }
+      case None => {}
+    }
+
+    // A failing status may still have produced something that must be
+    // released. Losing it here would leak it.
+    let anyway = openBox(1i32)
+    if anyway[0] == 5i32 { held = held + 1 }
+    match anyway[1] {
+      case Some(box) => {
+        if readBox(box) == 22i32 { held = held + 1 }
+        deleteBox(box)
+      }
+      case None => {}
+    }
+
+    // And a failure with nothing to own says so rather than naming address
+    // zero.
+    let refused = openBox(9i32)
+    if refused[0] == 9i32 { held = held + 1 }
+    if refused[1] == None { held = held + 1 }
+  }
+  held
+}

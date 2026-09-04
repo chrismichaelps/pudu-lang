@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-04 · [[Foreign Call]], [[Eval Foreign]], [[Eval Install]], [[Foreign Ownership]], [[Type Check Foreign]], [[Name Resolution]], [[grammar/pudu]] · let a library hand a value back through storage the caller supplied. `sqlite3_open` writes the database it made through a pointer and answers with a status, which is what most C libraries do and what nothing here could describe: a handle only ever arrived as a result, so there was no value of its type to pass in. A parameter written `out` is one the library writes rather than reads — a native argument and not a Pudu one — and a function carrying any answers one tuple of its native result and each slot in source order. A pointer slot answers `Option`, null being an absence a pointer really carries; a scalar or record slot answers its own type, a written zero and an unwritten cell leaving the same bytes. A handle slot must be owned and name its release, and every resource one call produced — the result's and the slots' — is claimed in one transaction before any of it is visible. A release named on a slot is now recognised as a release: reading only the result's `by` left the program's own call going straight to the library while the claim stayed in the store, and teardown then freed what the library had already destroyed · risk HIGH · depth DEEP · issue #217
+
 - 2026-09-04 · [[Pudu FFI Bridge]], [[Pudu FFI C++ Fixture]], [[Foreign Call]] · let the bridge carry
   an argument the library writes through, which is how most C libraries hand back the resource they
   have just made. `sqlite3_open` takes the database it produces through such a slot, and nothing

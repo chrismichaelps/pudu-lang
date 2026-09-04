@@ -8,7 +8,6 @@ module Pudu.Frontend.Parser.Declaration.Foreign
   ( parseForeign
   ) where
 
-import Pudu.Frontend.Parser.Declaration.Function (parseParameters)
 import Pudu.Frontend.Parser.Type (parseTypeSyntax)
 import Pudu.Frontend.Parser.Expression.Recovery (mergedOrLeft)
 import Pudu.Frontend.Parser.Name (expectUpperIdentifier, expectValueIdentifier)
@@ -31,6 +30,7 @@ import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
   , ForeignFunction (..)
+  , ForeignParameter (..)
   , TypeSyntax (..)
   , Visibility
   )
@@ -122,7 +122,7 @@ parseForeignFunction = do
   name <- expectValueIdentifier "after fn"
   symbol <- parseSymbol
   _ <- expectSymbol "(" "before the parameter list"
-  parameters <- parseParameters []
+  parameters <- parseForeignParameters []
   _ <- expectSymbol ")" "after the parameter list"
   arrow <- matchSymbol "->"
   owned <- if arrow == Nothing then pure Nothing else matchWord "owned"
@@ -141,6 +141,70 @@ parseForeignFunction = do
               }
         )
     )
+
+{-| The parameter list of a foreign function.
+
+    Its own parser rather than the ordinary one because two things only make
+    sense here: a parameter the library writes rather than reads, and the
+    ownership of what it wrote. A foreign parameter also has no default, there
+    being no caller on this side to apply one. -}
+parseForeignParameters :: [Located ForeignParameter] -> Parser [Located ForeignParameter]
+parseForeignParameters reversed = do
+  kind <- peekKind
+  exhausted <- budgetExhausted
+  if isSymbol ")" kind || kind == EndOfFile || exhausted
+    then pure (reverse reversed)
+    else do
+      before <- peekToken
+      one <- parseForeignParameter
+      after <- peekToken
+      if before == after
+        then pure (reverse reversed)
+        else do
+          _ <- matchSymbol ","
+          parseForeignParameters (one : reversed)
+
+{-| One parameter: `out`? name `:` `owned`? type (`by` release)?
+
+    `out` before the name because that is the first thing a reader needs to
+    know about it — everything after reads the same either way, and a marker
+    after the type would be found only by someone already reading closely. -}
+parseForeignParameter :: Parser (Located ForeignParameter)
+parseForeignParameter = do
+  start <- peekToken
+  out <- matchWord "out"
+  name <- expectValueIdentifier "for the parameter's name"
+  _ <- expectSymbol ":" "after the parameter's name"
+  owned <- matchWord "owned"
+  written <- parseTypeSyntax
+  released <- parseSlotRelease owned (locatedSpan written)
+  pure
+    ( Located (mergedOrLeft (tokenSpan start) (locatedSpan written))
+        ForeignParameter
+          { foreignParameterName = name
+          , foreignParameterType = Just written
+          , foreignParameterOut = out /= Nothing
+          , foreignParameterOwned = owned /= Nothing
+          , foreignParameterReleasedBy = released
+          }
+    )
+
+{-| What releases what an owned slot received.
+
+    The same rule the result follows, for the same reason: ownership is written
+    in the declaration precisely so that a missing release is a diagnostic here
+    rather than a leak nobody sees. -}
+parseSlotRelease :: Maybe Token -> Span -> Parser (Maybe (Located Text))
+parseSlotRelease owned spanValue = case owned of
+  Nothing -> pure Nothing
+  Just _ -> do
+    keyword <- matchWord "by"
+    case keyword of
+      Just _ -> Just <$> expectValueIdentifier "after by"
+      Nothing -> do
+        emitParseError "E1060" spanValue "an owned slot names no release"
+          (Just "write owned T by release, naming the function that frees it")
+        pure Nothing
 
 {-| The exact native spelling, when its library does not use Pudu's naming
     convention. Keeping this separate lets a Raylib `MemAlloc` remain the
@@ -181,9 +245,9 @@ expectStringLiteral purpose = do
 
 {-| A word that means something only here.
 
-    `version`, `symbol`, `owned`, and `by` are ordinary names everywhere else in a
-    program, and reserving four common words for one declaration form would
-    cost every program that used them for anything. They are recognised in the
-    positions where nothing else may appear. -}
+    `version`, `symbol`, `out`, `owned`, and `by` are ordinary names everywhere
+    else in a program, and reserving five common words for one declaration form
+    would cost every program that used them for anything. They are recognised in
+    the positions where nothing else may appear. -}
 matchWord :: Text -> Parser (Maybe Token)
 matchWord word = matchKind (== Identifier word)
