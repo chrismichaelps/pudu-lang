@@ -5,6 +5,9 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[ADR-0019-getting-a-value-back-out-of-a-library]] — accepted: output slots return beside the
+  native result, pointer absence is explicit, and scalar initialization is an unsafe contract rather
+  than a zero-value guess.
 - [[ADR-0015-hash-contract-and-hash-map]] — coherent equality/hashing and deterministic persistent hash maps.
 - [[ADR-0018-calling-a-library-written-elsewhere]] — accepted: a foreign block declares a library once, ownership is named in the declaration, and calling one needs the capability the language already reserved.
 - [[ADR-0017-what-the-web-layer-refuses]] — accepted: framing ambiguity, header injection, cross-site changes, off-site redirects, escaping paths, and self-disclosure are refused by default.
