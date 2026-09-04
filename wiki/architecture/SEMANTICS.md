@@ -205,12 +205,13 @@ drop p:                     Available → Moved
 - Foreign integer sizes, calling convention, struct layout, exception behavior, allocation ownership, thread safety, and nullability are explicit in foreign declarations.
 - Foreign integers preserve their declared signedness over the complete supported width, including the upper half of `UInt64`. `Str` crosses as UTF-8 independent of process locale; invalid returned bytes are a typed runtime refusal. `()` is result-only, foreign functions have at most 32 arguments, and flat records have at most 32 scalar or text fields. Opaque handles remain top-level so their liveness lease and owned-result release cannot be bypassed. Every restriction is checked at the declaration.
 - A foreign block may declare opaque nominal handle types. An owned handle result names one same-block release function taking exactly that handle and returning unit; null results, use after release, and repeated release are runtime refusals before another foreign call begins.
-- [[ADR-0019-getting-a-value-back-out-of-a-library]] accepts output slots as the next foreign slice,
-  but they are not implemented yet. Their Pudu result is a tuple of native result followed by slots;
-  scalar and record slots assert total initialization, while null text and owned-handle pointers
-  become `None`. Direct and slot-owned products form one atomic claim, and buffers remain a separate
-  capacity and lifetime design. No current program may rely on this rule until the grammar notice is
-  replaced by implemented semantics and conformance evidence.
+- [[ADR-0019-getting-a-value-back-out-of-a-library]] defines implemented output slots. The Pudu
+  result is a tuple of native result followed by slots; scalar and record slots assert total
+  initialization, while null text and owned-handle pointers become `None`. Duplicate produced
+  addresses refuse the batch. Failure cleanup preserves existing claims and releases each fresh
+  address only when its handle identity and destructor are unambiguous. Native text-conversion
+  failures retain produced handle addresses for cleanup. These paths were changed without running
+  validation on 2026-09-04; full conformance and cancellation safety remain unproven.
 - C++ crosses only through an exported `extern "C"` surface. Mangled names, object layout, templates, and exceptions do not cross the boundary.
 - Undefined behavior is confined to violated unsafe contracts; safe Pudu code must not cause undefined behavior through any input.
 

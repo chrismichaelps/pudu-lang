@@ -717,6 +717,11 @@ dependencies are its own files plus the compiler it is built with, and that is t
   fixtures whose maximum residency is bounded independently of input size; a buffered convenience
   wrapper never serves as that evidence.
 
+## Self-hosting
+
+[[architecture/FFI-SELF-HOSTING]] records the compiler stages, library boundaries, and native
+primitives still needed. Existing module presence does not establish a complete self-hosting SDK.
+
 ## Deferred, with reasons
 
 - **`Std.Regex`.** A regular-expression engine is a second language inside a string literal. Before
@@ -733,7 +738,8 @@ dependencies are its own files plus the compiler it is built with, and that is t
   through a C-linkage wrapper, never through mangled symbols, object layout, templates, or escaping
   exceptions. [[ADR-0019 Getting a Value Back Out of a Library]] now settles output slots: the
   native result and slots form a tuple, only pointer-shaped null becomes absence, and owned outputs
-  join direct owned results in one atomic claim. That slice is accepted but not yet implemented.
+  join direct owned results in one atomic claim. That slice is implemented; ownership failure-path hardening is recorded in
+  [[2026-09-04-ffi-hardening]], with validation explicitly outstanding.
   What is still open is the distinct buffer contract, a general pointer model, borrowed foreign
   lifetimes, callbacks into this language, which thread a call runs on, and where a library comes
   from.

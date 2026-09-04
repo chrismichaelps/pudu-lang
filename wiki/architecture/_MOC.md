@@ -23,6 +23,8 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/PERFORMANCE|Performance Constitution]] — compiler throughput, low-level IR, optimization barriers, and benchmarks.
 - [[architecture/PACKAGES|Package System]] — manifests, lockfiles, resolution, cache security, and registry protocol.
 
+- [[architecture/FFI-SELF-HOSTING]] — remaining FFI ownership contracts and concrete self-hosting stages.
+
 ## Governance Dashboard
 
 - **Maturity:** EXPLORING — fewer than 20k lines, pre-release, one active implementation team.
