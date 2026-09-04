@@ -71,6 +71,8 @@ testForeignHandles = do
   successful <- runEntry "test-fixtures/stdlib/UsesForeignHandles.pudu"
   imported <- runEntry "test-fixtures/foreignmodule/Main.pudu"
   records <- runEntry "test-fixtures/stdlib/UsesForeignRecords.pudu"
+  text <- runEntry "test-fixtures/stdlib/UsesForeignText.pudu"
+  noText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignTextNone.pudu"
   refusedRecords <- codes "test-fixtures/foreignrecords/Main.pudu"
   beforeDouble <- cppDeleteCount
   doubleRelease <- runtimeCodes "test-fixtures/stdlib/RejectsForeignDoubleRelease.pudu"
@@ -114,6 +116,15 @@ testForeignHandles = do
         answer would be a fault. -}
     , counterexample "a nested record and an uncrossable field are refused where they are written"
         (refusedRecords === ["E3063", "E3063"])
+    {-| Text a library hands back arrives as text. It used to arrive as the
+        address it crossed as, while the checker had already called it a Str —
+        so a program printed a number where it had asked for a string, and
+        nothing said otherwise. It is copied at the boundary, which ends every
+        question about whose storage it was. -}
+    , counterexample "text a library returns arrives as text, not as its address"
+        (text === Just "5")
+    , counterexample "no text where text was declared is refused rather than read through"
+        (noText === ["E7024"])
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"

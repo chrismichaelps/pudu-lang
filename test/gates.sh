@@ -3,11 +3,17 @@
 #
 # A fresh checkout cannot be up to date, so CI's warning gate always compiles.
 # Locally it frequently does not: cabal answers "Up to date" after a source
-# changed, and a warning gate that did not compile reports a clean tree while
-# checking none of it. That has hidden real errors here more than once, so the
-# warning gate below forces recompilation. It costs a few minutes and buys an
-# answer worth having.
+# changed, and a gate that did not compile reports a clean tree while checking
+# none of it. That has hidden real errors here more than once.
+#
+# `--ghc-options=-fforce-recomp` does not fix it, and believing otherwise cost
+# an hour: that flag is GHC's, and when cabal decides the package is up to date
+# it never invokes GHC, so the flag is never seen. Only removing the build
+# products makes the next build real. That is what this does, which is why it
+# takes minutes rather than seconds — and why the answer is worth having.
 set -u
+
+BUILD_ROOT=$(find dist-newstyle/build -maxdepth 3 -type d -name 'pudu-*' 2>/dev/null | head -1)
 
 failed=0
 
@@ -25,8 +31,11 @@ run() {
 pudu_bin() { cabal list-bin pudu; }
 
 printf 'gates\n'
+if [ -n "${BUILD_ROOT}" ]; then
+  rm -rf "${BUILD_ROOT}/opt" "${BUILD_ROOT}/noopt" "${BUILD_ROOT}/x" "${BUILD_ROOT}/t"
+fi
 run 'no warnings, optimized' \
-  cabal build all --enable-optimization=2 --ghc-options='-Werror -fforce-recomp'
+  cabal build all --enable-optimization=2 --ghc-options='-Werror'
 run 'full suite, optimized' \
   cabal test all --enable-optimization=2 --test-show-details=direct
 run 'every committed Pudu file is formatted' \

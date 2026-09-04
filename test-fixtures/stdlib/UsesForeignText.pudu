@@ -1,0 +1,35 @@
+module UsesForeignText
+
+/// Text a library hands back.
+///
+/// What crosses is an address, and the bytes behind it belong to whoever
+/// returned them — a static table, a buffer reused on the next call, or
+/// something the caller was meant to free. It is copied at the boundary, so the
+/// text a program holds is its own from the moment it arrives and nothing it
+/// does later depends on what the library meant to happen to the original.
+foreign "c" {
+  fn borrowed symbol "pudu_ffi_cpp_text_static" (which: Int32) -> Str
+  fn describe symbol "strerror" (code: Int32) -> Str
+  fn measure symbol "strlen" (text: Str) -> Int64
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    // Text arrives as text rather than as the address it crossed as. Before
+    // this it arrived as a number, which the checker had already called a Str.
+    let fixed = borrowed(0i32)
+    if fixed == "borrowed from the library" { held = held + 1 }
+    if fixed.length() == 25 { held = held + 1 }
+
+    // Empty is a real answer and is not the absence of one.
+    if borrowed(1i32) == "" { held = held + 1 }
+
+    // The platform's own, which is what a binding usually reaches for.
+    if describe(2i32).length() > 0 { held = held + 1 }
+
+    // And it is a Pudu string, so it goes back out again the ordinary way.
+    if measure(fixed) == 25i64 { held = held + 1 }
+  }
+  held
+}

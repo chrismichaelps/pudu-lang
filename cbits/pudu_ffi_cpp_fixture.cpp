@@ -72,4 +72,10 @@ extern "C" Span pudu_ffi_cpp_span_make(double start, std::int32_t count) {
   return Span{start, count};
 }
 
+extern "C" const char *pudu_ffi_cpp_text_static(std::int32_t which) {
+  return which == 0 ? "borrowed from the library" : "";
+}
+
+extern "C" const char *pudu_ffi_cpp_text_none() { return nullptr; }
+
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }
