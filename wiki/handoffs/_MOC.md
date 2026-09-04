@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-04-foreign-out-slots]] — issue #212 design boundary for status-plus-output native calls,
+  nullable pointer outputs, total scalar slots, and the separate buffer question.
 - [[2026-09-04-type-as-value]] — issue #214 repair for type-only symbols accepted as runtime
   values, preserving record and variant constructor paths.
 - [[2026-09-04-crossing-coverage]] — exact ABI coverage for every currently admitted scalar and

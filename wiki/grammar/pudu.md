@@ -355,6 +355,20 @@ foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
                    ("->", "owned"?, type, ("by", identifier)?)? ;
 ```
 
+[[ADR-0019-getting-a-value-back-out-of-a-library]] accepts the next extension to this grammar:
+
+```ebnf
+foreign_parameter = parameter
+                  | "out", identifier, ":", ("owned"?, type, ("by", identifier)?) ;
+```
+
+It is **not admitted by the parser yet**. Once implemented, an output parameter will occupy a native
+argument position but not a Pudu call argument. A function with any output parameters will answer a
+tuple containing the declared native result first and each output in source order. Scalar and record
+outputs are total unsafe assertions; text and owned-handle pointer outputs become `Option` because
+null, unlike a zero scalar, is an actual absence representation. The implementation issue must
+replace this notice with the complete normative production and diagnostics in the same change.
+
 - `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
 - A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
 - `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.

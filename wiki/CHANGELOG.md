@@ -5,6 +5,36 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-04 · [[Pudu FFI Bridge]], [[Pudu FFI C++ Fixture]], [[Foreign Call]] · let the bridge carry
+  an argument the library writes through, which is how most C libraries hand back the resource they
+  have just made. `sqlite3_open` takes the database it produces through such a slot, and nothing
+  below the language could describe one. The bridge now owns that storage for the call, passes its
+  address, and reads back what was left there; a declaration with no slots passes no slot table and
+  crosses exactly as before. Storage is zeroed first, so a pointer the library never wrote reads back
+  null, which is the absence a pointer can carry — while a scalar it never wrote reads back zero,
+  which is a value, and no portable observation separates that from a written zero. Storage the
+  bridge lays out now carries the alignment its widest member needs rather than an array of bytes
+  promising one, which a returned record with a floating field was relying on the compiler to
+  supply. The conformance surface proves a resource arriving through a slot, a failing status that
+  still yields a resource needing release, an unwritten pointer becoming nothing, a written zero, a
+  record read at the platform's own offsets, and ordinary arguments travelling beside slots. The
+  language above this cannot yet write `out`, so no program changes · risk HIGH · depth DEEP ·
+  issue #212
+
+- 2026-09-04 · [[ADR-0019 Getting a Value Back Out of a Library]], [[grammar/pudu]],
+  [[architecture/SEMANTICS]], [[architecture/STDLIB]] · decide how a C library gives back a value
+  through caller-supplied storage. A foreign `out` slot will be a native argument but not a Pudu
+  call argument, and a call with slots will answer one tuple containing its native result first and
+  each slot in source order. Scalar and record slots assert that the library always writes them;
+  their zero value cannot reveal whether a write occurred. Text and opaque-handle slots use null as
+  real absence and therefore answer `Option`, while every non-null owned direct result and slot joins
+  one atomic claim before exposure. SQLite's fallible `sqlite3_close` cannot masquerade as the
+  current unit destructor, so the real integration will use an honest C binding surface; it will
+  prove both a successful open and a failed open that still returns a handle requiring destruction.
+  Buffers stay separate because capacity, initialized length, mutation, and borrowing are contracts
+  an output slot does not carry. The design is accepted and independently reviewed; implementation
+  and the 0.7.0-draft semantic increment remain pending · risk HIGH · depth DEEP · issue #212
+
 - 2026-09-04 · [[Name Resolution]], [[Resolve Context]], [[Type Check Rule]] · refuse a type where
   a runtime value was written. Value resolution deliberately fell through to the type namespace so
   constructor paths could begin with their declaring type, but the same fallback admitted bare and

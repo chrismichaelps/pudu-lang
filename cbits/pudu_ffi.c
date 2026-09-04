@@ -44,15 +44,24 @@ enum pudu_kind {
 #define PUDU_MAX_ARGUMENTS 32
 #define PUDU_MAX_FIELDS 32
 
-/* One argument's fields, when the argument is a record.
+/* Storage for one argument this call lays out itself: a record crossing by
+ * value, or the cell behind an output slot.
  *
- * Deliberately one level deep. Every colour, point, and rectangle a library
- * hands about is a flat record of scalars, and admitting nesting would mean a
- * recursive description crossing this boundary for a case that is rare and
- * whose failure is silent. A nested record is refused where it is declared. */
-struct pudu_fields {
-  int32_t start;
-  int32_t count;
+ * A union rather than a byte array because what goes in is read by the platform
+ * at the platform's own offsets. A field of eight bytes must sit at an address
+ * the platform accepts for eight bytes, and an array of bytes promises an
+ * alignment of one — true storage today only because the compiler happened to
+ * place it well. The widest member states the requirement instead of relying on
+ * that.
+ *
+ * A record arrives already flattened to its leaf scalars, in declaration order,
+ * which is the same sequence the platform derives for the nesting itself. */
+union pudu_storage {
+  unsigned char bytes[PUDU_MAX_FIELDS * 16];
+  long double widest;
+  void *pointer;
+  int64_t integer;
+  double floating;
 };
 
 void *pudu_ffi_open(const char *path) { return dlopen(path, RTLD_LAZY | RTLD_LOCAL); }
@@ -216,12 +225,21 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
  *
  * Returns 0 on success and a non-zero code when the signature could not be
  * assembled, so a refusal reaches the caller as a value rather than as a
- * crash — the one failure mode here that is recoverable. */
+ * crash — the one failure mode here that is recoverable.
+ *
+ * An argument is an output slot when `slot_kinds` says so, and then the kind at
+ * that position describes what the library writes rather than what the caller
+ * sends. The native argument is the address of storage this frame owns; the
+ * caller supplies no value for it, and what the library left there is read back
+ * into the slot arrays before returning. `slot_kinds` may be null, which is a
+ * call with no slots at all. */
 int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
                   const double *doubles, void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
                   const int64_t *field_integers, const double *field_doubles,
-                  void *const *field_pointers, uint8_t result_kind, int32_t result_field_count,
+                  void *const *field_pointers, const uint8_t *slot_kinds, int64_t *slot_integers,
+                  double *slot_doubles, int64_t *slot_field_integers, double *slot_field_doubles,
+                  uint8_t result_kind, int32_t result_field_count,
                   const uint8_t *result_field_kinds,
                   int64_t *result_integer, double *result_double, int64_t *result_field_integers,
                   double *result_field_doubles) {
@@ -238,9 +256,60 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
   /* One description and one buffer per struct argument, alive for the call. */
   ffi_type struct_types[PUDU_MAX_ARGUMENTS];
   ffi_type *struct_elements[PUDU_MAX_ARGUMENTS][PUDU_MAX_FIELDS + 1];
-  unsigned char struct_storage[PUDU_MAX_ARGUMENTS][PUDU_MAX_FIELDS * 16];
+  union pudu_storage struct_storage[PUDU_MAX_ARGUMENTS];
+  /* Where each field of a record slot sits, kept because a slot is read after
+   * the call and the platform's answer must be the same one used to lay it
+   * out. */
+  size_t slot_offsets[PUDU_MAX_ARGUMENTS][PUDU_MAX_FIELDS];
 
   for (int32_t index = 0; index < arity; index++) {
+    uint8_t slot_kind = slot_kinds == NULL ? PUDU_VOID : slot_kinds[index];
+    if (slot_kind != PUDU_VOID) {
+      if (slot_integers == NULL || slot_doubles == NULL) {
+        return 6;
+      }
+      memset(&struct_storage[index], 0, sizeof(struct_storage[index]));
+      if (slot_kind == PUDU_STRUCT) {
+        int32_t count = field_counts[index];
+        int32_t start = field_starts[index];
+        if (count <= 0 || count > PUDU_MAX_FIELDS || start < 0 || slot_field_integers == NULL ||
+            slot_field_doubles == NULL) {
+          return 6;
+        }
+        for (int32_t field = 0; field < count; field++) {
+          ffi_type *member = type_for(field_kinds[start + field]);
+          if (member == NULL || field_kinds[start + field] == PUDU_VOID ||
+              field_kinds[start + field] == PUDU_STRUCT) {
+            return 6;
+          }
+          struct_elements[index][field] = member;
+        }
+        struct_elements[index][count] = NULL;
+        struct_types[index].size = 0;
+        struct_types[index].alignment = 0;
+        struct_types[index].type = FFI_TYPE_STRUCT;
+        struct_types[index].elements = struct_elements[index];
+        if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, &struct_types[index], slot_offsets[index]) !=
+            FFI_OK) {
+          return 5;
+        }
+        if (struct_types[index].size > sizeof(struct_storage[index].bytes)) {
+          return 6;
+        }
+      } else {
+        ffi_type *written = type_for(slot_kind);
+        if (written == NULL || written->size > sizeof(struct_storage[index].bytes)) {
+          return 6;
+        }
+      }
+      /* The library is handed the address of that storage, so the argument
+       * itself is a pointer and the pointer is what libffi is given a pointer
+       * to. */
+      argument_types[index] = &ffi_type_pointer;
+      slots[index].pointer = struct_storage[index].bytes;
+      argument_values[index] = &slots[index];
+      continue;
+    }
     uint8_t kind = kinds[index];
     if (kind == PUDU_STRUCT) {
       int32_t count = field_counts[index];
@@ -266,19 +335,19 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
       if (ffi_get_struct_offsets(FFI_DEFAULT_ABI, &struct_types[index], offsets) != FFI_OK) {
         return 5;
       }
-      if (struct_types[index].size > sizeof(struct_storage[index])) {
+      if (struct_types[index].size > sizeof(struct_storage[index].bytes)) {
         return 3;
       }
-      memset(struct_storage[index], 0, struct_types[index].size);
+      memset(&struct_storage[index], 0, sizeof(struct_storage[index]));
       for (int32_t field = 0; field < count; field++) {
-        if (place_field(struct_storage[index], offsets[field], field_kinds[start + field],
+        if (place_field(struct_storage[index].bytes, offsets[field], field_kinds[start + field],
                         field_integers[start + field], field_doubles[start + field],
                         field_pointers[start + field]) != 0) {
           return 3;
         }
       }
       argument_types[index] = &struct_types[index];
-      argument_values[index] = struct_storage[index];
+      argument_values[index] = struct_storage[index].bytes;
       continue;
     }
     ffi_type *type = type_for(kind);
@@ -387,6 +456,47 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
   }
 
   ffi_call(&call, FFI_FN(symbol), &produced, argument_values);
+
+  /* What the library left in each slot, read before the result so that a call
+   * answering through both is read once, here, in one place. Storage was zeroed
+   * before the call, so a pointer the library never wrote reads back as null —
+   * which is the absence a pointer can carry. A scalar it never wrote reads
+   * back as zero, and zero is a value: the declaration asserted the write, and
+   * nothing here can check that assertion. */
+  if (slot_kinds != NULL) {
+    for (int32_t index = 0; index < arity; index++) {
+      uint8_t slot_kind = slot_kinds[index];
+      if (slot_kind == PUDU_VOID) {
+        /* An ordinary argument answers with nothing, written rather than left
+         * as it was found, so every position in the array means something. */
+        if (slot_integers != NULL) {
+          slot_integers[index] = 0;
+        }
+        if (slot_doubles != NULL) {
+          slot_doubles[index] = 0.0;
+        }
+        continue;
+      }
+      if (slot_kind == PUDU_STRUCT) {
+        int32_t start = field_starts[index];
+        int32_t count = field_counts[index];
+        for (int32_t field = 0; field < count; field++) {
+          if (take_field(struct_storage[index].bytes, slot_offsets[index][field],
+                         field_kinds[start + field], &slot_field_integers[start + field],
+                         &slot_field_doubles[start + field]) != 0) {
+            return 6;
+          }
+        }
+        slot_integers[index] = 0;
+        slot_doubles[index] = 0.0;
+        continue;
+      }
+      if (take_field(struct_storage[index].bytes, 0, slot_kind, &slot_integers[index],
+                     &slot_doubles[index]) != 0) {
+        return 6;
+      }
+    }
+  }
 
   if (result_kind == PUDU_STRUCT) {
     for (int32_t field = 0; field < result_field_count; field++) {

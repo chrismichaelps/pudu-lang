@@ -54,6 +54,17 @@ extern "C" Labelled pudu_ffi_cpp_labelled(const char *label, uint64_t count);
 extern "C" uint64_t pudu_ffi_cpp_labelled_measure(Labelled value);
 extern "C" Labelled pudu_ffi_cpp_labelled_none(void);
 extern "C" const char *pudu_ffi_cpp_invalid_utf8(void);
+extern "C" float pudu_ffi_cpp_frame_sum(Frame frame);
+extern "C" Frame pudu_ffi_cpp_frame_make(float base);
+extern "C" double pudu_ffi_cpp_mixed_sum(Mixed mixed);
+extern "C" int32_t pudu_ffi_cpp_open_box(int32_t request, void **out);
+extern "C" void pudu_ffi_cpp_write_i32(int32_t *out);
+extern "C" void pudu_ffi_cpp_write_zero(int32_t *out);
+extern "C" void pudu_ffi_cpp_write_f64(double *out);
+extern "C" void pudu_ffi_cpp_write_text(const char **out);
+extern "C" void pudu_ffi_cpp_write_nothing(const char **out);
+extern "C" void pudu_ffi_cpp_write_mixed(Mixed *out);
+extern "C" int32_t pudu_ffi_cpp_write_sum(int32_t left, int32_t right, int32_t *out);
 ```
 
 ### Governance
@@ -67,6 +78,11 @@ extern "C" const char *pudu_ffi_cpp_invalid_utf8(void);
 - Allocation uses nothrow form so no C++ exception can cross the boundary.
 - Scalar identity and flat text-record symbols exercise the exact C ABI classes at their extrema;
   malformed returned bytes exist only to prove that invalid UTF-8 becomes a Pudu runtime diagnostic.
+- The writing symbols exist for output slots: a resource produced through a pointer the caller
+  supplied, a status that fails while still producing one that must be released, a pointer left
+  unwritten, a zero written on purpose, and a record written at the platform's own offsets. The
+  failing-with-a-resource case is the one a program cannot be allowed to miss, because what it made
+  leaks when it does.
 
 ## Grill Log
 

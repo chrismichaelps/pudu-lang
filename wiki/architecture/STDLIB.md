@@ -731,8 +731,12 @@ dependencies are its own files plus the compiler it is built with, and that is t
   own types. Opaque owned handles now cross as nominal values with one declared release function;
   they are not general pointers and cannot be inspected or used for arithmetic. C++ is supported
   through a C-linkage wrapper, never through mangled symbols, object layout, templates, or escaping
-  exceptions. What is still open is a general pointer model, borrowed foreign lifetimes, callbacks
-  into this language, which thread a call runs on, and where a library comes from.
+  exceptions. [[ADR-0019 Getting a Value Back Out of a Library]] now settles output slots: the
+  native result and slots form a tuple, only pointer-shaped null becomes absence, and owned outputs
+  join direct owned results in one atomic claim. That slice is accepted but not yet implemented.
+  What is still open is the distinct buffer contract, a general pointer model, borrowed foreign
+  lifetimes, callbacks into this language, which thread a call runs on, and where a library comes
+  from.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.

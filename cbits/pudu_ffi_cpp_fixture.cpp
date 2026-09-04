@@ -147,4 +147,47 @@ extern "C" double pudu_ffi_cpp_mixed_sum(Mixed mixed) {
   return mixed.tag + mixed.point.x + mixed.point.y + mixed.weight;
 }
 
+/* Writing through a pointer the caller supplied, which is how most C libraries
+ * hand back the resource they just made. The status is the result and the thing
+ * itself arrives in the slot, so both have to survive the crossing.
+ *
+ * The three names a library gives this shape: it worked and here it is, it
+ * failed but you still own what it made, and it failed with nothing to own. The
+ * middle one is the case a program cannot be allowed to miss, because the
+ * resource leaks when it does. */
+extern "C" std::int32_t pudu_ffi_cpp_open_box(std::int32_t request, void **out) {
+  if (request == 0) {
+    *out = pudu_ffi_cpp_box_new(21);
+    return 0;
+  }
+  if (request == 1) {
+    *out = pudu_ffi_cpp_box_new(22);
+    return 5;
+  }
+  return 9;
+}
+
+extern "C" void pudu_ffi_cpp_write_i32(std::int32_t *out) { *out = 42; }
+
+/* Zero written on purpose. Nothing observable separates this from a library
+ * that wrote nothing at all, which is why a scalar slot is an assertion the
+ * declaration makes rather than a fact the boundary checks. */
+extern "C" void pudu_ffi_cpp_write_zero(std::int32_t *out) { *out = 0; }
+
+extern "C" void pudu_ffi_cpp_write_f64(double *out) { *out = 2.5; }
+
+extern "C" void pudu_ffi_cpp_write_text(const char **out) { *out = u8"héllø 🐧"; }
+
+extern "C" void pudu_ffi_cpp_write_nothing(const char **) {}
+
+extern "C" void pudu_ffi_cpp_write_mixed(Mixed *out) {
+  *out = Mixed{7, {1.5f, -2.25f}, 0.125};
+}
+
+extern "C" std::int32_t pudu_ffi_cpp_write_sum(std::int32_t left, std::int32_t right,
+                                               std::int32_t *out) {
+  *out = left + right;
+  return left - right;
+}
+
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }
