@@ -14,19 +14,23 @@ module Pudu.Foreign.Call
   , findSymbol
   , callSymbol
   , CrossedValue (..)
+  , ForeignCallFailure (..)
   , kindCode
   ) where
 
 import Control.Concurrent.MVar (MVar, modifyMVar, newMVar)
+import qualified Data.ByteString as ByteString
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int32, Int64)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Foreign.C.String (CString, newCString, peekCString, withCString)
+import qualified Data.Text.Encoding as TextEncoding
+import Foreign.C.String (CString, peekCString, withCString)
 import Foreign.C.Types (CChar (..), CDouble (..), CInt (..))
-import Foreign.Marshal.Alloc (alloca, free)
+import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Array (allocaArray, peekArray, withArray)
+import Foreign.Marshal.Utils (withMany)
 import Foreign.Ptr (Ptr, intPtrToPtr, nullPtr)
 import Foreign.Storable (peek)
 import Data.Word (Word8)
@@ -49,6 +53,7 @@ foreign import ccall safe "pudu_ffi_call"
     -> Ptr Word8
     -> Ptr Int64
     -> Ptr CDouble
+    -> Ptr (Ptr CChar)
     -> Word8
     -> CInt
     -> Ptr Word8
@@ -208,6 +213,15 @@ data CrossedValue
   | CrossedNoText
   deriving stock (Eq, Show)
 
+{-| A native call that could not produce the value its declaration promised.
+
+    Signature assembly remains distinct from text validation so the evaluator
+    can tell a missing library contract from bytes that are not a Pudu string. -}
+data ForeignCallFailure
+  = CallAssemblyFailure !Text
+  | InvalidReturnedText
+  deriving stock (Eq, Show)
+
 {-| The code the other side reads for a kind.
 
     Shared with the C file and not to be reordered: one side knows the
@@ -237,71 +251,63 @@ kindCode crossing = case crossing of
     after, which is what "borrowed for the call" means: a library that keeps the
     pointer is a library whose declaration is wrong, and no arrangement here can
     detect that. -}
-callSymbol :: Ptr () -> [(Crossing, CrossedValue)] -> Crossing -> IO (Either Text CrossedValue)
-callSymbol symbol arguments result = do
-  strings <- mapM allocate arguments
-  let kinds = map (kindCode . fst) arguments
-      integers = map integerOf arguments
-      doubles = map doubleOf arguments
-      {-| Each argument's fields laid end to end, with the slice belonging to
-          each recorded beside it. One buffer rather than one per argument,
-          because the other side reads a span and the count of it. -}
-      flattened = map (uncurry recordFields) arguments
-      starts = scanl (+) 0 (map (fromIntegral . length) flattened) :: [Int32]
-      sliceStart = [if null slice then -1 else start | (slice, start) <- zip flattened starts]
-      sliceCount = map (fromIntegral . length) flattened :: [Int32]
-      fields = concat flattened
-      fieldKinds = map (kindCode . fst) fields
-      fieldIntegers = map integerOf fields
-      fieldDoubles = map doubleOf fields
-      resultKinds = resultFieldKinds result
-      resultCount = length resultKinds
-  outcome <-
-    withArray kinds $ \kindArray ->
-      withArray integers $ \integerArray ->
-        withArray (map CDouble doubles) $ \doubleArray ->
-          withArray strings $ \stringArray ->
-            withArray sliceStart $ \startArray ->
-              withArray sliceCount $ \countArray ->
-                withArray (orOne 0 fieldKinds) $ \fieldKindArray ->
-                  withArray (orOne 0 fieldIntegers) $ \fieldIntegerArray ->
-                    withArray (orOne 0 (map CDouble fieldDoubles)) $ \fieldDoubleArray ->
-                      withArray (orOne 0 resultKinds) $ \resultKindArray ->
-                        alloca $ \producedInteger ->
-                          alloca $ \producedDouble ->
-                            allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
-                              allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
-                                code <-
-                                  c_call symbol (fromIntegral (length arguments)) kindArray
-                                    integerArray doubleArray stringArray startArray countArray
-                                    fieldKindArray fieldIntegerArray fieldDoubleArray
-                                    (kindCode result) (fromIntegral resultCount) resultKindArray
-                                    producedInteger producedDouble producedFieldIntegers
-                                    producedFieldDoubles
-                                if code /= 0
-                                  then pure (Left (refusal code))
-                                  else case result of
-                                    RecordCrossing name declared -> do
-                                      producedIntegers <- peekArray resultCount producedFieldIntegers
-                                      producedDoubles <- peekArray resultCount producedFieldDoubles
-                                      pure
-                                        ( Right
-                                            ( CrossedRecord name
-                                                [ (label, received fieldCrossing asInteger asDouble)
-                                                | ((label, fieldCrossing), asInteger, CDouble asDouble) <-
-                                                    zip3 declared producedIntegers producedDoubles
-                                                ]
-                                            )
-                                        )
-                                    TextCrossing -> do
-                                      asInteger <- peek producedInteger
-                                      receivedText asInteger
-                                    _ -> do
-                                      asInteger <- peek producedInteger
-                                      CDouble asDouble <- peek producedDouble
-                                      pure (Right (received result asInteger asDouble))
-  mapM_ freeString strings
-  pure outcome
+callSymbol
+  :: Ptr ()
+  -> [(Crossing, CrossedValue)]
+  -> Crossing
+  -> IO (Either ForeignCallFailure CrossedValue)
+callSymbol symbol arguments result =
+  withMany ByteString.useAsCString (map encodedText arguments) $ \strings ->
+    withMany ByteString.useAsCString (map encodedText fields) $ \fieldStrings -> do
+      let kinds = map (kindCode . fst) arguments
+          integers = map integerOf arguments
+          doubles = map doubleOf arguments
+          {-| Each argument's fields laid end to end, with the slice belonging to
+              each recorded beside it. One buffer rather than one per argument,
+              because the other side reads a span and the count of it. -}
+          starts = scanl (+) 0 (map (fromIntegral . length) flattened) :: [Int32]
+          sliceStart = [if null slice then -1 else start | (slice, start) <- zip flattened starts]
+          sliceCount = map (fromIntegral . length) flattened :: [Int32]
+          fieldKinds = map (kindCode . fst) fields
+          fieldIntegers = map integerOf fields
+          fieldDoubles = map doubleOf fields
+          resultKinds = resultFieldKinds result
+          resultCount = length resultKinds
+      withArray kinds $ \kindArray ->
+        withArray integers $ \integerArray ->
+          withArray (map CDouble doubles) $ \doubleArray ->
+            withArray strings $ \stringArray ->
+              withArray sliceStart $ \startArray ->
+                withArray sliceCount $ \countArray ->
+                  withArray (orOne 0 fieldKinds) $ \fieldKindArray ->
+                    withArray (orOne 0 fieldIntegers) $ \fieldIntegerArray ->
+                      withArray (orOne 0 (map CDouble fieldDoubles)) $ \fieldDoubleArray ->
+                        withArray (orOne nullPtr fieldStrings) $ \fieldStringArray ->
+                          withArray (orOne 0 resultKinds) $ \resultKindArray ->
+                            alloca $ \producedInteger ->
+                              alloca $ \producedDouble ->
+                                allocaArray (max 1 resultCount) $ \producedFieldIntegers ->
+                                  allocaArray (max 1 resultCount) $ \producedFieldDoubles -> do
+                                    code <-
+                                      c_call symbol (fromIntegral (length arguments)) kindArray
+                                        integerArray doubleArray stringArray startArray countArray
+                                        fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
+                                        (kindCode result) (fromIntegral resultCount) resultKindArray
+                                        producedInteger producedDouble producedFieldIntegers
+                                        producedFieldDoubles
+                                    if code /= 0
+                                      then pure (Left (refusal code))
+                                      else case result of
+                                        RecordCrossing name declared -> do
+                                          producedIntegers <- peekArray resultCount producedFieldIntegers
+                                          producedDoubles <- peekArray resultCount producedFieldDoubles
+                                          crossed <- mapM receiveField
+                                            (zip3 declared producedIntegers producedDoubles)
+                                          pure (CrossedRecord name <$> sequence crossed)
+                                        _ -> do
+                                          asInteger <- peek producedInteger
+                                          CDouble asDouble <- peek producedDouble
+                                          received result asInteger asDouble
  where
   {-| An empty array still needs an address to pass, so an unused one carries a
       single filler the other side never reads: every count that would reach it
@@ -309,10 +315,11 @@ callSymbol symbol arguments result = do
       `withArray` writes what it is given. -}
   orOne filler values = if null values then [filler] else values
 
-  allocate (crossing, value) = case (crossing, value) of
-    (TextCrossing, CrossedText written) -> newCString (Text.unpack written)
-    _ -> pure nullPtr
-  freeString pointer = if pointer == nullPtr then pure () else free pointer
+  flattened = map (uncurry recordFields) arguments
+  fields = concat flattened
+  encodedText (_, value) = case value of
+    CrossedText written -> TextEncoding.encodeUtf8 written
+    _ -> ByteString.empty
   integerOf (_, value) = case value of
     CrossedInteger held -> held
     CrossedHandle _ held -> held
@@ -321,11 +328,19 @@ callSymbol symbol arguments result = do
     CrossedDouble held -> held
     _ -> 0
 
-received :: Crossing -> Int64 -> Double -> CrossedValue
+received :: Crossing -> Int64 -> Double -> IO (Either ForeignCallFailure CrossedValue)
 received crossing asInteger asDouble = case crossing of
-  FloatingCrossing _ -> CrossedDouble asDouble
-  HandleCrossing name -> CrossedHandle name asInteger
-  _ -> CrossedInteger asInteger
+  FloatingCrossing _ -> pure (Right (CrossedDouble asDouble))
+  HandleCrossing name -> pure (Right (CrossedHandle name asInteger))
+  TextCrossing -> receivedText asInteger
+  _ -> pure (Right (CrossedInteger asInteger))
+
+receiveField
+  :: ((Text, Crossing), Int64, CDouble)
+  -> IO (Either ForeignCallFailure (Text, CrossedValue))
+receiveField ((label, crossing), asInteger, CDouble asDouble) = do
+  value <- received crossing asInteger asDouble
+  pure ((,) label <$> value)
 
 {-| Text a library handed back, copied out of its own storage.
 
@@ -339,12 +354,14 @@ received crossing asInteger asDouble = case crossing of
     A nought address is not text. It is refused rather than read through, and
     rather than quietly becoming the empty string, which is a different answer
     from "there was none". -}
-receivedText :: Int64 -> IO (Either Text CrossedValue)
+receivedText :: Int64 -> IO (Either ForeignCallFailure CrossedValue)
 receivedText address
   | address == 0 = pure (Right CrossedNoText)
   | otherwise = do
-      copied <- peekCString (intPtrToPtr (fromIntegral address))
-      pure (Right (CrossedText (Text.pack copied)))
+      copied <- ByteString.packCString (intPtrToPtr (fromIntegral address))
+      pure $ case TextEncoding.decodeUtf8' copied of
+        Left _ -> Left InvalidReturnedText
+        Right decoded -> Right (CrossedText decoded)
 
 {-| The fields of a record argument, flattened in declaration order.
 
@@ -365,8 +382,8 @@ resultFieldKinds crossing = case crossing of
   RecordCrossing _ declared -> [kindCode fieldCrossing | (_, fieldCrossing) <- declared]
   _ -> []
 
-refusal :: CInt -> Text
-refusal code = case code of
+refusal :: CInt -> ForeignCallFailure
+refusal code = CallAssemblyFailure $ case code of
   1 -> "the function was not found in the library"
   2 -> "too many arguments for a foreign call"
   3 -> "an argument's type cannot cross"

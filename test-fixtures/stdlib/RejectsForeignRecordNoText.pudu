@@ -1,0 +1,11 @@
+module RejectsForeignRecordNoText
+
+type Labelled = { label: Str, count: UInt64 }
+
+foreign "c" {
+  fn missing symbol "pudu_ffi_cpp_labelled_none" () -> Labelled
+}
+
+export fn main() -> Int {
+  unsafe(foreign) { missing().label.length() }
+}

@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstring>
 #include <new>
 
 namespace {
@@ -77,5 +78,38 @@ extern "C" const char *pudu_ffi_cpp_text_static(std::int32_t which) {
 }
 
 extern "C" const char *pudu_ffi_cpp_text_none() { return nullptr; }
+
+extern "C" std::int8_t pudu_ffi_cpp_i8(std::int8_t value) { return value; }
+extern "C" std::int16_t pudu_ffi_cpp_i16(std::int16_t value) { return value; }
+extern "C" std::int32_t pudu_ffi_cpp_i32(std::int32_t value) { return value; }
+extern "C" std::int64_t pudu_ffi_cpp_i64(std::int64_t value) { return value; }
+extern "C" std::uint8_t pudu_ffi_cpp_u8(std::uint8_t value) { return value; }
+extern "C" std::uint16_t pudu_ffi_cpp_u16(std::uint16_t value) { return value; }
+extern "C" std::uint32_t pudu_ffi_cpp_u32(std::uint32_t value) { return value; }
+extern "C" std::uint64_t pudu_ffi_cpp_u64(std::uint64_t value) { return value; }
+extern "C" float pudu_ffi_cpp_f32(float value) { return value; }
+extern "C" double pudu_ffi_cpp_f64(double value) { return value; }
+extern "C" bool pudu_ffi_cpp_bool(bool value) { return !value; }
+extern "C" void pudu_ffi_cpp_void() {}
+
+struct Labelled {
+  const char *label;
+  std::uint64_t count;
+};
+
+extern "C" Labelled pudu_ffi_cpp_labelled(const char *label, std::uint64_t count) {
+  return Labelled{label, count};
+}
+
+extern "C" Labelled pudu_ffi_cpp_labelled_none() { return Labelled{nullptr, 1}; }
+
+extern "C" std::uint64_t pudu_ffi_cpp_labelled_measure(Labelled value) {
+  return std::strcmp(value.label, u8"héllø 🐧") == 0 ? value.count : 0;
+}
+
+extern "C" const char *pudu_ffi_cpp_invalid_utf8() {
+  static const char invalid[] = {static_cast<char>(0xc3), '(', '\0'};
+  return invalid;
+}
 
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }

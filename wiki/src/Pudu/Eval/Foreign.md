@@ -31,6 +31,9 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
   is in somebody else's hands and a mistake stops being a diagnostic and becomes a corrupted stack.
 - **An integer that does not fit its declared width is refused rather than wrapped.** A value that
   does not fit would arrive as a different value and the program would continue with it.
+- **A returned integer is interpreted with the declared signedness.** The native carrier is a
+  64-bit bit pattern, so `UInt64` values above `Int64` maximum are widened as unsigned before a Pudu
+  integer is built. The same rule applies to fields in a returned record.
 - **Text carrying a nought is refused.** The other side reads to the first nought, so it would see
   less than the text says — and text shortened without anybody being told is how a check on the
   whole of it is passed by only part of it.
@@ -66,6 +69,9 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 - **Q:** Check liveness and then call after dropping the ownership lock? **A:** No. _Rationale:_ a
   concurrent release could free the address in that gap. _Rejected:_ membership checks without a
   lease spanning the call.
+- **Q:** Turn invalid returned UTF-8 into replacement characters? **A:** No. _Rationale:_ replacement
+  silently changes data at the least trustworthy boundary. _Rejected:_ lossy decoding; host
+  exceptions escaping the evaluator.
 
 ## Referenced by
 

@@ -28,8 +28,13 @@ void *pudu_ffi_symbol(void *handle, const char *name);
 const char *pudu_ffi_error(void);
 int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
                   const int64_t *integers, const double *doubles,
-                  void *const *pointers, uint8_t result_kind,
-                  int64_t *result_integer, double *result_double);
+                  void *const *pointers, const int32_t *field_starts,
+                  const int32_t *field_counts, const uint8_t *field_kinds,
+                  const int64_t *field_integers, const double *field_doubles,
+                  void *const *field_pointers, uint8_t result_kind,
+                  int32_t result_field_count, const uint8_t *result_field_kinds,
+                  int64_t *result_integer, double *result_double,
+                  int64_t *result_field_integers, double *result_field_doubles);
 ```
 
 ### Governance
@@ -40,6 +45,10 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 - The bridge allocates or frees no foreign handle. It only carries an address the library owns.
 - Invalid kinds, arity, or signature preparation return a bounded status code before calling the
   symbol.
+- Text pointers in direct and record arguments borrow UTF-8 storage owned by the Haskell call frame.
+  Integer slots are bit carriers; signedness is recovered above the bridge from the kind code.
+- The fixed 32-argument and 32-field capacities are mirrored as checker limits, so these guards are
+  defence in depth rather than reachable behavior for a checked declaration.
 
 ### Linkage
 
@@ -54,6 +63,9 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 - **Q:** Free a returned pointer here? **A:** No. _Rationale:_ only the declaration names the
   matching release function, and this bridge deliberately knows nothing about library ownership.
   _Rejected:_ `free` for every returned address.
+- **Q:** Reuse the integer field array for text pointers? **A:** No. _Rationale:_ a text field needs
+  scoped encoded storage, while an integer is only bits; conflating them admitted text records and
+  then wrote a null pointer. _Rejected:_ implicit pointer packing in the integer carrier.
 
 ## Referenced by
 

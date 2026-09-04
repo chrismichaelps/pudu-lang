@@ -13,6 +13,8 @@ module Pudu.Foreign.Crossing
   , RecordLayouts
   , recordLayouts
   , fitsCrossing
+  , foreignArgumentLimit
+  , foreignRecordFieldLimit
   ) where
 
 import Data.Set (Set)
@@ -69,6 +71,14 @@ data Crossing
     walk, so both see one layout and neither has to be told about the other. -}
 type RecordLayouts = Map.Map Text [(Text, Located TypeSyntax)]
 
+{-| The fixed native call-frame capacity, exposed to declaration checking. -}
+foreignArgumentLimit :: Int
+foreignArgumentLimit = 32
+
+{-| The fixed flat-record description capacity, exposed to declaration checking. -}
+foreignRecordFieldLimit :: Int
+foreignRecordFieldLimit = 32
+
 recordLayouts :: [Located Declaration] -> RecordLayouts
 recordLayouts declarations =
   Map.fromList
@@ -104,12 +114,17 @@ crossingFor handles layouts = crossingAt True
   named nestable name
     | Set.member name handles = Just (HandleCrossing name)
     | Just fields <- Map.lookup name layouts =
-        if not nestable || null fields
+        if not nestable || null fields || length fields > foreignRecordFieldLimit
           then Nothing
           else RecordCrossing name <$> traverse field fields
     | otherwise = scalar name
    where
-    field (label, written) = (,) label <$> crossingAt False written
+    field (label, written) = do
+      crossing <- crossingAt False written
+      case crossing of
+        NothingCrossing -> Nothing
+        HandleCrossing _ -> Nothing
+        _ -> Just (label, crossing)
 
   scalar name = case name of
     "Int8" -> Just (SignedCrossing 8)

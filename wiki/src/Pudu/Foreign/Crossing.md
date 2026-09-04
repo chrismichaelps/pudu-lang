@@ -24,13 +24,18 @@ read the same list.
 
 ```haskell
 data Crossing = SignedCrossing !Int | UnsignedCrossing !Int | FloatingCrossing !Int
-              | BooleanCrossing | TextCrossing | HandleCrossing !Text | NothingCrossing
+              | BooleanCrossing | TextCrossing | HandleCrossing !Text
+              | RecordCrossing !Text ![(Text, Crossing)] | NothingCrossing
 
-crossingFor    :: Set Text -> Located TypeSyntax -> Maybe Crossing
+crossingFor    :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
 crossingName   :: Crossing -> Text
 crossingType   :: Crossing -> Type
 fitsCrossing   :: Crossing -> Integer -> Bool
 crossableNames :: Text
+type RecordLayouts = Map Text [(Text, Located TypeSyntax)]
+recordLayouts  :: [Located Declaration] -> RecordLayouts
+foreignArgumentLimit    :: Int
+foreignRecordFieldLimit :: Int
 ```
 
 ### Governance
@@ -54,10 +59,16 @@ crossableNames :: Text
 - **A record crosses by value and is an ordinary record.** What a library passes about is its
   colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
   The declaration names a record this program already has; it crosses when every field crosses, one
-  level deep, and the fields travel in the order the declaration wrote them.
+  level deep, and the fields travel in the order the declaration wrote them. `()` and opaque handles
+  are not stored fields: unit has no value, while a nested handle would evade the top-level ownership
+  lease and release contract. `Str` is a pointer field whose UTF-8 bytes are borrowed for the call or
+  copied on return exactly as direct text is.
 - **The layout is the platform's answer.** Only names and widths are carried across; where each
   field sits inside the record is asked for on the other side. A calculation here would be right on
   the machine it was written for and silently wrong on the next.
+- **The bridge limits are declaration limits.** A call has at most 32 arguments and a flat record at
+  most 32 fields. A larger shape is refused where it is declared rather than accepted by the checker
+  and rejected only when execution reaches the native bridge.
 
 ### Linkage
 
@@ -77,6 +88,14 @@ crossableNames :: Text
 - **Q:** Compare only the final segment of a foreign type path? **A:** No. _Rationale:_ `Other.Box`
   and this block's `Box` are different nominal types even when their basenames match. _Rejected:_
   qualifier erasure at the ABI boundary.
+- **Q:** Treat `()` like any other field or parameter because it has a kind code? **A:** No.
+  _Rationale:_ void describes the absence of a result; neither C nor libffi has a value of type void
+  to place in an argument register or record field. _Rejected:_ deferring the bridge refusal until
+  the call.
+- **Q:** Put an opaque handle inside a by-value record? **A:** No. _Rationale:_ handle ownership is
+  attached to a top-level foreign result and its declared release; nesting one would hide it from
+  liveness leasing on arguments and ownership registration on results. _Rejected:_ recursively
+  leasing or claiming fields without a field-level lifetime and release declaration.
 
 ## Referenced by
 

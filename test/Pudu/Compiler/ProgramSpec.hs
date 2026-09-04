@@ -72,7 +72,11 @@ testForeignHandles = do
   imported <- runEntry "test-fixtures/foreignmodule/Main.pudu"
   records <- runEntry "test-fixtures/stdlib/UsesForeignRecords.pudu"
   text <- runEntry "test-fixtures/stdlib/UsesForeignText.pudu"
+  crossings <- runEntry "test-fixtures/stdlib/UsesForeignCrossings.pudu"
   noText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignTextNone.pudu"
+  invalidText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8.pudu"
+  missingRecordText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignRecordNoText.pudu"
+  crossingShapes <- codes "test-fixtures/stdlib/RejectsForeignCrossingShapes.pudu"
   refusedRecords <- codes "test-fixtures/foreignrecords/Main.pudu"
   beforeDouble <- cppDeleteCount
   doubleRelease <- runtimeCodes "test-fixtures/stdlib/RejectsForeignDoubleRelease.pudu"
@@ -125,6 +129,14 @@ testForeignHandles = do
         (text === Just "5")
     , counterexample "no text where text was declared is refused rather than read through"
         (noText === ["E7024"])
+    , counterexample "every admitted scalar and flat-record crossing round-trips exactly"
+        (crossings === Just "20")
+    , counterexample "invalid returned UTF-8 is a runtime refusal"
+        (invalidText === ["E7025"])
+    , counterexample "a null text field in a returned record is refused"
+        (missingRecordText === ["E7024"])
+    , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"
+        (crossingShapes === ["E3070", "E3071", "E3069", "E3063", "E3063", "E3063"])
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"
