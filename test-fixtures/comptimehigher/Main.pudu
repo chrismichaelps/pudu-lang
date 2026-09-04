@@ -1,0 +1,25 @@
+module Main
+
+/// Compile-time functions a fold may reach.
+comptime fn doubled(value: Int) -> Int { value * 2 }
+
+comptime fn raised(value: Int) -> Int { value + 10 }
+
+/// A compile-time function that takes one.
+///
+/// Refusing to call anything handed in was the old rule, and it made this
+/// unwritable while adding no guarantee: what a fold may reach is decided when
+/// it folds, where an effect is refused at the point it happens.
+comptime fn through(action: fn(Int) -> Int, value: Int) -> Int { action(value) }
+
+comptime fn twice(action: fn(Int) -> Int, value: Int) -> Int {
+  through(action, through(action, value))
+}
+
+const FOUR: Int = through(doubled, 2)
+const FOURTEEN: Int = through(raised, 4)
+const EIGHT: Int = twice(doubled, 2)
+
+export fn main() -> Int {
+  if FOUR == 4 && FOURTEEN == 14 && EIGHT == 8 { 3 } else { 0 }
+}

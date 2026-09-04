@@ -50,6 +50,10 @@ The exported signatures are the module header's export list.
   spelling a call resolves against, so a value bound under two names needs its restrictions recorded
   under both or the second one is unguarded.
 
+- **What is known about folding is a map, not a list of the compile-time ones.** The call site asks a
+  three-way question and a list can only answer two of them; the map also turns the lookup from a
+  scan into a lookup, which matters because it is asked at every call inside a compile-time body.
+
 ### Linkage
 
 - **Requires:** [[Type Value]], [[Type Interface]], [[Syntax Tree]], [[Diagnostic Model]].

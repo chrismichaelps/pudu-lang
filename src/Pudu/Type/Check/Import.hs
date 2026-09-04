@@ -249,7 +249,7 @@ declareFunction declared value = do
   case functionUnsafe value of
     Nothing -> pure ()
     Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)
-  when (functionComptime value) (recordComptimeFunction name)
+  recordComptimeFunction name (functionComptime value)
 
 declareConstructors :: DeclaredTypes -> Tree.TypeDeclarationValue -> Checker ()
 declareConstructors declared value = case locatedValue (Tree.typeDefinition value) of

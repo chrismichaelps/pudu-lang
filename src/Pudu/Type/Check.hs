@@ -169,7 +169,7 @@ declareFunction declared value = do
     Nothing -> pure ()
     Just capabilities ->
       recordUnsafeFunction (locatedValue (functionName value)) (map locatedValue capabilities)
-  when (functionComptime value) (recordComptimeFunction (locatedValue (functionName value)))
+  recordComptimeFunction (locatedValue (functionName value)) (functionComptime value)
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}

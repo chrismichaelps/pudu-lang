@@ -58,6 +58,14 @@ reportUnusedCapabilities :: Span -> Checker ()
   a field of a value, and a built-in method on one is not a declaration at all. Asking whether the
   path binds tells the two apart without inventing a second notion of what a module is.
 
+- **A compile-time body is refused only for a callee known not to fold.** The question is three-way,
+  not two: a declared compile-time function may be called, a declared ordinary one may not and is
+  refused here where the diagnostic is best, and a parameter or a local is something this pass knows
+  nothing about. Refusing the third case made a compile-time function unable to call anything it was
+  handed — higher-order compile-time code could not be written at all — and bought no guarantee,
+  because what a fold may reach is decided when it folds: an effect reached there is refused at the
+  point it happens, naming the effect rather than the indirection that arrived at it.
+
 ### A note on this module's shape
 
 These are **two direct-name implementations of one intended idea** — checking what a body may reach

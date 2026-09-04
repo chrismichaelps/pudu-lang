@@ -84,6 +84,7 @@ testForeignHandles = do
   importedCapability <- codes "test-fixtures/importedcapability/Main.pudu"
   carriedCapability <- runEntry "test-fixtures/capabilitytype/Main.pudu"
   escapedCapability <- codes "test-fixtures/capabilityescape/Main.pudu"
+  higherComptime <- runEntry "test-fixtures/comptimehigher/Main.pudu"
   beforeCleanup <- cppDeleteCount
   CInt activeBefore <- cppActiveCount
   cleanupSuccess <- runEntry "test-fixtures/stdlib/UsesForeignHandleCleanup.pudu"
@@ -133,6 +134,13 @@ testForeignHandles = do
         (carriedCapability === Just "1")
     , counterexample "a requirement cannot be lost by storing or passing the function"
         (escapedCapability === ["E3023", "E3001", "E3023"])
+    {-| A compile-time function may call what it was handed. Refusing every
+        callee it could not name made higher-order compile-time code unwritable
+        and bought no guarantee: what a fold may reach is decided when it folds,
+        where an effect is refused at the point it happens. A declared function
+        that cannot fold is still refused early, where the diagnostic is best. -}
+    , counterexample "a compile-time function may call the function it was given"
+        (higherComptime === Just "3")
     , counterexample "an imported declaration keeps the restrictions it was declared under"
         (importedCapability === ["E3023", "E3023", "E3023", "E3023", "E3023", "E3025"])
     , counterexample "runtime teardown preserves a successful result"

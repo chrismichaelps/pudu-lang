@@ -22,7 +22,6 @@ import Pudu.Type.Env
   , warn
   , isComptimeFunction
   , inComptime
-  , lookupName
   , report
   )
 
@@ -55,23 +54,19 @@ checkComptimeCall spanValue callee = do
   inside <- inComptime
   when inside $ case dottedName (locatedValue callee) of
     Just name -> do
-      comptime <- isComptimeFunction name
-      builtin <- pure (name `elem` comptimeBuiltins)
-      {-| A dotted callee is only judged when the whole path names something.
+      known <- isComptimeFunction name
+      {-| Refused only when the callee is a declared function that may not fold.
 
-          `Health.flagOf` is bound under that spelling and is a call this rule
-          is about; `reading.counts` is a field of a value and is not, and
-          neither is a built-in method on one. Asking whether the path binds
-          tells the two apart without a second notion of what a module is. -}
-      declared <- if comptime || builtin then pure True else isDeclaredName name
-      unless (comptime || builtin || not declared) $
+          A name nothing is known about — a parameter, a local, a built-in
+          method on a value — is left to the fold itself, which refuses an
+          effect where it happens. Refusing those here bought no guarantee and
+          made a compile-time function unable to call anything it was handed,
+          so higher-order compile-time code could not be written at all. -}
+      when (known == Just False && name `notElem` comptimeBuiltins) $
         report "E3025" spanValue
           ("comptime function cannot call " <> name)
           (Just "declare the callee comptime, or move the call out of compile-time code")
     _ -> pure ()
-
-isDeclaredName :: Text -> Checker Bool
-isDeclaredName name = maybe False (const True) <$> lookupName name
 
 {-| Names a compile-time body may reach that are not user declarations. -}
 comptimeBuiltins :: [Text]

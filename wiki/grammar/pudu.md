@@ -388,7 +388,7 @@ foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
 
 ## Senior Definition Needed
 
-- `comptime` is still carried by name rather than by type, so a compile-time function stored in a variable and called through it is not yet checked. Unsafe capabilities no longer have this gap.
+- `comptime` is carried by name rather than by type, so what a fold may reach has two lines of defence rather than one. A declared function that cannot fold is refused where it is called, early and with a diagnostic naming it. Anything else a compile-time body calls — a parameter, a local, a function it was handed — is left to the fold, which refuses an effect at the point it happens. Refusing those statically bought no guarantee and made higher-order compile-time code unwritable. Unsafe capabilities are in the type and have no such gap.
 - Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 
 ## Referenced by
