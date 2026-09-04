@@ -51,6 +51,12 @@ kindCode    :: Crossing -> Word8
   from 1.7µs to 0.25µs a call. Two threads racing to resolve the same symbol both call the linker
   and both write the same address, which costs one redundant lookup and no correctness; a lock to
   prevent that would sit on the hot path to save work that is already rare.
+- **Text a library returns is copied out of its storage.** What crosses is an address, and the bytes
+  behind it belong to whoever returned them — a static table, a buffer reused on the next call, or
+  something the caller was meant to free. Copying at the boundary ends all three questions at once:
+  the text a program holds is its own from the moment it arrives. A nought address is its own answer
+  rather than the empty string, because a library saying it has no text and one saying its text is
+  empty are different things.
 - **An opened library is kept.** Opening one twice and holding two handles to the same code is how a
   library with internal state acquires two of it, and a graphics library is nothing but internal
   state.

@@ -1,0 +1,16 @@
+module RejectsForeignTextNone
+
+/// A library that answers with no text where text was declared.
+///
+/// Refused rather than read through, and rather than quietly becoming the
+/// empty string — which is a different answer from there being none.
+foreign "c" {
+  fn missing symbol "pudu_ffi_cpp_text_none" () -> Str
+}
+
+export fn main() -> Int {
+  unsafe(foreign) {
+    let text = missing()
+    text.length()
+  }
+}

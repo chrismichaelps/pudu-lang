@@ -260,6 +260,14 @@ receive spanValue binding store produced =
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (TextCrossing, CrossedText written) -> pure (StrValue written)
+    (TextCrossing, CrossedNoText) ->
+      abortAt (Just spanValue) "E7024"
+        (foreignBindingSymbol binding <> " returned no text")
+        ( Just
+            ( "a foreign result declared Str must name text; there is no way yet "
+                <> "to declare one that may be absent"
+            )
+        )
     (RecordCrossing name declared, CrossedRecord _ crossed) ->
       pure
         ( RecordValue name

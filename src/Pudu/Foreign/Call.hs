@@ -27,7 +27,7 @@ import Foreign.C.String (CString, newCString, peekCString, withCString)
 import Foreign.C.Types (CChar (..), CDouble (..), CInt (..))
 import Foreign.Marshal.Alloc (alloca, free)
 import Foreign.Marshal.Array (allocaArray, peekArray, withArray)
-import Foreign.Ptr (Ptr, nullPtr)
+import Foreign.Ptr (Ptr, intPtrToPtr, nullPtr)
 import Foreign.Storable (peek)
 import Data.Word (Word8)
 import Pudu.Foreign.Crossing (Crossing (..))
@@ -199,6 +199,13 @@ data CrossedValue
   | CrossedHandle !Text !Int64
   {-| A record crossing by value, its fields in the declaration's order. -}
   | CrossedRecord !Text ![(Text, CrossedValue)]
+  {-| A nought where text was declared.
+
+      Its own answer rather than an empty string, because those are different
+      things: one is a library saying it has none, the other is a library
+      saying it has none of it. Reading through the nought is the third
+      possibility and is not one. -}
+  | CrossedNoText
   deriving stock (Eq, Show)
 
 {-| The code the other side reads for a kind.
@@ -286,6 +293,9 @@ callSymbol symbol arguments result = do
                                                 ]
                                             )
                                         )
+                                    TextCrossing -> do
+                                      asInteger <- peek producedInteger
+                                      receivedText asInteger
                                     _ -> do
                                       asInteger <- peek producedInteger
                                       CDouble asDouble <- peek producedDouble
@@ -316,6 +326,25 @@ received crossing asInteger asDouble = case crossing of
   FloatingCrossing _ -> CrossedDouble asDouble
   HandleCrossing name -> CrossedHandle name asInteger
   _ -> CrossedInteger asInteger
+
+{-| Text a library handed back, copied out of its own storage.
+
+    What crosses is an address, and the bytes behind it belong to whoever
+    returned them: a static table, a buffer reused on the next call, or
+    something the caller was meant to free. Copying at the boundary ends every
+    one of those questions here — the text a program holds is its own from the
+    moment it arrives, and nothing it does later depends on what the library
+    meant to happen to the original.
+
+    A nought address is not text. It is refused rather than read through, and
+    rather than quietly becoming the empty string, which is a different answer
+    from "there was none". -}
+receivedText :: Int64 -> IO (Either Text CrossedValue)
+receivedText address
+  | address == 0 = pure (Right CrossedNoText)
+  | otherwise = do
+      copied <- peekCString (intPtrToPtr (fromIntegral address))
+      pure (Right (CrossedText (Text.pack copied)))
 
 {-| The fields of a record argument, flattened in declaration order.
 

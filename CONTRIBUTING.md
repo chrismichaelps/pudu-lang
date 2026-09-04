@@ -12,12 +12,16 @@ bash test/gates.sh
 
 Runs what CI runs, in CI's order, and names the gate that failed.
 
-The warning gate forces recompilation, and that is not incidental. A fresh
-checkout cannot be up to date, so CI's warning gate always compiles; locally
-`cabal` frequently answers "Up to date" after a source has changed, and a
-warning gate that did not compile reports a clean tree while checking none of
-it. That has hidden real errors in this repository more than once. Forcing the
-rebuild costs a few minutes and buys an answer worth having.
+The script removes the build products first, and that is not incidental. A
+fresh checkout cannot be up to date, so CI's gates always compile; locally
+`cabal` frequently answers "Up to date" after a source has changed, and a gate
+that did not compile reports a clean tree while checking none of it. That has
+hidden real errors in this repository more than once.
+
+`--ghc-options=-fforce-recomp` does **not** fix it. That flag is GHC's, and when
+`cabal` decides the package is up to date it never invokes GHC, so the flag is
+never seen. Removing the build products is the only thing that makes the next
+build real. It costs minutes and buys an answer worth having.
 
 ## Starting work
 

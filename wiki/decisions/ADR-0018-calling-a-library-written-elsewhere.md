@@ -127,7 +127,7 @@ is a different size on some machine somebody runs.
 | `Int8` `Int16` `Int32` `Int64` `UInt8` `UInt16` `UInt32` `UInt64` | the integer of that exact width | never a C `int`; the width is the declaration's job, and a value that does not fit is refused rather than wrapped |
 | `Float32` `Float64` | the two floating widths | placed in their own registers, which is the case a boundary assembled by hand gets wrong first |
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
-| `Str` | a pointer to bytes ending in a nought | copied for the call and freed after; text containing a nought is refused, since the other side would read less than the text says |
+| `Str` | a pointer to bytes ending in a nought | copied both ways: for the call and freed after on the way out, and out of the library's own storage on the way back, so whose buffer it was stops mattering the moment it arrives. Text containing a nought is refused, since the other side would read less than the text says. A nought address where text was declared is refused rather than read through |
 | a record of the above | by value, in the order its declaration writes the fields | one level; where each field sits inside it is asked of the platform, not calculated here |
 | `()` | nothing | a function returning nothing |
 | a block-local opaque type | one owned address | nominal, non-null, and released only by the declared function |
