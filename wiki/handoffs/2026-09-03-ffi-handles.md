@@ -83,6 +83,30 @@ that program exposed led to the next:
    name, which included every parameter, so higher-order compile-time code was unwritable — and it
    bought no guarantee, because an effect reached while folding is refused where it happens.
 
+## The intermittent suite hang, found and fixed
+
+The suite stopped responding on the Linux runner twice, in runs whose work was
+otherwise identical to runs that finished in twenty seconds. It was not
+flakiness in the infrastructure and not the foreign boundary: the generator for
+the language server's JSON round-trip property recursed at a size that never
+decreased, which made it a branching process with mean offspring of exactly one
+— two chances in three of an internal node, times an average of one and a half
+children. A critical process of that kind ends with probability one and has no
+finite expected size, so nearly every value it produced was small and
+occasionally one was astronomical.
+
+Two things found it. Line-buffering the suite's output, added after the first
+stall for exactly this purpose, named the test in the second one; the first
+stall's log had ended mid-buffer and named nothing. And a standalone replica of
+the generator failed to produce four thousand samples in forty seconds, which
+turned a hypothesis into a measurement.
+
+The depth halves at every step now, so the bound is structural rather than
+statistical: at most 1 + 3 + 9 + 27 nodes. The first fix left half the samples
+single scalars, which would have been a quiet loss of coverage, so the
+generator is weighted towards containers — median nine nodes against the
+previous median of one, and a ceiling of thirty-two.
+
 ## Known limitations, stated rather than implied
 
 - **A trait or implementation member cannot be declared `unsafe`.** The parser refuses it, so there
