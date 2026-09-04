@@ -12,6 +12,7 @@ module Pudu.Type.Check.Foreign
   ) where
 
 import Control.Monad (unless, when)
+import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -23,14 +24,16 @@ import Pudu.Foreign.Crossing
   , crossingFor
   , crossingType
   , foreignArgumentLimit
+  , foreignRecordFieldLimit
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Frontend.Syntax.Tree
   ( Capability (ForeignCapability)
   , Foreign (..)
   , ForeignFunction (..)
   , Parameter (..)
-  , TypeSyntax
+  , TypeSyntax (..)
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env (Checker, DeclaredTypes, bindName, recordUnsafeFunction, report)
@@ -127,7 +130,7 @@ checkOne layouts handles declared (Located functionSpan function) = do
         (Just "write the exact function name exported by the library")
     _ -> pure ()
   mapM_ (checkParameter layouts handles) (foreignParameters function)
-  refuseUncrossable (locatedSpan (foreignResult function)) result
+  refuseUncrossable layouts (foreignResult function) result
   checkOwnership declared function result
  where
   result = crossingFor handles layouts (foreignResult function)
@@ -145,15 +148,28 @@ checkParameter layouts handles (Located spanValue parameter) = case parameterTyp
       report "E3070" (locatedSpan written)
         "a foreign parameter cannot be ()"
         (Just "() describes a function returning no value; it is not an argument value")
-    crossing -> refuseUncrossable (locatedSpan written) crossing
+    crossing -> refuseUncrossable layouts written crossing
 
-refuseUncrossable :: Span -> Maybe Crossing -> Checker ()
-refuseUncrossable spanValue crossing = case crossing of
+refuseUncrossable :: RecordLayouts -> Located TypeSyntax -> Maybe Crossing -> Checker ()
+refuseUncrossable layouts written crossing = case crossing of
   Just _ -> pure ()
-  Nothing ->
-    report "E3063" spanValue
-      "this type cannot cross a foreign boundary"
-      (Just ("what may cross: " <> crossableNames))
+  Nothing -> case oversizedRecord layouts written of
+    Just count ->
+      report "E3071" (locatedSpan written)
+        ("this foreign record has " <> Text.pack (show count) <> " fields; the bridge accepts at most 32")
+        (Just "split the native surface into records whose layouts fit the bridge")
+    Nothing ->
+      report "E3063" (locatedSpan written)
+        "this type cannot cross a foreign boundary"
+        (Just ("what may cross: " <> crossableNames))
+
+oversizedRecord :: RecordLayouts -> Located TypeSyntax -> Maybe Int
+oversizedRecord layouts (Located _ syntax) = case syntax of
+  NamedType (ModuleName (name :| [])) [] -> do
+    fields <- Map.lookup name layouts
+    let count = length fields
+    if count > foreignRecordFieldLimit then Just count else Nothing
+  _ -> Nothing
 
 {-| An owned result is a handle, it names the function that frees it, and that
     function is one this library declares.

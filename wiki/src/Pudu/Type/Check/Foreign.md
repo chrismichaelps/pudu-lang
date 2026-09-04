@@ -46,7 +46,9 @@ foreignHandles :: Foreign -> Set Text
   defect and is reported as `E3068` before the platform loader is involved.
 - **Void and bridge capacity are checked at the declaration.** `()` may be a result but cannot be an
   argument or record field, and the native bridge accepts at most 32 arguments and 32 fields in one
-  flat record. A signature beyond those bounds is not admitted and then surprised at runtime.
+  flat record. A signature beyond those bounds is not admitted and then surprised at runtime;
+  `E3071` names the record limit rather than collapsing that case into the generic uncrossable-type
+  diagnostic.
 
 ### Linkage
 
@@ -73,6 +75,9 @@ foreignHandles :: Foreign -> Set Text
 - **Q:** Let libffi reject an oversized or void-bearing signature when it is called? **A:** No.
   _Rationale:_ the complete shape is already present in source, so deferral turns a declaration
   error into path-dependent runtime behavior. _Rejected:_ dynamic-only signature validation.
+- **Q:** Diagnose an oversized record as merely uncrossable? **A:** No. _Rationale:_ the declaration
+  is otherwise a supported flat record and the author needs the exact 32-field bridge boundary to
+  repair it. _Rejected:_ reusing `E3063` and hiding the actionable cause.
 
 ## Referenced by
 

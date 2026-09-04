@@ -1,6 +1,6 @@
 ---
 type: architecture
-semantic_version: "0.6.0-draft"
+semantic_version: "0.6.1-draft"
 status: NORMATIVE_DRAFT
 tags: [architecture, semantics]
 aliases: [Semantic System, Pudu Semantics]
@@ -200,7 +200,7 @@ drop p:                     Available → Moved
 - The compiler continues to enforce syntax, types, scope, safe-value ownership, and control-flow cleanup within unsafe blocks.
 - Safe callers cannot be required to uphold undocumented invariants. A safe wrapper validates inputs or encodes the invariant in its types.
 - Foreign integer sizes, calling convention, struct layout, exception behavior, allocation ownership, thread safety, and nullability are explicit in foreign declarations.
-- Foreign integers preserve their declared signedness over the complete supported width, including the upper half of `UInt64`. `Str` crosses as UTF-8 independent of process locale; invalid returned bytes are a typed runtime refusal. `()` is result-only, foreign functions have at most 32 arguments, and flat records have at most 32 non-unit scalar or text fields, all checked at the declaration.
+- Foreign integers preserve their declared signedness over the complete supported width, including the upper half of `UInt64`. `Str` crosses as UTF-8 independent of process locale; invalid returned bytes are a typed runtime refusal. `()` is result-only, foreign functions have at most 32 arguments, and flat records have at most 32 scalar or text fields. Opaque handles remain top-level so their liveness lease and owned-result release cannot be bypassed. Every restriction is checked at the declaration.
 - A foreign block may declare opaque nominal handle types. An owned handle result names one same-block release function taking exactly that handle and returning unit; null results, use after release, and repeated release are runtime refusals before another foreign call begins.
 - C++ crosses only through an exported `extern "C"` surface. Mangled names, object layout, templates, and exceptions do not cross the boundary.
 - Undefined behavior is confined to violated unsafe contracts; safe Pudu code must not cause undefined behavior through any input.

@@ -24,10 +24,14 @@ foreign "c" {
 export fn main() -> Int {
   var held = 0
   unsafe(foreign) {
-    if signed8(-127i8) == -127i8 { held = held + 1 }
-    if signed16(-32767i16) == -32767i16 { held = held + 1 }
-    if signed32(-2147483647i32) == -2147483647i32 { held = held + 1 }
-    if signed64(-9223372036854775807i64) == -9223372036854775807i64 { held = held + 1 }
+    if signed8(-128i8) == -128i8 { held = held + 1 }
+    if signed16(-32768i16) == -32768i16 { held = held + 1 }
+    if signed32(-2147483648i32) == -2147483648i32 { held = held + 1 }
+    if signed64(-9223372036854775808i64) == -9223372036854775808i64 { held = held + 1 }
+    if signed8(127i8) == 127i8 { held = held + 1 }
+    if signed16(32767i16) == 32767i16 { held = held + 1 }
+    if signed32(2147483647i32) == 2147483647i32 { held = held + 1 }
+    if signed64(9223372036854775807i64) == 9223372036854775807i64 { held = held + 1 }
     if unsigned8(255u8) == 255u8 { held = held + 1 }
     if unsigned16(65535u16) == 65535u16 { held = held + 1 }
     if unsigned32(4294967295u32) == 4294967295u32 { held = held + 1 }

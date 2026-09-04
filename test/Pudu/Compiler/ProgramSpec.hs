@@ -130,13 +130,13 @@ testForeignHandles = do
     , counterexample "no text where text was declared is refused rather than read through"
         (noText === ["E7024"])
     , counterexample "every admitted scalar and flat-record crossing round-trips exactly"
-        (crossings === Just "16")
+        (crossings === Just "20")
     , counterexample "invalid returned UTF-8 is a runtime refusal"
         (invalidText === ["E7025"])
     , counterexample "a null text field in a returned record is refused"
         (missingRecordText === ["E7024"])
-    , counterexample "void positions and bridge capacity are declaration errors"
-        (crossingShapes === ["E3070", "E3063", "E3069", "E3063"])
+    , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"
+        (crossingShapes === ["E3070", "E3071", "E3069", "E3063", "E3063", "E3063"])
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"

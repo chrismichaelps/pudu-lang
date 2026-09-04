@@ -123,6 +123,7 @@ crossingFor handles layouts = crossingAt True
       crossing <- crossingAt False written
       case crossing of
         NothingCrossing -> Nothing
+        HandleCrossing _ -> Nothing
         _ -> Just (label, crossing)
 
   scalar name = case name of

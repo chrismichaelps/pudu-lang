@@ -128,7 +128,7 @@ is a different size on some machine somebody runs.
 | `Float32` `Float64` | the two floating widths | placed in their own registers, which is the case a boundary assembled by hand gets wrong first |
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
 | `Str` | a pointer to UTF-8 bytes ending in a nought | copied both ways: for the call and freed after on the way out, and out of the library's own storage on the way back, so whose buffer it was stops mattering the moment it arrives. Text containing a nought is refused, since the other side would read less than the text says. A nought address or invalid UTF-8 where text was declared is refused rather than read through or replaced |
-| a record of the scalar and text crossings above | by value, in the order its declaration writes the fields | one level and at most 32 fields; `()` is not a field; where each field sits inside it is asked of the platform, not calculated here |
+| a record of the scalar and text crossings above | by value, in the order its declaration writes the fields | one level and at most 32 fields; `()` and opaque handles are not fields; where each field sits inside it is asked of the platform, not calculated here |
 | `()` | nothing | a function returning nothing |
 | a block-local opaque type | one owned address | nominal, non-null, and released only by the declared function |
 
@@ -136,9 +136,10 @@ is a different size on some machine somebody runs.
 `type Name` inside its foreign block, crosses as one machine address, cannot be inspected, and is
 not interchangeable with a handle of another declared name. Its spelling in the foreign signature
 must be unqualified; `Other.Name` is another module's nominal type and is refused even when this
-block declares the same basename. `Ptr[T]`, borrowed handles, nullable
-pointers, and records crossing by value remain later slices because each needs a lifetime, absence,
-or layout rule that an opaque owned address does not.
+block declares the same basename. A handle cannot be nested in a by-value record because ownership
+and liveness are enforced at the top-level crossing. `Ptr[T]`, borrowed handles, and nullable
+pointers remain later slices because each needs a lifetime or absence rule that an opaque owned
+address does not.
 
 Everything else is refused at the declaration, which is the point of stating the list: a type that
 cannot cross is a diagnostic where it is written rather than a fault when it is called.
@@ -265,4 +266,4 @@ dependency.
 
 ## Referenced by
 
-[[architecture/STDLIB]] · [[grammar/pudu]] · [[Unsafe Capabilities]] · [[architecture/PACKAGES]]
+[[architecture/STDLIB]] · [[grammar/pudu]] · [[Unsafe Capabilities]] · [[architecture/PACKAGES]] · [[2026-09-04-crossing-coverage]]
