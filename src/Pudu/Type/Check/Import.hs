@@ -35,6 +35,7 @@ import Pudu.Type.Env
   , inheritRestrictions
   , lookupName
   , recordComptimeFunction
+  , recordRequiredArity
   , recordUnsafeFunction
   )
 import Pudu.Type.Formation
@@ -256,6 +257,8 @@ declareFunction declared value = do
     Nothing -> pure ()
     Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)
   recordComptimeFunction name (functionComptime value)
+  recordRequiredArity name
+    (Tree.requiredParameterCount value, length (functionParameters value))
 
 declareConstructors :: DeclaredTypes -> Tree.TypeDeclarationValue -> Checker ()
 declareConstructors declared value = case locatedValue (Tree.typeDefinition value) of

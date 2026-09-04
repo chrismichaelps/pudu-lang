@@ -26,6 +26,7 @@ const shared = new Map([
   ["E2010", "an unresolved value name, from resolution and from its context"],
   ["E3010", "a name others can see must state its type: a binding where declarations are checked, a function or parameter where signatures are"],
   ["E3001", "the type mismatch, raised wherever two types are required to agree"],
+  ["E3003", "a call's argument count disagreeing with the declaration: too many, which the type alone shows, and too few, which only the declaration's defaults can decide"],
   ["E3005", "a member the receiver does not have, from field access and from method lookup"],
   ["E3013", "an ambiguous method, from trait dispatch and from coherence"],
   ["E3028", "type arguments written where they cannot be carried"],

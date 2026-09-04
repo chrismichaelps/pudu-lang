@@ -11,6 +11,7 @@ module Pudu.Frontend.Syntax.Tree
   , FieldPattern (..)
   , Function (..)
   , lambdaName
+  , requiredParameterCount
   , FunctionBody (..)
   , Foreign (..)
   , ForeignFunction (..)
@@ -38,7 +39,7 @@ module Pudu.Frontend.Syntax.Tree
 
 import Data.List.NonEmpty (NonEmpty)
 import Data.Text (Text)
-import Pudu.Frontend.Syntax.Located (Located)
+import Pudu.Frontend.Syntax.Located (Located, locatedValue)
 import Pudu.Frontend.Syntax.Name (ModuleName)
 import Pudu.Source (Span)
 
@@ -117,6 +118,17 @@ data Function = Function
   , functionBody :: !(Maybe (Located FunctionBody))
   }
   deriving stock (Eq, Show)
+
+{-| How many arguments a call of this function must supply.
+
+    Its parameters, less the trailing ones that have defaults. Only a trailing
+    run may be omitted: a default written before a parameter that has none
+    cannot be skipped, because the next argument would take its place. -}
+requiredParameterCount :: Function -> Int
+requiredParameterCount value =
+  length (dropWhile defaulted (reverse (functionParameters value)))
+ where
+  defaulted parameter = parameterDefault (locatedValue parameter) /= Nothing
 
 {-| @Type.Syntax.TypeParam — one declared generic parameter and its bounds -}
 data TypeParam = TypeParam
