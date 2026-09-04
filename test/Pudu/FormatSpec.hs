@@ -23,6 +23,7 @@ formatProperties =
   , ("input that does not lex is returned untouched", testUnlexable)
   , ("blank-line runs collapse to one", testBlankLines)
   , ("a loop label is one thing and starts its own line", testLabels)
+  , ("a record written as a change to another lines its fields up", testUpdateIndent)
   ]
 
 {-| The property that makes the formatter safe to run on anything.
@@ -376,4 +377,43 @@ commentsOf text = do
     | token <- lexTokens (lexSource source)
     , trivia <- tokenLeadingTrivia token
     , triviaKind trivia /= Whitespace
+    ]
+
+{-| A record written as a change to another opens with `..`, and that is the
+    first of its fields rather than the line above carried on.
+
+    Read as a continuation it sat one level deeper than the fields beside it,
+    which says the two are not siblings when they are. The output stayed
+    idempotent and kept every token, so neither of the properties above could
+    see it — only looking at the shape does. -}
+testUpdateIndent :: IO Property
+testUpdateIndent = do
+  formatted <- formatOf source
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  source =
+    Text.unlines
+      [ "module M"
+      , "type Thing = { a: Int, b: Int, c: Int }"
+      , "fn widen(base: Thing) -> Thing {"
+      , "Thing {"
+      , "..base,"
+      , "b: 20,"
+      , "c: 30"
+      , "}"
+      , "}"
+      ]
+  expected =
+    [ "module M"
+    , "type Thing = { a: Int, b: Int, c: Int }"
+    , "fn widen(base: Thing) -> Thing {"
+    , "  Thing {"
+    , "    ..base,"
+    , "    b: 20,"
+    , "    c: 30"
+    , "  }"
+    , "}"
     ]

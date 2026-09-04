@@ -39,7 +39,7 @@ run 'no warnings, optimized' \
 run 'full suite, optimized' \
   cabal test all --enable-optimization=2 --test-show-details=direct
 run 'every committed Pudu file is formatted' \
-  bash -c 'cabal run -v0 pudu -- fmt --check $(find lib test-fixtures -name "*.pudu")'
+  bash -c 'cabal run -v0 pudu -- fmt --check $(find lib test-fixtures examples -name "*.pudu")'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'the language server answers a real session' \
   bash -c 'node test/lsp-session.mjs "$(cabal list-bin pudu)"'

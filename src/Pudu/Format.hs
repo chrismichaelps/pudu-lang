@@ -164,6 +164,11 @@ indentLines = go 0
       {-| A label opens a loop; it never continues the line above. -}
       Symbol SymAt -> False
       Symbol SymHash -> False
+      {-| A record written as a change to another opens with `..`, and that is
+          the first of its fields rather than the line above carried on. Read as
+          a continuation it sat one level deeper than the fields beside it,
+          which says the two are not siblings when they are. -}
+      Symbol SymRangeExclusive -> False
       Symbol symbol -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
       Keyword KwElse -> True
       _ -> False
