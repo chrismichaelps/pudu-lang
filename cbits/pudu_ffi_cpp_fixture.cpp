@@ -112,4 +112,39 @@ extern "C" const char *pudu_ffi_cpp_invalid_utf8() {
   return invalid;
 }
 
+/* Nested records, which is what a camera, a font, and a sound all are. The
+ * question these answer is whether a struct of structs may be described to the
+ * bridge as the leaves it flattens to, or whether the nesting itself has to
+ * cross. */
+struct Pair {
+  float x;
+  float y;
+};
+
+struct Frame {
+  Pair offset;
+  Pair target;
+  float rotation;
+  float zoom;
+};
+
+struct Mixed {
+  std::uint8_t tag;
+  Pair point;
+  double weight;
+};
+
+extern "C" float pudu_ffi_cpp_frame_sum(Frame frame) {
+  return frame.offset.x + frame.offset.y + frame.target.x + frame.target.y + frame.rotation +
+         frame.zoom;
+}
+
+extern "C" Frame pudu_ffi_cpp_frame_make(float base) {
+  return Frame{{base, base + 1}, {base + 2, base + 3}, base + 4, base + 5};
+}
+
+extern "C" double pudu_ffi_cpp_mixed_sum(Mixed mixed) {
+  return mixed.tag + mixed.point.x + mixed.point.y + mixed.weight;
+}
+
 extern "C" std::int32_t pudu_ffi_cpp_anchor() { return 1; }
