@@ -4,6 +4,21 @@ Pudu is developed as a language specification and compiler together. The FMCF va
 
 The local files `fmcf.md`, `lang_proposal.md`, and `goal.md` are private inputs. Never stage, commit, quote, attach, or reproduce them in issues, PRs, diagnostics, artifacts, or release notes. Public work cites the distilled vault pages and ADRs.
 
+## Running the gates locally
+
+```bash
+bash test/gates.sh
+```
+
+Runs what CI runs, in CI's order, and names the gate that failed.
+
+The warning gate forces recompilation, and that is not incidental. A fresh
+checkout cannot be up to date, so CI's warning gate always compiles; locally
+`cabal` frequently answers "Up to date" after a source has changed, and a
+warning gate that did not compile reports a clean tree while checking none of
+it. That has hidden real errors in this repository more than once. Forcing the
+rebuild costs a few minutes and buys an answer worth having.
+
 ## Starting work
 
 1. Select or create one ready GitHub issue with a bounded vertical slice.

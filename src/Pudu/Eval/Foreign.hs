@@ -260,11 +260,11 @@ receive spanValue binding store produced =
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (TextCrossing, CrossedText written) -> pure (StrValue written)
-    (RecordCrossing name declared, CrossedRecord _ produced) ->
+    (RecordCrossing name declared, CrossedRecord _ crossed) ->
       pure
         ( RecordValue name
             [ (label, receivedField fieldCrossing value)
-            | ((label, fieldCrossing), (_, value)) <- zip declared produced
+            | ((label, fieldCrossing), (_, value)) <- zip declared crossed
             ]
         )
     _ -> foreignResultMismatch spanValue binding
