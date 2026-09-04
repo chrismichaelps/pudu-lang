@@ -31,7 +31,10 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
                   void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
                   const int64_t *field_integers, const double *field_doubles,
-                  void *const *field_pointers, uint8_t result_kind,
+                  void *const *field_pointers, const uint8_t *slot_kinds,
+                  int64_t *slot_integers, double *slot_doubles,
+                  int64_t *slot_field_integers, double *slot_field_doubles,
+                  uint8_t result_kind,
                   int32_t result_field_count, const uint8_t *result_field_kinds,
                   int64_t *result_integer, double *result_double,
                   int64_t *result_field_integers, double *result_field_doubles);
@@ -49,6 +52,13 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
   Integer slots are bit carriers; signedness is recovered above the bridge from the kind code.
 - The fixed 32-argument and 32-field capacities are mirrored as checker limits, so these guards are
   defence in depth rather than reachable behavior for a checked declaration.
+- An argument named by `slot_kinds` is written by the library rather than read from the caller: the
+  bridge owns the storage for the call, passes its address, and reads back what was left there. A
+  null `slot_kinds` is a call with no slots. Storage is zeroed first, so an unwritten pointer reads
+  back null while an unwritten scalar reads back zero — which is a value, not an absence, and the
+  distinction belongs to the declaration under [[ADR-0019 Getting a Value Back Out of a Library]].
+- Storage the bridge lays out itself carries the alignment its widest member requires, because a
+  record's fields are read by the platform at the platform's own offsets.
 
 ### Linkage
 
@@ -66,7 +76,14 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 - **Q:** Reuse the integer field array for text pointers? **A:** No. _Rationale:_ a text field needs
   scoped encoded storage, while an integer is only bits; conflating them admitted text records and
   then wrote a null pointer. _Rejected:_ implicit pointer packing in the integer carrier.
+- **Q:** Lay out a record in an array of bytes? **A:** No. _Rationale:_ such an array promises an
+  alignment of one, while the platform reads an eight-byte field at an address it considers valid
+  for eight; it held only because the compiler happened to place it well. _Rejected:_ storage whose
+  correctness is the allocator's accident.
+- **Q:** Tell a written zero from an unwritten scalar slot? **A:** No. _Rationale:_ both leave the
+  same bytes, and no portable observation separates them. _Rejected:_ manufacturing absence from a
+  byte pattern.
 
 ## Referenced by
 
-[[src/cbits/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]
+[[src/cbits/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[ADR-0019 Getting a Value Back Out of a Library]]

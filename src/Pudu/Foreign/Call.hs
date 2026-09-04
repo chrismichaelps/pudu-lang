@@ -54,6 +54,14 @@ foreign import ccall safe "pudu_ffi_call"
     -> Ptr Int64
     -> Ptr CDouble
     -> Ptr (Ptr CChar)
+    {-| Which arguments the library writes through rather than reads, and where
+        what it wrote is read back to. A nought address is a call with no
+        output slots, which is every call the language can yet write. -}
+    -> Ptr Word8
+    -> Ptr Int64
+    -> Ptr CDouble
+    -> Ptr Int64
+    -> Ptr CDouble
     -> Word8
     -> CInt
     -> Ptr Word8
@@ -292,6 +300,7 @@ callSymbol symbol arguments result =
                                       c_call symbol (fromIntegral (length arguments)) kindArray
                                         integerArray doubleArray stringArray startArray countArray
                                         fieldKindArray fieldIntegerArray fieldDoubleArray fieldStringArray
+                                        nullPtr nullPtr nullPtr nullPtr nullPtr
                                         (kindCode result) (fromIntegral resultCount) resultKindArray
                                         producedInteger producedDouble producedFieldIntegers
                                         producedFieldDoubles
