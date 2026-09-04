@@ -24,7 +24,7 @@ import Pudu.Diagnostic
 import Pudu.Eval.Env (Evaluator, abortAt, currentForeignStore, performEffect)
 import Pudu.FloatLiteral (FloatWidth (..))
 import Pudu.IntegerLiteral (IntegerKind (..), defaultIntegerKind)
-import Pudu.Eval.Value (ForeignBinding (..), ForeignRelease (..), Value (..))
+import Pudu.Eval.Value (ForeignBinding (..), ForeignRelease (..), ForeignSlot (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
   , ForeignCallFailure (..)
@@ -35,6 +35,7 @@ import Pudu.Foreign.Crossing (Crossing (..), crossingName, fitsCrossing)
 import Pudu.Foreign.Ownership
   ( ForeignResource
   , ForeignStore
+  , claimAllOwned
   , claimOwned
   , restoreOwned
   , takeOwned
@@ -65,15 +66,16 @@ callForeign spanValue binding values = do
         Just (Left problem) -> do
           restoreReleased spanValue store released
           abortForeignCall spanValue binding problem
-        Just (Right result) -> receive spanValue binding store result
+        Just (Right (produced, written)) ->
+          answer spanValue binding store produced written
 
 invoke
   :: Span
   -> ForeignBinding
   -> ForeignStore
   -> Ptr ()
-  -> [(Crossing, CrossedValue)]
-  -> Evaluator (Maybe (Either ForeignCallFailure CrossedValue))
+  -> [(Crossing, Bool, CrossedValue)]
+  -> Evaluator (Maybe (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue])))
 invoke spanValue binding store symbol arguments =
   case foreignBindingReleases binding of
     Just _ -> Just <$> perform
@@ -96,7 +98,7 @@ prepareHandles
   :: Span
   -> ForeignBinding
   -> ForeignStore
-  -> [(Crossing, CrossedValue)]
+  -> [(Crossing, Bool, CrossedValue)]
   -> Evaluator (Maybe (Int64, ForeignResource))
 prepareHandles spanValue binding store arguments =
   case foreignBindingReleases binding of
@@ -113,10 +115,14 @@ prepareHandles spanValue binding store arguments =
           (Just "pass one live handle of the type named by its foreign declaration")
     Nothing -> pure Nothing
 
-handleAddresses :: [(Crossing, CrossedValue)] -> [(Text, Int64)]
+{-| The live handles a caller passed in, which are the ones a call leases.
+
+    A slot carries no handle from this side: what it receives is claimed after
+    the call, not leased through it. -}
+handleAddresses :: [(Crossing, Bool, CrossedValue)] -> [(Text, Int64)]
 handleAddresses arguments =
   [ (name, address)
-  | (_, CrossedHandle name address) <- arguments
+  | (_, False, CrossedHandle name address) <- arguments
   ]
 
 restoreReleased :: Span -> ForeignStore -> Maybe (Int64, ForeignResource) -> Evaluator ()
@@ -124,7 +130,7 @@ restoreReleased _ _ Nothing = pure ()
 restoreReleased spanValue store (Just (address, resource)) =
   performEffect (refusal spanValue) (restoreOwned store address resource)
 
-firstHandleName :: [(Crossing, CrossedValue)] -> Text
+firstHandleName :: [(Crossing, Bool, CrossedValue)] -> Text
 firstHandleName arguments = case handleAddresses arguments of
   (name, _) : _ -> name
   [] -> "foreign handle"
@@ -140,18 +146,39 @@ deadHandle spanValue binding name =
     An integer that does not fit the declared width is refused rather than
     wrapped. Silent wraparound at this boundary is the oldest way for a program
     calling a library to keep running with a value it never computed. -}
-crossArguments :: Span -> ForeignBinding -> [Value] -> Evaluator [(Crossing, CrossedValue)]
+crossArguments
+  :: Span -> ForeignBinding -> [Value] -> Evaluator [(Crossing, Bool, CrossedValue)]
 crossArguments spanValue binding values
-  | length expected /= length values =
+  | length wanted /= length values =
       abortAt (Just spanValue) "E7016"
         ( foreignBindingSymbol binding <> " takes "
-            <> count (length expected) <> " but was given "
+            <> count (length wanted) <> " but was given "
             <> Text.pack (show (length values))
         )
         (Just "the declaration in the foreign block says how many it takes")
-  | otherwise = mapM (uncurry (crossOne spanValue binding)) (zip expected values)
+  | otherwise = weave positions values
  where
-  expected = foreignBindingArguments binding
+  positions = zip (foreignBindingArguments binding) (slotsOf binding)
+  wanted = [crossing | (crossing, Nothing) <- positions]
+  {-| The caller's values go to the positions the caller supplies. A slot takes
+      no value from this side, so it passes through carrying nothing and the
+      bridge is told to write it instead. -}
+  weave [] _ = pure []
+  weave ((crossing, Just _) : rest) remaining = do
+    crossed <- weave rest remaining
+    pure ((crossing, True, CrossedInteger 0) : crossed)
+  weave ((crossing, Nothing) : rest) remaining = case remaining of
+    [] -> pure []
+    value : more -> do
+      (_, one) <- crossOne spanValue binding crossing value
+      crossed <- weave rest more
+      pure ((crossing, False, one) : crossed)
+
+{-| Which native positions the library writes, in order. -}
+slotsOf :: ForeignBinding -> [Maybe ForeignSlot]
+slotsOf binding =
+  take (length (foreignBindingArguments binding))
+    (foreignBindingSlots binding <> repeat Nothing)
 
 count :: Int -> Text
 count value
@@ -232,6 +259,84 @@ isIntegral crossing = case crossing of
     A width goes out and an ordinary integer comes back: the declaration decides
     how much of a number crosses, and nothing above the boundary carries a
     machine width it did not ask for. -}
+{-| Everything the call produced, as one Pudu value.
+
+    Without slots that is the result alone, exactly as before. With them it is a
+    tuple of the result and each slot in declaration order, and every resource
+    the call handed back — the result's and the slots' — is claimed together
+    before any of it is visible. A claim that cannot be made gives back what the
+    library just made rather than leaking it, because a resource nobody can name
+    is one nobody can release. -}
+answer
+  :: Span
+  -> ForeignBinding
+  -> ForeignStore
+  -> CrossedValue
+  -> [Maybe CrossedValue]
+  -> Evaluator Value
+answer spanValue binding store produced written
+  | null (slotDescriptions binding) = receive spanValue binding store produced
+  | otherwise = do
+      claimed <-
+        performEffect (refusal spanValue)
+          (claimAllOwned store (fresh <> resultFresh))
+      case claimed of
+        _ : _ -> do
+          performEffect (refusal spanValue) (mapM_ snd (fresh <> resultFresh))
+          abortAt (Just spanValue) "E7021"
+            (foreignBindingSymbol binding <> " handed back something already owned")
+            (Just "an owned foreign value must transfer one new ownership claim")
+        [] -> do
+          native <- receiveClaimed spanValue binding store produced
+          slots <- mapM (uncurry (receiveSlot spanValue binding)) (zip described written)
+          pure (TupleValue (native : slots))
+ where
+  described = slotDescriptions binding
+  fresh =
+    [ (address, releaseHandle release name address)
+    | (Just slot, Just (CrossedHandle name address)) <- zip (map Just described) written
+    , address /= 0
+    , Just release <- [foreignSlotReleasedBy slot]
+    ]
+  resultFresh = case (foreignBindingResult binding, produced, foreignBindingReleasedBy binding) of
+    (HandleCrossing name, CrossedHandle _ address, Just release)
+      | address /= 0 -> [(address, releaseHandle release name address)]
+    _ -> []
+
+{-| The slots this binding declares, in order. -}
+slotDescriptions :: ForeignBinding -> [ForeignSlot]
+slotDescriptions binding = [slot | Just slot <- foreignBindingSlots binding]
+
+{-| One slot's value, once its ownership has already been settled.
+
+    A pointer slot answers `Option`, so a library that wrote nothing is a `None`
+    the program can read rather than an address it must not follow. -}
+receiveSlot
+  :: Span -> ForeignBinding -> ForeignSlot -> Maybe CrossedValue -> Evaluator Value
+receiveSlot spanValue binding slot received = case received of
+  Nothing -> pure (VariantValue "None" [])
+  Just value -> do
+    held <- receivedField spanValue binding "slot" (foreignSlotCrossing slot) value
+    pure
+      ( case foreignSlotCrossing slot of
+          TextCrossing -> VariantValue "Some" [held]
+          HandleCrossing _ -> VariantValue "Some" [held]
+          _ -> held
+      )
+
+{-| The native result, when its ownership was settled with the slots'. -}
+receiveClaimed :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
+receiveClaimed spanValue binding store produced =
+  case (foreignBindingResult binding, produced) of
+    (HandleCrossing name, CrossedHandle actual address)
+      | name /= actual -> foreignResultMismatch spanValue binding
+      | address == 0 ->
+          abortAt (Just spanValue) "E7020"
+            (foreignBindingSymbol binding <> " returned a null " <> name)
+            (Just "an owned foreign result must name a live object")
+      | otherwise -> pure (ForeignHandleValue name address)
+    _ -> receive spanValue binding store produced
+
 receive :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
 receive spanValue binding store produced =
   case (foreignBindingResult binding, produced) of
@@ -287,7 +392,7 @@ releaseHandle release name address = do
   case found of
     Left _ -> pure ()
     Right symbol -> do
-      _ <- callSymbol symbol [(HandleCrossing name, CrossedHandle name address)] NothingCrossing
+      _ <- callSymbol symbol [(HandleCrossing name, False, CrossedHandle name address)] NothingCrossing
       pure ()
 
 foreignResultMismatch :: Span -> ForeignBinding -> Evaluator a

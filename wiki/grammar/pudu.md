@@ -351,25 +351,13 @@ unsafe_type      = "unsafe", capabilities?, type ;
 foreign_decl     = "export"?, "foreign", string, ("version", string)?,
                    "{", (foreign_type | foreign_fn)*, "}" ;
 foreign_type     = "type", upper_identifier ;
-foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
+foreign_fn       = "fn", identifier, ("symbol", string)?,
+                   "(", (foreign_parameter, (",", foreign_parameter)*)?, ")",
                    ("->", "owned"?, type, ("by", identifier)?)? ;
+foreign_parameter = "out"?, identifier, ":", "owned"?, type, ("by", identifier)? ;
 ```
 
-[[ADR-0019-getting-a-value-back-out-of-a-library]] accepts the next extension to this grammar:
-
-```ebnf
-foreign_parameter = parameter
-                  | "out", identifier, ":", ("owned"?, type, ("by", identifier)?) ;
-```
-
-It is **not admitted by the parser yet**. Once implemented, an output parameter will occupy a native
-argument position but not a Pudu call argument. A function with any output parameters will answer a
-tuple containing the declared native result first and each output in source order. Scalar and record
-outputs are total unsafe assertions; text and owned-handle pointer outputs become `Option` because
-null, unlike a zero scalar, is an actual absence representation. The implementation issue must
-replace this notice with the complete normative production and diagnostics in the same change.
-
-- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
+- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `out`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
 - A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
 - `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.
 - A function ordinarily looks up a symbol with the same spelling as its Pudu name. `symbol "ExactName"` maps an idiomatic local value name to the exact exported symbol when the library's naming convention cannot be written as a Pudu value identifier. The mapping changes only lookup; calls, release declarations, and editor features use the local name. An empty symbol is refused.
@@ -377,7 +365,8 @@ replace this notice with the complete normative production and diagnostics in th
 - A record whose scalar or `Str` fields cross may cross by value, in the order its declaration writes the fields. It is an ordinary Pudu record, declared beside the foreign block that names it. At most 32 fields, and a record may hold records: what crosses is the leaves it flattens to, in order, which is the same description the platform derives for the nesting itself. A record reached from inside itself has no flattening and is refused where it is written, as are a `()` field and an opaque-handle field. A handle stays top-level because that is where its liveness lease and owned-result release are enforced. Where a field sits inside one is the platform's answer, asked for rather than calculated. `Str` is UTF-8 in direct and record positions; invalid returned bytes and nought text addresses are runtime refusals rather than replacement text or unit.
 - `Str` crosses as bytes ending in a nought, copied for the call and freed after. Text containing a nought is refused, because the other side reads to the first one and would see less than the text says.
 - An integer that does not fit the width it crosses as is refused rather than wrapped. Silent wraparound at this boundary is how a program calling a library keeps running with a value it never computed.
-- `owned T by release` is admitted only when `T` is an opaque type declared by the block. The release must be declared in that block with exactly one `T` parameter and a `()` result. A handle result without `owned` is refused until borrowed lifetimes have a representation. The runtime refuses a null owned result and refuses an already released or unowned handle before entering foreign code.
+- `out name: T` is a parameter the library writes rather than reads. It occupies a native argument position and not a Pudu one: the caller supplies no value for it, the boundary supplies the storage, and what the library left there comes back beside the result. A function with any output slot answers one tuple whose first member is the declared native result — present even when it is unit, so adding a status later moves no slot — and whose rest are the slots in source order. A pointer-shaped slot, which is `Str` or an opaque handle, answers `Option`, because null is an absence a pointer really carries. A scalar or record slot answers its own type: a written zero and an unwritten cell leave the same bytes, so an absence there would be invented rather than observed, and the declaration's assertion is what stands. A slot may hold only what already crosses; `()` is refused as a slot for the same reason it is refused as an argument. Ordinary parameters and slots together are the 32 the bridge accepts.
+- `owned T by release` is admitted only when `T` is an opaque type declared by the block, and is written on a result or on an output slot. A handle slot must be owned, for the same reason a handle result must be: a borrowed foreign lifetime has no representation. `owned` on a parameter the caller supplies is refused — the value was already theirs and passing it transfers nothing. A release may not declare slots. The release must be declared in that block with exactly one `T` parameter and a `()` result. A handle result without `owned` is refused until borrowed lifetimes have a representation. The runtime refuses a null owned result and refuses an already released or unowned handle before entering foreign code.
 - Every call needs the `foreign` capability. The signature is an assertion by whoever wrote it that nothing can check — a wrong width is not a diagnostic, it is a corrupted stack — and `unsafe` is where this language already says a thing is asserted rather than proved.
 - A foreign call is an effect, so a `comptime` body cannot make one: a constant is folded while the compiler runs, and what a program compiles to must not depend on what was installed on the machine that compiled it.
 - A library written in C++ is reachable through the surface it exports as `extern "C"`, and not otherwise. Its symbol names encode its parameter types and differ between compilers, a method needs an object whose layout its compiler decided, a template exports nothing until something instantiates it, and an exception crossing the boundary is undefined. [[ADR-0018 Calling a Library Written Elsewhere]] states this at length.

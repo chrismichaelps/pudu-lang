@@ -88,6 +88,7 @@ testForeignHandles = do
   nested <- runEntry "test-fixtures/stdlib/UsesForeignNested.pudu"
   text <- runEntry "test-fixtures/stdlib/UsesForeignText.pudu"
   crossings <- runEntry "test-fixtures/stdlib/UsesForeignCrossings.pudu"
+  slots <- runEntry "test-fixtures/stdlib/UsesForeignSlots.pudu"
   noText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignTextNone.pudu"
   invalidText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8.pudu"
   missingRecordText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignRecordNoText.pudu"
@@ -118,6 +119,8 @@ testForeignHandles = do
   CInt activeAfter <- cppActiveCount
   pure $ conjoin
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
+    , counterexample "a library writes scalars, text, records and resources through slots"
+        (slots === Just "17")
     , counterexample "a C++ object crosses as an opaque handle and is read and released"
         (successful === Just "2")
     {-| A record crossing by value, which is how nearly every library worth

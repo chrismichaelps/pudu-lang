@@ -1,6 +1,7 @@
 {-| @Program.Foreign.Ownership — owns one evaluation's foreign resources -}
 module Pudu.Foreign.Ownership
   ( ForeignResource
+  , claimAllOwned
   , ForeignStore
   , claimOwned
   , closeForeignStore
@@ -48,6 +49,29 @@ claimOwned (ForeignStore table) address cleanup = atomically $ do
     else do
       writeTVar table (Map.insert address (ForeignResource cleanup 0) held)
       pure True
+
+{-| Claim everything one call produced, or claim none of it.
+
+    A call may hand back several resources at once — a result and the slots it
+    wrote — and a claim that took some of them and failed on the rest would
+    leave the program owning things it cannot name. One transaction decides for
+    all of them, and answers with the addresses it refused so the caller can
+    give those back to the library.
+
+    An address appearing twice with the same destructor is one resource, so it
+    is claimed once rather than counted as a conflict. -}
+claimAllOwned :: ForeignStore -> [(Int64, IO ())] -> IO [Int64]
+claimAllOwned (ForeignStore table) produced = atomically $ do
+  held <- readTVar table
+  let taken = foldl remember Map.empty produced
+      remember seen (address, cleanup) = Map.insertWith (\_ old -> old) address cleanup seen
+      refused = [address | address <- Map.keys taken, Map.member address held]
+  if null refused
+    then do
+      writeTVar table
+        (Map.union held (Map.map (\cleanup -> ForeignResource cleanup 0) taken))
+      pure []
+    else pure refused
 
 {-| Run an action while every distinct address is leased.
 

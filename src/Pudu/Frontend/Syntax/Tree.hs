@@ -14,6 +14,7 @@ module Pudu.Frontend.Syntax.Tree
   , FunctionBody (..)
   , Foreign (..)
   , ForeignFunction (..)
+  , ForeignParameter (..)
   , Impl (..)
   , Import (..)
   , Literal (..)
@@ -344,12 +345,32 @@ data ForeignFunction = ForeignFunction
   {-| The exact symbol the library exports when it differs from the local
       value name. Tooling and calls keep the local name; only lookup reads this. -}
   , foreignSymbol :: !(Maybe (Located Text))
-  , foreignParameters :: ![Located Parameter]
+  , foreignParameters :: ![Located ForeignParameter]
   , foreignResult :: !(Located TypeSyntax)
   {-| The function that releases what this one returns, when what it returns
       must be released. A returned pointer is borrowed unless this names its
       release, so an owned value carries what frees it. -}
   , foreignReleasedBy :: !(Maybe (Located Text))
+  }
+  deriving stock (Eq, Show)
+
+{-| One parameter of a foreign function.
+
+    An ordinary parameter is a value the caller sends. An output slot is storage
+    the boundary supplies and the library writes into: the caller sends nothing
+    for it, and what the library left there comes back beside the result. Most C
+    libraries hand back the resource they made this way, which is why the
+    distinction is in the declaration rather than in a comment. -}
+data ForeignParameter = ForeignParameter
+  { foreignParameterName :: !(Located Text)
+  , foreignParameterType :: !(Maybe (Located TypeSyntax))
+  {-| Whether the library writes this parameter rather than reading it. -}
+  , foreignParameterOut :: !Bool
+  {-| What releases the handle an owned slot received, and whether the slot was
+      written `owned` at all — a handle slot that is not owned is refused, so
+      the two are recorded separately. -}
+  , foreignParameterOwned :: !Bool
+  , foreignParameterReleasedBy :: !(Maybe (Located Text))
   }
   deriving stock (Eq, Show)
 

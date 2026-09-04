@@ -38,6 +38,13 @@ foreignHandles :: Foreign -> Set Text
 - **Every foreign function requires the `foreign` capability without saying so.** The signature is
   unverifiable by construction, and this language already has a word for an assertion of that kind.
 - **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths.
+- **A slot is a native argument and not a Pudu one.** Two signatures are derived from one
+  declaration: the native one, ordinary parameters and slots in source order, and the Pudu one,
+  ordinary parameters answering a tuple of the native result and each slot. The native result stays
+  in that tuple even when it is unit, so adding a status later moves no slot.
+- **A pointer slot answers `Option` and a scalar or record slot does not.** Null is an absence a
+  pointer really carries; a written zero and an unwritten cell leave the same bytes, so optionality
+  there would be invented rather than observed.
 - **Every locally catchable ownership mistake is caught here:** a type that cannot cross, a borrowed
   handle result, an owned non-handle result, an absent release, and a release whose declaration is
   missing or does not take exactly the produced handle and return `()`. A signature that disagrees

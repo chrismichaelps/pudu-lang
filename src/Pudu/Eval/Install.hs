@@ -28,6 +28,7 @@ import Pudu.Eval.Value
   , Closure (..)
   , ForeignBinding (..)
   , ForeignRelease (..)
+  , ForeignSlot (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -37,9 +38,9 @@ import Pudu.Frontend.Syntax.Tree
   , Expression (..)
   , Foreign (..)
   , ForeignFunction (..)
+  , ForeignParameter (..)
   , Function (..)
   , Impl (..)
-  , Parameter (..)
   , Trait (..)
   , TypeDeclarationValue (..)
   , TypeSyntax (..)
@@ -135,7 +136,25 @@ installForeign layouts library (Located _ function) =
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
           , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
-              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles layouts)
+              [ crossingOf parameter
+              | Located _ parameter <- foreignParameters function
+              ]
+          , foreignBindingSlots =
+              [ if foreignParameterOut parameter
+                  then
+                    Just
+                      ForeignSlot
+                        { foreignSlotCrossing = crossingOf parameter
+                        , foreignSlotReleasedBy = do
+                            named <- locatedValue <$> foreignParameterReleasedBy parameter
+                            symbol <- Map.lookup named (releaseSymbolsOf library)
+                            pure
+                              ForeignRelease
+                                { foreignReleaseLibrary = locatedValue (foreignLibrary library)
+                                , foreignReleaseSymbol = symbol
+                                }
+                        }
+                  else Nothing
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingResult =
@@ -154,6 +173,8 @@ installForeign layouts library (Located _ function) =
  where
   name = locatedValue (foreignName function)
   handles = Set.fromList (map locatedValue (foreignTypes library))
+  crossingOf parameter =
+    fromMaybe NothingCrossing (foreignParameterType parameter >>= crossingFor handles layouts)
 
 {-| The functions of a block that release something.
 
@@ -162,17 +183,31 @@ installForeign layouts library (Located _ function) =
     only place that fact is written. -}
 releasesOf :: Foreign -> Map Text Text
 releasesOf library =
-  Map.fromList
-    [ (locatedValue named, handleName result)
-    | Located _ function <- foreignFunctions library
-    , Just named <- [foreignReleasedBy function]
-    , let result = foreignResult function
-    , isHandleName (handleName result)
-    ]
+  Map.fromList (concatMap named (foreignFunctions library))
  where
+  {-| A release is named by whatever it frees, and a resource arrives either as
+      the result or through a slot. Reading only the result left a slot's
+      release unrecognised: the program's explicit call went straight to the
+      library while the claim stayed in the store, and teardown freed what the
+      library had already destroyed. -}
+  named (Located _ function) =
+    [ (locatedValue name, handle)
+    | (Just name, written) <- releasing function
+    , let handle = handleName (locatedValue written)
+    , isHandleName handle
+    ]
+  {-| Each place this function may name a release, beside what that release
+      would free. -}
+  releasing function =
+    (foreignReleasedBy function, foreignResult function)
+      : [ (foreignParameterReleasedBy parameter, held)
+        | Located _ parameter <- foreignParameters function
+        , foreignParameterOut parameter
+        , Just held <- [foreignParameterType parameter]
+        ]
   known = Set.fromList (map locatedValue (foreignTypes library))
   isHandleName = (`Set.member` known)
-  handleName (Located _ syntax) = case syntax of
+  handleName syntax = case syntax of
     NamedType (ModuleName (name :| [])) [] -> name
     _ -> ""
 

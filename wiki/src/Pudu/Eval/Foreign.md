@@ -37,6 +37,12 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 - **Text carrying a nought is refused.** The other side reads to the first nought, so it would see
   less than the text says — and text shortened without anybody being told is how a check on the
   whole of it is passed by only part of it.
+- **Everything one call produced is claimed together.** A call may hand back a result and the
+  resources it wrote into slots; claiming some and failing on the rest would leave the program owning
+  things it cannot name, so one store transaction decides for all of them and the tuple is exposed
+  only after it succeeds.
+- **A slot leases nothing on the way in.** A handle a caller passes is leased for the call; a handle
+  a slot receives did not exist before the call and is claimed after it.
 - **A foreign call is an effect**, so a compile-time constant cannot make one. What a program
   compiles to must not depend on what happened to be installed on the machine that compiled it.
 - **A failure names the library and the symbol**, because the usual cause is that the library is not
