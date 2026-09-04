@@ -22,6 +22,7 @@ import Pudu.Foreign.Crossing
   , crossableNames
   , crossingFor
   , crossingType
+  , foreignArgumentLimit
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -114,7 +115,11 @@ checkOne
   -> Map.Map Text ForeignFunction
   -> Located ForeignFunction
   -> Checker ()
-checkOne layouts handles declared (Located _ function) = do
+checkOne layouts handles declared (Located functionSpan function) = do
+  when (length (foreignParameters function) > foreignArgumentLimit) $
+    report "E3069" functionSpan
+      "a foreign function may take at most 32 arguments"
+      (Just "split the native surface into functions whose signatures fit the bridge")
   case foreignSymbol function of
     Just (Located spanValue symbol) | Text.null symbol ->
       report "E3068" spanValue
@@ -135,7 +140,12 @@ checkParameter layouts handles (Located spanValue parameter) = case parameterTyp
           <> " names no type"
       )
       (Just "give every foreign parameter a type; nothing here can be inferred")
-  Just written -> refuseUncrossable (locatedSpan written) (crossingFor handles layouts written)
+  Just written -> case crossingFor handles layouts written of
+    Just NothingCrossing ->
+      report "E3070" (locatedSpan written)
+        "a foreign parameter cannot be ()"
+        (Just "() describes a function returning no value; it is not an argument value")
+    crossing -> refuseUncrossable (locatedSpan written) crossing
 
 refuseUncrossable :: Span -> Maybe Crossing -> Checker ()
 refuseUncrossable spanValue crossing = case crossing of

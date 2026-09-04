@@ -118,7 +118,7 @@ union pudu_slot {
  * a field sits inside a record is the ABI's answer and not a calculation a
  * caller may repeat. */
 static int place_field(unsigned char *storage, size_t offset, uint8_t kind, int64_t integer,
-                       double floating) {
+                       double floating, void *pointer) {
   void *slot = storage + offset;
   switch (kind) {
   case PUDU_I8:
@@ -153,6 +153,8 @@ static int place_field(unsigned char *storage, size_t offset, uint8_t kind, int6
     *(double *)slot = floating;
     return 0;
   case PUDU_TEXT:
+    *(void **)slot = pointer;
+    return 0;
   case PUDU_HANDLE:
     *(void **)slot = (void *)(intptr_t)integer;
     return 0;
@@ -193,7 +195,7 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
     *integer = *(const uint32_t *)slot;
     return 0;
   case PUDU_U64:
-    *integer = (int64_t)(*(const uint64_t *)slot);
+    memcpy(integer, slot, sizeof(uint64_t));
     return 0;
   case PUDU_F32:
     *floating = *(const float *)slot;
@@ -218,8 +220,9 @@ static int take_field(const unsigned char *storage, size_t offset, uint8_t kind,
 int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64_t *integers,
                   const double *doubles, void *const *pointers, const int32_t *field_starts,
                   const int32_t *field_counts, const uint8_t *field_kinds,
-                  const int64_t *field_integers, const double *field_doubles, uint8_t result_kind,
-                  int32_t result_field_count, const uint8_t *result_field_kinds,
+                  const int64_t *field_integers, const double *field_doubles,
+                  void *const *field_pointers, uint8_t result_kind, int32_t result_field_count,
+                  const uint8_t *result_field_kinds,
                   int64_t *result_integer, double *result_double, int64_t *result_field_integers,
                   double *result_field_doubles) {
   if (symbol == NULL) {
@@ -269,7 +272,8 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
       memset(struct_storage[index], 0, struct_types[index].size);
       for (int32_t field = 0; field < count; field++) {
         if (place_field(struct_storage[index], offsets[field], field_kinds[start + field],
-                        field_integers[start + field], field_doubles[start + field]) != 0) {
+                        field_integers[start + field], field_doubles[start + field],
+                        field_pointers[start + field]) != 0) {
           return 3;
         }
       }
@@ -371,6 +375,8 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
    * buffer is: libffi writes the whole slot and the narrow read follows. */
   union {
     ffi_arg raw;
+    int64_t i64;
+    uint64_t u64;
     float f32;
     double f64;
     unsigned char bytes[PUDU_MAX_FIELDS * 16];
@@ -407,7 +413,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     *result_integer = (int32_t)produced.raw;
     break;
   case PUDU_I64:
-    *result_integer = (int64_t)produced.raw;
+    *result_integer = produced.i64;
     break;
   case PUDU_U8:
     *result_integer = (int64_t)(uint8_t)produced.raw;
@@ -419,7 +425,7 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds, const int64
     *result_integer = (int64_t)(uint32_t)produced.raw;
     break;
   case PUDU_U64:
-    *result_integer = (int64_t)(uint64_t)produced.raw;
+    memcpy(result_integer, &produced.u64, sizeof(produced.u64));
     break;
   case PUDU_BOOL:
     *result_integer = ((uint8_t)produced.raw) != 0 ? 1 : 0;

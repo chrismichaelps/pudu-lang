@@ -127,8 +127,8 @@ is a different size on some machine somebody runs.
 | `Int8` `Int16` `Int32` `Int64` `UInt8` `UInt16` `UInt32` `UInt64` | the integer of that exact width | never a C `int`; the width is the declaration's job, and a value that does not fit is refused rather than wrapped |
 | `Float32` `Float64` | the two floating widths | placed in their own registers, which is the case a boundary assembled by hand gets wrong first |
 | `Bool` | one byte, zero or not | C's `_Bool`; a C++ `bool` matches on the platforms this targets |
-| `Str` | a pointer to bytes ending in a nought | copied both ways: for the call and freed after on the way out, and out of the library's own storage on the way back, so whose buffer it was stops mattering the moment it arrives. Text containing a nought is refused, since the other side would read less than the text says. A nought address where text was declared is refused rather than read through |
-| a record of the above | by value, in the order its declaration writes the fields | one level; where each field sits inside it is asked of the platform, not calculated here |
+| `Str` | a pointer to UTF-8 bytes ending in a nought | copied both ways: for the call and freed after on the way out, and out of the library's own storage on the way back, so whose buffer it was stops mattering the moment it arrives. Text containing a nought is refused, since the other side would read less than the text says. A nought address or invalid UTF-8 where text was declared is refused rather than read through or replaced |
+| a record of the scalar and text crossings above | by value, in the order its declaration writes the fields | one level and at most 32 fields; `()` is not a field; where each field sits inside it is asked of the platform, not calculated here |
 | `()` | nothing | a function returning nothing |
 | a block-local opaque type | one owned address | nominal, non-null, and released only by the declared function |
 
@@ -142,6 +142,11 @@ or layout rule that an opaque owned address does not.
 
 Everything else is refused at the declaration, which is the point of stating the list: a type that
 cannot cross is a diagnostic where it is written rather than a fault when it is called.
+
+A foreign function has at most 32 arguments. That is the bounded capacity of the native bridge and
+therefore part of what a declaration may say, not a late error reachable only when a large function
+is called. `()` is likewise only a result shape: there is no void value to place in an argument or a
+record field.
 
 **A pointer that may be absent will say so.** C has one representation for "no answer" and "the
 answer is address zero", and a declaration that does not distinguish them turns the first into a

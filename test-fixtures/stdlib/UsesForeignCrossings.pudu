@@ -1,0 +1,48 @@
+module UsesForeignCrossings
+
+/// Every scalar ABI class and a flat record carrying text and a full-width
+/// unsigned integer.
+type Labelled = { label: Str, count: UInt64 }
+
+foreign "c" {
+  fn signed8 symbol "pudu_ffi_cpp_i8" (value: Int8) -> Int8
+  fn signed16 symbol "pudu_ffi_cpp_i16" (value: Int16) -> Int16
+  fn signed32 symbol "pudu_ffi_cpp_i32" (value: Int32) -> Int32
+  fn signed64 symbol "pudu_ffi_cpp_i64" (value: Int64) -> Int64
+  fn unsigned8 symbol "pudu_ffi_cpp_u8" (value: UInt8) -> UInt8
+  fn unsigned16 symbol "pudu_ffi_cpp_u16" (value: UInt16) -> UInt16
+  fn unsigned32 symbol "pudu_ffi_cpp_u32" (value: UInt32) -> UInt32
+  fn unsigned64 symbol "pudu_ffi_cpp_u64" (value: UInt64) -> UInt64
+  fn float32 symbol "pudu_ffi_cpp_f32" (value: Float32) -> Float32
+  fn float64 symbol "pudu_ffi_cpp_f64" (value: Float64) -> Float64
+  fn flipTruth symbol "pudu_ffi_cpp_bool" (value: Bool) -> Bool
+  fn nothing symbol "pudu_ffi_cpp_void" () -> ()
+  fn labelled symbol "pudu_ffi_cpp_labelled" (label: Str, count: UInt64) -> Labelled
+  fn measure symbol "pudu_ffi_cpp_labelled_measure" (value: Labelled) -> UInt64
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    if signed8(-127i8) == -127i8 { held = held + 1 }
+    if signed16(-32767i16) == -32767i16 { held = held + 1 }
+    if signed32(-2147483647i32) == -2147483647i32 { held = held + 1 }
+    if signed64(-9223372036854775807i64) == -9223372036854775807i64 { held = held + 1 }
+    if unsigned8(255u8) == 255u8 { held = held + 1 }
+    if unsigned16(65535u16) == 65535u16 { held = held + 1 }
+    if unsigned32(4294967295u32) == 4294967295u32 { held = held + 1 }
+    if unsigned64(18446744073709551615u64) == 18446744073709551615u64 { held = held + 1 }
+    if float32(1.5f32) == 1.5f32 { held = held + 1 }
+    if float64(-9007199254740991.0f64) == -9007199254740991.0f64 { held = held + 1 }
+    if flipTruth(true) == false { held = held + 1 }
+    if flipTruth(false) == true { held = held + 1 }
+    nothing()
+    held = held + 1
+
+    let made = labelled("héllø 🐧", 18446744073709551615u64)
+    if made.label == "héllø 🐧" { held = held + 1 }
+    if made.count == 18446744073709551615u64 { held = held + 1 }
+    if measure(made) == 18446744073709551615u64 { held = held + 1 }
+  }
+  held
+}

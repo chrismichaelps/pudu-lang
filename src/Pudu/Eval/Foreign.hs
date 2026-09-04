@@ -10,6 +10,7 @@ module Pudu.Eval.Foreign
 
 import Data.Maybe (fromMaybe)
 import Data.Int (Int64)
+import Data.Word (Word64)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Foreign.Ptr (Ptr)
@@ -26,6 +27,7 @@ import Pudu.IntegerLiteral (IntegerKind (..), defaultIntegerKind)
 import Pudu.Eval.Value (ForeignBinding (..), ForeignRelease (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
+  , ForeignCallFailure (..)
   , callSymbol
   , resolveSymbol
   )
@@ -62,7 +64,7 @@ callForeign spanValue binding values = do
         Nothing -> deadHandle spanValue binding (firstHandleName crossed)
         Just (Left problem) -> do
           restoreReleased spanValue store released
-          abortForeign spanValue binding problem
+          abortForeignCall spanValue binding problem
         Just (Right result) -> receive spanValue binding store result
 
 invoke
@@ -71,7 +73,7 @@ invoke
   -> ForeignStore
   -> Ptr ()
   -> [(Crossing, CrossedValue)]
-  -> Evaluator (Maybe (Either Text CrossedValue))
+  -> Evaluator (Maybe (Either ForeignCallFailure CrossedValue))
 invoke spanValue binding store symbol arguments =
   case foreignBindingReleases binding of
     Just _ -> Just <$> perform
@@ -256,7 +258,10 @@ receive spanValue binding store produced =
                   (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")
                   (Just "an owned foreign result must transfer one new ownership claim")
     (_, CrossedInteger held) ->
-      pure (IntValue (kindOf (foreignBindingResult binding)) (fromIntegral held))
+      pure
+        ( IntValue (kindOf (foreignBindingResult binding))
+            (integerResult (foreignBindingResult binding) held)
+        )
     (_, CrossedDouble held) ->
       pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (TextCrossing, CrossedText written) -> pure (StrValue written)
@@ -269,12 +274,11 @@ receive spanValue binding store produced =
             )
         )
     (RecordCrossing name declared, CrossedRecord _ crossed) ->
-      pure
-        ( RecordValue name
-            [ (label, receivedField fieldCrossing value)
-            | ((label, fieldCrossing), (_, value)) <- zip declared crossed
-            ]
-        )
+      RecordValue name <$> mapM receiveField (zip declared crossed)
+     where
+      receiveField ((label, fieldCrossing), (_, value)) = do
+        received <- receivedField spanValue binding label fieldCrossing value
+        pure (label, received)
     _ -> foreignResultMismatch spanValue binding
 
 releaseHandle :: ForeignRelease -> Text -> Int64 -> IO ()
@@ -299,15 +303,24 @@ kindOf crossing = case crossing of
   _ -> defaultIntegerKind
 
 {-| One field of a record the library returned. -}
-receivedField :: Crossing -> CrossedValue -> Value
-receivedField crossing produced = case (crossing, produced) of
-  (BooleanCrossing, CrossedInteger held) -> BoolValue (held /= 0)
-  (FloatingCrossing _, CrossedDouble held) -> FloatValue (widthOf crossing) held
-  (TextCrossing, CrossedText written) -> StrValue written
-  (HandleCrossing name, CrossedHandle _ address) -> ForeignHandleValue name address
-  (_, CrossedInteger held) -> IntValue (kindOf crossing) (fromIntegral held)
-  (_, CrossedDouble held) -> FloatValue (widthOf crossing) held
-  _ -> UnitValue
+receivedField :: Span -> ForeignBinding -> Text -> Crossing -> CrossedValue -> Evaluator Value
+receivedField spanValue binding label crossing produced = case (crossing, produced) of
+  (BooleanCrossing, CrossedInteger held) -> pure (BoolValue (held /= 0))
+  (FloatingCrossing _, CrossedDouble held) -> pure (FloatValue (widthOf crossing) held)
+  (TextCrossing, CrossedText written) -> pure (StrValue written)
+  (TextCrossing, CrossedNoText) ->
+    abortAt (Just spanValue) "E7024"
+      (foreignBindingSymbol binding <> " returned no text for " <> label)
+      (Just "every Str field in a returned foreign record must name valid UTF-8 text")
+  (HandleCrossing name, CrossedHandle _ address) -> pure (ForeignHandleValue name address)
+  (_, CrossedInteger held) -> pure (IntValue (kindOf crossing) (integerResult crossing held))
+  (_, CrossedDouble held) -> pure (FloatValue (widthOf crossing) held)
+  _ -> foreignResultMismatch spanValue binding
+
+integerResult :: Crossing -> Int64 -> Integer
+integerResult crossing held = case crossing of
+  UnsignedCrossing 64 -> toInteger (fromIntegral held :: Word64)
+  _ -> fromIntegral held
 
 widthOf :: Crossing -> FloatWidth
 widthOf crossing = case crossing of
@@ -325,6 +338,14 @@ abortForeign spanValue binding problem =
             <> "install it, or check the name and the symbol against what it exports"
         )
     )
+
+abortForeignCall :: Span -> ForeignBinding -> ForeignCallFailure -> Evaluator a
+abortForeignCall spanValue binding failure = case failure of
+  CallAssemblyFailure problem -> abortForeign spanValue binding problem
+  InvalidReturnedText ->
+    abortAt (Just spanValue) "E7025"
+      (foreignBindingSymbol binding <> " returned text that is not valid UTF-8")
+      (Just "fix the native binding or declare a byte-oriented result instead of Str")
 
 refusal :: Span -> Diagnostic
 refusal spanValue =

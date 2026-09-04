@@ -5,7 +5,10 @@ tags: [moc, handoff]
 
 # Handoff Map
 
-- [[2026-09-03-ffi-handles]] — active issue #200 implementation and review boundary for opaque
+- [[2026-09-04-crossing-coverage]] — exact ABI coverage for every currently admitted scalar and
+  flat-record foreign shape; issue #204.
+
+- [[2026-09-03-ffi-handles]] — completed issue #200 implementation and review boundary for opaque
   foreign handles, C++ C-ABI evidence, and editor type visibility.
 - [[2026-09-02-public-http-deadlines]] — public HTTP/HTTPS/JSON evidence and whole-chain deadline
   hardening for issue #196.

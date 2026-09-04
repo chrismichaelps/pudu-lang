@@ -26,12 +26,15 @@ assembled while the program runs.
 resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
 
 data ForeignHandle
+data ForeignCallFailure = CallAssemblyFailure !Text | InvalidReturnedText
 data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText !Text
-                  | CrossedHandle !Text !Int64
+                  | CrossedHandle !Text !Int64 | CrossedRecord !Text ![(Text, CrossedValue)]
+                  | CrossedNoText
 
 openLibrary :: Text -> IO (Either Text ForeignHandle)
 findSymbol  :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
-callSymbol  :: Ptr () -> [(Crossing, CrossedValue)] -> Crossing -> IO (Either Text CrossedValue)
+callSymbol  :: Ptr () -> [(Crossing, CrossedValue)] -> Crossing
+            -> IO (Either ForeignCallFailure CrossedValue)
 kindCode    :: Crossing -> Word8
 ```
 
@@ -57,6 +60,12 @@ kindCode    :: Crossing -> Word8
   the text a program holds is its own from the moment it arrives. A nought address is its own answer
   rather than the empty string, because a library saying it has no text and one saying its text is
   empty are different things.
+- **`Str` means UTF-8 bytes, never the host locale.** Direct text and text stored as a pointer field
+  in a flat record use the same encoding and lifetime. Invalid bytes returned by a library are a
+  boundary refusal; replacement text would be a different value from the one the library returned.
+- **The integer carrier preserves bits; the declaration restores meaning.** Native argument/result
+  storage is 64 bits wide. In particular, the upper half of `UInt64` may look negative in that
+  carrier, but becomes its original unsigned Pudu integer before leaving the boundary.
 - **An opened library is kept.** Opening one twice and holding two handles to the same code is how a
   library with internal state acquires two of it, and a graphics library is nothing but internal
   state.
@@ -93,6 +102,9 @@ kindCode    :: Crossing -> Word8
 - **Q:** Keep ownership beside the process-global opened-library cache? **A:** No. _Rationale:_
   libraries may be shared, but resource claims belong to one evaluation and must be torn down with
   it. _Rejected:_ a process-global address set.
+- **Q:** Decode returned bytes with the process locale? **A:** No. _Rationale:_ Pudu source and
+  strings are Unicode, and the same library call must not mean different text because one host was
+  started under a different locale. _Rejected:_ locale-dependent `CString` conversion; lossy UTF-8.
 
 ## Referenced by
 

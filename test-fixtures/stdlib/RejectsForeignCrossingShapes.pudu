@@ -1,0 +1,25 @@
+module RejectsForeignCrossingShapes
+
+type VoidField = { absent: () }
+type Wide = {
+  f01: Int8, f02: Int8, f03: Int8, f04: Int8, f05: Int8, f06: Int8, f07: Int8, f08: Int8,
+  f09: Int8, f10: Int8, f11: Int8, f12: Int8, f13: Int8, f14: Int8, f15: Int8, f16: Int8,
+  f17: Int8, f18: Int8, f19: Int8, f20: Int8, f21: Int8, f22: Int8, f23: Int8, f24: Int8,
+  f25: Int8, f26: Int8, f27: Int8, f28: Int8, f29: Int8, f30: Int8, f31: Int8, f32: Int8,
+  f33: Int8,
+}
+
+foreign "c" {
+  fn voidArgument(value: ()) -> ()
+  fn wideArgument(value: Wide) -> ()
+  fn tooMany(
+    a01: Int8, a02: Int8, a03: Int8, a04: Int8, a05: Int8, a06: Int8, a07: Int8, a08: Int8,
+    a09: Int8, a10: Int8, a11: Int8, a12: Int8, a13: Int8, a14: Int8, a15: Int8, a16: Int8,
+    a17: Int8, a18: Int8, a19: Int8, a20: Int8, a21: Int8, a22: Int8, a23: Int8, a24: Int8,
+    a25: Int8, a26: Int8, a27: Int8, a28: Int8, a29: Int8, a30: Int8, a31: Int8, a32: Int8,
+    a33: Int8,
+  ) -> ()
+  fn voidField(value: VoidField) -> ()
+}
+
+export fn main() -> Int { 0 }
