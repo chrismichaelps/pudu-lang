@@ -139,10 +139,11 @@ must be unqualified; `Other.Name` is another module's nominal type and is refuse
 block declares the same basename. A handle cannot be nested in a by-value record because ownership
 and liveness are enforced at the top-level crossing. `Ptr[T]`, borrowed handles, and nullable
 pointers remain later slices because each needs a lifetime or absence rule that an opaque owned
-address does not. [[ADR-0019 A Value Only the Library Understands]] measures what those slices are
-worth and finds the ranking here was guessed rather than counted: three quarters of what a real
-library still withholds is not a pointer parameter at all, but a struct the library owns and returns
-by value with a pointer inside.
+address does not.
+[[ADR-0019 Getting a Value Back Out of a Library]]
+counts what those slices are worth across four libraries and reorders them: the opaque handle
+declared here is the shape most libraries use, but they hand it back through a slot the caller
+provides, so without one a library like SQLite cannot be opened at all.
 
 Everything else is refused at the declaration, which is the point of stating the list: a type that
 cannot cross is a diagnostic where it is written rather than a fault when it is called.

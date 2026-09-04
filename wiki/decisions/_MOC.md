@@ -18,7 +18,7 @@ tags: [moc, adr]
 - [[decisions/ADR-0006-integer-widths-and-std-numerics|ADR-0006 Integer Widths and Std Numerics]] — integers carry their width at run time; what `Std` promises about numbers.
 - [[decisions/ADR-0007-decimal-precision-and-rounding|ADR-0007 Decimal Precision and Rounding]] — `Decimal` is exact, and division is exact or an error rather than silently rounded.
 
-- [[ADR-0019 A Value Only the Library Understands]] — a program may hold a value it cannot read, and the declaration says how big it is. Three quarters of what a real library still withholds is one shape: a struct it owns, returned by value, holding a pointer inside.
+- [[ADR-0019 Getting a Value Back Out of a Library]] — a library may hand a value back through a slot, and the declaration says which arguments are slots. Without one, a library that returns its handle through `T**` — the ordinary C way — cannot be opened at all.
 
 ## Referenced by
 
