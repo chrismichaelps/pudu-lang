@@ -23,7 +23,9 @@ aliases: [2026-09-04-crossing-coverage]
 - `()` is a result only. It is never a parameter or stored record field.
 - Calls carry at most 32 arguments and flat records 32 fields; both are checked statically and guarded natively.
 - Opaque handles cross only at the top level; record fields cannot bypass their lease or release contract.
-- Ownership is unchanged; pointers, nullable values, callbacks, nested records, and owned text remain out of scope.
+- Ownership is unchanged; pointers, nullable values, callbacks, and owned text remain out of scope.
+- A record may hold records. What crosses is its leaves, and a record reached from inside itself is
+  refused, having no end to them.
 
 ## Exact next action
 

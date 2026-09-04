@@ -298,12 +298,12 @@ callSymbol symbol arguments result =
                                     if code /= 0
                                       then pure (Left (refusal code))
                                       else case result of
-                                        RecordCrossing name declared -> do
+                                        RecordCrossing _ _ -> do
                                           producedIntegers <- peekArray resultCount producedFieldIntegers
                                           producedDoubles <- peekArray resultCount producedFieldDoubles
-                                          crossed <- mapM receiveField
-                                            (zip3 declared producedIntegers producedDoubles)
-                                          pure (CrossedRecord name <$> sequence crossed)
+                                          rebuilt <- rebuildRecord result
+                                            (zip producedIntegers (map unwrapDouble producedDoubles))
+                                          pure (fmap fst rebuilt)
                                         _ -> do
                                           asInteger <- peek producedInteger
                                           CDouble asDouble <- peek producedDouble
@@ -314,6 +314,8 @@ callSymbol symbol arguments result =
       is zero. The filler is a real value rather than an undefined one, because
       `withArray` writes what it is given. -}
   orOne filler values = if null values then [filler] else values
+
+  unwrapDouble (CDouble held) = held
 
   flattened = map (uncurry recordFields) arguments
   fields = concat flattened
@@ -334,13 +336,6 @@ received crossing asInteger asDouble = case crossing of
   HandleCrossing name -> pure (Right (CrossedHandle name asInteger))
   TextCrossing -> receivedText asInteger
   _ -> pure (Right (CrossedInteger asInteger))
-
-receiveField
-  :: ((Text, Crossing), Int64, CDouble)
-  -> IO (Either ForeignCallFailure (Text, CrossedValue))
-receiveField ((label, crossing), asInteger, CDouble asDouble) = do
-  value <- received crossing asInteger asDouble
-  pure ((,) label <$> value)
 
 {-| Text a library handed back, copied out of its own storage.
 
@@ -363,24 +358,66 @@ receivedText address
         Left _ -> Left InvalidReturnedText
         Right decoded -> Right (CrossedText decoded)
 
-{-| The fields of a record argument, flattened in declaration order.
+{-| A record's leaves, in the order the declarations wrote them.
 
     Only the widths and the values travel. Where each one sits inside the record
     is asked of the platform on the other side, because that is the platform's
     answer and a caller repeating the calculation is a caller writing into the
-    wrong offsets on the machine whose rule it guessed wrong. -}
+    wrong offsets on the machine whose rule it guessed wrong.
+
+    A record inside a record contributes its own leaves in place of itself, so
+    what travels is always scalars. That is the same description the platform
+    derives for the nesting, so it lays the bytes out where the nesting would
+    have put them without being told the shape. -}
 recordFields :: Crossing -> CrossedValue -> [(Crossing, CrossedValue)]
 recordFields crossing value = case (crossing, value) of
   (RecordCrossing _ declared, CrossedRecord _ held) ->
-    [ (fieldCrossing, fieldValue)
-    | ((_, fieldCrossing), (_, fieldValue)) <- zip declared held
-    ]
+    concat
+      [ case (fieldCrossing, fieldValue) of
+          (RecordCrossing _ _, CrossedRecord _ _) -> recordFields fieldCrossing fieldValue
+          _ -> [(fieldCrossing, fieldValue)]
+      | ((_, fieldCrossing), (_, fieldValue)) <- zip declared held
+      ]
   _ -> []
 
+{-| The leaves a result is read back as, in the same order. -}
 resultFieldKinds :: Crossing -> [Word8]
 resultFieldKinds crossing = case crossing of
-  RecordCrossing _ declared -> [kindCode fieldCrossing | (_, fieldCrossing) <- declared]
+  RecordCrossing _ declared -> concatMap (leafKinds . snd) declared
   _ -> []
+
+leafKinds :: Crossing -> [Word8]
+leafKinds crossing = case crossing of
+  RecordCrossing _ declared -> concatMap (leafKinds . snd) declared
+  _ -> [kindCode crossing]
+
+{-| Rebuild a record from the leaves the platform handed back.
+
+    The leaves arrive flat and in order, so the declaration is what says where
+    each nesting begins and ends; this walks the two together and answers with
+    whatever is left over, which is empty when the shape and the leaves agree. -}
+rebuildRecord
+  :: Crossing
+  -> [(Int64, Double)]
+  -> IO (Either ForeignCallFailure (CrossedValue, [(Int64, Double)]))
+rebuildRecord crossing leaves = case crossing of
+  RecordCrossing name declared -> do
+    folded <- foldFields declared leaves
+    pure (fmap (\(fields, rest) -> (CrossedRecord name fields, rest)) folded)
+  _ -> case leaves of
+    (asInteger, asDouble) : rest -> do
+      value <- received crossing asInteger asDouble
+      pure (fmap (\one -> (one, rest)) value)
+    [] -> pure (Left (CallAssemblyFailure "the result had fewer fields than its declaration"))
+ where
+  foldFields [] rest = pure (Right ([], rest))
+  foldFields ((label, fieldCrossing) : more) rest = do
+    first <- rebuildRecord fieldCrossing rest
+    case first of
+      Left problem -> pure (Left problem)
+      Right (value, afterField) -> do
+        others <- foldFields more afterField
+        pure (fmap (\(rest', after) -> ((label, value) : rest', after)) others)
 
 refusal :: CInt -> ForeignCallFailure
 refusal code = CallAssemblyFailure $ case code of

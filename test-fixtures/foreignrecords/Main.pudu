@@ -1,18 +1,23 @@
 module Main
 
-/// A record whose fields are records, and one whose fields cannot cross.
+/// What a record still cannot do at a foreign boundary.
 ///
-/// Both are refused where they are written rather than where they are called,
-/// which is the whole reason the crossable set is stated rather than inferred.
+/// Nesting is admitted — a record is described by the leaves it flattens to.
+/// What has no flattening is a record reached from inside itself, because there
+/// is no end to its leaves; and a field whose own type cannot cross takes the
+/// record with it.
 type Point = { x: Float64, y: Float64 }
 
 type Camera = { offset: Point, zoom: Float64 }
 
+type Ring = { label: Float64, next: Ring }
+
 type Held = { name: Str, values: Array[Int32] }
 
 foreign "c" {
-  fn nested symbol "pudu_ffi_cpp_anchor" (camera: Camera) -> Int32
-  fn uncrossable symbol "pudu_ffi_cpp_anchor" (held: Held) -> Int32
+  fn nested symbol "pudu_ffi_cpp_anchor" (camera: Camera) -> Float64
+  fn circular symbol "pudu_ffi_cpp_anchor" (ring: Ring) -> Float64
+  fn uncrossable symbol "pudu_ffi_cpp_anchor" (held: Held) -> Float64
 }
 
 export fn main() -> Int { 0 }

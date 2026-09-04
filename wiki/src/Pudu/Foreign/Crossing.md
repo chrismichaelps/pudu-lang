@@ -58,11 +58,15 @@ foreignRecordFieldLimit :: Int
 
 - **A record crosses by value and is an ordinary record.** What a library passes about is its
   colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
-  The declaration names a record this program already has; it crosses when every field crosses, one
-  level deep, and the fields travel in the order the declaration wrote them. `()` and opaque handles
+  The declaration names a record this program already has; it crosses when every field crosses, and
+  a field may itself be a record. What travels is the leaves, in the order the declarations wrote
+  them. `()` and opaque handles
   are not stored fields: unit has no value, while a nested handle would evade the top-level ownership
   lease and release contract. `Str` is a pointer field whose UTF-8 bytes are borrowed for the call or
   copied on return exactly as direct text is.
+- **A record reached from inside itself is refused.** There is no end to its leaves, so there is no
+  flattening to describe. The records already open are carried down the walk, and one that reappears
+  stops it where it is written rather than looping.
 - **The layout is the platform's answer.** Only names and widths are carried across; where each
   field sits inside the record is asked for on the other side. A calculation here would be right on
   the machine it was written for and silently wrong on the next.

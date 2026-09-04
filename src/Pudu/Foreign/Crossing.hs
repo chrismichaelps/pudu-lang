@@ -97,30 +97,35 @@ recordLayouts declarations =
     of stating it: a type that cannot cross is a diagnostic where it is written
     rather than a fault where it is called. -}
 crossingFor :: Set Text -> RecordLayouts -> Located TypeSyntax -> Maybe Crossing
-crossingFor handles layouts = crossingAt True
+crossingFor handles layouts = crossingAt Set.empty
  where
-  crossingAt nestable (Located _ syntax) = case syntax of
+  crossingAt enclosing (Located _ syntax) = case syntax of
     UnitType -> Just NothingCrossing
-    NamedType (ModuleName (name :| [])) [] -> named nestable name
+    NamedType (ModuleName (name :| [])) [] -> named enclosing name
     _ -> Nothing
 
-  {-| A record's fields are themselves crossable and are not themselves records.
+  {-| A record's fields are themselves crossable, and may themselves be records.
 
-      One level, and stated rather than discovered: a colour, a point, and a
-      rectangle are flat records of numbers, and admitting nesting would mean
-      carrying a recursive description across the boundary for a case that is
-      rare and whose failure is silent. A nested record is refused where it is
-      written. -}
-  named nestable name
+      A camera holds two points, a font holds a texture, and a record that
+      admitted only numbers would admit almost nothing a library actually
+      passes. What crosses is the leaves: a record is described to the platform
+      by the scalars it flattens to, in order, which is the same description the
+      platform derives for the nesting itself.
+
+      A record reached from inside itself has no flattening, because there is no
+      end to its leaves. The set of records already open refuses it where it is
+      written rather than looping. -}
+  named enclosing name
     | Set.member name handles = Just (HandleCrossing name)
+    | Set.member name enclosing = Nothing
     | Just fields <- Map.lookup name layouts =
-        if not nestable || null fields || length fields > foreignRecordFieldLimit
+        if null fields || length fields > foreignRecordFieldLimit
           then Nothing
-          else RecordCrossing name <$> traverse field fields
+          else RecordCrossing name <$> traverse (field (Set.insert name enclosing)) fields
     | otherwise = scalar name
    where
-    field (label, written) = do
-      crossing <- crossingAt False written
+    field inner (label, written) = do
+      crossing <- crossingAt inner written
       case crossing of
         NothingCrossing -> Nothing
         HandleCrossing _ -> Nothing

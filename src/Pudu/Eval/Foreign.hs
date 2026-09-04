@@ -313,6 +313,18 @@ receivedField spanValue binding label crossing produced = case (crossing, produc
       (foreignBindingSymbol binding <> " returned no text for " <> label)
       (Just "every Str field in a returned foreign record must name valid UTF-8 text")
   (HandleCrossing name, CrossedHandle _ address) -> pure (ForeignHandleValue name address)
+  {-| A field may itself be a record, and is rebuilt the same way its enclosing
+      one is. The leaves arrived flat; the declaration is what says where each
+      nesting begins and ends. -}
+  (RecordCrossing name declared, CrossedRecord _ held)
+    | length declared == length held ->
+        RecordValue name
+          <$> mapM
+            ( \((fieldLabel, fieldCrossing), (_, fieldValue)) -> do
+                value <- receivedField spanValue binding fieldLabel fieldCrossing fieldValue
+                pure (fieldLabel, value)
+            )
+            (zip declared held)
   (_, CrossedInteger held) -> pure (IntValue (kindOf crossing) (integerResult crossing held))
   (_, CrossedDouble held) -> pure (FloatValue (widthOf crossing) held)
   _ -> foreignResultMismatch spanValue binding

@@ -65,12 +65,15 @@ foreign import ccall unsafe "pudu_ffi_cpp_delete_count"
 foreign import ccall unsafe "pudu_ffi_cpp_active_count"
   cppActiveCount :: IO CInt
 
+
+
 testForeignHandles :: IO Property
 testForeignHandles = do
   CInt anchor <- cppFixtureAnchor
   successful <- runEntry "test-fixtures/stdlib/UsesForeignHandles.pudu"
   imported <- runEntry "test-fixtures/foreignmodule/Main.pudu"
   records <- runEntry "test-fixtures/stdlib/UsesForeignRecords.pudu"
+  nested <- runEntry "test-fixtures/stdlib/UsesForeignNested.pudu"
   text <- runEntry "test-fixtures/stdlib/UsesForeignText.pudu"
   crossings <- runEntry "test-fixtures/stdlib/UsesForeignCrossings.pudu"
   noText <- runtimeCodes "test-fixtures/stdlib/RejectsForeignTextNone.pudu"
@@ -114,11 +117,13 @@ testForeignHandles = do
         machine it was written for. -}
     , counterexample "a record crosses a foreign boundary by value"
         (records === Just "12")
-    {-| One level, stated rather than discovered. A record of records and a
-        record with a field that cannot cross are both refused at the
-        declaration, where a reader can see why, rather than at a call where the
-        answer would be a fault. -}
-    , counterexample "a nested record and an uncrossable field are refused where they are written"
+    {-| What a record still cannot do. Nesting is admitted, because a record is
+        described by the leaves it flattens to. A record reached from inside
+        itself has no flattening — there is no end to its leaves — and a field
+        whose own type cannot cross takes the record with it. Both are refused
+        at the declaration, where a reader can see why, rather than at a call
+        where the answer would be a fault. -}
+    , counterexample "a circular record and an uncrossable field are refused where they are written"
         (refusedRecords === ["E3063", "E3063"])
     {-| Text a library hands back arrives as text. It used to arrive as the
         address it crossed as, while the checker had already called it a Str —
@@ -137,6 +142,15 @@ testForeignHandles = do
         (missingRecordText === ["E7024"])
     , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"
         (crossingShapes === ["E3070", "E3071", "E3069", "E3063", "E3063", "E3063"])
+    {-| A record inside a record. A camera holds two points and a font holds a
+        texture, so a boundary admitting only flat records admits almost none of
+        what a library passes about. What crosses is the leaves, in declaration
+        order, which is the same description the platform derives for the
+        nesting itself — proved against a C++ surface before anything was built
+        on it, including a record whose nesting sits between fields that need
+        padding around it. -}
+    , counterexample "a record inside a record crosses by value"
+        (nested === Just "8")
     , counterexample "an exported binding module keeps canonical handle types and runtime symbols"
         (imported === Just "1")
     , counterexample "a second release is refused before C++ is entered"
