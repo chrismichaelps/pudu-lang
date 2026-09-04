@@ -15,6 +15,7 @@ formatProperties =
   , ("formatting is idempotent", testIdempotent)
   , ("formatting preserves every comment", testCommentsPreserved)
   , ("indentation follows brace depth", testIndentation)
+  , ("a wrapped parameter list belongs to its declaration", testWrappedParameters)
   , ("spacing is normalised inside a line", testSpacing)
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
@@ -61,6 +62,36 @@ testCommentsPreserved = pure $ conjoin (map (ioProperty . check) samples)
     formatted <- formatOf text
     after <- commentsOf formatted
     pure (counterexample (Text.unpack formatted) (after === before))
+
+{-| A parameter list on its own line opens with `(`, which can also begin a
+    statement, so it was read as one and put at the margin — where a reader
+    looking for the next declaration finds it instead. A leading `(` that really
+    does begin a statement must stay where it is. -}
+testWrappedParameters :: IO Property
+testWrappedParameters = do
+  formatted <- formatOf wrapped
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expectedWrapped)
+    )
+ where
+  wrapped =
+    Text.unlines
+      [ "module M"
+      , "fn aLongName"
+      , "(first: Int, second: Int) -> Int {"
+      , "let pair = 1"
+      , "(pair, second)[0]"
+      , "}"
+      ]
+  expectedWrapped =
+    [ "module M"
+    , "fn aLongName"
+    , "  (first: Int, second: Int) -> Int {"
+    , "  let pair = 1"
+    , "  (pair, second)[0]"
+    , "}"
+    ]
 
 testIndentation :: IO Property
 testIndentation = do
