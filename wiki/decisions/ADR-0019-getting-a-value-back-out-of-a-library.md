@@ -160,7 +160,10 @@ caller owns useful storage before the call, a second value bounds how much may b
 answer may occupy only a prefix. Treating that as `out Str` would allocate the wrong representation,
 lose the capacity relation, and scan for a terminator the API may never write.
 
-Buffers therefore follow slots in a separate decision. They need a bounded byte value, an explicit
+[[ADR-0020-handing-a-library-a-run-of-bytes]] takes the first part of that separate decision, and
+finds that "buffers" is three contracts rather than one: sixty-three functions across four libraries
+pass a run the library only reads, against nine it writes into and ten it allocates. Buffers
+therefore follow slots in a separate decision. They need a bounded byte value, an explicit
 capacity relationship, mutation confined to the call, and a rule for the initialized length. Slots
 come first because they reuse existing scalar, record, text, and owned-handle crossing while making
 whole opaque-handle libraries reachable. Neither design is allowed to masquerade as the other.
@@ -261,4 +264,4 @@ value before the call. Conflating them would hide the invariants the boundary ne
 
 ## Referenced by
 
-[[ADR-0018-calling-a-library-written-elsewhere]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[architecture/STDLIB]] · [[2026-09-04-foreign-out-slots]]
+[[ADR-0018-calling-a-library-written-elsewhere]] · [[ADR-0020-handing-a-library-a-run-of-bytes]] · [[grammar/pudu]] · [[architecture/SEMANTICS]] · [[architecture/STDLIB]] · [[2026-09-04-foreign-out-slots]]
