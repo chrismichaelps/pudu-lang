@@ -1,0 +1,8 @@
+module RejectsBorrowedForeignHandle
+
+foreign "c" {
+  type Box
+  fn pudu_ffi_cpp_box_null() -> Box
+}
+
+export fn main() -> Int { 0 }

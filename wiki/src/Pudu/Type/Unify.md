@@ -15,6 +15,12 @@ aliases: [Type Unify]
 
 # Type Unify
 
+- **Two restricted functions agree when they require the same abilities and the functions underneath
+  them agree.** Exactly the same set, in both directions. One requiring more cannot stand where less
+  is expected — that is the laundering this exists to stop — and one requiring less cannot stand
+  where more is expected either, because the caller was written to grant what the expected type
+  asked for. Whether a set may narrow is what capability variables would answer.
+
 ## Purpose
 
 Own making two types equal or explaining why not for [[Type Check]].

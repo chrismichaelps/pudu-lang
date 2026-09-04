@@ -48,6 +48,8 @@ serverCapabilities :: Json
   looking at.
 - An `Analysis` is held rather than recomputed per request: a hover, a definition, and a completion
   within one keystroke would otherwise compile the program three times.
+- The stored analysis retains the root module's resolver result. Hover and definition therefore use
+  symbol identity from the same compile as diagnostics and types rather than guessing by spelling.
 - **Only implemented capabilities are announced.** A capability claimed and not honoured is worse
   than one withheld — the editor stops offering its own fallback and the reader gets nothing at all.
   Rename, references, and semantic tokens are absent for that reason.
@@ -69,6 +71,9 @@ serverCapabilities :: Json
 - **Hover answers about what the cursor is on, and about the declaration containing it only when nothing else answers.** The documentation index holds declarations, so asking it alone could only ever name the function a cursor was inside — hovering `text` in `text.length()` reported the enclosing `main`, which is true of every position in that body and therefore tells a reader nothing.
 - **After a dot, completion offers what the value carries.** The receiver is the expression ending at the dot, which the checker already recorded a type for, and the method names come from the tables dispatch reads. A request carrying no position asks about the document rather than a place in it, and is answered as it always was.
 - **A type the reader wrote carries what they gave it.** The built-in sets answer for `Str` and `Array` and say nothing about anything a program declared, so the methods an `impl` block wrote are offered alongside them — the index already names the type each was implemented for.
+- **A foreign function use retains provenance on hover.** The compiler-inferred signature remains
+  first, but the declaration entry is used only when the resolved symbol under the cursor is that
+  foreign declaration. Opaque foreign handle declarations appear in outline and completion as types.
 
 ### Linkage
 

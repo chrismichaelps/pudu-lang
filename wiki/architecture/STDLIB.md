@@ -728,8 +728,11 @@ dependencies are its own files plus the compiler it is built with, and that is t
   language rather than a module in the library, the `foreign` capability from [[Unsafe Capabilities]]
   gates every call, and ownership is named in the declaration — an owned result carries the function
   that releases it. Integers, the two floating widths, a boolean, and text cross, in this language's
-  own types. What is still open is a pointer, callbacks into this language, which thread a call runs
-  on, and where a library comes from.
+  own types. Opaque owned handles now cross as nominal values with one declared release function;
+  they are not general pointers and cannot be inspected or used for arithmetic. C++ is supported
+  through a C-linkage wrapper, never through mangled symbols, object layout, templates, or escaping
+  exceptions. What is still open is a general pointer model, borrowed foreign lifetimes, callbacks
+  into this language, which thread a call runs on, and where a library comes from.
 - **Numeric tower beyond `BigInt` and `Decimal`.** Rationals and arbitrary-precision floats have real
   uses and no urgent one; admitting them later costs nothing, and admitting them wrongly costs a
   release.

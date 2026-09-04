@@ -1,0 +1,24 @@
+module Main
+
+import Bindings
+import Bindings as B
+import Bindings {asserted}
+
+/// A restriction follows the function, not the spelling it was reached by.
+///
+/// Each of these is the same declaration under a different name — through its
+/// module, through an alias, and selected into this scope — and each is
+/// refused without the capability its declaration asked for.
+export fn main() -> Int {
+  let counted = Bindings.measure("four")
+  let renamed = B.measure("four")
+  let raised = asserted(1)
+  let aliased = B.asserted(2)
+  let qualified = Bindings.asserted(3)
+  Int64.toInt(counted) + Int64.toInt(renamed) + raised + aliased + qualified
+}
+
+/// A compile-time body may not call an imported ordinary function, for the
+/// same reason it may not call a local one: the guarantee is transitive or it
+/// is nothing.
+comptime fn folded() -> Int { Bindings.ordinary(1) }

@@ -35,7 +35,10 @@ uriOf            :: Json -> Maybe Text
 ### Governance
 
 - **The store is a value the loop threads, not a mutable cell.** What a reply says and what the server holds therefore cannot disagree part-way through answering a request.
-- One `Analysis` is everything one compile said about one file — its text, its source, its diagnostics, its documentation index, and what the checker made of each expression by span. Hover needs the last of those, and asking the documentation index instead is what made it answer with the enclosing function.
+- One `Analysis` is everything one compile said about one file — its text, source, diagnostics,
+  documentation index, resolved symbol identities, and what the checker made of each expression by
+  span. Hover and definition use resolution to distinguish a foreign declaration from a local or
+  parameter with the same spelling.
 - A document the editor closed is forgotten rather than kept, so a stale answer about a file nobody has open cannot be given.
 
 ### Linkage

@@ -16,14 +16,68 @@ module Pudu.Type.Value
   , integerType
   , isErrorType
   , renderType
+  , Capabilities
+  , noCapabilities
+  , capabilitiesOf
+  , capabilityList
+  , capabilitiesCover
+  , capabilitiesUnion
+  , capabilityName
+  , renderCapabilities
+  , restrictedBy
   , stringType
   , unitType
   ) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Bits ((.&.), (.|.), setBit, testBit, zeroBits)
 import Data.String (IsString (..))
+import Data.Word (Word8)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
+import Pudu.Frontend.Syntax.Tree (Capability (..))
+
+{-| The unchecked abilities a function requires of whoever calls it.
+
+    A set of at most four things, held as bits rather than as a list. Two types
+    are compared on every unification, so the comparison is one machine word
+    here instead of a walk over a list whose order would also have to be
+    normalised first. -}
+newtype Capabilities = Capabilities Word8
+  deriving stock (Eq, Ord, Show)
+
+noCapabilities :: Capabilities
+noCapabilities = Capabilities zeroBits
+
+capabilitiesOf :: [Capability] -> Capabilities
+capabilitiesOf = Capabilities . foldr (\capability bits -> setBit bits (fromEnum capability)) zeroBits
+
+capabilityList :: Capabilities -> [Capability]
+capabilityList (Capabilities bits) =
+  [capability | capability <- [minBound .. maxBound], testBit bits (fromEnum capability)]
+
+{-| Whether the first set covers the second.
+
+    Used where a requirement meets a grant rather than where two types meet:
+    types match exactly, and only a granting region is allowed to hold more than
+    was asked of it. -}
+capabilitiesCover :: Capabilities -> Capabilities -> Bool
+capabilitiesCover (Capabilities granted) (Capabilities required) =
+  granted .&. required == required
+
+capabilitiesUnion :: Capabilities -> Capabilities -> Capabilities
+capabilitiesUnion (Capabilities left) (Capabilities right) = Capabilities (left .|. right)
+
+capabilityName :: Capability -> Text
+capabilityName capability = case capability of
+  RawCapability -> "raw"
+  ForeignCapability -> "foreign"
+  UncheckedCapability -> "unchecked"
+  NullCapability -> "null"
+
+{-| The abilities a set names, for a diagnostic to read back. -}
+renderCapabilities :: Capabilities -> Text
+renderCapabilities = Text.intercalate ", " . map capabilityName . capabilityList
 
 {-| @Type.Value.Var — one inference variable -}
 newtype TypeVar = TypeVar Int
@@ -75,6 +129,15 @@ data Type
       and a mismatch explainable. -}
   | AppliedType !Type ![Type]
   | VariableType !TypeVar
+  {-| A function that requires unchecked abilities of whoever calls it.
+
+      A wrapper rather than a field on the function type, because the ordinary
+      function is the ordinary case and should not carry a set nearly every one
+      of them leaves empty. It also means a restricted function and a plain one
+      are different types, which is the whole point: a value cannot lose what it
+      requires by being stored in a variable or passed as an argument, because
+      the requirement is in the type that travels with it. -}
+  | RestrictedType !Capabilities !Type
   | UnitTypeValue
   | NeverType
   | ErrorType
@@ -141,6 +204,18 @@ variableName identifier
       Text.singleton (toEnum (fromEnum 'a' + identifier `mod` 26))
         <> Text.pack (show (identifier `div` 26))
 
+{-| The type a declaration's own capabilities give it.
+
+    A declaration that said `unsafe` is wrapped even when it named nothing: the
+    blanket form still requires an open region of its caller, and leaving it an
+    ordinary function type is what let it lose that requirement by being stored
+    in a variable. An ordinary declaration is left exactly as it was, so the
+    common signature carries no set at all. -}
+restrictedBy :: Maybe [Capability] -> Type -> Type
+restrictedBy declared inner = case declared of
+  Nothing -> inner
+  Just capabilities -> RestrictedType (capabilitiesOf capabilities) inner
+
 {-| Render a type the way a diagnostic quotes it. -}
 renderType :: Type -> Text
 renderType typeValue = case typeValue of
@@ -153,6 +228,10 @@ renderType typeValue = case typeValue of
     (if asynchronous then "async fn(" else "fn(")
       <> Text.intercalate ", " (map renderType inputs)
       <> ") -> " <> renderType result
+  {-| Rendered the way it is written, so a mismatch quotes something a reader
+      can search for in their own source. -}
+  RestrictedType capabilities inner ->
+    "unsafe(" <> renderCapabilities capabilities <> ") " <> renderType inner
   ReferenceTypeValue mutable target ->
     (if mutable then "&mut " else "&") <> renderType target
   RigidType name -> name

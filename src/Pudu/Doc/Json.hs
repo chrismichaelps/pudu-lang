@@ -8,6 +8,7 @@ module Pudu.Doc.Json
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), kindLabel)
+import Pudu.Type.Value (capabilityName)
 import Pudu.Doc.Signature
   ( SigType (..)
   , Signature (..)
@@ -75,6 +76,11 @@ encodeSigType sigType =
       [ ("form", string "fn")
       , ("inputs", array (map encodeSigType inputs))
       , ("result", encodeSigType result)
+      ]
+    SigRestricted capabilities inner ->
+      [ ("form", string "restricted")
+      , ("capabilities", array (map (string . capabilityName) capabilities))
+      , ("target", encodeSigType inner)
       ]
     SigUnit -> [("form", string "unit")]
     SigNever -> [("form", string "never")]

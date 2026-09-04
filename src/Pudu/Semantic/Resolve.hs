@@ -200,7 +200,10 @@ collectDeclaration (Located _ declaration) = case declaration of
       visibility carries to all of them: they were written together because they
       belong to one library, and exporting them one at a time would let a caller
       reach half of a boundary. -}
-  ForeignDeclaration value ->
+  ForeignDeclaration value -> do
+    mapM_
+      (declareNamed TypeSpace ModuleOrigin (foreignVisibility value) False)
+      (foreignTypes value)
     mapM_
       ( \(Located _ function) ->
           declareNamed ValueSpace ModuleOrigin (foreignVisibility value) False
@@ -440,6 +443,7 @@ walkType (Located typeSpan value) = case value of
   ReferenceType _ target -> walkType target
   TupleType members -> mapM_ walkType members
   FunctionType _ inputs result -> mapM_ walkType inputs >> walkType result
+  UnsafeType _ target -> walkType target
   UnitType -> pure ()
   InvalidType -> pure ()
 

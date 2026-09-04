@@ -24,9 +24,9 @@ read the same list.
 
 ```haskell
 data Crossing = SignedCrossing !Int | UnsignedCrossing !Int | FloatingCrossing !Int
-              | BooleanCrossing | TextCrossing | NothingCrossing
+              | BooleanCrossing | TextCrossing | HandleCrossing !Text | NothingCrossing
 
-crossingFor    :: Located TypeSyntax -> Maybe Crossing
+crossingFor    :: Set Text -> Located TypeSyntax -> Maybe Crossing
 crossingName   :: Crossing -> Text
 crossingType   :: Crossing -> Type
 fitsCrossing   :: Crossing -> Integer -> Bool
@@ -47,6 +47,17 @@ crossableNames :: Text
   keeps running with a value it never computed.
 - **The names are in one place** so a diagnostic can offer the whole list rather than a guess about
   which one was meant.
+- **Handle names are unqualified and come from the enclosing block.** A qualified `Other.Box` is
+  never reduced to `Box`; scalar names may be unqualified only as well. A misspelled or qualified
+  handle is refused rather than laundered into the block's own nominal type.
+
+- **A record crosses by value and is an ordinary record.** What a library passes about is its
+  colours, points, and rectangles, so a boundary admitting only scalars admits almost nothing real.
+  The declaration names a record this program already has; it crosses when every field crosses, one
+  level deep, and the fields travel in the order the declaration wrote them.
+- **The layout is the platform's answer.** Only names and widths are carried across; where each
+  field sits inside the record is asked for on the other side. A calculation here would be right on
+  the machine it was written for and silently wrong on the next.
 
 ### Linkage
 
@@ -60,11 +71,12 @@ crossableNames :: Text
   a second spelling for the same thing means a caller converts at every call and
   the foreign names leak into code that has nothing to do with the boundary.
   _Rejected:_ a parallel width vocabulary.
-- **Q:** Admit a pointer now, since [[ADR-0018 Calling a Library Written Elsewhere]]
-  describes one? **A:** Not in this slice. _Rationale:_ a pointer needs a runtime
-  representation and an ownership rule of its own, and `owned … by …` already
-  exists in the declaration form, so the next slice adds a type rather than a
-  syntax. _Rejected:_ an opaque integer standing in for an address.
+- **Q:** Represent a handle as an integer? **A:** No. _Rationale:_ its address-shaped storage is not
+  permission to calculate with it, and its declared name prevents one resource from being passed as
+  another. _Rejected:_ exposing addresses as `Int64`; one universal pointer type.
+- **Q:** Compare only the final segment of a foreign type path? **A:** No. _Rationale:_ `Other.Box`
+  and this block's `Box` are different nominal types even when their basenames match. _Rejected:_
+  qualifier erasure at the ABI boundary.
 
 ## Referenced by
 

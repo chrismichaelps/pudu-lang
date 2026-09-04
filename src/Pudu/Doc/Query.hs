@@ -72,6 +72,9 @@ parseSignature text = case splitArrows text of
         Just
           Signature
             { signatureConstraints = []
+            {-| A query never asks for a capability: a reader searching by shape
+                wants the function whether or not calling it needs one. -}
+            , signatureCapabilities = []
             , signatureArguments = reverse reversedArguments
             , signatureResult = result
             }

@@ -39,6 +39,8 @@ valueKind :: Value -> Text
   makes.
 - Both float widths render their normalized numeric value without a runtime suffix; `:type` remains
   where a reader asks about static width.
+- An opaque foreign handle renders its declared type and hexadecimal address inside an opaque tag.
+  It never renders as source or as an integer a program could reuse.
 
 ### Linkage
 
@@ -58,7 +60,7 @@ Direct structural recursion over the value shape. No caching, no mutation, no re
 
 ## Edge Cases
 
-- A function, task, or partially applied built-in method prints as an opaque tag naming what it is,
+- A function, task, foreign handle, or partially applied built-in method prints as an opaque tag naming what it is,
   because none of them has a written form to print.
 - An empty map prints as `{}` and an empty set as `#{}`, which is what distinguishes them.
 

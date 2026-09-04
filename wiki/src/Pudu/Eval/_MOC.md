@@ -24,6 +24,7 @@ tags: [moc, module]
 - [[Evaluator]] — declaration installation, statement and expression walking, and bounded execution.
 - [[Eval Dispatch]] — array method dispatch (currently inline in Eval.hs, extraction planned).
 - [[Eval Render]] — how a runtime value prints, and what a diagnostic calls its shape.
+- [[Eval Method]] — the closed vocabulary of built-in methods a value answers to, and the name each is spelled by.
 - [[Eval Value]] — runtime values, and the total order the keyed collections are held in.
 - [[Eval Foreign]] — the call into a library written elsewhere, and every check made before the value leaves.
 - [[Eval Env]] — environment frames, control unwinding, and abort diagnostics.

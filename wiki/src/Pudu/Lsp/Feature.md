@@ -25,7 +25,7 @@ The exported signatures are the module header's export list.
 
 - Positions convert between UTF-16 code units and scalars at the edge, once, so nothing inside the compiler has to know the protocol counts differently from the lexer. A cursor after one emoji reports character 2.
 - The narrowest entry covering an offset wins a hover. A declaration's span encloses its members', so the widest match would answer every hover with the same enclosing declaration.
-- Go to definition matches the *name under the cursor* against the index rather than the span under it, because a reader asks for the definition of a use, and a use is nowhere near the declaration.
+- `symbolAt` maps a declaration or reference span to the resolver's stable symbol identity. `entryForSymbol` then selects only the documentation entry containing that symbol's defining span, so equal spelling under shadowing cannot select another declaration.
 - A hover puts the signature first and the prose second: the signature answers "what is this", and a reader who already knows why still wants it without reading past a paragraph.
 - The outline is flat. The index records what a module declares; inventing a hierarchy it does not have would nest members under whichever declaration happened to enclose them by offset.
 - Completion ordering is left to the client, which knows what the reader has typed.
@@ -43,6 +43,12 @@ Direct structural recursion over the shape being read or written; no caching and
 
 - No compilation, no analysis, and no decision about what a program means.
 - No acceptance of input the format does not admit.
+
+## Grill Log
+
+- **Q:** Is matching the word under a cursor sufficient for identity-sensitive features? **A:** No.
+  _Rationale:_ lexical shadowing deliberately gives the same spelling multiple symbols. _Rejected:_
+  first source-ordered documentation entry with an equal name.
 
 ## Referenced by
 

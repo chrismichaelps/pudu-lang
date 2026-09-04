@@ -34,7 +34,12 @@ jobs:
       - name: Verify the tree compiles with no warnings
         run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
       - run: cabal build all --enable-optimization=2
-      - run: cabal test all --enable-optimization=2 --test-show-details=direct
+      # A suite that stops responding should say so and end, rather than hold
+      # the runner until the job's own limit. The bound is generous against the
+      # observed run so an ordinary slow day is not a failure.
+      - name: Run the full suite
+        timeout-minutes: 12
+        run: cabal test all --enable-optimization=2 --test-show-details=direct
       - name: Verify every committed Pudu file is formatted
         run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures -name '*.pudu')
       - name: Verify every diagnostic code means one thing

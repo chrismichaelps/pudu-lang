@@ -52,6 +52,7 @@ library
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Foreign
+    Pudu.Eval.Method
     Pudu.Eval.Handle
     Pudu.Eval.Hash
     Pudu.Eval.HashMap
@@ -77,11 +78,13 @@ library
     Pudu.Frontend.Parser
     Pudu.Frontend.Parser.Name
     Pudu.Frontend.Parser.Pattern
+    Pudu.Frontend.Parser.Capability
     Pudu.Frontend.Parser.Declaration
     Pudu.Frontend.Parser.Declaration.Binding
     Pudu.Frontend.Parser.Declaration.Block
     Pudu.Foreign.Call
     Pudu.Foreign.Crossing
+    Pudu.Foreign.Ownership
     Pudu.Frontend.Parser.Declaration.Foreign
     Pudu.Frontend.Parser.Declaration.Function
     Pudu.Frontend.Parser.Declaration.Generic
@@ -105,8 +108,10 @@ library
     Pudu.FloatLiteral
     Pudu.Format
     Pudu.Lsp.Feature
+    Pudu.Lsp.Hover
     Pudu.Lsp.Json
     Pudu.Lsp.Documents
+    Pudu.Lsp.Definition
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
     Pudu.IntegerLiteral
@@ -197,6 +202,12 @@ test-suite pudu-test
   hs-source-dirs:   test
   main-is:          Main.hs
   ghc-options:      -threaded -rtsopts
+  cxx-sources:      cbits/pudu_ffi_cpp_fixture.cpp
+  cxx-options:      -std=c++11
+  if os(darwin)
+    ghc-options:    -optl-Wl,-export_dynamic
+  else
+    ghc-options:    -optl-Wl,--export-dynamic
   other-modules:
     Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec

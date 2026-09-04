@@ -15,6 +15,11 @@ aliases: [Parser Type]
 
 # Parser Type
 
+- **`unsafe(raw) fn(Int) -> Int` is a type.** Without it a program could hold a function that
+  requires something but never name the shape of one, so no parameter could accept it and
+  higher-order code over a binding would be unwritable. Closing a hole by making the feature useless
+  is not closing it.
+
 ## Purpose
 
 Parse reference, tuple/unit, named path, and square-bracket generic type syntax without type resolution.

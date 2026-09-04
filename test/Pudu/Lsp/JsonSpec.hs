@@ -11,6 +11,7 @@ import Test.QuickCheck
   , counterexample
   , elements
   , forAll
+  , frequency
   , oneof
   , property
   , resize
@@ -36,18 +37,32 @@ testRoundTrip =
     counterexample (Text.unpack (encode value)) (parse (encode value) === Just value)
 
 {-| Bounded so a counterexample stays readable; the laws do not depend on
-    depth. -}
+    depth.
+
+    The depth has to fall at every step, and visibly. Recursing at a size that
+    did not decrease made this a branching process whose mean offspring was
+    exactly one — two chances in three of an internal node, times an average of
+    one and a half children — and a critical process of that kind ends with
+    probability one while having no finite expected size. Nearly every value it
+    produced was small, and occasionally one was astronomical, which is what a
+    suite that usually passed and sometimes never finished looked like from
+    outside. Halving carries at most 1 + 3 + 9 + 27 nodes from a size of four. -}
 values :: Gen Json
-values = sized (\size -> resize (min size 4) generate)
+values = resize 4 generate
  where
-  generate = sized $ \size ->
-    if size <= 0
-      then leaf
-      else
-        oneof
-          [ leaf
-          , JsonArray <$> shorter (resize 3 (listOf' generate))
-          , JsonObject <$> shorter (resize 3 (listOf' ((,) <$> names <*> generate)))
+  generate = sized descend
+  {-| Weighted towards structure, which is what the property is about. The
+      depth is capped by the halving above rather than by luck, so leaning on
+      containers costs nothing: a leaf every third value made half of every run
+      a single scalar, which round-trips whatever the encoder does with
+      nesting. -}
+  descend size
+    | size <= 0 = leaf
+    | otherwise =
+        frequency
+          [ (1, leaf)
+          , (2, JsonArray <$> listOf' (descend (size `div` 2)))
+          , (2, JsonObject <$> listOf' ((,) <$> names <*> descend (size `div` 2)))
           ]
   leaf =
     oneof
@@ -56,9 +71,8 @@ values = sized (\size -> resize (min size 4) generate)
       , JsonNumber . fromIntegral <$> chooseInt (-1000, 1000)
       , JsonText <$> contents
       ]
-  shorter = resize 2
   listOf' item = do
-    count <- chooseInt (0, 3)
+    count <- chooseInt (1, 3)
     sequence (replicate count item)
   names = elements ["id", "method", "params", "uri", "line", "character", "ünïcode"]
   contents =

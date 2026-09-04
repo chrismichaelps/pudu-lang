@@ -31,6 +31,12 @@ and the one to write; the type alone does not carry it once the function is stor
 signature guarantees is that nothing was handed over, and what `comptime` guarantees is that nothing
 was reached.
 
+**The reading's accessors are themselves compile-time.** A `comptime` body may call only other
+compile-time functions, which is what makes the guarantee transitive rather than a promise each
+function makes about itself — so a judgement that reads a count or a flag needs those two to carry
+the same restriction. They ask the reading's own map directly rather than going through another
+module, which keeps the compile-time claim inside the module that makes it.
+
 **The worst verdict wins.** An aggregate is as healthy as its unhealthiest part, which is the only
 aggregation rule that does not eventually report a working service while one of its parts is down.
 There is no ordering to configure and no per-check weighting, because both are ways of arranging for

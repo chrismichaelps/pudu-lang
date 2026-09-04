@@ -27,8 +27,8 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 
 - The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
 
-- The environment also carries one runtime resource set allocated for the evaluation. File, socket,
-  thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
+- The environment also carries one runtime resource set allocated for the evaluation. Foreign
+  resources, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
   child host threads retain the same set; a different program evaluated in the same host process
   receives a different set.
 
@@ -73,6 +73,9 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Keep process-global resource tables? **A:** No. _Rationale:_ one evaluation's teardown could
   close another concurrently evaluated program's live resources. _Rejected:_ serializing all
   embedded evaluations behind one global lock.
+- **Q:** Store foreign ownership outside the environment? **A:** No. _Rationale:_ captured closures
+  and child threads need the same claims, while independent evaluations need disjoint teardown.
+  _Rejected:_ a global foreign-address registry.
 
 ## Referenced by
 

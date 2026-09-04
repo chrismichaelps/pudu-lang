@@ -40,10 +40,19 @@ import Pudu.Source (Position (Position), Source, SourceName (SourceName), Span, 
   mergeSpans, mkSpan, newSource, offsetFromInt, offsetPosition, sourceLength, sourceName, sourceText,
   spanEnd, spanSource, spanStart, unOffset, zeroOffset, zeroWidthSpan)
 import System.Exit (exitFailure)
+import System.IO (BufferMode (LineBuffering), hSetBuffering, stdout)
 import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, elements, forAll, ioProperty,
   isSuccess, listOf, property, quickCheckResult, resize, withMaxSuccess, (===))
 main :: IO ()
 main = do
+  {-| A name reaches the log before the test it names runs.
+
+      Piped output is block-buffered by default, so a suite that stops
+      responding takes the last few hundred lines of its own log with it — and
+      the one line that would say which test stopped is always among them.
+      Line buffering costs nothing here and is the difference between a
+      diagnosable hang and a cancelled job. -}
+  hSetBuffering stdout LineBuffering
   sourceOutcomes <-
     sequence
       [ check "empty source position" testEmptySourcePosition

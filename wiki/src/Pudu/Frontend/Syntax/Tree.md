@@ -39,15 +39,27 @@ data Declaration
   | TypeDeclaration !TypeDeclarationValue
   | TraitDeclaration !Trait
   | ImplDeclaration !Impl
+  | MacroDeclaration !Macro
+  | ForeignDeclaration !Foreign
   | InvalidDeclaration
+data Foreign = Foreign
+  { foreignVisibility :: !Visibility, foreignLibrary :: !(Located Text)
+  , foreignVersion :: !(Maybe (Located Text)), foreignTypes :: ![Located Text]
+  , foreignFunctions :: ![Located ForeignFunction] }
+data ForeignFunction = ForeignFunction
+  { foreignName :: !(Located Text), foreignSymbol :: !(Maybe (Located Text))
+  , foreignParameters :: ![Located Parameter], foreignResult :: !(Located TypeSyntax)
+  , foreignReleasedBy :: !(Maybe (Located Text)) }
 data Function = Function
   { functionVisibility :: !Visibility, functionAsync :: !Bool
+  , functionUnsafe :: !(Maybe [Located Capability]), functionComptime :: !Bool
   , functionName :: !(Located Text), functionTypeParams :: ![Located TypeParam]
   , functionParameters :: ![Located Parameter], functionReturn :: !(Maybe (Located TypeSyntax))
   , functionConstraints :: ![Located Constraint]
   , functionBody :: !(Maybe (Located FunctionBody)) }
 data TypeParam = TypeParam
-  { typeParamName :: !(Located Text), typeParamBounds :: ![Located TypeSyntax] }
+  { typeParamName :: !(Located Text), typeParamArity :: !Int
+  , typeParamBounds :: ![Located TypeSyntax] }
 data Constraint = Constraint
   { constraintSubject :: !(Located Text), constraintBounds :: ![Located TypeSyntax] }
 data TypeDeclarationValue = TypeDeclarationValue
@@ -74,7 +86,8 @@ data Parameter = Parameter
   { parameterName :: !(Located Text), parameterType :: !(Maybe (Located TypeSyntax))
   , parameterDefault :: !(Maybe (Located Expression)) }
 data TypeSyntax
-  = NamedType !ModuleName ![Located TypeSyntax] | ReferenceType !Bool !(Located TypeSyntax)
+  = NamedType !ModuleName ![Located TypeSyntax] | DynamicType !ModuleName
+  | ReferenceType !Bool !(Located TypeSyntax)
   | TupleType ![Located TypeSyntax] | FunctionType !Bool ![Located TypeSyntax] !(Located TypeSyntax)
   | UnitType | InvalidType
 data FunctionBody = BlockBody !(Located Block) | ExpressionBody !(Located Expression)
@@ -139,6 +152,10 @@ All constructors derive `Eq` and `Show` and are exported for parser construction
 - An absent `functionBody` means a trait member declared without a default; it is the one legitimate bodiless function and is never produced at module scope.
 - Patterns are syntax only: alternation is flat, a range keeps two literal endpoints, and a record rest is an explicit flag rather than an implied field list.
 - `IfLetExpression` preserves the pattern condition the reader wrote so diagnostics and `:ast` do not expose an invented match. Its phases reuse ordinary pattern machinery; the tree adds surface identity, not new matching semantics.
+- A foreign block retains its opaque handle names separately from its function declarations. A
+  handle has no fields, constructors, or representation syntax in the tree.
+- A foreign function retains an optional exact native symbol separately from its local value name.
+  Name resolution and tooling use the local name; runtime installation alone reads the symbol.
 
 ### Linkage
 
@@ -169,6 +186,9 @@ DEPTH 0.56 (MEDIUM). Breadth is inherent to the grammar; co-location is delibera
 
 - **Q:** Split each recursive data type with `hs-boot`? **A:** No; keep the data knot in one behavior-free file. _Rationale:_ cycles add build complexity without modular behavior. _Rejected:_ artificial boot modules; all parser logic in the same file.
 - **Q:** Lower `if let` directly into `MatchExpression` while parsing? **A:** No; preserve a surface node. _Rationale:_ parser lowering makes source tools show syntax the reader did not write and lets synthetic-arm diagnostics leak. _Rejected:_ parser-only desugaring; a second pattern representation.
+- **Q:** Store only the native symbol and derive the local name from it? **A:** No. _Rationale:_
+  Raylib's `MemAlloc` is not a legal Pudu value name, and weakening one language's naming rules to
+  imitate another loses local consistency. _Rejected:_ foreign symbols as local identifiers.
 
 ## Variants
 

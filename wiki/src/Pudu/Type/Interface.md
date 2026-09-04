@@ -51,11 +51,13 @@ importsFor
 
 - Every exported nominal type and trait has a canonical identity formed from its declaring `ModuleName` plus declaration name. Display spelling is separate from equality.
 - The interface exposes annotated exported function/constant signatures, exported record/sum/alias shapes required to check their use, exported trait member signatures/default availability, and coherent implementation signatures defined by the module. Exported constants must be annotated with `E3010` otherwise because their bodies are not interface data.
+- An exported foreign block remains in the body-free interface. Its declared handles receive canonical identities owned by the declaring module, and its foreign functions remain asserted signatures carrying the `foreign` capability. Private foreign blocks do not enter importable names or values.
 - Function and method bodies, private top-level names, local scopes, inference substitutions, and checker diagnostics are not interface data.
 - An implementation has no export marker. It is visible through the defining module interface only when its trait is in the importing module's trait scope; ownership/coherence was already checked in its defining module.
 - Selected imports bind only selected exported names. A module or alias import supplies qualified access to all exported names. Import bindings never become exports of the consumer.
 - Selecting a missing or private item reports `E2013` at the item span with the named module in the message.
 - Imported names map their local spelling/path to canonical identity. Two modules exporting `User` or `Show` never share a type, trait, bound, implementation, or method key.
+- Two binding modules may both call a handle `Window`; their canonical module owners keep the types distinct even when a consumer imports both.
 - Interface skeleton construction is body-independent, allowing all skeletons in a cyclic SCC to exist before any body is checked.
 - Every interface-carried function, exported trait member, and implementation method must annotate every parameter and its return type. `E3010` rejects an incomplete ABI signature, and the incomplete member is omitted from the body-free interface so consumer inference cannot invent a context-dependent replacement.
 - Private nominal declarations are retained only as non-importable formation shells. They canonicalize private identities mentioned behind public signatures without entering the export or value namespaces.

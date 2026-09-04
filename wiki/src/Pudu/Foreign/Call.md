@@ -23,8 +23,11 @@ assembled while the program runs.
 ## Interface
 
 ```haskell
+resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
+
 data ForeignHandle
 data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText !Text
+                  | CrossedHandle !Text !Int64
 
 openLibrary :: Text -> IO (Either Text ForeignHandle)
 findSymbol  :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
@@ -41,6 +44,13 @@ kindCode    :: Crossing -> Word8
   every platform files it under a different name — and in one common case under a linker script
   rather than a library. A binding that hardcodes one of those names works on one machine, which is
   why nearly every language's C bindings carry a table of them.
+- **A resolved symbol is kept, and the read is lock-free.** A call used to ask the dynamic linker
+  for its function every time it ran — a hash lookup through the linker's tables plus a fresh
+  nought-terminated copy of the name to hand it. An address does not change for the life of the
+  process, so it is remembered. Measured over two hundred thousand calls, the boundary cost fell
+  from 1.7µs to 0.25µs a call. Two threads racing to resolve the same symbol both call the linker
+  and both write the same address, which costs one redundant lookup and no correctness; a lock to
+  prevent that would sit on the hot path to save work that is already rare.
 - **An opened library is kept.** Opening one twice and holding two handles to the same code is how a
   library with internal state acquires two of it, and a graphics library is nothing but internal
   state.
@@ -49,6 +59,8 @@ kindCode    :: Crossing -> Word8
   detect that.
 - **The kind codes are shared with the C file and are not to be reordered.** One side knows the
   declaration and the other knows the machine; the codes are the only thing they agree on.
+- Resource lifetime is delegated to [[Foreign Ownership]]. This module opens libraries, resolves
+  symbols, and performs calls; it does not keep process-global ownership state.
 - **A signature that cannot be assembled comes back as a value.** It is the one failure at this
   boundary that is recoverable, so it is reported rather than crashed on.
 
@@ -72,6 +84,9 @@ kindCode    :: Crossing -> Word8
 - **Q:** Close a library when nothing is using it? **A:** No. _Rationale:_ nothing
   here can know that, and closing one a call is about to use is worse than
   keeping it for the life of the program. _Rejected:_ reference counting handles.
+- **Q:** Keep ownership beside the process-global opened-library cache? **A:** No. _Rationale:_
+  libraries may be shared, but resource claims belong to one evaluation and must be torn down with
+  it. _Rejected:_ a process-global address set.
 
 ## Referenced by
 

@@ -11,6 +11,7 @@ import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Text as Text
+import qualified Numeric
 import Pudu.DecimalLiteral (renderDecimal)
 import Pudu.IntegerLiteral (integerKindName)
 import Pudu.Eval.Value
@@ -55,6 +56,8 @@ renderValue value = case value of
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
   BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
   BucketsMethodValue method _ -> "<store method " <> bucketsMethodName method <> ">"
+  ForeignHandleValue name address ->
+    "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
   {-| Bytes print as hexadecimal pairs rather than as the text they might
@@ -88,6 +91,7 @@ escape =
 valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
+  ForeignHandleValue name _ -> name
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"

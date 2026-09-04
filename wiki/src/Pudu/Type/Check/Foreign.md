@@ -22,8 +22,9 @@ Give every foreign function a type, and catch what its declaration can be wrong 
 ## Interface
 
 ```haskell
-declareForeign :: Foreign -> Checker ()
+declareForeign :: DeclaredTypes -> Foreign -> Checker ()
 checkForeign   :: Foreign -> Checker ()
+foreignHandles :: Foreign -> Set Text
 ```
 
 ### Governance
@@ -36,10 +37,13 @@ checkForeign   :: Foreign -> Checker ()
   definition as far as this program is concerned. None of that needs machinery of its own.
 - **Every foreign function requires the `foreign` capability without saying so.** The signature is
   unverifiable by construction, and this language already has a word for an assertion of that kind.
-- **Three things are catchable here and all three are caught:** a type that cannot cross, an owned
-  result that names no release, and a release the library does not declare. The fourth — a signature
-  that does not match what the library actually exports — is the one nothing can catch, which is why
-  the other three are worth catching.
+- **Handle syntax is formed through `DeclaredTypes`.** This preserves the declaring module in nominal identity, so same-spelling handles from two binding modules cannot unify; scalar crossings still retain their exact ABI widths.
+- **Every locally catchable ownership mistake is caught here:** a type that cannot cross, a borrowed
+  handle result, an owned non-handle result, an absent release, and a release whose declaration is
+  missing or does not take exactly the produced handle and return `()`. A signature that disagrees
+  with the binary remains unverifiable and is why calls require `unsafe(foreign)`.
+- **An explicitly mapped native symbol must not be empty.** Empty lookup is always a declaration
+  defect and is reported as `E3068` before the platform loader is involved.
 
 ### Linkage
 
@@ -57,6 +61,12 @@ checkForeign   :: Foreign -> Checker ()
   _Rationale:_ a release from a different library is a call into the wrong
   allocator, and the reason ownership is written in the declaration is that it
   can be checked where it is written. _Rejected:_ resolving releases globally.
+- **Q:** Admit a borrowed handle now? **A:** No. _Rationale:_ the checker has no foreign lifetime to
+  attach it to, so accepting one would permit storage after the library invalidates it. _Rejected:_
+  treating an unowned handle like a process-lifetime pointer.
+- **Q:** Validate that the named symbol exists during checking? **A:** No. _Rationale:_ checking must
+  not depend on what happens to be installed on the compiler's machine; existence is an integration
+  property at execution. _Rejected:_ loading libraries during type checking.
 
 ## Referenced by
 

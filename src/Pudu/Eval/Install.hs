@@ -10,8 +10,9 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as Set
 import Data.Text (Text)
-import Pudu.Foreign.Crossing (Crossing (NothingCrossing), crossingFor)
+import Pudu.Foreign.Crossing (Crossing (NothingCrossing), RecordLayouts, crossingFor, recordLayouts)
 import Pudu.Eval.Builtin
   ( effectBuiltins
   )
@@ -26,6 +27,7 @@ import Pudu.Eval.Value
   , builtinName
   , Closure (..)
   , ForeignBinding (..)
+  , ForeignRelease (..)
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -59,7 +61,8 @@ loadDeclarations :: Evaluate -> [Located Declaration] -> Evaluator ()
 loadDeclarations evaluateWith declarations = do
   installBuiltinConstructors
   let traits = traitTable declarations
-  mapM_ (installDeclaration traits) declarations
+      layouts = recordLayouts declarations
+  mapM_ (installDeclaration traits layouts) declarations
   mapM_ (initializeDeclaration evaluateWith) declarations
 
 {-| Trait members by trait name, so an implementation inherits the defaults it
@@ -106,15 +109,16 @@ installBuiltinConstructors = do
   bind "decimalRound" (BuiltinValue DecimalRoundBuiltin)
   mapM_ (\builtin -> bind (builtinName builtin) (BuiltinValue builtin)) effectBuiltins
 
-installDeclaration :: Map Text [Located Function] -> Located Declaration -> Evaluator ()
-installDeclaration traits (Located _ declaration) = case declaration of
+installDeclaration
+  :: Map Text [Located Function] -> RecordLayouts -> Located Declaration -> Evaluator ()
+installDeclaration traits layouts (Located _ declaration) = case declaration of
   FunctionDeclaration value ->
     bind (locatedValue (functionName value))
       (FunctionValue (Closure (locatedValue (functionName value)) value Nothing Nothing))
   TypeDeclaration value ->
     installVariants (locatedValue (typeName value)) (typeDefinition value)
   ImplDeclaration value -> installMethods traits value
-  ForeignDeclaration value -> mapM_ (installForeign value) (foreignFunctions value)
+  ForeignDeclaration value -> mapM_ (installForeign layouts value) (foreignFunctions value)
   _ -> pure ()
 
 {-| One foreign function becomes a value under its own name.
@@ -123,22 +127,65 @@ installDeclaration traits (Located _ declaration) = case declaration of
     runs: the library, the symbol, and how each value crosses. A call is then a
     call, and a declaration that could not be resolved into one has already been
     reported by the checker. -}
-installForeign :: Foreign -> Located ForeignFunction -> Evaluator ()
-installForeign library (Located _ function) =
-  bind (locatedValue (foreignName function))
+installForeign :: RecordLayouts -> Foreign -> Located ForeignFunction -> Evaluator ()
+installForeign layouts library (Located _ function) =
+  bind name
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
-          , foreignBindingSymbol = locatedValue (foreignName function)
+          , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
-              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor)
+              [ fromMaybe NothingCrossing (parameterType parameter >>= crossingFor handles layouts)
               | Located _ parameter <- foreignParameters function
               ]
           , foreignBindingResult =
-              fromMaybe NothingCrossing (crossingFor (foreignResult function))
-          , foreignBindingReleasedBy = locatedValue <$> foreignReleasedBy function
+              fromMaybe NothingCrossing (crossingFor handles layouts (foreignResult function))
+          , foreignBindingReleasedBy = do
+              named <- locatedValue <$> foreignReleasedBy function
+              symbol <- Map.lookup named (releaseSymbolsOf library)
+              pure
+                ForeignRelease
+                  { foreignReleaseLibrary = locatedValue (foreignLibrary library)
+                  , foreignReleaseSymbol = symbol
+                  }
+          , foreignBindingReleases = Map.lookup name (releasesOf library)
           }
     )
+ where
+  name = locatedValue (foreignName function)
+  handles = Set.fromList (map locatedValue (foreignTypes library))
+
+{-| The functions of a block that release something.
+
+    Read from the declarations rather than from a name, so a release is
+    whatever some function in the same block named after `by` — which is the
+    only place that fact is written. -}
+releasesOf :: Foreign -> Map Text Text
+releasesOf library =
+  Map.fromList
+    [ (locatedValue named, handleName result)
+    | Located _ function <- foreignFunctions library
+    , Just named <- [foreignReleasedBy function]
+    , let result = foreignResult function
+    , isHandleName (handleName result)
+    ]
+ where
+  known = Set.fromList (map locatedValue (foreignTypes library))
+  isHandleName = (`Set.member` known)
+  handleName (Located _ syntax) = case syntax of
+    NamedType (ModuleName (name :| [])) [] -> name
+    _ -> ""
+
+{-| Local release name to exact loader symbol. The `by` clause is local Pudu
+    syntax, while teardown must invoke the same mapped symbol as an explicit
+    call to that release declaration. -}
+releaseSymbolsOf :: Foreign -> Map Text Text
+releaseSymbolsOf library =
+  Map.fromList
+    [ (name, maybe name locatedValue (foreignSymbol function))
+    | Located _ function <- foreignFunctions library
+    , let name = locatedValue (foreignName function)
+    ]
 
 {-| An implementation's functions are installed under a key naming the type they
     implement for, so a member access on a value of that type finds them. -}

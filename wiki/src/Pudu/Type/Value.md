@@ -42,6 +42,15 @@ polytype :: [Text] -> [(Text, [NominalId])] -> Type -> Scheme
 - A scheme carries the trait bounds each parameter must satisfy alongside the parameter list itself, so instantiation can register obligations a call must prove. `monotype` is a scheme with no parameters and nothing to prove; `polytype` pairs parameters with their bounds.
 - Diagnostics use the `E3xxx` family and name the expected type first, because that is the one the reader declared.
 
+- **A function's requirement is in its type, as a wrapper rather than a field.** `RestrictedType`
+  wraps the function it restricts, so the ordinary function type — which is nearly all of them, the
+  whole builtin table included — is untouched and carries no empty set. It also makes a restricted
+  function and a plain one different types, which is the point: a value cannot shed what it requires
+  by being stored in a variable or handed to a parameter.
+- **The set is bits, not a list.** Two types are compared on every unification, so the comparison is
+  one machine word rather than a walk over a list whose order would have to be normalised first.
+  Four capabilities fit in a byte.
+
 ### Linkage
 
 - **Requires:** [[Syntax Tree]], [[Diagnostic Model]].

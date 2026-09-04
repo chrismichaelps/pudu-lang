@@ -217,5 +217,8 @@ typeShape (Located _ value) = case value of
   FunctionType asynchronous inputs result ->
     (if asynchronous then "async fn(" else "fn(")
       <> Text.intercalate "," (map typeShape inputs) <> ")->" <> typeShape result
+  UnsafeType capabilities target ->
+    "unsafe(" <> Text.intercalate "," (map (Text.pack . show . locatedValue) capabilities)
+      <> ") " <> typeShape target
   UnitType -> "()"
   InvalidType -> "invalid"

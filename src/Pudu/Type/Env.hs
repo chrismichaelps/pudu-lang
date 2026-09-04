@@ -17,6 +17,7 @@ module Pudu.Type.Env
   , withComptime
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
+  , inheritRestrictions
   , useCapability
   , useUnsafeRegion
   , CheckerProducts (..)
@@ -152,7 +153,17 @@ data CheckerState = CheckerState
   , stateLoopFrames :: ![LoopFrame]
   , stateReportedSpans :: ![((Int, Int), Text)]
   , stateUnsafeFunctions :: !(Map Text [Capability])
-  , stateComptimeFunctions :: ![Text]
+  {-| Whether each declared function may run at compile time.
+
+      A map rather than a list of the compile-time ones, because the question
+      asked at a call is three-way. A name recorded `True` may be called from a
+      compile-time body; one recorded `False` is a declared function that may
+      not, and is refused early with a good diagnostic. A name absent from the
+      map is a parameter, a local, or a built-in — nothing here knows what it
+      holds, and refusing it made higher-order compile-time code unwritable
+      while adding no guarantee, since an effect reached while folding is
+      refused then and there. -}
+  , stateComptimeFunctions :: !(Map Text Bool)
   , stateInComptime :: !Bool
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
@@ -246,7 +257,7 @@ initialState =
     , stateLoopFrames = []
     , stateReportedSpans = []
     , stateUnsafeFunctions = Map.empty
-    , stateComptimeFunctions = []
+    , stateComptimeFunctions = Map.empty
     , stateInComptime = False
     , stateObligations = []
     , stateIntegerLiterals = []
@@ -762,13 +773,19 @@ useUnsafeRegion =
 {-| Which functions may run at compile time. A compile-time body may call only
     these, which is what makes the guarantee transitive rather than a promise
     each function makes about itself. -}
-recordComptimeFunction :: Text -> Checker ()
-recordComptimeFunction name =
-  Checker $ \state -> ((), state{stateComptimeFunctions = name : stateComptimeFunctions state})
+{-| Record a declared function and whether it may run at compile time. -}
+recordComptimeFunction :: Text -> Bool -> Checker ()
+recordComptimeFunction name folds =
+  Checker $ \state ->
+    ((), state{stateComptimeFunctions = Map.insert name folds (stateComptimeFunctions state)})
 
-isComptimeFunction :: Text -> Checker Bool
+{-| What is known about calling this name from a compile-time body.
+
+    `Nothing` means nothing is known, which is the answer for a parameter or a
+    local and is not the same as "no". -}
+isComptimeFunction :: Text -> Checker (Maybe Bool)
 isComptimeFunction name =
-  Checker $ \state -> (name `elem` stateComptimeFunctions state, state)
+  Checker $ \state -> (Map.lookup name (stateComptimeFunctions state), state)
 
 {-| Run an action while checking a compile-time body, restoring the previous
     setting on exit so a nested ordinary declaration is unaffected. -}
@@ -793,6 +810,25 @@ recordUnsafeFunction name capabilities =
 unsafeFunctionCapabilities :: Text -> Checker (Maybe [Capability])
 unsafeFunctionCapabilities name =
   Checker $ \state -> (Map.lookup name (stateUnsafeFunctions state), state)
+
+{-| Give a second name for a function the restrictions the first one carries.
+
+    A name reached through its module is the same function as the name reached
+    directly, and what it is allowed to do cannot depend on how it was spelled.
+    Without this, an unsafe function stopped being unsafe the moment it was
+    imported, and a compile-time one stopped being compile-time — the boundary
+    held inside a module and dissolved at its edge, which is the edge that
+    matters. -}
+inheritRestrictions :: Text -> Text -> Checker ()
+inheritRestrictions from to =
+  Checker $ \state ->
+    let carried = case Map.lookup from (stateUnsafeFunctions state) of
+          Just capabilities -> Map.insert to capabilities (stateUnsafeFunctions state)
+          Nothing -> stateUnsafeFunctions state
+        folded = case Map.lookup from (stateComptimeFunctions state) of
+          Just known -> Map.insert to known (stateComptimeFunctions state)
+          Nothing -> stateComptimeFunctions state
+     in ((), state{stateUnsafeFunctions = carried, stateComptimeFunctions = folded})
 
 {-| Whether this span has already carried a diagnostic of its own.
 

@@ -21,6 +21,7 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Doc (DocIndex)
 import Pudu.Lsp.Json (Json, lookupField, textOf)
 import Pudu.Source (Source)
+import Pudu.Semantic.Resolve (Resolution)
 import Pudu.Type (TypeInfo)
 
 data Analysis = Analysis
@@ -28,6 +29,7 @@ data Analysis = Analysis
   , analysisSource :: !Source
   , analysisDiagnostics :: ![Diagnostic]
   , analysisIndex :: !DocIndex
+  , analysisResolution :: !(Maybe Resolution)
   {-| What the checker said each expression is, by span.
 
       The documentation index holds declarations, so it can only ever answer

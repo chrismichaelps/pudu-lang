@@ -1,0 +1,26 @@
+module Main
+
+import Risky
+
+/// A wrapper that takes a function requiring an unchecked ability, and grants
+/// it. Its own callers need nothing, which is the arrangement that makes an
+/// unsafe boundary usable: the assumption is held in one small place instead of
+/// spreading to everything that touches it.
+export fn applied(action: unsafe(raw) fn(Int) -> Int, value: Int) -> Int {
+  unsafe(raw) { action(action(value)) }
+}
+
+/// The same for the blanket form.
+export fn appliedBlanket(action: unsafe fn(Int) -> Int, value: Int) -> Int {
+  unsafe { action(value) }
+}
+
+export fn main() -> Int {
+  let held = Risky.stepped
+  unsafe(raw) {
+    if held(1) != 2 { return 0 }
+  }
+  if applied(Risky.stepped, 1) != 3 { return 0 }
+  if appliedBlanket(Risky.blanket, 1) != 3 { return 0 }
+  1
+}

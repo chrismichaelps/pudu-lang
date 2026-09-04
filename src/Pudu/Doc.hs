@@ -134,16 +134,28 @@ buildIndex tokens types moduleValue =
     ForeignDeclaration value ->
       snd
         ( List.mapAccumL
-            ( \previousEnd (Located functionSpan function) ->
-                ( unOffset (spanEnd functionSpan)
-                , make previousEnd (locatedValue (foreignName function))
-                    (DocForeign (locatedValue (foreignLibrary value)))
-                    functionSpan (locatedValue (foreignName function))
-                )
-            )
+            foreignEntry
             (unOffset (spanStart declarationSpan))
-            (foreignFunctions value)
+            (List.sortOn foreignMemberStart foreignMembers)
         )
+     where
+      foreignMembers =
+        map Left (foreignTypes value) <> map Right (foreignFunctions value)
+      foreignMemberStart member = case member of
+        Left (Located memberSpan _) -> unOffset (spanStart memberSpan)
+        Right (Located memberSpan _) -> unOffset (spanStart memberSpan)
+      foreignEntry previousEnd member = case member of
+        Left (Located typeSpan name) ->
+          ( unOffset (spanEnd typeSpan)
+          , make previousEnd name DocType typeSpan name
+          )
+        Right (Located functionSpan function) ->
+          let name = locatedValue (foreignName function)
+           in ( unOffset (spanEnd functionSpan)
+              , make previousEnd name
+                  (DocForeign (locatedValue (foreignLibrary value)))
+                  functionSpan name
+              )
     InvalidDeclaration -> []
 
   {-| A member's documentation is bounded by its enclosing declaration rather
@@ -329,4 +341,3 @@ renderEntryLinesWith withProvenance value =
   provenance
     | withProvenance = [kindLabel (docKind value) <> " · " <> docModule value]
     | otherwise = [kindLabel (docKind value)]
-

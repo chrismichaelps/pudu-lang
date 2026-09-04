@@ -328,11 +328,17 @@ unsafe_block     = "unsafe", capabilities?, block ;
 capabilities     = "(", capability, (",", capability)*, ","?, ")" ;
 capability       = "raw" | "foreign" | "unchecked" | "null" ;
 function_decl    = "unsafe", capabilities?, ... ;
+unsafe_type      = "unsafe", capabilities?, type ;
 ```
 
 - `unsafe { ... }` is the only construct enabling raw pointers, foreign calls marked unsafe, unchecked indexing, or `null`.
 - A region names the capabilities it grants. `unsafe(raw) { ... }` grants raw pointer work and nothing else; `unsafe { ... }` with no list is the blanket form and grants all four. Naming them is what makes an unsafe region auditable: a reader sees which invariant is in play without reading the body, and tooling can find every region that does raw pointer work without a whole-program analysis.
-- A function may be declared `unsafe`, optionally naming capabilities. A direct unqualified call requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them. Ordinary function types do not retain unsafety or capability metadata, so calls through aliases or higher-order values are not yet rejected.
+- A function may be declared `unsafe`, optionally naming capabilities. A call requires an open region that grants what the declaration asked for: a blanket declaration requires only that some region is open, and a declaration naming capabilities requires each of them.
+- **The requirement follows the function, not the spelling.** `Bindings.open`, `B.open` after `import Bindings as B`, and a selected `open` are one function, and each requires what its declaration asked for. The same holds for `comptime`: an imported compile-time function stays one, and an imported ordinary function cannot be called from a compile-time body. Restrictions that stopped at the import were a boundary that held inside a module and dissolved at its edge — and putting bindings in a module of their own is the arrangement [[ADR-0018 Calling a Library Written Elsewhere]] recommends, so the edge was exactly where it mattered.
+- **The requirement is part of the function's type**, so it travels with the value rather than with the name. A function stored in a variable, returned, or passed as an argument still asks for what its declaration asked for, and the call is checked wherever it finally happens. The type is written `unsafe(raw) fn(Int) -> Int`, and the blanket form `unsafe fn(Int) -> Int` requires only that some region be open.
+- **A parameter must say what it accepts.** `fn(action: fn(Int) -> Int)` takes an ordinary function and refuses one that requires more, because a body written for an ordinary function grants nothing. `fn(action: unsafe(raw) fn(Int) -> Int)` takes one that requires `raw`, and the body must grant it. That is what makes a safe wrapper writable: the wrapper opens one small region, and its own callers need nothing.
+- **A trait or implementation member cannot be declared `unsafe`.** So a trait cannot say that a method requires a capability. Write the member ordinary and open the region inside each implementation: callers of the trait then need nothing, which is the same arrangement a safe wrapper makes for a plain function and the one this design recommends regardless.
+- **Capability sets match exactly.** A function requiring less does not stand where one requiring more is expected, nor the reverse. Whether a set should be allowed to narrow is what capability variables would answer, and [[ADR-0009 Effects in the Type]] is where that is settled.
 - A function's unsafety is a contract its callers uphold, not a claim about its body. A body that needs nothing unchecked is still a legitimate unsafe function, because the invariant may live in its parameters.
 - A region that grants a capability nothing in it used is reported. Unsafe is an audited surface, so a grant that buys nothing is removed rather than kept.
 - Unsafe does not disable type checking, ownership of safe values, or lexical initialization checks.
@@ -343,18 +349,21 @@ function_decl    = "unsafe", capabilities?, ... ;
 
 ```ebnf
 foreign_decl     = "export"?, "foreign", string, ("version", string)?,
-                   "{", foreign_fn*, "}" ;
-foreign_fn       = "fn", identifier, "(", parameters?, ")",
+                   "{", (foreign_type | foreign_fn)*, "}" ;
+foreign_type     = "type", upper_identifier ;
+foreign_fn       = "fn", identifier, ("symbol", string)?, "(", parameters?, ")",
                    ("->", "owned"?, type, ("by", identifier)?)? ;
 ```
 
-- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `owned`, and `by`. Reserving four common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
+- `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
 - A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
 - `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.
-- The types that may cross are stated: `Int8` `Int16` `Int32` `Int64`, `UInt8` `UInt16` `UInt32` `UInt64`, `Float32` `Float64`, `Bool`, `Str`, and `()`. These are the language's own types, so a foreign signature is an ordinary signature and a caller passing the wrong width is told so by the ordinary checker. Anything else is refused at the declaration, which is the point of stating the list.
+- A function ordinarily looks up a symbol with the same spelling as its Pudu name. `symbol "ExactName"` maps an idiomatic local value name to the exact exported symbol when the library's naming convention cannot be written as a Pudu value identifier. The mapping changes only lookup; calls, release declarations, and editor features use the local name. An empty symbol is refused.
+- The types that may cross are stated: `Int8` `Int16` `Int32` `Int64`, `UInt8` `UInt16` `UInt32` `UInt64`, `Float32` `Float64`, `Bool`, `Str`, `()`, and an opaque handle type declared by the same block. These are the language's own types, so a foreign signature is an ordinary signature and a caller passing the wrong width or handle kind is told so by the ordinary checker. Anything else is refused at the declaration, which is the point of stating the list.
+- A record whose every field crosses may cross by value, in the order its declaration writes the fields. It is an ordinary Pudu record, declared beside the foreign block that names it. One level: a record of records is refused where it is written. Where a field sits inside one is the platform's answer, asked for rather than calculated.
 - `Str` crosses as bytes ending in a nought, copied for the call and freed after. Text containing a nought is refused, because the other side reads to the first one and would see less than the text says.
 - An integer that does not fit the width it crosses as is refused rather than wrapped. Silent wraparound at this boundary is how a program calling a library keeps running with a value it never computed.
-- `owned T by release` names the function that frees a result, and that function must be declared in the same block. A result without `owned` is borrowed: valid for the call that produced it and not to be kept.
+- `owned T by release` is admitted only when `T` is an opaque type declared by the block. The release must be declared in that block with exactly one `T` parameter and a `()` result. A handle result without `owned` is refused until borrowed lifetimes have a representation. The runtime refuses a null owned result and refuses an already released or unowned handle before entering foreign code.
 - Every call needs the `foreign` capability. The signature is an assertion by whoever wrote it that nothing can check — a wrong width is not a diagnostic, it is a corrupted stack — and `unsafe` is where this language already says a thing is asserted rather than proved.
 - A foreign call is an effect, so a `comptime` body cannot make one: a constant is folded while the compiler runs, and what a program compiles to must not depend on what was installed on the machine that compiled it.
 - A library written in C++ is reachable through the surface it exports as `extern "C"`, and not otherwise. Its symbol names encode its parameter types and differ between compilers, a method needs an object whose layout its compiler decided, a template exports nothing until something instantiates it, and an exception crossing the boundary is undefined. [[ADR-0018 Calling a Library Written Elsewhere]] states this at length.
@@ -381,7 +390,7 @@ foreign_fn       = "fn", identifier, "(", parameters?, ")",
 
 ## Senior Definition Needed
 
-- `comptime` and unsafe capability metadata must become part of callable types before the compiler can enforce either restriction through aliases and higher-order calls.
+- `comptime` is carried by name rather than by type, so what a fold may reach has two lines of defence rather than one. A declared function that cannot fold is refused where it is called, early and with a diagnostic naming it. Anything else a compile-time body calls — a parameter, a local, a function it was handed — is left to the fold, which refuses an effect at the point it happens. Refusing those statically bought no guarantee and made higher-order compile-time code unwritable. Unsafe capabilities are in the type and have no such gap.
 - Macro repetition syntax remains open. [[Macro Design]] records the reason: `Array` values and compile-time functions may already cover what repetition exists for elsewhere, and a syntax added first would be the one every use is then forced through.
 
 ## Referenced by

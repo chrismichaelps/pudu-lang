@@ -19,6 +19,8 @@ import Pudu.Frontend.Syntax.Tree
   , TypeParam (..)
   )
 import qualified Pudu.Frontend.Syntax.Tree as Tree
+import Pudu.Foreign.Crossing (recordLayouts)
+import Pudu.Type.Check.Foreign (declareForeign)
 import Pudu.Type.Check.Method
   ( declareInterfaceMethods
   , declareBounds
@@ -30,7 +32,10 @@ import Pudu.Type.Env
   , DeclaredTypes (..)
   , bindName
   , emptyDeclared
+  , inheritRestrictions
   , lookupName
+  , recordComptimeFunction
+  , recordUnsafeFunction
   )
 import Pudu.Type.Formation
   ( collectDeclaredFrom
@@ -56,6 +61,7 @@ import Pudu.Type.Value
   , monotype
   , nominalKey
   , polytype
+  , restrictedBy
   )
 
 collectImportedDeclared :: ImportTypes -> Checker DeclaredTypes
@@ -88,9 +94,16 @@ declareImportedTypes declared imported = do
   available = Map.fromList [(interfaceModule value, value) | value <- interfaces]
   traits = Map.unionsWith (<>) (map interfaceTraits interfaces)
   defaults = foldMap interfaceDefaults interfaces
+  {-| The name this module reaches an imported value by, which an alias makes
+      different from the name the value was declared under.
+
+      The restrictions follow the binding for the same reason they follow the
+      module qualifier: renaming a function at the import is a change of
+      spelling, not a change of what it is allowed to do. -}
   bindImportedValue (localName, canonicalName) = do
     found <- lookupName canonicalName
     maybe (pure ()) (bindName localName) found
+    inheritRestrictions canonicalName localName
 
 declareInterface
   :: DeclaredTypes
@@ -105,6 +118,11 @@ declareInterface declared visibleTraits available traits defaults value = do
   mapM_ (declareOne traits) declarations
   mapM_ declareImportedBinding (interfaceBindings value)
  where
+  {-| A record crossing by value must be declared beside the block that names
+      it, so the layouts an interface contributes are its own. -}
+  interfaceLayouts =
+    recordLayouts (interfacePrivateDeclarations value <> interfaceDeclarations value)
+
   interfaceDeclared = declared
     { declaredNames = interfaceNames available value <> declaredNames declared
     , declaredAliases = interfaceAliases declared value <> declaredAliases declared
@@ -119,6 +137,10 @@ declareInterface declared visibleTraits available traits defaults value = do
           mapM_ (publishValue . locatedValue . Tree.variantName . locatedValue) variants
         _ -> pure ()
     TraitDeclaration trait -> declareTraitMembers interfaceDeclared trait
+    ForeignDeclaration foreignValue -> do
+      declareForeign interfaceDeclared interfaceLayouts foreignValue
+      mapM_ (publishValue . locatedValue . Tree.foreignName . locatedValue)
+        (Tree.foreignFunctions foreignValue)
     ImplDeclaration implementation -> do
       formed <- formTraitReference interfaceDeclared [] (implTrait implementation)
       case formed of
@@ -128,9 +150,15 @@ declareInterface declared visibleTraits available traits defaults value = do
         _ -> pure ()
     _ -> pure ()
 
+  {-| The same function under the name its module gives it.
+
+      The restrictions follow the binding, because what a function may do cannot
+      depend on whether it was reached directly or through its module. -}
   publishValue name = do
     found <- lookupName name
-    maybe (pure ()) (bindName (moduleNameText (interfaceModule value) <> "." <> name)) found
+    let qualified = moduleNameText (interfaceModule value) <> "." <> name
+    maybe (pure ()) (bindName qualified) found
+    inheritRestrictions name qualified
 
   declareImportedBinding (name, syntax) = do
     formed <- formType interfaceDeclared [] syntax
@@ -148,6 +176,8 @@ interfaceLocalNames value = Map.fromList (concatMap one declarations)
   one (Located _ declaration) = case declaration of
     TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
     TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
+    ForeignDeclaration foreignValue ->
+      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 
@@ -193,6 +223,8 @@ interfaceIdentities value = concatMap one (interfaceDeclarations value)
   one (Located _ declaration) = case declaration of
     TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
     TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
+    ForeignDeclaration foreignValue ->
+      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 
@@ -201,13 +233,29 @@ lastSegment value = case reverse (Text.splitOn "." value) of
   first : _ -> first
   [] -> value
 
+{-| An imported signature, with the restrictions it was declared under.
+
+    The restrictions travel with it because they are properties of the function
+    rather than of the file it was written in. Without them an unsafe function
+    became ordinary the moment it was imported, which made the boundary hold
+    everywhere except across the edge it exists to guard — and putting bindings
+    in a module of their own is the arrangement this library recommends. -}
 declareFunction :: DeclaredTypes -> Function -> Checker ()
 declareFunction declared value = do
   let rigid = functionRigid value
+      name = locatedValue (functionName value)
   inputs <- mapM (declaredParameterType declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
-  bindName (locatedValue (functionName value))
-    (polytype rigid (declareBounds declared value) (FunctionTypeValue (functionAsync value) inputs result))
+  bindName name
+    ( polytype rigid (declareBounds declared value)
+        ( restrictedBy (map locatedValue <$> functionUnsafe value)
+            (FunctionTypeValue (functionAsync value) inputs result)
+        )
+    )
+  case functionUnsafe value of
+    Nothing -> pure ()
+    Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)
+  recordComptimeFunction name (functionComptime value)
 
 declareConstructors :: DeclaredTypes -> Tree.TypeDeclarationValue -> Checker ()
 declareConstructors declared value = case locatedValue (Tree.typeDefinition value) of

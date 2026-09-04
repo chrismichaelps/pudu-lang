@@ -17,7 +17,9 @@ aliases: [Eval Value]
 
 ## Purpose
 
-Own runtime values, including retained floating precision, builtin functions, and the total order the keyed collections are held in. How a value prints belongs to [[Eval Render]].
+Own runtime values, including retained floating precision, foreign bindings and opaque handles,
+builtin functions, and the total order the keyed collections are held in. How a value prints
+belongs to [[Eval Render]].
 
 ## Interface
 
@@ -41,6 +43,9 @@ body.
 - `OrdValue` and `compareValues` are declared here, not in [[Eval Order]], because `MapValue` and `SetValue` are keyed by that order and the value type cannot be declared without it. `Value` itself still has no `Ord` instance: a function is a value and no order on functions is meaningful, so the wrapper keeps every keyed use visible.
 - Original network builtins and separately named timeout variants remain distinct constructors, so
   adding an operation budget does not change the arity of an existing prelude value.
+- `ForeignHandleValue` carries a declared handle name and address. The name is semantic identity;
+  the address remains opaque storage and ownership decisions stay in [[Foreign Ownership]]. A
+  `ForeignBinding` producer retains the exact declared native release symbol used for teardown.
 
 ### Linkage
 
@@ -73,7 +78,7 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Store an already computed async result? **A:** No; store the prepared closure and bindings. _Rationale:_ an async call is cold and body evaluation begins at `.await`. _Rejected:_ eager execution wrapped in a task-shaped value; a placeholder unit task.
 - **Q:** Erase `Float32` to a host `Double`? **A:** No; pair normalized storage with a width tag. _Rationale:_ later operations must round to binary32 and mixed-width values must not compare equal merely because their storage matches. _Rejected:_ static-only precision; a separate runtime constructor with duplicated rendering logic.
 - **Q:** Why did #157 move the order into this module rather than leave it beside `comparableValue`? **A:** Because the keyed constructors now name it. A map keyed by a balanced tree cannot be declared before the order that tree is arranged by, and declaring the instance in [[Eval Order]] would make it an orphan, which [[grammar/haskell]] prohibits. _Rejected:_ an `.hs-boot` cycle, which preserves the old file boundary at the price of a build-order subtlety every later reader has to learn.
-- **Q:** Does moving the order in push this file past the size the delivery rules allow? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table now live in [[Eval Builtin Definition]], returning this module below 500 without changing its exports. _Rationale:_ both extractions follow complete seams: presentation is not value identity, and builtin naming does not depend on runtime values. _Rejected:_ leaving the file over the limit; an undocumented exception; splitting the order back out, which the constructors no longer allow.
+- **Q:** Does moving the order in push this file past the size target? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table then moved to [[Eval Builtin Definition]]. Foreign handles then took it to 548, and the built-in method vocabulary moved to [[Eval Method]], leaving 328. Each extraction followed the same seam — a closed tag set and its name table, depending on no runtime value — and each is re-exported here, so no call site learned that anything moved. _Rationale:_ size accounting must describe the current source honestly, and a limit is worth keeping only if the split follows the code rather than the line count. _Rejected:_ claiming an old measurement is current; splitting the file arbitrarily to fit.
 
 ## Referenced by
 

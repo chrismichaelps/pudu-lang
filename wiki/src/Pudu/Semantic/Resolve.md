@@ -46,6 +46,9 @@ resolveModuleWith :: ExportIndex -> Module -> (Resolution, [Diagnostic])
 - Shadowing a `var`, a parameter, an import, or a type name warns with `W2001`; an immutable local shadowing another immutable local is silent and legal. Borrow-sensitive shadowing rules belong to ownership checking.
 - Scope layering follows Haskell's shape: wired-in names from [[Semantic Prelude]] occupy the outermost frame, the implicitly imported prelude module the next, and the module's own imports and declarations the innermost. An inner layer shadows an outer one silently, so a program that imports nothing still resolves `Int64` and a module may still define its own `Drop`.
 - `Self` is bound inside a trait or implementation body only.
+- A foreign block contributes each declared handle to the type namespace and each function to the
+  value namespace under the block's visibility. Signatures therefore resolve their handles through
+  the ordinary type namespace, and editor definitions point back to the declaration.
 - A recovered `InvalidDeclaration`, `InvalidExpression`, or `InvalidPattern` introduces no symbol and no reference, so a parse error never produces a second resolution error for the same defect.
 - An `if let` subject resolves before its pattern binds. The successful bindings occupy one fresh
   frame around the then block only; the else expression resolves outside that frame.

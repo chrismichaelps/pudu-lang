@@ -247,6 +247,12 @@ data TypeSyntax
   | ReferenceType !Bool !(Located TypeSyntax)
   | TupleType ![Located TypeSyntax]
   | FunctionType !Bool ![Located TypeSyntax] !(Located TypeSyntax)
+  {-| A function that requires unchecked abilities of whoever calls it.
+
+      Written as a prefix on the type rather than as part of the function
+      arrow, so an ordinary signature stays exactly what it was and only the
+      declarations that require something say so. -}
+  | UnsafeType ![Located Capability] !(Located TypeSyntax)
   | UnitType
   | InvalidType
   deriving stock (Eq, Show)
@@ -320,6 +326,11 @@ data Foreign = Foreign
       than enforced: nothing here fetches or verifies a library, and claiming
       to check a version this cannot see would be worse than saying nothing. -}
   , foreignVersion :: !(Maybe (Located Text))
+  {-| The opaque things this library hands back, named so a signature can say
+      which one it means. A library's handles are not interchangeable — a window
+      is not a texture — and one address type for all of them makes passing the
+      wrong one a fault the library reports rather than one the checker does. -}
+  , foreignTypes :: ![Located Text]
   , foreignFunctions :: ![Located ForeignFunction]
   }
   deriving stock (Eq, Show)
@@ -330,6 +341,9 @@ data Foreign = Foreign
     than a diagnostic — which is why reaching one needs `unsafe`. -}
 data ForeignFunction = ForeignFunction
   { foreignName :: !(Located Text)
+  {-| The exact symbol the library exports when it differs from the local
+      value name. Tooling and calls keep the local name; only lookup reads this. -}
+  , foreignSymbol :: !(Maybe (Located Text))
   , foreignParameters :: ![Located Parameter]
   , foreignResult :: !(Located TypeSyntax)
   {-| The function that releases what this one returns, when what it returns
