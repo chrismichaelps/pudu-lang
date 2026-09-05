@@ -28,8 +28,10 @@ data ForeignResource
 
 newForeignStore   :: IO ForeignStore
 closeForeignStore :: ForeignStore -> IO ()
-claimOwned        :: ForeignStore -> Int64 -> IO () -> IO Bool
-claimAllOwned     :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] ())
+claimOwned             :: ForeignStore -> Int64 -> IO () -> IO Bool
+claimAllOwned          :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] ())
+claimCountedGeneration :: ForeignStore -> Int64 -> IO () -> IO (Maybe Integer)
+takeCountedGeneration  :: ForeignStore -> Int64 -> Integer -> IO (Maybe ForeignResource)
 withOwned         :: ForeignStore -> [Int64] -> IO a -> IO (Maybe a)
 takeOwned         :: ForeignStore -> Int64 -> IO (Maybe ForeignResource)
 restoreOwned      :: ForeignStore -> Int64 -> ForeignResource -> IO ()
@@ -170,6 +172,33 @@ refuses a late claim and releases what it turned away rather than leaking it. A 
 while its action is blocked is given back: the leaseholder is interrupted at a point where the lease
 is certainly held, and the claim is then recovered under a bounded wait, which a lease that was never
 returned would exceed rather than fail outright.
+
+## Counted references
+
+A reference-counted library hands back the pointer it was given and expects a release for each
+reference: `g_object_ref` and `cairo_reference` return their argument, and cairo, GObject,
+CoreFoundation and COM all work this way. A claim keyed by address cannot express that, because
+several live claims share one address.
+
+Counted claims are therefore held in a second table keyed by the generation, which is unique per
+claim by construction. `claimCountedGeneration` is admitted whenever the store is open;
+`takeCountedGeneration` removes exactly the reference named and never consults whether the address is
+still live under another. Leasing spans both tables, so two references to one address are two leases
+rather than one, and teardown releases every outstanding reference rather than the address once.
+
+The owned table keeps its rule unchanged — a live address cannot be claimed twice — because that rule
+is what catches the common library's mistakes, and loosening it to admit reference counting would
+have spent the protection of the common case on the rarer one. Nothing diagnoses a type declared
+owned by one function and counted by another; that is a mis-declaration this side cannot see.
+
+### Resolved Grill
+
+- **Q:** Count references at one claim instead, releasing when the count reaches zero? **A:** No.
+  The library's own count went up once per reference, so each one owes a release; releasing once at
+  zero leaves the object alive for ever.
+- **Q:** Key every claim by generation and drop the address table? **A:** No. That would rewrite the
+  paths that hold the common case, to admit a shape they do not have. Two tables leave those exactly
+  as they were.
 
 ## Cancelled leases
 

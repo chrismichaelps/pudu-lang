@@ -2,10 +2,12 @@
 module Pudu.Foreign.Ownership
   ( ForeignResource
   , claimAllOwnedGenerations
+  , claimCountedGeneration
   , claimOwnedGeneration
   , withOwnedGenerations
   , discardOwnedGenerations
   , takeOwnedGeneration
+  , takeCountedGeneration
   , claimAllOwned
   , ForeignStore
   , claimOwned
@@ -44,20 +46,50 @@ data ForeignResource = ForeignResource
   , resourceUses :: !Int
   }
 
-{-| The resource claims belonging to one evaluator run. -}
-data ForeignStore = ForeignStore !(TVar (Map Int64 ForeignResource)) !(TVar Bool) !(TVar [Diagnostic]) !(TVar Integer)
+{-| The resource claims belonging to one evaluator run.
+
+    Two tables, because two libraries mean two things by handing back the same
+    address. Most mean "this is yours now", and a second claim on a live address
+    is a mistake worth refusing — that is the first table, keyed by address.
+
+    A reference-counted library means "here is another reference", and cairo,
+    GObject, CoreFoundation and COM all work that way: `g_object_ref` returns
+    the pointer it was given, and each reference owes its own unref. Those
+    cannot be keyed by address at all, since several live claims share one. They
+    are keyed by the generation, which is unique per claim by construction.
+
+    Keeping them apart leaves every owned path exactly as it was, rather than
+    loosening the rule that protects the common case in order to admit the
+    other. Nothing diagnoses a library declared owned in one function and
+    counted in another; that is a mis-declaration this side cannot see. -}
+data ForeignStore = ForeignStore
+  !(TVar (Map Int64 ForeignResource))
+  !(TVar Bool)
+  !(TVar [Diagnostic])
+  !(TVar Integer)
+  !(TVar (Map Integer (Int64, ForeignResource)))
 
 newForeignStore :: IO ForeignStore
-newForeignStore = ForeignStore <$> newTVarIO Map.empty <*> newTVarIO False <*> newTVarIO [] <*> newTVarIO 1
+newForeignStore =
+  ForeignStore
+    <$> newTVarIO Map.empty
+    <*> newTVarIO False
+    <*> newTVarIO []
+    <*> newTVarIO 1
+    <*> newTVarIO Map.empty
+
+{-| Which table a lease is held in, decided once when it is taken. -}
+data Lease = OwnedLease !Int64 | CountedLease !Integer
+  deriving stock (Eq, Ord)
 
 {-| Record cleanup problems separately from resource admission and release. -}
 recordForeignDiagnostic :: ForeignStore -> Diagnostic -> IO ()
-recordForeignDiagnostic (ForeignStore _ _ journal _) problem = atomically $ do
+recordForeignDiagnostic (ForeignStore _ _ journal _ _) problem = atomically $ do
   existing <- readTVar journal
   writeTVar journal (problem : existing)
 
 takeForeignDiagnostics :: ForeignStore -> IO [Diagnostic]
-takeForeignDiagnostics (ForeignStore _ _ journal _) = atomically $ do
+takeForeignDiagnostics (ForeignStore _ _ journal _ _) = atomically $ do
   existing <- readTVar journal
   writeTVar journal []
   pure (reverse existing)
@@ -67,7 +99,7 @@ claimOwned :: ForeignStore -> Int64 -> IO () -> IO Bool
 claimOwned store address cleanup = isJust <$> claimOwnedGeneration store address cleanup
 
 claimOwnedGeneration :: ForeignStore -> Int64 -> IO () -> IO (Maybe Integer)
-claimOwnedGeneration (ForeignStore table closing _ counter) address cleanup = mask_ $ do
+claimOwnedGeneration (ForeignStore table closing _ counter _) address cleanup = mask_ $ do
   outcome <- atomically $ do
     held <- readTVar table
     closed <- readTVar closing
@@ -85,13 +117,37 @@ claimOwnedGeneration (ForeignStore table closing _ counter) address cleanup = ma
       if dispose then cleanupQuietly (ForeignResource cleanup 0 0) else pure ()
       pure accepted
 
+{-| Claim another reference to something already referenced.
+
+    Always admitted while the store is open: the address of a second reference
+    is the address of the first, and refusing that is refusing what a
+    reference-counted library does. Each claim owes one release, so two
+    references release twice. -}
+claimCountedGeneration :: ForeignStore -> Int64 -> IO () -> IO (Maybe Integer)
+claimCountedGeneration (ForeignStore _ closing _ counter counted) address cleanup = mask_ $ do
+  outcome <- atomically $ do
+    closed <- readTVar closing
+    if closed
+      then pure Nothing
+      else do
+        generation <- readTVar counter
+        writeTVar counter (generation + 1)
+        held <- readTVar counted
+        writeTVar counted (Map.insert generation (address, ForeignResource cleanup generation 0) held)
+        pure (Just generation)
+  case outcome of
+    Nothing -> do
+      cleanupQuietly (ForeignResource cleanup 0 0)
+      pure Nothing
+    Just generation -> pure (Just generation)
+
 {-| A failed batch returns protected addresses without accepting a prefix. -}
 claimAllOwned :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] ())
 claimAllOwned store produced = fmap (fmap (const ())) (claimAllOwnedGenerations store produced)
 
 claimAllOwnedGenerations
   :: ForeignStore -> [(Int64, IO ())] -> IO (Either [Int64] [(Int64, Integer)])
-claimAllOwnedGenerations (ForeignStore table closing _ counter) produced = atomically $ do
+claimAllOwnedGenerations (ForeignStore table closing _ counter _) produced = atomically $ do
   held <- readTVar table
   closed <- readTVar closing
   let taken = Map.fromList produced
@@ -121,38 +177,69 @@ withOwnedGenerations store claims = withClaims store [(address, Just generation)
 
 withClaims :: ForeignStore -> [(Int64, Maybe Integer)] -> IO a -> IO (Maybe a)
 withClaims store claims action = mask $ \restore -> do
-  let unique = Set.toList (Set.fromList (map fst claims))
-  acquired <- acquire store claims unique
-  if acquired
-    then Just <$> restore action `finally` releaseUses store unique
-    else pure Nothing
+  acquired <- acquire store claims
+  case acquired of
+    Nothing -> pure Nothing
+    Just leases -> Just <$> restore action `finally` releaseLeases store leases
 
-acquire :: ForeignStore -> [(Int64, Maybe Integer)] -> [Int64] -> IO Bool
-acquire (ForeignStore table closing _ _) claims addresses = atomically $ do
+{-| Lease every claim, or none. A claim names a table by where it is found, so
+    two references sharing one address are two leases rather than one. -}
+acquire :: ForeignStore -> [(Int64, Maybe Integer)] -> IO (Maybe [Lease])
+acquire (ForeignStore table closing _ _ counted) claims = atomically $ do
   held <- readTVar table
+  references <- readTVar counted
   closed <- readTVar closing
-  let matches (address, expected) = case Map.lookup address held of
-        Nothing -> False
-        Just resource -> maybe True (== resourceGeneration resource) expected
-  if closed || not (all matches claims)
-    then pure False
+  let found (address, expected) = case Map.lookup address held of
+        Just resource
+          | maybe True (== resourceGeneration resource) expected -> Just (OwnedLease address)
+        _ -> case expected of
+          Nothing -> Nothing
+          Just generation -> case Map.lookup generation references of
+            Just (owner, _) | owner == address -> Just (CountedLease generation)
+            _ -> Nothing
+      resolved = map found claims
+  if closed || any (== Nothing) resolved
+    then pure Nothing
     else do
-      writeTVar table (foldr increment held addresses)
-      pure True
+      let leases = Set.toList (Set.fromList [lease | Just lease <- resolved])
+      writeTVar table (foldr incrementOwned held leases)
+      writeTVar counted (foldr incrementCounted references leases)
+      pure (Just leases)
  where
-  increment address = Map.adjust (\resource -> resource{resourceUses = resourceUses resource + 1}) address
+  incrementOwned lease = case lease of
+    OwnedLease address -> Map.adjust busier address
+    CountedLease _ -> id
+  incrementCounted lease = case lease of
+    CountedLease generation -> Map.adjust (fmap busier) generation
+    OwnedLease _ -> id
+  busier resource = resource{resourceUses = resourceUses resource + 1}
 
-releaseUses :: ForeignStore -> [Int64] -> IO ()
-releaseUses (ForeignStore table closing _ _) addresses = mask_ $ do
+releaseLeases :: ForeignStore -> [Lease] -> IO ()
+releaseLeases (ForeignStore table closing _ _ counted) leases = mask_ $ do
   finished <- atomically $ do
     held <- readTVar table
+    references <- readTVar counted
     closed <- readTVar closing
-    let decrement resource = resource{resourceUses = max 0 (resourceUses resource - 1)}
-        updated = foldr (Map.adjust decrement) held addresses
+    let updated = foldr decrementOwned held leases
+        updatedCounted = foldr decrementCounted references leases
         (idle, busy) = Map.partition ((== 0) . resourceUses) updated
+        (idleCounted, busyCounted) = Map.partition ((== 0) . resourceUses . snd) updatedCounted
     writeTVar table (if closed then busy else updated)
-    pure (if closed then Map.elems idle else [])
+    writeTVar counted (if closed then busyCounted else updatedCounted)
+    pure
+      ( if closed
+          then Map.elems idle <> map snd (Map.elems idleCounted)
+          else []
+      )
   mapM_ cleanupQuietly finished
+ where
+  decrementOwned lease = case lease of
+    OwnedLease address -> Map.adjust idler address
+    CountedLease _ -> id
+  decrementCounted lease = case lease of
+    CountedLease generation -> Map.adjust (fmap idler) generation
+    OwnedLease _ -> id
+  idler resource = resource{resourceUses = max 0 (resourceUses resource - 1)}
 
 {-| Remove a claim for explicit release, waiting until native users finish. -}
 takeOwned :: ForeignStore -> Int64 -> IO (Maybe ForeignResource)
@@ -162,7 +249,7 @@ takeOwnedGeneration :: ForeignStore -> Int64 -> Integer -> IO (Maybe ForeignReso
 takeOwnedGeneration store address generation = takeClaim store address (Just generation)
 
 takeClaim :: ForeignStore -> Int64 -> Maybe Integer -> IO (Maybe ForeignResource)
-takeClaim (ForeignStore table _ _ _) address expected = atomically $ do
+takeClaim (ForeignStore table _ _ _ _) address expected = atomically $ do
   held <- readTVar table
   case Map.lookup address held of
     Nothing -> pure Nothing
@@ -171,6 +258,23 @@ takeClaim (ForeignStore table _ _ _) address expected = atomically $ do
       | resourceUses resource > 0 -> retry
       | otherwise -> do
           writeTVar table (Map.delete address held)
+          pure (Just resource)
+
+{-| Release one reference, leaving any others at that address alone.
+
+    Waits while a native call is inside this reference, the way an owned claim
+    does, and removes exactly the one named — its address may still be live
+    under other references, and is not consulted. -}
+takeCountedGeneration :: ForeignStore -> Int64 -> Integer -> IO (Maybe ForeignResource)
+takeCountedGeneration (ForeignStore _ _ _ _ counted) address generation = atomically $ do
+  references <- readTVar counted
+  case Map.lookup generation references of
+    Nothing -> pure Nothing
+    Just (owner, resource)
+      | owner /= address -> pure Nothing
+      | resourceUses resource > 0 -> retry
+      | otherwise -> do
+          writeTVar counted (Map.delete generation references)
           pure (Just resource)
 
 {-| Discard only the exact claims belonging to an unexposed result. -}
@@ -183,7 +287,7 @@ discardOwnedGenerations store claims = mask_ $ mapM_ discard claims
 
 {-| Restore a claim when the explicit destructor was never entered. -}
 restoreOwned :: ForeignStore -> Int64 -> ForeignResource -> IO ()
-restoreOwned (ForeignStore table closing _ _) address resource = mask_ $ do
+restoreOwned (ForeignStore table closing _ _ _) address resource = mask_ $ do
   dispose <- atomically $ do
     held <- readTVar table
     closed <- readTVar closing
@@ -203,7 +307,7 @@ drainPatience = 5 * 1000 * 1000
 
 {-| Close admission, drain idle resources, and leave busy cleanup to final leases. -}
 closeForeignStore :: ForeignStore -> IO ()
-closeForeignStore (ForeignStore table closing _ _) = mask_ $ do
+closeForeignStore (ForeignStore table closing _ _ counted) = mask_ $ do
   atomically (writeTVar closing True)
   deadline <- registerDelay drainPatience
   resources <-
@@ -214,7 +318,17 @@ closeForeignStore (ForeignStore table closing _ _) = mask_ $ do
                        if expired then drainUnleased table else retry
                    )
       )
-  mapM_ cleanupQuietly resources
+  {-| Every outstanding reference owes its own release, so teardown releases
+      each one rather than the address once. -}
+  references <-
+    atomically
+      ( drainCounted counted
+          `orElse` ( do
+                       expired <- readTVar deadline
+                       if expired then drainUnleasedCounted counted else retry
+                   )
+      )
+  mapM_ cleanupQuietly (resources <> references)
 
 drain :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
 drain table = do
@@ -232,6 +346,22 @@ drainUnleased table = do
   let (idle, busy) = Map.partition ((== 0) . resourceUses) held
   writeTVar table busy
   pure (Map.elems idle)
+
+drainCounted :: TVar (Map Integer (Int64, ForeignResource)) -> STM [ForeignResource]
+drainCounted counted = do
+  held <- readTVar counted
+  if any ((> 0) . resourceUses . snd) (Map.elems held)
+    then retry
+    else do
+      writeTVar counted Map.empty
+      pure (map snd (Map.elems held))
+
+drainUnleasedCounted :: TVar (Map Integer (Int64, ForeignResource)) -> STM [ForeignResource]
+drainUnleasedCounted counted = do
+  held <- readTVar counted
+  let (idle, busy) = Map.partition ((== 0) . resourceUses . snd) held
+  writeTVar counted busy
+  pure (map snd (Map.elems idle))
 
 cleanupQuietly :: ForeignResource -> IO ()
 cleanupQuietly resource = do

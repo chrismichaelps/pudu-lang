@@ -14,11 +14,13 @@ import Data.List (sort)
 import Pudu.Foreign.Call (candidates)
 import Pudu.Foreign.Ownership
   ( claimAllOwnedGenerations
+  , claimCountedGeneration
   , claimOwnedGeneration
   , closeForeignStore
   , discardOwnedGenerations
   , newForeignStore
   , takeOwnedGeneration
+  , takeCountedGeneration
   , withOwnedGenerations
   )
 import System.Timeout (timeout)
@@ -34,6 +36,8 @@ ownershipProperties =
   , ("a closing store admits nothing and releases what it turns away", testClosedAdmission)
   , ("a lease cancelled mid-call is still given back", testInterruptedLease)
   , ("a declared version is asked for the way each platform spells it", testVersionedNames)
+  , ("two references to one address are two claims", testCountedClaims)
+  , ("every outstanding reference is released at teardown", testCountedTeardown)
   ]
 
 {-| A cleanup that records that it ran, so a leak and a double release are both
@@ -253,6 +257,66 @@ testVersionedNames =
     )
  where
   numbered = zip (candidates "cairo" (Just "2")) [0 :: Int ..]
+
+{-| A reference-counted library hands back the pointer it was given and expects
+    an unref for each reference. Keying a claim by address cannot express that,
+    so these are keyed by the claim instead: two references to one address are
+    two claims, each releasing once, and releasing one leaves the other usable. -}
+testCountedClaims :: IO Property
+testCountedClaims = do
+  store <- newForeignStore
+  releases <- newReleases
+  first <- claimCountedGeneration store 4096 (releasing releases 4096)
+  second <- claimCountedGeneration store 4096 (releasing releases 4096)
+  let one = maybe 0 id first
+      two = maybe 0 id second
+  usable <- withOwnedGenerations store [(4096, one)] (pure ())
+  takenFirst <- takeCountedGeneration store 4096 one
+  afterFirst <- released releases
+  stillUsable <- withOwnedGenerations store [(4096, two)] (pure ())
+  repeated <- takeCountedGeneration store 4096 one
+  takenSecond <- takeCountedGeneration store 4096 two
+  wrongAddress <- claimCountedGeneration store 8192 (releasing releases 8192)
+  mismatched <- takeCountedGeneration store 4096 (maybe 0 id wrongAddress)
+  pure
+    ( conjoin
+        [ counterexample "a second reference to one address is admitted" (property (one /= two))
+        , counterexample "a reference can be leased" (usable === Just ())
+        , counterexample "releasing one gives that reference back"
+            (property (isJustResource takenFirst))
+        , counterexample "the other reference is still usable" (stillUsable === Just ())
+        , counterexample "releasing the same reference twice is refused"
+            (property (isNothingResource repeated))
+        , counterexample "and the second reference releases on its own"
+            (property (isJustResource takenSecond))
+        , counterexample "a reference is not released through another address"
+            (property (isNothingResource mismatched))
+        , counterexample "nothing was cleaned up by removing a claim" (afterFirst === [])
+        ]
+    )
+
+{-| Two references left behind owe two releases, not one. An address released
+    once would leave the library's count above zero for ever. -}
+testCountedTeardown :: IO Property
+testCountedTeardown = do
+  store <- newForeignStore
+  releases <- newReleases
+  _ <- claimCountedGeneration store 4096 (releasing releases 4096)
+  _ <- claimCountedGeneration store 4096 (releasing releases 4096)
+  _ <- claimOwnedGeneration store 8192 (releasing releases 8192)
+  closeForeignStore store
+  afterwards <- released releases
+  refused <- claimCountedGeneration store 16384 (releasing releases 16384)
+  afterClosed <- released releases
+  pure
+    ( conjoin
+        [ counterexample "each reference is released once, and the owned claim too"
+            (afterwards === [4096, 4096, 8192])
+        , counterexample "a reference arriving after closing is refused" (refused === Nothing)
+        , counterexample "and is released rather than left behind"
+            (afterClosed === [4096, 4096, 8192, 16384])
+        ]
+    )
 
 oneSecond :: Int
 oneSecond = 1000000
