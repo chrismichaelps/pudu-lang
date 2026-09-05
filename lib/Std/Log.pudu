@@ -78,13 +78,13 @@ fn unescapeShown(value: Str) -> Str {
       out = out + character.toText()
       index = index + 1
     } else {
-      let escapedChar = value.charAt(index + 1)
-      out = out + match escapedChar {
+      let escapedValue = value.charAt(index + 1)
+      out = out + match escapedValue {
         case 'n' => "\n"
         case 't' => "\t"
         case '"' => "\""
         case '\\' => "\\"
-        case _ => "\\" + escapedChar.toText()
+        case _ => "\\" + escapedValue.toText()
       }
       index = index + 2
     }

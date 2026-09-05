@@ -42,6 +42,12 @@ jobs:
         run: cabal test all --enable-optimization=2 --test-show-details=direct
       - name: Verify every committed Pudu file is formatted
         run: cabal run -v0 pudu -- fmt --check $(find lib test-fixtures examples -name '*.pudu')
+      # Formatting only parses. Nothing else compiled the standard library
+      # itself: a module broke only where a test happened to import it, and the
+      # ones no test reaches were never checked at all. The fixtures are
+      # excluded because many of them are programs that must fail to check.
+      - name: Verify the standard library and examples compile
+        run: cabal run -v0 pudu -- check $(find lib examples -name '*.pudu')
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       - name: Verify the language server answers a real session

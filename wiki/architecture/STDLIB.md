@@ -717,6 +717,20 @@ dependencies are its own files plus the compiler it is built with, and that is t
   fixtures whose maximum residency is bounded independently of input size; a buffered convenience
   wrapper never serves as that evidence.
 
+## The library is a gate
+
+Every module under `lib/` and every example compiles in CI, not merely parses. `fmt --check` was the
+only gate that touched them, and it stops at the parser: a Std module was checked where some test
+happened to import it, and the modules no test reaches were never checked at all. The fixtures stay
+out of that gate, because many of them are programs that must fail to check.
+
+### Resolved Grill
+
+- **Q:** Is a formatted file a compiling file? **A:** No. Formatting proves the parser accepted it,
+  which says nothing about names, types, or effects.
+- **Q:** Do the tests already cover the library? **A:** Only where one imports it. Coverage by
+  accident of use is not coverage, and it is silent about exactly the modules nothing exercises.
+
 ## Self-hosting
 
 Four additional source modules now provide compiler foundations: `Std.Bytes.Cursor` for bounded
