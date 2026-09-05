@@ -18,7 +18,8 @@ warnings, language defaults, dependencies, and native bridge linkage for the Cab
 Cabal consumes this manifest and `cabal.project`. The library includes [[Eval Foreign Resource]] and [[Eval Foreign Result]]
 alongside [[Eval Foreign]], [[Foreign Call]], and [[Foreign Ownership]]. Source module registration
 must match actual Haskell module declarations. Existing dependency and toolchain policies remain
-those in [[grammar/haskell]].
+those in [[grammar/haskell]]. A test module is registered the same way: an unregistered spec compiles
+nowhere and runs never, so the suite reports success without it.
 
 ## Invariants and negative logic
 

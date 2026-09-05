@@ -14,7 +14,7 @@ standard-library primitives exist. [[ADR-0019-getting-a-value-back-out-of-a-libr
 
 | Order | Deliverable | Required boundary |
 |---|---|---|
-| 1 | Complete output ownership | Cancellation-safe transitions; typed cleanup diagnostics; generation identity; all raw products classified before conversion |
+| 1 | Complete output ownership | Cancellation-safe transitions; typed cleanup diagnostics; generation identity; all raw products classified before conversion. Admission, refusal, generation identity, discard, and result conversion are covered; cleanup after invalid returned text is not, and needs a fixture library carrying a release symbol |
 | 2 | Owned values passed by value | Target-derived aggregate layout; explicit resource identity and alias contract; full-value destruction |
 | 3 | Returned buffers | Explicit byte length and allocator-matched release; null/empty distinction; overflow checks |
 | 4 | Writable buffers | Exclusive call lease; capacity and initialized length; explicit allocation; no mutation of immutable `Bytes` |

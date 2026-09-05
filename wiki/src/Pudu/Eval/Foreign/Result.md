@@ -24,6 +24,14 @@ require exact nominal name, field count, and field-name order, and recursively c
 No truncating zip or generic scalar fallback accepts a different declared shape. Record fields
 cannot introduce handles, bytes, or unit. Handles are constructed only by the generation-aware owner.
 
+## Covered by
+
+`Pudu.Eval.Foreign.ResultSpec` holds each refusal: a carrier of the wrong category, a record short a
+field, one carrying a surplus or renamed field, one whose fields arrive in another order, a field
+declared as a handle, run of bytes, or unit, an integer outside its declared width, and a width the
+boundary does not carry. It also holds what must still convert, so the refusals cannot be satisfied
+by refusing everything: a nested record at every depth, and a UInt64 whose carrier arrives negative.
+
 ## Grill Log
 
 - **Q:** Convert any integer-shaped carrier to an integer value? **A:** No; the declared crossing

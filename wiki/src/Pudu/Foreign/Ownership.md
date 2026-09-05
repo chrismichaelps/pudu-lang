@@ -158,6 +158,16 @@ Pudu values always use generation-aware admission. Restoration retains the origi
 - **Q:** Let a fixed-width generation counter wrap? **A:** No; the bootstrap uses an unbounded
   integer. A future native counter must refuse exhaustion before reusing an identity.
 
+## Covered by
+
+`Pudu.Foreign.OwnershipSpec` reaches the store directly, because these are the paths a foreign call
+that succeeds never takes: a batch naming one address twice, a batch touching an address already
+held, and what each refusal must leave alone. A refusal releases nothing and inserts nothing. An
+address claimed again after its release carries a new generation, and the old one can neither lease
+nor release the resource standing there. A discarded claim releases once, discarding it twice
+releases nothing further, and it cannot reach a newer occupant of the same address. A closed store
+refuses a late claim and releases what it turned away rather than leaking it.
+
 ## Aborted result settlement
 
 `discardOwnedGenerations` removes and cleans only the generations claimed by a failed result

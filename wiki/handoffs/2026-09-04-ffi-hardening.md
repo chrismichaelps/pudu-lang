@@ -60,15 +60,25 @@ Native declarations still assert pointer validity, ABI layout, and initializatio
 The pass that wrote these changes ran none. They were checked afterwards against the gates the
 project runs: the tree compiles at `-O2` under `-Werror`, the suite passes including every output-slot
 case, `fmt --check` accepts every committed Pudu file, and each diagnostic code still means one thing.
-No benchmarks ran and no throughput claim is made. Passing gates written before these paths existed is
-not coverage of them: nothing exercises a rejected batch, a conversion failure that discards its own
-claims, cleanup after invalid returned text, or a stale generation at a reused address. Those paths
-are implemented and unproven. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
+No benchmarks ran and no throughput claim is made.
+
+Passing gates written before these paths existed was not coverage of them, so three of the four
+uncovered paths now have their own specs. `Pudu.Foreign.OwnershipSpec` covers the rejected batch, what
+a refusal must leave alone, the stale generation at a reused address, and discard settling only its
+own claims. `Pudu.Eval.Foreign.ResultSpec` covers conversion refusing every shape outside the
+declaration. Both were confirmed to bite: removing the duplicate-address guard and the declared-width
+guard each fails the test written for it, so neither passes by never being reached.
+
+What remains uncovered is cleanup after invalid returned text. `cleanupFailedOutputs` and
+`releaseHandle` resolve and invoke a real destructor through the native bridge, so testing them needs
+a fixture library with a release symbol rather than a store reached directly. That is the one failure
+path still resting on reading alone. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
 
 ## Exact next action
 
-Write the tests those four failure paths have never had, before introducing owned-by-value or
-additional buffer syntax.
+Give the C++ conformance fixture a release symbol and a producer that returns invalid UTF-8 beside a
+handle, then cover `cleanupFailedOutputs` end to end, before introducing owned-by-value or additional
+buffer syntax.
 
 ## Referenced by
 

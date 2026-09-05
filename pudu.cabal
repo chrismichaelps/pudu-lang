@@ -219,6 +219,8 @@ test-suite pudu-test
     Pudu.Diagnostic.RenderSpec
     Pudu.Compiler.ProgramSpec
     Pudu.Foreign.SlotSpec
+    Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.Foreign.ResultSpec
     Pudu.Frontend.Lexer.CursorSpec
     Pudu.Frontend.ExpandSpec
     Pudu.Frontend.LexerSpec
