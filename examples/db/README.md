@@ -53,13 +53,14 @@ and a `SUM` of it answers as one. The amount is right, and the type is the
 warning — `Orders.pudu` prints which of the two happened rather than hiding it,
 because the difference only shows up after enough arithmetic to matter.
 
-**The query builder writes one dialect and never asks which is wanted.**
-`Query.textOf` renders placeholders as `$1`, PostgreSQL's spelling, while every
-driver already declares a `Placeholders` dialect that nothing consults. It does
-not bite on either backend here — SQLite accepts `$N` as well as `?` — so the
-two agree by luck rather than by design. A backend taking only `?` would be
-refused by the database rather than by the builder, which is the wrong end to
-find out at.
+**The query builder wrote one dialect and never asked which was wanted.**
+`Query.textOf` rendered placeholders as `$1`, PostgreSQL's spelling, while every
+driver already declared a `Placeholders` dialect that nothing consulted. It did
+not bite on either backend here, because SQLite accepts `$N` as well as `?` — so
+running a `$1` statement and seeing it work proved nothing. `Query.textIn` now
+spells a statement for a given dialect, and `Orm.pudu` runs the same statement
+in both spellings so neither is passing by luck. `textOf` keeps its old
+behaviour for callers that have no driver in hand.
 
 **The layers above the driver are tied to one backend.** `Std.Db.Query` and
 `Std.Db.Repository` are written against `Std.Db.Rows`, the PostgreSQL session's

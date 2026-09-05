@@ -2,7 +2,7 @@ module Orm
 
 import Std.Db as Db
 import Std.Db.Driver as Driver
-import Std.Db.Driver {NullValue, TextValue}
+import Std.Db.Driver {NullValue, TextValue, DollarNumber, QuestionMark}
 import Std.Db.Query as Query
 import Std.Db.Repository as Repository
 import Std.Db.Session as Session
@@ -44,6 +44,13 @@ export fn main() -> () {
           passed = check(passed, "its value travels beside it",
             Query.valuesOf(&one) == [Some("1")])
           passed = check(passed, "and is counted", Query.valueCount(&one) == 1)
+          // The same statement, spelled for each backend. A builder that only
+          // ever wrote one of these would suit whichever backends happened to
+          // take it.
+          passed = check(passed, "it can be spelled for PostgreSQL",
+            Query.textIn(&one, &DollarNumber).endsWith("customers.id = $1"))
+          passed = check(passed, "and for a backend that takes only ?",
+            Query.textIn(&one, &QuestionMark).endsWith("customers.id = ?"))
         }
       }
     }
@@ -102,11 +109,10 @@ export fn main() -> () {
 /// asks the driver which spelling this backend takes — `Placeholders` is
 /// declared on every driver and consulted by nobody here.
 ///
-/// That turns out not to bite on either backend this tree ships: SQLite
-/// accepts `$N` as well as `?`, so both agree by luck rather than by design.
-/// It is recorded because the coupling is real and the luck is not general — a
-/// backend that takes only `?` would be refused by the database rather than by
-/// the builder, which is the wrong end to find out at.
+/// Both spellings are run here, because a builder that only ever wrote one of
+/// them would suit whichever backends happened to take it — SQLite accepts
+/// `$N` as well as `?`, so writing `$1` and running it here proves nothing on
+/// its own.
 fn portability() -> Int {
   match Driver.connect(&[Sqlite.driver()], "sqlite:examples/db/orders.db", 1) {
     case Err(_) => {
@@ -118,20 +124,14 @@ fn portability() -> Int {
           &Result.unwrapOr(Query.selecting(&["name"], "customers"), Query.empty()),
         "customers.id", "=", Some("1"))
       let statement = Result.unwrapOr(built, Query.empty())
-      let answered = Driver.query(&client, Query.textOf(&statement), &crossed(&Query.valuesOf(&statement)))
+      let values = crossed(&Query.valuesOf(&statement))
+      let dollars = Driver.query(&client, Query.textIn(&statement, &DollarNumber), &values)
+      let questions = Driver.query(&client, Query.textIn(&statement, &QuestionMark), &values)
       let _closed = Driver.close(&client)
-      match answered {
-        case Ok(_) => {
-          let _said = print("  the builder writes $1 and this backend took it")
-          let _also = print("    it was not asked which spelling this backend wanted")
-          1
-        }
-        case Err(problem) => {
-          let _said = print("  the builder's statement was refused: " + problem.message)
-          let _also = print("    textOf writes $1 and never asks the driver's declared dialect")
-          0
-        }
-      }
+      var held = 0
+      held = check(held, "a statement spelled with $1 runs here", Result.isOk(&dollars))
+      held = check(held, "and so does the same one spelled with ?", Result.isOk(&questions))
+      held
     }
   }
 }

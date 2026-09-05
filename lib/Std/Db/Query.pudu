@@ -1,5 +1,7 @@
 module Std.Db.Query
 
+import Std.Db.Driver {DollarNumber, QuestionMark, Named}
+import Std.Db.Driver as Driver
 import Std.Db.Schema as Schema
 import Std.Option as Option
 import Std.Set as Set
@@ -112,7 +114,16 @@ export fn text(source: Str) -> Statement {
 }
 
 /// The text a statement holds, which a program may read before running it.
-export fn textOf(held: &Statement) -> Str {
+export fn textOf(held: &Statement) -> Str { textIn(held, &DollarNumber) }
+
+/// The same statement, spelled the way one backend writes a placeholder.
+///
+/// PostgreSQL takes `$1`, SQLite takes `?` as well as `$1`, and a backend that
+/// takes only `?` refuses the first. Which one a driver takes is already
+/// declared on it, so a caller with a driver in hand can ask here rather than
+/// writing a spelling by hand and finding out from the database which backends
+/// it happened to suit.
+export fn textIn(held: &Statement, style: &Driver.Placeholders) -> Str {
   var pieces: Array[Str] = []
   var placeholder = 0
   var previous = ""
@@ -121,7 +132,7 @@ export fn textOf(held: &Statement) -> Str {
       case Literal(source) => source
       case Placeholder => {
         placeholder = placeholder + 1
-        "$" + show(placeholder)
+        spelled(style, placeholder)
       }
     }
     if !piece.isEmpty() {
@@ -131,6 +142,15 @@ export fn textOf(held: &Statement) -> Str {
     }
   }
   pieces.join("")
+}
+
+/// One placeholder, as this backend writes it.
+fn spelled(style: &Driver.Placeholders, position: Int) -> Str {
+  match *style {
+    case DollarNumber => "$" + show(position)
+    case QuestionMark => "?"
+    case Named => ":p" + show(position)
+  }
 }
 
 /// Whether two pieces need a space between them.
