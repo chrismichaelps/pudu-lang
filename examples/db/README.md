@@ -7,6 +7,7 @@ failure a reader can act on rather than a number nobody reads.
 ```
 pudu run examples/db/Orders.pudu   # the driver, against SQLite by default
 pudu run examples/db/Orm.pudu      # the query builder and the row mapper
+pudu run examples/db/Reports.pudu  # joins, aggregates, grouping and paging
 ```
 
 `Orders.pudu` writes `examples/db/orders.db` and `Orm.pudu` reads it, so run
@@ -45,7 +46,30 @@ operator, which matters because a name cannot travel beside a statement the way
 a value can; and what `Std.Db.Repository` does with a `NULL`, a column that is
 not there, and a row past the end.
 
+`Reports.pudu` writes each query as one `Shape.Select` record, with what it
+reads from, answers with, joins and filters all at the same indentation. The
+combinators — `answering`, `alongside`, `keeping`, `gatheredBy` — build the same
+record by wrapping, so four of them nest four deep and the thing a reader wants
+first ends up furthest in. They suit adding a clause to a query already in hand;
+they do not suit writing one out.
+
 ## What running them turned up
+
+**A numeric comparison crosses as text, and SQLite answers nothing.** This is
+the one to fix. `Shape.is` takes its value as `Str`, so a filter like
+`having sum(quantity) > 6` binds the bar as the text `"6"`. SQLite orders every
+number before every text, so the comparison is false for any sum there could be
+and the report comes back empty; PostgreSQL coerces the text to the column's
+type and answers correctly. One query, two answers, and no error from either.
+`Reports.pudu` records it rather than working around it, because writing the
+number into the SQL would hide it and the number a screen filters by is exactly
+the value a caller supplies.
+
+**An aggregate takes a column, not an expression.** `over("sum", column)` cannot
+say `sum(unit_price * quantity)`, so the spend report sums unit prices — 49.75
+rather than the 84 the order book is actually worth. Nothing is wrong with the
+answer it gives; it is a different question from the one a reporting screen
+asks.
 
 **Money comes back as a float on SQLite.** SQLite has no decimal type: a
 `DECIMAL(12,2)` column has NUMERIC affinity, so the value is kept as a float

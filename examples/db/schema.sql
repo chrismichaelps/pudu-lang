@@ -66,7 +66,8 @@ INSERT INTO categories (id, name) VALUES (1, 'Tools'), (2, 'Books');
 INSERT INTO customers (id, region_id, name, email) VALUES
   (1, 1, 'Ada',  'ada@example.test'),
   (2, 1, 'Alan', NULL),
-  (3, 2, 'Grace','grace@example.test');
+  (3, 2, 'Grace','grace@example.test'),
+  (4, 2, 'Zoe',   NULL);
 
 INSERT INTO products (id, category_id, sku, unit_price) VALUES
   (1, 1, 'HAMMER-01', 12.50),

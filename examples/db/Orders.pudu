@@ -121,7 +121,7 @@ fn exercise(client: &Driver.Client, style: &Driver.Placeholders) -> Result[Int, 
       + " LEFT JOIN products p ON p.id = l.product_id"
       + " GROUP BY c.name"
       + " ORDER BY c.name", &[]) ?
-  passed = check(passed, "a left join keeps every customer", rowCount(&everyone) == 3)
+  passed = check(passed, "a left join keeps every customer", rowCount(&everyone) == 4)
   passed = check(passed, "a missing right side is NULL, not zero", isNullAt(&everyone, 1, "total"))
   passed = check(passed, "and so is the other one", isNullAt(&everyone, 2, "total"))
 

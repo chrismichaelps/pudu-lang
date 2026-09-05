@@ -1,0 +1,241 @@
+module Reports
+
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, QuestionMark, TextValue}
+import Std.Db.Query as Query
+import Std.Db.Query.Shape {NoLocking}
+import Std.Db.Query.Shape as Shape
+import Std.Db.Repository as Repository
+import Std.Db.Sqlite as Sqlite
+import Std.Option as Option
+import Std.Result as Result
+
+/// The query a reporting screen asks for, written flat and then run.
+///
+///     pudu run examples/db/Orders.pudu    # leaves the database behind
+///     pudu run examples/db/Reports.pudu
+///
+/// Every query here is one `Shape.Select` record. That is the form the type was
+/// made for: what it reads from, what it answers with, what it joins, and what
+/// it filters are all at the same indentation, in the order they are thought
+/// of, and a clause the query does not need is written empty rather than left
+/// out.
+///
+/// The combinators — `answering`, `alongside`, `keeping`, `gatheredBy` — build
+/// the same record by wrapping, and each one puts the last query *inside* the
+/// next. Four of them nest four deep, and the thing a reader wants first ends
+/// up furthest in. That is worth knowing before reaching for them: they suit
+/// adding one clause to a query already in hand, and not writing one out.
+///
+/// Each query is run against the database `Orders.pudu` leaves behind, and
+/// checked against an answer worked out by hand from the same rows — because
+/// SQL that a backend accepts and SQL that is right are different things.
+export fn main() -> () {
+  match Driver.connect(&[Sqlite.driver()], "sqlite:examples/db/orders.db", 2) {
+    case Err(problem) => {
+      let _said = print("could not open: " + problem.message)
+      let _also = print("run examples/db/Orders.pudu first")
+      ()
+    }
+    case Ok(client) => {
+      let outcome = exercise(&client)
+      let _closed = Driver.close(&client)
+      let _done = print("checks passed: " + show(outcome))
+      ()
+    }
+  }
+}
+
+fn exercise(client: &Driver.Client) -> Int {
+  var passed = 0
+
+  // What each customer spent on shipped orders: four tables, an aggregate, a
+  // group, and an order.
+  let spend = Shape.Select {
+    from: "customers",
+    columns: [
+      Shape.under(&Shape.pick("customers.name"), "name"),
+      Shape.under(&Shape.over("sum", "products.unit_price"), "spend")
+    ],
+    joins: [
+      Shape.inner("orders", "customers.id", "orders.customer_id"),
+      Shape.inner("order_lines", "orders.id", "order_lines.order_id"),
+      Shape.inner("products", "order_lines.product_id", "products.id")
+    ],
+    conditions: [Shape.is("orders.status", "=", "shipped")],
+    groupBy: ["customers.name"],
+    having: [],
+    orderBy: [Shape.descending("name")],
+    bound: Shape.unbounded(),
+    distinct: false,
+    locking: NoLocking
+  }
+  match rowsOf(client, &spend) {
+    case Err(problem) => { passed = report(passed, "the four-table report runs: " + problem) }
+    case Ok(rows) => {
+      passed = check(passed, "the four-table report answers one customer", rows.rows.length() == 1)
+      passed = check(passed, "and that customer is Ada",
+        Result.unwrapOr(Repository.text(&rows, 0, "name"), "") == "Ada")
+      // 12.50 + 7.25 + 30.00. Not 84: `over` aggregates a column, so this is
+      // the sum of the prices, not of price times quantity. See the note below.
+      passed = check(passed, "whose prices sum to 49.75",
+        Result.unwrapOr(Repository.text(&rows, 0, "spend"), "") == "49.75")
+    }
+  }
+
+  // A condition on the group rather than on the row. Ada bought 7 items and
+  // Grace 10, so a bar at 6 keeps both and a bar at 600 keeps neither — which
+  // is what tells a `having` from a `where` that happened to work.
+  let byItems = Shape.Select {
+    from: "customers",
+    columns: [
+      Shape.under(&Shape.pick("customers.name"), "name"),
+      Shape.under(&Shape.over("sum", "order_lines.quantity"), "items")
+    ],
+    joins: [
+      Shape.inner("orders", "customers.id", "orders.customer_id"),
+      Shape.inner("order_lines", "orders.id", "order_lines.order_id")
+    ],
+    conditions: [],
+    groupBy: ["customers.name"],
+    having: [Shape.is("sum(order_lines.quantity)", ">", "6")],
+    orderBy: [],
+    bound: Shape.unbounded(),
+    distinct: false,
+    locking: NoLocking
+  }
+  // Two groups clear a bar of 6 — Ada with 7 and Grace with 10 — and this
+  // answers none of them.
+  //
+  // `Shape.is` takes its value as `Str`, so the bar crosses as the text "6".
+  // SQLite orders every number before every text, so `sum(...) > '6'` is false
+  // for any sum there could be, and the report comes back empty. PostgreSQL
+  // coerces the text to the column's type and answers the two. One query, two
+  // answers, no error from either.
+  //
+  // This is recorded rather than worked around: writing the bar into the SQL
+  // would hide it, and the number a screen filters by is exactly the value a
+  // caller supplies. Until a condition can carry a number, a numeric filter
+  // through this builder is unsafe across backends.
+  passed = passed + counted(client, &byItems, "a numeric having is text, and matches nothing here", 0)
+
+  // A left join keeps the customer who has no orders at all; an inner one does
+  // not. Running both is what shows the difference is the join and not the
+  // rows.
+  let everyone = Shape.Select {
+    from: "customers",
+    columns: [Shape.under(&Shape.pick("customers.name"), "name")],
+    joins: [Shape.leftJoin("orders", "customers.id", "orders.customer_id")],
+    conditions: [],
+    groupBy: [],
+    having: [],
+    orderBy: [],
+    bound: Shape.unbounded(),
+    distinct: false,
+    locking: NoLocking
+  }
+  passed = passed + counted(client, &everyone, "a left join keeps the customer with no orders", 5)
+
+  let ordering = Shape.Select{..everyone, joins: [Shape.inner("orders", "customers.id", "orders.customer_id")]}
+  passed = passed + counted(client, &ordering, "an inner join drops them", 4)
+
+  // Distinct, over a column the join repeated.
+  let distinctly = Shape.Select{..ordering, distinct: true}
+  passed = passed + counted(client, &distinctly, "distinct removes what the join repeated", 3)
+
+  // A page of a result, which is what a screen actually asks for.
+  let paged = Shape.Select {
+    from: "products",
+    columns: [Shape.under(&Shape.pick("sku"), "sku")],
+    joins: [],
+    conditions: [],
+    groupBy: [],
+    having: [],
+    orderBy: [Shape.ascending("sku")],
+    bound: Shape.page(2, 1),
+    distinct: false,
+    locking: NoLocking
+  }
+  passed = passed + counted(client, &paged, "a page answers its own size", 2)
+
+  // A value travels beside the statement even here, so a hostile one is a
+  // value rather than syntax.
+  let hostile = Shape.Select {
+    from: "customers",
+    columns: [Shape.under(&Shape.pick("name"), "name")],
+    joins: [],
+    conditions: [Shape.is("name", "=", "' or 1=1 --")],
+    groupBy: [],
+    having: [],
+    orderBy: [],
+    bound: Shape.unbounded(),
+    distinct: false,
+    locking: NoLocking
+  }
+  passed = passed + counted(client, &hostile, "an injection attempt is a value, and matches nothing", 0)
+
+  // And what is not a value is refused where it is written, because a name
+  // cannot travel beside a statement the way a value can.
+  passed = check(passed, "a hostile table is refused",
+    Result.isErr(&Shape.select(&Shape.Select{..hostile, from: "customers; drop table customers --"})))
+  passed = check(passed, "a hostile join target is refused",
+    Result.isErr(&Shape.select(&Shape.Select{..hostile,
+          joins: [Shape.inner("orders; drop table orders --", "customers.id", "orders.customer_id")] })))
+  passed = check(passed, "an aggregate that is not one is refused",
+    Result.isErr(&Shape.select(&Shape.Select{..hostile,
+          columns: [Shape.over("; drop table customers --", "customers.id")] })))
+  passed = check(passed, "an unknown comparison is refused",
+    Result.isErr(&Shape.select(&Shape.Select{..hostile,
+          conditions: [Shape.is("name", "; drop table customers --", "x")] })))
+
+  passed
+}
+
+/// Build a query, run it, and answer its rows.
+fn rowsOf(client: &Driver.Client, query: &Shape.Select) -> Result[Driver.Rows, Str] {
+  match Shape.select(query) {
+    case Err(_) => Err("the query would not build")
+    case Ok(statement) =>
+    match Driver.query(client, Query.textIn(&statement, &QuestionMark),
+        &crossed(&Query.valuesOf(&statement))) {
+      case Ok(rows) => Ok(rows)
+      case Err(problem) => Err(problem.message)
+    }
+  }
+}
+
+/// Run a query and count its rows against a number worked out by hand.
+fn counted(client: &Driver.Client, query: &Shape.Select, label: Str, wanted: Int) -> Int {
+  match rowsOf(client, query) {
+    case Err(problem) => {
+      let _said = print("  not run: " + label + ": " + problem)
+      0
+    }
+    case Ok(rows) => check(0, label, rows.rows.length() == wanted)
+  }
+}
+
+fn crossed(values: &Array[Option[Str]]) -> Array[Driver.Value] {
+  var found: Array[Driver.Value] = []
+  for value in *values {
+    found = found.push(match value {
+        case Some(held) => TextValue(held)
+        case None => NullValue
+      })
+  }
+  found
+}
+
+fn check(passed: Int, label: Str, held: Bool) -> Int {
+  if held {
+    passed + 1
+  } else {
+    let _said = print("  not held: " + label)
+    passed
+  }
+}
+
+fn report(passed: Int, label: Str) -> Int {
+  let _said = print("  not built: " + label)
+  passed
+}
