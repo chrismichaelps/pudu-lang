@@ -39,15 +39,15 @@ export fn withDrivers(drivers: &Array[Driver.Driver], uri: Str, size: Int) -> Re
 
 export fn fromConfig(settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
   let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
-    Driver.error("", "configuration", "required database connection setting is missing or empty")
-  }) ?
+      Driver.error("", "configuration", "required database connection setting is missing or empty")
+    }) ?
   create(uri, size)
 }
 
 export fn fromConfigWith(driver: Driver.Driver, settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
   let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
-    Driver.error(driver.name, "configuration", "required database connection setting is missing or empty")
-  }) ?
+      Driver.error(driver.name, "configuration", "required database connection setting is missing or empty")
+    }) ?
   withDriver(driver, uri, size)
 }
 
@@ -62,31 +62,31 @@ export fn stage(database: &Database, name: Str) -> App.Stage {
 export fn start(database: &Database) -> Result[(), Driver.Error] {
   let resource = *database
   Result.mapErr(Sync.withLock(&database.lifecycle, fn() -> Result[(), Driver.Error] {
-    let current = Result.mapErr(Sync.get(&resource.current), syncError) ?
-    if let Some(_) = current { return Err(Driver.error(resource.driver.name, "lifecycle", "database resource is already started")) }
-    let opened = (resource.driver.open)(resource.uri, resource.size) ?
-    match Sync.set(&resource.current, Some(opened)) {
-      case Ok(_) => Ok(())
-      case Err(problem) => {
-        match Driver.close(&opened) {
-          case Ok(_) => Err(syncError(problem))
-          case Err(cleanup) => Err(Driver.error(resource.driver.name, "cleanup", show(problem) + "; closing client also failed: " + cleanup.message))
+        let current = Result.mapErr(Sync.get(&resource.current), syncError) ?
+        if let Some(_) = current { return Err(Driver.error(resource.driver.name, "lifecycle", "database resource is already started")) }
+        let opened = (resource.driver.open)(resource.uri, resource.size) ?
+        match Sync.set(&resource.current, Some(opened)) {
+          case Ok(_) => Ok(())
+          case Err(problem) => {
+            match Driver.close(&opened) {
+              case Ok(_) => Err(syncError(problem))
+              case Err(cleanup) => Err(Driver.error(resource.driver.name, "cleanup", show(problem) + "; closing client also failed: " + cleanup.message))
+            }
+          }
         }
-      }
-    }
-  }), syncError) ?
+      }), syncError) ?
 }
 
 /// Clear admission before closing; repeated stops are harmless.
 export fn stop(database: &Database) -> Result[(), Driver.Error] {
   let resource = *database
   Result.mapErr(Sync.withLock(&database.lifecycle, fn() -> Result[(), Driver.Error] {
-    let current = Result.mapErr(Sync.swap(&resource.current, None), syncError) ?
-    match current {
-      case None => Ok(())
-      case Some(client) => Driver.close(&client)
-    }
-  }), syncError) ?
+        let current = Result.mapErr(Sync.swap(&resource.current, None), syncError) ?
+        match current {
+          case None => Ok(())
+          case Some(client) => Driver.close(&client)
+        }
+      }), syncError) ?
 }
 
 /// SQL and placeholders follow the selected driver; values are always separate.

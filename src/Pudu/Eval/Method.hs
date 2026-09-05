@@ -184,6 +184,7 @@ data StringMethod
 
 data ArrayMethod
   = ArrayLength
+  | ArrayIsEmpty
   | ArrayGet
   | ArrayIndexOf
   | ArrayContains
@@ -235,6 +236,7 @@ stringMethodName method = case method of
 arrayMethodName :: ArrayMethod -> Text
 arrayMethodName method = case method of
   ArrayLength -> "length"
+  ArrayIsEmpty -> "isEmpty"
   ArrayGet -> "get"
   ArrayIndexOf -> "indexOf"
   ArrayContains -> "contains"

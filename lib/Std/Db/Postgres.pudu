@@ -1,7 +1,7 @@
 module Std.Db.Postgres
 
-import Std.Db as Db
 import Std.Db.ConnectionString as ConnectionString
+import Std.Db as Db
 import Std.Db.Driver as Driver
 import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
 import Std.Db.Session as Session
@@ -9,35 +9,35 @@ import Std.Result as Result
 
 export fn driver() -> Driver.Driver {
   Driver.Driver{name: "postgresql", schemes: ["postgres", "postgresql"],
-    placeholders: Driver.DollarNumber, open: connect}
+    placeholders: Driver.DollarNumber, open: connect }
 }
 
 export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
   let pool = Result.mapErr(ConnectionString.pool(uri, size), adaptError) ?
-  Ok(Driver.Client{
-    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
-      let parameters = textParameters(&values) ?
-      let rows = Result.mapErr(Db.withConnection(&pool,
-        fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
-          match Db.run(stream, sql, &parameters) {
-            case Ok(pair) => (Ok(pair[0]), pair[1])
-            case Err(problem) => (Err(problem), stream)
-          }
-        }), adaptError) ?
-      Ok(adaptRows(&rows))
-    },
-    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
-      let rows = Result.mapErr(Db.withConnection(&pool,
-        fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
-          match Db.simple(stream, sql) {
-            case Ok(pair) => (Ok(pair[0]), pair[1])
-            case Err(problem) => (Err(problem), stream)
-          }
-        }), adaptError) ?
-      Ok(adaptRows(&rows))
-    },
-    close: fn() -> Result[(), Driver.Error] { Result.mapErr(Db.closePool(&pool), adaptError) }
-  })
+  Ok(Driver.Client {
+      query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+        let parameters = textParameters(&values) ?
+        let rows = Result.mapErr(Db.withConnection(&pool,
+            fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
+              match Db.run(stream, sql, &parameters) {
+                case Ok(pair) => (Ok(pair[0]), pair[1])
+                case Err(problem) => (Err(problem), stream)
+              }
+            }), adaptError) ?
+        Ok(adaptRows(&rows))
+      },
+      execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+        let rows = Result.mapErr(Db.withConnection(&pool,
+            fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
+              match Db.simple(stream, sql) {
+                case Ok(pair) => (Ok(pair[0]), pair[1])
+                case Err(problem) => (Err(problem), stream)
+              }
+            }), adaptError) ?
+        Ok(adaptRows(&rows))
+      },
+      close: fn() -> Result[(), Driver.Error] { Result.mapErr(Db.closePool(&pool), adaptError) }
+    })
 }
 
 fn textParameters(values: &Array[Driver.Value]) -> Result[Array[Option[Str]], Driver.Error] {
@@ -70,9 +70,9 @@ fn adaptRows(rows: &Db.Rows) -> Driver.Rows {
     var converted: Array[Driver.Value] = []
     for value in row {
       converted = converted.push(match value {
-        case None => NullValue
-        case Some(text) => TextValue(text)
-      })
+          case None => NullValue
+          case Some(text) => TextValue(text)
+        })
     }
     values = values.push(converted)
   }

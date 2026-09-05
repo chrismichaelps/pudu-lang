@@ -44,33 +44,33 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
   let database = open(path) ?
   let lock = Sync.mutex()
   let current = Sync.cell(Some(database))
-  Ok(Driver.Client{
-    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
-      Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
-        let held = Result.mapErr(Sync.get(&current), synchronization) ?
-        match held {
-          case None => Err(problem("closed", "SQLite client is closed"))
-          case Some(database) => perform(database, sql, &values)
-        }
-      }), synchronization) ?
-    },
-    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
-      Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
-        let held = Result.mapErr(Sync.get(&current), synchronization) ?
-        match held {
-          case None => Err(problem("closed", "SQLite client is closed"))
-          case Some(database) => perform(database, sql, &[])
-        }
-      }), synchronization) ?
-    },
-    close: fn() -> Result[(), Driver.Error] {
-      Result.mapErr(Sync.withLock(&lock, fn() -> Result[(), Driver.Error] {
-        let held = Result.mapErr(Sync.swap(&current, None), synchronization) ?
-        if let Some(database) = held { unsafe(foreign) { releaseDatabase(database) } }
-        Ok(())
-      }), synchronization) ?
-    }
-  })
+  Ok(Driver.Client {
+      query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
+              let held = Result.mapErr(Sync.get(&current), synchronization) ?
+              match held {
+                case None => Err(problem("closed", "SQLite client is closed"))
+                case Some(database) => perform(database, sql, &values)
+              }
+            }), synchronization) ?
+      },
+      execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
+              let held = Result.mapErr(Sync.get(&current), synchronization) ?
+              match held {
+                case None => Err(problem("closed", "SQLite client is closed"))
+                case Some(database) => perform(database, sql, &[])
+              }
+            }), synchronization) ?
+      },
+      close: fn() -> Result[(), Driver.Error] {
+        Result.mapErr(Sync.withLock(&lock, fn() -> Result[(), Driver.Error] {
+              let held = Result.mapErr(Sync.swap(&current, None), synchronization) ?
+              if let Some(database) = held { unsafe(foreign) { releaseDatabase(database) } }
+              Ok(())
+            }), synchronization) ?
+      }
+    })
 }
 
 fn open(path: Str) -> Result[DatabaseHandle, Driver.Error] {

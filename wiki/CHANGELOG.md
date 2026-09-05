@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-05 · [[Eval Builtin]], [[Type Check Rule]], [[Std Db]], [[Std Db Session]] · give `Array` the `isEmpty` every other container has, and make the standard library compile again. `Str`, `Bytes`, `Map` and `Set` all answer `isEmpty`; `Array` did not, and five call sites across `Std.App` and `Std.Db` had already been written as though it did. Adding it is the smaller change and removes the inconsistency that invited them. Four matches were also refused by the exhaustiveness checker although they cover every case — `Err`, `Ok(None)`, `Ok(Some(x))` is exhaustive, and a constructor whose payload is tested rather than bound covers nothing today — so those bind and re-match until the checker learns collective coverage. Six files committed unformatted are formatted. The library and examples now compile and the suite passes; before this, neither did · risk LOW · issue #193
+
 ## 2026-09-05 — Backend-neutral row consumption
 
 - Add typed result readers and row mapping independent of PostgreSQL repository types.

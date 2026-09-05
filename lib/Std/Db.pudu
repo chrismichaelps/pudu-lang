@@ -8,8 +8,8 @@ import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
-import Std.Text as Text
 import Std.Sync as Sync
+import Std.Text as Text
 
 /// A column of a result.
 export type Column = { name: Str, oid: Int }
@@ -390,11 +390,12 @@ export fn withConnection[T](
       let failed: Result[T, Session.DbError] = Err(Other(show(problem)))
       return afterCleanup(afterCleanup(failed, Session.close(&stream)), closePool(target))
     }
-    case Ok(true) => {
-      let failed: Result[T, Session.DbError] = Err(Closed)
-      return afterCleanup(failed, Session.close(&stream))
+    case Ok(shut) => {
+      if shut {
+        let failed: Result[T, Session.DbError] = Err(Closed)
+        return afterCleanup(failed, Session.close(&stream))
+      }
     }
-    case Ok(false) => {}
   }
   let outcome = action(stream)
   match Sync.get(&target.closing) {
@@ -402,8 +403,9 @@ export fn withConnection[T](
       let cleanup: Result[(), Session.DbError] = Err(Other(show(problem)))
       return afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&outcome[1])), closePool(target))
     }
-    case Ok(true) => { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
-    case Ok(false) => {}
+    case Ok(shut) => {
+      if shut { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
+    }
   }
   let reusable = match outcome[0] {
     case Ok(_) => true
@@ -454,8 +456,12 @@ export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
         outcome = afterCleanup(outcome, cleanup)
         going = false
       }
-      case Ok(None) => { going = false }
-      case Ok(Some(stream)) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
+      case Ok(queued) => {
+        match queued {
+          case None => { going = false }
+          case Some(stream) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
+        }
+      }
     }
   }
   outcome

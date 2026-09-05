@@ -813,6 +813,7 @@ bucketsMethodType spanValue member held = case member of
 arrayMethodType :: Span -> Text -> Type -> Checker Type
 arrayMethodType spanValue member element = case member of
   "length" -> pure (FunctionTypeValue False [] integerType)
+  "isEmpty" -> pure (FunctionTypeValue False [] boolType)
   "get" -> pure (FunctionTypeValue False [integerType] element)
   "indexOf" -> pure (FunctionTypeValue False [element] integerType)
   "contains" -> pure (FunctionTypeValue False [element] boolType)

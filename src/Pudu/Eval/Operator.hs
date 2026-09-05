@@ -426,6 +426,7 @@ stringMethods =
 arrayMethods :: [(Text, ArrayMethod)]
 arrayMethods =
   [ ("length", ArrayLength)
+  , ("isEmpty", ArrayIsEmpty)
   , ("get", ArrayGet)
   , ("indexOf", ArrayIndexOf)
   , ("contains", ArrayContains)

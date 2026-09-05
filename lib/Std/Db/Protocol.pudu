@@ -84,8 +84,8 @@ export fn bodyLength(head: &Bytes) -> Option[Int] {
 export fn messageSize(head: &Bytes) -> Result[Int, ProtocolError] {
   if head.length() < 5 { return Err(Truncated(5, head.length())) }
   let read = Result.mapErr(ByteSeq.getU32Be(&head.drop(1)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
-    Truncated(5, head.length())
-  }) ?
+      Truncated(5, head.length())
+    }) ?
   let stated = read[0]
   if stated < 4u32 || stated > 2147483647u32 {
     return Err(BadField("a message length outside the signed protocol range"))
@@ -214,11 +214,11 @@ export fn readRowDescription(payload: &Bytes) -> Result[Array[Column], ProtocolE
     let after = named[1]
     if after.length() < 18 { return Err(Truncated(18, after.length())) }
     let oid = Result.mapErr(ByteSeq.getU32Be(&after.drop(6)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
-      BadField("a column type that did not read")
-    }) ?
+        BadField("a column type that did not read")
+      }) ?
     let format = Result.mapErr(ByteSeq.getU16Be(&after.drop(16)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
-      BadField("a column format that did not read")
-    }) ?
+        BadField("a column format that did not read")
+      }) ?
     if format[0] != 0u16 { return Err(BadField("a binary column in a text-format result")) }
     let typeId = match convertInteger[Int](oid[0]) {
       case Some(found) => found
@@ -239,8 +239,8 @@ export fn readDataRow(payload: &Bytes) -> Result[Array[Option[Str]], ProtocolErr
   var index = 0
   while index < narrow16(counted[0]) {
     let sized = Result.mapErr(ByteSeq.getU32Be(&rest), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
-      Truncated(4, rest.length())
-    }) ?
+        Truncated(4, rest.length())
+      }) ?
     let stated = sized[0]
     let after = sized[1]
     if stated == 4294967295u32 {

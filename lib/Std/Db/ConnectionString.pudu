@@ -2,8 +2,8 @@ module Std.Db.ConnectionString
 
 import Std.Bytes as ByteSeq
 import Std.Db as Db
-import Std.Db.Session as Session
 import Std.Db.Session {Connect, Unsupported}
+import Std.Db.Session as Session
 import Std.Result as Result
 import Std.Text as Text
 

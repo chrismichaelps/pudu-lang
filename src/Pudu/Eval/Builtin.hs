@@ -430,6 +430,11 @@ callArrayMethod apply spanValue method receiver arguments = case method of
       Just len -> pure (intOf (fromIntegral len))
       Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "length" 0
+  ArrayIsEmpty -> case arguments of
+    [] -> case arrayLength receiver of
+      Just len -> pure (BoolValue (len == 0))
+      Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
+    _ -> wrongArity "isEmpty" 0
   ArrayGet -> case arguments of
     [IntValue _ index] -> case arrayIndex receiver (fromInteger index) of
       Just value -> pure value
