@@ -40,7 +40,7 @@ import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
 import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
-import Pudu.Foreign.Ownership (closeForeignStore, newForeignStore)
+import Pudu.Foreign.Ownership (closeForeignStore, newForeignStore, takeForeignDiagnostics)
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
   , evaluateFor
@@ -106,14 +106,17 @@ runWithEffects effects (Evaluator action) =
     Workers stop before secured connections, sockets, and handles close, so a
     child cannot race teardown while finishing an effect. Independent evaluations own disjoint
     stores and therefore cannot invalidate one another's tokens. -}
-withRuntime :: (Env -> IO a) -> IO a
+withRuntime :: (Env -> IO EvalOutcome) -> IO EvalOutcome
 withRuntime action =
   bracket newHandleStore closeHandleStore $ \handles ->
     bracket newSocketStore closeSocketStore $ \sockets ->
       bracket newTlsStore closeTlsStore $ \secured ->
-        bracket newForeignStore closeForeignStore $ \foreignStore ->
-          bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
+        bracket newForeignStore closeForeignStore $ \foreignStore -> do
+          outcome <- bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
             action (emptyEnv handles sockets secured concurrent foreignStore)
+          closeForeignStore foreignStore
+          problems <- takeForeignDiagnostics foreignStore
+          pure outcome{outcomeDiagnostics = outcomeDiagnostics outcome <> problems}
 
 {-| What a finished evaluation answers with. A control transfer that reached the
     top is the value it carried; only an abort has nothing to answer. -}

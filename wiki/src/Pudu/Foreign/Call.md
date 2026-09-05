@@ -27,7 +27,7 @@ resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
 
 data ForeignHandle
 data ForeignCallFailure = CallAssemblyFailure !Text | InvalidReturnedText
-                        | PostCallFailure !ForeignCallFailure ![(Text, Int64)]
+                        | PostCallFailure !ForeignCallFailure ![(Maybe Int, Text, Int64)]
 data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText !Text
                   | CrossedHandle !Text !Int64 | CrossedRecord !Text ![(Text, CrossedValue)]
                   | CrossedNoText
@@ -109,7 +109,7 @@ kindCode    :: Crossing -> Word8
 
 ## Post-call conversion failures
 
-`PostCallFailure ForeignCallFailure [(Text, Int64)]` retains every non-null top-level
+`PostCallFailure ForeignCallFailure [(Maybe Int, Text, Int64)]` retains every non-null top-level
 handle produced by the native result or slots. The bridge captures these addresses before decoding
 any returned text. This lets the evaluator discharge ownership even when UTF-8 decoding fails.
 
@@ -117,6 +117,17 @@ any returned text. This lets the evaluator discharge ownership even when UTF-8 d
 
 - **Q:** Discard raw outputs on invalid text? **A:** No; preserve resource addresses on the failure
   path. Text validity cannot erase a native release obligation.
+
+## Native output provenance
+
+Retained handles include their native parameter index (`Nothing` for the direct result). Cleanup
+uses that exact declaration's destructor, so two outputs of the same type may name different release
+functions without being conflated. A missing or mismatched obligation is reported without guessing.
+
+### Resolved Grill
+
+- **Q:** Recover a release using only the handle's type name? **A:** No; source position identifies
+  the producer obligation, while the type only identifies the nominal value.
 
 ## Referenced by
 

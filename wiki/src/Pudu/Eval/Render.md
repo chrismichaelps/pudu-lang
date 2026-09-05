@@ -82,6 +82,16 @@ DEPTH 0.30 (LOW). Two total functions over one closed set of shapes.
   are changed together whenever a value shape is added. _Rejected:_ keeping it in [[Eval Value]],
   which would split one concern across two files to keep an import list shorter.
 
+## Foreign generation metadata
+
+Handle rendering retains its existing opaque type/address form. The extra ownership generation
+is ignored by rendering but retained in value equality and runtime liveness checks.
+
+### Resolved Grill
+
+- **Q:** Expose ownership generations as language values? **A:** No; generations are internal
+  admission metadata, not a new user-visible numeric or pointer API.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]]

@@ -165,6 +165,18 @@ DEPTH 0.86 (DEEP). One entry point hides declaration installation, environment f
 
 - A compiled backend replaces this walker for release builds; the diagnostic codes and value shapes stay the contract tools depend on.
 
+## Foreign cleanup reporting
+
+After workers stop, foreign resources close before the final outcome is returned. The per-run
+foreign cleanup journal is appended to `outcomeDiagnostics`; warnings do not discard a successful
+value. Cleanup failures observed while a boundary aborts become related information on that
+primary diagnostic. Exceptional host termination may have no outcome to carry diagnostics.
+
+### Resolved Grill
+
+- **Q:** Collect cleanup diagnostics before teardown? **A:** No; a destructor can fail during
+  teardown itself. Close resources before draining the journal, retaining the bracket for exceptional exits.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Pudu REPL]] · [[Syntax Tree]] · [[Diagnostic Model]] · [[Semantics]]

@@ -53,6 +53,26 @@ restoreOwned      :: ForeignStore -> Int64 -> ForeignResource -> IO ()
 - **Requires:** [[Foreign Call]], [[Eval Foreign]].
 - **Used by:** [[Eval Env]], [[Evaluator]].
 
+## Closing and cancellation
+
+The store has a permanent closing state. Closing rejects new leases and claims; products arriving
+after closing are cleaned instead of being inserted behind teardown. Busy resources remain claimed
+until their final lease ends, which removes and cleans them when the store is closing. Teardown
+still waits at most five seconds, but returning after that deadline no longer abandons resources
+whose native calls eventually return. A native call that never returns still prevents safe release.
+
+Lease acquisition and installation of its cleanup handler are masked against asynchronous
+exceptions. The native action uses the caller's prior masking state. Draining and cleanup handoff
+are masked as well. Restoration never overwrites another claim; restoring into a closed empty slot
+runs its cleanup instead of reopening the store.
+
+### Resolved Grill
+
+- **Q:** Assume evaluator teardown means process termination? **A:** No. Embedded and REPL runs
+  can outlive an evaluation; the final native lease performs deferred cleanup after closing.
+- **Q:** Install `finally` after an unmasked acquisition? **A:** No; mask across acquisition and
+  handler installation, then restore the incoming masking state for the action.
+
 ## Algorithm
 
 An STM table maps addresses to live resources and active lease counts. Multi-handle acquisition is
@@ -81,8 +101,7 @@ all leases reach zero, then performs cleanup outside STM.
 - **Q:** Free what is still leased when the wait ends? **A:** No; leave it.
   _Rationale:_ another thread is inside the library holding that address, and
   freeing underneath it is the exact fault this store exists to prevent. The
-  process is ending, so the memory returns anyway — an abandoned resource costs
-  nothing and a destructor called under a live user costs everything.
+  final lease now owns deferred cleanup; an embedded evaluation need not terminate its process.
   _Rejected:_ freeing regardless; refusing to exit.
 - **Q:** Bound the wait with `System.Timeout.timeout`? **A:** No; a deadline in
   STM. _Rationale:_ `timeout` bounds a computation by throwing to the thread
@@ -112,6 +131,32 @@ address. A failed batch inserts nothing. Cleanup actions are not comparable owne
 - **Q:** Coalesce duplicate products silently? **A:** No; refuse the complete batch. The caller
   has the canonical type and destructor metadata needed to decide which fresh products can be
   cleaned safely. Existing claims never become cleanup candidates.
+
+## Cleanup diagnostics
+
+`recordForeignDiagnostic` and `takeForeignDiagnostics` own a per-run diagnostic journal independent
+of the resource map. Diagnostics are drained in recording order. They survive store closing so
+teardown failures can be included in the evaluation outcome.
+
+### Resolved Grill
+
+- **Q:** Keep cleanup reporting process-global? **A:** No; failures belong to the evaluation whose
+  resources caused them, including a failed result conversion and runtime teardown.
+
+## Claim generations
+
+Every accepted resource receives a monotonically increasing, unbounded integer generation in the
+same STM transaction as insertion. `claimOwnedGeneration` and `claimAllOwnedGenerations` return
+these generations. `withOwnedGenerations` and `takeOwnedGeneration` require address and generation
+to match atomically. Address-only helpers remain for internal cleanup and existing host consumers;
+Pudu values always use generation-aware admission. Restoration retains the original generation.
+
+### Resolved Grill
+
+- **Q:** Is an address enough to validate an old handle? **A:** No; allocators reuse addresses.
+  A generation mismatch refuses use and release even while a new resource occupies that address.
+- **Q:** Let a fixed-width generation counter wrap? **A:** No; the bootstrap uses an unbounded
+  integer. A future native counter must refuse exhaustion before reusing an identity.
 
 ## Referenced by
 

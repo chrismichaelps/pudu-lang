@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
+
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
 - [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge and test-only C++ conformance

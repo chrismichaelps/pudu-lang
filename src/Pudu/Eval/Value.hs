@@ -113,7 +113,7 @@ data Value
       being a value of its own rather than a number is that the runtime knows
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
-  | ForeignHandleValue !Text !Int64
+  | ForeignHandleValue !Text !Int64 !Integer
   deriving stock (Eq, Show)
 
 {-| Everything the runtime needs to make one foreign call.
@@ -342,5 +342,5 @@ shapeRank value = case value of
   BucketsValue _ -> 23
   BucketsMethodValue _ _ -> 24
   ForeignValue _ -> 25
-  ForeignHandleValue _ _ -> 26
+  ForeignHandleValue _ _ _ -> 26
 

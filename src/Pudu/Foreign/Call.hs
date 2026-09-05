@@ -234,7 +234,7 @@ data CrossedValue
 data ForeignCallFailure
   = CallAssemblyFailure !Text
   | InvalidReturnedText
-  | PostCallFailure !ForeignCallFailure ![(Text, Int64)]
+  | PostCallFailure !ForeignCallFailure ![(Maybe Int, Text, Int64)]
   deriving stock (Eq, Show)
 
 {-| The code the other side reads for a kind.
@@ -341,9 +341,9 @@ callSymbol symbol supplied result =
                                                     _ -> pure 0
                                                   rawSlots <- peekArray (length arguments) slotIntegers
                                                   let owned =
-                                                        [(name, rawResult) | HandleCrossing name <- [result], rawResult /= 0]
-                                                        <> [(name, address)
-                                                           | ((HandleCrossing name, _), True, address) <- zip3 arguments written rawSlots
+                                                        [(Nothing, name, rawResult) | HandleCrossing name <- [result], rawResult /= 0]
+                                                        <> [(Just index, name, address)
+                                                           | (index, ((HandleCrossing name, _), True, address)) <- zip [0 ..] (zip3 arguments written rawSlots)
                                                            , address /= 0]
                                                       preserve problem = PostCallFailure problem owned
                                                   answered <- case result of

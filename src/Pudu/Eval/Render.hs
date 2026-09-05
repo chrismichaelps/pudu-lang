@@ -56,7 +56,7 @@ renderValue value = case value of
   CharMethodValue method _ -> "<character method " <> charMethodName method <> ">"
   BytesMethodValue method _ -> "<byte method " <> bytesMethodName method <> ">"
   BucketsMethodValue method _ -> "<store method " <> bucketsMethodName method <> ">"
-  ForeignHandleValue name address ->
+  ForeignHandleValue name address _ ->
     "<" <> name <> " at 0x" <> Text.pack (Numeric.showHex address "")
   ForeignValue binding ->
     "<foreign " <> foreignBindingLibrary binding <> "." <> foreignBindingSymbol binding <> ">"
@@ -91,7 +91,7 @@ escape =
 valueKind :: Value -> Text
 valueKind value = case value of
   ForeignValue _ -> "foreign function"
-  ForeignHandleValue name _ -> name
+  ForeignHandleValue name _ _ -> name
   IntValue kind _ -> integerKindName kind
   FloatValue _ _ -> "float"
   DecimalValue _ -> "decimal"

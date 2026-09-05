@@ -80,6 +80,17 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Why did #157 move the order into this module rather than leave it beside `comparableValue`? **A:** Because the keyed constructors now name it. A map keyed by a balanced tree cannot be declared before the order that tree is arranged by, and declaring the instance in [[Eval Order]] would make it an orphan, which [[grammar/haskell]] prohibits. _Rejected:_ an `.hs-boot` cycle, which preserves the old file boundary at the price of a build-order subtlety every later reader has to learn.
 - **Q:** Does moving the order in push this file past the size target? **A:** It did — 522 lines, measured rather than estimated — so rendering moved out to [[Eval Render]]. Later value and builtin growth took the file to 686 lines; the closed tag vocabulary and its name table then moved to [[Eval Builtin Definition]]. Foreign handles then took it to 548, and the built-in method vocabulary moved to [[Eval Method]], leaving 328. Each extraction followed the same seam — a closed tag set and its name table, depending on no runtime value — and each is re-exported here, so no call site learned that anything moved. _Rationale:_ size accounting must describe the current source honestly, and a limit is worth keeping only if the split follows the code rather than the line count. _Rejected:_ claiming an old measurement is current; splitting the file arbitrarily to fit.
 
+## Foreign handle generations
+
+`ForeignHandleValue` carries canonical type, opaque native address, and ownership generation.
+Equality includes the generation, so address reuse does not make two ownership lifetimes equal.
+The generation is runtime metadata and never crosses the native ABI or becomes a Pudu integer.
+
+### Resolved Grill
+
+- **Q:** Erase claim identity when building a handle value? **A:** No; aliases retain the original
+  generation and cannot operate on a replacement object at a reused address.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

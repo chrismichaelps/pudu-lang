@@ -105,6 +105,42 @@ released once, including resources produced beside invalid UTF-8.
 - **Q:** Wait for a successful text conversion to discover ownership? **A:** No; the native bridge
   retains raw handle outputs even when conversion fails.
 
+## Boundary cancellation interval
+
+The evaluator masks asynchronous exceptions over foreign dispatch through ownership settlement.
+Waiting for a lease before removing a claim remains interruptible; the non-interruptible native
+call and subsequent nonblocking settlement run under the mask. This closes the gap between native
+return and recording produced resources. It does not make arbitrary native code cancellable, contain
+native memory faults, or prove synchronous allocation-failure cleanup.
+
+### Resolved Grill
+
+- **Q:** Restore asynchronous delivery immediately when a producer returns? **A:** No; settle its
+  ownership first, or cancellation can erase the only reference to a fresh native allocation.
+
+## Resource helper boundary
+
+[[Eval Foreign Resource]] now owns destructor preflight, failed-batch cleanup, and warning recording.
+Every producer's release symbols are resolved before dispatch. A boundary abort retains its original
+code and span and includes accumulated cleanup warnings as related messages.
+
+### Resolved Grill
+
+- **Q:** Keep cleanup policy mixed with result conversion? **A:** No; the resource helper owns
+  release obligations while this module converts admitted values and chooses the primary diagnostic.
+
+## Generation-aware crossing
+
+Ordinary handle arguments retain their ownership generations until lease admission; only native
+addresses cross the ABI. Explicit release validates the same generation atomically. Output claims
+return generations in their insertion transaction, and direct and optional slot values are built
+from those exact generations. No result can recover a generation by querying a later address occupant.
+
+### Resolved Grill
+
+- **Q:** Read the generation after claiming in a separate lookup? **A:** No; the claim transaction
+  returns it, avoiding a race with release and address reuse.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]

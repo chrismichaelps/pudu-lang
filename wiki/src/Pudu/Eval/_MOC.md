@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Foreign Resource]] — destructor preflight, failed output cleanup, and cleanup diagnostics.
+
 - [[Eval Entropy]] — bounded operating-system cryptographic entropy.
 - [[Eval Hash Map]] — persistent indexed buckets and deterministic map order.
 - [[Eval Bytes]] — compact byte values and their built-in operations.

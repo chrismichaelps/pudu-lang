@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-04 · [[Foreign Ownership]], [[Eval Foreign Resource]], [[Eval Foreign]], [[Eval Value]], [[Evaluator]], [[2026-09-04-ffi-hardening]] · retain claim generations across allocator address reuse, mask foreign ownership handoffs, defer busy cleanup to final leases, resolve destructors before production, and report cleanup failures with native-output provenance. Validation intentionally not run · risk HIGH · issue #217
+
 - 2026-09-04 · [[2026-09-04-ffi-hardening]], [[architecture/FFI-SELF-HOSTING]], [[architecture/SEMANTICS]], [[architecture/STDLIB]] · reconcile output-slot implementation status and record remaining ownership, buffer, callback, hardware, and self-hosting work without claiming completed validation · issue #217
 
 - 2026-09-04 · [[Foreign Ownership]], [[Foreign Call]], [[Eval Foreign]] · reject duplicate output claims, preserve existing claims on batch failure, and retain returned handles through text-conversion failure for cleanup. No tests, build, benchmark, or completed review; full foreign-boundary assurance remains outstanding · risk HIGH · issue #217

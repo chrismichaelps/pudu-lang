@@ -52,6 +52,7 @@ library
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Foreign
+    Pudu.Eval.Foreign.Resource
     Pudu.Eval.Method
     Pudu.Eval.Handle
     Pudu.Eval.Hash
