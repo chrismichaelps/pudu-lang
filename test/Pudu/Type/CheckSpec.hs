@@ -1403,6 +1403,37 @@ testExhaustiveness = do
     , "  match value { case Some(1) => 1 case Some(2) => 2 case Some(n) => n case None => 0 }"
     , "}"
     ]
+  capturedWrite <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  var seen = 0"
+    , "  let bump = fn() -> Int {"
+    , "    seen = 9"
+    , "    1"
+    , "  }"
+    , "  let _ran = bump()"
+    , "  seen"
+    , "}"
+    ]
+  ownWrite <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  let counted = fn() -> Int {"
+    , "    var inner = 0"
+    , "    inner = 5"
+    , "    inner"
+    , "  }"
+    , "  counted()"
+    , "}"
+    ]
+  outerWrite <- codes
+    [ "module M"
+    , "fn run() -> Int {"
+    , "  var seen = 0"
+    , "  seen = 9"
+    , "  seen"
+    , "}"
+    ]
   nestedBooleans <- codes
     [ "module M"
     , "fn run(value: Result[Bool, Int]) -> Int {"
@@ -1461,6 +1492,12 @@ testExhaustiveness = do
     , counterexample "one of two booleans does not" (nestedHalfBoolean === ["E5001"])
     , counterexample "one of two variants does not" (nestedHalfVariant === ["E5001"])
     , counterexample "a literal payload covers nothing" (nestedLiteral === ["E5001"])
+    {-| A closure holds its own copy of what it captured, so a write to a
+        captured name lands on the copy. Refusing it is what turns a value that
+        is silently the old one into a line to look at. -}
+    , counterexample "a write to a captured name is refused" (capturedWrite === ["E3076"])
+    , counterexample "a closure writes its own bindings" (ownWrite === [])
+    , counterexample "a write outside any closure is untouched" (outerWrite === [])
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])

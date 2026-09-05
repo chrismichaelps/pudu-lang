@@ -10,6 +10,7 @@ module Pudu.Type.Check.Expression
   ) where
 
 import Control.Monad (foldM, unless)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
@@ -25,6 +26,8 @@ import Pudu.Frontend.Syntax.Tree
 import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
+  , insideClosure
+  , capturedFromOutside
   , DeclaredTypes (..)
   , bindName
   , finalizeIntegerLiteralsBetween
@@ -128,6 +131,7 @@ inferExpression around declared rigid spanValue expression = case expression of
   BinaryExpression left operator right -> do
     leftType <- checkExpression around declared rigid left
     rightType <- checkExpression around declared rigid right
+    checkCapturedAssignment operator left
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
     checkComptimeCall spanValue callee
@@ -425,7 +429,7 @@ literalIndex (Located _ expression) = case expression of
     silent second instantiation of something they wrote once. Generalisation
     belongs to a declaration, which has a name to attach it to. -}
 lambdaType :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Function -> Checker Type
-lambdaType around declared rigid value = withoutLoops $ inTypeScopeWith $ do
+lambdaType around declared rigid value = withoutLoops $ insideClosure $ inTypeScopeWith $ do
   inputs <- mapM (aroundParameter around declared rigid) (functionParameters value)
   result <- formOptionalType declared rigid (functionReturn value)
   let signature = FunctionTypeValue (functionAsync value) inputs result
@@ -439,6 +443,39 @@ lambdaType around declared rigid value = withoutLoops $ inTypeScopeWith $ do
       _ <- unify bodySpan result actual
       pure ()
   zonk signature
+
+{-| Refuse an assignment to a name the closure only captured.
+
+    A closure captures a copy of what it can see, so the write lands on the
+    copy and the original is left as it was. The program states an intent the
+    language does not carry out, and says nothing: the value read afterwards is
+    simply the old one, somewhere else, with no line to look at.
+
+    That is not hypothetical. A test written this way accumulated into a
+    captured variable from inside a callback, compiled, ran, and never executed
+    the branch it existed to check — it passed while checking nothing, and was
+    caught only because a count came out one short.
+
+    Only a bare name is refused. A field or an element reaches through a value
+    that a copy still shares, and whether that write is visible outside is a
+    question about the value rather than about the capture. -}
+checkCapturedAssignment :: Text -> Located Expression -> Checker ()
+checkCapturedAssignment operator (Located spanValue expression)
+  | operator /= "=" = pure ()
+  | otherwise = case expression of
+      NameExpression names | [name] <- NonEmpty.toList names -> do
+        captured <- capturedFromOutside name
+        if captured
+          then
+            report "E3076" spanValue
+              ("assignment to " <> name <> " does not leave this closure")
+              ( Just
+                  ( "a closure holds its own copy of what it captured; return the "
+                      <> "value instead, or carry it in what the closure answers"
+                  )
+              )
+          else pure ()
+      _ -> pure ()
 
 {-| Warn when a statement throws away a value that is the whole point of the
     call that produced it.

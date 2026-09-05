@@ -34,6 +34,8 @@ module Pudu.Type.Env
   , finalizeIntegerLiteralsSince
   , integerLiteralCheckpoint
   , inTypeScope
+  , insideClosure
+  , capturedFromOutside
   , inTypeScopeWith
   , lookupField
   , lookupOwnerVariants
@@ -153,6 +155,13 @@ data CheckerState = CheckerState
   , stateAmbiguousMethods :: !(Map Text [NominalId])
   , stateUnsafeFrames :: ![UnsafeFrame]
   , stateLoopFrames :: ![LoopFrame]
+  {-| How deep the name frames were when each enclosing closure began.
+
+      A closure captures what it can see, and the copy it captures is its own.
+      An assignment to a name from outside therefore writes the closure's copy
+      and leaves the original alone, so the depth is kept in order to tell a
+      name the closure declared from one it only captured. -}
+  , stateClosureDepths :: ![Int]
   , stateReportedSpans :: ![((Int, Int), Text)]
   , stateUnsafeFunctions :: !(Map Text [Capability])
   {-| Whether each declared function may run at compile time.
@@ -266,6 +275,7 @@ initialState =
     , stateAmbiguousMethods = Map.empty
     , stateUnsafeFrames = []
     , stateLoopFrames = []
+    , stateClosureDepths = []
     , stateReportedSpans = []
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = Map.empty
@@ -511,6 +521,39 @@ qualifiesSomething qualifier =
  where
   prefix = qualifier <> "."
   covered frame = any (Text.isPrefixOf prefix) (Map.keys frame)
+
+{-| Run an action as the body of a closure, remembering how deep the name
+    frames were when it began. -}
+insideClosure :: Checker a -> Checker a
+insideClosure action = do
+  push
+  value <- action
+  pop
+  pure value
+ where
+  push =
+    Checker $ \state ->
+      ((), state{stateClosureDepths = length (stateFrames state) : stateClosureDepths state})
+  pop =
+    Checker $ \state -> case stateClosureDepths state of
+      _ : rest -> ((), state{stateClosureDepths = rest})
+      [] -> ((), state)
+
+{-| Whether this name was declared outside the closure now being checked.
+
+    Frames are innermost first, so the frames belonging to everything outside
+    the closure are the last ones — as many as there were when it began. A name
+    found among those was captured rather than declared here. -}
+capturedFromOutside :: Text -> Checker Bool
+capturedFromOutside name = Checker $ \state ->
+  case stateClosureDepths state of
+    [] -> (False, state)
+    depth : _ ->
+      let frames = stateFrames state
+          found = [index | (index, frame) <- zip [0 ..] frames, Map.member name frame]
+       in case found of
+            [] -> (False, state)
+            index : _ -> (index >= length frames - depth, state)
 
 {-| Run an action in a fresh name frame; the frame is discarded on exit. -}
 inTypeScope :: Checker a -> Checker ()
