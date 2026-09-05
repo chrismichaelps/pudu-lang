@@ -128,6 +128,7 @@ testForeignHandles = do
   beforeSlotText <- cppDeleteCount
   CInt activeBeforeSlotText <- cppActiveCount
   invalidTextWithSlot <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8WithSlot.pudu"
+  unaliasedImport <- runEntry "test-fixtures/stdlib/UsesUnaliasedImport.pudu"
   afterSlotText <- cppDeleteCount
   CInt activeAfterSlotText <- cppActiveCount
   pure $ conjoin
@@ -180,6 +181,13 @@ testForeignHandles = do
         (afterSlotText - beforeSlotText === 1)
     , counterexample "leaving no live box behind"
         (activeAfterSlotText === activeBeforeSlotText)
+    {-| An import without `as` is reached through the module's own last segment.
+        The checker resolved names against that segment while the evaluator
+        bound nothing unless an alias was written, so a program using the
+        documented form checked clean and then failed at run time with an
+        undefined name. Both sides ask one function for the qualifier now. -}
+    , counterexample "an unaliased import binds the qualifier the checker resolved against"
+        (unaliasedImport === Just "5")
     , counterexample "a null text field in a returned record is refused"
         (missingRecordText === ["E7024"])
     , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"

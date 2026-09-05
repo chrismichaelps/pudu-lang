@@ -78,6 +78,19 @@ the entry name up, and call it.
   ordinary import states it exactly. _Rejected:_ a record for symmetry with the
   other splits, which would claim a cycle that does not exist.
 
+## Import qualifiers
+
+`import M` binds every name of `M` under `M`'s last segment, `import M as N` under `N`, and
+`import M { a, b }` binds those names alone and no qualifier. The segment comes from
+[[Syntax Name]], which the checker asks too, so a qualified name the checker admits is one this can
+find.
+
+### Resolved Grill
+
+- **Q:** Bind a qualifier only where `as` was written? **A:** No. The checker resolved names against
+  the last segment regardless, so the unaliased form type-checked and then aborted with an undefined
+  name. Both sides settle a qualifier through one function.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Compiler Pipeline]]

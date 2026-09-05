@@ -36,7 +36,7 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (moduleNameText)
+import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Import (..)
   , Function (..)
@@ -229,21 +229,27 @@ linkDependencies = mapM_ linkOne
     captured something at the point it was written keeps what it captured — a
     lambda's scope is where it was written, not the module it ended up in. -}
 
-{-| Bind the names an import makes available without qualification.
+{-| Bind the names an import makes available.
 
-    `import M as N` republishes every name of `M` under `N`, and
-    `import M { a, b }` republishes just those under their plain names. The
-    values are the ones already linked, so an alias and its origin are the same
-    binding rather than two copies that could drift. -}
+    `import M` republishes every name of `M` under `M`'s own last segment,
+    `import M as N` under `N`, and `import M { a, b }` binds just those under
+    their plain names and no qualifier at all. The values are the ones already
+    linked, so an alias and its origin are the same binding rather than two
+    copies that could drift.
+
+    The qualifier comes from `moduleQualifier`, which the checker asks too. A
+    program the checker admits is one this can find, and the two cannot settle
+    a name differently. -}
 installImportAliases :: [Located Import] -> Evaluator ()
 installImportAliases = mapM_ (installOne . locatedValue)
  where
   installOne value = do
     let path = moduleNameText (locatedValue (importModule value))
-    case importAlias value of
-      Just alias -> republish path (locatedValue alias <> ".")
-      Nothing -> pure ()
-    mapM_ (selectOne path . locatedValue) (importItems value)
+        qualifier =
+          maybe (moduleQualifier (locatedValue (importModule value))) locatedValue (importAlias value)
+    if null (importItems value)
+      then republish path (qualifier <> ".")
+      else mapM_ (selectOne path . locatedValue) (importItems value)
 
   selectOne path item = do
     found <- lookupName (path <> "." <> item)

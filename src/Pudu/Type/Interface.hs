@@ -18,9 +18,8 @@ import qualified Data.Map.Strict as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
+import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
@@ -191,7 +190,7 @@ importOne value found =
     }
  where
   selected = map locatedValue (importItems value)
-  qualifier = maybe (lastSegment (interfaceModule found)) locatedValue (importAlias value)
+  qualifier = maybe (moduleQualifier (interfaceModule found)) locatedValue (importAlias value)
   visible name = null selected || name `elem` selected
   namesFor (name, identity, _)
     | null selected = [(qualifier <> "." <> name, identity)]
@@ -228,7 +227,3 @@ exportedValue (Located _ declaration) = case declaration of
     _ -> []
   _ -> []
 
-lastSegment :: ModuleName -> Text
-lastSegment value = case reverse (Text.splitOn "." (moduleNameText value)) of
-  first : _ -> first
-  [] -> moduleNameText value

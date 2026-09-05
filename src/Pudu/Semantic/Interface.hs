@@ -13,7 +13,6 @@ module Pudu.Semantic.Interface
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
 import Pudu.Diagnostic
   ( Diagnostic
   , Severity (Error)
@@ -22,7 +21,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
+import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
   ( Declaration (..)
   , Foreign (..)
@@ -113,7 +112,7 @@ importBindings (ExportIndex modules) (Located importSpan value) =
       items -> foldMap (selectedBindings importedModule exports) items
  where
   importedModule = locatedValue (importModule value)
-  qualifier = maybe (lastModuleSegment importedModule) locatedValue (importAlias value)
+  qualifier = maybe (moduleQualifier importedModule) locatedValue (importAlias value)
 
 selectedBindings
   :: ModuleName -> ModuleExports -> Located Text -> ([ImportBinding], [Diagnostic])
@@ -152,8 +151,3 @@ notExported owner item = do
     (locatedValue item <> " is not exported by " <> moduleNameText owner)
   pure (withHelp "export the declaration, or remove it from the import selection" value)
 
-lastModuleSegment :: ModuleName -> Text
-lastModuleSegment name =
-  case reverse (Text.splitOn "." (moduleNameText name)) of
-    segment : _ -> segment
-    [] -> moduleNameText name

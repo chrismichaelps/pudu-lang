@@ -75,6 +75,9 @@ DEPTH 0.68 (MEDIUM). It hides export projection, namespace-aware selection, decl
 
 - **Q:** Should imports remain opaque in a program graph? **A:** No. _Rationale:_ loaded modules provide authoritative exports, so guessing both namespaces would discard privacy and identity. _Rejected:_ permanent `ImportOrigin` placeholders in both namespaces.
 - **Q:** Does a module import copy all exports into the local scope? **A:** No; it binds one qualifier. _Rationale:_ `import A` and `import A {x}` are deliberately distinct grammar forms. _Rejected:_ wildcard-like unqualified injection.
+- **Q:** Derive the unaliased qualifier here? **A:** No; ask [[Syntax Name]] for it. This module and
+  [[Type Interface]] each carried a copy of "the last segment" while [[Eval Program]] carried none,
+  so `import Std.Map` resolved `Map` at check time and had nothing to look up at run time.
 - **Q:** Who reports a missing source module? **A:** [[Compiler Program]], before interface lookup. _Rationale:_ only the loader knows paths and IO failures. _Rejected:_ fabricating an empty export set and reporting every selection as private.
 - **Q:** Are implementations lexical exports? **A:** No. _Rationale:_ implementations have no source name; [[Type Interface]] carries them for trait dispatch after imports establish which traits are in scope. _Rejected:_ synthetic implementation symbols.
 

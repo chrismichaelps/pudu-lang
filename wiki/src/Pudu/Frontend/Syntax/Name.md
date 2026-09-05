@@ -28,16 +28,21 @@ newtype ModuleName = ModuleName { moduleNameSegments :: NonEmpty Text }
   deriving stock (Eq, Ord, Show)
 
 moduleNameText :: ModuleName -> Text
+moduleQualifier :: ModuleName -> Text
 ```
 
 ### Governance
 
 - Empty paths are unrepresentable; parser validates segment casing separately.
+- `moduleQualifier` is the last segment: the name an unaliased `import M` is
+  reached through. It is the single definition every side asks, so a qualifier
+  the checker resolves against is the one the evaluator binds.
 
 ### Linkage
 
 - **Requires:** [[Pudu Module]].
-- **Consumed by:** [[Syntax Tree]] and the future parser-name module.
+- **Consumed by:** [[Syntax Tree]], [[Semantic Interface]], [[Type Interface]], and
+  [[Eval Program]], which all settle import qualifiers through `moduleQualifier`.
 
 ## Algorithm
 
@@ -58,6 +63,10 @@ DEPTH 0.48 (MEDIUM). A narrow nominal contract prevents stringly module paths.
 ## Grill Log
 
 - **Q:** Store one dotted `Text`? **A:** No; store non-empty segments. _Rationale:_ resolution and diagnostics need boundaries. _Rejected:_ repeated splitting.
+- **Q:** Let each side derive an import's qualifier for itself? **A:** No. Two copies in the checker
+  and none in the evaluator is what let `import Std.Map` check clean and then fail at run time with
+  an undefined `Map`. A rule two sides must agree on belongs in one place, and the segments are
+  already here, so the last one needs no splitting to find.
 
 ## Variants
 
