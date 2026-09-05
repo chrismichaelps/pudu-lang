@@ -55,13 +55,20 @@ cleanup after an evaluation has already returned cannot be appended to that retu
 Generation tokens are per evaluation; host code must not inject values between independent stores.
 Native declarations still assert pointer validity, ABI layout, and initialization Pudu cannot prove.
 
-No tests, build, benchmarks, or further reviews ran. No throughput improvement or full conformance is
-asserted. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
+## Validation
+
+The pass that wrote these changes ran none. They were checked afterwards against the gates the
+project runs: the tree compiles at `-O2` under `-Werror`, the suite passes including every output-slot
+case, `fmt --check` accepts every committed Pudu file, and each diagnostic code still means one thing.
+No benchmarks ran and no throughput claim is made. Passing gates written before these paths existed is
+not coverage of them: nothing exercises a rejected batch, a conversion failure that discards its own
+claims, cleanup after invalid returned text, or a stale generation at a reused address. Those paths
+are implemented and unproven. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
 
 ## Exact next action
 
-Complete runtime foreign-result conversion shape checks and retain exact failure cleanup before
-introducing owned-by-value or additional buffer syntax.
+Write the tests those four failure paths have never had, before introducing owned-by-value or
+additional buffer syntax.
 
 ## Referenced by
 

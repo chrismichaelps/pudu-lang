@@ -721,9 +721,12 @@ dependencies are its own files plus the compiler it is built with, and that is t
 
 Four additional source modules now provide compiler foundations: `Std.Bytes.Cursor` for bounded
 binary reads, `Std.Text.Source` for indexed byte-coordinate locations, `Std.Intern` for explicit
-session-local spelling IDs, and `Std.Text.Builder` for fragment-based emission. These additions
-have not been built or tested in the requested no-verification pass. Their presence does not
-complete the self-hosting compiler or remaining foreign contracts.
+session-local spelling IDs, and `Std.Text.Builder` for fragment-based emission. Each checks with no
+diagnostics, is formatted, and answers a program that imports all four: spellings reuse their first
+ID, a CRLF line reads back without its terminator, fragments join once, and a read past the end is
+refused rather than truncated. That is a smoke probe, not a conformance suite — no property tests
+cover them, and their presence does not complete the self-hosting compiler or remaining foreign
+contracts.
 
 
 [[architecture/FFI-SELF-HOSTING]] records the compiler stages, library boundaries, and native

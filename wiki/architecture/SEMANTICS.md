@@ -210,8 +210,9 @@ drop p:                     Available → Moved
   initialization, while null text and owned-handle pointers become `None`. Duplicate produced
   addresses refuse the batch. Failure cleanup preserves existing claims and releases each fresh
   address only when its handle identity and destructor are unambiguous. Native text-conversion
-  failures retain produced handle addresses for cleanup. These paths were changed without running
-  validation on 2026-09-04; full conformance remains unproven. Handle values now retain claim generations; lease and release
+  failures retain produced handle addresses for cleanup. A returned slot count that disagrees with the
+  declaration is a boundary error rather than a shorter tuple, and a result is converted only into the
+  shape its declaration names. Handle values now retain claim generations; lease and release
   admission reject a stale generation after address reuse. Dispatch through ownership settlement
   masks asynchronous cancellation. Destructor failures are retained as `W7027` or related information
   on an existing boundary error, and closing stores defer busy-resource cleanup to the final lease.
