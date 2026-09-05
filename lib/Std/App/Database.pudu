@@ -4,6 +4,7 @@ import Std.App as App
 import Std.App.Config as Config
 import Std.Db.Driver as Driver
 import Std.Db.Postgres as Postgres
+import Std.Db.Sqlite as Sqlite
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -16,9 +17,12 @@ export type Database = {
   current: Sync.Cell[Option[Driver.Client]]
 }
 
-/// PostgreSQL convenience; use withDriver or withDrivers for other connectors.
+/// Built-in connectors remain ordinary values that applications can extend.
+export fn bundledDrivers() -> Array[Driver.Driver] { [Postgres.driver(), Sqlite.driver()] }
+
+/// Select a bundled connector from the connection-string scheme.
 export fn create(uri: Str, size: Int) -> Result[Database, Driver.Error] {
-  withDriver(Postgres.driver(), uri, size)
+  withDrivers(&bundledDrivers(), uri, size)
 }
 
 /// Prepare any developer-supplied connector; sockets open during stage startup.
@@ -34,7 +38,10 @@ export fn withDrivers(drivers: &Array[Driver.Driver], uri: Str, size: Int) -> Re
 }
 
 export fn fromConfig(settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
-  fromConfigWith(Postgres.driver(), settings, key, size)
+  let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
+    Driver.error("", "configuration", "required database connection setting is missing or empty")
+  }) ?
+  create(uri, size)
 }
 
 export fn fromConfigWith(driver: Driver.Driver, settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {

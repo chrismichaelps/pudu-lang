@@ -29,8 +29,8 @@ closes the newly opened client. No global registration or implicit schema synchr
 
 The resource stores a Driver.Driver, connection string, pool size and optional Driver.Client.
 `withDriver` prepares any supplied driver; `withDrivers` selects by URI from an explicit driver
-array. `create` is a PostgreSQL convenience. `fromConfigWith` accepts a caller-selected driver;
-`fromConfig` retains the PostgreSQL convenience. Public queries and results use Driver.Value,
+array. `create` selects from the bundled PostgreSQL and SQLite drivers. `fromConfigWith` accepts a caller-selected driver;
+`fromConfig` selects from the bundled drivers. Public queries and results use Driver.Value,
 Driver.Rows and Driver.Error, with no PostgreSQL session types. Lifecycle synchronization is
 unchanged. Driver implementers own thread-safe query admission, pooling and close behavior.
 
@@ -77,7 +77,16 @@ placeholder convention. Handler/lifecycle APIs and result types stay the same. `
 selects from a caller-provided array using the URI scheme; duplicate matches fail instead of
 choosing by array order. Driver implementations can live in application packages.
 
-No example was compiled or executed in this delivery. The bundled implementation currently is
-PostgreSQL; MySQL, SQLite and other native adapters remain implementation work, not aliases to
+No example was compiled or executed in this delivery. The bundled implementations are
+PostgreSQL and SQLite; MySQL and other native adapters remain implementation work, not aliases to
 PostgreSQL. [[Std Db Store]], [[Std Db Query]], and migrations currently remain PostgreSQL-specific
 and do not yet consume the generic driver contract.
+
+## Selecting the backend through configuration
+
+`Database.fromConfig(&settings, "database.url", 4)` selects the bundled driver by URI scheme.
+Use `postgresql://...?...` for PostgreSQL or `sqlite:/absolute/path/app.db` for SQLite.
+`Database.create("sqlite::memory:", 1)` creates an isolated in-memory SQLite resource when started.
+`Database.bundledDrivers()` returns the explicit built-in list; append another package's driver
+and pass that list to `withDrivers` to extend selection. Unknown or ambiguous schemes fail.
+The SQL dialect and placeholders still belong to the chosen database.

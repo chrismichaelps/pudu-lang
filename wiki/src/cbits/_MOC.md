@@ -9,6 +9,8 @@ tags: [moc, module, foreign, ffi]
   native call.
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
+- [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
+
 ## Referenced by
 
 [[src/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]]

@@ -41,7 +41,7 @@ The shared FFI implementation remains outside this ownership boundary.
 
 ## Exact next action
 
-Implement a real SQLite adapter against the backend-neutral driver contract; retain PostgreSQL SSLRequest/TLS upgrade as the next network transport gap.
+Add an exclusive backend-neutral transaction callback so BEGIN/work/COMMIT cannot interleave across callers sharing a client. PostgreSQL SSLRequest/TLS upgrade and MySQL remain open driver work.
 
 ## Implemented pool and query continuation
 
@@ -70,3 +70,11 @@ Own new `lib/Std/Db/ConnectionString.pudu`, `lib/Std/App/Database.pudu` and thei
 Detailed lifecycle reports preserve all typed cleanup failures. URI parsing, direct session/pool opening, and application database stages now compose the existing real PostgreSQL query protocol. No live database was contacted and no tests/build/reviews were run.
 
 Own `lib/Std/Db/Driver.pudu`, `lib/Std/Db/Postgres.pudu` and their mirrors for the user-directed backend-neutral driver boundary.
+
+## SQLite ownership
+
+Own new `cbits/pudu_sqlite.c`, `lib/Std/Db/Sqlite.pudu`, their mirrors, plus the reserved-module dispatch in `cbits/pudu_ffi.c` and C source registration in `pudu.cabal`. Preserve all other FFI work.
+
+## SQLite delivery
+
+Implemented on-demand native SQLite loading, reference-counted database/statement wrappers, prepared bindings, typed rows, serialized client shutdown, and default app selection between PostgreSQL and SQLite. No builds, tests, reviews or live database execution performed.

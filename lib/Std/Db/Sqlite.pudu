@@ -1,0 +1,216 @@
+module Std.Db.Sqlite
+
+import Std.Bytes as ByteSeq
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
+import Std.Result as Result
+import Std.Sync as Sync
+
+foreign "pudu_sqlite" {
+  type DatabaseHandle
+  type StatementHandle
+  fn nativeOpen symbol "open" (path: Str, out database: owned DatabaseHandle by releaseDatabase) -> Int32
+  fn releaseDatabase symbol "release" (database: DatabaseHandle) -> ()
+  fn prepare symbol "prepare" (database: DatabaseHandle, sql: Str, out statement: owned StatementHandle by finalize) -> Int32
+  fn finalize symbol "finalize" (statement: StatementHandle) -> ()
+  fn parameters symbol "parameters" (statement: StatementHandle) -> Int32
+  fn bindNull symbol "bind_null" (statement: StatementHandle, index: Int32) -> Int32
+  fn bindInteger symbol "bind_integer" (statement: StatementHandle, index: Int32, value: Int64) -> Int32
+  fn bindReal symbol "bind_real" (statement: StatementHandle, index: Int32, value: Float64) -> Int32
+  fn bindBytes symbol "bind_bytes" (statement: StatementHandle, index: Int32, value: Bytes, size: Int32, text: Int32) -> Int32
+  fn step symbol "step" (statement: StatementHandle) -> Int32
+  fn columns symbol "columns" (statement: StatementHandle) -> Int32
+  fn columnType symbol "column_type" (statement: StatementHandle, index: Int32) -> Int32
+  fn columnInteger symbol "column_integer" (statement: StatementHandle, index: Int32) -> Int64
+  fn columnReal symbol "column_real" (statement: StatementHandle, index: Int32) -> Float64
+  fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
+}
+
+export fn driver() -> Driver.Driver {
+  Driver.Driver{name: "sqlite", schemes: ["sqlite"], placeholders: Driver.QuestionMark, open: connect}
+}
+
+/// One serialized connection preserves a single database for :memory: clients.
+export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error] {
+  if capacity < 1 { return Err(problem("configuration", "connection capacity must be positive")) }
+  if uri.take(7).toLower() != "sqlite:" { return Err(problem("configuration", "expected a sqlite connection string")) }
+  let path = uri.drop(7)
+  if path.isEmpty() || path.contains("\0") || path.contains("?") || path.contains("#") || path.startsWith("file:") {
+    return Err(problem("configuration", "expected a literal SQLite filename or :memory:"))
+  }
+  if path.startsWith(":") && path != ":memory:" {
+    return Err(problem("configuration", "unsupported special SQLite filename"))
+  }
+  let database = open(path) ?
+  let lock = Sync.mutex()
+  let current = Sync.cell(Some(database))
+  Ok(Driver.Client{
+    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+      Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
+        let held = Result.mapErr(Sync.get(&current), synchronization) ?
+        match held {
+          case None => Err(problem("closed", "SQLite client is closed"))
+          case Some(database) => perform(database, sql, &values)
+        }
+      }), synchronization) ?
+    },
+    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+      Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
+        let held = Result.mapErr(Sync.get(&current), synchronization) ?
+        match held {
+          case None => Err(problem("closed", "SQLite client is closed"))
+          case Some(database) => perform(database, sql, &[])
+        }
+      }), synchronization) ?
+    },
+    close: fn() -> Result[(), Driver.Error] {
+      Result.mapErr(Sync.withLock(&lock, fn() -> Result[(), Driver.Error] {
+        let held = Result.mapErr(Sync.swap(&current, None), synchronization) ?
+        if let Some(database) = held { unsafe(foreign) { releaseDatabase(database) } }
+        Ok(())
+      }), synchronization) ?
+    }
+  })
+}
+
+fn open(path: Str) -> Result[DatabaseHandle, Driver.Error] {
+  unsafe(foreign) {
+    let opened = nativeOpen(path)
+    if opened[0] != 0i32 {
+      if let Some(database) = opened[1] { releaseDatabase(database) }
+      return Err(statusError(opened[0]))
+    }
+    match opened[1] {
+      case None => Err(problem("protocol", "SQLite open produced no database"))
+      case Some(database) => Ok(database)
+    }
+  }
+}
+
+/// Finalize on every typed outcome, including binding and decoding failures.
+fn perform(database: DatabaseHandle, sql: Str, values: &Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+  if sql.contains("\0") { return Err(problem("statement", "SQL cannot contain NUL")) }
+  unsafe(foreign) {
+    let prepared = prepare(database, sql)
+    if prepared[0] != 0i32 {
+      if let Some(statement) = prepared[1] { finalize(statement) }
+      return Err(statusError(prepared[0]))
+    }
+    let statement = match prepared[1] {
+      case None => { return Err(problem("protocol", "SQLite prepare produced no statement")) }
+      case Some(held) => held
+    }
+    let bound = bind(statement, values)
+    let outcome = match bound {
+      case Err(reason) => Err(reason)
+      case Ok(_) => collect(statement)
+    }
+    finalize(statement)
+    outcome
+  }
+}
+
+fn bind(statement: StatementHandle, values: &Array[Driver.Value]) -> Result[(), Driver.Error] {
+  unsafe(foreign) {
+    let count = parameters(statement)
+    if convertInteger[Int32](values.length()) != Some(count) {
+      return Err(problem("parameter", "parameter count does not match the prepared statement"))
+    }
+    var index = 0
+    for value in values {
+      index = index + 1
+      let position = match convertInteger[Int32](index) {
+        case None => { return Err(problem("parameter", "parameter index exceeds SQLite limits")) }
+        case Some(held) => held
+      }
+      let status = match value {
+        case NullValue => bindNull(statement, position)
+        case IntegerValue(held) => bindInteger(statement, position, held)
+        case RealValue(held) => bindReal(statement, position, held)
+        case BooleanValue(held) => bindInteger(statement, position, if held { 1i64 } else { 0i64 })
+        case DecimalValue(_) => { return Err(problem("unsupported", "SQLite has no lossless native Decimal binding; choose an explicit storage representation")) }
+        case TextValue(held) => bindPayload(statement, position, held.toBytes(), 1i32) ?
+        case BytesValue(held) => bindPayload(statement, position, held, 0i32) ?
+      }
+      if status != 0i32 { return Err(statusError(status)) }
+    }
+    Ok(())
+  }
+}
+
+fn bindPayload(statement: StatementHandle, position: Int32, bytes: Bytes, text: Int32) -> Result[Int32, Driver.Error] {
+  let size = match convertInteger[Int32](bytes.length()) {
+    case None => { return Err(problem("parameter", "parameter bytes exceed SQLite limits")) }
+    case Some(held) => held
+  }
+  unsafe(foreign) { Ok(bindBytes(statement, position, bytes, size, text)) }
+}
+
+fn collect(statement: StatementHandle) -> Result[Driver.Rows, Driver.Error] {
+  unsafe(foreign) {
+    let count = columns(statement)
+    var names: Array[Driver.Column] = []
+    var index = 0i32
+    while index < count {
+      let bytes = readBytes(statement, index, 2i32) ?
+      let name = Result.mapErr(ByteSeq.toText(&bytes), badText) ?
+      names = names.push(Driver.Column{name: name, nativeType: None})
+      index = index + 1i32
+    }
+    var rows: Array[Array[Driver.Value]] = []
+    loop {
+      let status = step(statement)
+      if status == 101i32 { return Ok(Driver.Rows{columns: names, rows: rows, command: "SQLITE_DONE"}) }
+      if status != 100i32 { return Err(statusError(status)) }
+      var row: Array[Driver.Value] = []
+      index = 0i32
+      while index < count {
+        row = row.push(readValue(statement, index) ?)
+        index = index + 1i32
+      }
+      rows = rows.push(row)
+    }
+  }
+}
+
+fn readValue(statement: StatementHandle, index: Int32) -> Result[Driver.Value, Driver.Error] {
+  unsafe(foreign) {
+    let kind = columnType(statement, index)
+    if kind == 5i32 { return Ok(NullValue) }
+    if kind == 1i32 { return Ok(IntegerValue(columnInteger(statement, index))) }
+    if kind == 2i32 { return Ok(RealValue(columnReal(statement, index))) }
+    if kind == 4i32 { return Ok(BytesValue(readBytes(statement, index, 0i32) ?)) }
+    if kind == 3i32 {
+      let bytes = readBytes(statement, index, 1i32) ?
+      return Ok(TextValue(Result.mapErr(ByteSeq.toText(&bytes), badText) ?))
+    }
+    Err(problem("protocol", "unknown SQLite storage class"))
+  }
+}
+
+fn readBytes(statement: StatementHandle, index: Int32, mode: Int32) -> Result[Bytes, Driver.Error] {
+  unsafe(foreign) {
+    let encoded = columnHex(statement, index, mode)
+    if encoded[0] != 0i32 { return Err(statusError(encoded[0])) }
+    match encoded[1] {
+      case None => Err(problem("protocol", "SQLite bytes were not returned"))
+      case Some(text) => Result.mapErr(ByteSeq.decodeHex(text), badText)
+    }
+  }
+}
+
+fn statusError(code: Int32) -> Driver.Error {
+  let message = if code == -1i32 { "SQLite shared library is not installed" } else {
+    if code == -2i32 { "SQLite shared library lacks a required API" } else {
+      if code == -3i32 { "SQL contains no statement" } else {
+        if code == -4i32 { "only one SQL statement is accepted; trailing non-whitespace is refused" } else {
+          "SQLite operation failed with status " + show(code)
+        }
+      }
+    }
+  }
+  Driver.Error{driver: "sqlite", category: "operation", code: Some(show(code)), message: message}
+}
+fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
+fn synchronization(problem: Sync.SyncError) -> Driver.Error { Driver.error("sqlite", "synchronization", show(problem)) }
+fn badText(_problem: ByteSeq.BytesError) -> Driver.Error { Driver.error("sqlite", "decode", "SQLite returned invalid text or byte encoding") }

@@ -811,3 +811,5 @@ were implemented without tests or review; they are not a new production-readines
 [[Std Db ConnectionString]] parses explicit PostgreSQL URIs; [[Std App Database]] owns the pool as an application stage and exposes bound queries to handlers. PostgreSQL SSLRequest/TLS transport is still pending; the URI API requires explicit plaintext mode.
 
 The public extension seam is [[Std Db Driver]], independent of PostgreSQL session and OID types. [[Std App Database]] accepts developer-supplied drivers or an explicit driver array. [[Std Db Postgres]] is the first bundled adapter; SQL dialects remain driver-specific. Existing query builders, stores and migrations are PostgreSQL-specific pending adapter migration.
+
+[[Std Db Sqlite]] is a second bundled adapter: one serialized embedded connection, prepared bindings, typed rows and explicit close. App database construction selects PostgreSQL or SQLite from the URI and accepts additional developer-supplied drivers. MySQL and other native adapters remain open work.

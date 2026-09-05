@@ -38,3 +38,5 @@ connection strings, Unix socket paths and multiple hosts are rejected, not silen
 URI scheme and escaping follow the relevant subset of
 [PostgreSQL connection URI documentation](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
 This API deliberately does not claim complete libpq compatibility.
+
+Scheme matching is case-insensitive, in agreement with the generic driver selector.

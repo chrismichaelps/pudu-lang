@@ -36,3 +36,10 @@ compiler semantics through build metadata. Every new library module must be regi
 ## Referenced by
 
 [[src/_MOC]] · [[Eval Foreign Resource]] and [[Eval Foreign Result]]
+
+## SQLite native adapter
+
+Compile `cbits/pudu_sqlite.c` beside the libffi bridge. SQLite itself is loaded only on demand, retaining the existing POSIX dynamic-loader dependency and requiring no SQLite development headers.
+
+### Resolved Grill Log
+- **Q:** Link every compiler invocation against SQLite? **A:** No; bundle the small ABI adapter and load SQLite only when its driver connects.

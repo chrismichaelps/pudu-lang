@@ -87,3 +87,10 @@ int pudu_ffi_call(void *symbol, int32_t arity, const uint8_t *kinds,
 ## Referenced by
 
 [[src/cbits/_MOC]] · [[Foreign Call]] · [[ADR-0018 Calling a Library Written Elsewhere]] · [[ADR-0019 Getting a Value Back Out of a Library]]
+
+## Bundled native modules
+
+The exact name `pudu_sqlite` opens a reserved bridge handle. Symbol lookup on that handle delegates only to [[Pudu SQLite Bridge]]; other libraries retain ordinary loader behavior.
+
+### Resolved Grill Log
+- **Q:** Depend on executable symbol export flags for bundled adapters? **A:** No; resolve the reserved module through a fixed symbol table.

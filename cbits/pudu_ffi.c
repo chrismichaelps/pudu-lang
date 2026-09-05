@@ -68,9 +68,18 @@ union pudu_storage {
   double floating;
 };
 
-void *pudu_ffi_open(const char *path) { return dlopen(path, RTLD_LAZY | RTLD_LOCAL); }
+void *pudu_sqlite_symbol(const char *name);
+static char sqlite_module;
 
-void *pudu_ffi_symbol(void *handle, const char *name) { return dlsym(handle, name); }
+void *pudu_ffi_open(const char *path) {
+  if (path && strcmp(path, "pudu_sqlite") == 0) return &sqlite_module;
+  return dlopen(path, RTLD_LAZY | RTLD_LOCAL);
+}
+
+void *pudu_ffi_symbol(void *handle, const char *name) {
+  if (handle == &sqlite_module) return pudu_sqlite_symbol(name);
+  return dlsym(handle, name);
+}
 
 const char *pudu_ffi_error(void) { return dlerror(); }
 

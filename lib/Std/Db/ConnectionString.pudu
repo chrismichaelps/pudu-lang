@@ -9,8 +9,8 @@ import Std.Text as Text
 
 /// Parse connection settings without connecting or including secrets in errors.
 export fn parse(source: Str) -> Result[Session.Config, Session.DbError] {
-  let rest = if source.startsWith("postgresql://") { source.drop(13) } else {
-    if source.startsWith("postgres://") { source.drop(11) } else {
+  let rest = if source.take(13).toLower() == "postgresql://" { source.drop(13) } else {
+    if source.take(11).toLower() == "postgres://" { source.drop(11) } else {
       return Err(Unsupported("expected a postgres or postgresql URI"))
     }
   }

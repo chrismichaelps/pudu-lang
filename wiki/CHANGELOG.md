@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — SQLite driver and configurable backend selection
+
+- Add a real SQLite adapter with prepared parameters, typed rows, serialized queries and native resource cleanup.
+- Load SQLite on demand through a fixed native bridge; require no SQLite headers or link-time SQLite dependency.
+- Select PostgreSQL or SQLite from app connection strings and retain explicit third-party driver extension.
+- Update module contracts and examples. No builds, tests, reviews or live database execution run.
+
 ## 2026-09-05 — Application database connections and lifecycle failures
 
 - Add PostgreSQL URI parsing with strict percent decoding, explicit transport policy, and direct connection/pool opening.

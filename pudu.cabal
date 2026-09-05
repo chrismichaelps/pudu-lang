@@ -166,6 +166,7 @@ library
     Pudu.Semantic.Symbol
     Pudu.Source
   c-sources:        cbits/pudu_ffi.c
+                   cbits/pudu_sqlite.c
   extra-libraries:  ffi
   build-depends:
     base >=4.20 && <4.23,

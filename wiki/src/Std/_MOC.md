@@ -96,6 +96,8 @@ tags: [moc, module, stdlib]
 - [[Std Db Driver]] — backend-neutral clients, typed values and explicit driver selection.
 - [[Std Db Postgres]] — PostgreSQL adapter for the shared driver contract.
 
+- [[Std Db Sqlite]] — embedded SQLite prepared statements through the shared driver contract.
+
 ## Referenced by
 
 [[src/_MOC]] · [[architecture/STDLIB]]
