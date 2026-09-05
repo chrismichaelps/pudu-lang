@@ -173,6 +173,35 @@ export fn main() -> Int {
       count
     })
 
+  // A transaction taken from a pool holds one connection for the whole
+  // operation. This pool has exactly one, so the BEGIN and the COMMIT are
+  // observably on the same session, and the connection comes back afterwards
+  // rather than being lost. A caller reaching for the pool once per statement
+  // would have put the BEGIN on one connection and the work on another.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(pooled) = Db.pool(&settings, 1) {
+        let done = Db.transaction(&pooled, fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            (Ok(1), inside)
+          })
+        if Result.unwrapOr(done, 0) == 1 { count = count + 1 }
+        // Asking again can only be answered by a connection the pool still
+        // has, so this is also the check that the transaction gave it back.
+        let after = Db.withConnection(&pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+            let asked = Db.simple(open, "what did you get")
+            match asked {
+              case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")), pair[1])
+              case Err(reason) => (Err(reason), open)
+            }
+          })
+        let seen = Result.unwrapOr(after, "")
+        if seen.contains("BEGIN") { count = count + 1 }
+        if seen.contains("COMMIT") { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
   // A name written into a statement cannot end it and begin another.
   held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
       var count = 0

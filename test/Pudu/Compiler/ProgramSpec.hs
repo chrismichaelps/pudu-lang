@@ -788,7 +788,7 @@ testProgramEvaluation = do
         is undone rather than left open. -}
     , counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "33")
+        (database === Just "36")
     {-| The obligations [[ADR-0016]] places on an application: that a declared
         default is held like any other setting and can say where it came from,
         that a later layer wins over an earlier one, that a profile states its

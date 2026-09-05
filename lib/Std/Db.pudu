@@ -434,6 +434,55 @@ export fn withConnection[T](
   }
 }
 
+/// Take a connection, run an action inside a transaction on it, and put it
+/// back.
+///
+/// The connection is held for the whole operation, which is the point. A
+/// caller that reaches for the pool once per statement gets a different
+/// connection each time, so `BEGIN` lands on one and the work that was meant
+/// to be inside it lands on another — and the transaction, holding nothing,
+/// commits nothing and rolls back nothing. Nothing about that reads as wrong
+/// at the call site; it appears as rows that should have been undone and were
+/// not.
+///
+/// Holding one connection is also what stops another caller interleaving work
+/// between the `BEGIN` and the `COMMIT`: a connection lent to this operation
+/// is not in the pool for anyone else to take.
+export fn transaction[T](
+  target: &Pool,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  withConnection(target, fn(stream: Session.Connection) -> (Result[T, Session.DbError], Session.Connection) {
+      withTransaction(stream, action)
+    })
+}
+
+/// The same, at a stated level of protection.
+export fn transactionWith[T](
+  target: &Pool,
+  level: &Isolation,
+  action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
+) -> Result[T, Session.DbError] {
+  withConnection(target, fn(stream: Session.Connection) -> (Result[T, Session.DbError], Session.Connection) {
+      let opened = beginWith(stream, level)
+      if let Err(reason) = opened { return (Err(reason), stream) }
+      let inside = Result.unwrapOr(opened, stream)
+      let outcome = action(inside)
+      if Result.isErr(&outcome[0]) {
+        let undone = rollback(outcome[1])
+        (outcome[0], Result.unwrapOr(undone, outcome[1]))
+      } else {
+        let kept = commit(outcome[1])
+        if let Err(reason) = kept {
+          let undone = rollback(outcome[1])
+          (Err(reason), Result.unwrapOr(undone, outcome[1]))
+        } else {
+          (outcome[0], Result.unwrapOr(kept, outcome[1]))
+        }
+      }
+    })
+}
+
 /// Only a confirmed idle connection may return to the available queue.
 fn settled(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
   if stream.status == Idle { Ok(stream) } else {

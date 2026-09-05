@@ -53,6 +53,28 @@ worker cancellation are not handled by this pure-Pudu scoped helper and remain r
 - **Q:** Lose earlier opens if a later connection fails? **A:** No; constructor failure owns all
   partial resources and drains them before returning its error.
 
+## A transaction holds one connection
+
+`transaction` and `transactionWith` take a connection from the pool and keep it for the whole
+operation, rather than composing a pool borrow per statement.
+
+The failure they exist to prevent is not a race a reader would see. A caller that reaches for the
+pool once per statement gets a different connection each time, so `BEGIN` lands on one and the work
+meant to be inside it lands on another. Nothing raises: the transaction holds nothing and therefore
+commits nothing and rolls back nothing, and the symptom is rows that should have been undone and were
+not, far from the code that caused it.
+
+Holding one connection is also what keeps another caller out from between the `BEGIN` and the
+`COMMIT`, because a connection lent to this operation is not in the pool for anyone else to take.
+The commit and rollback rules are `withTransaction`'s, unchanged: a failed action is rolled back, and
+a commit that itself fails is reported rather than swallowed.
+
+### Resolved Grill Log
+
+- **Q:** Leave callers to nest `withConnection` and `withTransaction` themselves? **A:** No. The
+  nesting is the whole correctness property, and one written the other way round — a transaction
+  around a pool borrow — reads almost the same and holds nothing.
+
 ## Query failure synchronization
 
 A server ErrorResponse is retained separately from a fatal transport or parsing error. Collection
