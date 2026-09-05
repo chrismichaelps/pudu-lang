@@ -4,7 +4,7 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Db as Db
 import Std.Db.Protocol as Wire
-import Std.Db.Session {Auth, Idle, Other, Server}
+import Std.Db.Session {Auth, Expired, Idle, Other, Server}
 import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
@@ -198,6 +198,35 @@ export fn main() -> Int {
         if seen.contains("BEGIN") { count = count + 1 }
         if seen.contains("COMMIT") { count = count + 1 }
         let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
+  // A connection kept past the transaction that lent it is refused rather than
+  // used. The copy the callback keeps names a lending that has ended, and the
+  // connection it points at is back in the pool by then — writing through it
+  // would put a statement into somebody else's conversation.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        // The callback hands its own connection back out as the value of the
+        // transaction, which is how one really escapes: no copying out of a
+        // closure is needed, only returning what was lent.
+        let done = Db.withTransaction(stream, fn(inside: Session.Connection) -> (Result[Session.Connection, Session.DbError], Session.Connection) {
+            (Ok(inside), inside)
+          })
+        if Result.isOk(&done[0]) { count = count + 1 }
+        if let Ok(stale) = done[0] {
+          if let Err(Expired) = Db.simple(stale, "what did you get") { count = count + 1 }
+        }
+        // The same statement through the connection the transaction gave back
+        // still works, so this refuses the stale copy rather than the
+        // connection.
+        let asked = Db.simple(done[1], "what did you get")
+        if let Ok(pair) = asked {
+          if Db.rowCount(&pair[0]) == 1 { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
       }
       count
     })

@@ -291,8 +291,18 @@ export fn withTransaction[T](
 ) -> (Result[T, Session.DbError], Session.Connection) {
   let opened = begin(start)
   if let Err(reason) = opened { return (Err(reason), start) }
-  let stream = Result.unwrapOr(opened, start)
-  let outcome = action(stream)
+  let begun = Result.unwrapOr(opened, start)
+  // The action is lent the connection under a lending of its own, so a copy it
+  // keeps stops working the moment this returns. Without that, a callback can
+  // hold one past the commit and write through it while the pool has handed
+  // the connection to somebody else.
+  let lent = Session.renew(begun)
+  if let Err(reason) = lent { return (Err(reason), begun) }
+  let stream = Result.unwrapOr(lent, begun)
+  let acted = action(stream)
+  let taken = Session.renew(acted[1])
+  if let Err(reason) = taken { return (Err(reason), acted[1]) }
+  let outcome = (acted[0], Result.unwrapOr(taken, acted[1]))
   if Result.isErr(&outcome[0]) {
     let undone = rollback(outcome[1])
     (outcome[0], Result.unwrapOr(undone, outcome[1]))
@@ -397,7 +407,18 @@ export fn withConnection[T](
       }
     }
   }
-  let outcome = action(stream)
+  let lent = Session.renew(stream)
+  if let Err(reason) = lent {
+    let failed: Result[T, Session.DbError] = Err(reason)
+    return afterCleanup(failed, Session.close(&stream))
+  }
+  let acted = action(Result.unwrapOr(lent, stream))
+  let ended = Session.renew(acted[1])
+  if let Err(reason) = ended {
+    let cleanup: Result[(), Session.DbError] = Err(reason)
+    return afterCleanup(afterCleanup(acted[0], cleanup), Session.close(&acted[1]))
+  }
+  let outcome = (acted[0], Result.unwrapOr(ended, acted[1]))
   match Sync.get(&target.closing) {
     case Err(problem) => {
       let cleanup: Result[(), Session.DbError] = Err(Other(show(problem)))

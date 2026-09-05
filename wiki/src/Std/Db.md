@@ -75,6 +75,32 @@ a commit that itself fails is reported rather than swallowed.
   nesting is the whole correctness property, and one written the other way round — a transaction
   around a pool borrow — reads almost the same and holds nothing.
 
+## A handle stops working when its scope ends
+
+A connection is a value, so a callback can keep a copy of one after the scope that lent it returned.
+By then the connection is back in the pool and may be inside somebody else's transaction: a statement
+written through the copy is interleaved with theirs, and the answers come back to the wrong caller.
+Nothing about that is visible at the call site, and it appears only under load.
+
+Every connection carries a shared count of how many times it has been lent, and each value carries
+the lending it belongs to. `withConnection` and `withTransaction` end the lending on the way in and
+again on the way out, so the value the callback holds names a lending that is over the moment the
+scope returns, while the value handed back to the caller names the current one. `write` compares the
+two and answers `Expired` rather than sending. The check sits at the write because that is where a
+stale copy would put bytes into a conversation that is no longer its own.
+
+The connection itself is untouched by this: what moved is the right to use it. The same statement
+through the value the scope handed back still works, which is what distinguishes refusing a stale
+copy from refusing the connection.
+
+### Resolved Grill Log
+
+- **Q:** Mark a connection dead at the end of a scope with a flag? **A:** No. The pool lends the
+  same connection again, so a flag set back to live would revive every stale copy with it. A count
+  that only goes up cannot be mistaken for an earlier lending.
+- **Q:** Check when the connection is passed rather than when it writes? **A:** No. Passing a stale
+  copy harms nothing; writing through it is what interleaves two conversations.
+
 ## Query failure synchronization
 
 A server ErrorResponse is retained separately from a fatal transport or parsing error. Collection

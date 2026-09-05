@@ -87,6 +87,7 @@ fn adaptError(problem: Session.DbError) -> Driver.Error {
     case Session.Malformed(message) => Driver.error("postgresql", "protocol", message)
     case Session.Unsupported(message) => Driver.error("postgresql", "unsupported", message)
     case Session.Closed => Driver.error("postgresql", "closed", "database connection is closed")
+    case Session.Expired => Driver.error("postgresql", "expired", "the scope that lent this connection has ended")
     case Session.Other(message) => Driver.error("postgresql", "operation", message)
   }
 }

@@ -6,6 +6,7 @@ import Std.Net as Net
 import Std.Option as Option
 import Std.Random as Random
 import Std.Result as Result
+import Std.Sync as Sync
 import Std.Text as Text
 
 /// Opening a connection and keeping it: the handshake, what the server asks
@@ -31,6 +32,7 @@ export type DbError
   | Server(Str, Str, Str)
   | Closed
   | Unsupported(Str)
+  | Expired
   | Other(Str)
 
 /// Where a database is and who is asking.
@@ -52,7 +54,20 @@ export type Connection = {
   socket: Net.Connection,
   buffer: Bytes,
   parameters: Array[(Str, Str)],
-  status: TransactionStatus
+  status: TransactionStatus,
+  /// The lending this value belongs to, and which lending the connection is
+  /// on now. They agree while the scope that handed this value out is still
+  /// running, and stop agreeing the moment it ends.
+  ///
+  /// A connection is a value, so a callback can keep a copy of one after the
+  /// scope that lent it returned — by which time the connection is back in the
+  /// pool and may be in the middle of somebody else's transaction. Writing a
+  /// statement through that copy interleaves it with theirs, and the answers
+  /// come back to the wrong caller. The count is shared between every copy;
+  /// the number beside it is not, which is what tells a copy apart from the
+  /// connection it was taken from.
+  lease: Sync.Cell[Int],
+  epoch: Int
 }
 
 /// Where a connection stands with respect to a transaction.
@@ -149,9 +164,39 @@ fn failedRead[T](stream: &Connection, primary: DbError) -> Result[T, DbError] {
 }
 
 export fn write(stream: &Connection, payload: &Bytes) -> Result[(), DbError] {
+  live(stream) ?
   Result.mapErr(Net.send(&stream.socket, payload), fn(problem: Net.NetError) -> DbError {
       Other(show(problem))
     })
+}
+
+/// Whether this value still names the current lending of its connection.
+///
+/// Checked where a statement is written rather than where a connection is
+/// passed, because writing is the point at which a stale copy would put bytes
+/// into a conversation that is no longer its own.
+export fn live(stream: &Connection) -> Result[(), DbError] {
+  match Sync.get(&stream.lease) {
+    case Err(problem) => Err(Other(show(problem)))
+    case Ok(current) => { if current == stream.epoch { Ok(()) } else { Err(Expired) } }
+  }
+}
+
+/// End this lending and begin the next one.
+///
+/// The returned value is the connection under its new lending; every copy
+/// handed out under the old one stops working. The connection itself is
+/// untouched — it is the right to use it that moved.
+export fn renew(stream: Connection) -> Result[Connection, DbError] {
+  match Sync.get(&stream.lease) {
+    case Err(problem) => Err(Other(show(problem)))
+    case Ok(current) => {
+      match Sync.set(&stream.lease, current + 1) {
+        case Err(problem) => Err(Other(show(problem)))
+        case Ok(_) => Ok(Connection{..stream, epoch: current + 1})
+      }
+    }
+  }
 }
 
 /// The failure a server-reported error carries.
@@ -175,7 +220,9 @@ export fn connect(settings: &Config) -> Result[Connection, DbError] {
       socket: socket,
       buffer: ByteSeq.empty(),
       parameters: [],
-      status: Idle
+      status: Idle,
+      lease: Sync.cell(0),
+      epoch: 0
     }
     let hello = Wire.startup(&[("user", settings.user), ("database", settings.database)])
     let sent = write(&stream, &hello)
@@ -240,12 +287,7 @@ export fn withStatus(stream: Connection, payload: &Bytes) -> Connection {
   let found = if letter == 84u8 { Active } else {
     if letter == 69u8 { Failed } else { Idle }
   }
-  Connection {
-    socket: stream.socket,
-    buffer: stream.buffer,
-    parameters: stream.parameters,
-    status: found
-  }
+  Connection{..stream, status: found}
 }
 
 fn withParameter(stream: Connection, payload: &Bytes) -> Connection {
@@ -253,12 +295,7 @@ fn withParameter(stream: Connection, payload: &Bytes) -> Connection {
   if let Ok(first) = named {
     let valued = Wire.readCString(&first[1])
     if let Ok(second) = valued {
-      Connection {
-        socket: stream.socket,
-        buffer: stream.buffer,
-        parameters: stream.parameters.push((first[0], second[0])),
-        status: stream.status
-      }
+      Connection{..stream, parameters: stream.parameters.push((first[0], second[0]))}
     } else {
       stream
     }
