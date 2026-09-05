@@ -90,6 +90,12 @@ tags: [moc, module, stdlib]
 - [[Std LruCache]] — a bounded map that discards what has gone longest unused.
 - [[Std PrefixTrie]] — text keys held by their characters, searchable by prefix.
 
+- [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
+- [[Std App Database]] — application-owned pools and bound queries.
+
+- [[Std Db Driver]] — backend-neutral clients, typed values and explicit driver selection.
+- [[Std Db Postgres]] — PostgreSQL adapter for the shared driver contract.
+
 ## Referenced by
 
 [[src/_MOC]] · [[architecture/STDLIB]]

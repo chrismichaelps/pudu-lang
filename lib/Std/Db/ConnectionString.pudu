@@ -1,0 +1,124 @@
+module Std.Db.ConnectionString
+
+import Std.Bytes as ByteSeq
+import Std.Db as Db
+import Std.Db.Session as Session
+import Std.Db.Session {Connect, Unsupported}
+import Std.Result as Result
+import Std.Text as Text
+
+/// Parse connection settings without connecting or including secrets in errors.
+export fn parse(source: Str) -> Result[Session.Config, Session.DbError] {
+  let rest = if source.startsWith("postgresql://") { source.drop(13) } else {
+    if source.startsWith("postgres://") { source.drop(11) } else {
+      return Err(Unsupported("expected a postgres or postgresql URI"))
+    }
+  }
+  if rest.contains("#") { return Err(Connect("connection URIs cannot contain fragments")) }
+  let question = rest.indexOf("?")
+  if question < 0 { return Err(Unsupported("database TLS negotiation is unavailable; explicit sslmode=disable is required")) }
+  let location = rest.take(question)
+  let options = rest.drop(question + 1)
+  var modeSeen = false
+  for option in options.split("&") {
+    let equals = option.indexOf("=")
+    if equals < 0 { return Err(Connect("a connection option needs a value")) }
+    let key = decode(option.take(equals)) ?
+    let value = decode(option.drop(equals + 1)) ?
+    if key != "sslmode" { return Err(Unsupported("unsupported connection option")) }
+    if modeSeen { return Err(Connect("duplicate sslmode option")) }
+    if value != "disable" { return Err(Unsupported("database TLS negotiation is unavailable")) }
+    modeSeen = true
+  }
+  if !modeSeen { return Err(Unsupported("explicit sslmode=disable is required")) }
+  let slash = location.indexOf("/")
+  if slash < 0 { return Err(Connect("a database name is required")) }
+  let authority = location.take(slash)
+  let path = location.drop(slash + 1)
+  if path.contains("/") { return Err(Connect("database names must encode path separators")) }
+  let database = decode(path) ?
+  if database.isEmpty() { return Err(Connect("a database name is required")) }
+  let at = authority.indexOf("@")
+  if at < 0 { return Err(Connect("a database user is required")) }
+  let credentials = authority.take(at)
+  let address = authority.drop(at + 1)
+  if address.contains("@") { return Err(Connect("credentials must encode authority separators")) }
+  let colon = credentials.indexOf(":")
+  let user = decode(if colon < 0 { credentials } else { credentials.take(colon) }) ?
+  let password = decode(if colon < 0 { "" } else { credentials.drop(colon + 1) }) ?
+  if user.isEmpty() { return Err(Connect("a database user is required")) }
+  let endpoint = hostPort(address) ?
+  Ok(Session.Config{host: endpoint[0], port: endpoint[1], database: database, user: user, password: password})
+}
+
+/// Open a real PostgreSQL session from a connection URI.
+export fn connect(source: Str) -> Result[Session.Connection, Session.DbError] {
+  let settings = parse(source) ?
+  Session.connect(&settings)
+}
+
+/// Open a bounded pool from a connection URI.
+export fn pool(source: Str, size: Int) -> Result[Db.Pool, Session.DbError] {
+  let settings = parse(source) ?
+  Db.pool(&settings, size)
+}
+
+fn hostPort(address: Str) -> Result[(Str, Int), Session.DbError] {
+  var host = ""
+  var port = 5432
+  var suffix = ""
+  if address.startsWith("[") {
+    let closing = address.indexOf("]")
+    if closing < 0 { return Err(Connect("unclosed IPv6 host")) }
+    host = decode(address.slice(1, closing)) ?
+    suffix = address.drop(closing + 1)
+    if !host.contains(":") { return Err(Connect("brackets require an IPv6 host")) }
+  } else {
+    let colon = address.indexOf(":")
+    host = decode(if colon < 0 { address } else { address.take(colon) }) ?
+    suffix = if colon < 0 { "" } else { address.drop(colon) }
+    if host.contains(":") { return Err(Connect("IPv6 hosts require brackets")) }
+  }
+  if host.isEmpty() { return Err(Connect("a database host is required")) }
+  for character in host.chars() {
+    if character.code() <= 32 || "/,@?#[]".contains(character.toText()) {
+      return Err(Connect("invalid database host"))
+    }
+  }
+  if !suffix.isEmpty() {
+    if !suffix.startsWith(":") { return Err(Connect("unexpected text after host")) }
+    let digits = suffix.drop(1)
+    if digits.isEmpty() || digits.length() > 5 { return Err(Connect("invalid database port")) }
+    for digit in digits.chars() {
+      if digit < '0' || digit > '9' { return Err(Connect("invalid database port")) }
+    }
+    match Text.countOf(digits) {
+      case None => { return Err(Connect("invalid database port")) }
+      case Some(number) => { port = number }
+    }
+    if port < 1 || port > 65535 { return Err(Connect("database port is outside 1..65535")) }
+  }
+  Ok((host, port))
+}
+
+/// Decode bytes before UTF-8 validation; URI plus signs remain literal.
+fn decode(source: Str) -> Result[Str, Session.DbError] {
+  var parts: Array[Bytes] = []
+  var index = 0
+  while index < source.length() {
+    let character = source.charAt(index)
+    if character == '%' {
+      if index + 2 >= source.length() { return Err(Connect("incomplete percent escape")) }
+      let octet = Result.mapErr(ByteSeq.decodeHex(source.slice(index + 1, index + 3)), fn(_problem: ByteSeq.BytesError) -> Session.DbError { Connect("invalid percent escape") }) ?
+      parts = parts.push(octet)
+      index = index + 3
+    } else {
+      if character.code() <= 32 || character.code() == 127 { return Err(Connect("connection URI whitespace and controls must be encoded")) }
+      parts = parts.push(character.toText().toBytes())
+      index = index + 1
+    }
+  }
+  let joined = ByteSeq.join(&parts)
+  let decoded = Result.mapErr(ByteSeq.toText(&joined), fn(_problem: ByteSeq.BytesError) -> Session.DbError { Connect("connection component is not UTF-8") }) ?
+  if decoded.contains("\0") { Err(Connect("connection components cannot contain NUL")) } else { Ok(decoded) }
+}

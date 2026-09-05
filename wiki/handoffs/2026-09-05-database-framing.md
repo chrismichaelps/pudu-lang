@@ -41,7 +41,7 @@ The shared FFI implementation remains outside this ownership boundary.
 
 ## Exact next action
 
-Propagate application stage teardown failures through startup and service shutdown outcomes.
+Implement a real SQLite adapter against the backend-neutral driver contract; retain PostgreSQL SSLRequest/TLS upgrade as the next network transport gap.
 
 ## Implemented pool and query continuation
 
@@ -58,3 +58,15 @@ not conformance evidence or a production-readiness verdict.
 ## Referenced by
 
 [[handoffs/_MOC]] · [[Std Db Protocol]] · [[Std Db Session]] · [[CHANGELOG]]
+
+## Application continuation ownership
+
+Standard Library Implementer owns `lib/Std/App.pudu` and its mirror for lifecycle failure reporting.
+
+Own new `lib/Std/Db/ConnectionString.pudu`, `lib/Std/App/Database.pudu` and their mirrors for the user-requested connection-string and application database integration.
+
+## Implemented application continuation
+
+Detailed lifecycle reports preserve all typed cleanup failures. URI parsing, direct session/pool opening, and application database stages now compose the existing real PostgreSQL query protocol. No live database was contacted and no tests/build/reviews were run.
+
+Own `lib/Std/Db/Driver.pudu`, `lib/Std/Db/Postgres.pudu` and their mirrors for the user-directed backend-neutral driver boundary.

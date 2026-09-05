@@ -15,7 +15,7 @@ The program itself as a value: what it is made of, what starts it, and what stop
 stopping graceful. That is the whole of the interface a first program needs.
 
 Beneath it, for a program that outgrew one call: `web` builds the same application without running
-it, `with` adds a stage, `start`, `stop`, and `run` drive one, and `stagesOf`, `configOf`, and
+it, `using` adds a stage, `start`, `stop`, and `run` drive one, and `stagesOf`, `configOf`, and
 `routerOf` read one back. A `Stage` names what to start and how to stop it. A `Report` names the
 stage that failed rather than only saying that one did.
 ## Governance and algorithm
@@ -92,3 +92,19 @@ either a gap or a decision, and these are decisions:
   close is not a reason to leak the next. _Rejected:_ short-circuiting stop.
 ## Referenced by
 [[src/Std/_MOC]] · [[ADR-0016 An Application Is a Value]] · [[Std App Config]] · [[Std App Health]] · [[Std Http Server]]
+
+## Lifecycle failure preservation
+
+`startDetailed` and `stopDetailed` return `LifecycleReport` with successful stage names in
+`completed` and every typed failure in `failures`, in occurrence order. Failed startup retains
+its primary failure followed by reverse-order unwind failures. Legacy `Report` keeps its shape;
+its first failure includes subsequent failure text. `run` reports `StopFailed` after successful
+serving if shutdown fails, and appends shutdown failures to an existing listener error.
+These callbacks cover typed returns, not host panic or forced cancellation.
+
+### Resolved Grill Log
+
+- **Q:** Discard unwind failures to preserve the startup error? **A:** No; retain both in order.
+- **Q:** Return success when serving ends but teardown fails? **A:** No; return `StopFailed`.
+
+[[Std App Database]] is the optional database stage adapter, with pool-backed parameterized queries.

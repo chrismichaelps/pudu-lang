@@ -1,0 +1,92 @@
+module Std.Db.Postgres
+
+import Std.Db as Db
+import Std.Db.ConnectionString as ConnectionString
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
+import Std.Db.Session as Session
+import Std.Result as Result
+
+export fn driver() -> Driver.Driver {
+  Driver.Driver{name: "postgresql", schemes: ["postgres", "postgresql"],
+    placeholders: Driver.DollarNumber, open: connect}
+}
+
+export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
+  let pool = Result.mapErr(ConnectionString.pool(uri, size), adaptError) ?
+  Ok(Driver.Client{
+    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+      let parameters = textParameters(&values) ?
+      let rows = Result.mapErr(Db.withConnection(&pool,
+        fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
+          match Db.run(stream, sql, &parameters) {
+            case Ok(pair) => (Ok(pair[0]), pair[1])
+            case Err(problem) => (Err(problem), stream)
+          }
+        }), adaptError) ?
+      Ok(adaptRows(&rows))
+    },
+    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+      let rows = Result.mapErr(Db.withConnection(&pool,
+        fn(stream: Session.Connection) -> (Result[Db.Rows, Session.DbError], Session.Connection) {
+          match Db.simple(stream, sql) {
+            case Ok(pair) => (Ok(pair[0]), pair[1])
+            case Err(problem) => (Err(problem), stream)
+          }
+        }), adaptError) ?
+      Ok(adaptRows(&rows))
+    },
+    close: fn() -> Result[(), Driver.Error] { Result.mapErr(Db.closePool(&pool), adaptError) }
+  })
+}
+
+fn textParameters(values: &Array[Driver.Value]) -> Result[Array[Option[Str]], Driver.Error] {
+  var found: Array[Option[Str]] = []
+  for value in values {
+    let text = match value {
+      case NullValue => None
+      case TextValue(held) => {
+        if held.contains("\0") { return Err(Driver.error("postgresql", "parameter", "text parameters cannot contain NUL")) }
+        Some(held)
+      }
+      case IntegerValue(held) => Some(show(held))
+      case DecimalValue(held) => Some(show(held))
+      case RealValue(held) => Some(show(held))
+      case BooleanValue(held) => Some(if held { "true" } else { "false" })
+      case BytesValue(_) => { return Err(Driver.error("postgresql", "unsupported", "binary parameters are not implemented by this driver")) }
+    }
+    found = found.push(text)
+  }
+  Ok(found)
+}
+
+fn adaptRows(rows: &Db.Rows) -> Driver.Rows {
+  var columns: Array[Driver.Column] = []
+  for column in rows.columns {
+    columns = columns.push(Driver.Column{name: column.name, nativeType: Some(show(column.oid))})
+  }
+  var values: Array[Array[Driver.Value]] = []
+  for row in rows.rows {
+    var converted: Array[Driver.Value] = []
+    for value in row {
+      converted = converted.push(match value {
+        case None => NullValue
+        case Some(text) => TextValue(text)
+      })
+    }
+    values = values.push(converted)
+  }
+  Driver.Rows{columns: columns, rows: values, command: rows.tag}
+}
+
+fn adaptError(problem: Session.DbError) -> Driver.Error {
+  match problem {
+    case Session.Server(_, code, message) => Driver.Error{driver: "postgresql", category: "server", code: Some(code), message: message}
+    case Session.Connect(message) => Driver.error("postgresql", "connection", message)
+    case Session.Auth(message) => Driver.error("postgresql", "authentication", message)
+    case Session.Malformed(message) => Driver.error("postgresql", "protocol", message)
+    case Session.Unsupported(message) => Driver.error("postgresql", "unsupported", message)
+    case Session.Closed => Driver.error("postgresql", "closed", "database connection is closed")
+    case Session.Other(message) => Driver.error("postgresql", "operation", message)
+  }
+}

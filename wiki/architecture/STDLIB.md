@@ -805,3 +805,9 @@ primitives still needed. Existing module presence does not establish a complete 
 `nextMessageLimited` alternative. Invalid frames stop reading and close the transport. These changes
 were implemented without tests or review; they are not a new production-readiness verdict.
 [[2026-09-05-database-framing]] records ownership and the next resource-management gap.
+
+## Application database connections
+
+[[Std Db ConnectionString]] parses explicit PostgreSQL URIs; [[Std App Database]] owns the pool as an application stage and exposes bound queries to handlers. PostgreSQL SSLRequest/TLS transport is still pending; the URI API requires explicit plaintext mode.
+
+The public extension seam is [[Std Db Driver]], independent of PostgreSQL session and OID types. [[Std App Database]] accepts developer-supplied drivers or an explicit driver array. [[Std Db Postgres]] is the first bundled adapter; SQL dialects remain driver-specific. Existing query builders, stores and migrations are PostgreSQL-specific pending adapter migration.

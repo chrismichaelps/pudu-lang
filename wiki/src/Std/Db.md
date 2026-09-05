@@ -70,3 +70,5 @@ multiple command results instead of mixing rows from different schemas.
 
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db Session]] · [[Std Db Protocol]] · [[Std Net]] · [[architecture/STDLIB]]
+
+Connection URI opening is available through [[Std Db ConnectionString]]; [[Std App Database]] connects pool lifetime to application stages and provides parameterized queries for handlers.

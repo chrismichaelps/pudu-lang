@@ -1,0 +1,69 @@
+module Std.Db.Driver
+
+/// Values retain their kind across the driver boundary; drivers bind them separately.
+export type Value
+  = NullValue
+  | TextValue(Str)
+  | IntegerValue(Int64)
+  | DecimalValue(Decimal)
+  | RealValue(Float64)
+  | BooleanValue(Bool)
+  | BytesValue(Bytes)
+
+export type Column = { name: Str, nativeType: Option[Str] }
+export type Rows = { columns: Array[Column], rows: Array[Array[Value]], command: Str }
+export type Error = { driver: Str, category: Str, code: Option[Str], message: Str }
+export type Placeholders = DollarNumber | QuestionMark | Named
+
+/// A driver owns synchronization and closes admission before releasing its resources.
+export type Client = {
+  query: fn(Str, Array[Value]) -> Result[Rows, Error],
+  execute: fn(Str) -> Result[Rows, Error],
+  close: fn() -> Result[(), Error]
+}
+
+/// A connector is an ordinary value; applications choose which drivers they admit.
+export type Driver = {
+  name: Str,
+  schemes: Array[Str],
+  placeholders: Placeholders,
+  open: fn(Str, Int) -> Result[Client, Error]
+}
+
+export fn error(driver: Str, category: Str, message: Str) -> Error {
+  Error{driver: driver, category: category, code: None, message: message}
+}
+
+/// Select exactly one driver without exposing connection-string contents in errors.
+export fn select(drivers: &Array[Driver], uri: Str) -> Result[Driver, Error] {
+  let separator = uri.indexOf(":")
+  if separator <= 0 { return Err(error("", "configuration", "connection string needs a URI scheme")) }
+  let scheme = uri.take(separator).toLower()
+  var selected: Option[Driver] = None
+  for driver in drivers {
+    var matches = false
+    for supported in driver.schemes {
+      if supported.toLower() == scheme { matches = true }
+    }
+    if matches {
+      if let Some(_) = selected { return Err(error("", "configuration", "multiple drivers accept this URI scheme")) }
+      selected = Some(driver)
+    }
+  }
+  match selected {
+    case None => Err(error("", "unsupported", "no supplied driver accepts this URI scheme"))
+    case Some(driver) => Ok(driver)
+  }
+}
+
+export fn connect(drivers: &Array[Driver], uri: Str, size: Int) -> Result[Client, Error] {
+  let driver = select(drivers, uri) ?
+  if size < 1 { return Err(error(driver.name, "configuration", "connection capacity must be positive")) }
+  (driver.open)(uri, size)
+}
+
+export fn query(client: &Client, sql: Str, values: &Array[Value]) -> Result[Rows, Error] {
+  (client.query)(sql, *values)
+}
+export fn execute(client: &Client, sql: Str) -> Result[Rows, Error] { (client.execute)(sql) }
+export fn close(client: &Client) -> Result[(), Error] { (client.close)() }

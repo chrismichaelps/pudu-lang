@@ -42,11 +42,15 @@ export type App = {
 /// same shape so the two can be compared.
 export type Report = { started: Array[Str], failure: Option[(Str, Str)] }
 
+/// Successful callbacks and every typed failure, in occurrence order.
+export type LifecycleReport = { completed: Array[Str], failures: Array[(Str, Str)] }
+
 /// Why a program could not run.
 export type AppError
   = Configuration(Str)
   | StageFailed(Str, Str)
   | Listen(Str)
+  | StopFailed(Str, Str)
 
 /// The port a service listens on when nothing said otherwise.
 const DEFAULT_PORT: Int = 8080
@@ -213,48 +217,65 @@ export fn stageNames(target: &App) -> Array[Str] {
 /// A stage that fails stops every stage already started, in reverse, before
 /// answering. A caller told that a start failed will not then be told to clean
 /// up after it, so the cleanup happens here or it does not happen.
-export fn start(target: &App) -> Report {
+export fn start(target: &App) -> Report { summarize(&startDetailed(target)) }
+
+/// Start in declaration order and retain failures from unwinding the started prefix.
+export fn startDetailed(target: &App) -> LifecycleReport {
   var started: Array[Str] = []
-  var failure: Option[(Str, Str)] = None
+  var failures: Array[(Str, Str)] = []
   var index = 0
-  while index < target.stages.length() && Option.isNone(&failure) {
+  while index < target.stages.length() && failures.isEmpty() {
     let held = target.stages[index]
-    let attempted = (held.start)()
-    if let Err(reason) = attempted {
-      failure = Some((held.name, reason))
-    } else {
-      started = started.push(held.name)
+    match (held.start)() {
+      case Err(reason) => { failures = failures.push((held.name, reason)) }
+      case Ok(_) => { started = started.push(held.name) }
     }
     index = index + 1
   }
-  if Option.isSome(&failure) { let _unwound = stopThrough(target, started.length()) }
-  Report{started: started, failure: failure}
+  if !failures.isEmpty() {
+    let unwound = stopThroughDetailed(target, started.length())
+    failures = failures.concat(unwound.failures)
+  }
+  LifecycleReport{completed: started, failures: failures}
 }
 
-/// Stop every stage, in reverse.
-///
-/// Every stage is attempted even after one fails: a resource that would not
-/// close is not a reason to leak the next one. The first failure is the one
-/// reported, because it is the one that happened while the most was still
-/// running.
-export fn stop(target: &App) -> Report { stopThrough(target, target.stages.length()) }
+/// Stop every stage in reverse and summarize all failures.
+export fn stop(target: &App) -> Report { summarize(&stopDetailed(target)) }
 
-/// Stop the first `count` stages, in reverse.
-fn stopThrough(target: &App, count: Int) -> Report {
+/// Stop every stage in reverse, retaining each failure separately.
+export fn stopDetailed(target: &App) -> LifecycleReport {
+  stopThroughDetailed(target, target.stages.length())
+}
+
+fn stopThroughDetailed(target: &App, count: Int) -> LifecycleReport {
   var stopped: Array[Str] = []
-  var failure: Option[(Str, Str)] = None
+  var failures: Array[(Str, Str)] = []
   var index = count - 1
   while index >= 0 {
     let held = target.stages[index]
-    let attempted = (held.stop)()
-    if let Err(reason) = attempted {
-      if Option.isNone(&failure) { failure = Some((held.name, reason)) }
-    } else {
-      stopped = stopped.push(held.name)
+    match (held.stop)() {
+      case Err(reason) => { failures = failures.push((held.name, reason)) }
+      case Ok(_) => { stopped = stopped.push(held.name) }
     }
     index = index - 1
   }
-  Report{started: stopped, failure: failure}
+  LifecycleReport{completed: stopped, failures: failures}
+}
+
+fn summarize(held: &LifecycleReport) -> Report {
+  var failure: Option[(Str, Str)] = None
+  if !held.failures.isEmpty() {
+    let first = held.failures[0]
+    var reasons: Array[Str] = [first[1]]
+    var index = 1
+    while index < held.failures.length() {
+      let next = held.failures[index]
+      reasons = reasons.push("also failed: " + next[0] + ": " + next[1])
+      index = index + 1
+    }
+    failure = Some((first[0], reasons.join("; ")))
+  }
+  Report{started: held.completed, failure: failure}
 }
 
 /// Whether a report says everything worked.
@@ -278,8 +299,13 @@ export fn run(target: &App) -> Result[Int, AppError] {
   var listening = Server.server(&target.router)
   for step in target.steps { listening = Server.using(&listening, step) }
   let served = Server.listenAndServe(&listening, host, port, limit)
-  let _stopped = stop(target)
-  if let Err(problem) = served { Err(Listen(show(problem))) } else { Ok(Result.unwrapOr(served, 0)) }
+  let stopped = stop(target)
+  if let Err(problem) = served {
+    let extra = if succeeded(&stopped) { "" } else { "; shutdown also failed: " + explainReport(&stopped) }
+    Err(Listen(show(problem) + extra))
+  } else if let Some(problem) = stopped.failure {
+    Err(StopFailed(problem[0], problem[1]))
+  } else { Ok(Result.unwrapOr(served, 0)) }
 }
 
 /// What a refusal says.
@@ -288,6 +314,7 @@ export fn explain(problem: &AppError) -> Str {
     case Configuration(reason) => "configuration: " + reason
     case StageFailed(named, reason) => named + " did not start: " + reason
     case Listen(reason) => "could not serve: " + reason
+    case StopFailed(named, reason) => named + " did not stop: " + reason
   }
 }
 

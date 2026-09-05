@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Application database connections and lifecycle failures
+
+- Add PostgreSQL URI parsing with strict percent decoding, explicit transport policy, and direct connection/pool opening.
+- Add backend-neutral `Std.Db.Driver`, a PostgreSQL adapter, and `Std.App.Database` with developer-supplied driver selection, typed parameters and lifecycle ownership.
+- Retain every typed lifecycle failure and report failed shutdown from `App.run`.
+- No tests, builds, or reviews run, as directed; PostgreSQL TLS negotiation remains pending.
+
 - 2026-09-05 · [[Std Db]], [[2026-09-05-database-framing]] · close partially constructed pools, reject zero capacity, gate borrowing on closing state, and propagate settlement and cleanup failures. Query failures drain to ReadyForQuery; malformed and mixed row results are refused. Tests and review intentionally not run · risk HIGH · issue #193
 
 - 2026-09-05 · [[Std Db Protocol]], [[Std Db Session]], [[2026-09-05-database-framing]] · distinguish SQL NULL from invalid or truncated text, require exact row payloads, and bound incoming database frames before body accumulation. Malformed streams close instead of being retried as incomplete input. Tests and review intentionally not run · risk HIGH · issue #193
