@@ -112,6 +112,16 @@ extern "C" const char *pudu_ffi_cpp_invalid_utf8() {
   return invalid;
 }
 
+/* A resource made and handed back beside text the caller cannot read. The
+ * library did its work: the box exists and its release is owed whatever the
+ * text turns out to be. Nothing about a decoding failure frees it, so this is
+ * the shape that says whether the boundary discharges an obligation it can no
+ * longer report a value for. */
+extern "C" const char *pudu_ffi_cpp_invalid_utf8_with_box(void **produced) {
+  *produced = pudu_ffi_cpp_box_new(29);
+  return pudu_ffi_cpp_invalid_utf8();
+}
+
 /* Nested records, which is what a camera, a font, and a sound all are. The
  * question these answer is whether a struct of structs may be described to the
  * bridge as the leaves it flattens to, or whether the nesting itself has to

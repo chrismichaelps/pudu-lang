@@ -23,6 +23,14 @@ assembly, or host IO failure. `cleanupUnclaimed` protects existing addresses and
 address only when its canonical identity and destructor agree. `cleanupFailedOutputs` reconstructs
 release obligations for raw handles retained through text-conversion failure.
 
+## Covered by
+
+`RejectsForeignInvalidUtf8WithSlot` declares `pudu_ffi_cpp_invalid_utf8_with_box`, which writes a box
+through a slot and returns text that cannot be decoded. The call is refused as `E7025`, the native
+destructor runs once, and no live box remains. The assertion counts real destructor calls in the C++
+fixture, so disabling `cleanupFailedOutputs` fails it with the box still allocated rather than merely
+changing a diagnostic.
+
 ## Dependencies and consumers
 
 Requires [[Foreign Call]], [[Foreign Ownership]], [[Eval Value]], and [[Diagnostic Model]].

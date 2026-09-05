@@ -69,16 +69,24 @@ own claims. `Pudu.Eval.Foreign.ResultSpec` covers conversion refusing every shap
 declaration. Both were confirmed to bite: removing the duplicate-address guard and the declared-width
 guard each fails the test written for it, so neither passes by never being reached.
 
-What remains uncovered is cleanup after invalid returned text. `cleanupFailedOutputs` and
-`releaseHandle` resolve and invoke a real destructor through the native bridge, so testing them needs
-a fixture library with a release symbol rather than a store reached directly. That is the one failure
-path still resting on reading alone. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
+Cleanup after invalid returned text is covered too, end to end rather than through the store:
+`pudu_ffi_cpp_invalid_utf8_with_box` writes a box through a slot and returns text that cannot be
+decoded, and `RejectsForeignInvalidUtf8WithSlot` declares it. The call is refused as `E7025`, the
+native destructor runs once, and no live box is left. Disabling `cleanupFailedOutputs` fails that
+assertion with the box still allocated, so it measures the release rather than the refusal.
+
+That check took four runs to establish, because `cabal test` recompiles the library without relinking
+the test executable against it. Three mutation runs reported success while executing the original
+code, which reads exactly like a test that cannot fail. Only `rm -rf` of the package's build
+directory, then running the binary from `cabal list-bin` directly, gave an honest answer; `strings` on
+that binary for a marker from the edit is what distinguishes the two cases. See
+[[architecture/FFI-SELF-HOSTING]] for the remaining scope.
 
 ## Exact next action
 
-Give the C++ conformance fixture a release symbol and a producer that returns invalid UTF-8 beside a
-handle, then cover `cleanupFailedOutputs` end to end, before introducing owned-by-value or additional
-buffer syntax.
+Take the next item in the delivery order — owned values passed by value — starting from the resource
+identity and alias contract that [[ADR-0021-a-value-the-library-owns]] proposes, which needs
+acceptance before any syntax for it is presented as supported.
 
 ## Referenced by
 

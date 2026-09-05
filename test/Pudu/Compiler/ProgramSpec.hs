@@ -125,6 +125,11 @@ testForeignHandles = do
   cleanupFailure <- runtimeCodes "test-fixtures/stdlib/RejectsAfterForeignHandleCleanup.pudu"
   afterCleanup <- cppDeleteCount
   CInt activeAfter <- cppActiveCount
+  beforeSlotText <- cppDeleteCount
+  CInt activeBeforeSlotText <- cppActiveCount
+  invalidTextWithSlot <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8WithSlot.pudu"
+  afterSlotText <- cppDeleteCount
+  CInt activeAfterSlotText <- cppActiveCount
   pure $ conjoin
     [ counterexample "the C++ fixture is linked into the running process" (anchor === 1)
     , counterexample "a run of bytes is lent whole, noughts and emptiness included"
@@ -164,6 +169,17 @@ testForeignHandles = do
         (crossings === Just "20")
     , counterexample "invalid returned UTF-8 is a runtime refusal"
         (invalidText === ["E7025"])
+    {-| Text that cannot be decoded does not cancel a release. The library
+        wrote a resource through the slot before the boundary ever looked at
+        the text, and the address it wrote never reaches the program, so a
+        boundary that reports the decoding failure and walks away is the one
+        arrangement in which nothing can free it. -}
+    , counterexample "a resource produced beside invalid text is still refused as text"
+        (invalidTextWithSlot === ["E7025"])
+    , counterexample "and released, rather than left with nothing able to name it"
+        (afterSlotText - beforeSlotText === 1)
+    , counterexample "leaving no live box behind"
+        (activeAfterSlotText === activeBeforeSlotText)
     , counterexample "a null text field in a returned record is refused"
         (missingRecordText === ["E7024"])
     , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"

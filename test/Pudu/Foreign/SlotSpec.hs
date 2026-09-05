@@ -1,9 +1,12 @@
 {-| What the bridge does with an argument the library writes through.
 
-    These reach `pudu_ffi_call` directly rather than through a Pudu program,
-    because the language cannot yet write an output slot and the bridge that
-    carries one has to be proven before anything is built on it. The symbols are
-    the C++ conformance fixture linked into this binary. -}
+    These reach `pudu_ffi_call` directly rather than through a Pudu program, so
+    that what the bridge does with storage the library writes through is proven
+    on its own terms: a declaration, a claim, and a conversion all sit above it,
+    and a failure in any of them would otherwise be indistinguishable from a
+    failure here. What a program written in the language does with a slot is
+    `UsesForeignSlots.pudu`. The symbols are the C++ conformance fixture linked
+    into this binary. -}
 module Pudu.Foreign.SlotSpec (slotProperties) where
 
 import Data.Int (Int32, Int64)
