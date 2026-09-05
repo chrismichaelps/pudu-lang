@@ -166,7 +166,22 @@ held, and what each refusal must leave alone. A refusal releases nothing and ins
 address claimed again after its release carries a new generation, and the old one can neither lease
 nor release the resource standing there. A discarded claim releases once, discarding it twice
 releases nothing further, and it cannot reach a newer occupant of the same address. A closed store
-refuses a late claim and releases what it turned away rather than leaking it.
+refuses a late claim and releases what it turned away rather than leaking it. A lease cancelled
+while its action is blocked is given back: the leaseholder is interrupted at a point where the lease
+is certainly held, and the claim is then recovered under a bounded wait, which a lease that was never
+returned would exceed rather than fail outright.
+
+## Cancelled leases
+
+A native call is interruptible while it runs, which is the point: an evaluation cancelled inside one
+must not wait for the library to finish. The lease still has to end. An address left marked in use is
+one nothing can release — removal waits until no one is inside it — so teardown would wait out its
+patience and then leave the resource behind.
+
+`withClaims` acquires under a mask and releases through `finally`, so the release runs on the
+cancelling exception as well as on an ordinary return. What this establishes is that the lease is
+given back; it is not a claim about the evaluator's whole masked interval, where the native call, the
+raw outputs, and the claim settle in sequence.
 
 ## Aborted result settlement
 

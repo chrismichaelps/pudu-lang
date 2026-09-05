@@ -6,6 +6,8 @@
     passing foreign call never takes. -}
 module Pudu.Foreign.OwnershipSpec (ownershipProperties) where
 
+import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar, throwTo)
+import Control.Exception (AsyncException (ThreadKilled))
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.List (sort)
@@ -18,6 +20,7 @@ import Pudu.Foreign.Ownership
   , takeOwnedGeneration
   , withOwnedGenerations
   )
+import System.Timeout (timeout)
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 ownershipProperties :: [(String, IO Property)]
@@ -28,6 +31,7 @@ ownershipProperties =
   , ("an address reused after release does not revive the old claim", testStaleGeneration)
   , ("a discarded claim is released once and only its own", testDiscardOwnClaims)
   , ("a closing store admits nothing and releases what it turns away", testClosedAdmission)
+  , ("a lease cancelled mid-call is still given back", testInterruptedLease)
   ]
 
 {-| A cleanup that records that it ran, so a leak and a double release are both
@@ -176,6 +180,42 @@ testClosedAdmission = do
         , counterexample "a closed store leases nothing" (leased === Nothing)
         ]
     )
+
+{-| A native call is interruptible while it runs, so an evaluation cancelled
+    inside one lands there. The lease has to end anyway: an address still marked
+    in use is one nothing can release, and teardown waits on it for as long as
+    its patience lasts and then leaves it.
+
+    Deterministic on purpose. The leaseholder blocks on an empty variable rather
+    than on a sleep, so the exception arrives while the lease is certainly held,
+    and the wait for the claim afterwards is bounded — release removes a claim
+    only once no one is inside it, so a lease that was never given back would
+    wait for ever rather than fail. -}
+testInterruptedLease :: IO Property
+testInterruptedLease = do
+  store <- newForeignStore
+  releases <- newReleases
+  claimed <- claimOwnedGeneration store 4096 (releasing releases 4096)
+  let generation = maybe 0 id claimed
+  leased <- newEmptyMVar
+  blocked <- newEmptyMVar
+  leaseholder <- forkIO $ do
+    _ <- withOwnedGenerations store [(4096, generation)] (putMVar leased () >> takeMVar blocked)
+    pure ()
+  takeMVar leased
+  throwTo leaseholder ThreadKilled
+  recovered <- timeout oneSecond (takeOwnedGeneration store 4096 generation)
+  afterwards <- released releases
+  pure
+    ( conjoin
+        [ counterexample "the claim comes back rather than staying in use"
+            (property (maybe False isJustResource recovered))
+        , counterexample "and cancelling a lease is not itself a release" (afterwards === [])
+        ]
+    )
+
+oneSecond :: Int
+oneSecond = 1000000
 
 isRefusal :: Either [Int64] a -> Bool
 isRefusal = either (const True) (const False)

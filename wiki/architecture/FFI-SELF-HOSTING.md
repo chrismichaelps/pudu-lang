@@ -14,7 +14,7 @@ standard-library primitives exist. [[ADR-0019-getting-a-value-back-out-of-a-libr
 
 | Order | Deliverable | Required boundary |
 |---|---|---|
-| 1 | Complete output ownership | Cancellation-safe transitions; typed cleanup diagnostics; generation identity; all raw products classified before conversion. Admission, refusal, generation identity, discard, result conversion, and cleanup after invalid returned text are covered. Cancellation itself is not: nothing exercises an abort delivered inside the masked interval |
+| 1 | Complete output ownership | Cancellation-safe transitions; typed cleanup diagnostics; generation identity; all raw products classified before conversion. Admission, refusal, generation identity, discard, result conversion, and cleanup after invalid returned text are covered. A lease cancelled mid-call is given back rather than left in use. What is still unproven is the evaluator's whole masked interval, where the native call, the raw outputs and the claim settle in sequence |
 | 2 | Owned values passed by value | Target-derived aggregate layout; explicit resource identity and alias contract; full-value destruction |
 | 3 | Returned buffers | Explicit byte length and allocator-matched release; null/empty distinction; overflow checks |
 | 4 | Writable buffers | Exclusive call lease; capacity and initialized length; explicit allocation; no mutation of immutable `Bytes` |
@@ -27,7 +27,11 @@ standard-library primitives exist. [[ADR-0019-getting-a-value-back-out-of-a-libr
 A struct's pointer fields do not generally identify its destruction obligation. Two returned structs
 can share one allocation and own different secondary allocations; equality of the complete pointer
 tuple misses that overlap. Conversely, a borrowed internal pointer need not confer ownership at all.
-A null pointer tuple can occur in a resource whose scalar descriptor still needs destruction.
+A resource can hold no pointer at all and still need destruction: in `raylib.h` as installed,
+`Texture`, `RenderTexture` and `VrStereoConfig` contain only integers, and each has an `Unload*`
+that takes it by value. `Texture2D` is among the most used types the library has, so this is the
+common case rather than a corner of it — see the amendment in
+[[ADR-0021-a-value-the-library-owns]].
 
 The implementation must therefore describe an explicit resource identity and alias/transfer contract,
 not infer ownership from every pointer-shaped field. The full native representation must be retained
@@ -76,8 +80,8 @@ proof of completeness, native support, complexity bounds, or structured cancella
 
 The continued pass adds `Std.Bytes.Cursor`, `Std.Text.Source`, `Std.Intern`, and `Std.Text.Builder`.
 Their mirrors specify cursor failure behavior, byte-column coordinates, session-scoped IDs, and
-explicit builder materialization. These modules are implementation additions without build or test
-evidence, not a completed self-hosting SDK.
+explicit builder materialization. All four check clean, are formatted, and answer a program that
+imports them; none of them has a property suite, and none of that makes a self-hosting SDK.
 
 The compiler should own its token, AST, type, diagnostic, and IR types. They are compiler-domain
 modules, not speculative `Std.Ast` or `Std.TypeCheck` APIs. Shared library additions should follow
