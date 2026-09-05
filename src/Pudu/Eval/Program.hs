@@ -80,28 +80,10 @@ evaluateEntryPoint integerKinds = evaluateProgramEntry integerKinds []
     is what happened to the one caller that was allowed to forget. An empty map
     is a caller saying it has not checked the program, not a caller that failed
     to pass what it had. -}
-
-{-| Every caller says what inference settled on for each integer literal.
-
-    A literal written without a suffix is not a platform `Int` merely because it
-    was written plainly, and only the checker knows what it became. This is an
-    argument rather than a default because a caller that forgets it gets a
-    program whose declared widths are not enforced, and nothing says so — which
-    is what happened to the one caller that was allowed to forget. An empty map
-    is a caller saying it has not checked the program, not a caller that failed
-    to pass what it had. -}
 evaluateProgramEntry
   :: Map.Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry integerKinds dependencies entryName moduleValue =
   fst <$> evaluateProgramTallied integerKinds dependencies entryName moduleValue
-
-{-| The same, and what running it cost.
-
-    A program has no machine code to read, so the honest account of what it does
-    is what the evaluator did: how many names it looked up, how many closures it
-    called, how many expressions of each kind it walked. That is the audit a
-    reader optimising this compiler can act on, and it is the layer where the
-    costs actually live. -}
 
 {-| The same, and what running it cost.
 
@@ -153,11 +135,6 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
     This is the compile-time path: [[architecture/SEMANTICS]] makes a
     module-scope `const` a compile-time value, and folding it must not perform
     the effects a run of the program would. -}
-{-| A `const` is folded while the compiler runs, so its literals need their
-    kinds here for the same reason a program's do: a constant declared `Int8`
-    that cannot hold what it computes is a mistake worth naming at compile
-    time. -}
-
 {-| A `const` is folded while the compiler runs, so its literals need their
     kinds here for the same reason a program's do: a constant declared `Int8`
     that cannot hold what it computes is a mistake worth naming at compile
