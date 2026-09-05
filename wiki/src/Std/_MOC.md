@@ -98,6 +98,8 @@ tags: [moc, module, stdlib]
 
 - [[Std Db Sqlite]] — embedded SQLite prepared statements through the shared driver contract.
 
+- [[Std Db Row]] — typed backend-neutral result access and cardinality-aware mapping.
+
 ## Referenced by
 
 [[src/_MOC]] · [[architecture/STDLIB]]

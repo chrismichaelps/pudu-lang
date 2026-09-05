@@ -90,3 +90,5 @@ Use `postgresql://...?...` for PostgreSQL or `sqlite:/absolute/path/app.db` for 
 `Database.bundledDrivers()` returns the explicit built-in list; append another package's driver
 and pass that list to `withDrivers` to extend selection. Unknown or ambiguous schemes fail.
 The SQL dialect and placeholders still belong to the chosen database.
+
+Use [[Std Db Row]] to consume result cells by unique column name or index and map rows into application values. It distinguishes SQL NULL, absent columns, ambiguous labels, wrong storage kinds and wrong cardinality.

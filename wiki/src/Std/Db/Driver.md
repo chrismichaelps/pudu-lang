@@ -32,3 +32,5 @@ Placeholder metadata describes syntax; it does not convert dialects. Result cell
 when the driver cannot establish a lossless native mapping. SQL NULL is always `NullValue`.
 `nativeType` is optional driver metadata, not a PostgreSQL OID required of every implementation.
 The core does not parse vendor connection options, select a hidden driver, or promise portable SQL.
+
+[[Std Db Row]] supplies named/indexed access, exact typed readers and cardinality-aware mapping over these backend-neutral results.

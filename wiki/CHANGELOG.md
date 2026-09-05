@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Backend-neutral row consumption
+
+- Add typed result readers and row mapping independent of PostgreSQL repository types.
+- Distinguish NULL, missing/ambiguous columns, wrong widths, storage kinds and cardinality.
+- Update module documentation. No tests, builds or reviews run as directed.
+
 ## 2026-09-05 — SQLite driver and configurable backend selection
 
 - Add a real SQLite adapter with prepared parameters, typed rows, serialized queries and native resource cleanup.

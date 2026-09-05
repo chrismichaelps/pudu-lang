@@ -78,3 +78,7 @@ Own new `cbits/pudu_sqlite.c`, `lib/Std/Db/Sqlite.pudu`, their mirrors, plus the
 ## SQLite delivery
 
 Implemented on-demand native SQLite loading, reference-counted database/statement wrappers, prepared bindings, typed rows, serialized client shutdown, and default app selection between PostgreSQL and SQLite. No builds, tests, reviews or live database execution performed.
+
+## Backend-neutral row mapping ownership
+
+Own `lib/Std/Db/Row.pudu` and its mirror for typed application result consumption before the next transaction API slice. Existing PostgreSQL-specific Repository remains compatible.

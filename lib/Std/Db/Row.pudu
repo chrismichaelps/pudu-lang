@@ -1,0 +1,126 @@
+module Std.Db.Row
+
+import Std.Db.Driver as Driver
+
+export type RowError
+  = MissingColumn(Str)
+  | AmbiguousColumn(Str)
+  | MissingRow(Int)
+  | MissingPosition(Int)
+  | WrongWidth(Int, Int, Int)
+  | NullColumn(Str)
+  | WrongKind(Str, Str)
+  | NoRows
+  | TooManyRows(Int)
+
+export type Mapper[T] = fn(Driver.Rows, Int) -> Result[T, RowError]
+
+/// Named access refuses duplicate labels, which require aliases or indexed access.
+export fn indexOf(result: &Driver.Rows, name: Str) -> Result[Int, RowError] {
+  var position = -1
+  var index = 0
+  for column in result.columns {
+    if column.name == name {
+      if position >= 0 { return Err(AmbiguousColumn(name)) }
+      position = index
+    }
+    index = index + 1
+  }
+  if position < 0 { Err(MissingColumn(name)) } else { Ok(position) }
+}
+
+export fn at(result: &Driver.Rows, row: Int, column: Int) -> Result[Driver.Value, RowError] {
+  if row < 0 || row >= result.rows.length() { return Err(MissingRow(row)) }
+  if column < 0 || column >= result.columns.length() { return Err(MissingPosition(column)) }
+  let held = result.rows[row]
+  if held.length() != result.columns.length() {
+    return Err(WrongWidth(row, result.columns.length(), held.length()))
+  }
+  Ok(held[column])
+}
+
+export fn value(result: &Driver.Rows, row: Int, name: Str) -> Result[Driver.Value, RowError] {
+  at(result, row, indexOf(result, name) ?)
+}
+
+/// None means a present SQL NULL, never a missing column or malformed row.
+export fn nullable(result: &Driver.Rows, row: Int, name: Str) -> Result[Option[Driver.Value], RowError] {
+  match value(result, row, name) ? {
+    case Driver.NullValue => Ok(None)
+    case held => Ok(Some(held))
+  }
+}
+
+fn required(result: &Driver.Rows, row: Int, name: Str) -> Result[Driver.Value, RowError] {
+  match value(result, row, name) ? {
+    case Driver.NullValue => Err(NullColumn(name))
+    case held => Ok(held)
+  }
+}
+
+export fn text(result: &Driver.Rows, row: Int, name: Str) -> Result[Str, RowError] {
+  match required(result, row, name) ? {
+    case Driver.TextValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "text"))
+  }
+}
+
+export fn integer(result: &Driver.Rows, row: Int, name: Str) -> Result[Int64, RowError] {
+  match required(result, row, name) ? {
+    case Driver.IntegerValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "Int64"))
+  }
+}
+
+export fn decimal(result: &Driver.Rows, row: Int, name: Str) -> Result[Decimal, RowError] {
+  match required(result, row, name) ? {
+    case Driver.DecimalValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "Decimal"))
+  }
+}
+
+export fn real(result: &Driver.Rows, row: Int, name: Str) -> Result[Float64, RowError] {
+  match required(result, row, name) ? {
+    case Driver.RealValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "Float64"))
+  }
+}
+
+export fn truth(result: &Driver.Rows, row: Int, name: Str) -> Result[Bool, RowError] {
+  match required(result, row, name) ? {
+    case Driver.BooleanValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "Bool"))
+  }
+}
+
+export fn bytes(result: &Driver.Rows, row: Int, name: Str) -> Result[Bytes, RowError] {
+  match required(result, row, name) ? {
+    case Driver.BytesValue(held) => Ok(held)
+    case _ => Err(WrongKind(name, "Bytes"))
+  }
+}
+
+/// Mapping order follows the result; the first mapper failure stops consumption.
+export fn map[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Array[T], RowError] {
+  var mapped: Array[T] = []
+  var index = 0
+  while index < result.rows.length() {
+    mapped = mapped.push(mapper(*result, index) ?)
+    index = index + 1
+  }
+  Ok(mapped)
+}
+
+export fn one[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[T, RowError] {
+  let count = result.rows.length()
+  if count == 0 { return Err(NoRows) }
+  if count > 1 { return Err(TooManyRows(count)) }
+  mapper(*result, 0)
+}
+
+export fn optional[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
+  let count = result.rows.length()
+  if count == 0 { return Ok(None) }
+  if count > 1 { return Err(TooManyRows(count)) }
+  Ok(Some(mapper(*result, 0) ?))
+}
