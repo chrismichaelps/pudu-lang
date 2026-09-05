@@ -719,6 +719,13 @@ dependencies are its own files plus the compiler it is built with, and that is t
 
 ## Self-hosting
 
+Four additional source modules now provide compiler foundations: `Std.Bytes.Cursor` for bounded
+binary reads, `Std.Text.Source` for indexed byte-coordinate locations, `Std.Intern` for explicit
+session-local spelling IDs, and `Std.Text.Builder` for fragment-based emission. These additions
+have not been built or tested in the requested no-verification pass. Their presence does not
+complete the self-hosting compiler or remaining foreign contracts.
+
+
 [[architecture/FFI-SELF-HOSTING]] records the compiler stages, library boundaries, and native
 primitives still needed. Existing module presence does not establish a complete self-hosting SDK.
 

@@ -1,0 +1,41 @@
+module Std.Text.Builder
+
+/// Persistent fragments, materialized as text only by `finish`.
+export type Builder = { chunks: Array[Str] }
+
+export fn empty() -> Builder { Builder{chunks: []} }
+
+/// Append a fragment without copying the accumulated prefix.
+export fn append(builder: &Builder, text: Str) -> Builder {
+  if text.isEmpty() { *builder } else { Builder{chunks: builder.chunks.push(text)} }
+}
+
+/// Append a line and an explicit LF, including when the line is empty.
+export fn appendLine(builder: &Builder, text: Str) -> Builder {
+  let content = append(builder, text)
+  append(&content, "\n")
+}
+
+export fn appendAll(builder: &Builder, pieces: &Array[Str]) -> Builder {
+  var current = *builder
+  for piece in *pieces { current = append(&current, piece) }
+  current
+}
+
+/// Join builder structures without materializing either text prefix.
+export fn concat(left: &Builder, right: &Builder) -> Builder {
+  Builder{chunks: left.chunks.concat(right.chunks)}
+}
+
+/// The number of stored fragments, not a text or byte length.
+export fn chunkCount(builder: &Builder) -> Int { builder.chunks.length() }
+
+export fn isEmpty(builder: &Builder) -> Bool {
+  for chunk in builder.chunks {
+    if !chunk.isEmpty() { return false }
+  }
+  true
+}
+
+/// Allocate the final text by joining every fragment once.
+export fn finish(builder: &Builder) -> Str { builder.chunks.join("") }

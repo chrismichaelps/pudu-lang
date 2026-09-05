@@ -1,0 +1,43 @@
+module Std.Intern
+
+/// A persistent, session-local spelling table. Thread returned pools forward.
+export type Pool = { names: Array[Str], indices: Map[Str, Int] }
+
+export fn empty() -> Pool { Pool{names: [], indices: mapOf([])} }
+
+export fn size(pool: &Pool) -> Int { pool.names.length() }
+
+/// Resolve a pool-local ID, refusing negative and out-of-range values.
+export fn resolve(pool: &Pool, id: Int) -> Option[Str] {
+  if id < 0 || id >= pool.names.length() { None } else { Some(pool.names[id]) }
+}
+
+/// Look up a spelling and check that the indexed ID still names that spelling.
+export fn lookup(pool: &Pool, spelling: Str) -> Option[Int] {
+  let id = pool.indices.get(spelling) ?
+  let held = resolve(pool, id) ?
+  if held == spelling { Some(id) } else { None }
+}
+
+/// Preserve an existing ID or append the spelling and return the updated pool.
+export fn intern(pool: &Pool, spelling: Str) -> (Pool, Int) {
+  match lookup(pool, spelling) {
+    case Some(id) => (*pool, id)
+    case None => {
+      let id = pool.names.length()
+      (Pool{names: pool.names.push(spelling), indices: pool.indices.insert(spelling, id)}, id)
+    }
+  }
+}
+
+/// Intern in input order, preserving one ID per input occurrence.
+export fn internAll(pool: &Pool, spellings: &Array[Str]) -> (Pool, Array[Int]) {
+  var current = *pool
+  var ids: Array[Int] = []
+  for spelling in *spellings {
+    let added = intern(&current, spelling)
+    current = added[0]
+    ids = ids.push(added[1])
+  }
+  (current, ids)
+}

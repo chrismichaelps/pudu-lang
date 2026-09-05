@@ -5,6 +5,11 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Byte Cursor]] — checked binary reads retaining absolute byte positions.
+- [[Std Source Buffer]] — LF line indexing and explicit byte-coordinate locations.
+- [[Std Symbol Interner]] — persistent, session-local spelling IDs.
+- [[Std Text Builder]] — persistent fragments with explicit final text materialization.
+
 - [[Std Random]] — deterministic generators and OS-backed secure bytes.
 - [[Std Order]] — equality, ordering, and hashing contracts.
 - [[Std HashMap]] — persistent indexed lookup with deterministic insertion order.

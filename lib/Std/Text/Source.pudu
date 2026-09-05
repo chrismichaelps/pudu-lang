@@ -1,0 +1,67 @@
+module Std.Text.Source
+
+/// Byte storage and ascending line starts, built together by the constructors.
+export type Source = { bytes: Bytes, starts: Array[Int] }
+
+/// One-based line and byte column; offset is zero-based and may name EOF.
+export type Position = { offset: Int, line: Int, byteColumn: Int }
+
+/// Index LF delimiters without decoding or copying the source bytes.
+export fn fromBytes(bytes: &Bytes) -> Source {
+  var starts = [0]
+  var offset = 0
+  while offset < bytes.length() {
+    if bytes.at(offset) == Some(10u8) { starts = starts.push(offset + 1) }
+    offset = offset + 1
+  }
+  Source{bytes: *bytes, starts: starts}
+}
+
+/// Encode UTF-8 explicitly before building the byte-coordinate index.
+export fn fromText(text: Str) -> Source {
+  let bytes = text.toBytes()
+  fromBytes(&bytes)
+}
+
+export fn byteLength(source: &Source) -> Int { source.bytes.length() }
+
+export fn lineCount(source: &Source) -> Int { source.starts.length() }
+
+/// Locate an absolute byte offset. A byte inside UTF-8 still has a byte column.
+export fn position(source: &Source, offset: Int) -> Option[Position] {
+  if offset < 0 || offset > source.bytes.length() || source.starts.length() == 0 {
+    return None
+  }
+  var low = 0
+  var high = source.starts.length()
+  while low < high {
+    let middle = low + (high - low) / 2
+    if source.starts[middle] <= offset { low = middle + 1 } else { high = middle }
+  }
+  if low == 0 { return None }
+  let start = source.starts[low - 1]
+  if start < 0 || start > offset { return None }
+  Some(Position{offset: offset, line: low, byteColumn: offset - start + 1})
+}
+
+/// Return a line without its LF or CRLF delimiter, preserving standalone CR.
+export fn line(source: &Source, number: Int) -> Option[Bytes] {
+  if number < 1 || number > source.starts.length() { return None }
+  let start = source.starts[number - 1]
+  var end = source.bytes.length()
+  if number < source.starts.length() {
+    end = source.starts[number] - 1
+    if end > start && source.bytes.at(end - 1) == Some(13u8) { end = end - 1 }
+  }
+  if start < 0 || end < start || end > source.bytes.length() { return None }
+  Some(source.bytes.slice(start, end))
+}
+
+/// Return an exact half-open byte range; invalid bounds never clamp silently.
+export fn slice(source: &Source, from: Int, to: Int) -> Option[Bytes] {
+  if from < 0 || to < from || to > source.bytes.length() {
+    None
+  } else {
+    Some(source.bytes.slice(from, to))
+  }
+}

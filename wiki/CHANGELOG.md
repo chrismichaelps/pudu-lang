@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-04 · [[Std Byte Cursor]], [[Std Source Buffer]], [[Std Symbol Interner]], [[Std Text Builder]], [[architecture/STDLIB]] · add persistent byte cursors, line indexing, spelling IDs, and text-fragment builders as self-hosting foundations. No build or tests run · issue #217
+
 - 2026-09-04 · [[Foreign Ownership]], [[Eval Foreign Resource]], [[Eval Foreign]], [[Eval Value]], [[Evaluator]], [[2026-09-04-ffi-hardening]] · retain claim generations across allocator address reuse, mask foreign ownership handoffs, defer busy cleanup to final leases, resolve destructors before production, and report cleanup failures with native-output provenance. Validation intentionally not run · risk HIGH · issue #217
 
 - 2026-09-04 · [[2026-09-04-ffi-hardening]], [[architecture/FFI-SELF-HOSTING]], [[architecture/SEMANTICS]], [[architecture/STDLIB]] · reconcile output-slot implementation status and record remaining ownership, buffer, callback, hardware, and self-hosting work without claiming completed validation · issue #217

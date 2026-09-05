@@ -74,6 +74,11 @@ Existing source modules provide useful foundations: `Std.Text.Parse`, `Std.Bytes
 `Std.Io`, `Std.Env`, `Std.Process`, `Std.Concurrent`, `Std.Channel`, and `Std.Sync`. Presence is not
 proof of completeness, native support, complexity bounds, or structured cancellation.
 
+The continued pass adds `Std.Bytes.Cursor`, `Std.Text.Source`, `Std.Intern`, and `Std.Text.Builder`.
+Their mirrors specify cursor failure behavior, byte-column coordinates, session-scoped IDs, and
+explicit builder materialization. These modules are implementation additions without build or test
+evidence, not a completed self-hosting SDK.
+
 The compiler should own its token, AST, type, diagnostic, and IR types. They are compiler-domain
 modules, not speculative `Std.Ast` or `Std.TypeCheck` APIs. Shared library additions should follow
 concrete needs established by implementing these stages:

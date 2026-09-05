@@ -40,6 +40,12 @@ Independent review was stopped when that instruction arrived. No approval or val
   address and generation, so allocator address reuse cannot revive an old Pudu handle.
 - [[Eval Foreign Resource]] separates resource policy from value conversion.
 
+## Standard-library continuation
+
+Added [[Std Byte Cursor]], [[Std Source Buffer]], [[Std Symbol Interner]], and [[Std Text Builder]]
+with their mirrors before source creation. These are pure Pudu foundations; no new host primitive
+or compiler-specific AST/type-checker standard module was introduced. No tests or builds ran.
+
 ## Remaining assurance gaps
 
 This is not a zero-leak guarantee. Conflicting native destruction obligations cannot safely be
@@ -54,8 +60,8 @@ asserted. See [[architecture/FFI-SELF-HOSTING]] for the remaining scope.
 
 ## Exact next action
 
-Add the next concrete self-hosting library foundations while keeping owned-by-value and buffer
-syntax unadvertised until their implementation contracts are complete.
+Complete runtime foreign-result conversion shape checks and retain exact failure cleanup before
+introducing owned-by-value or additional buffer syntax.
 
 ## Referenced by
 

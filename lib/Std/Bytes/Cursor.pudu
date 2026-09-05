@@ -1,0 +1,126 @@
+module Std.Bytes.Cursor
+
+/// A byte position within the original immutable input.
+export type Cursor = { source: Bytes, position: Int }
+
+/// Invalid cursor state, invalid request, or insufficient remaining input.
+export type CursorError
+  = InvalidPosition(Int)
+  | InvalidCount(Int)
+  | Truncated(Int, Int, Int)
+  | InvalidWidth(Int)
+
+/// Begin reading without copying the input.
+export fn start(source: &Bytes) -> Cursor { Cursor{source: *source, position: 0} }
+
+/// Move to an absolute byte position, including the end of input.
+export fn seek(cursor: &Cursor, position: Int) -> Result[Cursor, CursorError] {
+  if position < 0 || position > cursor.source.length() {
+    Err(InvalidPosition(position))
+  } else {
+    Ok(Cursor{source: cursor.source, position: position})
+  }
+}
+
+/// Validate the cursor before subtracting its position from the input length.
+export fn remaining(cursor: &Cursor) -> Result[Int, CursorError] {
+  if cursor.position < 0 || cursor.position > cursor.source.length() {
+    Err(InvalidPosition(cursor.position))
+  } else {
+    Ok(cursor.source.length() - cursor.position)
+  }
+}
+
+/// Observe the next byte without consuming it; EOF is `None`.
+export fn peek(cursor: &Cursor) -> Result[Option[UInt8], CursorError] {
+  let available = remaining(cursor) ?
+  if available == 0 { Ok(None) } else { Ok(cursor.source.at(cursor.position)) }
+}
+
+/// Read a shared view. A failed read leaves the original cursor usable.
+export fn take(cursor: &Cursor, count: Int) -> Result[(Bytes, Cursor), CursorError] {
+  let available = remaining(cursor) ?
+  if count < 0 {
+    Err(InvalidCount(count))
+  } else if count > available {
+    Err(Truncated(cursor.position, count, available))
+  } else {
+    let end = cursor.position + count
+    Ok((cursor.source.slice(cursor.position, end), Cursor{source: cursor.source, position: end}))
+  }
+}
+
+/// Skip bytes using the same bounds contract as a read.
+export fn skip(cursor: &Cursor, count: Int) -> Result[Cursor, CursorError] {
+  let read = take(cursor, count) ?
+  Ok(read[1])
+}
+
+/// Read one octet without converting it through text.
+export fn u8(cursor: &Cursor) -> Result[(UInt8, Cursor), CursorError] {
+  let read = take(cursor, 1) ?
+  match read[0].at(0) {
+    case Some(value) => Ok((value, read[1]))
+    case None => Err(Truncated(cursor.position, 1, 0))
+  }
+}
+
+fn unsigned(cursor: &Cursor, width: Int, little: Bool) -> Result[(UInt64, Cursor), CursorError] {
+  if width < 1 || width > 8 { return Err(InvalidWidth(width)) }
+  let read = take(cursor, width) ?
+  var value = 0u64
+  var index = 0
+  while index < width {
+    let offset = if little { width - 1 - index } else { index }
+    let octet = match read[0].at(offset) {
+      case Some(found) => found
+      case None => { return Err(Truncated(cursor.position, width, index)) }
+    }
+    let widened = match convertInteger[UInt64](octet) {
+      case Some(found) => found
+      case None => { return Err(InvalidWidth(width)) }
+    }
+    value = (value << 8) | widened
+    index = index + 1
+  }
+  Ok((value, read[1]))
+}
+
+fn narrow16(read: (UInt64, Cursor)) -> Result[(UInt16, Cursor), CursorError] {
+  match convertInteger[UInt16](read[0]) {
+    case Some(value) => Ok((value, read[1]))
+    case None => Err(InvalidWidth(2))
+  }
+}
+
+fn narrow32(read: (UInt64, Cursor)) -> Result[(UInt32, Cursor), CursorError] {
+  match convertInteger[UInt32](read[0]) {
+    case Some(value) => Ok((value, read[1]))
+    case None => Err(InvalidWidth(4))
+  }
+}
+
+/// Read an unsigned integer in the byte order named by the function.
+export fn u16Be(cursor: &Cursor) -> Result[(UInt16, Cursor), CursorError] {
+  narrow16(unsigned(cursor, 2, false) ?)
+}
+
+export fn u16Le(cursor: &Cursor) -> Result[(UInt16, Cursor), CursorError] {
+  narrow16(unsigned(cursor, 2, true) ?)
+}
+
+export fn u32Be(cursor: &Cursor) -> Result[(UInt32, Cursor), CursorError] {
+  narrow32(unsigned(cursor, 4, false) ?)
+}
+
+export fn u32Le(cursor: &Cursor) -> Result[(UInt32, Cursor), CursorError] {
+  narrow32(unsigned(cursor, 4, true) ?)
+}
+
+export fn u64Be(cursor: &Cursor) -> Result[(UInt64, Cursor), CursorError] {
+  unsigned(cursor, 8, false)
+}
+
+export fn u64Le(cursor: &Cursor) -> Result[(UInt64, Cursor), CursorError] {
+  unsigned(cursor, 8, true)
+}
