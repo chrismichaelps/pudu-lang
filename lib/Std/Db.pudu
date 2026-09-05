@@ -9,6 +9,7 @@ import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
 import Std.Text as Text
+import Std.Sync as Sync
 
 /// A column of a result.
 export type Column = { name: Str, oid: Int }
@@ -27,7 +28,8 @@ export type Rows = {
 /// A set of connections shared between threads.
 export type Pool = {
   ready: Channel.Channel[Session.Connection],
-  size: Int
+  size: Int,
+  closing: Sync.Cell[Bool]
 }
 
 /// Run text the server plans and executes in one step.
@@ -70,6 +72,7 @@ fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Sess
   var rows: Array[Array[Option[Str]]] = []
   var tag = ""
   var failure: Option[Session.DbError] = None
+  var reported: Option[Session.DbError] = None
   var ready = false
   while !ready && Option.isNone(&failure) {
     let read = Session.nextMessage(stream)
@@ -81,19 +84,31 @@ fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Sess
       stream = pair[1]
       if message.kind == "T" {
         let described = Wire.readRowDescription(&message.payload)
-        if let Ok(found) = described { columns = namedColumns(&found) } else {
+        if !columns.isEmpty() || !rows.isEmpty() || !tag.isEmpty() {
+          failure = Some(Unsupported("multiple command results require a separate result stream"))
+        } else if let Ok(found) = described { columns = namedColumns(&found) } else {
           failure = Some(Malformed("a row description that did not read"))
         }
       } else {
         if message.kind == "D" {
           let valued = Wire.readDataRow(&message.payload)
-          if let Ok(found) = valued { rows = rows.push(found) } else {
+          if let Ok(found) = valued {
+            if found.length() != columns.length() {
+              failure = Some(Malformed("a data row does not match its column description"))
+            } else { rows = rows.push(found) }
+          } else {
             failure = Some(Malformed("a data row that did not read"))
           }
         } else {
           if message.kind == "C" {
             let named = Wire.readCString(&message.payload)
-            if let Ok(found) = named { tag = found[0] }
+            if !tag.isEmpty() {
+              failure = Some(Unsupported("multiple command results require a separate result stream"))
+            } else if let Ok(found) = named {
+              if found[1].isEmpty() { tag = found[0] } else {
+                failure = Some(Malformed("unread bytes after a command tag"))
+              }
+            } else { failure = Some(Malformed("a command tag that did not read")) }
           } else {
             if message.kind == "E" {
               // The failure is kept and the loop keeps reading rather than
@@ -102,7 +117,7 @@ fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Sess
               // unread, and the next query would read this one's ending as its
               // own — which is how one failed query makes every query after it
               // wrong. The loop below ends on that message, not this one.
-              failure = Some(Session.serverFailure(&message.payload))
+              if Option.isNone(&reported) { reported = Some(Session.serverFailure(&message.payload)) }
             } else {
               if message.kind == "Z" {
                 stream = Session.withStatus(stream, &message.payload)
@@ -114,7 +129,12 @@ fn collect(start: Session.Connection) -> Result[(Rows, Session.Connection), Sess
       }
     }
   }
-  if let Some(reason) = failure { Err(reason) } else {
+  if let Some(reason) = failure {
+    let failed: Result[(Rows, Session.Connection), Session.DbError] = Err(reason)
+    afterCleanup(failed, Result.mapErr(Net.close(&stream.socket), fn(problem: Net.NetError) -> Session.DbError { Other(show(problem)) }))
+  } else if let Some(reason) = reported {
+    Err(reason)
+  } else {
     Ok((Rows{columns: columns, rows: rows, tag: tag}, stream))
   }
 }
@@ -319,19 +339,34 @@ export fn withSavepoint[T](
 /// It also means a pool cannot hand out more connections than it opened, which
 /// is the whole reason a database wants one.
 export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
-  let ready: Channel.Channel[Session.Connection] = Channel.channel(if size < 1 { 1 } else { size })
+  if size < 1 { return Err(Other("a database pool must contain at least one connection")) }
+  let ready: Channel.Channel[Session.Connection] = Channel.channel(size)
+  let building = Pool{ready: ready, size: size, closing: Sync.cell(false)}
   var opened = 0
   var failure: Option[Session.DbError] = None
   while opened < size && Option.isNone(&failure) {
-    let made = Session.connect(settings)
-    if let Ok(stream) = made {
-      let _put = Channel.send(&ready, stream)
-      opened = opened + 1
-    } else {
-      if let Err(reason) = made { failure = Some(reason) }
+    match Session.connect(settings) {
+      case Err(reason) => { failure = Some(reason) }
+      case Ok(stream) => {
+        match Channel.send(&ready, stream) {
+          case Ok(_) => { opened = opened + 1 }
+          case Err(reason) => {
+            let failed: Result[(), Session.DbError] = Err(asChannel(reason))
+            match afterCleanup(failed, Session.close(&stream)) {
+              case Err(problem) => { failure = Some(problem) }
+              case Ok(_) => { failure = Some(asChannel(reason)) }
+            }
+          }
+        }
+      }
     }
   }
-  if let Some(reason) = failure { Err(reason) } else { Ok(Pool{ready: ready, size: size}) }
+  if let Some(reason) = failure {
+    let failed: Result[Pool, Session.DbError] = Err(reason)
+    afterCleanup(failed, closePool(&building))
+  } else {
+    Ok(building)
+  }
 }
 
 /// Take a connection, hand it to an action, and put it back however the action
@@ -346,36 +381,97 @@ export fn withConnection[T](
   action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
 ) -> Result[T, Session.DbError] {
   let taken = Result.mapErr(Channel.receive(&target.ready), asChannel) ?
-  if let Some(stream) = taken {
-    let outcome = action(stream)
-    let _returned = Channel.send(&target.ready, settled(outcome[1]))
-    outcome[0]
-  } else {
-    Err(Closed)
+  let stream = match taken {
+    case Some(found) => found
+    case None => { return Err(Closed) }
+  }
+  match Sync.get(&target.closing) {
+    case Err(problem) => {
+      let failed: Result[T, Session.DbError] = Err(Other(show(problem)))
+      return afterCleanup(afterCleanup(failed, Session.close(&stream)), closePool(target))
+    }
+    case Ok(true) => {
+      let failed: Result[T, Session.DbError] = Err(Closed)
+      return afterCleanup(failed, Session.close(&stream))
+    }
+    case Ok(false) => {}
+  }
+  let outcome = action(stream)
+  match Sync.get(&target.closing) {
+    case Err(problem) => {
+      let cleanup: Result[(), Session.DbError] = Err(Other(show(problem)))
+      return afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&outcome[1])), closePool(target))
+    }
+    case Ok(true) => { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
+    case Ok(false) => {}
+  }
+  let reusable = match outcome[0] {
+    case Ok(_) => true
+    case Err(Server(_, _, _)) => true
+    case Err(_) => false
+  }
+  if !reusable {
+    return afterCleanup(afterCleanup(outcome[0], Session.close(&outcome[1])), closePool(target))
+  }
+  match settled(outcome[1]) {
+    case Err(problem) => {
+      let cleanup: Result[(), Session.DbError] = Err(problem)
+      let failed = afterCleanup(outcome[0], cleanup)
+      let discarded = afterCleanup(failed, Session.close(&outcome[1]))
+      return afterCleanup(discarded, closePool(target))
+    }
+    case Ok(returning) => {
+      match Channel.send(&target.ready, returning) {
+        case Ok(_) => outcome[0]
+        case Err(problem) => {
+          let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
+          afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&returning)), closePool(target))
+        }
+      }
+    }
   }
 }
 
-/// A connection put back the way it was taken.
-///
-/// A connection returned to a pool while still inside a transaction holds
-/// every row that transaction touched, and hands the next caller a connection
-/// that is not at the start of anything — its first statement joins work it
-/// never asked for, and its failures are somebody else's. A transaction the
-/// borrower did not close is closed here rather than trusted, because the
-/// borrower has already stopped running and cannot be asked.
-fn settled(stream: Session.Connection) -> Session.Connection {
-  if stream.status == Idle { stream } else { Result.unwrapOr(rollback(stream), stream) }
+/// Only a confirmed idle connection may return to the available queue.
+fn settled(stream: Session.Connection) -> Result[Session.Connection, Session.DbError] {
+  if stream.status == Idle { Ok(stream) } else {
+    let restored = rollback(stream) ?
+    if restored.status == Idle { Ok(restored) } else { Err(Malformed("rollback did not leave the connection idle")) }
+  }
 }
 
-/// Close every connection a pool holds.
+/// Close admission and every queued connection; borrowers close their own returns.
 export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
-  let _finished = Channel.close(&target.ready)
+  var outcome: Result[(), Session.DbError] = Result.mapErr(Sync.set(&target.closing, true), fn(problem: Sync.SyncError) -> Session.DbError { Other(show(problem)) })
+  let finished = Result.mapErr(Channel.close(&target.ready), asChannel)
+  outcome = afterCleanup(outcome, finished)
+  if Result.isErr(&finished) { return outcome }
   var going = true
   while going {
-    let taken = Channel.receive(&target.ready)
-    if let Ok(Some(stream)) = taken { let _closed = Session.close(&stream) } else { going = false }
+    match Channel.receive(&target.ready) {
+      case Err(problem) => {
+        let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
+        outcome = afterCleanup(outcome, cleanup)
+        going = false
+      }
+      case Ok(None) => { going = false }
+      case Ok(Some(stream)) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
+    }
   }
-  Ok(())
+  outcome
+}
+
+/// Keep the operation's failure first while retaining cleanup failures beside it.
+fn afterCleanup[T](primary: Result[T, Session.DbError], cleanup: Result[(), Session.DbError]) -> Result[T, Session.DbError] {
+  match cleanup {
+    case Ok(_) => primary
+    case Err(problem) => {
+      match primary {
+        case Ok(_) => Err(problem)
+        case Err(original) => Err(Other(show(original) + "; cleanup also failed: " + show(problem)))
+      }
+    }
+  }
 }
 
 fn asChannel(problem: Channel.ChannelError) -> Session.DbError { Other(show(problem)) }

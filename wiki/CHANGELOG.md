@@ -5,6 +5,8 @@ tags: [changelog]
 
 # Changelog
 
+- 2026-09-05 · [[Std Db]], [[2026-09-05-database-framing]] · close partially constructed pools, reject zero capacity, gate borrowing on closing state, and propagate settlement and cleanup failures. Query failures drain to ReadyForQuery; malformed and mixed row results are refused. Tests and review intentionally not run · risk HIGH · issue #193
+
 - 2026-09-05 · [[Std Db Protocol]], [[Std Db Session]], [[2026-09-05-database-framing]] · distinguish SQL NULL from invalid or truncated text, require exact row payloads, and bound incoming database frames before body accumulation. Malformed streams close instead of being retried as incomplete input. Tests and review intentionally not run · risk HIGH · issue #193
 
 - 2026-09-04 · [[Foreign Ownership]] · admit a reference to something already referenced. A claim was keyed by address and a live address could not be claimed twice, which is right for a library that gives a resource away and wrong for one that counts references: `g_object_ref` and `cairo_reference` return the pointer they were given, and each reference owes its own release. Counted claims now live in a second table keyed by the generation, unique per claim, so two references to one address are two claims that release once each, releasing one leaves the other usable, and teardown releases every outstanding reference rather than the address once. The owned table keeps its rule exactly, because that rule catches the common library's mistakes and loosening it would have spent the common case's protection on the rarer one. No language syntax reaches this yet · risk MEDIUM · issue #217

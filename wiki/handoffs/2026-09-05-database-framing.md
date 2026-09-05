@@ -33,10 +33,22 @@ consume their complete payloads. This client requests text format and refuses bi
 [PostgreSQL message formats](https://www.postgresql.org/docs/current/protocol-message-formats.html)
 define the length words, row field lengths, NULL sentinel, and row-description format codes.
 
+## Pool continuation ownership
+
+Standard Library Implementer additionally owns `lib/Std/Db.pudu` and [[Std Db]] for positive pool
+sizes, partial-construction cleanup, closing-state admission, failed settlement, and checked returns.
+The shared FFI implementation remains outside this ownership boundary.
+
 ## Exact next action
 
-Close partially constructed database pools on failure and propagate connection-return cleanup
-failures instead of returning broken connections to the pool.
+Propagate application stage teardown failures through startup and service shutdown outcomes.
+
+## Implemented pool and query continuation
+
+Positive pool sizes are required; construction failures drain partial resources. Closing state gates
+borrow admission, and failed settlement closes the pool rather than circulating a broken connection.
+Typed return/close failures are retained. Server query failures drain through ReadyForQuery; malformed
+rows close the stream, and single-result collection refuses mixed command results.
 
 ## Validation
 
