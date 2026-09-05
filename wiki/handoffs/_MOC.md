@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-05-database-framing]] — strict database field decoding and bounded frame admission.
+
 - [[2026-09-04-ffi-hardening]] — output ownership failure paths, unvalidated delivery, and exact next action.
 
 - [[2026-09-04-foreign-out-slots]] — issue #212 design boundary for status-plus-output native calls,

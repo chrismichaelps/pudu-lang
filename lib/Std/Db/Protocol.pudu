@@ -74,31 +74,39 @@ export fn readCString(source: &Bytes) -> Result[(Str, Bytes), ProtocolError] {
 /// Separated from reading the message so a caller can ask for exactly what is
 /// missing rather than reading a byte at a time.
 export fn bodyLength(head: &Bytes) -> Option[Int] {
-  if head.length() < 5 {
-    None
-  } else {
-    let stated = ByteSeq.getU32Be(&head.drop(1))
-    if let Ok(read) = stated { Some(narrow(read[0]) - 4) } else { None }
+  match messageSize(head) {
+    case Ok(total) => Some(total - 5)
+    case Err(_) => None
   }
 }
 
-/// A message read from the whole of its bytes.
+/// Validate the length before a streaming reader allocates or requests a body.
+export fn messageSize(head: &Bytes) -> Result[Int, ProtocolError] {
+  if head.length() < 5 { return Err(Truncated(5, head.length())) }
+  let read = Result.mapErr(ByteSeq.getU32Be(&head.drop(1)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
+    Truncated(5, head.length())
+  }) ?
+  let stated = read[0]
+  if stated < 4u32 || stated > 2147483647u32 {
+    return Err(BadField("a message length outside the signed protocol range"))
+  }
+  let wide = match convertInteger[UInt64](stated) {
+    case Some(found) => found
+    case None => { return Err(BadField("a message length that cannot be widened")) }
+  }
+  match convertInteger[Int](wide + 1u64) {
+    case Some(total) => Ok(total)
+    case None => Err(BadField("a message length that exceeds this host's addressable range"))
+  }
+}
+
+/// Read one complete message, preserving any following frames.
 export fn readMessage(source: &Bytes) -> Result[(Message, Bytes), ProtocolError] {
-  if source.length() < 5 {
-    Err(Truncated(5, source.length()))
-  } else {
-    let kind = Option.unwrapOr(source.take(1).toText(), "?")
-    let stated = ByteSeq.getU32Be(&source.drop(1))
-    if let Ok(read) = stated {
-      let size = narrow(read[0]) - 4
-      if source.length() < size + 5 {
-        Err(Truncated(size + 5, source.length()))
-      } else {
-        Ok((Message{kind: kind, payload: source.slice(5, size + 5)}, source.drop(size + 5)))
-      }
-    } else {
-      Err(Truncated(5, source.length()))
-    }
+  let total = messageSize(source) ?
+  if source.length() < total { return Err(Truncated(total, source.length())) }
+  match source.take(1).toText() {
+    case None => Err(BadField("a message tag that is not valid text"))
+    case Some(kind) => Ok((Message{kind: kind, payload: source.slice(5, total)}, source.drop(total)))
   }
 }
 
@@ -201,59 +209,60 @@ export fn readRowDescription(payload: &Bytes) -> Result[Array[Column], ProtocolE
   var columns: Array[Column] = []
   var rest = counted[1]
   var index = 0
-  var failure: Option[ProtocolError] = None
-  while index < narrow16(counted[0]) && Option.isNone(&failure) {
-    let named = readCString(&rest)
-    if let Ok(pair) = named {
-      // Each column carries the table it came from, its position there, its
-      // type, and how wide that type is. Only the name and the type decide
-      // how a value is read, so the rest is stepped over rather than kept.
-      let after = pair[1]
-      if after.length() < 18 {
-        failure = Some(Truncated(18, after.length()))
-      } else {
-        let oid = ByteSeq.getU32Be(&after.drop(6))
-        if let Ok(found) = oid {
-          columns = columns.push(Column{name: pair[0], oid: narrow(found[0])})
-        } else {
-          failure = Some(BadField("a column type that did not read"))
-        }
-        rest = after.drop(18)
-      }
-    } else {
-      failure = Some(BadField("a column name that did not read"))
+  while index < narrow16(counted[0]) {
+    let named = readCString(&rest) ?
+    let after = named[1]
+    if after.length() < 18 { return Err(Truncated(18, after.length())) }
+    let oid = Result.mapErr(ByteSeq.getU32Be(&after.drop(6)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
+      BadField("a column type that did not read")
+    }) ?
+    let format = Result.mapErr(ByteSeq.getU16Be(&after.drop(16)), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
+      BadField("a column format that did not read")
+    }) ?
+    if format[0] != 0u16 { return Err(BadField("a binary column in a text-format result")) }
+    let typeId = match convertInteger[Int](oid[0]) {
+      case Some(found) => found
+      case None => { return Err(BadField("a column type outside the host integer range")) }
     }
+    columns = columns.push(Column{name: named[0], oid: typeId})
+    rest = after.drop(18)
     index = index + 1
   }
-  if let Some(reason) = failure { Err(reason) } else { Ok(columns) }
+  if !rest.isEmpty() { Err(BadField("unread bytes after a row description")) } else { Ok(columns) }
 }
 
-/// The values a data row carries, with absent ones distinguished from empty.
+/// SQL NULL has one explicit sentinel; invalid or truncated text is not absent.
 export fn readDataRow(payload: &Bytes) -> Result[Array[Option[Str]], ProtocolError] {
   let counted = countOf(payload) ?
   var values: Array[Option[Str]] = []
   var rest = counted[1]
   var index = 0
-  var failure: Option[ProtocolError] = None
-  while index < narrow16(counted[0]) && Option.isNone(&failure) {
-    let sized = ByteSeq.getU32Be(&rest)
-    if let Ok(pair) = sized {
-      let size = narrow(pair[0])
-      // A length the protocol writes as every bit set is minus one, which is
-      // how it says the column has no value at all.
-      if size == 4294967295 {
-        values = values.push(None)
-        rest = pair[1]
-      } else {
-        values = values.push(pair[1].take(size).toText())
-        rest = pair[1].drop(size)
-      }
+  while index < narrow16(counted[0]) {
+    let sized = Result.mapErr(ByteSeq.getU32Be(&rest), fn(_problem: ByteSeq.BytesError) -> ProtocolError {
+      Truncated(4, rest.length())
+    }) ?
+    let stated = sized[0]
+    let after = sized[1]
+    if stated == 4294967295u32 {
+      values = values.push(None)
+      rest = after
     } else {
-      failure = Some(Truncated(4, rest.length()))
+      if stated > 2147483647u32 { return Err(BadField("a negative field length other than NULL")) }
+      let size = match convertInteger[Int](stated) {
+        case Some(found) => found
+        case None => { return Err(BadField("a field length outside the host integer range")) }
+      }
+      if size > after.length() { return Err(Truncated(size, after.length())) }
+      let text = match after.take(size).toText() {
+        case Some(found) => found
+        case None => { return Err(BadField("a row field that is not valid UTF-8")) }
+      }
+      values = values.push(Some(text))
+      rest = after.drop(size)
     }
     index = index + 1
   }
-  if let Some(reason) = failure { Err(reason) } else { Ok(values) }
+  if !rest.isEmpty() { Err(BadField("unread bytes after a data row")) } else { Ok(values) }
 }
 
 /// The fields an error or notice carries, keyed by the letter naming each.

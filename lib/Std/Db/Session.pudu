@@ -94,46 +94,53 @@ const CHUNK: Int = 65536
 /// several messages in one packet. Buffering is what makes the reader agree
 /// with what the server actually sends rather than with how it was drawn.
 export fn nextMessage(stream: Connection) -> Result[(Wire.Message, Connection), DbError] {
+  nextMessageLimited(stream, DEFAULT_MESSAGE_BYTES)
+}
+
+/// Complete tagged-message budget, including the tag and four-byte length word.
+export const DEFAULT_MESSAGE_BYTES: Int = 16777216
+
+/// Read one bounded message. A broken or partially consumed transport is closed.
+export fn nextMessageLimited(
+  stream: Connection,
+  maxBytes: Int
+) -> Result[(Wire.Message, Connection), DbError] {
+  if maxBytes < 5 { return Err(Other("the database message budget must be at least five bytes")) }
   var held = stream
-  var answer: Option[Wire.Message] = None
-  var failure: Option[DbError] = None
-  var going = true
-  while going {
-    let read = Wire.readMessage(&held.buffer)
-    if let Ok(pair) = read {
-      answer = Some(pair[0])
-      held = Connection {
-        socket: held.socket,
-        buffer: pair[1],
-        parameters: held.parameters,
-        status: held.status
+  loop {
+    var required = 5
+    if held.buffer.length() >= 5 {
+      match Wire.messageSize(&held.buffer) {
+        case Err(problem) => { return failedRead(&held, Malformed(show(problem))) }
+        case Ok(total) => { required = total }
       }
-      going = false
-    } else {
-      let more = Net.receive(&held.socket, CHUNK)
-      if let Err(problem) = more {
-        failure = Some(Other(show(problem)))
-        going = false
-      } else {
-        let piece = Result.unwrapOr(more, None)
-        if let Some(bytes) = piece {
-          held = Connection {
-            socket: held.socket,
-            buffer: held.buffer.concat(bytes),
-            parameters: held.parameters,
-            status: held.status
-          }
-        } else {
-          failure = Some(Closed)
-          going = false
+      if required > maxBytes {
+        return failedRead(&held, Malformed("the database message exceeds its byte budget"))
+      }
+      if held.buffer.length() >= required {
+        match Wire.readMessage(&held.buffer) {
+          case Err(problem) => { return failedRead(&held, Malformed(show(problem))) }
+          case Ok(pair) => { return Ok((pair[0], Connection{..held, buffer: pair[1]})) }
         }
       }
     }
+    let missing = required - held.buffer.length()
+    let requested = if missing < CHUNK { missing } else { CHUNK }
+    match Net.receive(&held.socket, requested) {
+      case Err(problem) => { return failedRead(&held, Other(show(problem))) }
+      case Ok(None) => { return failedRead(&held, Closed) }
+      case Ok(Some(bytes)) => {
+        if bytes.isEmpty() { return failedRead(&held, Closed) }
+        held = Connection{..held, buffer: held.buffer.concat(bytes)}
+      }
+    }
   }
-  if let Some(reason) = failure {
-    Err(reason)
-  } else {
-    if let Some(message) = answer { Ok((message, held)) } else { Err(Closed) }
+}
+
+fn failedRead[T](stream: &Connection, primary: DbError) -> Result[T, DbError] {
+  match Net.close(&stream.socket) {
+    case Ok(_) => Err(primary)
+    case Err(problem) => Err(Other(show(primary) + "; closing the database socket also failed: " + show(problem)))
   }
 }
 

@@ -797,3 +797,11 @@ primitives still needed. Existing module presence does not establish a complete 
 ## Referenced by
 
 [[architecture/_MOC]] · [[grammar/pudu]] · [[Semantic Prelude]] · [[architecture/SEMANTICS]]
+
+## Database framing continuation · 2026-09-05
+
+[[Std Db Protocol]] distinguishes SQL NULL from invalid text and truncated field payloads.
+[[Std Db Session]] admits complete messages under a 16 MiB default byte budget, with an explicit
+`nextMessageLimited` alternative. Invalid frames stop reading and close the transport. These changes
+were implemented without tests or review; they are not a new production-readiness verdict.
+[[2026-09-05-database-framing]] records ownership and the next resource-management gap.

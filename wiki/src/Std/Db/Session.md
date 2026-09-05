@@ -28,5 +28,24 @@ whether a transaction is open.
   ready message, and a local copy can disagree. _Rejected:_ counting begins and commits.
 - **Q:** Take a nonce from the deterministic generator? **A:** No. _Rationale:_ a repeatable nonce
   is not a nonce. _Rejected:_ sharing [[Std Random]] with authentication.
+## Bounded message admission
+
+`nextMessage` uses a 16 MiB complete-message cap. `nextMessageLimited(stream, maxBytes)` accepts a
+caller-selected cap of at least five bytes. The advertised size is checked once a header is present,
+before body accumulation. Only the current frame's missing bytes are requested, capped at 64 KiB per
+read; bytes already buffered for subsequent frames remain in the returned connection.
+
+Malformed framing, oversized frames, read failures, and EOF terminate this read and close the socket.
+A close failure is included with the primary error rather than silently replacing it. An invalid
+local size limit is rejected before touching the connection. This is a byte budget, not a deadline;
+whole-query deadlines and aggregate row budgets remain separate work.
+
+### Resolved Grill Log
+
+- **Q:** Buffer an arbitrarily large advertised frame? **A:** No; reject from the header before
+  body allocation. Applications may explicitly select a larger budget.
+- **Q:** Return a partially consumed connection after failure? **A:** No; this API returns no
+  successor on failure, so the unusable transport is closed instead of leaking it.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Db]] · [[Std Db Protocol]] · [[Std Net]]
