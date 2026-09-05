@@ -357,6 +357,7 @@ foreign_fn       = "fn", identifier, ("symbol", string)?,
 foreign_parameter = "out"?, identifier, ":", "owned"?, type, ("by", identifier)? ;
 ```
 
+- A `version` on a foreign block is asked of the loader, not verified. Each platform writes a version inside the library's file name — `libcairo.so.2`, `libcairo.2.dylib`, `libcairo-2.dll` — and those spellings are tried before the unversioned ones, since the unversioned name is usually a symlink shipped for building against rather than for running. Naming the version is what lets a binding load on a machine that has the library and not its headers. Nothing checks that what opened is the ABI named.
 - `foreign` is contextual: it starts a declaration and is an ordinary name everywhere else, as are `version`, `symbol`, `out`, `owned`, and `by`. Reserving common words to add one declaration form would cost every program that had used them, and a language that charges its own users a rename for a feature has chosen the feature over them.
 - A block names the library once, because the library is what its functions share: it is opened once, its version is one fact, and a reader asking what a program reaches outside itself has one place to look. The name is a name the platform is asked for, never a path — a path is a claim about somebody else's machine.
 - `"c"` names the C library and resolves to the running program's own symbols. Every platform links it and every platform files it under a different name, so a declaration naming one of those file names would work on one machine.

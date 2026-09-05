@@ -129,6 +129,7 @@ testForeignHandles = do
   CInt activeBeforeSlotText <- cppActiveCount
   invalidTextWithSlot <- runtimeCodes "test-fixtures/stdlib/RejectsForeignInvalidUtf8WithSlot.pudu"
   unaliasedImport <- runEntry "test-fixtures/stdlib/UsesUnaliasedImport.pudu"
+  missingVersioned <- runtimeMessages "test-fixtures/stdlib/RejectsMissingForeignLibraryVersion.pudu"
   afterSlotText <- cppDeleteCount
   CInt activeAfterSlotText <- cppActiveCount
   pure $ conjoin
@@ -188,6 +189,19 @@ testForeignHandles = do
         undefined name. Both sides ask one function for the qualifier now. -}
     , counterexample "an unaliased import binds the qualifier the checker resolved against"
         (unaliasedImport === Just "5")
+    {-| A declared version reaches the loader. The platform writes a version
+        inside the library's file name, and the unversioned spelling is usually
+        a symlink shipped for building against — so a machine holding the
+        library and not its headers has only the versioned one. The refusal
+        names what it asked for, which is where this is visible. -}
+    , counterexample "a declared version is asked for in each platform's spelling"
+        ( property
+            ( any
+                (\said -> all (`Text.isInfixOf` said)
+                  ["libnosuchlibrary.so.9", "libnosuchlibrary.9.dylib", "libnosuchlibrary-9.dll"])
+                missingVersioned
+            )
+        )
     , counterexample "a null text field in a returned record is refused"
         (missingRecordText === ["E7024"])
     , counterexample "invalid shapes are precise while exact bridge capacities remain admitted"
@@ -1136,6 +1150,21 @@ runtimeCodes path = do
           "main"
           parsed
       pure (map (diagnosticCodeText . diagnosticCode) (outcomeDiagnostics outcome))
+
+{-| What a program said at run time, rather than only which codes it used. -}
+runtimeMessages :: FilePath -> IO [Text]
+runtimeMessages path = do
+  program <- compileProgram path
+  case rootCompileResult program >>= compileModule of
+    Nothing -> pure (map diagnosticMessage (programDiagnostics program))
+    Just parsed -> do
+      outcome <-
+        evaluateProgramEntry
+          (programIntegerKinds program)
+          (programDependencies program)
+          "main"
+          parsed
+      pure (map diagnosticMessage (outcomeDiagnostics outcome))
 
 moduleNames :: FilePath -> IO [Text]
 moduleNames path = do

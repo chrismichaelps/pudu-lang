@@ -11,6 +11,7 @@ import Control.Exception (AsyncException (ThreadKilled))
 import Data.IORef (IORef, atomicModifyIORef', newIORef, readIORef)
 import Data.Int (Int64)
 import Data.List (sort)
+import Pudu.Foreign.Call (candidates)
 import Pudu.Foreign.Ownership
   ( claimAllOwnedGenerations
   , claimOwnedGeneration
@@ -32,6 +33,7 @@ ownershipProperties =
   , ("a discarded claim is released once and only its own", testDiscardOwnClaims)
   , ("a closing store admits nothing and releases what it turns away", testClosedAdmission)
   , ("a lease cancelled mid-call is still given back", testInterruptedLease)
+  , ("a declared version is asked for the way each platform spells it", testVersionedNames)
   ]
 
 {-| A cleanup that records that it ran, so a leak and a double release are both
@@ -213,6 +215,44 @@ testInterruptedLease = do
         , counterexample "and cancelling a lease is not itself a release" (afterwards === [])
         ]
     )
+
+{-| The version a declaration names has to reach the loader, because the
+    platform puts it inside the file name. On most systems the unversioned name
+    is a symlink shipped for building against: a machine with the library and
+    not its headers has `libcairo.so.2` and no `libcairo.so`, so a binding that
+    asked only for the latter would fail where the library is plainly present. -}
+testVersionedNames :: IO Property
+testVersionedNames =
+  pure
+    ( conjoin
+        [ counterexample "what the declaration wrote is asked for first"
+            (take 1 (candidates "cairo" (Just "2")) === ["cairo"])
+        , counterexample "each platform's spelling of the version is asked for"
+            ( property
+                ( all
+                    (`elem` candidates "cairo" (Just "2"))
+                    ["libcairo.so.2", "libcairo.2.dylib", "libcairo-2.dll"]
+                )
+            )
+        , counterexample "versioned names come before the unversioned ones"
+            ( property
+                ( maybe False id $ do
+                    versioned <- lookup "libcairo.so.2" numbered
+                    plain <- lookup "libcairo.so" numbered
+                    pure (versioned < plain)
+                )
+            )
+        , counterexample "the unversioned names are still reached"
+            ( property
+                (all (`elem` candidates "cairo" (Just "2")) ["libcairo.so", "libcairo.dylib"])
+            )
+        , counterexample "no version means the names that were tried before"
+            (candidates "cairo" Nothing
+              === ["cairo", "libcairo.dylib", "libcairo.so", "cairo.dylib", "cairo.so", "cairo.dll"])
+        ]
+    )
+ where
+  numbered = zip (candidates "cairo" (Just "2")) [0 :: Int ..]
 
 oneSecond :: Int
 oneSecond = 1000000

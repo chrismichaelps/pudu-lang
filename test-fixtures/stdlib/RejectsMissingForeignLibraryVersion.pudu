@@ -1,0 +1,15 @@
+module RejectsMissingForeignLibraryVersion
+
+/// A library the platform does not have, named with the version it would carry.
+/// The refusal says which file names were asked for, and a declared version has
+/// to appear among them: each platform writes the version inside the name, and
+/// the unversioned spelling is usually a symlink that only a machine with the
+/// headers installed has.
+foreign "nosuchlibrary" version "9" {
+  fn absent symbol "definitely_not_here" () -> ()
+}
+
+export fn main() -> Int {
+  unsafe(foreign) { absent() }
+  0
+}

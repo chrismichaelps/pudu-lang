@@ -62,7 +62,8 @@ callForeign spanValue binding values = maskedBoundary $ do
   store <- currentForeignStore
   found <-
     performEffect (refusal spanValue)
-      (resolveSymbol (foreignBindingLibrary binding) (foreignBindingSymbol binding))
+      (resolveSymbol (foreignBindingLibrary binding) (foreignBindingVersion binding)
+        (foreignBindingSymbol binding))
   case found of
     Left problem -> abortForeign spanValue binding problem
     Right symbol -> do

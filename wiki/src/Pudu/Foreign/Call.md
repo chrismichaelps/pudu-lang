@@ -23,7 +23,7 @@ assembled while the program runs.
 ## Interface
 
 ```haskell
-resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
+resolveSymbol :: Text -> Maybe Text -> Text -> IO (Either Text (Ptr ()))
 
 data ForeignHandle
 data ForeignCallFailure = CallAssemblyFailure !Text | InvalidReturnedText
@@ -32,7 +32,8 @@ data CrossedValue = CrossedInteger !Int64 | CrossedDouble !Double | CrossedText 
                   | CrossedHandle !Text !Int64 | CrossedRecord !Text ![(Text, CrossedValue)]
                   | CrossedNoText
 
-openLibrary :: Text -> IO (Either Text ForeignHandle)
+openLibrary   :: Text -> Maybe Text -> IO (Either Text ForeignHandle)
+candidates    :: Text -> Maybe Text -> [Text]
 findSymbol  :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))
 callSymbol  :: Ptr () -> [(Crossing, Bool, CrossedValue)] -> Crossing
             -> IO (Either ForeignCallFailure (CrossedValue, [Maybe CrossedValue]))
@@ -128,6 +129,27 @@ functions without being conflated. A missing or mismatched obligation is reporte
 
 - **Q:** Recover a release using only the handle's type name? **A:** No; source position identifies
   the producer obligation, while the type only identifies the nominal value.
+
+## Naming a library
+
+`candidates` lists what to ask the loader for, in the order a person would: what the declaration
+wrote, then the versioned spellings, then the unversioned ones. The version belongs inside the file
+name and each platform puts it in a different place — `libcairo.so.2`, `libcairo.2.dylib`,
+`libcairo-2.dll`.
+
+Versioned first, because the unversioned name is usually a symlink shipped for building against: a
+machine holding the library and not its headers has only the versioned one. The unversioned names are
+still reached afterwards, so this only ever adds names that would not have been tried. Nothing here
+can check that what opened is the ABI the declaration named.
+
+Open libraries and resolved symbols are cached by name *and* version, so two blocks naming the same
+library at different versions do not share one handle.
+
+### Resolved Grill
+
+- **Q:** Refuse to fall back to the unversioned name when a version is declared? **A:** No. It cannot
+  be verified either way, and refusing would break the machine where the unversioned name is the
+  installed runtime, in exchange for a guarantee this layer cannot make.
 
 ## Referenced by
 

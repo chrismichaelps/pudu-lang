@@ -134,6 +134,7 @@ installForeign layouts library (Located _ function) =
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
+          , foreignBindingVersion = locatedValue <$> foreignVersion library
           , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =
               [ crossingOf parameter
@@ -151,6 +152,7 @@ installForeign layouts library (Located _ function) =
                             pure
                               ForeignRelease
                                 { foreignReleaseLibrary = locatedValue (foreignLibrary library)
+                                , foreignReleaseVersion = locatedValue <$> foreignVersion library
                                 , foreignReleaseSymbol = symbol
                                 }
                         }
@@ -165,6 +167,7 @@ installForeign layouts library (Located _ function) =
               pure
                 ForeignRelease
                   { foreignReleaseLibrary = locatedValue (foreignLibrary library)
+                  , foreignReleaseVersion = locatedValue <$> foreignVersion library
                   , foreignReleaseSymbol = symbol
                   }
           , foreignBindingReleases = Map.lookup name (releasesOf library)

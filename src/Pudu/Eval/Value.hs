@@ -123,6 +123,9 @@ data Value
     the program is running, so a call is a call rather than a search. -}
 data ForeignBinding = ForeignBinding
   { foreignBindingLibrary :: !Text
+  {-| The ABI version the declaration named, which the platform's own naming
+      puts inside the file name rather than beside it. -}
+  , foreignBindingVersion :: !(Maybe Text)
   , foreignBindingSymbol :: !Text
   {-| How every native argument crosses, slots included: the bridge needs a kind
       for each position whether the value is sent or written back. -}
@@ -155,6 +158,7 @@ data ForeignSlot = ForeignSlot
 {-| The exact native destructor an owned result retains for runtime teardown. -}
 data ForeignRelease = ForeignRelease
   { foreignReleaseLibrary :: !Text
+  , foreignReleaseVersion :: !(Maybe Text)
   , foreignReleaseSymbol :: !Text
   }
   deriving stock (Eq, Show)

@@ -223,9 +223,17 @@ decision and a separate slice.
 them, require the thread the program started on, and this language's workers do not currently
 promise that.
 
-**Where a library comes from** is resolved by the platform for now. Naming a version is admitted and
-recorded, but nothing here fetches, pins, or verifies a library — that is the package question, and
-[[architecture/PACKAGES]] says why half of that is worse than none of it.
+**Where a library comes from** is resolved by the platform for now. Nothing here fetches, pins, or
+verifies a library — that is the package question, and [[architecture/PACKAGES]] says why half of that
+is worse than none of it.
+
+A named version is used for one thing: asking the loader for the names that carry it. Each platform
+writes the version inside the file name — `libcairo.so.2`, `libcairo.2.dylib`, `libcairo-2.dll` — and
+those are tried before the unversioned spellings, because on most systems the unversioned name is a
+symlink shipped for building against. A machine with the library installed and not its headers has
+only the versioned one, so a boundary that asked for `libcairo.so` alone failed where the library was
+plainly present. The unversioned names are still tried afterwards, and nothing checks that what opens
+is the ABI the declaration named — that remains the package question.
 
 ## Alternatives Rejected
 

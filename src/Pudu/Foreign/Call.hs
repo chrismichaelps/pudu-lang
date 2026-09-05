@@ -9,6 +9,7 @@
     to the same code is how a library with internal state acquires two of it. -}
 module Pudu.Foreign.Call
   ( ForeignHandle
+  , candidates
   , openLibrary
   , resolveSymbol
   , findSymbol
@@ -80,7 +81,7 @@ newtype ForeignHandle = ForeignHandle (Ptr ())
     One handle per name for the lifetime of the program: a library with
     internal state — and a graphics library is nothing but internal state —
     must not be opened twice into two of it. -}
-openedLibraries :: MVar (Map.Map Text ForeignHandle)
+openedLibraries :: MVar (Map.Map (Text, Maybe Text) ForeignHandle)
 openedLibraries = unsafePerformIO (newMVar Map.empty)
 {-# NOINLINE openedLibraries #-}
 
@@ -91,15 +92,18 @@ openedLibraries = unsafePerformIO (newMVar Map.empty)
     Reporting which candidates were tried matters more here than elsewhere,
     because the usual cause is that the library is not installed and the usual
     remedy is to install it. -}
-openLibrary :: Text -> IO (Either Text ForeignHandle)
-openLibrary name = modifyMVar openedLibraries $ \opened ->
-  case Map.lookup name opened of
+openLibrary :: Text -> Maybe Text -> IO (Either Text ForeignHandle)
+openLibrary name version = modifyMVar openedLibraries $ \opened ->
+  case Map.lookup key opened of
     Just found -> pure (opened, Right found)
     Nothing -> do
-      attempted <- if name == "c" then openProcess else tryCandidates (candidates name)
+      attempted <-
+        if name == "c" then openProcess else tryCandidates (candidates name version)
       case attempted of
-        Right handle -> pure (Map.insert name handle opened, Right handle)
+        Right handle -> pure (Map.insert key handle opened, Right handle)
         Left problem -> pure (opened, Left problem)
+ where
+  key = (name, version)
 
 {-| The C library is the one library every program already has, and every
     platform files under a different name — libc.so.6 here, libSystem.B.dylib
@@ -120,15 +124,42 @@ openProcess = do
         else Right (ForeignHandle handle)
     )
 
-candidates :: Text -> [Text]
-candidates name =
-  [ name
-  , "lib" <> name <> ".dylib"
-  , "lib" <> name <> ".so"
-  , name <> ".dylib"
-  , name <> ".so"
-  , name <> ".dll"
-  ]
+{-| What to ask the loader for, in the order a person would.
+
+    What the declaration wrote comes first, so a full path or an exact file name
+    is honoured as written. Then the platform's own spellings.
+
+    A version is part of the file name rather than something beside it, and each
+    platform puts it in a different place: `libcairo.so.2`, `libcairo.2.dylib`,
+    `libcairo-2.dll`. Those come before the unversioned spellings, because the
+    unversioned name is frequently absent — on most systems `libcairo.so` is a
+    symlink shipped for building against, not for running, so a machine with the
+    library installed and not its headers has only the versioned name. Trying it
+    first is what makes a declared version worth writing.
+
+    The unversioned names are still tried afterwards. Nothing here can check that
+    what opens is the ABI the declaration named, and this ordering does not make
+    that worse: it only reaches a name that would have been tried anyway. -}
+candidates :: Text -> Maybe Text -> [Text]
+candidates name version = name : versioned <> plain
+ where
+  versioned = case version of
+    Nothing -> []
+    Just number ->
+      [ "lib" <> name <> ".so." <> number
+      , "lib" <> name <> "." <> number <> ".dylib"
+      , "lib" <> name <> "-" <> number <> ".dll"
+      , name <> ".so." <> number
+      , name <> "." <> number <> ".dylib"
+      , name <> "-" <> number <> ".dll"
+      ]
+  plain =
+    [ "lib" <> name <> ".dylib"
+    , "lib" <> name <> ".so"
+    , name <> ".dylib"
+    , name <> ".so"
+    , name <> ".dll"
+    ]
 
 tryCandidates :: [Text] -> IO (Either Text ForeignHandle)
 tryCandidates [] = pure (Left "no candidate name opened")
@@ -166,7 +197,7 @@ tryCandidates (candidate : rest) = do
     same symbol both call the linker and both write the same address, which
     costs one redundant lookup and no correctness. Taking a lock to prevent that
     would put a lock on the hot path to save work that is already rare. -}
-resolvedSymbols :: IORef (Map.Map (Text, Text) (Ptr ()))
+resolvedSymbols :: IORef (Map.Map (Text, Maybe Text, Text) (Ptr ()))
 resolvedSymbols = unsafePerformIO (newIORef Map.empty)
 {-# NOINLINE resolvedSymbols #-}
 
@@ -174,13 +205,13 @@ resolvedSymbols = unsafePerformIO (newIORef Map.empty)
 
     Opening the library is part of what is remembered, so a call that hits does
     not touch the opened-library table either. -}
-resolveSymbol :: Text -> Text -> IO (Either Text (Ptr ()))
-resolveSymbol library symbol = do
+resolveSymbol :: Text -> Maybe Text -> Text -> IO (Either Text (Ptr ()))
+resolveSymbol library version symbol = do
   remembered <- readIORef resolvedSymbols
   case Map.lookup key remembered of
     Just found -> pure (Right found)
     Nothing -> do
-      opened <- openLibrary library
+      opened <- openLibrary library version
       case opened of
         Left problem -> pure (Left problem)
         Right handle -> do
@@ -192,7 +223,7 @@ resolveSymbol library symbol = do
                 (\table -> (Map.insert key address table, ()))
               pure (Right address)
  where
-  key = (library, symbol)
+  key = (library, version, symbol)
 
 {-| Find one function in an opened library. -}
 findSymbol :: ForeignHandle -> Text -> IO (Either Text (Ptr ()))

@@ -25,13 +25,13 @@ prepareReleases :: ForeignBinding -> IO (Either Text ())
 prepareReleases binding = resolveAll (Set.toList (Set.fromList declarations))
  where
   declarations =
-    [(foreignReleaseLibrary release, foreignReleaseSymbol release)
+    [(foreignReleaseLibrary release, foreignReleaseVersion release, foreignReleaseSymbol release)
     | release <- maybe [] pure (foreignBindingReleasedBy binding)
       <> [release | Just slot <- foreignBindingSlots binding
                   , Just release <- [foreignSlotReleasedBy slot]]]
   resolveAll [] = pure (Right ())
-  resolveAll ((library, symbol) : rest) = do
-    found <- resolveSymbol library symbol
+  resolveAll ((library, version, symbol) : rest) = do
+    found <- resolveSymbol library version symbol
     case found of
       Left problem -> pure (Left ("release " <> symbol <> ": " <> problem))
       Right _ -> resolveAll rest
@@ -46,7 +46,8 @@ releaseHandle store spanValue release name address = do
     Right (Right ()) -> pure ()
  where
   releaseOnce = do
-    found <- resolveSymbol (foreignReleaseLibrary release) (foreignReleaseSymbol release)
+    found <- resolveSymbol (foreignReleaseLibrary release) (foreignReleaseVersion release)
+      (foreignReleaseSymbol release)
     case found of
       Left problem -> pure (Left (foreignReleaseSymbol release <> ": " <> problem))
       Right symbol -> do
