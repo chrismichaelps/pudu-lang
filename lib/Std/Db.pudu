@@ -400,12 +400,11 @@ export fn withConnection[T](
       let failed: Result[T, Session.DbError] = Err(Other(show(problem)))
       return afterCleanup(afterCleanup(failed, Session.close(&stream)), closePool(target))
     }
-    case Ok(shut) => {
-      if shut {
-        let failed: Result[T, Session.DbError] = Err(Closed)
-        return afterCleanup(failed, Session.close(&stream))
-      }
+    case Ok(true) => {
+      let failed: Result[T, Session.DbError] = Err(Closed)
+      return afterCleanup(failed, Session.close(&stream))
     }
+    case Ok(false) => {}
   }
   let lent = Session.renew(stream)
   if let Err(reason) = lent {
@@ -424,9 +423,8 @@ export fn withConnection[T](
       let cleanup: Result[(), Session.DbError] = Err(Other(show(problem)))
       return afterCleanup(afterCleanup(afterCleanup(outcome[0], cleanup), Session.close(&outcome[1])), closePool(target))
     }
-    case Ok(shut) => {
-      if shut { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
-    }
+    case Ok(true) => { return afterCleanup(outcome[0], Session.close(&outcome[1])) }
+    case Ok(false) => {}
   }
   let reusable = match outcome[0] {
     case Ok(_) => true
@@ -526,12 +524,8 @@ export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
         outcome = afterCleanup(outcome, cleanup)
         going = false
       }
-      case Ok(queued) => {
-        match queued {
-          case None => { going = false }
-          case Some(stream) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
-        }
-      }
+      case Ok(None) => { going = false }
+      case Ok(Some(stream)) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
     }
   }
   outcome

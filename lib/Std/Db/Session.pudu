@@ -143,14 +143,10 @@ export fn nextMessageLimited(
     let requested = if missing < CHUNK { missing } else { CHUNK }
     match Net.receive(&held.socket, requested) {
       case Err(problem) => { return failedRead(&held, Other(show(problem))) }
-      case Ok(received) => {
-        match received {
-          case None => { return failedRead(&held, Closed) }
-          case Some(bytes) => {
-            if bytes.isEmpty() { return failedRead(&held, Closed) }
-            held = Connection{..held, buffer: held.buffer.concat(bytes)}
-          }
-        }
+      case Ok(None) => { return failedRead(&held, Closed) }
+      case Ok(Some(bytes)) => {
+        if bytes.isEmpty() { return failedRead(&held, Closed) }
+        held = Connection{..held, buffer: held.buffer.concat(bytes)}
       }
     }
   }

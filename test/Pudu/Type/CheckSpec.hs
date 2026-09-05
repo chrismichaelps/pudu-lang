@@ -1403,6 +1403,36 @@ testExhaustiveness = do
     , "  match value { case Some(1) => 1 case Some(2) => 2 case Some(n) => n case None => 0 }"
     , "}"
     ]
+  nestedBooleans <- codes
+    [ "module M"
+    , "fn run(value: Result[Bool, Int]) -> Int {"
+    , "  match value { case Err(_) => 0 case Ok(true) => 1 case Ok(false) => 2 }"
+    , "}"
+    ]
+  nestedVariants <- codes
+    [ "module M"
+    , "fn run(value: Result[Option[Int], Int]) -> Int {"
+    , "  match value { case Err(_) => 0 case Ok(None) => 1 case Ok(Some(_)) => 2 }"
+    , "}"
+    ]
+  nestedHalfBoolean <- codes
+    [ "module M"
+    , "fn run(value: Result[Bool, Int]) -> Int {"
+    , "  match value { case Err(_) => 0 case Ok(true) => 1 }"
+    , "}"
+    ]
+  nestedHalfVariant <- codes
+    [ "module M"
+    , "fn run(value: Result[Option[Int], Int]) -> Int {"
+    , "  match value { case Err(_) => 0 case Ok(None) => 1 }"
+    , "}"
+    ]
+  nestedLiteral <- codes
+    [ "module M"
+    , "fn run(value: Result[Int, Int]) -> Int {"
+    , "  match value { case Err(_) => 0 case Ok(1) => 1 }"
+    , "}"
+    ]
   guardTakesNothing <- codes (colorProgram <>
     [ "fn run(c: Color) -> Int {"
     , "  match c {"
@@ -1420,6 +1450,17 @@ testExhaustiveness = do
     , counterexample "a guarded arm does not cover" (guarded === ["E5001"])
     , counterexample "Option must cover None" (option === ["E5001"])
     , counterexample "an open domain needs a wildcard" (openDomain === ["E5001"])
+    {-| A payload that tests rather than binds covers its constructor when the
+        arms naming it exhaust the payload between them. `Ok(true)` alone does
+        not cover `Ok`, and neither does `Ok(1)`, because an integer cannot be
+        exhausted by naming one of its values. -}
+    , counterexample "two booleans under one constructor cover it"
+        (nestedBooleans === [])
+    , counterexample "two variants under one constructor cover it"
+        (nestedVariants === [])
+    , counterexample "one of two booleans does not" (nestedHalfBoolean === ["E5001"])
+    , counterexample "one of two variants does not" (nestedHalfVariant === ["E5001"])
+    , counterexample "a literal payload covers nothing" (nestedLiteral === ["E5001"])
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])
