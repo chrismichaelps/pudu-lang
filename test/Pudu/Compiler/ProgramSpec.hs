@@ -594,6 +594,7 @@ testProgramEvaluation = do
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
+  connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
   permitted <- runEntry "test-fixtures/stdlib/UsesAccess.pudu"
@@ -834,6 +835,17 @@ testProgramEvaluation = do
     , counterexample
         "a schema change is planned before a database is reached"
         (schemas === Just "21")
+    {-| A connection URI is where text a person or an environment supplied
+        becomes the address a program dials, so what the parser accepts is the
+        whole of what it will connect to. Each refusal is one a URI could
+        otherwise have talked its way past: another database's scheme, a
+        missing `sslmode` where no TLS is available, an option nobody checks, a
+        second at-sign hiding the real host, a path separator naming a
+        different database, a port outside the range, an escape that is not
+        one. The accepted forms sit beside them, because a parser that refuses
+        everything is no safer and much less useful. -}
+    , counterexample "a connection URI is read exactly, or refused"
+        (connectionStrings === Just "35")
     {-| That the two questions asked from outside a process stay two
         questions: a liveness judgement is handed a reading rather than a
         connection and is declared comptime, so reaching a clock or a socket

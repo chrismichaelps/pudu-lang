@@ -1,0 +1,102 @@
+module UsesConnectionString
+
+import Std.Db.ConnectionString as ConnectionString
+import Std.Db.Session as Session
+import Std.Result as Result
+
+/// What a connection URI is allowed to say.
+///
+/// This is where text a person or an environment supplied becomes the address
+/// a program connects to, and what it accepts is the whole of what it will
+/// dial. Every refusal below is one a URI could otherwise have talked its way
+/// past: a scheme that is not this database, an option nobody checked, an
+/// authority hiding a second `@`, a port outside the range, a control
+/// character. The accepted forms are here beside them, because a parser that
+/// refuses everything is no safer and much less useful.
+export fn main() -> Int {
+  var held = 0
+
+  // The ordinary form, in full.
+  if let Ok(settings) = ConnectionString.parse("postgresql://ada:secret@db.example.test:6000/orders?sslmode=disable") {
+    if settings.host == "db.example.test" { held = held + 1 }
+    if settings.port == 6000 { held = held + 1 }
+    if settings.database == "orders" { held = held + 1 }
+    if settings.user == "ada" { held = held + 1 }
+    if settings.password == "secret" { held = held + 1 }
+  }
+
+  // The shorter scheme, no port, and no password are all ordinary.
+  if let Ok(settings) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable") {
+    if settings.port == 5432 { held = held + 1 }
+    if settings.password == "" { held = held + 1 }
+  }
+
+  // Percent escapes are decoded, which is how a password holding a colon or an
+  // at-sign is written at all.
+  if let Ok(settings) = ConnectionString.parse("postgres://ada:p%40ss%3Aword@localhost/or%64ers?sslmode=disable") {
+    if settings.password == "p@ss:word" { held = held + 1 }
+    if settings.database == "orders" { held = held + 1 }
+  }
+
+  // An IPv6 host is bracketed, and the brackets are what tell its colons from
+  // the one before a port.
+  if let Ok(settings) = ConnectionString.parse("postgres://ada@[::1]:6000/orders?sslmode=disable") {
+    if settings.host == "::1" { held = held + 1 }
+    if settings.port == 6000 { held = held + 1 }
+  }
+
+  // Another database's URI is not this one's.
+  if let Err(_) = ConnectionString.parse("mysql://ada@localhost/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("https://ada@localhost/orders?sslmode=disable") { held = held + 1 }
+
+  // TLS is not available, so a URI that does not say so is refused rather than
+  // connected in the clear by default.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=require") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&sslmode=disable") { held = held + 1 }
+
+  // An option nobody checked is refused rather than ignored: a URI that says
+  // something this program does not act on is a URI whose author believed
+  // something untrue.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable&application_name=x") {
+    held = held + 1
+  }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode") { held = held + 1 }
+
+  // The parts a URI must have.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://localhost/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://@localhost/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@/orders?sslmode=disable") { held = held + 1 }
+
+  // A second at-sign in the authority would let the host be read from the part
+  // a reader takes for a password.
+  if let Err(_) = ConnectionString.parse("postgres://ada:secret@evil.test@localhost/orders?sslmode=disable") {
+    held = held + 1
+  }
+
+  // A path separator inside a database name would name a different database
+  // than the one the URI appears to.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders/other?sslmode=disable") { held = held + 1 }
+
+  // A fragment is not part of a connection and cannot be silently dropped.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders?sslmode=disable#note") { held = held + 1 }
+
+  // Ports outside the range, and text where digits belong.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost:0/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost:70000/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost:http/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost:/orders?sslmode=disable") { held = held + 1 }
+
+  // IPv6 without brackets cannot be told from a host and a port.
+  if let Err(_) = ConnectionString.parse("postgres://ada@::1/orders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@[::1/orders?sslmode=disable") { held = held + 1 }
+
+  // Escapes that are not escapes, and bytes that are not text.
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/or%ders?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/orders%?sslmode=disable") { held = held + 1 }
+  if let Err(_) = ConnectionString.parse("postgres://ada@localhost/or%00ders?sslmode=disable") { held = held + 1 }
+
+  held
+}

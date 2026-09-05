@@ -204,14 +204,14 @@ export fn affected(result: &Rows) -> Int {
 /// a driver's, which two copies would eventually disagree about.
 export fn asDriverRows(result: &Rows) -> Driver.Rows {
   var columns: Array[Driver.Column] = []
-  for column in result.columns {
-    columns = columns.push(Driver.Column{name: column.name, nativeType: Some(show(column.oid))})
+  for named in result.columns {
+    columns = columns.push(Driver.Column{name: named.name, nativeType: Some(show(named.oid))})
   }
   var values: Array[Array[Driver.Value]] = []
   for row in result.rows {
     var converted: Array[Driver.Value] = []
-    for value in row {
-      converted = converted.push(match value {
+    for cell in row {
+      converted = converted.push(match cell {
           case None => Driver.NullValue
           case Some(held) => Driver.TextValue(held)
         })
