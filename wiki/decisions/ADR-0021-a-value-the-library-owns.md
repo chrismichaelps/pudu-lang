@@ -31,9 +31,12 @@ The shape has been described before as "structs returned by value", and counted 
 wrong, and the correction narrows the problem considerably.
 
 raylib 6 declares 600 functions and 35 by-value structs. Of those structs, **20 hold no address at
-all** — `Color`, `Rectangle`, `Vector2`, `Vector3`, `Matrix`, `Camera2D`, `Camera3D`, `Ray`,
-`BoundingBox` and their kind. Those have crossed since a record was allowed to hold a record. A
-declaration naming them checks today:
+all**. Most are plain values — `Color`, `Rectangle`, `Vector2`, `Vector3`, `Matrix`, `Camera2D`,
+`Camera3D`, `Ray`, `BoundingBox` — which have crossed since a record was allowed to hold a record,
+and a declaration naming them checks today. Three of the twenty are not values at all: `Texture`,
+`RenderTexture` and `VrStereoConfig` hold only integers and each has an `Unload*` that takes it by
+value. Holding no address is not the same as owning nothing, and counting them together was the
+mistake this decision was first written on.
 
 ```pudu
 fn beginMode3D symbol "BeginMode3D" (camera: Camera3D) -> ()
@@ -59,15 +62,21 @@ naming the scalars it is made of.**
 
 ```pudu
 foreign "raylib" version "6" {
-  owned type Image = (Ptr, Int32, Int32, Int32, Int32) by unloadImage
+  type Image = (Ptr, Int32, Int32, Int32, Int32)
+  type Font  = (Int32, Int32, Int32, UInt32, Int32, Int32, Int32, Int32, Ptr, Ptr)
 
-  fn loadImage symbol "LoadImage" (path: Str) -> Image
-  fn unloadImage symbol "UnloadImage" (image: Image) -> ()
-  fn imageWidth symbol "GetImageWidth" (image: Image) -> Int32
+  fn loadImage       symbol "LoadImage"      (path: Str)    -> owned Image by unloadImage
+  fn unloadImage     symbol "UnloadImage"    (image: Image) -> ()
+  fn imageWidth      symbol "GetImageWidth"  (image: Image) -> Int32
+
+  fn getFontDefault  symbol "GetFontDefault" ()             -> borrowed Font
 }
 ```
 
-Four things follow.
+The type says how the value crosses. Each result says what it transfers, because the same type does
+different things in different functions.
+
+What follows.
 
 **The layout is written, and it has no field names.** It has to be written because a value passed in
 registers cannot be a black box: the platform classifies a struct by the sequence of scalar kinds it
@@ -81,18 +90,39 @@ program reaches the width through `GetImageWidth`, not through `image.width`.
 type a program may write, hold, or compare. Its whole content is "this many bytes, classified as a
 pointer", which is what the platform needs in order to place the value correctly.
 
-**It is owned, and ownership works as it already does.** `by unloadImage` names the function that
-frees it, under the rules a handle result already follows: the release takes exactly that type and
-returns unit, and it is declared in the same block. The store leases the value for the duration of a
-call, refuses a second release, refuses use after release, and releases at teardown what the program
-did not. The one difference from a handle is what identity means, and it is the next point.
+**What a result transfers is declared on the result, not on the type.** One C type arrives owned from
+one function and borrowed from another: raylib's `Font` comes owned from `LoadFont` and borrowed from
+`GetFontDefault`, which returns the library's own copy that must never be unloaded. A `by` clause
+attached to the type cannot say which, so the obligation belongs to each result:
 
-**Two of them are the same resource when their addresses agree.** A handle is an address, so identity
-is the address. A value like this is several scalars, one or more of which is an address, and the
-library will hand the same underlying resource back as two bit-identical copies without expecting two
-releases. Identity is therefore the addresses inside the layout, in order: two values whose pointer
-scalars all agree are one resource, and releasing either releases it. A layout holding no address at
-all is refused — it would be an ordinary record, and a record is what it should be declared as.
+- **owned** — the result carries one release. `LoadImage`, `H5Dopen`.
+- **borrowed** — the result carries none, and the library keeps it. `GetFontDefault`. Pudu cannot
+  check that the owner outlives it; what it can do is never release it.
+- **counted** — the result carries its own release even when another result is bitwise identical to
+  it. `cairo_reference`, `g_object_ref`.
+
+**Identity is declared, and never inferred from which scalars are pointers.** Which fields are
+addresses tells the platform how to place the value, which the layout is written for. It says nothing
+about what the library counts as one resource, and libraries disagree: HDF5 names every file, dataset
+and group by an `int64_t` `hid_t`; raylib's `Texture` is five integers; an OpenGL name, a file
+descriptor and a Windows `HANDLE` are all integers. A rule keyed on addresses cannot express any of
+them, and a rule refusing pointer-free layouts cannot reach them.
+
+The default is the whole value: two values equal in every scalar are one resource. A declaration may
+narrow that to the scalars that identify it, for a library that varies a field it does not consider
+part of the identity — raylib's `Music` carries a `looping` flag beside the context pointer that owns
+the resource.
+
+**A counted result is not merged with anything.** Two references from `g_object_ref` are bitwise
+equal and each owes an unref, so identity-merging is exactly wrong for them, which is why the mode is
+declared rather than derived from equality.
+
+**The three modes are about ownership, not about how a value crosses.** They apply to a handle result
+exactly as they do to a value passed by value: an opaque `cairo_t *` from `cairo_reference` is
+counted, a pointer to a library's own state is borrowed, and what handles do today is the owned case
+under a name. Only the layout in this decision is specific to a struct in registers. Writing the modes
+as though they belonged to by-value structs alone would leave the same three questions unanswered for
+the pointers a library hands back, which is most of what any library hands back.
 
 ## What This Does Not Decide
 
@@ -104,6 +134,13 @@ construct one, and there is no literal for it.
 
 **A pointer as an ordinary type.** `Ptr` stays inside a layout. Admitting it as a value would make an
 address an integer, which every part of this boundary has refused.
+
+**A resource holding another resource.** A `Font` embeds a `Texture`, and `UnloadFont` frees the
+atlas with it. Nothing here says whether the inner one may be named separately, released separately,
+or survives its container, and a library that lends out an interior resource — `Model` holding
+`Material` holding `Texture` is the same shape — needs an answer before its bindings are safe. The
+conservative reading, and the one to implement first, is that only the outermost value is a resource
+and an interior one is reachable through the library's own accessors.
 
 **The other 115.** Functions using an address some other way — a run the library writes into, a run it
 allocates, a callback — keep their own decisions under
@@ -128,40 +165,33 @@ The declaration is where they enter.
 such function, and the point of a foreign declaration is to call the library rather than a layer
 written to make the library callable.
 
-## Amendment 2026-09-04: the identity rule is wrong, and blocks acceptance
+## Why this is not a raylib design
 
-Checked against `raylib.h` as installed, three structs a library releases by value hold no pointer at
-any depth: `Texture` (`unsigned int id` and four `int`s, freed by `UnloadTexture`), `RenderTexture`
-(freed by `UnloadRenderTexture`), and `VrStereoConfig`. `Texture2D` is among the most used types the
-library has.
+raylib is the evidence, not the target: a foreign boundary is worth having only if it reaches
+libraries nobody had in mind when it was written. Checked on this machine, three shapes recur across
+unrelated libraries and none of them are expressible by inferring ownership from pointers.
 
-That falsifies two statements above.
+**A resource named by an integer.** HDF5 declares `typedef int64_t hid_t`, and every file, dataset,
+group and dataspace it hands out is one, closed by `H5Dclose` and its siblings. raylib's `Texture`
+is five integers, freed by `UnloadTexture`; `RenderTexture` and `VrStereoConfig` are the same. An
+OpenGL name, a POSIX file descriptor and a Windows `HANDLE` are all integers too. The first draft of
+this decision refused a pointer-free layout as "an ordinary record" — which would have made every one
+of these a value nothing owns, free to copy and to close twice with nothing said.
 
-**"A layout holding no address at all is refused — a record is what it should be declared as."** A
-`Texture2D` declared as an ordinary record is a resource nothing owns: a program may copy it freely
-and call `UnloadTexture` on both copies, and no part of this design would say a word. The sentence
-counting 20 pointer-free structs as values that "have crossed since a record was allowed to hold a
-record" silently includes two resources among them.
+**A resource counted rather than owned.** cairo pairs `cairo_reference` with `cairo_destroy`, GObject
+pairs `g_object_ref` with `g_object_unref`, and CoreFoundation, COM and the Python C API all work
+this way. Two references are bitwise equal and each owes a release. The first draft's rule — two
+values whose pointers agree are one resource, and releasing either releases it — turns every second
+reference into a leak, or worse, releases an object another reference is still holding.
 
-**"Identity is therefore the addresses inside the layout, in order."** A `Texture`'s identity is its
-`id`, an integer. A rule keyed on addresses cannot express it, and a rule that refuses pointer-free
-layouts cannot even reach it.
+**A resource the library keeps.** `GetFontDefault` returns raylib's own `Font`; GObject's
+documentation shows `g_object_ref (the_singleton)` for the same shape. Releasing one of these is a
+fault, and a design in which ownership is a property of the *type* cannot say that `LoadFont` and
+`GetFontDefault` return the same type under different obligations.
 
-The error is inference. Which scalars happen to be pointers is a fact about how the platform places
-the value in registers or memory, and the design already needs it for exactly that. It carries no
-information about what the library considers one resource, and reusing it as identity conflates a
-calling-convention question with an ownership question that only the declaration can answer.
-
-**Decided: identity is declared, never inferred.** A declaration names the scalars that identify the
-resource, the layout continues to name the scalars the value is made of, and neither reads the other.
-A pointer-free layout is admitted as an owned value. `owned`/`by` and the store's rules are unchanged;
-only where identity comes from changes. This ADR stays PROPOSED until it is rewritten on that basis —
-implementing the rule as written would put a wrong ownership model under 220 of the 600 functions.
-
-Still unresolved, and not to be papered over: a library that hands the same identity back twice and
-expects two releases — a retain/release count — cannot be modelled by merging equal identities at all.
-Until there is a transfer contract that can say so, such a binding needs a C wrapper returning an
-opaque handle, which [[ADR-0018-calling-a-library-written-elsewhere]] already supports.
+Together these are why identity and transfer are declared per result. Inference from the layout was
+reading a calling-convention fact — which scalars are addresses — as an ownership fact, and the two
+are unrelated.
 
 ## Validation Required Before Implementation Is Complete
 
@@ -174,9 +204,15 @@ opaque handle, which [[ADR-0018-calling-a-library-written-elsewhere]] already su
 - Two copies the declaration says are one resource are one claim, and releasing either releases it
   once.
 - A `Ptr` written outside a layout is refused, as is a field read through such a value.
-- A pointer-free layout that a library releases by value — `Texture2D` is the case to use — is owned,
-  and a second release of it is refused.
-- The pointer-free raylib structs that no `Unload` takes keep crossing as ordinary records.
+- A pointer-free layout the library releases by value is owned and refuses a second release. Prove it
+  on an integer identity, not a pointer one: raylib's `Texture2D` or an HDF5 `hid_t`.
+- A borrowed result is never released, proved against a function returning the library's own value —
+  `GetFontDefault` is the case to use — including at teardown.
+- A counted result is not merged with an equal one: two references each release once, and the object
+  outlives the first release.
+- A declaration narrowing identity to part of the layout treats two values differing only outside
+  that part as one resource.
+- The pointer-free structs that no release takes keep crossing as ordinary records.
 
 ## Referenced by
 

@@ -15,7 +15,7 @@ standard-library primitives exist. [[ADR-0019-getting-a-value-back-out-of-a-libr
 | Order | Deliverable | Required boundary |
 |---|---|---|
 | 1 | Complete output ownership | Cancellation-safe transitions; typed cleanup diagnostics; generation identity; all raw products classified before conversion. Admission, refusal, generation identity, discard, result conversion, and cleanup after invalid returned text are covered. A lease cancelled mid-call is given back rather than left in use. What is still unproven is the evaluator's whole masked interval, where the native call, the raw outputs and the claim settle in sequence |
-| 2 | Owned values passed by value | Target-derived aggregate layout; explicit resource identity and alias contract; full-value destruction |
+| 2 | Owned values passed by value | Target-derived aggregate layout; identity and transfer declared per result rather than inferred from the layout — owned, borrowed and counted are all real and all needed; full-value destruction |
 | 3 | Returned buffers | Explicit byte length and allocator-matched release; null/empty distinction; overflow checks |
 | 4 | Writable buffers | Exclusive call lease; capacity and initialized length; explicit allocation; no mutation of immutable `Bytes` |
 | 5 | Callbacks | Registration ownership; lifetime, thread affinity, reentrancy, and quiescent unregister |
