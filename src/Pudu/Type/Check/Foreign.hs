@@ -308,15 +308,28 @@ checkOwnership :: Map.Map Text ForeignFunction -> ForeignFunction -> Maybe Cross
 checkOwnership declared function result = case (result, foreignReleasedBy function) of
   (Just (HandleCrossing _), Nothing)
     | foreignResultBorrowed function -> pure ()
+    | foreignResultCounted function ->
+        report "E3075" (locatedSpan (foreignResult function))
+          "a counted foreign result names no release"
+          (Just "write counted Handle by release, naming the function that drops one reference")
     | otherwise ->
         report "E3066" (locatedSpan (foreignResult function))
-          "a foreign handle result must say whether it is owned or borrowed"
+          "a foreign handle result must say what it transfers"
           ( Just
-              ( "write owned Handle by release for one the library gives away, or "
-                  <> "borrowed Handle for one it keeps"
+              ( "write owned Handle by release for one the library gives away, "
+                  <> "borrowed Handle for one it keeps, or counted Handle by release "
+                  <> "for one more reference to something it counts"
               )
           )
   (_, _)
+    | foreignResultCounted function && not (isHandle result) ->
+        report "E3065" (locatedSpan (foreignResult function))
+          "only something this library hands back can be counted"
+          ( Just
+              ( "declare the result as a type the block itself declares; a number "
+                  <> "or a piece of text is copied here and there is nothing to count"
+              )
+          )
     | foreignResultBorrowed function && not (isHandle result) ->
         report "E3065" (locatedSpan (foreignResult function))
           "only something this library hands back can be borrowed"

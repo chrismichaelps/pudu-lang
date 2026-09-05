@@ -101,6 +101,12 @@ attached to the type cannot say which, so the obligation belongs to each result:
 - **counted** — the result carries its own release even when another result is bitwise identical to
   it. `cairo_reference`, `g_object_ref`.
 
+All three are implemented for handle results as of 2026-09-04, under
+[[ADR-0018-calling-a-library-written-elsewhere]]: `owned T by release`, `borrowed T`, and
+`counted T by release`. That part of this decision needed nothing from the layout question below,
+which is why it did not wait for it. What remains proposed here is the by-value layout: a struct the
+library passes in registers, and the identity rule for one.
+
 **Identity is declared, and never inferred from which scalars are pointers.** Which fields are
 addresses tells the platform how to place the value, which the layout is written for. It says nothing
 about what the library counts as one resource, and libraries disagree: HDF5 names every file, dataset

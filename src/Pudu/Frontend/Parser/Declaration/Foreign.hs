@@ -128,8 +128,13 @@ parseForeignFunction = do
   owned <- if arrow == Nothing then pure Nothing else matchWord "owned"
   borrowed <-
     if arrow == Nothing || owned /= Nothing then pure Nothing else matchWord "borrowed"
+  counted <-
+    if arrow == Nothing || owned /= Nothing || borrowed /= Nothing
+      then pure Nothing
+      else matchWord "counted"
   returned <- if arrow == Nothing then pure Nothing else Just <$> parseTypeSyntax
-  released <- parseReleasedBy owned (borrowed /= Nothing) (tokenSpan start)
+  released <-
+    parseReleasedBy owned (borrowed /= Nothing || counted /= Nothing) (tokenSpan start)
   let result = maybe (Located (tokenSpan start) UnitType) id returned
   pure
     ( Just
@@ -140,6 +145,7 @@ parseForeignFunction = do
               , foreignParameters = parameters
               , foreignResult = result
               , foreignResultBorrowed = borrowed /= Nothing
+              , foreignResultCounted = counted /= Nothing
               , foreignReleasedBy = released
               }
         )
@@ -226,10 +232,11 @@ parseSymbol = do
     checked where it is written. -}
 parseReleasedBy :: Maybe Token -> Bool -> Span -> Parser (Maybe (Located Text))
 parseReleasedBy owned borrowed spanValue = case owned of
-  {-| A release is read after `borrowed` as well, though it cannot mean
-      anything there. Refusing it in the grammar would report a missing `fn`
-      several tokens later; read it, and the check that knows what borrowing
-      means says so where it is written. -}
+  {-| A release is read after `borrowed` and `counted` too. It cannot mean
+      anything after `borrowed`, and after `counted` its absence is the mistake
+      — but refusing either in the grammar reports a missing `fn` several tokens
+      later, or names the wrong mode. Read it, and let the check that knows what
+      each mode means say so where it is written. -}
   Nothing
     | borrowed -> do
         keyword <- matchWord "by"

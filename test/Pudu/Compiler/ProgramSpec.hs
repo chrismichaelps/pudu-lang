@@ -110,6 +110,8 @@ testForeignHandles = do
   duplicateOwnership <- runtimeCodes "test-fixtures/stdlib/RejectsDuplicateForeignOwnership.pudu"
   borrowed <- codes "test-fixtures/stdlib/RejectsBorrowedForeignHandle.pudu"
   borrowedRelease <- codes "test-fixtures/stdlib/RejectsBorrowedForeignRelease.pudu"
+  countedNoRelease <- codes "test-fixtures/stdlib/RejectsCountedForeignNoRelease.pudu"
+  countedHandle <- runEntry "test-fixtures/stdlib/UsesCountedForeignHandle.pudu"
   beforeBorrowed <- cppDeleteCount
   borrowedHandle <- runEntry "test-fixtures/stdlib/UsesBorrowedForeignHandle.pudu"
   releasingBorrowed <- runtimeCodes "test-fixtures/stdlib/RejectsReleasingBorrowedHandle.pudu"
@@ -241,6 +243,15 @@ testForeignHandles = do
         (borrowed === ["E3066"])
     , counterexample "a borrowed result naming a release is refused"
         (borrowedRelease === ["E3074"])
+    , counterexample "a counted result naming no release is refused"
+        (countedNoRelease === ["E3075"])
+    {-| Taking a reference returns the pointer the last one returned, so two
+        references are one address. Each still owes its own drop: a boundary
+        that mistook them for one claim would leave the library's count above
+        zero for ever, and one that released the address once would drop a
+        reference the program still holds. -}
+    , counterexample "two references to one address are two claims that drop separately"
+        (countedHandle === Just "6")
     , counterexample "a borrowed handle is read like any other"
         (borrowedHandle === Just "3")
     {-| The only spelling available before this was `owned ... by`, which made

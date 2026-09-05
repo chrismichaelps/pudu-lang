@@ -39,9 +39,11 @@ import Pudu.Foreign.Ownership
   , ForeignStore
   , discardOwnedGenerations
   , claimAllOwnedGenerations
+  , claimCountedGeneration
   , claimOwnedGeneration
   , restoreOwned
   , takeOwnedGeneration
+  , takeCountedGeneration
   , takeForeignDiagnostics
   , withOwnedGenerations
   )
@@ -142,8 +144,11 @@ prepareHandles spanValue binding store claims arguments =
         | actual == expected -> do
             released <- case lookup address claims of
               Nothing -> pure Nothing
-              Just generation -> performEffect (refusal spanValue)
-                (takeOwnedGeneration store address generation)
+              Just generation -> performEffect (refusal spanValue) $ do
+                owned <- takeOwnedGeneration store address generation
+                case owned of
+                  Just resource -> pure (Just resource)
+                  Nothing -> takeCountedGeneration store address generation
             case released of
               Just resource -> pure (Just (address, resource))
               Nothing -> deadHandle spanValue binding actual
@@ -408,6 +413,22 @@ receive spanValue binding store produced =
           refuses. Whether it outlives what owns it is the declaration's
           assertion, as every other thing crossing here is. -}
       | foreignBindingBorrowedResult binding -> pure (ForeignHandleValue name address BorrowedClaim)
+      {-| Another reference to something the library counts. The address is
+          almost always one already claimed — that is what a reference is — so
+          this is admitted rather than refused, and owes a release of its own. -}
+      | foreignBindingCountedResult binding -> case foreignBindingReleasedBy binding of
+          Nothing -> foreignResultMismatch spanValue binding
+          Just release -> do
+            fresh <-
+              performEffect (refusal spanValue)
+                (claimCountedGeneration store address
+                  (releaseHandle store spanValue release name address))
+            case fresh of
+              Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
+              Nothing ->
+                abortAt (Just spanValue) "E7021"
+                  (foreignBindingSymbol binding <> " returned a " <> name <> " that cannot be claimed")
+                  (Just "a reference must be claimed before the evaluation it belongs to ends")
       | otherwise -> case foreignBindingReleasedBy binding of
           Nothing -> foreignResultMismatch spanValue binding
           Just release -> do

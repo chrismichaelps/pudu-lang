@@ -32,6 +32,24 @@ extern "C" void pudu_ffi_cpp_box_delete(void *address) {
 
 extern "C" void *pudu_ffi_cpp_box_null() { return nullptr; }
 
+/* A reference-counted resource, which is what cairo, GObject, CoreFoundation
+ * and COM all hand back: taking a reference returns the pointer it was given,
+ * and every reference taken owes one drop. The count is what says whether a
+ * boundary treated two references as two claims or mistook them for one. */
+namespace {
+int counted_references = 0;
+Box counted_box{53};
+}
+
+extern "C" void *pudu_ffi_cpp_reference() {
+  ++counted_references;
+  return &counted_box;
+}
+
+extern "C" void pudu_ffi_cpp_drop_reference(void *) { --counted_references; }
+
+extern "C" std::int32_t pudu_ffi_cpp_reference_count() { return counted_references; }
+
 extern "C" void *pudu_ffi_cpp_box_shared() { return &shared_box; }
 
 extern "C" void pudu_ffi_cpp_box_shared_release(void *) {}

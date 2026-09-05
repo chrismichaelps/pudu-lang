@@ -126,6 +126,9 @@ data ForeignBinding = ForeignBinding
   { foreignBindingLibrary :: !Text
   {-| Whether the result is one the library keeps rather than gives away. -}
   , foreignBindingBorrowedResult :: !Bool
+  {-| Whether the result is another reference the library counts, which owes a
+      release of its own even where an existing reference is the same address. -}
+  , foreignBindingCountedResult :: !Bool
   {-| The ABI version the declaration named, which the platform's own naming
       puts inside the file name rather than beside it. -}
   , foreignBindingVersion :: !(Maybe Text)

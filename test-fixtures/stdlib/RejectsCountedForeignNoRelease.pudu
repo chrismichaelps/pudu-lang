@@ -1,0 +1,11 @@
+module RejectsCountedForeignNoRelease
+
+/// A reference that names nothing to drop it with is a leak the declaration
+/// can see.
+foreign "c" {
+  type Box
+
+  fn reference symbol "pudu_ffi_cpp_reference" () -> counted Box
+}
+
+export fn main() -> Int { 0 }

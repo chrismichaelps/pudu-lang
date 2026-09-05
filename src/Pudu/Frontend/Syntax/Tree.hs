@@ -362,9 +362,12 @@ data ForeignFunction = ForeignFunction
   {-| Written `borrowed`: the library keeps what it returns, so nothing here
       releases it and no release may be named for it. -}
   , foreignResultBorrowed :: !Bool
+  {-| Written `counted`: the result is another reference to something the
+      library counts, and owes its own release even where an existing reference
+      is the same address. -}
+  , foreignResultCounted :: !Bool
   {-| The function that releases what this one returns, when what it returns
-      must be released. A returned pointer is borrowed unless this names its
-      release, so an owned value carries what frees it. -}
+      must be released. -}
   , foreignReleasedBy :: !(Maybe (Located Text))
   }
   deriving stock (Eq, Show)
