@@ -27,3 +27,6 @@ pudu.prof
 # Editor client dependencies, fetched rather than committed
 editors/vscode/node_modules/
 editors/vscode/package-lock.json
+
+# The scratch database the database example leaves behind.
+examples/db/orders.db

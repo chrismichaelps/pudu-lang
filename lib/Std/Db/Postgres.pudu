@@ -6,6 +6,7 @@ import Std.Db.Driver as Driver
 import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
 import Std.Db.Session as Session
 import Std.Result as Result
+import Std.Sync as Sync
 
 export fn driver() -> Driver.Driver {
   Driver.Driver{name: "postgresql", schemes: ["postgres", "postgresql"],
@@ -35,6 +36,66 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
               }
             }), adaptError) ?
         Ok(adaptRows(&rows))
+      },
+      transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+        // The outer result is the session's: whether a connection could be
+        // taken and the transaction opened and closed. The inner one is the
+        // action's own answer, kept whole so a driver failure keeps its
+        // category and code rather than being flattened into a protocol error.
+        let settled = Result.mapErr(Db.withConnection(&pool,
+            fn(stream: Session.Connection) -> (Result[Result[Driver.Rows, Driver.Error], Session.DbError], Session.Connection) {
+              match Db.begin(stream) {
+                case Err(reason) => (Err(reason), stream)
+                case Ok(started) => {
+                  // Every call answers with the connection it used, and a
+                  // closure cannot hand it to the next one, so the transaction
+                  // keeps it where all of them can reach it.
+                  let held = Sync.cell(started)
+                  let inside = Driver.Tx {
+                    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+                      let parameters = textParameters(&values) ?
+                      let open = Result.mapErr(Sync.get(&held), synchronization) ?
+                      match Db.run(open, sql, &parameters) {
+                        case Ok(pair) => {
+                          let _kept = Sync.set(&held, pair[1])
+                          Ok(adaptRows(&pair[0]))
+                        }
+                        case Err(reason) => Err(adaptError(reason))
+                      }
+                    },
+                    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+                      let open = Result.mapErr(Sync.get(&held), synchronization) ?
+                      match Db.simple(open, sql) {
+                        case Ok(pair) => {
+                          let _kept = Sync.set(&held, pair[1])
+                          Ok(adaptRows(&pair[0]))
+                        }
+                        case Err(reason) => Err(adaptError(reason))
+                      }
+                    }
+                  }
+                  let answered = action(inside)
+                  match Sync.get(&held) {
+                    case Err(problem) => (Err(Session.Other(show(problem))), started)
+                    case Ok(current) => {
+                      if Result.isErr(&answered) {
+                        let undone = Db.rollback(current)
+                        (Ok(answered), Result.unwrapOr(undone, current))
+                      } else {
+                        match Db.commit(current) {
+                          case Ok(kept) => (Ok(answered), kept)
+                          case Err(reason) => {
+                            let undone = Db.rollback(current)
+                            (Err(reason), Result.unwrapOr(undone, current))
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }), adaptError) ?
+        settled
       },
       close: fn() -> Result[(), Driver.Error] { Result.mapErr(Db.closePool(&pool), adaptError) }
     })
@@ -77,6 +138,10 @@ fn adaptRows(rows: &Db.Rows) -> Driver.Rows {
     values = values.push(converted)
   }
   Driver.Rows{columns: columns, rows: values, command: rows.tag}
+}
+
+fn synchronization(problem: Sync.SyncError) -> Driver.Error {
+  Driver.error("postgresql", "operation", show(problem))
 }
 
 fn adaptError(problem: Session.DbError) -> Driver.Error {

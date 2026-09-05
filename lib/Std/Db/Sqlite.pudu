@@ -54,6 +54,37 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
               }
             }), synchronization) ?
       },
+      transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+        Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
+              let held = Result.mapErr(Sync.get(&current), synchronization) ?
+              match held {
+                case None => Err(problem("closed", "SQLite client is closed"))
+                case Some(database) => {
+                  // The lock is held for the whole action, so nothing else
+                  // reaches this database between the begin and the commit.
+                  let _begun = perform(database, "BEGIN", &[]) ?
+                  let inside = Driver.Tx {
+                    query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+                      perform(database, sql, &values)
+                    },
+                    execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+                      perform(database, sql, &[])
+                    }
+                  }
+                  match action(inside) {
+                    case Ok(rows) => {
+                      let _kept = perform(database, "COMMIT", &[]) ?
+                      Ok(rows)
+                    }
+                    case Err(reason) => {
+                      let _undone = perform(database, "ROLLBACK", &[])
+                      Err(reason)
+                    }
+                  }
+                }
+              }
+            }), synchronization) ?
+      },
       execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
         Result.mapErr(Sync.withLock(&lock, fn() -> Result[Driver.Rows, Driver.Error] {
               let held = Result.mapErr(Sync.get(&current), synchronization) ?

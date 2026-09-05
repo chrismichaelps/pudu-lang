@@ -15,10 +15,29 @@ export type Rows = { columns: Array[Column], rows: Array[Array[Value]], command:
 export type Error = { driver: Str, category: Str, code: Option[Str], message: Str }
 export type Placeholders = DollarNumber | QuestionMark | Named
 
+/// One connection, held for the length of a transaction.
+///
+/// Separate from `Client` because that is the whole difference: a client's
+/// `query` reaches for whatever connection is free, and two of them in a row
+/// need not be the same one. Everything asked of a `Tx` goes to the connection
+/// the transaction is running on.
+export type Tx = {
+  query: fn(Str, Array[Value]) -> Result[Rows, Error],
+  execute: fn(Str) -> Result[Rows, Error]
+}
+
 /// A driver owns synchronization and closes admission before releasing its resources.
 export type Client = {
   query: fn(Str, Array[Value]) -> Result[Rows, Error],
   execute: fn(Str) -> Result[Rows, Error],
+  /// Run an action on one connection, between a begin and a commit.
+  ///
+  /// A driver has to provide this rather than a caller writing `BEGIN` through
+  /// `execute`, because `execute` takes whatever connection is free: the begin
+  /// lands on one and the work meant to be inside it lands on another. Nothing
+  /// reports that. The transaction holds nothing, so it commits nothing and
+  /// rolls back nothing, and what is left is rows that should have been undone.
+  transaction: fn(fn(Tx) -> Result[Rows, Error]) -> Result[Rows, Error],
   close: fn() -> Result[(), Error]
 }
 
@@ -67,3 +86,19 @@ export fn query(client: &Client, sql: Str, values: &Array[Value]) -> Result[Rows
 }
 export fn execute(client: &Client, sql: Str) -> Result[Rows, Error] { (client.execute)(sql) }
 export fn close(client: &Client) -> Result[(), Error] { (client.close)() }
+
+/// Run an action inside a transaction, on one connection, whichever backend
+/// this client is.
+export fn transaction(
+  client: &Client,
+  action: fn(Tx) -> Result[Rows, Error]
+) -> Result[Rows, Error] {
+  (client.transaction)(action)
+}
+
+/// Ask a transaction's own connection, rather than the pool.
+export fn ask(held: &Tx, sql: Str, values: &Array[Value]) -> Result[Rows, Error] {
+  (held.query)(sql, *values)
+}
+
+export fn run(held: &Tx, sql: Str) -> Result[Rows, Error] { (held.execute)(sql) }

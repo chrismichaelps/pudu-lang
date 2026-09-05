@@ -1,0 +1,163 @@
+module Orm
+
+import Std.Db as Db
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue}
+import Std.Db.Query as Query
+import Std.Db.Repository as Repository
+import Std.Db.Session as Session
+import Std.Db.Sqlite as Sqlite
+import Std.Option as Option
+import Std.Result as Result
+
+/// The query builder and the row mapper, asked what they promise.
+///
+///     pudu run examples/db/Orm.pudu
+///
+/// Two layers sit above a driver. `Std.Db.Query` assembles a statement and
+/// checks every identifier that goes into it, which is the part that has to be
+/// right because a table name is not a value and cannot be sent beside the
+/// statement. `Std.Db.Repository` reads a row into a type and says which
+/// column was wrong when it cannot.
+///
+/// Both are checked here without a server where that is possible — a built
+/// statement is text, and a mapper reads a result that can be written down —
+/// and against the real SQLite database `Orders.pudu` leaves behind for the
+/// one question neither can answer on its own: whether what the builder
+/// produces is what a backend will accept.
+export fn main() -> () {
+  var passed = 0
+
+  // What the builder produces, exactly. Written out rather than described,
+  // because the text is the thing a reader will see in a log during an
+  // incident and the only way to know it is right is to read it.
+  match Query.selecting(&["name", "email"], "customers") {
+    case Err(_) => { passed = report(passed, "a plain select builds") }
+    case Ok(base) => {
+      passed = check(passed, "a plain select builds",
+        Query.textOf(&base) == "select name, email from customers")
+      match Query.matching(&base, "customers.id", "=", Some("1")) {
+        case Err(_) => { passed = report(passed, "a condition builds") }
+        case Ok(one) => {
+          passed = check(passed, "a condition builds",
+            Query.textOf(&one) == "select name, email from customers where customers.id = $1")
+          passed = check(passed, "its value travels beside it",
+            Query.valuesOf(&one) == [Some("1")])
+          passed = check(passed, "and is counted", Query.valueCount(&one) == 1)
+        }
+      }
+    }
+  }
+
+  // The identifier guard. A value can be sent beside a statement and a name
+  // cannot, so this is the only thing standing between a caller passing a
+  // column name through and a statement that says something else entirely.
+  passed = check(passed, "a hostile table name is refused",
+    Result.isErr(&Query.from("customers; drop table customers --")))
+  passed = check(passed, "a hostile column name is refused",
+    Result.isErr(&Query.selecting(&["name); drop table customers --"], "customers")))
+  passed = check(passed, "an unknown operator is refused",
+    Result.isErr(&Query.operator("; drop table customers --")))
+  passed = check(passed, "an ordinary name is admitted", Result.isOk(&Query.name("customers")))
+  passed = check(passed, "a qualified name is admitted",
+    Result.isOk(&Query.qualifiedName("customers.id")))
+
+  // The mapper, against a result written down rather than fetched, so what it
+  // does with a NULL and with a column that is not there is checked exactly.
+  let held = Db.Rows {
+    columns: [Db.Column{name: "id", oid: 23}, Db.Column{name: "name", oid: 25}, Db.Column{name: "email", oid: 25}],
+    rows: [[Some("1"), Some("Ada"), Some("ada@example.test")], [Some("2"), Some("Alan"), None]],
+    tag: "SELECT 2"
+  }
+  passed = check(passed, "a column that is there is found", Repository.hasColumn(&held, "email"))
+  passed = check(passed, "one that is not is not", !Repository.hasColumn(&held, "nickname"))
+  passed = check(passed, "text is read", Result.unwrapOr(Repository.text(&held, 0, "name"), "") == "Ada")
+  passed = check(passed, "a whole number is read", Result.unwrapOr(Repository.whole(&held, 0, "id"), 0) == 1)
+  passed = check(passed, "an absent value is absent, not empty",
+    Result.unwrapOr(Repository.optionalText(&held, 1, "email"), Some("")) == None)
+  passed = check(passed, "a missing column is a failure, not a default",
+    Result.isErr(&Repository.text(&held, 0, "nickname")))
+  passed = check(passed, "a NULL where text was wanted is a failure",
+    Result.isErr(&Repository.text(&held, 1, "email")))
+  passed = check(passed, "a row past the end is a failure",
+    Result.isErr(&Repository.text(&held, 9, "name")))
+
+  // Every row through a mapper of the caller's own.
+  let people = Repository.all(&held, fn(rows: Db.Rows, row: Int) -> Result[Str, Repository.RowError] {
+      Repository.text(&rows, row, "name")
+    })
+  passed = check(passed, "every row is mapped", Result.unwrapOr(people, []) == ["Ada", "Alan"])
+
+  // And the question neither layer can answer alone: whether what the builder
+  // wrote is what a backend takes.
+  passed = passed + portability()
+
+  let _done = print("checks passed: " + show(passed))
+  ()
+}
+
+/// Run a built statement against the database `Orders.pudu` left behind.
+///
+/// `textOf` writes `$1`, which is PostgreSQL's spelling, and the builder never
+/// asks the driver which spelling this backend takes — `Placeholders` is
+/// declared on every driver and consulted by nobody here.
+///
+/// That turns out not to bite on either backend this tree ships: SQLite
+/// accepts `$N` as well as `?`, so both agree by luck rather than by design.
+/// It is recorded because the coupling is real and the luck is not general — a
+/// backend that takes only `?` would be refused by the database rather than by
+/// the builder, which is the wrong end to find out at.
+fn portability() -> Int {
+  match Driver.connect(&[Sqlite.driver()], "sqlite:examples/db/orders.db", 1) {
+    case Err(_) => {
+      let _said = print("  skipped: run Orders.pudu first to leave a database behind")
+      0
+    }
+    case Ok(client) => {
+      let built = Query.matching(
+          &Result.unwrapOr(Query.selecting(&["name"], "customers"), Query.empty()),
+        "customers.id", "=", Some("1"))
+      let statement = Result.unwrapOr(built, Query.empty())
+      let answered = Driver.query(&client, Query.textOf(&statement), &crossed(&Query.valuesOf(&statement)))
+      let _closed = Driver.close(&client)
+      match answered {
+        case Ok(_) => {
+          let _said = print("  the builder writes $1 and this backend took it")
+          let _also = print("    it was not asked which spelling this backend wanted")
+          1
+        }
+        case Err(problem) => {
+          let _said = print("  the builder's statement was refused: " + problem.message)
+          let _also = print("    textOf writes $1 and never asks the driver's declared dialect")
+          0
+        }
+      }
+    }
+  }
+}
+
+/// The builder's values, as the driver takes them.
+fn crossed(values: &Array[Option[Str]]) -> Array[Driver.Value] {
+  var found: Array[Driver.Value] = []
+  for value in *values {
+    found = found.push(match value {
+        case Some(held) => TextValue(held)
+        case None => NullValue
+      })
+  }
+  found
+}
+
+fn check(passed: Int, label: Str, held: Bool) -> Int {
+  if held {
+    passed + 1
+  } else {
+    let _said = print("  not held: " + label)
+    passed
+  }
+}
+
+fn report(passed: Int, label: Str) -> Int {
+  let _said = print("  not built: " + label)
+  passed
+}

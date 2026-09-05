@@ -1,0 +1,313 @@
+module Orders
+
+import Std.Db.Driver {DollarNumber, QuestionMark, Named, NullValue, TextValue, IntegerValue, DecimalValue, RealValue}
+import Std.Db.Driver as Driver
+import Std.Db.Postgres as Postgres
+import Std.Db.Sqlite as Sqlite
+import Std.Decimal as Decimal
+import Std.Env as Env
+import Std.Io as Io
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text as Text
+
+/// The order book, asked the questions a real one is asked.
+///
+/// Runs against whichever backend `PUDU_DB_URL` names, and against SQLite in a
+/// scratch file when it names none:
+///
+///     pudu run examples/db/Orders.pudu
+///     PUDU_DB_URL='postgresql://user:pass@localhost:5432/orders' \
+///       pudu run examples/db/Orders.pudu
+///
+/// The point is not that the queries are hard. It is that they are the shapes
+/// a driver is actually asked for and rarely tested against: a three-table
+/// join, a left join whose right side is missing, an aggregate that groups,
+/// money that must not go through a float, a column that is NULL, and a
+/// transaction that has to be undone. Each is checked against a value worked
+/// out by hand, so a wrong answer is a failure rather than a number nobody
+/// reads.
+export fn main() -> () {
+  let url = Option.unwrapOr(Env.variable("PUDU_DB_URL"), "sqlite:examples/db/orders.db")
+  let _said = report("connecting to " + describe(url))
+
+  let opened = open(url)
+  match opened {
+    case Err(problem) => {
+      let _failed = report("could not connect: " + problem.message)
+      ()
+    }
+    case Ok(client) => {
+      let outcome = exercise(&client, &styleOf(url))
+      let _closed = Driver.close(&client)
+      match outcome {
+        case Err(problem) => {
+          let _failed = report("FAILED: " + problem.category + ": " + problem.message)
+          ()
+        }
+        case Ok(passed) => {
+          let _done = report("checks passed: " + show(passed))
+          ()
+        }
+      }
+    }
+  }
+}
+
+/// Only the scheme, so a password in the string is never printed.
+fn describe(url: Str) -> Str {
+  if url.startsWith("sqlite:") { "sqlite" } else { "postgresql" }
+}
+
+fn drivers() -> Array[Driver.Driver] { [Sqlite.driver(), Postgres.driver()] }
+
+fn open(url: Str) -> Result[Driver.Client, Driver.Error] {
+  Driver.connect(&drivers(), url, 4)
+}
+
+/// Which placeholder the backend spells values with.
+///
+/// Read from the driver rather than the client, because a `Client` does not
+/// carry it: a caller holding one has no way to ask, and writing `$1` or `?`
+/// by hand works against one backend and fails against the other.
+fn styleOf(url: Str) -> Driver.Placeholders {
+  match Driver.select(&drivers(), url) {
+    case Ok(found) => found.placeholders
+    case Err(_) => QuestionMark
+  }
+}
+
+fn report(message: Str) -> Result[(), Str] { print(message) }
+
+/// Every question, in order, counting the ones answered correctly.
+fn exercise(client: &Driver.Client, style: &Driver.Placeholders) -> Result[Int, Driver.Error] {
+  var passed = 0
+
+  prepare(client) ?
+
+  // A three-table join with a grouped aggregate: what each customer spent on
+  // orders that were actually shipped. Ada's two shipped orders come to
+  // 2 * 12.50 + 4 * 7.25 + 1 * 30.00 = 84.00; Alan's order is pending and
+  // Grace's is cancelled, so neither appears at all.
+  let spend = Driver.query(client,
+    "SELECT c.name AS name, SUM(p.unit_price * l.quantity) AS total"
+      + " FROM customers c"
+      + " JOIN orders o ON o.customer_id = c.id"
+      + " JOIN order_lines l ON l.order_id = o.id"
+      + " JOIN products p ON p.id = l.product_id"
+      + " WHERE o.status = 'shipped'"
+      + " GROUP BY c.name"
+      + " ORDER BY c.name", &[]) ?
+  passed = check(passed, "one customer has shipped spend", rowCount(&spend) == 1)
+  passed = check(passed, "that customer is Ada", textAt(&spend, 0, "name") == "Ada")
+  // Compared as a number rather than as text, because the two backends spell
+  // the same amount differently — 84 and 84.00 are the same money.
+  passed = check(passed, "her shipped total is 84", isAmount(&spend, 0, "total", "84"))
+  // Whether the backend kept that money exact, or handed back a float. Both
+  // answer 84 here; only one of them would still be right after enough
+  // arithmetic, and which one it is belongs in the open rather than in a
+  // surprise months later.
+  let _noted = print("  money came back " + (if exactMoney(&spend, 0, "total") { "exact" } else { "as a float — this backend has no decimal of its own" }))
+
+  // A left join whose right side is missing for one row. Every customer
+  // appears; the one with no shipped order still has a row, and its total is
+  // NULL rather than zero — which is the distinction a driver either carries
+  // or quietly loses.
+  let everyone = Driver.query(client,
+    "SELECT c.name AS name, SUM(p.unit_price * l.quantity) AS total"
+      + " FROM customers c"
+      + " LEFT JOIN orders o ON o.customer_id = c.id AND o.status = 'shipped'"
+      + " LEFT JOIN order_lines l ON l.order_id = o.id"
+      + " LEFT JOIN products p ON p.id = l.product_id"
+      + " GROUP BY c.name"
+      + " ORDER BY c.name", &[]) ?
+  passed = check(passed, "a left join keeps every customer", rowCount(&everyone) == 3)
+  passed = check(passed, "a missing right side is NULL, not zero", isNullAt(&everyone, 1, "total"))
+  passed = check(passed, "and so is the other one", isNullAt(&everyone, 2, "total"))
+
+  // A NULL column read straight out of a row, rather than one an aggregate
+  // produced. Alan gave no email.
+  let contacts = Driver.query(client,
+    "SELECT name, email FROM customers ORDER BY name", &[]) ?
+  passed = check(passed, "rows come back in the order asked for", textAt(&contacts, 0, "name") == "Ada")
+  passed = check(passed, "a NULL column is absent, not empty text", isNullAt(&contacts, 1, "email"))
+  passed = check(passed, "text beside it is unharmed", textAt(&contacts, 2, "email") == "grace@example.test")
+
+  // A value supplied apart from the statement rather than pasted into it. The
+  // placeholder differs between the two backends, which is what the driver's
+  // own dialect is for.
+  let one = Driver.query(client,
+    "SELECT sku FROM products WHERE id = " + placeholder(style, 1), &[Driver.IntegerValue(3i64)]) ?
+  passed = check(passed, "a value crosses apart from the statement", textAt(&one, 0, "sku") == "BOOK-03")
+
+  // A statement that would be an injection if the value were pasted in. It
+  // must find nothing and leave the table standing.
+  let hostile = Driver.query(client,
+    "SELECT sku FROM products WHERE sku = " + placeholder(style, 1),
+      &[Driver.TextValue("' OR 1=1 --")]) ?
+  passed = check(passed, "an injection attempt matches nothing", rowCount(&hostile) == 0)
+  let standing = Driver.query(client, "SELECT COUNT(*) AS held FROM products", &[]) ?
+  passed = check(passed, "and leaves the table standing", isAmount(&standing, 0, "held", "3"))
+
+  // A transaction that fails partway is undone whole. The insert lands, the
+  // action then refuses, and the row must not be there afterwards — which is
+  // the check that the rollback reached the connection the insert used.
+  let refused = Driver.transaction(client, fn(inside: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      let _added = Driver.run(&inside,
+        "INSERT INTO regions (id, name) VALUES (99, 'Nowhere')") ?
+      Err(Driver.error("example", "deliberate", "the caller gave up"))
+    })
+  passed = check(passed, "a failing transaction reports its failure", Result.isErr(&refused))
+  let after = Driver.query(client, "SELECT COUNT(*) AS held FROM regions", &[]) ?
+  passed = check(passed, "and is rolled back whole", isAmount(&after, 0, "held", "2"))
+
+  // And one that succeeds is kept.
+  let kept = Driver.transaction(client, fn(inside: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      Driver.run(&inside, "INSERT INTO regions (id, name) VALUES (98, 'East')")
+    })
+  passed = check(passed, "a succeeding transaction reports success", Result.isOk(&kept))
+  let grown = Driver.query(client, "SELECT COUNT(*) AS held FROM regions", &[]) ?
+  passed = check(passed, "and is kept", isAmount(&grown, 0, "held", "3"))
+
+  Ok(passed)
+}
+
+/// `$1` for PostgreSQL and `?` for SQLite, which is what the driver's declared
+/// dialect is for: a program writing one of them by hand works against one
+/// backend and fails against the other.
+fn placeholder(style: &Driver.Placeholders, position: Int) -> Str {
+  match *style {
+    case DollarNumber => "$" + show(position)
+    case QuestionMark => "?"
+    case Named => ":p" + show(position)
+  }
+}
+
+/// Apply the schema, and start from a known state each run.
+fn prepare(client: &Driver.Client) -> Result[(), Driver.Error] {
+  let script = Result.mapErr(Io.read("examples/db/schema.sql"),
+    fn(problem: Str) -> Driver.Error { Driver.error("example", "schema", problem) }) ?
+  for statement in split(script) {
+    let _dropped = Driver.execute(client, "DROP TABLE IF EXISTS " + tableIn(statement))
+    ()
+  }
+  for statement in split(script) {
+    Driver.execute(client, statement) ?
+    ()
+  }
+  Ok(())
+}
+
+/// The statements of a script, without the comments or the blank lines.
+fn split(script: Str) -> Array[Str] {
+  var statements: Array[Str] = []
+  var current = ""
+  for line in script.lines() {
+    let trimmed = line.trim()
+    if !trimmed.startsWith("--") && !trimmed.isEmpty() {
+      current = current + trimmed + " "
+      if trimmed.endsWith(";") {
+        statements = statements.push(trimTrailing(current.trim()))
+        current = ""
+      }
+    }
+  }
+  statements
+}
+
+/// The table a `CREATE TABLE` names, so the run can start from nothing.
+fn tableIn(statement: Str) -> Str {
+  if statement.startsWith("CREATE TABLE ") {
+    let rest = statement.drop(13)
+    {
+      let parts = rest.split(" ")
+      if parts.length() == 0 { "" } else { parts[0] }
+    }
+  } else {
+    ""
+  }
+}
+
+fn columnAt(rows: &Driver.Rows, row: Int, named: Str) -> Option[Driver.Value] {
+  var index = 0
+  var found: Option[Driver.Value] = None
+  for column in rows.columns {
+    if column.name == named && row < rows.rows.length() && index < rows.rows[row].length() {
+      found = Some(rows.rows[row][index])
+    }
+    index = index + 1
+  }
+  found
+}
+
+fn textAt(rows: &Driver.Rows, row: Int, named: Str) -> Str {
+  match columnAt(rows, row, named) {
+    case Some(TextValue(held)) => held
+    case _ => ""
+  }
+}
+
+fn isNullAt(rows: &Driver.Rows, row: Int, named: Str) -> Bool {
+  match columnAt(rows, row, named) {
+    case Some(NullValue) => true
+    case _ => false
+  }
+}
+
+/// An amount, however the backend spelled it.
+///
+/// PostgreSQL answers a `NUMERIC` as text and SQLite an integer count as an
+/// integer, and `84` and `84.00` are the same money. Compared as a decimal
+/// rather than a float, because the whole reason the column is `NUMERIC` is
+/// that a float cannot hold what it holds.
+fn amountAt(rows: &Driver.Rows, row: Int, named: Str) -> Option[Decimal] {
+  match columnAt(rows, row, named) {
+    case Some(IntegerValue(held)) => Some(Decimal.fromInt(convertInt(held)))
+    case Some(DecimalValue(held)) => Some(held)
+    case Some(TextValue(held)) => Decimal.parse(held)
+    // SQLite has no decimal of its own: a DECIMAL column has NUMERIC affinity,
+    // so the value is kept as a float and a sum of it comes back as one. The
+    // amount is right here, and the type is the warning — see `exactMoney`.
+    case Some(RealValue(held)) => Decimal.parse(show(held))
+    case _ => None
+  }
+}
+
+fn isAmount(rows: &Driver.Rows, row: Int, named: Str, wanted: Str) -> Bool {
+  match (amountAt(rows, row, named), Decimal.parse(wanted)) {
+    case (Some(found), Some(expected)) => found == expected
+    case _ => false
+  }
+}
+
+fn rowCount(rows: &Driver.Rows) -> Int { rows.rows.length() }
+
+/// Whether the backend answered money as an exact value rather than a float.
+fn exactMoney(rows: &Driver.Rows, row: Int, named: Str) -> Bool {
+  match columnAt(rows, row, named) {
+    case Some(RealValue(_)) => false
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Count a check, and say which one did not hold.
+///
+/// A count on its own tells a reader that something is wrong and not what, and
+/// this program exists to find what.
+fn check(passed: Int, label: Str, held: Bool) -> Int {
+  if held {
+    passed + 1
+  } else {
+    let _said = print("  not held: " + label)
+    passed
+  }
+}
+
+/// A count answered as a machine integer, as an ordinary one.
+fn convertInt(value: Int64) -> Int {
+  Option.unwrapOr(convertInteger[Int](value), 0)
+}
+
+/// The statement without its terminating semicolon.
+fn trimTrailing(statement: Str) -> Str { statement.take(statement.length() - 1) }
