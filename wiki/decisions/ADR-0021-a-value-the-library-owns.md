@@ -128,6 +128,41 @@ The declaration is where they enter.
 such function, and the point of a foreign declaration is to call the library rather than a layer
 written to make the library callable.
 
+## Amendment 2026-09-04: the identity rule is wrong, and blocks acceptance
+
+Checked against `raylib.h` as installed, three structs a library releases by value hold no pointer at
+any depth: `Texture` (`unsigned int id` and four `int`s, freed by `UnloadTexture`), `RenderTexture`
+(freed by `UnloadRenderTexture`), and `VrStereoConfig`. `Texture2D` is among the most used types the
+library has.
+
+That falsifies two statements above.
+
+**"A layout holding no address at all is refused — a record is what it should be declared as."** A
+`Texture2D` declared as an ordinary record is a resource nothing owns: a program may copy it freely
+and call `UnloadTexture` on both copies, and no part of this design would say a word. The sentence
+counting 20 pointer-free structs as values that "have crossed since a record was allowed to hold a
+record" silently includes two resources among them.
+
+**"Identity is therefore the addresses inside the layout, in order."** A `Texture`'s identity is its
+`id`, an integer. A rule keyed on addresses cannot express it, and a rule that refuses pointer-free
+layouts cannot even reach it.
+
+The error is inference. Which scalars happen to be pointers is a fact about how the platform places
+the value in registers or memory, and the design already needs it for exactly that. It carries no
+information about what the library considers one resource, and reusing it as identity conflates a
+calling-convention question with an ownership question that only the declaration can answer.
+
+**Decided: identity is declared, never inferred.** A declaration names the scalars that identify the
+resource, the layout continues to name the scalars the value is made of, and neither reads the other.
+A pointer-free layout is admitted as an owned value. `owned`/`by` and the store's rules are unchanged;
+only where identity comes from changes. This ADR stays PROPOSED until it is rewritten on that basis —
+implementing the rule as written would put a wrong ownership model under 220 of the 600 functions.
+
+Still unresolved, and not to be papered over: a library that hands the same identity back twice and
+expects two releases — a retain/release count — cannot be modelled by merging equal identities at all.
+Until there is a transfer contract that can say so, such a binding needs a C wrapper returning an
+opaque handle, which [[ADR-0018-calling-a-library-written-elsewhere]] already supports.
+
 ## Validation Required Before Implementation Is Complete
 
 - A C conformance fixture passes and returns a struct holding an address beside scalars, and proves
@@ -136,10 +171,12 @@ written to make the library callable.
   and scalars, and a layout large enough to be returned through memory rather than registers.
 - Ownership is proven as it is for handles: release once, refuse a second, refuse use after release,
   release at teardown what the program did not.
-- Two bit-identical copies of one resource are one claim, and releasing either releases it once.
-- A layout holding no address is refused at the declaration, as is a `Ptr` written outside one and a
-  field read through such a value.
-- The 20 pointer-free raylib structs keep crossing as ordinary records, unchanged.
+- Two copies the declaration says are one resource are one claim, and releasing either releases it
+  once.
+- A `Ptr` written outside a layout is refused, as is a field read through such a value.
+- A pointer-free layout that a library releases by value — `Texture2D` is the case to use — is owned,
+  and a second release of it is refused.
+- The pointer-free raylib structs that no `Unload` takes keep crossing as ordinary records.
 
 ## Referenced by
 
