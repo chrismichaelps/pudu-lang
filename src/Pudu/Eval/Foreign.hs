@@ -26,7 +26,7 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Eval.Env (Evaluator (..), Eval (..), abortAt, currentForeignStore, performEffect)
-import Pudu.Eval.Value (ForeignBinding (..), ForeignSlot (..), Value (..))
+import Pudu.Eval.Value (ForeignBinding (..), ForeignClaim (..), ForeignSlot (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
   , ForeignCallFailure (..)
@@ -58,7 +58,8 @@ import Pudu.Eval.Foreign.Resource (prepareReleases, releaseHandle, cleanupFailed
 callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 callForeign spanValue binding values = maskedBoundary $ do
   crossed <- crossArguments spanValue binding values
-  let claims = [(address, generation) | ForeignHandleValue _ address generation <- values]
+  let claims =
+        [(address, generation) | ForeignHandleValue _ address (OwnedClaim generation) <- values]
   store <- currentForeignStore
   found <-
     performEffect (refusal spanValue)
@@ -390,7 +391,7 @@ receiveClaimed spanValue binding store generations produced =
 
 ownedValue :: Span -> ForeignBinding -> [(Int64, Integer)] -> Text -> Int64 -> Evaluator Value
 ownedValue spanValue binding generations name address = case lookup address generations of
-  Just generation -> pure (ForeignHandleValue name address generation)
+  Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
   Nothing -> foreignResultMismatch spanValue binding
 
 receive :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
@@ -401,7 +402,12 @@ receive spanValue binding store produced =
       | address == 0 ->
           abortAt (Just spanValue) "E7020"
             (foreignBindingSymbol binding <> " returned a null " <> name)
-            (Just "an owned foreign result must name a live object")
+            (Just "a foreign handle result must name a live object")
+      {-| A borrowed result is the library's own, so nothing is claimed for it:
+          no lease, no release at teardown, and a release that is handed one
+          refuses. Whether it outlives what owns it is the declaration's
+          assertion, as every other thing crossing here is. -}
+      | foreignBindingBorrowedResult binding -> pure (ForeignHandleValue name address BorrowedClaim)
       | otherwise -> case foreignBindingReleasedBy binding of
           Nothing -> foreignResultMismatch spanValue binding
           Just release -> do
@@ -409,7 +415,7 @@ receive spanValue binding store produced =
               performEffect (refusal spanValue)
                 (claimOwnedGeneration store address (releaseHandle store spanValue release name address))
             case fresh of
-              Just generation -> pure (ForeignHandleValue name address generation)
+              Just generation -> pure (ForeignHandleValue name address (OwnedClaim generation))
               Nothing ->
                 abortAt (Just spanValue) "E7021"
                   (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")

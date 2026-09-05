@@ -109,6 +109,11 @@ testForeignHandles = do
   nullResult <- runtimeCodes "test-fixtures/stdlib/RejectsForeignNullHandle.pudu"
   duplicateOwnership <- runtimeCodes "test-fixtures/stdlib/RejectsDuplicateForeignOwnership.pudu"
   borrowed <- codes "test-fixtures/stdlib/RejectsBorrowedForeignHandle.pudu"
+  borrowedRelease <- codes "test-fixtures/stdlib/RejectsBorrowedForeignRelease.pudu"
+  beforeBorrowed <- cppDeleteCount
+  borrowedHandle <- runEntry "test-fixtures/stdlib/UsesBorrowedForeignHandle.pudu"
+  releasingBorrowed <- runtimeCodes "test-fixtures/stdlib/RejectsReleasingBorrowedHandle.pudu"
+  afterBorrowed <- cppDeleteCount
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
@@ -227,8 +232,24 @@ testForeignHandles = do
         (nullResult === ["E7020"])
     , counterexample "one live native address cannot create two ownership claims"
         (duplicateOwnership === ["E7021"])
-    , counterexample "borrowed handle results are refused until lifetimes exist"
+    {-| A library hands back two different things through one C type: what it
+        gives away, and what it keeps — a default font, the text of a last
+        error, the surface a context draws to. Saying neither is refused,
+        because the address does not say which and guessing either way is a
+        leak or a free of something still in use. -}
+    , counterexample "a handle result saying neither owned nor borrowed is refused"
         (borrowed === ["E3066"])
+    , counterexample "a borrowed result naming a release is refused"
+        (borrowedRelease === ["E3074"])
+    , counterexample "a borrowed handle is read like any other"
+        (borrowedHandle === Just "3")
+    {-| The only spelling available before this was `owned ... by`, which made
+        the boundary release the library's own object at teardown. Refusing the
+        declaration did not prevent that; it required it. -}
+    , counterexample "and releasing one is refused rather than freeing what the library kept"
+        (releasingBorrowed === ["E7022"])
+    , counterexample "so nothing was destroyed across either program"
+        (afterBorrowed - beforeBorrowed === 0)
     , counterexample "a release must take its matching handle and return unit"
         (badRelease === ["E3067"])
     , counterexample "nominal handles cannot cross as another declared handle"

@@ -306,10 +306,29 @@ oversizedRecord layouts (Located _ syntax) = case syntax of
     is nothing at all, since there is nothing to free. -}
 checkOwnership :: Map.Map Text ForeignFunction -> ForeignFunction -> Maybe Crossing -> Checker ()
 checkOwnership declared function result = case (result, foreignReleasedBy function) of
-  (Just (HandleCrossing _), Nothing) ->
-    report "E3066" (locatedSpan (foreignResult function))
-      "a foreign handle result must be owned"
-      (Just "write owned Handle by release; borrowed foreign lifetimes are not represented yet")
+  (Just (HandleCrossing _), Nothing)
+    | foreignResultBorrowed function -> pure ()
+    | otherwise ->
+        report "E3066" (locatedSpan (foreignResult function))
+          "a foreign handle result must say whether it is owned or borrowed"
+          ( Just
+              ( "write owned Handle by release for one the library gives away, or "
+                  <> "borrowed Handle for one it keeps"
+              )
+          )
+  (_, _)
+    | foreignResultBorrowed function && not (isHandle result) ->
+        report "E3065" (locatedSpan (foreignResult function))
+          "only something this library hands back can be borrowed"
+          ( Just
+              ( "declare the result as a type the block itself declares; a number "
+                  <> "or a piece of text is copied here and there is nothing to borrow"
+              )
+          )
+    | foreignResultBorrowed function ->
+        report "E3074" (locatedSpan (foreignResult function))
+          "a borrowed foreign result cannot name a release"
+          (Just "the library keeps what it returned; drop the by clause, or write owned instead")
   (_, Nothing) -> pure ()
   (_, Just (Located spanValue name)) -> do
     when (not (isHandle result)) $

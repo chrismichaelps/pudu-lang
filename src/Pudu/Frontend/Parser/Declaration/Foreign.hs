@@ -126,8 +126,10 @@ parseForeignFunction = do
   _ <- expectSymbol ")" "after the parameter list"
   arrow <- matchSymbol "->"
   owned <- if arrow == Nothing then pure Nothing else matchWord "owned"
+  borrowed <-
+    if arrow == Nothing || owned /= Nothing then pure Nothing else matchWord "borrowed"
   returned <- if arrow == Nothing then pure Nothing else Just <$> parseTypeSyntax
-  released <- parseReleasedBy owned (tokenSpan start)
+  released <- parseReleasedBy owned (borrowed /= Nothing) (tokenSpan start)
   let result = maybe (Located (tokenSpan start) UnitType) id returned
   pure
     ( Just
@@ -137,6 +139,7 @@ parseForeignFunction = do
               , foreignSymbol = symbol
               , foreignParameters = parameters
               , foreignResult = result
+              , foreignResultBorrowed = borrowed /= Nothing
               , foreignReleasedBy = released
               }
         )
@@ -221,9 +224,19 @@ parseSymbol = do
     An owned result that names no release is refused here rather than leaking
     later: the whole reason ownership is in the declaration is that it can be
     checked where it is written. -}
-parseReleasedBy :: Maybe Token -> Span -> Parser (Maybe (Located Text))
-parseReleasedBy owned spanValue = case owned of
-  Nothing -> pure Nothing
+parseReleasedBy :: Maybe Token -> Bool -> Span -> Parser (Maybe (Located Text))
+parseReleasedBy owned borrowed spanValue = case owned of
+  {-| A release is read after `borrowed` as well, though it cannot mean
+      anything there. Refusing it in the grammar would report a missing `fn`
+      several tokens later; read it, and the check that knows what borrowing
+      means says so where it is written. -}
+  Nothing
+    | borrowed -> do
+        keyword <- matchWord "by"
+        case keyword of
+          Just _ -> Just <$> expectValueIdentifier "after by"
+          Nothing -> pure Nothing
+    | otherwise -> pure Nothing
   Just _ -> do
     keyword <- matchWord "by"
     case keyword of

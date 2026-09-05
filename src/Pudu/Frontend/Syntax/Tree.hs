@@ -359,6 +359,9 @@ data ForeignFunction = ForeignFunction
   , foreignSymbol :: !(Maybe (Located Text))
   , foreignParameters :: ![Located ForeignParameter]
   , foreignResult :: !(Located TypeSyntax)
+  {-| Written `borrowed`: the library keeps what it returns, so nothing here
+      releases it and no release may be named for it. -}
+  , foreignResultBorrowed :: !Bool
   {-| The function that releases what this one returns, when what it returns
       must be released. A returned pointer is borrowed unless this names its
       release, so an owned value carries what frees it. -}

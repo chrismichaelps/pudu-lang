@@ -100,9 +100,21 @@ release of an unowned address, and a second release before foreign code runs. A 
 each handle for its full duration, so a concurrent release cannot destroy an address while native
 code uses it. Each evaluator run owns a separate resource store and invokes the declared native
 release for every still-live handle on success, early return, or runtime failure. A handle result
-without `owned` remains refused until borrowed lifetimes have a representation; calling it
-"borrowed" without being able to bound that borrow would be a promise the implementation cannot
-keep. The alternative — every foreign pointer looking alike and a comment saying which must be
+must say `owned T by release` or `borrowed T`; saying neither is refused.
+
+**Amended 2026-09-04.** This said a handle result without `owned` stayed refused until borrowed
+lifetimes had a representation, because calling one "borrowed" without bounding the borrow would
+promise what the implementation cannot keep. The objection is right about the promise and wrong about
+the alternative. There was no spelling for a result the library keeps, so binding `GetFontDefault`,
+`sqlite3_errmsg`, `SDL_GetError` or a GObject getter meant writing `owned T by release` and having
+the boundary call a destructor on the library's own object at teardown. The refusal did not withhold
+that hazard; it required it.
+
+`borrowed` promises only what is enforced, and the lifetime is not among it: such a result is claimed
+by no store, leased by no call, released at no teardown, and refused before native code if it reaches
+the release its handle type declared. Whether it outlives what owns it is unchecked, an assertion of
+the same kind as the pointer validity, ABI layout and initialization every declaration here already
+makes. Naming a release for one is `E3074`. The alternative — every foreign pointer looking alike and a comment saying which must be
 freed — is how every C binding leaks.
 
 **Calling one requires `unsafe` and the `foreign` capability**, which the language already has. The

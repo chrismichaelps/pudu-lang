@@ -19,6 +19,7 @@ module Pudu.Eval.Value
   , Closure (..)
   , Value (..)
   , ForeignBinding (..)
+  , ForeignClaim (..)
   , ForeignRelease (..)
   , ForeignSlot (..)
   , OrdValue (..)
@@ -113,7 +114,7 @@ data Value
       being a value of its own rather than a number is that the runtime knows
       what frees it, so releasing one twice is refused where it happens instead
       of being a fault the operating system reports much later. -}
-  | ForeignHandleValue !Text !Int64 !Integer
+  | ForeignHandleValue !Text !Int64 !ForeignClaim
   deriving stock (Eq, Show)
 
 {-| Everything the runtime needs to make one foreign call.
@@ -123,6 +124,8 @@ data Value
     the program is running, so a call is a call rather than a search. -}
 data ForeignBinding = ForeignBinding
   { foreignBindingLibrary :: !Text
+  {-| Whether the result is one the library keeps rather than gives away. -}
+  , foreignBindingBorrowedResult :: !Bool
   {-| The ABI version the declaration named, which the platform's own naming
       puts inside the file name rather than beside it. -}
   , foreignBindingVersion :: !(Maybe Text)
@@ -156,6 +159,23 @@ data ForeignSlot = ForeignSlot
   deriving stock (Eq, Show)
 
 {-| The exact native destructor an owned result retains for runtime teardown. -}
+{-| Whether the program owes a release for a handle it holds.
+
+    A library hands back two different things through one C type. Some of them
+    it gives away, and the program must release exactly once. Others it keeps —
+    a default font, the text of its last error, the surface a context draws to —
+    and releasing one of those frees something the library is still using.
+
+    Which it is cannot be read off the address, so it is carried beside it. A
+    borrowed handle has no claim in the store, is never leased, is never
+    released at teardown, and is refused if it reaches a release. -}
+data ForeignClaim
+  = {-| The generation of this handle's claim, which the store admitted. -}
+    OwnedClaim !Integer
+  | {-| The library keeps it. Nothing on this side releases it, ever. -}
+    BorrowedClaim
+  deriving stock (Eq, Show)
+
 data ForeignRelease = ForeignRelease
   { foreignReleaseLibrary :: !Text
   , foreignReleaseVersion :: !(Maybe Text)

@@ -1,0 +1,23 @@
+module RejectsReleasingBorrowedHandle
+
+/// Handing a borrowed value to the release declared for this handle type. The
+/// library is still using what it returned, so this is refused before native
+/// code is entered rather than freeing something the program never owned.
+///
+/// `newBox` is what makes `deleteBox` a release: a function is one because a
+/// declaration named it in a `by` clause, not because of what it does.
+foreign "c" {
+  type Box
+
+  fn shared symbol "pudu_ffi_cpp_box_shared" () -> borrowed Box
+  fn newBox symbol "pudu_ffi_cpp_box_new" (value: Int32) -> owned Box by deleteBox
+  fn deleteBox symbol "pudu_ffi_cpp_box_delete" (box: Box) -> ()
+}
+
+export fn main() -> Int {
+  unsafe(foreign) {
+    let borrowedBox = shared()
+    deleteBox(borrowedBox)
+  }
+  0
+}

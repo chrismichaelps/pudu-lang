@@ -134,6 +134,7 @@ installForeign layouts library (Located _ function) =
     ( ForeignValue
         ForeignBinding
           { foreignBindingLibrary = locatedValue (foreignLibrary library)
+          , foreignBindingBorrowedResult = foreignResultBorrowed function
           , foreignBindingVersion = locatedValue <$> foreignVersion library
           , foreignBindingSymbol = maybe name locatedValue (foreignSymbol function)
           , foreignBindingArguments =

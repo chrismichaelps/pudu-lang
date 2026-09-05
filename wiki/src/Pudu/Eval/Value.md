@@ -91,6 +91,23 @@ The generation is runtime metadata and never crosses the native ABI or becomes a
 - **Q:** Erase claim identity when building a handle value? **A:** No; aliases retain the original
   generation and cannot operate on a replacement object at a reused address.
 
+## Owned and borrowed handles
+
+`ForeignHandleValue` carries a `ForeignClaim`: `OwnedClaim` with the generation the store admitted,
+or `BorrowedClaim` for a value the library keeps. A library returns both through one C type — what it
+gives away, and its own default font, last error text, or drawing target — and the address does not
+say which, so it is carried beside it.
+
+A borrowed handle is claimed by no store, contributes no lease to a call, is released at no teardown,
+and is refused before native code if it reaches the release its handle type declared. Equality
+includes the claim, so a borrowed handle and an owned one at one address are not the same value.
+
+### Resolved Grill
+
+- **Q:** Mark borrowing with a reserved generation instead of a constructor? **A:** No. A sentinel is
+  a value that has to be remembered everywhere it is compared; a constructor makes the two cases
+  something the compiler asks about at each use.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]

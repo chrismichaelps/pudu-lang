@@ -1,0 +1,27 @@
+module UsesBorrowedForeignHandle
+
+/// A library that keeps what it hands back. `pudu_ffi_cpp_box_shared` returns
+/// its own static box every time, the way a default font, the text of a last
+/// error, or the surface a context draws to is returned. Reading one works as
+/// reading any handle does; nothing here releases it, and the count of native
+/// destructions must not move.
+foreign "c" {
+  type Box
+
+  fn shared symbol "pudu_ffi_cpp_box_shared" () -> borrowed Box
+  fn readBox symbol "pudu_ffi_cpp_box_read" (box: Box) -> Int32
+  fn deletes symbol "pudu_ffi_cpp_delete_count" () -> Int32
+}
+
+export fn main() -> Int {
+  var held = 0
+  unsafe(foreign) {
+    let before = deletes()
+    let one = shared()
+    let again = shared()
+    if readBox(one) == 11i32 { held = held + 1 }
+    if readBox(again) == 11i32 { held = held + 1 }
+    if deletes() == before { held = held + 1 }
+  }
+  held
+}

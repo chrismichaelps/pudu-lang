@@ -155,6 +155,24 @@ propagating. The primary diagnostic remains primary.
 - **Q:** Skip cleanup when a claimed result later fails conversion? **A:** No; the result settlement
   wrapper owns every claimed generation until it exposes a successful value.
 
+## A result the library keeps
+
+`borrowed T` on a handle result builds a `BorrowedClaim` and claims nothing. Only owned handles among
+a call's arguments become leases, so passing a borrowed one neither leases nor refuses; passing one to
+the release its handle type declared finds no claim and is refused with `E7022` before native code.
+
+A null result is refused whether it is owned or borrowed: a handle names a live object, and there is
+no representation here for one that may be absent.
+
+### Resolved Grill
+
+- **Q:** Was refusing a borrowed result the safe position? **A:** No. The only spelling left was
+  `owned T by release`, which made teardown call a destructor on the library's own object. The
+  refusal required the hazard rather than withholding it.
+- **Q:** Does `borrowed` bound the borrow? **A:** No, and it does not claim to. What it enforces is
+  that nothing here releases the value; how long the library keeps it is the declaration's assertion,
+  like the pointer validity and ABI layout beside it.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]
