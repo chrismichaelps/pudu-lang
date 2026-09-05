@@ -5,6 +5,7 @@ tags: [moc, adr]
 
 # Decision Map
 
+- [[ADR-0021-a-value-the-library-owns]] — proposed: a struct the library passes by value whose interior holds an address, which is neither a record nor a handle. Twenty of raylib's thirty-five by-value structs never needed this and already cross.
 - [[ADR-0020-handing-a-library-a-run-of-bytes]] — accepted: a run of bytes a library only reads crosses as `Bytes`, which is most of what "buffers" means; the runs a library writes into or allocates keep their own ownership and lifetime questions.
 - [[ADR-0019-getting-a-value-back-out-of-a-library]] — accepted: output slots return beside the
   native result, pointer absence is explicit, and scalar initialization is an unsafe contract rather
