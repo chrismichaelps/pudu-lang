@@ -62,8 +62,18 @@ spells a statement for a given dialect, and `Orm.pudu` runs the same statement
 in both spellings so neither is passing by luck. `textOf` keeps its old
 behaviour for callers that have no driver in hand.
 
-**The layers above the driver are tied to one backend.** `Std.Db.Query` and
-`Std.Db.Repository` are written against `Std.Db.Rows`, the PostgreSQL session's
-result type, not against `Std.Db.Driver.Rows`. A program reaching the driver
-layer for SQLite cannot use the mapper above it, which is why `Orm.pudu` checks
-the mapper against a result written down rather than one it fetched.
+**The mapper was tied to one backend.** `Std.Db.Repository` was written
+against `Std.Db.Rows`, the PostgreSQL session's result type, so a program on the
+driver layer could not use it at all. It now reads `Std.Db.Driver.Rows`, and
+`Orm.pudu` maps rows it actually fetched from SQLite.
+
+That is more than a type change. The session answers every column as text
+because that is what the wire carries, while a driver answers what a value is,
+so the mapper now takes a whole number from the number the backend decoded
+rather than reading it back out of its digits — and it renders a number as text
+where text was asked for, because refusing would mean the same query worked on
+PostgreSQL and failed on SQLite. Bytes are the one thing it will not call text.
+
+`Std.Db.Store` still speaks the session, which is what it is for; it converts at
+its edges through `Db.asDriverRows`, the one description of how a session's
+result becomes a driver's.

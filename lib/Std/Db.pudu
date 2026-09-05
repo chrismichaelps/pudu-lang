@@ -2,6 +2,7 @@ module Std.Db
 
 import Std.Bytes as ByteSeq
 import Std.Channel as Channel
+import Std.Db.Driver as Driver
 import Std.Db.Protocol as Wire
 import Std.Db.Session {Auth, Closed, Connect, Malformed, Other, Server, Unsupported, Active, Failed, Idle}
 import Std.Db.Session as Session
@@ -193,6 +194,31 @@ export fn affected(result: &Rows) -> Int {
   if pieces.length() == 0 { 0 } else {
     Option.unwrapOr(Text.countOf(pieces[pieces.length() - 1]), 0)
   }
+}
+
+/// This result as the driver layer carries one.
+///
+/// The session answers every column as text, because that is what the wire
+/// carries; the driver layer carries what a value is. Converting here rather
+/// than in each driver keeps one description of how a session's result becomes
+/// a driver's, which two copies would eventually disagree about.
+export fn asDriverRows(result: &Rows) -> Driver.Rows {
+  var columns: Array[Driver.Column] = []
+  for column in result.columns {
+    columns = columns.push(Driver.Column{name: column.name, nativeType: Some(show(column.oid))})
+  }
+  var values: Array[Array[Driver.Value]] = []
+  for row in result.rows {
+    var converted: Array[Driver.Value] = []
+    for value in row {
+      converted = converted.push(match value {
+          case None => Driver.NullValue
+          case Some(held) => Driver.TextValue(held)
+        })
+    }
+    values = values.push(converted)
+  }
+  Driver.Rows{columns: columns, rows: values, command: result.tag}
 }
 
 /// How much a transaction is protected from what other transactions are doing.

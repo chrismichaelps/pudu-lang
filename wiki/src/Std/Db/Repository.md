@@ -38,6 +38,32 @@ record with different functions, rather than a mechanism this module has to prov
 **A failure names the column, not the value.** The value came from the database and may be anything;
 putting it in a message is how a message reaches a log with something in it nobody expected. The
 column name is what a program acts on.
+## Which rows it reads
+
+The driver's, not the session's. `Std.Db.Rows` is what the PostgreSQL wire
+produces and answers every column as text; `Std.Db.Driver.Rows` is the
+backend-neutral one and answers what a value is. Reading the session's meant a
+program on the driver layer could not use this module at all, which is the
+opposite of what a mapper is for.
+
+Reading the driver's changes more than a type. A whole number is taken from the
+number the backend already decoded rather than read back out of its digits, and
+a truth from a boolean where the backend sent one. Where text is asked for and
+the value is a number, it is rendered rather than refused — refusing would mean
+the same query worked on PostgreSQL, which sends text for everything, and failed
+on SQLite, which does not. Bytes are the one thing that will not be called text,
+and say so.
+
+### Resolved Grill Log
+
+- **Q:** Convert a driver's rows to the session's instead, and leave this module
+  alone? **A:** No. The conversion loses: bytes have no faithful spelling as
+  text, so a `BytesValue` column would arrive corrupted rather than refused.
+- **Q:** Should `Std.Db.Store` move too? **A:** No. It takes a
+  `Session.Connection` and speaks the session by design; it converts at its
+  edges through `Db.asDriverRows`, which is the one description of that
+  conversion rather than a copy in each driver.
+
 ## Grill Log
 - **Q:** Let a missing column read as an absent value, since the layer below does? **A:** No.
   _Rationale:_ that turns a typo into a data condition, and it is found later and further away.

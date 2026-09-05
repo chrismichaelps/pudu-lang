@@ -71,11 +71,11 @@ export fn main() -> () {
 
   // The mapper, against a result written down rather than fetched, so what it
   // does with a NULL and with a column that is not there is checked exactly.
-  let held = Db.Rows {
-    columns: [Db.Column{name: "id", oid: 23}, Db.Column{name: "name", oid: 25}, Db.Column{name: "email", oid: 25}],
-    rows: [[Some("1"), Some("Ada"), Some("ada@example.test")], [Some("2"), Some("Alan"), None]],
-    tag: "SELECT 2"
-  }
+  let held = Db.asDriverRows(&Db.Rows {
+      columns: [Db.Column{name: "id", oid: 23}, Db.Column{name: "name", oid: 25}, Db.Column{name: "email", oid: 25}],
+      rows: [[Some("1"), Some("Ada"), Some("ada@example.test")], [Some("2"), Some("Alan"), None]],
+      tag: "SELECT 2"
+    })
   passed = check(passed, "a column that is there is found", Repository.hasColumn(&held, "email"))
   passed = check(passed, "one that is not is not", !Repository.hasColumn(&held, "nickname"))
   passed = check(passed, "text is read", Result.unwrapOr(Repository.text(&held, 0, "name"), "") == "Ada")
@@ -90,7 +90,7 @@ export fn main() -> () {
     Result.isErr(&Repository.text(&held, 9, "name")))
 
   // Every row through a mapper of the caller's own.
-  let people = Repository.all(&held, fn(rows: Db.Rows, row: Int) -> Result[Str, Repository.RowError] {
+  let people = Repository.all(&held, fn(rows: Driver.Rows, row: Int) -> Result[Str, Repository.RowError] {
       Repository.text(&rows, row, "name")
     })
   passed = check(passed, "every row is mapped", Result.unwrapOr(people, []) == ["Ada", "Alan"])
@@ -131,6 +131,15 @@ fn portability() -> Int {
       var held = 0
       held = check(held, "a statement spelled with $1 runs here", Result.isOk(&dollars))
       held = check(held, "and so does the same one spelled with ?", Result.isOk(&questions))
+      // The mapper, over rows this program actually fetched rather than wrote
+      // down. It reads the driver's rows now, so the layer above the driver and
+      // the driver itself finally meet.
+      let fetched = Result.unwrapOr(dollars, Driver.Rows{columns: [], rows: [], command: ""})
+      let names = Repository.all(&fetched, fn(rows: Driver.Rows, row: Int) -> Result[Str, Repository.RowError] {
+          Repository.text(&rows, row, "name")
+        })
+      held = check(held, "the mapper reads rows the driver fetched",
+        Result.unwrapOr(names, []) == ["Ada"])
       held
     }
   }

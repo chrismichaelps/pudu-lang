@@ -1,6 +1,7 @@
 module UsesStore
 
 import Std.Db as Db
+import Std.Db.Driver as Driver
 import Std.Db.Query as Query
 import Std.Db.Repository as Repository
 import Std.Db.Store as Store
@@ -144,7 +145,7 @@ export fn main() -> Int {
 
 fn personRow(who: Person) -> Array[Option[Str]] { [Some(show(who.id)), Some(who.name)] }
 
-fn personAt(result: Db.Rows, row: Int) -> Result[Person, Repository.RowError] {
+fn personAt(result: Driver.Rows, row: Int) -> Result[Person, Repository.RowError] {
   let id = Repository.whole(&result, row, "id") ?
   let name = Repository.text(&result, row, "name") ?
   Ok(Person{id: id, name: name})
@@ -156,7 +157,7 @@ fn noteRow(note: Note) -> Array[Option[Str]] {
   [Some(show(note.id)), Some(show(note.personId)), Some(note.body)]
 }
 
-fn noteAt(result: Db.Rows, row: Int) -> Result[Note, Repository.RowError] {
+fn noteAt(result: Driver.Rows, row: Int) -> Result[Note, Repository.RowError] {
   let id = Repository.whole(&result, row, "id") ?
   let personId = Repository.whole(&result, row, "person_id") ?
   let body = Repository.text(&result, row, "body") ?
@@ -169,8 +170,8 @@ fn orEmpty(outcome: Result[Query.Statement, Store.StoreError]) -> Query.Statemen
   Result.unwrapOr(outcome, Query.empty())
 }
 
-fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Db.Rows {
+fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Driver.Rows {
   var named: Array[Db.Column] = []
   for column in columns { named = named.push(Db.Column{name: column, oid: 25}) }
-  Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())}
+  Db.asDriverRows(&Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())})
 }

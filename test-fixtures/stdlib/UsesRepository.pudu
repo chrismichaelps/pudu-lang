@@ -1,6 +1,7 @@
 module UsesRepository
 
 import Std.Db as Db
+import Std.Db.Driver as Driver
 import Std.Db.Repository {Absent, ManyRows, NoColumn, NoRow, NotCount, NotTruth, NotWhole}
 import Std.Db.Repository as Repository
 import Std.Option as Option
@@ -160,7 +161,7 @@ export fn main() -> Int {
 }
 
 /// One row as a person, which is a pure function of the result and the row.
-fn personAt(result: Db.Rows, row: Int) -> Result[Person, Repository.RowError] {
+fn personAt(result: Driver.Rows, row: Int) -> Result[Person, Repository.RowError] {
   let id = Repository.whole(&result, row, "id") ?
   let name = Repository.text(&result, row, "name") ?
   let active = Repository.truth(&result, row, "active") ?
@@ -172,15 +173,15 @@ fn asText(value: Str) -> Option[Str] { Some(value) }
 
 fn missing() -> Person { Person{id: 0, name: "", active: false, nickname: None} }
 
-fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Db.Rows {
+fn rowsOf(columns: &Array[Str], rows: &Array[Array[Option[Str]]]) -> Driver.Rows {
   var named: Array[Db.Column] = []
   for column in columns { named = named.push(Db.Column{name: column, oid: 25}) }
-  Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())}
+  Db.asDriverRows(&Db.Rows{columns: named, rows: *rows, tag: "SELECT " + show(rows.length())})
 }
 
-fn taggedRows(tag: Str) -> Db.Rows { Db.Rows{columns: [], rows: [], tag: tag} }
+fn taggedRows(tag: Str) -> Driver.Rows { Db.asDriverRows(&Db.Rows{columns: [], rows: [], tag: tag}) }
 
-fn rowsFor(key: Int) -> Db.Rows {
+fn rowsFor(key: Int) -> Driver.Rows {
   if key == 1 {
     rowsOf(
         &["id", "name", "active", "nickname"],

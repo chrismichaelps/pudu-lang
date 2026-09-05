@@ -1,6 +1,7 @@
 module Std.Db.Store
 
 import Std.Db as Db
+import Std.Db.Driver as Driver
 import Std.Db.Query as Query
 import Std.Db.Repository as Repository
 import Std.Db.Schema as Schema
@@ -80,12 +81,12 @@ export fn selectAllOf[T](held: &Stored[T]) -> Result[Query.Statement, StoreError
 }
 
 /// Every row of a result as a value.
-export fn readAll[T](held: &Stored[T], result: &Db.Rows) -> Result[Array[T], StoreError] {
+export fn readAll[T](held: &Stored[T], result: &Driver.Rows) -> Result[Array[T], StoreError] {
   mapped(Repository.all(result, held.fromRow))
 }
 
 /// At most one row of a result as a value.
-export fn readOne[T](held: &Stored[T], result: &Db.Rows) -> Result[Option[T], StoreError] {
+export fn readOne[T](held: &Stored[T], result: &Driver.Rows) -> Result[Option[T], StoreError] {
   mapped(Repository.optional(result, held.fromRow))
 }
 
@@ -98,14 +99,14 @@ export fn readOne[T](held: &Stored[T], result: &Db.Rows) -> Result[Option[T], St
 /// to produce. Offering both as peers is how the slow one becomes the default.
 export fn groupedBy[T](
   held: &Stored[T],
-  result: &Db.Rows,
+  result: &Driver.Rows,
   parentColumn: Str
 ) -> Result[Map[Str, Array[T]], StoreError] {
   var found: Map[Str, Array[T]] = Map.empty()
   var index = 0
-  while index < Db.rowCount(result) {
+  while index < result.rows.length() {
     let value = mapped((held.fromRow)(*result, index)) ?
-    let owner = Option.unwrapOr(Db.value(result, index, parentColumn), "")
+    let owner = Result.unwrapOr(Repository.text(result, index, parentColumn), "")
     found = Map.insert(&found, owner, Map.getOr(&found, owner, []).push(value))
     index = index + 1
   }
@@ -194,7 +195,7 @@ export fn load[T](
 ) -> Result[(Option[T], Session.Connection), StoreError] {
   let statement = selectOf(held, key) ?
   let answered = ask(stream, &statement) ?
-  let value = readOne(held, &answered[0]) ?
+  let value = readOne(held, &Db.asDriverRows(&answered[0])) ?
   Ok((value, answered[1]))
 }
 
@@ -205,7 +206,7 @@ export fn loadAll[T](
 ) -> Result[(Array[T], Session.Connection), StoreError] {
   let statement = selectAllOf(held) ?
   let answered = ask(stream, &statement) ?
-  let values = readAll(held, &answered[0]) ?
+  let values = readAll(held, &Db.asDriverRows(&answered[0])) ?
   Ok((values, answered[1]))
 }
 
@@ -216,7 +217,7 @@ export fn loadWhere[T](
   statement: &Query.Statement
 ) -> Result[(Array[T], Session.Connection), StoreError] {
   let answered = ask(stream, statement) ?
-  let values = readAll(held, &answered[0]) ?
+  let values = readAll(held, &Db.asDriverRows(&answered[0])) ?
   Ok((values, answered[1]))
 }
 
@@ -229,7 +230,7 @@ export fn loadForParents[T](
 ) -> Result[(Map[Str, Array[T]], Session.Connection), StoreError] {
   let statement = forParents(held, parentColumn, keys) ?
   let answered = ask(stream, &statement) ?
-  let grouped = groupedBy(held, &answered[0], parentColumn) ?
+  let grouped = groupedBy(held, &Db.asDriverRows(&answered[0]), parentColumn) ?
   Ok((grouped, answered[1]))
 }
 

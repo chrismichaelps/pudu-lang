@@ -25,7 +25,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
                 case Err(problem) => (Err(problem), stream)
               }
             }), adaptError) ?
-        Ok(adaptRows(&rows))
+        Ok(Db.asDriverRows(&rows))
       },
       execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
         let rows = Result.mapErr(Db.withConnection(&pool,
@@ -35,7 +35,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
                 case Err(problem) => (Err(problem), stream)
               }
             }), adaptError) ?
-        Ok(adaptRows(&rows))
+        Ok(Db.asDriverRows(&rows))
       },
       transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
         // The outer result is the session's: whether a connection could be
@@ -58,7 +58,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
                       match Db.run(open, sql, &parameters) {
                         case Ok(pair) => {
                           let _kept = Sync.set(&held, pair[1])
-                          Ok(adaptRows(&pair[0]))
+                          Ok(Db.asDriverRows(&pair[0]))
                         }
                         case Err(reason) => Err(adaptError(reason))
                       }
@@ -68,7 +68,7 @@ export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
                       match Db.simple(open, sql) {
                         case Ok(pair) => {
                           let _kept = Sync.set(&held, pair[1])
-                          Ok(adaptRows(&pair[0]))
+                          Ok(Db.asDriverRows(&pair[0]))
                         }
                         case Err(reason) => Err(adaptError(reason))
                       }
@@ -119,25 +119,6 @@ fn textParameters(values: &Array[Driver.Value]) -> Result[Array[Option[Str]], Dr
     found = found.push(text)
   }
   Ok(found)
-}
-
-fn adaptRows(rows: &Db.Rows) -> Driver.Rows {
-  var columns: Array[Driver.Column] = []
-  for column in rows.columns {
-    columns = columns.push(Driver.Column{name: column.name, nativeType: Some(show(column.oid))})
-  }
-  var values: Array[Array[Driver.Value]] = []
-  for row in rows.rows {
-    var converted: Array[Driver.Value] = []
-    for value in row {
-      converted = converted.push(match value {
-          case None => NullValue
-          case Some(text) => TextValue(text)
-        })
-    }
-    values = values.push(converted)
-  }
-  Driver.Rows{columns: columns, rows: values, command: rows.tag}
 }
 
 fn synchronization(problem: Sync.SyncError) -> Driver.Error {
