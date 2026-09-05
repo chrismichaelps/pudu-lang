@@ -4,6 +4,7 @@ module Pudu.Foreign.Ownership
   , claimAllOwnedGenerations
   , claimOwnedGeneration
   , withOwnedGenerations
+  , discardOwnedGenerations
   , takeOwnedGeneration
   , claimAllOwned
   , ForeignStore
@@ -171,6 +172,14 @@ takeClaim (ForeignStore table _ _ _) address expected = atomically $ do
       | otherwise -> do
           writeTVar table (Map.delete address held)
           pure (Just resource)
+
+{-| Discard only the exact claims belonging to an unexposed result. -}
+discardOwnedGenerations :: ForeignStore -> [(Int64, Integer)] -> IO ()
+discardOwnedGenerations store claims = mask_ $ mapM_ discard claims
+ where
+  discard (address, generation) = do
+    found <- takeOwnedGeneration store address generation
+    maybe (pure ()) cleanupQuietly found
 
 {-| Restore a claim when the explicit destructor was never entered. -}
 restoreOwned :: ForeignStore -> Int64 -> ForeignResource -> IO ()

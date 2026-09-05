@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Foreign Result]] — exact non-owning result conversion and shape failures.
+
 - [[Eval Foreign Resource]] — destructor preflight, failed output cleanup, and cleanup diagnostics.
 
 - [[Eval Entropy]] — bounded operating-system cryptographic entropy.

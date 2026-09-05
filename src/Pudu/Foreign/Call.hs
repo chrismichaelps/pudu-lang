@@ -469,7 +469,7 @@ takeSlots arguments written starts counts integers doubles fieldIntegers fieldDo
             case one of
               Left problem -> pure (Left problem)
               Right value -> collect rest moreIntegers moreDoubles (value : taken)
-  collect _ _ _ taken = pure (Right (reverse taken))
+  collect _ _ _ _ = pure (Left (CallAssemblyFailure "output slot storage does not match its declaration"))
 
 receivedSlot :: Crossing -> Int64 -> Double -> IO (Either ForeignCallFailure (Maybe CrossedValue))
 receivedSlot crossing asInteger asDouble = case crossing of

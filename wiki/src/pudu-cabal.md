@@ -15,7 +15,7 @@ warnings, language defaults, dependencies, and native bridge linkage for the Cab
 
 ## Dependencies and consumers
 
-Cabal consumes this manifest and `cabal.project`. The library includes [[Eval Foreign Resource]]
+Cabal consumes this manifest and `cabal.project`. The library includes [[Eval Foreign Resource]] and [[Eval Foreign Result]]
 alongside [[Eval Foreign]], [[Foreign Call]], and [[Foreign Ownership]]. Source module registration
 must match actual Haskell module declarations. Existing dependency and toolchain policies remain
 those in [[grammar/haskell]].
@@ -34,4 +34,4 @@ compiler semantics through build metadata. Every new library module must be regi
 
 ## Referenced by
 
-[[src/_MOC]] · [[Eval Foreign Resource]]
+[[src/_MOC]] · [[Eval Foreign Resource]] and [[Eval Foreign Result]]

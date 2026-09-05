@@ -158,6 +158,17 @@ Pudu values always use generation-aware admission. Restoration retains the origi
 - **Q:** Let a fixed-width generation counter wrap? **A:** No; the bootstrap uses an unbounded
   integer. A future native counter must refuse exhaustion before reusing an identity.
 
+## Aborted result settlement
+
+`discardOwnedGenerations` removes and cleans only the generations claimed by a failed result
+conversion. It cannot destroy a newer occupant of the address. Removal and cleanup handoff are
+masked; registered cleanup actions retain their warning journal.
+
+### Resolved Grill
+
+- **Q:** Leave a failed result's accepted resources until evaluation teardown? **A:** No; discard
+  that transaction's exact generations when conversion aborts, before returning its primary error.
+
 ## Referenced by
 
 [[src/Pudu/Foreign/_MOC]] · [[Evaluator]] · [[ADR-0018 Calling a Library Written Elsewhere]]

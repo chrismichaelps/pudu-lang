@@ -8,10 +8,9 @@ module Pudu.Eval.Foreign
   ( callForeign
   ) where
 
-import Control.Exception (mask_)
+import Control.Exception (mask_, onException)
 import Data.Maybe (fromMaybe)
 import Data.Int (Int64)
-import Data.Word (Word64)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Foreign.Ptr (Ptr)
@@ -27,8 +26,6 @@ import Pudu.Diagnostic
   , withHelp
   )
 import Pudu.Eval.Env (Evaluator (..), Eval (..), abortAt, currentForeignStore, performEffect)
-import Pudu.FloatLiteral (FloatWidth (..))
-import Pudu.IntegerLiteral (IntegerKind (..), defaultIntegerKind)
 import Pudu.Eval.Value (ForeignBinding (..), ForeignSlot (..), Value (..))
 import Pudu.Foreign.Call
   ( CrossedValue (..)
@@ -40,6 +37,7 @@ import Pudu.Foreign.Crossing (Crossing (..), crossingName, fitsCrossing)
 import Pudu.Foreign.Ownership
   ( ForeignResource
   , ForeignStore
+  , discardOwnedGenerations
   , claimAllOwnedGenerations
   , claimOwnedGeneration
   , restoreOwned
@@ -48,6 +46,7 @@ import Pudu.Foreign.Ownership
   , withOwnedGenerations
   )
 import Pudu.Source (Span)
+import Pudu.Eval.Foreign.Result (ConversionFailure (..), convertForeignValue)
 import Pudu.Eval.Foreign.Resource (prepareReleases, releaseHandle, cleanupFailedOutputs, cleanupUnclaimed)
 
 {-| Make the call the binding describes.
@@ -328,7 +327,10 @@ answer spanValue binding store produced written
           abortAt (Just spanValue) "E7021"
             (foreignBindingSymbol binding <> " handed back duplicate or already owned resources")
             (Just "an owned foreign value must transfer one new ownership claim")
-        Right generations -> do
+        Right generations -> settleClaimed store generations $ do
+          if length written == length described
+            then pure ()
+            else foreignResultMismatch spanValue binding
           native <- receiveClaimed spanValue binding store generations produced
           slots <- mapM (uncurry (receiveSlot spanValue binding generations)) (zip described written)
           pure (TupleValue (native : slots))
@@ -356,7 +358,10 @@ slotDescriptions binding = [slot | Just slot <- foreignBindingSlots binding]
 receiveSlot
   :: Span -> ForeignBinding -> [(Int64, Integer)] -> ForeignSlot -> Maybe CrossedValue -> Evaluator Value
 receiveSlot spanValue binding generations slot received = case received of
-  Nothing -> pure (VariantValue "None" [])
+  Nothing -> case foreignSlotCrossing slot of
+    TextCrossing -> pure (VariantValue "None" [])
+    HandleCrossing _ -> pure (VariantValue "None" [])
+    _ -> foreignResultMismatch spanValue binding
   Just value -> do
     held <- case (foreignSlotCrossing slot, value) of
       (HandleCrossing name, CrossedHandle actual address)
@@ -390,10 +395,6 @@ ownedValue spanValue binding generations name address = case lookup address gene
 receive :: Span -> ForeignBinding -> ForeignStore -> CrossedValue -> Evaluator Value
 receive spanValue binding store produced =
   case (foreignBindingResult binding, produced) of
-    (NothingCrossing, _) -> pure UnitValue
-    (BooleanCrossing, CrossedInteger held) -> pure (BoolValue (held /= 0))
-    (FloatingCrossing _, CrossedDouble held) ->
-      pure (FloatValue (widthOf (foreignBindingResult binding)) held)
     (HandleCrossing name, CrossedHandle actual address)
       | name /= actual -> foreignResultMismatch spanValue binding
       | address == 0 ->
@@ -412,41 +413,11 @@ receive spanValue binding store produced =
                 abortAt (Just spanValue) "E7021"
                   (foreignBindingSymbol binding <> " returned a " <> name <> " already owned")
                   (Just "an owned foreign result must transfer one new ownership claim")
-    (_, CrossedInteger held) ->
-      pure
-        ( IntValue (kindOf (foreignBindingResult binding))
-            (integerResult (foreignBindingResult binding) held)
-        )
-    (_, CrossedDouble held) ->
-      pure (FloatValue (widthOf (foreignBindingResult binding)) held)
-    {-| A run of bytes the library allocated is a resource, with a length that
-        arrives beside it and a release that frees it. None of that is written
-        in a declaration yet, so a result declared `Bytes` is refused here
-        rather than answered with storage nobody owns. -}
     (BytesCrossing, _) ->
       abortAt (Just spanValue) "E7026"
         (foreignBindingSymbol binding <> " cannot return Bytes")
-        ( Just
-            ( "a run of bytes a library allocated needs a length and a release; "
-                <> "declare what it hands back another way"
-            )
-        )
-    (TextCrossing, CrossedText written) -> pure (StrValue written)
-    (TextCrossing, CrossedNoText) ->
-      abortAt (Just spanValue) "E7024"
-        (foreignBindingSymbol binding <> " returned no text")
-        ( Just
-            ( "a foreign result declared Str must name text; there is no way yet "
-                <> "to declare one that may be absent"
-            )
-        )
-    (RecordCrossing name declared, CrossedRecord _ crossed) ->
-      RecordValue name <$> mapM receiveField (zip declared crossed)
-     where
-      receiveField ((label, fieldCrossing), (_, value)) = do
-        received <- receivedField spanValue binding label fieldCrossing value
-        pure (label, received)
-    _ -> foreignResultMismatch spanValue binding
+        (Just "an owned buffer requires an explicit length and release contract")
+    _ -> receivedField spanValue binding "result" (foreignBindingResult binding) produced
 
 foreignResultMismatch :: Span -> ForeignBinding -> Evaluator a
 foreignResultMismatch spanValue binding =
@@ -454,47 +425,23 @@ foreignResultMismatch spanValue binding =
     (foreignBindingSymbol binding <> " returned a value outside its declaration")
     (Just "check the foreign result type against the library's exported signature")
 
-kindOf :: Crossing -> IntegerKind
-kindOf crossing = case crossing of
-  SignedCrossing width -> SignedKind width
-  UnsignedCrossing width -> UnsignedKind width
-  _ -> defaultIntegerKind
-
-{-| One field of a record the library returned. -}
 receivedField :: Span -> ForeignBinding -> Text -> Crossing -> CrossedValue -> Evaluator Value
-receivedField spanValue binding label crossing produced = case (crossing, produced) of
-  (BooleanCrossing, CrossedInteger held) -> pure (BoolValue (held /= 0))
-  (FloatingCrossing _, CrossedDouble held) -> pure (FloatValue (widthOf crossing) held)
-  (TextCrossing, CrossedText written) -> pure (StrValue written)
-  (TextCrossing, CrossedNoText) ->
-    abortAt (Just spanValue) "E7024"
-      (foreignBindingSymbol binding <> " returned no text for " <> label)
-      (Just "every Str field in a returned foreign record must name valid UTF-8 text")
-  {-| A field may itself be a record, and is rebuilt the same way its enclosing
-      one is. The leaves arrived flat; the declaration is what says where each
-      nesting begins and ends. -}
-  (RecordCrossing name declared, CrossedRecord _ held)
-    | length declared == length held ->
-        RecordValue name
-          <$> mapM
-            ( \((fieldLabel, fieldCrossing), (_, fieldValue)) -> do
-                value <- receivedField spanValue binding fieldLabel fieldCrossing fieldValue
-                pure (fieldLabel, value)
-            )
-            (zip declared held)
-  (_, CrossedInteger held) -> pure (IntValue (kindOf crossing) (integerResult crossing held))
-  (_, CrossedDouble held) -> pure (FloatValue (widthOf crossing) held)
-  _ -> foreignResultMismatch spanValue binding
+receivedField spanValue binding label crossing produced =
+  case convertForeignValue label crossing produced of
+    Right value -> pure value
+    Left InvalidShape -> foreignResultMismatch spanValue binding
+    Left (MissingText field) ->
+      abortAt (Just spanValue) "E7024"
+        (foreignBindingSymbol binding <> " returned no text for " <> field)
+        (Just "a declared Str must name valid UTF-8 text")
 
-integerResult :: Crossing -> Int64 -> Integer
-integerResult crossing held = case crossing of
-  UnsignedCrossing 64 -> toInteger (fromIntegral held :: Word64)
-  _ -> fromIntegral held
-
-widthOf :: Crossing -> FloatWidth
-widthOf crossing = case crossing of
-  FloatingCrossing 32 -> Float32Width
-  _ -> Float64Width
+{-| Failed conversion cannot leave unexposed claims in the store. -}
+settleClaimed :: ForeignStore -> [(Int64, Integer)] -> Evaluator a -> Evaluator a
+settleClaimed store claims (Evaluator action) = Evaluator $ \env -> do
+  outcome <- action env `onException` discardOwnedGenerations store claims
+  case outcome of
+    Done _ _ -> pure outcome
+    _ -> discardOwnedGenerations store claims >> pure outcome
 
 abortForeign :: Span -> ForeignBinding -> Text -> Evaluator a
 abortForeign spanValue binding problem =

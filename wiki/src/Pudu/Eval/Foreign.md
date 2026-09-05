@@ -141,6 +141,20 @@ from those exact generations. No result can recover a generation by querying a l
 - **Q:** Read the generation after claiming in a separate lookup? **A:** No; the claim transaction
   returns it, avoiding a race with release and address reuse.
 
+## Exact result conversion
+
+[[Eval Foreign Result]] validates non-owning result shapes. Slot count must match the declaration;
+only text and handle slots may be absent. Record shape and scalar category mismatches abort rather
+than yielding a truncated or differently typed value. If conversion aborts after claiming resources,
+its exact generations are discarded immediately. Host exceptions also trigger that discard before
+propagating. The primary diagnostic remains primary.
+
+### Resolved Grill
+
+- **Q:** Trust `zip` to enforce output arity? **A:** No; compare lengths before conversion.
+- **Q:** Skip cleanup when a claimed result later fails conversion? **A:** No; the result settlement
+  wrapper owns every claimed generation until it exposes a successful value.
+
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[ADR-0018 Calling a Library Written Elsewhere]]

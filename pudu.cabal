@@ -53,6 +53,7 @@ library
     Pudu.Eval.Env
     Pudu.Eval.Foreign
     Pudu.Eval.Foreign.Resource
+    Pudu.Eval.Foreign.Result
     Pudu.Eval.Method
     Pudu.Eval.Handle
     Pudu.Eval.Hash
