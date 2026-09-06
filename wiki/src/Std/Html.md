@@ -78,3 +78,13 @@ functions already are, and they compose without a second mechanism to learn.
   page that renders oddly rather than one that is unsafe. _Rejected:_ a content model.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Ui]] · [[Std Http Server Reply]] · [[architecture/STDLIB]]
+
+## Fragment rendering
+
+`renderChunks` collects rendered text fragments in document order; render joins them once.
+Element recursion appends opening, child fragments and closing markup to one persistent array
+instead of materializing each child subtree. Attribute rendering, escaping, void-element syntax
+and trusted markup behavior are unchanged. This is buffered rendering, not socket streaming;
+recursive traversal depth remains proportional to HTML depth.
+Resolved Grill Log: Keep the existing serialized output while removing repeated subtree joins.
+Expose fragments for SSR composition without promising bounded-memory transport.

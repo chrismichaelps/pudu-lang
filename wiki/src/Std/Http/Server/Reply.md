@@ -36,3 +36,10 @@ explicit trust escapes retain their existing meaning; these helpers do not sanit
 
 Resolved Grill Log: Keep explicit status selection with the caller; do not infer success or
 convert database errors into responses automatically. Serialization happens exactly once.
+
+## Prepared server rendering
+
+`rendered(code, Ssr.Rendered)` responds with an already rendered body and its recorded UTF-8
+length, avoiding another HTML traversal or UTF-8 length calculation. Values produced by Ssr
+constructors keep body and length consistent; manually constructed records must preserve that
+invariant. Resolved Grill Log: do not rerender reusable output at the HTTP boundary.

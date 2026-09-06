@@ -295,13 +295,29 @@ export fn explainUnsafe(problem: &Unsafe) -> Str {
 /// The only thing here that produces text. It reads nothing outside the value
 /// it was given, so two renders of equal views are equal and a page can be
 /// compared in a test rather than matched against a pattern.
-export fn render(view: &Html) -> Str {
+export fn render(view: &Html) -> Str { renderChunks(view).join("") }
+
+/// Buffered output fragments, in document order, without joining child subtrees.
+export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
+
+fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
   match view {
-    case Text(content) => escape(content)
-    case Trusted(markup) => markup
-    case Fragment(children) => renderAll(&children)
-    case Element(name, attributes, children) => renderElement(name, &attributes, &children)
+    case Text(content) => pieces.push(escape(content))
+    case Trusted(markup) => pieces.push(markup)
+    case Fragment(children) => appendChildren(&children, pieces)
+    case Element(name, attributes, children) => {
+      let opened = pieces.push("<" + name + renderAttributes(&attributes))
+      if VOID_ELEMENTS.contains(name) { opened.push(" />") } else {
+        appendChildren(&children, opened.push(">")).push("</" + name + ">")
+      }
+    }
   }
+}
+
+fn appendChildren(children: &Array[Html], pieces: Array[Str]) -> Array[Str] {
+  var out = pieces
+  for child in children { out = appendRendered(&child, out) }
+  out
 }
 
 /// A whole document, with the declaration that says which one it is.
@@ -343,21 +359,6 @@ const ESCAPES: Map[Str, Str] = mapOf([
 
 fn escaped(character: Str) -> Str {
   if let Some(written) = ESCAPES.get(character) { written } else { character }
-}
-
-fn renderAll(children: &Array[Html]) -> Str {
-  var pieces: Array[Str] = []
-  for child in children { pieces = pieces.push(render(&child)) }
-  pieces.join("")
-}
-
-fn renderElement(name: Str, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Str {
-  let opening = "<" + name + renderAttributes(attributes)
-  if VOID_ELEMENTS.contains(name) {
-    opening + " />"
-  } else {
-    opening + ">" + renderAll(children) + "</" + name + ">"
-  }
 }
 
 /// The attributes of an element, written.

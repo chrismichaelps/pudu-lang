@@ -1,0 +1,81 @@
+module Std.Html.Ssr
+
+import Std.Html as Html
+
+export type Piece = Fixed(Html.Html) | Slot(Str)
+export type Prepared = Markup(Array[Str]) | Hole(Str)
+export type Plan = { parts: Array[Prepared] }
+export type RenderError = MissingSlot(Str) | InvalidLimit(Int) | TooLarge(Int)
+export type Rendered = { body: Str, byteLength: Int }
+
+/// Render static sections once; the plan never stores request-specific slots.
+export fn prepare(pieces: &Array[Piece]) -> Plan {
+  var parts: Array[Prepared] = []
+  for piece in pieces {
+    match piece {
+      case Fixed(view) => { parts = parts.push(Markup(Html.renderChunks(&view))) }
+      case Slot(name) => { parts = parts.push(Hole(name)) }
+    }
+  }
+  Plan{parts: parts}
+}
+
+export fn chunks(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
+  assemble(plan, values, None)
+}
+
+export fn render(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Str, RenderError] {
+  let output = chunks(plan, values) ?
+  Ok(output.join(""))
+}
+
+export fn finish(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Rendered, RenderError] {
+  Ok(completed(render(plan, values) ?))
+}
+
+export fn renderWithin(plan: &Plan, values: &Map[Str, Html.Html], maxBytes: Int) -> Result[Rendered, RenderError] {
+  if maxBytes < 0 { return Err(InvalidLimit(maxBytes)) }
+  let output = assemble(plan, values, Some(maxBytes)) ?
+  Ok(completed(output.join("")))
+}
+
+export fn fragment(view: &Html.Html) -> Rendered { completed(Html.render(view)) }
+export fn document(view: &Html.Html) -> Rendered { completed(Html.document(view)) }
+
+fn completed(body: Str) -> Rendered {
+  Rendered{body: body, byteLength: body.toBytes().length()}
+}
+
+fn assemble(plan: &Plan, values: &Map[Str, Html.Html], limit: Option[Int]) -> Result[Array[Str], RenderError] {
+  var cached: Map[Str, Array[Str]] = mapOf([])
+  var output: Array[Str] = []
+  var total = 0
+  for part in plan.parts {
+    let fragments = match part {
+      case Markup(held) => held
+      case Hole(name) => {
+        match cached.get(name) {
+          case Some(held) => held
+          case None => {
+            let view = match values.get(name) {
+              case Some(held) => held
+              case None => { return Err(MissingSlot(name)) }
+            }
+            let held = Html.renderChunks(&view)
+            cached = cached.insert(name, held)
+            held
+          }
+        }
+      }
+    }
+    for piece in fragments {
+      if let Some(maximum) = limit {
+        let size = piece.toBytes().length()
+        if size > maximum - total { return Err(TooLarge(maximum)) }
+        total = total + size
+      }
+      output = output.push(piece)
+    }
+  }
+  Ok(output)
+}

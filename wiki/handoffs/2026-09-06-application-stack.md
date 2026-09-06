@@ -40,3 +40,11 @@ Notes layout and navigation. Added fluent persistent content and extracted noteV
 changes or raw-template interpolation. No tests, builds or reviews.
 Exact next action: use the composition API for browser create/edit forms sharing validation
 and database operations with JSON handlers.
+
+## Server rendering ownership
+
+STD Implementer owns Html fragment rendering, Html.Ssr, Reply.rendered and mirrors. Implemented
+static plans, typed slots, per-render reuse and bounded accepted UTF-8 output. Output remains
+buffered; limits do not bound peak allocation. No tests, builds, reviews or measurements.
+Exact next action: integrate application-owned prepared plans into Notes routes and add HTTP
+conditional response handling with explicit private/public cache policy.

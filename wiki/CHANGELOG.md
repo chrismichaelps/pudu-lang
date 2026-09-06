@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Reusable server rendering
+
+[[Std Html]] now collects fragments and joins once instead of joining every subtree. Added
+[[Std Html SSR]] with prepared static sections, named typed slots, per-render slot reuse, UTF-8
+output budgets and reusable rendered responses. [[Std Http Server Reply]] consumes prepared
+output directly. No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Linear HTML composition
 
 Added [[Std Html Compose]] with persistent fluent content methods, repeated components and

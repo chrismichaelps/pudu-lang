@@ -1,6 +1,7 @@
 module Std.Http.Server.Reply
 
 import Std.Html as Html
+import Std.Html.Ssr as Ssr
 import Std.Http as Http
 import Std.Http.Message as Message
 import Std.Json as Json
@@ -76,4 +77,13 @@ export fn page(code: Int, content: Html.Html) -> Http.Response {
 /// Encode the standard JSON model at the response boundary.
 export fn jsonValue(code: Int, content: Json.Json) -> Http.Response {
   json(code, Json.encode(&content))
+}
+
+/// Reuse server-rendered output and its UTF-8 length without rendering again.
+export fn rendered(code: Int, content: Ssr.Rendered) -> Http.Response {
+  Http.Response{
+    status: Http.status(code),
+    headers: [("content-type", "text/html; charset=utf-8"), ("content-length", show(content.byteLength))],
+    body: content.body
+  }
 }

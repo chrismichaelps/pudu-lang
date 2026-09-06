@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Html SSR]] — reusable static render plans, typed slots and output budgets.
+
 - [[Std Html Compose]] — fluent content composition with reusable view functions.
 
 - [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
