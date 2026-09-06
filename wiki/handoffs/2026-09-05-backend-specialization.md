@@ -22,3 +22,7 @@ lifetime and fallback evidence, connected to the actual lowering pipeline.
 ## Packed-byte continuation
 
 Own Eval.Bytes and its mirror. Removed list staging in byte/array conversions using known-length sequence generation and ByteString unfolding. Validation remains ordered and complete. No measurements, tests, builds or reviews run. The planned StoragePlan remains future work; the current tree exposes evaluator modules rather than an implemented lowering/codegen directory.
+
+## Sequence kernel continuation
+
+Own Eval.Array and its mirror. Array search now stays in the sequence; pop uses a right view and position edits use direct sequence operations. Public boundary guards remain intact. No tests, builds, reviews or measurements run.

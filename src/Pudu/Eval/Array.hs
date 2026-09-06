@@ -16,6 +16,7 @@ module Pudu.Eval.Array
   ) where
 
 import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import qualified Data.Sequence as Seq
 import Pudu.Eval.Value (Value (..))
 
@@ -47,9 +48,9 @@ arrayPush _ _ = NullValue
 
 {-| O(1) drop last. Returns a new array; no-op on empty. -}
 arrayPop :: Value -> Value
-arrayPop (ArrayValue members)
-  | Seq.null members = ArrayValue members
-  | otherwise = ArrayValue (Seq.take (Seq.length members - 1) members)
+arrayPop (ArrayValue members) = case Seq.viewr members of
+  Seq.EmptyR -> ArrayValue members
+  remaining Seq.:> _ -> ArrayValue remaining
 arrayPop _ = NullValue
 
 {-| O(log n) insert at index. Clamps to the end. -}
@@ -57,16 +58,14 @@ arrayInsert :: Value -> Int -> Value -> Value
 arrayInsert (ArrayValue members) index value
   | index <= 0 = ArrayValue (value Seq.<| members)
   | index >= Seq.length members = ArrayValue (members Seq.|> value)
-  | otherwise = let (before, after) = Seq.splitAt index members
-                 in ArrayValue (before Seq.>< (value Seq.<| after))
+  | otherwise = ArrayValue (Seq.insertAt index value members)
 arrayInsert _ _ _ = NullValue
 
 {-| O(log n) remove at index. No-op if out of bounds. -}
 arrayRemove :: Value -> Int -> Value
 arrayRemove (ArrayValue members) index
   | index >= 0 && index < Seq.length members =
-      let (before, after) = Seq.splitAt index members
-       in ArrayValue (before Seq.>< Seq.drop 1 after)
+      ArrayValue (Seq.deleteAt index members)
   | otherwise = ArrayValue members
 arrayRemove _ _ = NullValue
 
@@ -98,12 +97,8 @@ arrayReverse _ = NullValue
 
 {-| O(n) linear search. Returns the first index of a matching value, or -1. -}
 arrayIndexOf :: Value -> Value -> Int
-arrayIndexOf (ArrayValue members) target = go 0 (toList members)
- where
-  go i elements = case elements of
-    [] -> -1
-    head' : rest | head' == target -> i
-                 | otherwise -> go (i + 1) rest
+arrayIndexOf (ArrayValue members) target =
+  fromMaybe (-1) (Seq.findIndexL (== target) members)
 arrayIndexOf _ _ = -1
 
 {-| O(n) membership test using structural equality. -}

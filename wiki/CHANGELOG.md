@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Direct persistent-array kernels
+
+- Use direct sequence search, right-end removal and indexed edits in the Haskell runtime.
+- Preserve first-match equality, clamping, empty-array behavior and persistent snapshots.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Direct packed-byte conversions
 
 - Remove list staging from runtime byte/array conversions using length-aware container construction.

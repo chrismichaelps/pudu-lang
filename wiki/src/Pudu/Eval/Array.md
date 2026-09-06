@@ -99,3 +99,15 @@ DEPTH 0.50 (MEDIUM). It keeps array semantics out of [[Evaluator]] and [[Eval Op
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Direct sequence kernels
+
+`indexOf` uses the sequence's leftmost predicate search without list staging. `pop` uses its right
+view, and interior insertion/removal use `insertAt`/`deleteAt` instead of constructing split/join
+intermediates. Existing guards preserve clamping, no-op removal, empty-pop and non-array behavior.
+Structural equality and persistent sharing remain unchanged.
+
+### Resolved Grill Log
+- **Q:** Reconstruct a sequence to edit one position? **A:** No; use the container's native edit path.
+- **Q:** Convert to a list to find one member? **A:** No; direct leftmost search preserves short-circuit order.
+- **Q:** Change the public collection representation? **A:** No; these kernels operate on the existing immutable sequence.
