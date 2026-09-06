@@ -62,3 +62,7 @@ IntegerLiteral and Eval.Operator now compute wrapping add/subtract/multiply in W
 ## Internal collection API ownership
 
 Runtime Implementer owns Runtime.Collection, Eval.Keyed and Eval.HashMap integration, manifest registration and mirrors. Map/Set bulk construction and Map/Set/HashMap enumeration now consume one internal evaluator-independent API. No measurements, tests, builds or reviews run.
+
+## Bidirectional bulk loading
+
+Own Runtime.Collection and its mirror for monotone-direction detection. Map and Set consumers now bulk-load descending as well as ascending prefixes, preserving first representatives and latest map payloads. No measurements, tests, builds or reviews run.

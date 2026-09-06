@@ -26,3 +26,16 @@ no raw storage pointer escapes. Generic kernels expose INLINE boundaries for con
 
 ## Referenced by
 [[src/_MOC]] · [[Eval Keyed]] · [[Eval Hash Map]] · [[Pudu Cabal Manifest]]
+
+## Bidirectional monotone bulk loading
+
+The prefix scanner determines direction from the first unequal pair. Adjacent duplicates retain
+the same representative policy before and after direction selection. Descending runs accumulate
+in ascending order directly; ascending runs reverse once at completion. At a direction change,
+the scanner returns the canonical ascending prefix and leaves the changing element for strict
+insertion. Thus both sorted directions reach the distinct-ascending builder without sorting or
+repeated insertion. Arbitrary input retains the persistent fallback.
+
+### Resolved Grill Log
+- **Q:** Sort every input to recognize reverse order? **A:** No; select direction during the existing scan.
+- **Q:** Reverse duplicate precedence with descending keys? **A:** No; combine duplicates in original input order before ordering the canonical prefix.

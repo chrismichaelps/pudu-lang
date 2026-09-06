@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bidirectional collection bulk loading
+
+- Detect ascending or descending input prefixes in the shared Map/Set storage kernel.
+- Build canonical ordered trees while preserving duplicate precedence and strict fallback.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-06 — Internal collection kernel API
 
 - Introduce pure generic bulk-construction and enumeration kernels independent of evaluator values.

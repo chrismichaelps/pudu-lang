@@ -137,3 +137,5 @@ Legacy list-returning keyed helpers remain for callers that require lists.
 
 ### Resolved Grill Log
 - **Q:** Duplicate storage loops in each value adapter? **A:** No; share the internal generic kernel without changing public STD behavior.
+
+The shared [[Runtime Collection Kernels]] bulk loader now recognizes both ascending and descending prefixes; duplicate handling still follows original input order.
