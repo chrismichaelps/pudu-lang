@@ -261,6 +261,12 @@ test-suite pudu-test
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
     Pudu.EvalSpec
+    Pudu.Eval.Common
+    Pudu.Eval.ArithmeticSpec
+    Pudu.Eval.BindingFlowSpec
+    Pudu.Eval.DataSpec
+    Pudu.Eval.FunctionClosureSpec
+    Pudu.Eval.SystemSpec
     Pudu.DocSpec
     Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec

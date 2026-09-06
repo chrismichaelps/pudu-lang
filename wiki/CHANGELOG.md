@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose EvalSpec into layered dependency graph modules
+
+Decomposed the 983-line monolithic `test/Pudu/EvalSpec.hs` into a scalable, layered dependency graph test architecture strictly under 270 lines per module:
+- Extracted shared runners, expression evaluation, and diagnostic extraction helpers into `Pudu.Eval.Common` (96 lines).
+- Isolated operators, precedence, float arithmetic, and bit-width limits into `Pudu.Eval.ArithmeticSpec` (109 lines).
+- Isolated lexical bindings, assignments, blocks, branching, pattern evaluation, loops, and frame restoration into `Pudu.Eval.BindingFlowSpec` (227 lines).
+- Isolated records, variants, tuples, maps, sets, text operations, and string interpolation into `Pudu.Eval.DataSpec` (211 lines).
+- Isolated functions, closures, default arguments, recursion, and built-in type trait implementations into `Pudu.Eval.FunctionClosureSpec` (138 lines).
+- Isolated async tasks, structured scopes, unsafe capability regions, references, system effects, and resource isolation into `Pudu.Eval.SystemSpec` (261 lines).
+- Refactored `Pudu.EvalSpec` into a thin coordinator (63 lines) re-exporting all 22 QuickCheck properties with zero semantic delta.
+- Registered all 6 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Type.CheckSpec into layered dependency graph modules
 
 Decomposed the 2468-line monolithic `test/Pudu/Type/CheckSpec.hs` into a scalable, layered dependency graph test architecture strictly under 500 lines per module:
