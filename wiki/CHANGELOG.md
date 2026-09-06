@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Vectorized column sorting, permutation indexing, binary search, and gather
+
+Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed permutation index sorting, hardware-speed binary search, and zero-copy gather:
+- Introduced `sortIndices`, `binarySearch`, `gather`, `sortIndicesF64`, `binarySearchF64`, and `gatherF64`.
+- Implemented `columnSortIndicesU64` and `columnSortIndicesF64` generating packed permutation index buffers sorted in ascending order with nulls partitioned to the end (`ASC NULLS LAST`).
+- Implemented branch-optimized $O(\log N)$ binary search (`columnBinarySearchU64`, `columnBinarySearchF64`) directly over unboxed column data and permutation buffers with zero intermediate heap allocations.
+- Implemented zero-copy permutation gather (`columnGatherU64`, `columnGatherF64`) materializing reordered unboxed columns while preserving validity bitmaps.
+- Wired 6 new pure builtins across `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, and `Type.Check.Prelude`.
+- Expanded `test-fixtures/stdlib/UsesColumn.pudu` from 20 to 22 assertions with 100% test coverage of all new APIs without nested matches.
+- All 7 CI quality gates verified and passing under `-Werror`.
+
 ## 2026-09-06 — Float columnar vectors, vector addition, and SIMD/SWAR bitmap query algebra
 
 Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed 64-bit float columnar vectors (`ColumnF64`),

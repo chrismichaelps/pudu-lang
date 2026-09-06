@@ -607,6 +607,12 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (ColumnBitmapOrBuiltin, values) -> Column.callColumnBitmapOr spanValue values
   (ColumnBitmapNotBuiltin, values) -> Column.callColumnBitmapNot spanValue values
   (ColumnBitmapCountBuiltin, values) -> Column.callColumnBitmapCount spanValue values
+  (ColumnSortIndicesU64Builtin, values) -> Column.callColumnSortIndicesU64 spanValue values
+  (ColumnSortIndicesF64Builtin, values) -> Column.callColumnSortIndicesF64 spanValue values
+  (ColumnBinarySearchU64Builtin, values) -> Column.callColumnBinarySearchU64 spanValue values
+  (ColumnBinarySearchF64Builtin, values) -> Column.callColumnBinarySearchF64 spanValue values
+  (ColumnGatherU64Builtin, values) -> Column.callColumnGatherU64 spanValue values
+  (ColumnGatherF64Builtin, values) -> Column.callColumnGatherF64 spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing

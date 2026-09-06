@@ -206,7 +206,16 @@ Runtime Implementer owned `Runtime.Column`, `Eval.Column`, `lib/Std/Column.pudu`
 - Added SIMD/SWAR bitmap query algebra (`bitmapAnd`, `bitmapOr`, `bitmapNot`, `bitmapCount`) processing 64 rows per cycle.
 - 100% public API test coverage in `test-fixtures/stdlib/UsesColumn.pudu` (20 assertions) without nested matches.
 - All 7 CI quality gates passed under `-Werror`.
-Exact next action: proceed with next high-performance systems feature (such as zero-copy dictionary encoding, compressed bitset runs, or memory-mapped table scans).
+
+## Vectorized column sorting, permutation indexing, binary search, and gather
+
+Runtime Implementer owned `Runtime.Column`, `Eval.Column`, `lib/Std/Column.pudu`, `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, `Type.Check.Prelude`, and all mirrored wiki pages under `wiki/src/`.
+- Implemented `sortIndices` and `sortIndicesF64` generating packed permutation index buffers sorted in ascending order with null rows partitioned to the end (`ASC NULLS LAST`).
+- Implemented branch-optimized $O(\log N)$ binary search (`binarySearch`, `binarySearchF64`) directly over unboxed column data and permutation buffers with zero intermediate heap allocations.
+- Implemented zero-copy permutation gather (`gather`, `gatherF64`) materializing reordered unboxed columns while preserving validity bitmaps.
+- 100% public API test coverage in `test-fixtures/stdlib/UsesColumn.pudu` (22 assertions) without nested matches.
+- All 7 CI quality gates passed under `-Werror`.
+Exact next action: continue backend hardware specialization into dictionary-encoded categorical columns or multi-column table record batches.
 
 
 

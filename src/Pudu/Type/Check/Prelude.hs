@@ -220,6 +220,18 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, integerType] bytesType))
   bindName "columnBitmapCount"
     (monotype (FunctionTypeValue False [bytesType, integerType] integerType))
+  bindName "columnSortIndicesU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] bytesType))
+  bindName "columnSortIndicesF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] bytesType))
+  bindName "columnBinarySearchU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "UInt64" []] (NominalType "Option" [integerType])))
+  bindName "columnBinarySearchF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "Float64" []] (NominalType "Option" [integerType])))
+  bindName "columnGatherU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType, integerType])))
+  bindName "columnGatherF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType, integerType])))
 
 
   bindName "swissTableEmpty"

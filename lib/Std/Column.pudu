@@ -424,3 +424,71 @@ export fn bitmapNot(b: &Buffer.Buffer, rowCount: Int) -> Buffer.Buffer {
 export fn bitmapCount(b: &Buffer.Buffer, rowCount: Int) -> Int {
   columnBitmapCount(Buffer.toBytes(b), rowCount)
 }
+
+/// Computes an unboxed permutation index buffer containing row offsets sorted in ascending order.
+///
+/// Null rows are cleanly partitioned to the end of the permutation array (ASC NULLS LAST).
+export fn sortIndices(col: &ColumnU64) -> Buffer.Buffer {
+  let idxBytes = columnSortIndicesU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+  Buffer.fromBytes(idxBytes)
+}
+
+/// Performs an O(log N) binary search over the valid portion of a sorted column.
+///
+/// Returns the matched row offset if found, or None if target is absent.
+export fn binarySearch(col: &ColumnU64, indices: &Buffer.Buffer, target: UInt64) -> Option[Int] {
+  let validCount = col.length - col.nullCount
+  if validCount <= 0 {
+    None
+  } else {
+    columnBinarySearchU64(Buffer.toBytes(&col.data), Buffer.toBytes(indices), validCount, target)
+  }
+}
+
+/// Gathers row elements according to a permutation index buffer into a new contiguous unboxed column.
+export fn gather(col: &ColumnU64, indices: &Buffer.Buffer) -> ColumnU64 {
+  let permBytes = Buffer.size(indices)
+  let permCount = permBytes / 8
+  let res = columnGatherU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), Buffer.toBytes(indices), permCount)
+  let destRows = res[2]
+  let destNullBuf = Buffer.fromBytes(res[1])
+  let validCount = columnBitmapCount(Buffer.toBytes(&destNullBuf), destRows)
+  ColumnU64 {
+    length: destRows,
+    nullCount: destRows - validCount,
+    nullBitmap: destNullBuf,
+    data: Buffer.fromBytes(res[0]),
+  }
+}
+
+/// Computes an unboxed permutation index buffer for float rows sorted in ascending order (ASC NULLS LAST).
+export fn sortIndicesF64(col: &ColumnF64) -> Buffer.Buffer {
+  let idxBytes = columnSortIndicesF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+  Buffer.fromBytes(idxBytes)
+}
+
+/// Performs an O(log N) binary search over the valid portion of a sorted float column.
+export fn binarySearchF64(col: &ColumnF64, indices: &Buffer.Buffer, target: Float64) -> Option[Int] {
+  let validCount = col.length - col.nullCount
+  if validCount <= 0 {
+    None
+  } else {
+    columnBinarySearchF64(Buffer.toBytes(&col.data), Buffer.toBytes(indices), validCount, target)
+  }
+}
+
+/// Gathers float row elements according to a permutation index buffer into a new contiguous unboxed column.
+export fn gatherF64(col: &ColumnF64, indices: &Buffer.Buffer) -> ColumnF64 {
+  let permBytes = Buffer.size(indices)
+  let permCount = permBytes / 8
+  let res = columnGatherF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), Buffer.toBytes(indices), permCount)
+  let destRows = res[2]
+  let destNullBuf = Buffer.fromBytes(res[1])
+  let validCount = columnBitmapCount(Buffer.toBytes(&destNullBuf), destRows)
+  ColumnF64 {
+    length: destRows,
+    nullCount: destRows - validCount,
+    nullBitmap: destNullBuf,
+    data: Buffer.fromBytes(res[0]),
+  }
+}

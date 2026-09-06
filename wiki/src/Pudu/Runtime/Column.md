@@ -31,11 +31,18 @@ Key operations:
 - `columnBitmapOr :: ByteString -> ByteString -> Int -> ByteString` computes bitwise OR across 64-bit words for composite filters.
 - `columnBitmapNot :: ByteString -> Int -> ByteString` inverts active selection bits.
 - `columnBitmapCount :: ByteString -> Int -> Int` calculates total active selected rows using hardware popcount.
+- `columnSortIndicesU64 :: ByteString -> ByteString -> Int -> ByteString` produces an unboxed permutation index buffer of row offsets sorted in ascending order (`ASC NULLS LAST`).
+- `columnSortIndicesF64 :: ByteString -> ByteString -> Int -> ByteString` produces an unboxed float permutation index buffer sorted in ascending order (`ASC NULLS LAST`).
+- `columnBinarySearchU64 :: ByteString -> ByteString -> Int -> Word64 -> Maybe Int` performs $O(\log N)$ binary search over the sorted permutation index, returning matching row index.
+- `columnBinarySearchF64 :: ByteString -> ByteString -> Int -> Double -> Maybe Int` performs $O(\log N)$ binary search over sorted float permutation index.
+- `columnGatherU64 :: ByteString -> ByteString -> ByteString -> Int -> (ByteString, ByteString, Int)` gathers rows in permutation order into a new contiguous unboxed column.
+- `columnGatherF64 :: ByteString -> ByteString -> ByteString -> Int -> (ByteString, ByteString, Int)` gathers float rows in permutation order into a new contiguous unboxed column.
 
 ## Memory layout
 
 - Value buffer: Contiguous array of 64-bit scalar words ($8 \times N$ bytes).
 - Null bitmap: Packed bitset where bit $i$ is set if row $i$ is valid (non-null), matching hardware bit-vector layouts.
+- Permutation index buffer: Contiguous array of 64-bit row offsets ($8 \times N$ bytes), enabling zero-copy logical reordering.
 
 ## Grill Log
 
@@ -44,6 +51,8 @@ Key operations:
 - **Q:** Does projection copy or allocate intermediate boxed values? **A:** No; valid rows are copied directly between unboxed buffers using machine word stores.
 - **Q:** How are null bitmaps propagated during projection? **A:** The source column's validity bit is sampled for each selected row and written into the destination null bitmap, preserving null status.
 - **Q:** How does bitmap algebra avoid temporary memory allocation in multi-predicate queries? **A:** Predicates emit packed bit-buffers that combine in 64-row machine cycles using single ALU instructions (`.&.`, `.|.`, `complement`), avoiding row ID array instantiation.
+- **Q:** Why use permutation index vectors for sorting instead of sorting rows in-place? **A:** Decoupling physical layout from logical order allows multiple different sorts and secondary indexes over the same underlying column data without copying megabytes of buffer memory.
+- **Q:** How does binary search handle null rows? **A:** Sorting partitions null rows to the end (`NULLS LAST`). Binary search restricts its search interval to `[0 .. validCount - 1]`, guaranteeing non-null comparisons.
 
 
 

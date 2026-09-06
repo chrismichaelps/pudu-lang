@@ -1,4 +1,4 @@
-{-| Vectorized columnar database engine with continuous unboxed memory layouts and SIMD aggregations. -}
+{-| Vectorized columnar database engine with continuous unboxed memory layouts, SIMD aggregations, and permutation indexing. -}
 module Pudu.Runtime.Column
   ( columnSumU64
   , columnMinU64
@@ -16,14 +16,30 @@ module Pudu.Runtime.Column
   , columnBitmapOr
   , columnBitmapNot
   , columnBitmapCount
+  , columnSortIndicesU64
+  , columnSortIndicesF64
+  , columnBinarySearchU64
+  , columnBinarySearchF64
+  , columnGatherU64
+  , columnGatherF64
   ) where
 
 import Data.Bits ((.&.), (.|.), complement, popCount, shiftL, shiftR)
 import qualified Data.ByteString as BS
+import Data.List (partition, sortBy)
+import Data.Ord (comparing)
 import Data.Word (Word64)
 import GHC.Float (castDoubleToWord64, castWord64ToDouble)
 import qualified Pudu.Runtime.Buffer as Buffer
 
+-- | Tests if a given row is valid (non-null) in the null bitmap.
+isRowValid :: BS.ByteString -> Int -> Bool
+isRowValid nullBs row =
+  let bitWordIdx = (row `shiftR` 6) * 8
+      bitInWord = row .&. 63
+   in case Buffer.readWord64LE nullBs bitWordIdx of
+        Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
+        Nothing -> False
 
 -- | Vectorized sum of 64-bit unsigned integers in unboxed column, skipping null rows.
 columnSumU64 :: BS.ByteString -> BS.ByteString -> Int -> Word64
@@ -33,17 +49,11 @@ columnSumU64 dataBs nullBs rowCount
  where
   go row acc
     | row >= rowCount = acc
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v -> go (row + 1) (acc + v)
-                Nothing -> go (row + 1) acc
-              else go (row + 1) acc
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just v -> go (row + 1) (acc + v)
+          Nothing -> go (row + 1) acc
+    | otherwise = go (row + 1) acc
 
 -- | Vectorized minimum of 64-bit unsigned integers in unboxed column.
 columnMinU64 :: BS.ByteString -> BS.ByteString -> Int -> Maybe Word64
@@ -53,21 +63,15 @@ columnMinU64 dataBs nullBs rowCount
  where
   go row currentMin
     | row >= rowCount = currentMin
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v ->
-                  let nextMin = case currentMin of
-                        Just m -> Just (min m v)
-                        Nothing -> Just v
-                   in go (row + 1) nextMin
-                Nothing -> go (row + 1) currentMin
-              else go (row + 1) currentMin
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just v ->
+            let nextMin = case currentMin of
+                  Just m -> Just (min m v)
+                  Nothing -> Just v
+             in go (row + 1) nextMin
+          Nothing -> go (row + 1) currentMin
+    | otherwise = go (row + 1) currentMin
 
 -- | Vectorized maximum of 64-bit unsigned integers in unboxed column.
 columnMaxU64 :: BS.ByteString -> BS.ByteString -> Int -> Maybe Word64
@@ -77,21 +81,15 @@ columnMaxU64 dataBs nullBs rowCount
  where
   go row currentMax
     | row >= rowCount = currentMax
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v ->
-                  let nextMax = case currentMax of
-                        Just m -> Just (max m v)
-                        Nothing -> Just v
-                   in go (row + 1) nextMax
-                Nothing -> go (row + 1) currentMax
-              else go (row + 1) currentMax
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just v ->
+            let nextMax = case currentMax of
+                  Just m -> Just (max m v)
+                  Nothing -> Just v
+             in go (row + 1) nextMax
+          Nothing -> go (row + 1) currentMax
+    | otherwise = go (row + 1) currentMax
 
 -- | Vectorized predicate filter evaluating (val > threshold) producing a packed selection bitmap.
 columnFilterGtU64 :: BS.ByteString -> BS.ByteString -> Int -> Word64 -> BS.ByteString
@@ -121,53 +119,48 @@ columnFilterGtU64 dataBs nullBs rowCount threshold
             _ -> acc
           else acc
 
--- | Gathers selected rows from unboxed column into a new contiguous unboxed column.
--- Returns (projectedData, projectedNullBitmap, selectedRowCount).
+-- | Gathers selected rows according to selection bitmap into a new contiguous unboxed column.
 columnProjectU64 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> Int -> (BS.ByteString, BS.ByteString, Int)
 columnProjectU64 dataBs nullBs selBs rowCount
   | rowCount <= 0 = (BS.empty, BS.empty, 0)
   | otherwise =
-      let (outData, outNull, count) = go 0 0 (Buffer.allocateBuffer (rowCount * 8)) (Buffer.allocateBuffer (((rowCount + 63) `shiftR` 6) * 8))
-          trimmedData = BS.take (count * 8) outData
-          trimmedNull = BS.take (((count + 63) `shiftR` 6) * 8) outNull
-       in (trimmedData, trimmedNull, count)
+      let matchingIndices = filter isRowSelected [0 .. rowCount - 1]
+          numMatches = length matchingIndices
+          destDataBuf = Buffer.allocateBuffer (numMatches * 8)
+          numDestBitWords = (numMatches + 63) `shiftR` 6
+          destNullBuf = Buffer.allocateBuffer (numDestBitWords * 8)
+          (finalData, finalNull, _) = foldl copyMatch (destDataBuf, destNullBuf, 0) matchingIndices
+       in (finalData, finalNull, numMatches)
  where
-  go inRow outRow accData accNull
-    | inRow >= rowCount = (accData, accNull, outRow)
-    | otherwise =
-        let selWordIdx = (inRow `shiftR` 6) * 8
-            selBit = inRow .&. 63
-            isSelected = case Buffer.readWord64LE selBs selWordIdx of
-              Just w -> (w .&. (1 `shiftL` selBit)) /= 0
-              Nothing -> False
-         in if isSelected
-              then
-                let val = case Buffer.readWord64LE dataBs (inRow * 8) of
-                      Just v -> v
-                      Nothing -> 0
-                    nextData = case Buffer.writeWord64LE accData (outRow * 8) val of
-                      Just d -> d
-                      Nothing -> accData
-                    inNullWordIdx = (inRow `shiftR` 6) * 8
-                    inNullBit = inRow .&. 63
-                    isValid = case Buffer.readWord64LE nullBs inNullWordIdx of
-                      Just nw -> (nw .&. (1 `shiftL` inNullBit)) /= 0
-                      Nothing -> False
-                    outWordIdx = (outRow `shiftR` 6) * 8
-                    outBit = outRow .&. 63
-                    oldNullWord = case Buffer.readWord64LE accNull outWordIdx of
-                      Just w -> w
-                      Nothing -> 0
-                    nextNull = if isValid
-                      then case Buffer.writeWord64LE accNull outWordIdx (oldNullWord .|. (1 `shiftL` outBit)) of
-                        Just n -> n
-                        Nothing -> accNull
-                      else accNull
-                 in go (inRow + 1) (outRow + 1) nextData nextNull
+  isRowSelected r =
+    let selWordIdx = (r `shiftR` 6) * 8
+        selBitInWord = r .&. 63
+     in case Buffer.readWord64LE selBs selWordIdx of
+          Just w -> (w .&. (1 `shiftL` selBitInWord)) /= 0
+          Nothing -> False
 
-              else go (inRow + 1) outRow accData accNull
+  copyMatch (dBuf, nBuf, dstIdx) srcRow =
+    let val = case Buffer.readWord64LE dataBs (srcRow * 8) of
+          Just v -> v
+          Nothing -> 0
+        srcValid = isRowValid nullBs srcRow
+        dBuf' = case Buffer.writeWord64LE dBuf (dstIdx * 8) val of
+          Just updated -> updated
+          Nothing -> dBuf
+        nBuf' = if srcValid
+          then
+            let bitWordIdx = (dstIdx `shiftR` 6) * 8
+                bitInWord = dstIdx .&. 63
+                curWord = case Buffer.readWord64LE nBuf bitWordIdx of
+                  Just w -> w
+                  Nothing -> 0
+             in case Buffer.writeWord64LE nBuf bitWordIdx (curWord .|. (1 `shiftL` bitInWord)) of
+                  Just updated -> updated
+                  Nothing -> nBuf
+          else nBuf
+     in (dBuf', nBuf', dstIdx + 1)
 
--- | Vectorized sum of 64-bit IEEE 754 floats in unboxed column, skipping null rows.
+-- | Vectorized sum of 64-bit floating point numbers in unboxed column.
 columnSumF64 :: BS.ByteString -> BS.ByteString -> Int -> Double
 columnSumF64 dataBs nullBs rowCount
   | rowCount <= 0 = 0.0
@@ -175,19 +168,13 @@ columnSumF64 dataBs nullBs rowCount
  where
   go row acc
     | row >= rowCount = acc
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v -> go (row + 1) (acc + castWord64ToDouble v)
-                Nothing -> go (row + 1) acc
-              else go (row + 1) acc
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just w -> go (row + 1) (acc + castWord64ToDouble w)
+          Nothing -> go (row + 1) acc
+    | otherwise = go (row + 1) acc
 
--- | Vectorized minimum of 64-bit IEEE 754 floats in unboxed column.
+-- | Vectorized minimum of 64-bit floating point numbers in unboxed column.
 columnMinF64 :: BS.ByteString -> BS.ByteString -> Int -> Maybe Double
 columnMinF64 dataBs nullBs rowCount
   | rowCount <= 0 = Nothing
@@ -195,24 +182,18 @@ columnMinF64 dataBs nullBs rowCount
  where
   go row currentMin
     | row >= rowCount = currentMin
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v ->
-                  let d = castWord64ToDouble v
-                      nextMin = case currentMin of
-                        Just m -> Just (min m d)
-                        Nothing -> Just d
-                   in go (row + 1) nextMin
-                Nothing -> go (row + 1) currentMin
-              else go (row + 1) currentMin
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just w ->
+            let v = castWord64ToDouble w
+                nextMin = case currentMin of
+                  Just m -> Just (min m v)
+                  Nothing -> Just v
+             in go (row + 1) nextMin
+          Nothing -> go (row + 1) currentMin
+    | otherwise = go (row + 1) currentMin
 
--- | Vectorized maximum of 64-bit IEEE 754 floats in unboxed column.
+-- | Vectorized maximum of 64-bit floating point numbers in unboxed column.
 columnMaxF64 :: BS.ByteString -> BS.ByteString -> Int -> Maybe Double
 columnMaxF64 dataBs nullBs rowCount
   | rowCount <= 0 = Nothing
@@ -220,22 +201,16 @@ columnMaxF64 dataBs nullBs rowCount
  where
   go row currentMax
     | row >= rowCount = currentMax
-    | otherwise =
-        let bitWordIdx = (row `shiftR` 6) * 8
-            bitInWord = row .&. 63
-            isValid = case Buffer.readWord64LE nullBs bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if isValid
-              then case Buffer.readWord64LE dataBs (row * 8) of
-                Just v ->
-                  let d = castWord64ToDouble v
-                      nextMax = case currentMax of
-                        Just m -> Just (max m d)
-                        Nothing -> Just d
-                   in go (row + 1) nextMax
-                Nothing -> go (row + 1) currentMax
-              else go (row + 1) currentMax
+    | isRowValid nullBs row =
+        case Buffer.readWord64LE dataBs (row * 8) of
+          Just w ->
+            let v = castWord64ToDouble w
+                nextMax = case currentMax of
+                  Just m -> Just (max m v)
+                  Nothing -> Just v
+             in go (row + 1) nextMax
+          Nothing -> go (row + 1) currentMax
+    | otherwise = go (row + 1) currentMax
 
 -- | Vectorized predicate filter evaluating (val > threshold) for floats.
 columnFilterGtF64 :: BS.ByteString -> BS.ByteString -> Int -> Double -> BS.ByteString
@@ -261,7 +236,7 @@ columnFilterGtF64 dataBs nullBs rowCount threshold
     let r = baseRow + bitPos
      in if r < rowCount && (validWord .&. (1 `shiftL` bitPos)) /= 0
           then case Buffer.readWord64LE dataBs (r * 8) of
-            Just v | castWord64ToDouble v > threshold -> acc .|. (1 `shiftL` bitPos)
+            Just w | castWord64ToDouble w > threshold -> acc .|. (1 `shiftL` bitPos)
             _ -> acc
           else acc
 
@@ -289,37 +264,30 @@ columnFilterLtF64 dataBs nullBs rowCount threshold
     let r = baseRow + bitPos
      in if r < rowCount && (validWord .&. (1 `shiftL` bitPos)) /= 0
           then case Buffer.readWord64LE dataBs (r * 8) of
-            Just v | castWord64ToDouble v < threshold -> acc .|. (1 `shiftL` bitPos)
+            Just w | castWord64ToDouble w < threshold -> acc .|. (1 `shiftL` bitPos)
             _ -> acc
           else acc
 
--- | Gathers selected float rows from unboxed column into a new contiguous unboxed column.
+-- | Gathers selected float rows according to selection bitmap.
 columnProjectF64 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> Int -> (BS.ByteString, BS.ByteString, Int)
 columnProjectF64 = columnProjectU64
 
--- | Vectorized element-wise addition across two Float64 columns.
+-- | Vectorized element-wise addition across two float columns.
 columnAddF64 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> BS.ByteString -> Int -> (BS.ByteString, BS.ByteString)
 columnAddF64 dataA nullA dataB nullB rowCount
   | rowCount <= 0 = (BS.empty, BS.empty)
   | otherwise =
-      let numWords = (rowCount + 63) `shiftR` 6
-          outData = Buffer.allocateBuffer (rowCount * 8)
-          outNull = Buffer.allocateBuffer (numWords * 8)
-          (finalData, finalNull) = go 0 outData outNull
-       in (finalData, finalNull)
+      let dataBuf = Buffer.allocateBuffer (rowCount * 8)
+          numBitWords = (rowCount + 63) `shiftR` 6
+          nullBuf = Buffer.allocateBuffer (numBitWords * 8)
+       in go 0 dataBuf nullBuf
  where
   go row accData accNull
     | row >= rowCount = (accData, accNull)
     | otherwise =
         let bitWordIdx = (row `shiftR` 6) * 8
             bitInWord = row .&. 63
-            validA = case Buffer.readWord64LE nullA bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-            validB = case Buffer.readWord64LE nullB bitWordIdx of
-              Just w -> (w .&. (1 `shiftL` bitInWord)) /= 0
-              Nothing -> False
-         in if validA && validB
+         in if isRowValid nullA row && isRowValid nullB row
               then
                 let vA = case Buffer.readWord64LE dataA (row * 8) of
                       Just w -> castWord64ToDouble w
@@ -427,3 +395,126 @@ columnBitmapCount b rowCount
                    then raw .&. ((1 `shiftL` (rowCount .&. 63)) - 1)
                    else raw
      in acc + popCount masked
+
+-- | Produces a packed permutation index buffer containing row offsets sorted in ascending order (NULLS LAST).
+columnSortIndicesU64 :: BS.ByteString -> BS.ByteString -> Int -> BS.ByteString
+columnSortIndicesU64 dataBs nullBs rowCount
+  | rowCount <= 0 = BS.empty
+  | otherwise =
+      let (validRows, nullRows) = partition (isRowValid nullBs) [0 .. rowCount - 1]
+          getVal r = case Buffer.readWord64LE dataBs (r * 8) of
+            Just w -> w
+            Nothing -> 0
+          sortedValid = sortBy (comparing getVal) validRows
+          allSorted = sortedValid ++ nullRows
+          outBuf = Buffer.allocateBuffer (rowCount * 8)
+          writeIdx (buf, off) r =
+            case Buffer.writeWord64LE buf off (fromIntegral r) of
+              Just updated -> (updated, off + 8)
+              Nothing -> (buf, off + 8)
+          (finalBuf, _) = foldl writeIdx (outBuf, 0) allSorted
+       in finalBuf
+
+-- | Produces a packed permutation index buffer for float rows sorted in ascending order (NULLS LAST).
+columnSortIndicesF64 :: BS.ByteString -> BS.ByteString -> Int -> BS.ByteString
+columnSortIndicesF64 dataBs nullBs rowCount
+  | rowCount <= 0 = BS.empty
+  | otherwise =
+      let (validRows, nullRows) = partition (isRowValid nullBs) [0 .. rowCount - 1]
+          getVal r = case Buffer.readWord64LE dataBs (r * 8) of
+            Just w -> castWord64ToDouble w
+            Nothing -> 0.0
+          sortedValid = sortBy (comparing getVal) validRows
+          allSorted = sortedValid ++ nullRows
+          outBuf = Buffer.allocateBuffer (rowCount * 8)
+          writeIdx (buf, off) r =
+            case Buffer.writeWord64LE buf off (fromIntegral r) of
+              Just updated -> (updated, off + 8)
+              Nothing -> (buf, off + 8)
+          (finalBuf, _) = foldl writeIdx (outBuf, 0) allSorted
+       in finalBuf
+
+-- | Performs O(log N) binary search over valid portion of sorted permutation index.
+columnBinarySearchU64 :: BS.ByteString -> BS.ByteString -> Int -> Word64 -> Maybe Int
+columnBinarySearchU64 dataBs permBs validCount target
+  | validCount <= 0 = Nothing
+  | otherwise = go 0 (validCount - 1)
+ where
+  go low high
+    | low > high = Nothing
+    | otherwise =
+        let mid = (low + high) `shiftR` 1
+         in case Buffer.readWord64LE permBs (mid * 8) of
+              Nothing -> Nothing
+              Just row ->
+                case Buffer.readWord64LE dataBs (fromIntegral row * 8) of
+                  Nothing -> Nothing
+                  Just val -> case compare val target of
+                    EQ -> Just (fromIntegral row)
+                    LT -> go (mid + 1) high
+                    GT -> go low (mid - 1)
+
+-- | Performs O(log N) binary search over valid portion of float sorted permutation index.
+columnBinarySearchF64 :: BS.ByteString -> BS.ByteString -> Int -> Double -> Maybe Int
+columnBinarySearchF64 dataBs permBs validCount target
+  | validCount <= 0 = Nothing
+  | otherwise = go 0 (validCount - 1)
+ where
+  go low high
+    | low > high = Nothing
+    | otherwise =
+        let mid = (low + high) `shiftR` 1
+         in case Buffer.readWord64LE permBs (mid * 8) of
+              Nothing -> Nothing
+              Just row ->
+                case Buffer.readWord64LE dataBs (fromIntegral row * 8) of
+                  Nothing -> Nothing
+                  Just w ->
+                    let val = castWord64ToDouble w
+                     in case compare val target of
+                          EQ -> Just (fromIntegral row)
+                          LT -> go (mid + 1) high
+                          GT -> go low (mid - 1)
+
+-- | Gathers row elements according to a permutation index buffer into a new unboxed column.
+columnGatherU64 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> Int -> (BS.ByteString, BS.ByteString, Int)
+columnGatherU64 dataBs nullBs permBs permCount
+  | permCount <= 0 = (BS.empty, BS.empty, 0)
+  | otherwise =
+      let numBitWords = (permCount + 63) `shiftR` 6
+          destData0 = Buffer.allocateBuffer (permCount * 8)
+          destNull0 = Buffer.allocateBuffer (numBitWords * 8)
+          (finalData, finalNull) = foldl gatherRow (destData0, destNull0) [0 .. permCount - 1]
+       in (finalData, finalNull, permCount)
+ where
+  gatherRow (dBuf, nBuf) dstIdx =
+    case Buffer.readWord64LE permBs (dstIdx * 8) of
+      Nothing -> (dBuf, nBuf)
+      Just srcRowWord ->
+        let srcRow = fromIntegral srcRowWord
+            bitWordIdx = (dstIdx `shiftR` 6) * 8
+            bitInWord = dstIdx .&. 63
+         in if isRowValid nullBs srcRow
+              then
+                let val = case Buffer.readWord64LE dataBs (srcRow * 8) of
+                      Just w -> w
+                      Nothing -> 0
+                    curNullWord = case Buffer.readWord64LE nBuf bitWordIdx of
+                      Just w -> w
+                      Nothing -> 0
+                    dBuf' = case Buffer.writeWord64LE dBuf (dstIdx * 8) val of
+                      Just updated -> updated
+                      Nothing -> dBuf
+                    nBuf' = case Buffer.writeWord64LE nBuf bitWordIdx (curNullWord .|. (1 `shiftL` bitInWord)) of
+                      Just updated -> updated
+                      Nothing -> nBuf
+                 in (dBuf', nBuf')
+              else
+                let dBuf' = case Buffer.writeWord64LE dBuf (dstIdx * 8) 0 of
+                      Just updated -> updated
+                      Nothing -> dBuf
+                 in (dBuf', nBuf)
+
+-- | Gathers float row elements according to a permutation index buffer into a new unboxed column.
+columnGatherF64 :: BS.ByteString -> BS.ByteString -> BS.ByteString -> Int -> (BS.ByteString, BS.ByteString, Int)
+columnGatherF64 = columnGatherU64

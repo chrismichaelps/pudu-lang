@@ -553,5 +553,11 @@ isHashingBuiltin builtin = case builtin of
   ColumnBitmapOrBuiltin -> True
   ColumnBitmapNotBuiltin -> True
   ColumnBitmapCountBuiltin -> True
+  ColumnSortIndicesU64Builtin -> True
+  ColumnSortIndicesF64Builtin -> True
+  ColumnBinarySearchU64Builtin -> True
+  ColumnBinarySearchF64Builtin -> True
+  ColumnGatherU64Builtin -> True
+  ColumnGatherF64Builtin -> True
   _ -> False
 

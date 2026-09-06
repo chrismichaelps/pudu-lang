@@ -1124,7 +1124,7 @@ testProgramEvaluation = do
     , counterexample "flat hash table with control metadata evaluates"
         (flatMaps === Just "31")
     , counterexample "vectorized columnar engine with unboxed storage evaluates"
-        (columnVectors === Just "20")
+        (columnVectors === Just "22")
 
 
     , counterexample "the format modules parse and render"

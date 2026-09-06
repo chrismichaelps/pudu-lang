@@ -141,6 +141,12 @@ data Builtin
   | ColumnBitmapOrBuiltin
   | ColumnBitmapNotBuiltin
   | ColumnBitmapCountBuiltin
+  | ColumnSortIndicesU64Builtin
+  | ColumnSortIndicesF64Builtin
+  | ColumnBinarySearchU64Builtin
+  | ColumnBinarySearchF64Builtin
+  | ColumnGatherU64Builtin
+  | ColumnGatherF64Builtin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -279,3 +285,9 @@ builtinName value = case value of
   ColumnBitmapOrBuiltin -> "columnBitmapOr"
   ColumnBitmapNotBuiltin -> "columnBitmapNot"
   ColumnBitmapCountBuiltin -> "columnBitmapCount"
+  ColumnSortIndicesU64Builtin -> "columnSortIndicesU64"
+  ColumnSortIndicesF64Builtin -> "columnSortIndicesF64"
+  ColumnBinarySearchU64Builtin -> "columnBinarySearchU64"
+  ColumnBinarySearchF64Builtin -> "columnBinarySearchF64"
+  ColumnGatherU64Builtin -> "columnGatherU64"
+  ColumnGatherF64Builtin -> "columnGatherF64"

@@ -140,6 +140,12 @@ installBuiltinConstructors = do
   bind "columnBitmapOr" (BuiltinValue ColumnBitmapOrBuiltin)
   bind "columnBitmapNot" (BuiltinValue ColumnBitmapNotBuiltin)
   bind "columnBitmapCount" (BuiltinValue ColumnBitmapCountBuiltin)
+  bind "columnSortIndicesU64" (BuiltinValue ColumnSortIndicesU64Builtin)
+  bind "columnSortIndicesF64" (BuiltinValue ColumnSortIndicesF64Builtin)
+  bind "columnBinarySearchU64" (BuiltinValue ColumnBinarySearchU64Builtin)
+  bind "columnBinarySearchF64" (BuiltinValue ColumnBinarySearchF64Builtin)
+  bind "columnGatherU64" (BuiltinValue ColumnGatherU64Builtin)
+  bind "columnGatherF64" (BuiltinValue ColumnGatherF64Builtin)
   bind "hashOf" (BuiltinValue HashOfBuiltin)
 
   bind "mixHash" (BuiltinValue MixHashBuiltin)

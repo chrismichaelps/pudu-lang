@@ -28,6 +28,12 @@ aliases: [Eval Column]
 - `callColumnBitmapOr`: Bitwise OR of two selection masks.
 - `callColumnBitmapNot`: Inversion of selection mask.
 - `callColumnBitmapCount`: Counts set bits in selection mask using popcount.
+- `callColumnSortIndicesU64`: Sorts integer column row indices, returning permutation index as `Bytes`.
+- `callColumnSortIndicesF64`: Sorts float column row indices, returning permutation index as `Bytes`.
+- `callColumnBinarySearchU64`: Performs binary search over sorted integer permutation index, returning `Option[Int]`.
+- `callColumnBinarySearchF64`: Performs binary search over sorted float permutation index, returning `Option[Int]`.
+- `callColumnGatherU64`: Gathers rows named in permutation index into `(dataBytes, nullBytes, rowCount)`.
+- `callColumnGatherF64`: Gathers float rows named in permutation index into `(dataBytes, nullBytes, rowCount)`.
 
 ## Grill Log
 
@@ -35,6 +41,7 @@ aliases: [Eval Column]
 - **Q:** How are malformed column buffers validated? **A:** Lengths and byte sizes are checked against the row count. Mismatches abort with diagnostic E7001 or E7004.
 - **Q:** How are selection masks integrated with BitSet? **A:** Selection bitmaps use the same packed 64-bit word format as `Std.BitSet`, enabling zero-cost conversions to bitsets.
 - **Q:** Are floating point operations subject to intermediate boxing? **A:** No; register bit-casting ensures values are decoded and calculated directly with hardware floating point units.
+- **Q:** How does `callColumnGatherU64` validate the permutation index? **A:** Each index read from the permutation buffer is bounds-checked against the source column's `rowCount`. Out-of-range indices abort with diagnostic E7004.
 
 
 ## Dependencies and consumers

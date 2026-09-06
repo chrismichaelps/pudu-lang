@@ -163,12 +163,15 @@ Include `BufferReadI64Builtin`, `BufferWriteI64Builtin`, `BufferReadF64Builtin`,
 `ColumnSumU64Builtin`, `ColumnMinU64Builtin`, `ColumnMaxU64Builtin`, `ColumnFilterGtU64Builtin`,
 `ColumnProjectU64Builtin`, `ColumnSumF64Builtin`, `ColumnMinF64Builtin`, `ColumnMaxF64Builtin`,
 `ColumnFilterGtF64Builtin`, `ColumnFilterLtF64Builtin`, `ColumnProjectF64Builtin`, `ColumnAddF64Builtin`,
-`ColumnBitmapAndBuiltin`, `ColumnBitmapOrBuiltin`, `ColumnBitmapNotBuiltin`, and `ColumnBitmapCountBuiltin`
+`ColumnBitmapAndBuiltin`, `ColumnBitmapOrBuiltin`, `ColumnBitmapNotBuiltin`, `ColumnBitmapCountBuiltin`,
+`ColumnSortIndicesU64Builtin`, `ColumnSortIndicesF64Builtin`, `ColumnBinarySearchU64Builtin`,
+`ColumnBinarySearchF64Builtin`, `ColumnGatherU64Builtin`, and `ColumnGatherF64Builtin`
 in `isBuiltinImmediate` so they evaluate immediately without task scheduling or effect handler interception.
 
 ### Resolved Grill Log
 - **Q:** Route vectorized columnar reductions through IO effects? **A:** No; column operations are pure mathematical and projection transformations operating deterministically on unboxed memory.
 - **Q:** Route bitmap boolean algebra through immediate evaluation? **A:** Yes; bitmap bitwise operations are pure register bit operations without runtime side-effects.
+- **Q:** Are sorting and binary search operations immediate builtins? **A:** Yes; permutation index generation and binary search lookups operate on deterministic unboxed memory without external capabilities or thread yielding.
 
 
 

@@ -16,6 +16,12 @@ module Pudu.Eval.Column
   , callColumnBitmapOr
   , callColumnBitmapNot
   , callColumnBitmapCount
+  , callColumnSortIndicesU64
+  , callColumnSortIndicesF64
+  , callColumnBinarySearchU64
+  , callColumnBinarySearchF64
+  , callColumnGatherU64
+  , callColumnGatherF64
   ) where
 
 import Data.Word (Word64)
@@ -166,3 +172,56 @@ callColumnBitmapCount spanValue arguments = case arguments of
      in pure (intOf (fromIntegral count))
   [_, _] -> abortAt (Just spanValue) "E7001" "columnBitmapCount expects selection bitmap and row count" Nothing
   _ -> abortAt (Just spanValue) "E7003" "columnBitmapCount expects two arguments" Nothing
+
+callColumnSortIndicesU64 :: Span -> [Value] -> Evaluator Value
+callColumnSortIndicesU64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue nullBs, IntValue _ rowCount] ->
+    let res = Column.columnSortIndicesU64 dataBs nullBs (fromIntegral rowCount)
+     in pure (BytesValue res)
+  [_, _, _] -> abortAt (Just spanValue) "E7001" "columnSortIndicesU64 expects data buffer, null bitmap, and row count" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnSortIndicesU64 expects three arguments" Nothing
+
+callColumnSortIndicesF64 :: Span -> [Value] -> Evaluator Value
+callColumnSortIndicesF64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue nullBs, IntValue _ rowCount] ->
+    let res = Column.columnSortIndicesF64 dataBs nullBs (fromIntegral rowCount)
+     in pure (BytesValue res)
+  [_, _, _] -> abortAt (Just spanValue) "E7001" "columnSortIndicesF64 expects data buffer, null bitmap, and row count" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnSortIndicesF64 expects three arguments" Nothing
+
+callColumnBinarySearchU64 :: Span -> [Value] -> Evaluator Value
+callColumnBinarySearchU64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue permBs, IntValue _ validCount, IntValue _ target]
+    | target >= 0 && target <= toInteger (maxBound :: Word64) ->
+        case Column.columnBinarySearchU64 dataBs permBs (fromIntegral validCount) (fromIntegral target) of
+          Just r -> pure (someValue (intOf (fromIntegral r)))
+          Nothing -> pure noneValue
+    | otherwise ->
+        abortAt (Just spanValue) "E7004" "columnBinarySearchU64 target outside UInt64 range" Nothing
+  [_, _, _, _] -> abortAt (Just spanValue) "E7001" "columnBinarySearchU64 expects data buffer, index buffer, count, and target" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnBinarySearchU64 expects four arguments" Nothing
+
+callColumnBinarySearchF64 :: Span -> [Value] -> Evaluator Value
+callColumnBinarySearchF64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue permBs, IntValue _ validCount, FloatValue _ target] ->
+    case Column.columnBinarySearchF64 dataBs permBs (fromIntegral validCount) target of
+      Just r -> pure (someValue (intOf (fromIntegral r)))
+      Nothing -> pure noneValue
+  [_, _, _, _] -> abortAt (Just spanValue) "E7001" "columnBinarySearchF64 expects data buffer, index buffer, count, and target" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnBinarySearchF64 expects four arguments" Nothing
+
+callColumnGatherU64 :: Span -> [Value] -> Evaluator Value
+callColumnGatherU64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue nullBs, BytesValue permBs, IntValue _ permCount] ->
+    let (gData, gNull, gCount) = Column.columnGatherU64 dataBs nullBs permBs (fromIntegral permCount)
+     in pure (TupleValue [BytesValue gData, BytesValue gNull, intOf (fromIntegral gCount)])
+  [_, _, _, _] -> abortAt (Just spanValue) "E7001" "columnGatherU64 expects data buffer, null bitmap, index buffer, and count" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnGatherU64 expects four arguments" Nothing
+
+callColumnGatherF64 :: Span -> [Value] -> Evaluator Value
+callColumnGatherF64 spanValue arguments = case arguments of
+  [BytesValue dataBs, BytesValue nullBs, BytesValue permBs, IntValue _ permCount] ->
+    let (gData, gNull, gCount) = Column.columnGatherF64 dataBs nullBs permBs (fromIntegral permCount)
+     in pure (TupleValue [BytesValue gData, BytesValue gNull, intOf (fromIntegral gCount)])
+  [_, _, _, _] -> abortAt (Just spanValue) "E7001" "columnGatherF64 expects data buffer, null bitmap, index buffer, and count" Nothing
+  _ -> abortAt (Just spanValue) "E7003" "columnGatherF64 expects four arguments" Nothing

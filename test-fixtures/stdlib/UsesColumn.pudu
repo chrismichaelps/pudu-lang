@@ -297,6 +297,118 @@ fn testEmptyAndAllNullFloatColumns() -> Option[Bool] {
       && Option.isNone(&allNullMax))
 }
 
+fn testIntegerSortingAndBinarySearch() -> Option[Bool] {
+  let col0 = Column.createU64(7)
+  let col1 = Column.appendU64(&col0, 40u64) ?
+  let col2 = Column.appendU64(&col1, 10u64) ?
+  let col3 = Column.appendNullU64(&col2) ?
+  let col4 = Column.appendU64(&col3, 30u64) ?
+  let col5 = Column.appendU64(&col4, 20u64) ?
+  let col6 = Column.appendNullU64(&col5) ?
+  let col7 = Column.appendU64(&col6, 50u64) ?
+
+  // Compute sorted permutation indices (ASC NULLS LAST)
+  let perm = Column.sortIndices(&col7)
+  let s0 = Buffer.readU64(&perm, 0) ?
+  let s1 = Buffer.readU64(&perm, 8) ?
+  let s2 = Buffer.readU64(&perm, 16) ?
+  let s3 = Buffer.readU64(&perm, 24) ?
+  let s4 = Buffer.readU64(&perm, 32) ?
+
+  // Binary search over valid portion
+  let found30 = Column.binarySearch(&col7, &perm, 30u64) ?
+  let found10 = Column.binarySearch(&col7, &perm, 10u64) ?
+  let found50 = Column.binarySearch(&col7, &perm, 50u64) ?
+  let notFound = Column.binarySearch(&col7, &perm, 99u64)
+
+  // Gather rows in sorted permutation order
+  let sortedCol = Column.gather(&col7, &perm)
+  let g0 = Column.getU64(&sortedCol, 0) ?
+  let g1 = Column.getU64(&sortedCol, 1) ?
+  let g2 = Column.getU64(&sortedCol, 2) ?
+  let g3 = Column.getU64(&sortedCol, 3) ?
+  let g4 = Column.getU64(&sortedCol, 4) ?
+  let gNull5 = Column.isNull(&sortedCol, 5)
+  let gNull6 = Column.isNull(&sortedCol, 6)
+  let gatheredSum = Column.sum(&sortedCol)
+
+  Some(s0 == 1u64
+      && s1 == 4u64
+      && s2 == 3u64
+      && s3 == 0u64
+      && s4 == 6u64
+      && found30 == 3
+      && found10 == 1
+      && found50 == 6
+      && Option.isNone(&notFound)
+      && Column.length(&sortedCol) == 7
+      && Column.nullCount(&sortedCol) == 2
+      && g0 == 10u64
+      && g1 == 20u64
+      && g2 == 30u64
+      && g3 == 40u64
+      && g4 == 50u64
+      && gNull5
+      && gNull6
+      && gatheredSum == 150u64)
+}
+
+fn testFloatSortingAndBinarySearch() -> Option[Bool] {
+  let col0 = Column.createF64(7)
+  let col1 = Column.appendF64(&col0, 40.5) ?
+  let col2 = Column.appendF64(&col1, 10.25) ?
+  let col3 = Column.appendNullF64(&col2) ?
+  let col4 = Column.appendF64(&col3, 30.0) ?
+  let col5 = Column.appendF64(&col4, 20.75) ?
+  let col6 = Column.appendNullF64(&col5) ?
+  let col7 = Column.appendF64(&col6, 50.125) ?
+
+  // Compute sorted permutation indices (ASC NULLS LAST)
+  let perm = Column.sortIndicesF64(&col7)
+  let s0 = Buffer.readU64(&perm, 0) ?
+  let s1 = Buffer.readU64(&perm, 8) ?
+  let s2 = Buffer.readU64(&perm, 16) ?
+  let s3 = Buffer.readU64(&perm, 24) ?
+  let s4 = Buffer.readU64(&perm, 32) ?
+
+  // Binary search over valid portion
+  let found30 = Column.binarySearchF64(&col7, &perm, 30.0) ?
+  let found10 = Column.binarySearchF64(&col7, &perm, 10.25) ?
+  let found50 = Column.binarySearchF64(&col7, &perm, 50.125) ?
+  let notFound = Column.binarySearchF64(&col7, &perm, 99.9)
+
+  // Gather rows in sorted permutation order
+  let sortedCol = Column.gatherF64(&col7, &perm)
+  let g0 = Column.getF64(&sortedCol, 0) ?
+  let g1 = Column.getF64(&sortedCol, 1) ?
+  let g2 = Column.getF64(&sortedCol, 2) ?
+  let g3 = Column.getF64(&sortedCol, 3) ?
+  let g4 = Column.getF64(&sortedCol, 4) ?
+  let gNull5 = Column.isNullF64(&sortedCol, 5)
+  let gNull6 = Column.isNullF64(&sortedCol, 6)
+  let gatheredSum = Column.sumF64(&sortedCol)
+
+  Some(s0 == 1u64
+      && s1 == 4u64
+      && s2 == 3u64
+      && s3 == 0u64
+      && s4 == 6u64
+      && found30 == 3
+      && found10 == 1
+      && found50 == 6
+      && Option.isNone(&notFound)
+      && Column.lengthF64(&sortedCol) == 7
+      && Column.nullCountF64(&sortedCol) == 2
+      && g0 == 10.25
+      && g1 == 20.75
+      && g2 == 30.0
+      && g3 == 40.5
+      && g4 == 50.125
+      && gNull5
+      && gNull6
+      && gatheredSum == 151.625)
+}
+
 export fn main() -> Int {
   var held = 0
 
@@ -343,6 +455,12 @@ export fn main() -> Int {
 
   // 11. Empty and all-null float columns
   if Option.unwrapOr(testEmptyAndAllNullFloatColumns(), false) { held = held + 1 }
+
+  // 12. Integer column sorting, binary search, and gather
+  if Option.unwrapOr(testIntegerSortingAndBinarySearch(), false) { held = held + 1 }
+
+  // 13. Float column sorting, binary search, and gather
+  if Option.unwrapOr(testFloatSortingAndBinarySearch(), false) { held = held + 1 }
 
   held
 }

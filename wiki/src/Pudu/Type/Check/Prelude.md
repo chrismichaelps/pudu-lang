@@ -153,10 +153,17 @@ Wires type schemes for the 13 extended primitives:
 - `columnBitmapOr: fn(Bytes, Bytes, Int) -> Bytes`
 - `columnBitmapNot: fn(Bytes, Int) -> Bytes`
 - `columnBitmapCount: fn(Bytes, Int) -> Int`
+- `columnSortIndicesU64: fn(Bytes, Bytes, Int) -> Bytes`
+- `columnSortIndicesF64: fn(Bytes, Bytes, Int) -> Bytes`
+- `columnBinarySearchU64: fn(Bytes, Bytes, Int, UInt64) -> Option[Int]`
+- `columnBinarySearchF64: fn(Bytes, Bytes, Int, Float64) -> Option[Int]`
+- `columnGatherU64: fn(Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes, Int)`
+- `columnGatherF64: fn(Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes, Int)`
 
 ### Resolved Grill Log
 - **Q:** Should buffer operations require unsafe casts or pointer types? **A:** No; type buffer arguments as `Bytes` and scalar values as their precise fixed-width nominal types (`Int64`, `Float64`, `UInt32`, `UInt8`, `UInt64`).
 - **Q:** How are multi-result vector projections typed? **A:** As structural tuples `(Bytes, Bytes, Int)` or `(Bytes, Bytes)` avoiding heap-allocated record overhead.
+- **Q:** How are permutation indexes typed? **A:** Permutation index buffers are typed as `Bytes`, holding contiguous 64-bit row offsets; binary search returns `Option[Int]` for the matched row offset.
 
 
 

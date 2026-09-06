@@ -151,11 +151,14 @@ Adds the 24 extended primitive names to `preludeValueNames`:
 `bufferReadI64`, `bufferWriteI64`, `bufferReadF64`, `bufferWriteF64`, `bufferReadU32`, `bufferWriteU32`,
 `bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, `columnProjectU64`,
 `columnSumF64`, `columnMinF64`, `columnMaxF64`, `columnFilterGtF64`, `columnFilterLtF64`, `columnProjectF64`,
-`columnAddF64`, `columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, and `columnBitmapCount`.
+`columnAddF64`, `columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, `columnBitmapCount`,
+`columnSortIndicesU64`, `columnSortIndicesF64`, `columnBinarySearchU64`, `columnBinarySearchF64`,
+`columnGatherU64`, and `columnGatherF64`.
 They are available implicitly in the value namespace for standard library modules.
 
 ### Resolved Grill Log
 - **Q:** Introduce a separate namespace for columnar primitives? **A:** No; bind primitive names in prelude values and expose idiomatic record abstractions in `Std.Column`.
+- **Q:** Are sorting and binary search primitives registered in prelude values? **A:** Yes; registered in `preludeValueNames` so `Std.Column` and user modules resolve them unconditionally.
 
 
 

@@ -47,6 +47,12 @@ Exports:
 - `bitmapOr(b1: &Buffer, b2: &Buffer, count: Int) -> Buffer`: Bitwise OR of two selection masks.
 - `bitmapNot(b: &Buffer, count: Int) -> Buffer`: Bitwise inversion of selection mask.
 - `bitmapCount(b: &Buffer, count: Int) -> Int`: Total matching rows in selection mask.
+- `sortIndices(col: &ColumnU64) -> Buffer`: Compute ascending permutation index buffer (`ASC NULLS LAST`).
+- `binarySearch(col: &ColumnU64, indices: &Buffer, target: UInt64) -> Option[Int]`: $O(\log N)$ lookup in permutation index.
+- `gather(col: &ColumnU64, indices: &Buffer) -> ColumnU64`: Materialize column in permutation order.
+- `sortIndicesF64(col: &ColumnF64) -> Buffer`: Compute ascending float permutation index buffer (`ASC NULLS LAST`).
+- `binarySearchF64(col: &ColumnF64, indices: &Buffer, target: Float64) -> Option[Int]`: $O(\log N)$ lookup in float permutation index.
+- `gatherF64(col: &ColumnF64, indices: &Buffer) -> ColumnF64`: Materialize float column in permutation order.
 
 ## Governance
 
@@ -59,6 +65,7 @@ Exports:
 - **Q:** How does Std.Column integrate with Std.Buffer and Std.BitSet? **A:** The data and null bitmaps are backed directly by unboxed `Buffer` instances, and selection bitmaps are compatible with `BitSet` bit-level operations.
 - **Q:** What is the performance target? **A:** Aggregations and scans run at hardware memory bandwidth, outperforming row-based record iterations by orders of magnitude.
 - **Q:** Can multiple predicates be combined without row ID materialization? **A:** Yes; `bitmapAnd`, `bitmapOr`, and `bitmapNot` combine selection masks at 64 rows per machine cycle with zero row ID array allocations.
+- **Q:** How are sorting and searching optimized without heap allocations? **A:** `sortIndices` creates a single unboxed `Buffer` containing 64-bit row offsets; `binarySearch` operates directly on this buffer and the unboxed column data with zero intermediate object allocations.
 
 
 ## Referenced by
