@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native word-map cardinality
+
+Added [[Runtime Word Kernels]] and [[Eval Word Map]], wired through the pure prelude as
+`wordMapPopCount`. [[Std BitSet]] cardinality now folds host map payloads directly with native
+Word64 population counts, removing entry-array staging and interpreted per-bit loops. Payloads
+are checked before conversion and the result remains UInt128. No tests, builds, reviews or
+measurements run.
+
 ## 2026-09-06 — Sparse integer bitsets
 
 Added [[Std BitSet]] with persistent 64-ID words, validated block import, ascending enumeration,

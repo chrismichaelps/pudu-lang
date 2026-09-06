@@ -92,3 +92,14 @@ expanded STD scope alongside backend optimization. No measurements, tests, build
 Implemented the documented sparse bitset module; remains unvalidated.
 Exact next action for this continuation: add a Haskell packed-word kernel for bitset cardinality
 and block algebra so STD can avoid per-word evaluator dispatch.
+
+## Word-map reduction ownership
+
+Language Architect → Runtime Implementer. Own Runtime.Word, Eval.WordMap, primitive registration
+in Builtin.Definition, Builtin, Call, Install, semantic/type preludes, cabal and mirrored pages;
+own Std.BitSet.size consumer. Previous goal turn made progress (2e48c38 pushed). Implement a pure
+fallible Word64 reduction over host maps; preserve unrelated work. No validation commands.
+
+Implemented native cardinality and connected Std.BitSet.size. Algebra still runs in Pudu.
+Exact next action: introduce checked native block-algebra primitives for Std.BitSet union and
+intersection, preserving sorted keys and canonical nonzero words.

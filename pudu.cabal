@@ -165,6 +165,8 @@ library
     Pudu.Semantic.Scope
     Pudu.Semantic.Symbol
     Pudu.Source
+    Pudu.Runtime.Word
+    Pudu.Eval.WordMap
     Pudu.Runtime.Collection
   c-sources:        cbits/pudu_ffi.c
                    cbits/pudu_sqlite.c

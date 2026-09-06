@@ -96,6 +96,7 @@ installBuiltinConstructors = do
   bind "sha256Of" (BuiltinValue Sha256Builtin)
   bind "hmacSha256Of" (BuiltinValue HmacBuiltin)
   bind "deriveKey" (BuiltinValue DeriveKeyBuiltin)
+  bind "wordMapPopCount" (BuiltinValue WordMapPopCountBuiltin)
   bind "hashOf" (BuiltinValue HashOfBuiltin)
   bind "mixHash" (BuiltinValue MixHashBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)

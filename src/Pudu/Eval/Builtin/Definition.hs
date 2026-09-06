@@ -73,6 +73,7 @@ data Builtin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
+  | WordMapPopCountBuiltin
   | HashOfBuiltin
   | MixHashBuiltin
   | CreateDirectoryBuiltin
@@ -167,6 +168,7 @@ builtinName value = case value of
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"
+  WordMapPopCountBuiltin -> "wordMapPopCount"
   HashOfBuiltin -> "hashOf"
   MixHashBuiltin -> "mixHash"
   CreateDirectoryBuiltin -> "createDirectory"

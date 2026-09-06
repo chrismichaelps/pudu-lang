@@ -507,6 +507,7 @@ isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
   HmacBuiltin -> True
   DeriveKeyBuiltin -> True
+  WordMapPopCountBuiltin -> True
   HashOfBuiltin -> True
   MixHashBuiltin -> True
   _ -> False

@@ -62,17 +62,7 @@ export fn fromArray(ids: &Array[UInt64]) -> BitSet {
 export fn isEmpty(value: &BitSet) -> Bool { value.words.isEmpty() }
 
 /// UInt128 can count even the entire UInt64 ID domain.
-export fn size(value: &BitSet) -> UInt128 {
-  var count = 0u128
-  for pair in value.words.entries() {
-    var word = pair[1]
-    while word != 0u64 {
-      word = word & (word - 1u64)
-      count = count + 1u128
-    }
-  }
-  count
-}
+export fn size(value: &BitSet) -> UInt128 { wordMapPopCount(value.words) }
 
 /// Materialize members in ascending order.
 export fn toArray(value: &BitSet) -> Array[UInt64] {

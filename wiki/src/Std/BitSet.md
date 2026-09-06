@@ -36,8 +36,8 @@ Membership and point edits cost O(log b) map operations for b occupied blocks. A
 blocks, does fixed-width native bit operations, and assembles sorted output through `mapOf`,
 consuming [[Runtime Collection Kernels]]. Union and symmetric difference merge two ordered block
 arrays; intersection and difference scan left blocks with right-map lookup. Subset and disjointness
-short-circuit at the first disproving block. Cardinality clears one set bit per loop using
-`word & (word - 1u64)` only for nonzero words. No FFI, IO, global mutation, unchecked memory or
+short-circuit at the first disproving block. Cardinality calls `wordMapPopCount`, which folds map payloads directly with native Word64
+population counts through [[Runtime Word Kernels]], avoiding entry arrays and interpreted bit loops. No FFI, IO, global mutation, unchecked memory or
 new surface syntax is introduced. The evaluator still boxes words and stores tree nodes: this is
 word-packed membership, not a contiguous unboxed bitmap or a claim of C/C++ throughput.
 
@@ -62,3 +62,15 @@ Implementation is unvalidated at user direction; no performance measurements are
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Backend Representation Specialization]]
+
+## Word-map cardinality kernel
+
+`wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by
+[[Std BitSet]]. It counts payload bits independently of keys, including zero payloads, and avoids
+entry-array materialization. The runtime checks UInt64 kind/range before conversion and reports
+E7001 for invalid payloads or receiver, E7003 for wrong arity. Registration covers semantic names,
+type signatures, installation, builtin naming and pure dispatch. No IO or FFI capability is required.
+
+Resolved Grill Log: Use an explicit primitive rather than recognize a library function by name,
+so shadowing and ordinary calls retain their meaning. Result width is UInt128; an Int-sized host
+map cannot contain enough 64-bit words to overflow it. This remains unvalidated.

@@ -85,3 +85,15 @@ constructor.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Eval Program]] · [[Eval Loop]]
+
+## Word-map cardinality kernel
+
+`wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by
+[[Std BitSet]]. It counts payload bits independently of keys, including zero payloads, and avoids
+entry-array materialization. The runtime checks UInt64 kind/range before conversion and reports
+E7001 for invalid payloads or receiver, E7003 for wrong arity. Registration covers semantic names,
+type signatures, installation, builtin naming and pure dispatch. No IO or FFI capability is required.
+
+Resolved Grill Log: Use an explicit primitive rather than recognize a library function by name,
+so shadowing and ordinary calls retain their meaning. Result width is UInt128; an Int-sized host
+map cannot contain enough 64-bit words to overflow it. This remains unvalidated.

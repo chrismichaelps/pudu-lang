@@ -5,6 +5,9 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Runtime Word Kernels]] — native-word reductions over existing containers.
+- [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
+
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.

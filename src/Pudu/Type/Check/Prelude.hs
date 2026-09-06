@@ -143,6 +143,10 @@ declareBuiltinConstructors = do
   bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "deriveKey"
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  bindName "wordMapPopCount"
+    (polytype [("K", 0)] [] (FunctionTypeValue False
+      [NominalType "Map" [RigidType "K", NominalType "UInt64" []]]
+      (NominalType "UInt128" [])))
   bindName "hashOf" (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   bindName "mixHash" (monotype (FunctionTypeValue False [integerType] integerType))
   {-| The indexed store `Std.HashMap` reaches its buckets through. Built empty

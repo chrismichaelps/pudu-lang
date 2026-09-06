@@ -29,6 +29,7 @@ import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
 import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
 import Pudu.Eval.HashMap (mixKey)
+import Pudu.Eval.WordMap (callWordMapPopCount)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
 import Pudu.Eval.Order (comparableValue)
@@ -554,6 +555,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
       hash map wants: cheap, well spread, and stable within a run. A value
       hashed with it is not hidden, and two runs are not promised the same
       number for the same value. -}
+  (WordMapPopCountBuiltin, values) -> callWordMapPopCount spanValue values
   (HashOfBuiltin, [value]) -> pure (intOf (hashOfValue value))
   {-| A hash spread across the whole word against a value chosen when the
       process started, so the bucket a key lands in cannot be predicted from
