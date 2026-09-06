@@ -150,8 +150,11 @@ fn readRequest(
 /// The response always states its own length, so the client knows where the
 /// body ends without the connection closing to tell it.
 export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool {
+  serveWith(target, connection, handlerOf(target))
+}
+
+fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler) -> Bool {
   let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis)
-  let handle = handlerOf(target)
   if let Err(refusal) = read {
     let _sent = sendResponse(connection, &withLength(&closing(&refusal)), target.writeMillis)
     false
@@ -272,13 +275,14 @@ export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, Ser
   let workerCount = if target.workers < 1 { 1 } else { target.workers }
   while index < workerCount {
     let started = Concurrent.start(fn() -> () {
+      let handle = handlerOf(&serving)
       var receiving = true
       while receiving {
         match Channel.receive(&queue) {
           case Ok(Some(connection)) => {
             var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
             while keeping {
-              keeping = serveConnection(&serving, &connection)
+              keeping = serveWith(&serving, &connection, handle)
                 && !Result.unwrapOr(Sync.get(&stopping), true)
             }
             let _closed = Net.close(&connection)

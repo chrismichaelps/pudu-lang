@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bounded STD batch concurrency
+
+[[Std Concurrent]] adds parallelBounded and forEachBounded with fixed workers, atomic work
+claiming, retained join failures and no implicit retries. No tests, builds or reviews run.
+
+## 2026-09-06 — Worker handler reuse
+
+[[Std Http Server]] composes middleware once per worker and reuses the immutable handler
+across requests. Standalone serveConnection remains available. No tests or reviews run.
+
 ## 2026-09-06 — Bounded server workers
 
 [[Std Http Server]] uses a fixed worker pool and bounded connection queue, configured through

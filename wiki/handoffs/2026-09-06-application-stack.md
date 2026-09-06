@@ -71,3 +71,12 @@ Implemented fixed connection workers and bounded queue with configuration admiss
 App and mirrors. LSP untouched. No tests, builds or reviews.
 Exact next action: cap keep-alive requests per connection and make handler chain construction
 once per worker rather than once per request, preserving middleware order.
+
+Worker handler composition now occurs once per worker, preserving middleware order.
+The user requested “Threats in STD”; clarification between threads and security threats is pending.
+Exact next action: implement the clarified STD feature, retaining server worker limits.
+
+User clarified threads/concurrency. Implemented Std.Concurrent.parallelBounded and
+forEachBounded with atomic claiming and joining all started tasks. Own Concurrent and mirror.
+Exact next action: add typed result collection for bounded parallel mapping, retaining input
+order independently of completion order. No tests, builds or reviews run.

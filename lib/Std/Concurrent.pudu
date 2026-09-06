@@ -1,6 +1,7 @@
 module Std.Concurrent
 
 import Std.Result as Result
+import Std.Sync as Sync
 
 /// Why a thread could not be started, or what it said when it failed.
 export type ConcurrentError
@@ -79,4 +80,56 @@ export fn sleep(millis: Int) -> Result[(), ConcurrentError] {
 
 fn causeOf(message: Str) -> ConcurrentError {
   if message.contains("no such thread") { Missing } else { Failed(message) }
+}
+
+/// Run a batch with bounded workers; each action is claimed at most once.
+export fn parallelBounded(actions: &Array[fn() -> ()], workers: Int) -> Result[(), ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  let work = *actions
+  if work.isEmpty() { return Ok(()) }
+  let cursor = Sync.counter(0)
+  let count = if workers < work.length() { workers } else { work.length() }
+  let claimingFailure: Sync.Cell[Option[Str]] = Sync.cell(None)
+  var tasks: Array[Task] = []
+  var failure: Option[ConcurrentError] = None
+  var index = 0
+  while index < count {
+    let started = start(fn() -> () {
+      var going = true
+      while going {
+        match Sync.increment(&cursor, 1) {
+          case Err(problem) => {
+            let _recorded = Sync.set(&claimingFailure, Some(show(problem)))
+            going = false
+          }
+          case Ok(next) => {
+            if next > work.length() { going = false } else { (work[next - 1])() }
+          }
+        }
+      }
+    })
+    match started {
+      case Ok(worker) => { tasks = tasks.push(worker) }
+      case Err(problem) => {
+        failure = Some(problem)
+        break
+      }
+    }
+    index = index + 1
+  }
+  let joined = joinAll(&tasks)
+  if let Some(problem) = failure { return Err(problem) }
+  joined ?
+  let claimed = Result.mapErr(Sync.get(&claimingFailure), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
+  if let Some(problem) = claimed { Err(Other(problem)) } else { Ok(()) }
+}
+
+/// Apply an action to values with bounded concurrency, without implicit retries.
+export fn forEachBounded[T](items: &Array[T], workers: Int, action: fn(T) -> ()) -> Result[(), ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  var actions: Array[fn() -> ()] = []
+  for item in items {
+    actions = actions.push(fn() -> () { action(item) })
+  }
+  parallelBounded(&actions, workers)
 }

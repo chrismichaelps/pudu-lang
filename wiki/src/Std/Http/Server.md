@@ -70,3 +70,10 @@ stop flag between keep-alive requests. Handler abort/cancellation cleanup and bo
 shutdown remain unresolved; a handler that never returns can still hold one worker indefinitely.
 Resolved Grill Log: fixed workers bound tasks and retained handles; do not describe the connection
 accept count as concurrency. Do not discard worker-start or join errors. No tests or reviews run.
+
+## Worker handler reuse
+
+Each worker composes its middleware handler once before receiving connections, then passes that
+handler into the internal request-serving function. Public serveConnection still composes a
+handler for standalone use. Middleware invocation order and request-local results are unchanged.
+Resolved Grill Log: reuse the immutable handler closure, never a response or request value.
