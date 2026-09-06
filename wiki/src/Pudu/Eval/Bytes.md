@@ -22,3 +22,15 @@ UTF-8 decoding reports failure rather than replacement text.
   and prevents cheap native slicing/search. _Rejected:_ partial indexing.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Std Bytes]] · [[Eval Value]]
+
+## Direct representation conversion
+
+Bytes-to-array uses `Seq.fromFunction` over the known byte length, avoiding unpacked byte and
+mapped-value lists. Every generated index is inside that length. Array-to-bytes traverses the
+sequence in order for validation and then unfolds the validated sequence into one ByteString,
+using its exact length. No unsafe pointer operation or public representation change is introduced.
+
+### Resolved Grill Log
+- **Q:** Skip validation to pack faster? **A:** No; retain the first invalid element and existing diagnostic.
+- **Q:** Keep list staging between two length-aware containers? **A:** No; direct construction removes that intermediate representation.
+- **Q:** Claim lower measured allocation? **A:** No; the staging lists are removed in code, but no measurements were requested or run.

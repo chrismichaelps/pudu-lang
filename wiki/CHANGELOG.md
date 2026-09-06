@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Direct packed-byte conversions
+
+- Remove list staging from runtime byte/array conversions using length-aware container construction.
+- Preserve ordered byte validation, diagnostics and immutable results.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Backend specialization foundation
 
 - Specify evidence-driven storage layouts, scoped builders, fused kernels and a staged backend roadmap.

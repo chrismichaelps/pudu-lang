@@ -7,7 +7,6 @@ module Pudu.Eval.Bytes
   ) where
 
 import qualified Data.ByteString as ByteString
-import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -43,10 +42,15 @@ byteValue = IntValue byteKind . fromIntegral
 callBytesOf :: Span -> [Value] -> Evaluator Value
 callBytesOf spanValue arguments = case arguments of
   [ArrayValue members] -> do
-    bytes <- traverse oneByte (toList members)
-    pure (BytesValue (ByteString.pack bytes))
+    bytes <- traverse oneByte members
+    let (packed, _) = ByteString.unfoldrN (Seq.length bytes) nextByte bytes
+    pure (BytesValue packed)
   _ -> abortAt (Just spanValue) "E7003" "bytesOf expects one array" Nothing
  where
+  nextByte remaining = case Seq.viewl remaining of
+    Seq.EmptyL -> Nothing
+    byte Seq.:< rest -> Just (byte, rest)
+
   oneByte value = case value of
     IntValue _ number
       | number >= 0 && number <= 255 -> pure (fromInteger number)
@@ -136,7 +140,8 @@ callBytesMethod spanValue method receiver arguments = case receiver of
       pure (BoolValue (ByteString.isSuffixOf needle bytes))
     (BytesReverse, []) -> pure (BytesValue (ByteString.reverse bytes))
     (BytesToArray, []) ->
-      pure (ArrayValue (Seq.fromList (map byteValue (ByteString.unpack bytes))))
+      pure (ArrayValue (Seq.fromFunction (ByteString.length bytes)
+        (byteValue . ByteString.index bytes)))
     {-| Decoding answers `Option` because not every sequence of bytes is text.
         A wired-in signature cannot mention a type a library module declares,
         so the cause of the failure is named by `Std.Bytes` rather than here:

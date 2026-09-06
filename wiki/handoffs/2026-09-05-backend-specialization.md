@@ -18,3 +18,7 @@ lifetime and fallback evidence, connected to the actual lowering pipeline.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Backend Representation Specialization]] · [[Eval Keyed]]
+
+## Packed-byte continuation
+
+Own Eval.Bytes and its mirror. Removed list staging in byte/array conversions using known-length sequence generation and ByteString unfolding. Validation remains ordered and complete. No measurements, tests, builds or reviews run. The planned StoragePlan remains future work; the current tree exposes evaluator modules rather than an implemented lowering/codegen directory.
