@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Scalar integer hash specialization
+
+- Mix word-sized integer keys directly without staging a byte list or packed buffer.
+- Retain full-width fallback and existing magnitude/sign byte encoding.
+- Update runtime contract; no measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Direct collection enumeration
 
 - Build Map, Set and indexed-bucket result arrays through native ascending folds.

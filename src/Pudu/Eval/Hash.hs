@@ -26,6 +26,7 @@ import qualified Crypto.Hash as Hash
 import qualified Crypto.KDF.PBKDF2 as Pbkdf2
 import qualified Crypto.MAC.HMAC as Hmac
 import Data.Bits (shiftR, xor, (.&.))
+import Data.List (foldl')
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
@@ -93,17 +94,35 @@ hashOfValue value = case value of
     spreads a changed byte across the whole result rather than leaving it in
     the position it changed. -}
 hashOfBytes :: ByteString.ByteString -> Integer
-hashOfBytes = fromIntegral . ByteString.foldl' step (0xcbf29ce484222325 :: Word64)
- where
-  step accumulated byte = (accumulated `xor` fromIntegral byte) * 0x100000001b3
+hashOfBytes = fromIntegral . ByteString.foldl' mixByte offsetBasis
 
-{-| An integer mixed without rendering it, since a number is the commonest key
-    and rendering one to hash it would be the whole cost of the lookup. -}
+offsetBasis :: Word64
+offsetBasis = 0xcbf29ce484222325
+
+mixByte :: Word64 -> Word8 -> Word64
+mixByte accumulated byte = (accumulated `xor` fromIntegral byte) * 0x100000001b3
+{-# INLINE mixByte #-}
+
+{-| Word-sized magnitudes are folded without staging bytes in a list or buffer.
+    Admission happens before narrowing; the general path retains every bit. -}
 mixInteger :: Integer -> Integer
-mixInteger number =
-  hashOfBytes (ByteString.pack (bytesOfInteger (abs number) <> [sign]))
+mixInteger number = fromIntegral (mixByte magnitudeHash sign)
  where
-  sign = if number < 0 then 1 else 0 :: Word8
+  magnitude = abs number
+  sign = if number < 0 then 1 else 0
+  magnitudeHash
+    | magnitude <= fromIntegral (maxBound :: Word64) = mixWord (fromInteger magnitude)
+    | otherwise = foldl' mixByte offsetBasis (bytesOfInteger magnitude)
+
+mixWord :: Word64 -> Word64
+mixWord number = begin 56
+ where
+  begin shift
+    | shift > 0 && number `shiftR` shift == 0 = begin (shift - 8)
+    | otherwise = consume shift offsetBasis
+  consume shift accumulated =
+    let next = mixByte accumulated (fromIntegral (number `shiftR` shift))
+     in if shift == 0 then next else next `seq` consume (shift - 8) next
 
 bytesOfInteger :: Integer -> [Word8]
 bytesOfInteger number

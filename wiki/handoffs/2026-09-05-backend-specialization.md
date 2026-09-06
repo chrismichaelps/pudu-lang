@@ -34,3 +34,7 @@ Own Eval.Builtin and its mirror for sequence-native map/filter/reduce. Removed i
 ## Direct enumeration ownership
 
 Own Eval.Keyed, Eval.Builtin, Eval.HashMap and their mirrors for direct ascending sequence construction. Maps no longer create association lists for value enumeration. Set and bucket enumeration also avoid transient lists. No measurements or validation commands run.
+
+## Integer hash specialization
+
+Own Eval.Hash and its mirror. Added a checked Word64-magnitude path that mixes directly without list or byte-buffer staging. General Integer hashing avoids the packed intermediate buffer. Byte order, zero and sign encoding are retained. No measurements, tests, builds or reviews run.
