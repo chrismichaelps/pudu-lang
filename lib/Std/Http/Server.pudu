@@ -27,7 +27,8 @@ export type Server = {
   middleware: Array[Route.Middleware],
   headLimit: Int,
   bodyLimit: Int,
-  readMillis: Int
+  readMillis: Int,
+  writeMillis: Int
 }
 
 /// A running server, and the switch that stops it.
@@ -49,7 +50,7 @@ const BODY_LIMIT: Int = 8388608
 
 /// A server over a router, with no middleware and the default limits.
 export fn server(base: &Route.Router) -> Server {
-  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000}
+  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000}
 }
 
 /// A server with one more step wrapped around its handlers.
@@ -64,13 +65,14 @@ export fn using(base: &Server, step: Route.Middleware) -> Server {
     middleware: base.middleware.push(step),
     headLimit: base.headLimit,
     bodyLimit: base.bodyLimit,
-    readMillis: base.readMillis
+    readMillis: base.readMillis,
+    writeMillis: base.writeMillis
   }
 }
 
 /// A server with different limits on what a request may be.
 export fn withLimits(base: &Server, head: Int, payload: Int) -> Server {
-  Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload, readMillis: base.readMillis}
+  Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload, readMillis: base.readMillis, writeMillis: base.writeMillis}
 }
 
 /// The handler a server presents, with every step wrapped around it.
@@ -155,14 +157,14 @@ export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool 
   let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis)
   let handle = handlerOf(target)
   if let Err(refusal) = read {
-    let _sent = sendResponse(connection, &withLength(&closing(&refusal)))
+    let _sent = sendResponse(connection, &withLength(&closing(&refusal)), target.writeMillis)
     false
   } else {
     let request = Result.unwrapOr(read, emptyServerRequest())
     let answer = handle(request)
     let keeping = wantsKeepAlive(&request.message)
     let finished = if keeping { withLength(&answer) } else { withLength(&closing(&answer)) }
-    let sent = sendResponse(connection, &finished)
+    let sent = sendResponse(connection, &finished, target.writeMillis)
     keeping && Result.isOk(&sent)
   }
 }
@@ -173,11 +175,11 @@ export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool 
 /// followed it, which is a response this program did not write. A response
 /// carrying one is replaced rather than escaped: escaping guesses at an intent
 /// no legitimate value has.
-fn sendResponse(connection: &Net.Connection, answer: &Http.Response) -> Result[(), Net.NetError] {
+fn sendResponse(connection: &Net.Connection, answer: &Http.Response, millis: Int) -> Result[(), Net.NetError] {
   if let Err(_) = Safe.headersWritable(&answer.headers) {
-    Net.sendText(connection, Message.renderResponse(&withLength(&text(500, "the response could not be written"))))
+    Net.sendTextWithin(connection, Message.renderResponse(&withLength(&text(500, "the response could not be written"))), millis)
   } else {
-    Net.sendText(connection, Message.renderResponse(answer))
+    Net.sendTextWithin(connection, Message.renderResponse(answer), millis)
   }
 }
 
@@ -351,4 +353,9 @@ export fn logging(write: fn(Str) -> ()) -> Route.Middleware {
 /// One deadline for the complete request read, including partial packets.
 export fn withReadDeadline(base: &Server, millis: Int) -> Server {
   Server{..*base, readMillis: if millis < 1 { 1 } else { millis }}
+}
+
+/// Bound socket sending without renewing the budget for partial writes.
+export fn withWriteDeadline(base: &Server, millis: Int) -> Server {
+  Server{..*base, writeMillis: if millis < 1 { 1 } else { millis }}
 }

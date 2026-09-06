@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Response write deadlines
+
+[[Std Http Server]] now bounds ordinary and fallback response writes through a configurable
+socket-send deadline. [[Std App]] validates server.writeMillis before startup. Documented
+poor-network SSR priorities in [[Application Deployment Contract]]. No tests or reviews run.
+
 ## 2026-09-06 — Bounded request reads
 
 Added [[Std Net Bounded Read]] and shared header/body deadlines in [[Std Http Server]],

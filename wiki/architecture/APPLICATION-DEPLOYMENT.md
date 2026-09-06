@@ -62,3 +62,20 @@ MIME encoding and SMTP capability negotiation remain separate transport responsi
 
 ## Referenced by
 [[architecture/_MOC]] · [[Std App]] · [[Std Mail]] · [[2026-09-06-application-stack]]
+
+## Poor-network priorities
+
+1. Deliver useful SSR HTML before optional JavaScript. Keep initial pages and images small;
+   paginate lists and defer nonessential media. Network bytes and round trips dominate on slow links.
+2. Add negotiated compression at the deployment proxy/CDN and explicit cache policy. Static
+   versioned assets may be shared; personalized HTML requires deliberate private/no-store policy.
+3. Implement validators and conditional responses to avoid resending unchanged bodies.
+4. Add progressive enhancement: server forms and navigation must remain usable when scripts
+   fail. Preserve user input on failed submissions and use idempotency keys for retryable writes.
+5. Bound worker admission and queues. Deadlines prevent indefinite holds; choose them alongside
+   payload sizes rather than assuming a short timeout makes a slow connection faster.
+6. Add early-flush rendering and backpressure with correct HTTP framing, cancellation and
+   cleanup. Current SSR remains buffered; handler/database deadlines remain outstanding.
+
+Reference: [HTML delivery guidance](https://web.dev/learn/performance/general-html-performance)
+and [HTTP caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching).

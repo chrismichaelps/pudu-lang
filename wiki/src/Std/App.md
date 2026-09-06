@@ -127,3 +127,13 @@ keep-alive reads. Header limits count delimiter bytes. This does not interrupt h
 bound response writes or impose a complete shutdown deadline.
 Resolved Grill Log: retain an absolute deadline across partial reads; timeout per packet lets
 a slow sender hold a worker indefinitely.
+
+## Bounded response writes
+
+Server.writeMillis defaults to 30000, configured by withWriteDeadline and server.writeMillis
+(1..86400000 at application startup). Both ordinary and fallback responses use Net.sendTextWithin.
+A failed/expired write ends connection reuse. The budget covers socket sending, not handler
+execution or response serialization. Tune for expected payload sizes and slow legitimate clients;
+timeouts protect capacity and do not increase available network bandwidth.
+Resolved Grill Log: bound fallback writes too, and preserve configured deadlines through server
+copy helpers. No tests, builds, reviews or measurements run.

@@ -70,7 +70,8 @@ const DEFAULT_SETTINGS: Array[(Str, Str)] = [
   ("server.connections", "0"),
   ("server.headBytes", "65536"),
   ("server.bodyBytes", "8388608"),
-  ("server.readMillis", "30000")
+  ("server.readMillis", "30000"),
+  ("server.writeMillis", "30000")
 ]
 
 /// A name and a router, and a service is running.
@@ -297,6 +298,8 @@ export fn run(target: &App) -> Result[Int, AppError] {
   let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
   let port = serverNumber(&target.config, "server.port", DEFAULT_PORT) ?
   let limit = serverNumber(&target.config, "server.connections", 0) ?
+  let writeMillis = serverNumber(&target.config, "server.writeMillis", 30000) ?
+  if writeMillis < 1 || writeMillis > 86400000 { return Err(Configuration("server.writeMillis must be in 1..86400000")) }
   let readMillis = serverNumber(&target.config, "server.readMillis", 30000) ?
   if readMillis < 1 || readMillis > 86400000 { return Err(Configuration("server.readMillis must be in 1..86400000")) }
   let headBytes = serverNumber(&target.config, "server.headBytes", 65536) ?
@@ -310,6 +313,7 @@ export fn run(target: &App) -> Result[Int, AppError] {
   if let Some(problem) = coming.failure { return Err(StageFailed(problem[0], problem[1])) }
   var listening = Server.withLimits(&Server.server(&target.router), headBytes, bodyBytes)
   listening = Server.withReadDeadline(&listening, readMillis)
+  listening = Server.withWriteDeadline(&listening, writeMillis)
   for step in target.steps { listening = Server.using(&listening, step) }
   let served = Server.listenAndServe(&listening, host, port, limit)
   let stopped = stop(target)

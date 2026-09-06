@@ -61,3 +61,8 @@ Implemented shared request read deadlines and bounded delimiter admission. Own N
 and App integration plus mirrors. No tests, builds or reviews.
 Exact next action: bounded worker admission and response-write deadlines; handler cancellation
 and full shutdown deadlines remain outstanding.
+
+Implemented response write deadlines, including fallback responses, and documented poor-network
+priorities. Own Server/App fields, copy helpers and mirrors. No tests, builds or reviews.
+Exact next action: bounded worker admission and cleanup on thread-start failure, with explicit
+backpressure rather than unbounded worker accumulation.
