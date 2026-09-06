@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Native modular arithmetic kernels
+
+- Compute bounded wrapping add/subtract/multiply in Word64 before declared-width reinterpretation.
+- Avoid arbitrary-precision intermediate results on that path; retain exact wider fallback.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Native scalar wrapping carriers
 
 - Dispatch fixed-width wrapping through explicit signed/unsigned native scalar carriers.

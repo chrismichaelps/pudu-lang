@@ -11,6 +11,9 @@ module Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindAddWrapping
+  , integerKindSubtractWrapping
+  , integerKindMultiplyWrapping
   , targetPointerWidth
   , defaultIntegerKind
   , fitsIntegerType
@@ -183,6 +186,29 @@ integerKindWrap kind value = case kind of
   PlatformUnsigned -> wrapUnsigned targetPointerWidth value
   SignedKind width -> wrapSigned width value
   UnsignedKind width -> wrapUnsigned width value
+
+{-| Modular kernels discard high bits during computation, not after a large result. -}
+integerKindAddWrapping :: IntegerKind -> Integer -> Integer -> Integer
+integerKindAddWrapping = wrappingBinary (+) (+)
+{-# INLINE integerKindAddWrapping #-}
+
+integerKindSubtractWrapping :: IntegerKind -> Integer -> Integer -> Integer
+integerKindSubtractWrapping = wrappingBinary (-) (-)
+{-# INLINE integerKindSubtractWrapping #-}
+
+integerKindMultiplyWrapping :: IntegerKind -> Integer -> Integer -> Integer
+integerKindMultiplyWrapping = wrappingBinary (*) (*)
+{-# INLINE integerKindMultiplyWrapping #-}
+
+wrappingBinary
+  :: (Word64 -> Word64 -> Word64)
+  -> (Integer -> Integer -> Integer)
+  -> IntegerKind -> Integer -> Integer -> Integer
+wrappingBinary native general kind left right = case integerKindWidth kind of
+  Just width | width > 0 && width <= 64 ->
+    integerKindWrap kind (toInteger (native (fromInteger left) (fromInteger right)))
+  _ -> integerKindWrap kind (general left right)
+{-# INLINE wrappingBinary #-}
 
 {-| Explicit carriers preserve target widths independently of the host Int. -}
 wrapUnsigned :: Int -> Integer -> Integer

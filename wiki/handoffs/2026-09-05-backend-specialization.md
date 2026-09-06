@@ -54,3 +54,7 @@ Own IntegerLiteral, Eval.Operator and their mirrors. Checked arithmetic, saturat
 ## Native wrapping carriers
 
 Integer wrapping now dispatches admitted 8/16/32/64-bit kinds through explicit Haskell native carriers. Wider kinds retain exact masks and shared signed bounds. This is an internal modular-arithmetic implementation, not an implicit surface conversion. No measurements, tests, builds or reviews run.
+
+## Native modular arithmetic continuation
+
+IntegerLiteral and Eval.Operator now compute wrapping add/subtract/multiply in Word64 for admitted widths up to 64, then reinterpret at the declared width. Wider and unbounded arithmetic retain exact fallback. Checked/saturating paths remain unchanged. No measurements, tests, builds or reviews run.

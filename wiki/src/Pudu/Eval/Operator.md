@@ -110,3 +110,15 @@ resolve through targetPointerWidth. No host-width narrowing or change to overflo
 ### Resolved Grill Log
 - **Q:** Recompute powers independently in checked and saturating operations? **A:** No; share the width descriptor.
 - **Q:** Give BigInt artificial machine bounds? **A:** No; Nothing denotes its unbounded interval.
+
+## Native modular arithmetic
+
+Wrapping add/subtract/multiply for widths 1..64 operate on Word64 carriers before reinterpretation
+at the declared width. Reduction modulo 2^64 followed by reduction modulo 2^w equals direct
+reduction modulo 2^w for these three operations when w <= 64. This also preserves signed results
+through the existing wrapping conversion. Wider kinds and BigInt retain mathematical Integer
+operations; checked and saturating operations remain on their exact-result paths.
+
+### Resolved Grill Log
+- **Q:** Build an arbitrary-precision product only to discard its high bits? **A:** No; bounded modular multiplication computes only the carrier bits needed.
+- **Q:** Extend modular reduction to division? **A:** No; the reduction law does not justify that transformation.

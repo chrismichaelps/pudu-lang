@@ -115,3 +115,15 @@ using the shared signed upper bound to identify the negative half. BigInt remain
 ### Resolved Grill Log
 - **Q:** Let the host Int determine a Pudu width? **A:** No; dispatch names explicit Int8/16/32/64 and Word8/16/32/64 carriers.
 - **Q:** Apply native narrowing before deciding the overflow mode? **A:** No; native carriers exist only inside integerKindWrap.
+
+## Native modular arithmetic
+
+Wrapping add/subtract/multiply for widths 1..64 operate on Word64 carriers before reinterpretation
+at the declared width. Reduction modulo 2^64 followed by reduction modulo 2^w equals direct
+reduction modulo 2^w for these three operations when w <= 64. This also preserves signed results
+through the existing wrapping conversion. Wider kinds and BigInt retain mathematical Integer
+operations; checked and saturating operations remain on their exact-result paths.
+
+### Resolved Grill Log
+- **Q:** Build an arbitrary-precision product only to discard its high bits? **A:** No; bounded modular multiplication computes only the carrier bits needed.
+- **Q:** Extend modular reduction to division? **A:** No; the reduction law does not justify that transformation.

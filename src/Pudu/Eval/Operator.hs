@@ -39,6 +39,9 @@ import Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindAddWrapping
+  , integerKindSubtractWrapping
+  , integerKindMultiplyWrapping
   )
 import Pudu.Source (Span)
 
@@ -99,9 +102,9 @@ integerOperation spanValue kind operator left right = case operator of
   "+" -> checkedResult spanValue kind "add" (left + right)
   "-" -> checkedResult spanValue kind "subtract" (left - right)
   "*" -> checkedResult spanValue kind "multiply" (left * right)
-  "&+" -> wrappedResult kind (left + right)
-  "&-" -> wrappedResult kind (left - right)
-  "&*" -> wrappedResult kind (left * right)
+  "&+" -> pure (IntValue kind (integerKindAddWrapping kind left right))
+  "&-" -> pure (IntValue kind (integerKindSubtractWrapping kind left right))
+  "&*" -> pure (IntValue kind (integerKindMultiplyWrapping kind left right))
   "+|" -> saturatedResult kind (left + right)
   "-|" -> saturatedResult kind (left - right)
   "*|" -> saturatedResult kind (left * right)
@@ -138,10 +141,6 @@ checkedResult spanValue kind what value
                 <> "checked arithmetic never truncates quietly"
             )
         )
-
-{-| A wrapping result, reduced into the type's interval. -}
-wrappedResult :: IntegerKind -> Integer -> Evaluator Value
-wrappedResult kind value = pure (IntValue kind (integerKindWrap kind value))
 
 {-| A saturating result, clamped to the type's ends.
 
