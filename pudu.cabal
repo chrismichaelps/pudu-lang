@@ -266,6 +266,14 @@ test-suite pudu-test
     Pudu.Repl.SessionSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec
+    Pudu.Type.Check.Common
+    Pudu.Type.Check.PrimitiveSpec
+    Pudu.Type.Check.DataSpec
+    Pudu.Type.Check.ControlFlowSpec
+    Pudu.Type.Check.PatternSpec
+    Pudu.Type.Check.FunctionGenericSpec
+    Pudu.Type.Check.TraitSpec
+    Pudu.Type.Check.SystemSpec
     Pudu.Type.Check.ImportSpec
     Pudu.Type.InterfaceSpec
   build-depends:

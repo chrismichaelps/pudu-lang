@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Type.CheckSpec into layered dependency graph modules
+
+Decomposed the 2468-line monolithic `test/Pudu/Type/CheckSpec.hs` into a scalable, layered dependency graph test architecture strictly under 500 lines per module:
+- Extracted shared runners, typing helpers, diagnostic assertions, and region locators into `Pudu.Type.Check.Common` (80 lines).
+- Isolated primitive types, operators, integer bit-width bounds, float precision, decimals, and text methods into `Pudu.Type.Check.PrimitiveSpec` (263 lines).
+- Isolated tuples, records, sum variants, named variants, keyed collections (maps and sets), and discarded result checks into `Pudu.Type.Check.DataSpec` (397 lines).
+- Isolated branching, let-else, while-let, loops, try operator `?`, exported signatures, phase ordering, and error non-cascading into `Pudu.Type.Check.ControlFlowSpec` (459 lines).
+- Isolated pattern borrowing and match exhaustiveness/reachability into `Pudu.Type.Check.PatternSpec` (246 lines).
+- Isolated closures, function calls, generics, type aliases, generic type instantiation, and dynamic trait objects into `Pudu.Type.Check.FunctionGenericSpec` (314 lines).
+- Isolated trait dispatch, default method resolution, call bounds, ambiguous dispatch, orphan/duplicate coherence, qualified calls, and generic traits into `Pudu.Type.Check.TraitSpec` (478 lines).
+- Isolated references, dereferencing, structural markers (`Copy`, `Send`, `Sync`), unsafe capability regions, compile-time purity, async tasks, structured scopes, and recorded tooling types into `Pudu.Type.Check.SystemSpec` (346 lines).
+- Refactored `Pudu.Type.CheckSpec` into a thin coordinator (109 lines) re-exporting all 43 QuickCheck properties with zero semantic delta.
+- Registered all 8 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose ProgramSpec into layered dependency graph modules
 
 Decomposed the 1269-line monolithic `test/Pudu/Compiler/ProgramSpec.hs` into a scalable, layered dependency graph test architecture:
