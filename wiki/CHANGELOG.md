@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Linear HTML composition
+
+Added [[Std Html Compose]] with persistent fluent content methods, repeated components and
+document shells. Rewrote [[Notes Web Application]] to remove nested HTML arrays from the page
+handler. Text retains standard escaping. No tests, builds or reviews run.
+
 ## 2026-09-06 — Database-backed web composition
 
 Added [[Notes Web Application]] connecting configuration, database lifecycle, schema bootstrap,

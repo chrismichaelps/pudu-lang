@@ -6,6 +6,7 @@ import Std.App.Database as Database
 import Std.Db.Driver as Driver
 import Std.Db.Row as Row
 import Std.Html as Html
+import Std.Html.Compose as Page
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
@@ -27,23 +28,22 @@ fn jsonNote(note: Note) -> Json.Json {
   Json.object(&[("title", Json.Text(note.title)), ("body", Json.Text(note.body))])
 }
 
+fn noteView(note: Note) -> Html.Html {
+  Page.content()
+    .heading(2, note.title)
+    .preformatted(note.body)
+    .article()
+}
+
 fn page(database: &Database.Database) -> Http.Response {
-  match notes(database) {
-    case Err(_) => Reply.text(503, "notes are unavailable")
-    case Ok(items) => Reply.page(200, Html.html(&[], &[
-      Html.head(&[Html.title("Pudu Notes"), Html.meta(&[("charset", "utf-8")])]),
-      Html.body(&[], &[
-        Html.heading(1, &[], &[Html.text("Notes")]),
-        Html.paragraph(&[], &[Html.text("Create notes through POST /api/notes. Refresh to see saved changes.")]),
-        Html.each(&items, fn(note: Note) -> Html.Html {
-          Html.tag("article", &[
-            Html.heading(2, &[], &[Html.text(note.title)]),
-            Html.tag("pre", &[Html.text(note.body)])
-          ])
-        })
-      ])
-    ]))
-  }
+  let loaded = notes(database)
+  if let Err(_) = loaded { return Reply.text(503, "notes are unavailable") }
+  let items = Result.unwrapOr(loaded, [])
+  let body = Page.content()
+    .heading(1, "Notes")
+    .paragraph("Create notes through POST /api/notes. Refresh to see saved changes.")
+    .each(items, noteView)
+  Reply.page(200, Page.document("Pudu Notes", body))
 }
 
 fn listing(database: &Database.Database) -> Http.Response {

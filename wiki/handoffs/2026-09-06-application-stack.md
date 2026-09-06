@@ -32,3 +32,11 @@ SQLite/PostgreSQL placeholder selection and database-before-schema startup. LSP 
 No tests, builds, reviews or measurements run.
 Exact next action: add browser form submission and typed redirect responses, sharing validation
 and parameterized persistence with the JSON create route.
+
+## Page ergonomics
+
+User requested a simpler page definition. STD Implementer owns Html.Compose and its mirror,
+Notes layout and navigation. Added fluent persistent content and extracted noteView. No parser
+changes or raw-template interpolation. No tests, builds or reviews.
+Exact next action: use the composition API for browser create/edit forms sharing validation
+and database operations with JSON handlers.

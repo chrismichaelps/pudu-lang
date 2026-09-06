@@ -1,0 +1,72 @@
+module Std.Html.Compose
+
+import Std.Html as Html
+
+/// An ordered, persistent sequence of typed views.
+export type Content = { nodes: Array[Html.Html] }
+
+export fn content() -> Content { Content{nodes: []} }
+
+/// Content reads top to bottom; every adding method returns the next value.
+export trait Composition {
+  fn heading(self: &Self, level: Int, text: Str) -> Self
+  fn paragraph(self: &Self, text: Str) -> Self
+  fn preformatted(self: &Self, text: Str) -> Self
+  fn add(self: &Self, view: Html.Html) -> Self
+  fn each[T](self: &Self, items: Array[T], view: fn(T) -> Html.Html) -> Self
+  fn when(self: &Self, condition: Bool, view: Html.Html) -> Self
+  fn fragment(self: &Self) -> Html.Html
+  fn article(self: &Self) -> Html.Html
+  fn section(self: &Self) -> Html.Html
+}
+
+impl Composition for Content {
+  fn heading(self: &Self, level: Int, text: Str) -> Self {
+    Content{nodes: self.nodes.push(Html.heading(level, &[], &[Html.text(text)]))}
+  }
+
+  fn paragraph(self: &Self, text: Str) -> Self {
+    Content{nodes: self.nodes.push(Html.paragraph(&[], &[Html.text(text)]))}
+  }
+
+  fn preformatted(self: &Self, text: Str) -> Self {
+    Content{nodes: self.nodes.push(Html.tag("pre", &[Html.text(text)]))}
+  }
+
+  fn add(self: &Self, view: Html.Html) -> Self {
+    Content{nodes: self.nodes.push(view)}
+  }
+
+  fn each[T](self: &Self, items: Array[T], view: fn(T) -> Html.Html) -> Self {
+    var nodes = self.nodes
+    for item in items { nodes = nodes.push(view(item)) }
+    Content{nodes: nodes}
+  }
+
+  fn when(self: &Self, condition: Bool, view: Html.Html) -> Self {
+    if condition { Content{nodes: self.nodes.push(view)} } else { *self }
+  }
+
+  fn fragment(self: &Self) -> Html.Html { Html.fragment(&self.nodes) }
+  fn article(self: &Self) -> Html.Html { Html.tag("article", &self.nodes) }
+  fn section(self: &Self) -> Html.Html { Html.tag("section", &self.nodes) }
+}
+
+export fn document(title: Str, body: Content) -> Html.Html {
+  shell(&[], title, body)
+}
+
+export fn documentIn(language: Str, title: Str, body: Content) -> Html.Html {
+  shell(&[("lang", language)], title, body)
+}
+
+fn shell(attributes: &Array[(Str, Str)], title: Str, body: Content) -> Html.Html {
+  Html.html(attributes, &[
+    Html.head(&[
+      Html.meta(&[("charset", "utf-8")]),
+      Html.meta(&[("name", "viewport"), ("content", "width=device-width, initial-scale=1")]),
+      Html.title(title)
+    ]),
+    Html.body(&[], &body.nodes)
+  ])
+}

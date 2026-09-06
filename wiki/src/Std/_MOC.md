@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std Html Compose]] — fluent content composition with reusable view functions.
+
 - [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
 - [[Std Buffer]] — contiguous byte buffer for unboxed scalar manipulation.
 - [[Std FlatMap]] — ultra-fast flat hash table with 1-byte control metadata.

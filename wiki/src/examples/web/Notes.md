@@ -37,3 +37,11 @@ implicitly initialize the database. App orders startup and reverse teardown.
 
 ## Referenced by
 [[src/_MOC]] · [[2026-09-06-application-stack]]
+
+## Linear page composition
+
+HTML routes use [[Std Html Compose]] to build a linear heading/paragraph/repeated-component
+chain. noteView is an ordinary reusable function. Document boilerplate lives in the composition
+module; no nested arrays are required in the page handler. Escaping remains in Std.Html.
+Resolved Grill Log: Keep database failure handling separate from successful page composition
+with an early return, so the layout is readable independently of query control flow.
