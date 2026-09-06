@@ -20,7 +20,7 @@ module Pudu.Eval.Builtin
   , isDecimalBuiltin
   ) where
 
-import Control.Monad (filterM, foldM)
+import Control.Monad (foldM)
 import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
@@ -488,29 +488,30 @@ callArrayMethod apply spanValue method receiver arguments = case method of
     [] -> pure (arrayReverse receiver)
     _ -> wrongArity "reverse" 0
   ArrayMap -> case arguments of
-    [closureValue] -> do
-      elements <- case arrayToList receiver of
-        Just values -> pure values
-        Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
-      results <- mapM (apply spanValue closureValue . (: [])) elements
-      pure (arrayFromList results)
+    [closureValue] -> case receiver of
+      ArrayValue elements ->
+        ArrayValue <$> traverse (apply spanValue closureValue . (: [])) elements
+      _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "map" 1
   ArrayFilter -> case arguments of
-    [closureValue] -> do
-      elements <- case arrayToList receiver of
-        Just values -> pure values
-        Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
-      kept <- filterM (acceptByFunction apply spanValue closureValue) elements
-      pure (arrayFromList kept)
+    [closureValue] -> case receiver of
+      ArrayValue elements -> do
+        kept <- foldM (keepAccepted closureValue) Seq.empty elements
+        pure (ArrayValue kept)
+      _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "filter" 1
   ArrayReduce -> case arguments of
-    [closureValue, initial] -> do
-      elements <- case arrayToList receiver of
-        Just values -> pure values
-        Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
-      foldM (\acc element -> apply spanValue closureValue [acc, element]) initial elements
+    [closureValue, initial] -> case receiver of
+      ArrayValue elements ->
+        foldM (\acc element -> apply spanValue closureValue [acc, element]) initial elements
+      _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     _ -> wrongArity "reduce" 2
  where
+  keepAccepted closureValue kept element = do
+    accepted <- acceptByFunction apply spanValue closureValue element
+    let next = if accepted then kept Seq.|> element else kept
+    next `seq` pure next
+
   wrongArity name expected =
     abortAt (Just spanValue) "E7003"
       (Text.pack (name <> " expects " <> show (expected :: Int) <> " argument(s)"))

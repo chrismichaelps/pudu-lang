@@ -26,3 +26,7 @@ Own Eval.Bytes and its mirror. Removed list staging in byte/array conversions us
 ## Sequence kernel continuation
 
 Own Eval.Array and its mirror. Array search now stays in the sequence; pop uses a right view and position edits use direct sequence operations. Public boundary guards remain intact. No tests, builds, reviews or measurements run.
+
+## Higher-order sequence continuation
+
+Own Eval.Builtin and its mirror for sequence-native map/filter/reduce. Removed intermediate list conversion while preserving callback order and failure short-circuiting. No measurements, tests, builds or reviews run.

@@ -87,3 +87,14 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]
+
+## Sequence-native higher-order operations
+
+Array map traverses the sequence directly and returns that result sequence. Filter folds the
+sequence into a persistent output sequence, appending only accepted values. Reduce folds the
+sequence without list conversion. Callbacks remain left-to-right, once per visited element;
+a failed callback prevents later invocations. Receiver and arity diagnostics are unchanged.
+
+### Resolved Grill Log
+- **Q:** Flatten every array before invoking callbacks? **A:** No; native Traversable/Foldable sequence operations preserve order without an intermediate input list.
+- **Q:** Parallelize callbacks while removing staging? **A:** No; evaluation order and effects remain observable and sequential.

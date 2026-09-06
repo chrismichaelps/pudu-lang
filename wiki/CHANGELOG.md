@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Sequence-native callback traversal
+
+- Keep array map, filter and reduce in native sequence traversal instead of flattening to lists.
+- Preserve ordered callback effects and first-failure short-circuiting.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Direct persistent-array kernels
 
 - Use direct sequence search, right-end removal and indexed edits in the Haskell runtime.
