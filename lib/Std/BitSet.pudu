@@ -1,0 +1,164 @@
+module Std.BitSet
+
+/// Sparse blocks of 64 IDs. Construct through this module to preserve block invariants.
+export type BitSet = { words: Map[UInt64, UInt64] }
+
+export fn empty() -> BitSet { BitSet{words: mapOf([])} }
+
+/// Validate block addresses and omit empty blocks.
+export fn fromBlocks(words: &Map[UInt64, UInt64]) -> Result[BitSet, UInt64] {
+  var entries: Array[(UInt64, UInt64)] = []
+  for pair in words.entries() {
+    if pair[0] > 0x03ffffffffffffffu64 { return Err(pair[0]) }
+    if pair[1] != 0u64 { entries = entries.push(pair) }
+  }
+  Ok(BitSet{words: mapOf(entries)})
+}
+
+export fn blocks(value: &BitSet) -> Map[UInt64, UInt64] { value.words }
+
+fn wordAt(value: &BitSet, block: UInt64) -> UInt64 {
+  match value.words.get(block) {
+    case Some(word) => word
+    case None => 0u64
+  }
+}
+
+fn mask(id: UInt64) -> UInt64 {
+  // The low six bits always fit the shift-count type.
+  match convertInteger[Int](id & 63u64) {
+    case Some(position) => 1u64 << position
+    case None => 0u64
+  }
+}
+
+fn store(value: &BitSet, block: UInt64, word: UInt64) -> BitSet {
+  if word == 0u64 { BitSet{words: value.words.remove(block)} }
+    else { BitSet{words: value.words.insert(block, word)} }
+}
+
+export fn contains(value: &BitSet, id: UInt64) -> Bool {
+  (wordAt(value, id >> 6) & mask(id)) != 0u64
+}
+
+export fn insert(value: &BitSet, id: UInt64) -> BitSet {
+  let block = id >> 6
+  store(value, block, wordAt(value, block) | mask(id))
+}
+
+export fn remove(value: &BitSet, id: UInt64) -> BitSet {
+  let block = id >> 6
+  store(value, block, wordAt(value, block) & (~mask(id)))
+}
+
+export fn singleton(id: UInt64) -> BitSet { insert(&empty(), id) }
+
+export fn fromArray(ids: &Array[UInt64]) -> BitSet {
+  var out = empty()
+  for id in *ids { out = insert(&out, id) }
+  out
+}
+
+export fn isEmpty(value: &BitSet) -> Bool { value.words.isEmpty() }
+
+/// UInt128 can count even the entire UInt64 ID domain.
+export fn size(value: &BitSet) -> UInt128 {
+  var count = 0u128
+  for pair in value.words.entries() {
+    var word = pair[1]
+    while word != 0u64 {
+      word = word & (word - 1u64)
+      count = count + 1u128
+    }
+  }
+  count
+}
+
+/// Materialize members in ascending order.
+export fn toArray(value: &BitSet) -> Array[UInt64] {
+  var out: Array[UInt64] = []
+  for pair in value.words.entries() {
+    let base = pair[0] << 6
+    var word = pair[1]
+    var offset = 0u64
+    while word != 0u64 {
+      if (word & 1u64) != 0u64 { out = out.push(base | offset) }
+      word = word >> 1
+      offset = offset + 1u64
+    }
+  }
+  out
+}
+
+fn merge(left: &BitSet, right: &BitSet, exclusive: Bool) -> BitSet {
+  let a = left.words.entries()
+  let b = right.words.entries()
+  var entries: Array[(UInt64, UInt64)] = []
+  var i = 0
+  var j = 0
+  while i < a.length() && j < b.length() {
+    let x = a[i]
+    let y = b[j]
+    if x[0] < y[0] {
+      entries = entries.push(x)
+      i = i + 1
+    } else {
+      if y[0] < x[0] {
+        entries = entries.push(y)
+        j = j + 1
+      } else {
+        let word = if exclusive { x[1] ^ y[1] } else { x[1] | y[1] }
+        if word != 0u64 { entries = entries.push((x[0], word)) }
+        i = i + 1
+        j = j + 1
+      }
+    }
+  }
+  while i < a.length() {
+    entries = entries.push(a[i])
+    i = i + 1
+  }
+  while j < b.length() {
+    entries = entries.push(b[j])
+    j = j + 1
+  }
+  BitSet{words: mapOf(entries)}
+}
+
+export fn union(left: &BitSet, right: &BitSet) -> BitSet { merge(left, right, false) }
+
+export fn symmetricDifference(left: &BitSet, right: &BitSet) -> BitSet {
+  merge(left, right, true)
+}
+
+fn retain(left: &BitSet, right: &BitSet, exclude: Bool) -> BitSet {
+  var entries: Array[(UInt64, UInt64)] = []
+  for pair in left.words.entries() {
+    let other = wordAt(right, pair[0])
+    let word = pair[1] & (if exclude { ~other } else { other })
+    if word != 0u64 { entries = entries.push((pair[0], word)) }
+  }
+  BitSet{words: mapOf(entries)}
+}
+
+export fn intersection(left: &BitSet, right: &BitSet) -> BitSet {
+  retain(left, right, false)
+}
+
+export fn difference(left: &BitSet, right: &BitSet) -> BitSet {
+  retain(left, right, true)
+}
+
+export fn isSubsetOf(left: &BitSet, right: &BitSet) -> Bool {
+  for pair in left.words.entries() {
+    if (pair[1] & (~wordAt(right, pair[0]))) != 0u64 { return false }
+  }
+  true
+}
+
+export fn isDisjointFrom(left: &BitSet, right: &BitSet) -> Bool {
+  for pair in left.words.entries() {
+    if (pair[1] & wordAt(right, pair[0])) != 0u64 { return false }
+  }
+  true
+}

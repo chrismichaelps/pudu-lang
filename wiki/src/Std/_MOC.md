@@ -5,6 +5,8 @@ tags: [moc, module, stdlib]
 
 # Standard Library Module Map
 
+- [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
+
 - [[Std Byte Cursor]] — checked binary reads retaining absolute byte positions.
 - [[Std Source Buffer]] — LF line indexing and explicit byte-coordinate locations.
 - [[Std Symbol Interner]] — persistent, session-local spelling IDs.

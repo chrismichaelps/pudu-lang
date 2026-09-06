@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Sparse integer bitsets
+
+Added [[Std BitSet]] with persistent 64-ID words, validated block import, ascending enumeration,
+UInt128 cardinality and block-wise set algebra. Consumes native scalar kernels and ordered bulk
+map construction. No tests, builds, reviews or measurements run, as requested.
+
 ## 2026-09-06 — Native bounded shift kernels
 
 - Dispatch validated fixed-width shifts through explicit native carriers.

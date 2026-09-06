@@ -82,3 +82,13 @@ Own Eval.HashMap and its mirror. Removed the unused mutability of the process bu
 ## Native shift continuation
 
 Own IntegerLiteral, Eval.Operator and mirrors. Bounded shifts now use native word carriers after existing count validation; unsigned right shifts normalize first and signed right shifts retain arithmetic behavior. No measurements, tests, builds or reviews run.
+
+## Sparse bitset STD ownership
+
+Language Architect → STD Implementer. Own lib/Std/BitSet.pudu and its new mirror, STD MOC and
+changelog entry. Add UInt64 sparse block membership and algebra consuming existing native scalar
+kernels and ordered bulk map construction. Preserve all other source work. The user explicitly
+expanded STD scope alongside backend optimization. No measurements, tests, builds or reviews.
+Implemented the documented sparse bitset module; remains unvalidated.
+Exact next action for this continuation: add a Haskell packed-word kernel for bitset cardinality
+and block algebra so STD can avoid per-word evaluator dispatch.
