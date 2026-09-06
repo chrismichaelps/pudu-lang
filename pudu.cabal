@@ -270,6 +270,10 @@ test-suite pudu-test
     Pudu.DocSpec
     Pudu.Repl.AnswerSpec
     Pudu.Repl.SessionSpec
+    Pudu.Repl.Session.Common
+    Pudu.Repl.Session.CommandSpec
+    Pudu.Repl.Session.ContextSpec
+    Pudu.Repl.Session.EvaluationSpec
     Pudu.Semantic.ResolveSpec
     Pudu.Type.CheckSpec
     Pudu.Type.Check.Common

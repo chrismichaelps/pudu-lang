@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Repl.SessionSpec into layered dependency graph modules
+
+Decomposed the 681-line monolithic `test/Pudu/Repl/SessionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 330 lines per module:
+- Extracted shared runners, fixture loading, and session evaluation helpers into `Pudu.Repl.Session.Common` (49 lines).
+- Isolated command parsing, submission classification, and member/identifier completion into `Pudu.Repl.Session.CommandSpec` (153 lines).
+- Isolated environment persistence, binding retention, rejection, context inspection, kind arities, describe queries, and interactive imports into `Pudu.Repl.Session.ContextSpec` (193 lines).
+- Isolated interactive evaluation, location offsets, static typing, loops, control transfers, iteration edges, traits, match patterns, and runtime errors into `Pudu.Repl.Session.EvaluationSpec` (326 lines).
+- Refactored `Pudu.Repl.SessionSpec` into a thin coordinator (67 lines) re-exporting all 22 QuickCheck properties with zero semantic delta.
+- Registered all 4 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose EvalSpec into layered dependency graph modules
 
 Decomposed the 983-line monolithic `test/Pudu/EvalSpec.hs` into a scalable, layered dependency graph test architecture strictly under 270 lines per module:
