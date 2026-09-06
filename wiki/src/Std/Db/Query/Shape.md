@@ -42,6 +42,26 @@ lateral joins, and recursive traversal are not here. What is not covered goes th
 which still keeps values apart — so the escape hatch does not give up the property the builder
 exists for. Modelling the whole grammar would produce an interface as large as the grammar and no
 safer than writing it out.
+## A condition's value carries its type
+
+`is` compares against text, and says so. `isNumber` compares against a whole number, and `isBound`
+takes a value that already carries its type.
+
+The distinction is not decoration. A bar written `is("sum(quantity)", ">", "6")` crosses as text;
+SQLite orders every number before every text, so the comparison is false for every row it could be
+asked about and the answer is an empty result rather than an error, while PostgreSQL coerces the text
+and answers correctly. Two backends, one statement, two meanings, and nothing reported either way.
+
+`isValue` and `isOneOf` still take `Option[Str]`, because a caller who reached for them has already
+spelled the value and nothing here can recover what it was. `isBound` and `isAmong` are the typed
+forms beside them.
+
+### Resolved Grill
+
+- **Q:** Make `is` take a number too, by overloading on the argument? **A:** No. A caller who wrote a
+  number as text should see that named, not silently repaired — `is` means text, and the name of the
+  numeric one says what it does.
+
 ## Grill Log
 - **Q:** Build a query by calls that each take the last one? **A:** No — that was the first design
   and it was wrong. _Rationale:_ it reads inside out, so the query a reader wants to check is

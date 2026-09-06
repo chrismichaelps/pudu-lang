@@ -33,7 +33,7 @@ export fn main() -> Int {
   // The statements it produces, with every value a parameter.
   let adding = orEmpty(Store.insertOf(&people, Person{id: 1, name: "ada"}))
   if Query.textOf(&adding) == "insert into people (id, name) values ($1, $2)" { held = held + 1 }
-  if Query.valuesOf(&adding) == [Some("1"), Some("ada")] { held = held + 1 }
+  if Query.valuesOf(&adding) == [Query.textValue("1"), Query.textValue("ada")] { held = held + 1 }
 
   let changing = orEmpty(Store.updateOf(&people, Some("1"), Person{id: 1, name: "grace"}))
   if Query.textOf(&changing) == "update people set id = $1, name = $2 where id = $3" {

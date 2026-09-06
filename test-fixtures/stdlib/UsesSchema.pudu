@@ -44,7 +44,7 @@ export fn main() -> Int {
   // value. Neither can arrive misspelled, because neither is text.
   let byName = Query.on(&Query.fromTable(&userName()), &userName(), Equals, &"ada")
   if Query.textOf(&byName) == "select * from users where name = $1" { held = held + 1 }
-  if Query.valuesOf(&byName) == [Some("ada")] { held = held + 1 }
+  if Query.valuesOf(&byName) == [Query.textValue("ada")] { held = held + 1 }
 
   // The value travels as a parameter, so a value that spells a statement is
   // still just a value.
@@ -60,11 +60,17 @@ export fn main() -> Int {
 
   // A value is written for a parameter rather than for a person: showing text
   // quotes it, and a quoted value in a parameter is a different value.
-  if Schema.boundValue(&"ada") == Some("ada") { held = held + 1 }
-  if Schema.boundValue(&"ada") != Some(show("ada")) { held = held + 1 }
-  if Schema.boundValue(&42) == Some("42") { held = held + 1 }
-  if Schema.boundValue(&true) == Some("true") { held = held + 1 }
-  if Schema.nothing() == None { held = held + 1 }
+  if Schema.boundValue(&"ada") == Query.textValue("ada") { held = held + 1 }
+  if Schema.boundValue(&"ada") != Query.textValue(show("ada")) { held = held + 1 }
+
+  // A number crosses as a number. Bound as text it would be compared as text,
+  // and SQLite orders every number before every text — so a bar written that
+  // way is one no number clears, and the answer is an empty result rather than
+  // an error. This is the check that says which of the two happens.
+  if Schema.boundValue(&42) == Query.whole(42) { held = held + 1 }
+  if Schema.boundValue(&42) != Query.textValue("42") { held = held + 1 }
+  if Schema.boundValue(&true) == Query.flag(true) { held = held + 1 }
+  if Schema.nothing() == Query.absent() { held = held + 1 }
 
   // Conditions join, and the placeholders follow one another.
   let grown = Query.andOn(
@@ -76,7 +82,10 @@ export fn main() -> Int {
   if Query.textOf(&grown) == "select * from users where active = $1 and age > $2" {
     held = held + 1
   }
-  if Query.valuesOf(&grown) == [Some("true"), Some("18")] { held = held + 1 }
+  // The column's own type decides what crosses: a flag as a flag and an age as
+  // a number, not as the text they would be written as. A number bound as text
+  // is compared as text, and `age > '18'` is not the question that was asked.
+  if Query.valuesOf(&grown) == [Query.flag(true), Query.whole(18)] { held = held + 1 }
 
   let either = Query.orOn(&byName, &userName(), Equals, &"grace")
   if Query.textOf(&either).contains("or name = $2") { held = held + 1 }
@@ -102,7 +111,7 @@ export fn main() -> Int {
       &Query.text("select * from users"),
     "name",
     "=",
-    Some("ada")
+    Query.textValue("ada")
   )
   if Query.textOf(&byName) == Query.textOf(&orEmpty(byText)) { held = held + 1 }
 

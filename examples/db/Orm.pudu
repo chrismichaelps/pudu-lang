@@ -1,8 +1,8 @@
 module Orm
 
 import Std.Db as Db
+import Std.Db.Driver {DollarNumber, QuestionMark}
 import Std.Db.Driver as Driver
-import Std.Db.Driver {NullValue, TextValue, DollarNumber, QuestionMark}
 import Std.Db.Query as Query
 import Std.Db.Repository as Repository
 import Std.Db.Session as Session
@@ -36,13 +36,13 @@ export fn main() -> () {
     case Ok(base) => {
       passed = check(passed, "a plain select builds",
         Query.textOf(&base) == "select name, email from customers")
-      match Query.matching(&base, "customers.id", "=", Some("1")) {
+      match Query.matching(&base, "customers.id", "=", Query.textValue("1")) {
         case Err(_) => { passed = report(passed, "a condition builds") }
         case Ok(one) => {
           passed = check(passed, "a condition builds",
             Query.textOf(&one) == "select name, email from customers where customers.id = $1")
           passed = check(passed, "its value travels beside it",
-            Query.valuesOf(&one) == [Some("1")])
+            Query.valuesOf(&one) == [Query.textValue("1")])
           passed = check(passed, "and is counted", Query.valueCount(&one) == 1)
           // The same statement, spelled for each backend. A builder that only
           // ever wrote one of these would suit whichever backends happened to
@@ -122,9 +122,9 @@ fn portability() -> Int {
     case Ok(client) => {
       let built = Query.matching(
           &Result.unwrapOr(Query.selecting(&["name"], "customers"), Query.empty()),
-        "customers.id", "=", Some("1"))
+        "customers.id", "=", Query.textValue("1"))
       let statement = Result.unwrapOr(built, Query.empty())
-      let values = crossed(&Query.valuesOf(&statement))
+      let values = Query.valuesOf(&statement)
       let dollars = Driver.query(&client, Query.textIn(&statement, &DollarNumber), &values)
       let questions = Driver.query(&client, Query.textIn(&statement, &QuestionMark), &values)
       let _closed = Driver.close(&client)
@@ -143,18 +143,6 @@ fn portability() -> Int {
       held
     }
   }
-}
-
-/// The builder's values, as the driver takes them.
-fn crossed(values: &Array[Option[Str]]) -> Array[Driver.Value] {
-  var found: Array[Driver.Value] = []
-  for value in *values {
-    found = found.push(match value {
-        case Some(held) => TextValue(held)
-        case None => NullValue
-      })
-  }
-  found
 }
 
 fn check(passed: Int, label: Str, held: Bool) -> Int {

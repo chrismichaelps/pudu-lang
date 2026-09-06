@@ -961,7 +961,7 @@ testProgramEvaluation = do
         the method is called. -}
     , counterexample
         "a column is a name the compiler knows"
-        (columns === Just "29")
+        (columns === Just "30")
     {-| That a loaded value holds what was loaded and nothing else — no proxy,
         no attached session, nothing left to fetch — and that what belongs to
         many parents is read in one statement, because the interface takes a

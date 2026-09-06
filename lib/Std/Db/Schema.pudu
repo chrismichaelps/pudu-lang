@@ -1,5 +1,7 @@
 module Std.Db.Schema
 
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, BooleanValue}
 import Std.Decimal as Decimal
 
 /// How a value is written when it travels as a parameter.
@@ -7,24 +9,35 @@ import Std.Decimal as Decimal
 /// Separate from how a value is shown to a person, because showing text quotes
 /// it and a quoted value in a parameter is a different value. That mistake
 /// passes every test written with numbers.
+/// A value carries its own type across, rather than its spelling.
+///
+/// Rendering a number to text here is what makes a numeric comparison a text
+/// one at the far end. SQLite orders every number before every text, so a bar
+/// bound as text is a bar no number clears, and the answer is an empty result
+/// rather than an error.
 export trait Bindable {
-  fn bound(self: &Self) -> Option[Str]
+  fn bound(self: &Self) -> Driver.Value
 }
 
 impl Bindable for Str {
-  fn bound(self: &Self) -> Option[Str] { Some(*self) }
+  fn bound(self: &Self) -> Driver.Value { TextValue(*self) }
 }
 
 impl Bindable for Int {
-  fn bound(self: &Self) -> Option[Str] { Some(show(*self)) }
+  fn bound(self: &Self) -> Driver.Value {
+    match convertInteger[Int64](*self) {
+      case Some(number) => IntegerValue(number)
+      case None => TextValue(show(*self))
+    }
+  }
 }
 
 impl Bindable for Bool {
-  fn bound(self: &Self) -> Option[Str] { Some(if *self { "true" } else { "false" }) }
+  fn bound(self: &Self) -> Driver.Value { BooleanValue(*self) }
 }
 
 impl Bindable for Decimal {
-  fn bound(self: &Self) -> Option[Str] { Some(Decimal.toText(*self)) }
+  fn bound(self: &Self) -> Driver.Value { DecimalValue(*self) }
 }
 
 /// A column: where it lives, what it is called, and what it holds.
@@ -85,7 +98,7 @@ export fn comparisonText(held: &Comparison) -> Str {
 }
 
 /// A value as the parameter it becomes.
-export fn boundValue[T: Bindable](value: &T) -> Option[Str] { value.bound() }
+export fn boundValue[T: Bindable](value: &T) -> Driver.Value { value.bound() }
 
 /// Nothing, for a column that is being set to hold nothing.
-export fn nothing() -> Option[Str] { None }
+export fn nothing() -> Driver.Value { NullValue }

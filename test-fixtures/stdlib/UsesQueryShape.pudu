@@ -57,7 +57,7 @@ export fn main() -> Int {
   // However large it grew, every value that came from outside is a parameter.
   if !written.contains("paid") { held = held + 1 }
   if !written.contains("1000") { held = held + 1 }
-  if Query.valuesOf(&statement) == [Some("paid"), Some("1000")] { held = held + 1 }
+  if Query.valuesOf(&statement) == [Query.textValue("paid"), Query.textValue("1000")] { held = held + 1 }
 
   // The smallest query there is, for which nothing has to be written down.
   if Query.textOf(&orEmpty(Shape.select(&Shape.everythingFrom("users"))))

@@ -13,27 +13,27 @@ export fn main() -> Int {
   var held = 0
 
   // A value travels beside the statement, never inside it.
-  let byName = orEmpty(Query.matching(&orEmpty(Query.from("users")), "name", "=", Some("ada")))
+  let byName = orEmpty(Query.matching(&orEmpty(Query.from("users")), "name", "=", Query.textValue("ada")))
   if Query.textOf(&byName) == "select * from users where name = $1" { held = held + 1 }
-  if Query.valuesOf(&byName) == [Some("ada")] { held = held + 1 }
+  if Query.valuesOf(&byName) == [Query.textValue("ada")] { held = held + 1 }
   if Query.valueCount(&byName) == 1 { held = held + 1 }
 
   // A value that is a whole statement is still just a value. This is the
   // check the module exists for: there is no call that would have put it in
   // the text, so nothing had to remember to escape it.
   let hostile = orEmpty(
-    Query.matching(&orEmpty(Query.from("users")), "name", "=", Some("'; drop table users; --"))
+    Query.matching(&orEmpty(Query.from("users")), "name", "=", Query.textValue("'; drop table users; --"))
   )
   if !Query.textOf(&hostile).contains("drop table") { held = held + 1 }
   if Query.textOf(&hostile) == "select * from users where name = $1" { held = held + 1 }
-  if Query.valuesOf(&hostile) == [Some("'; drop table users; --")] { held = held + 1 }
+  if Query.valuesOf(&hostile) == [Query.textValue("'; drop table users; --")] { held = held + 1 }
 
   // Placeholders are numbered as values are added, so two conditions do not
   // both claim the first.
-  let two = orEmpty(Query.also(&byName, "age", ">", Some("18")))
+  let two = orEmpty(Query.also(&byName, "age", ">", Query.textValue("18")))
   if Query.textOf(&two) == "select * from users where name = $1 and age > $2" { held = held + 1 }
   if Query.valueCount(&two) == 2 { held = held + 1 }
-  let three = orEmpty(Query.either(&two, "role", "=", Some("admin")))
+  let three = orEmpty(Query.either(&two, "role", "=", Query.textValue("admin")))
   if Query.textOf(&three).contains("or role = $3") { held = held + 1 }
 
   // A name is refused rather than quoted, because quoting correctly depends
@@ -49,7 +49,7 @@ export fn main() -> Int {
 
   // A statement whose table came from outside is refused before it is built.
   if let Err(_) = Query.from("users; drop table users") { held = held + 1 }
-  if let Err(_) = Query.matching(&byName, "name); drop table users; --", "=", Some("x")) {
+  if let Err(_) = Query.matching(&byName, "name); drop table users; --", "=", Query.textValue("x")) {
     held = held + 1
   }
 
@@ -63,7 +63,7 @@ export fn main() -> Int {
   if Result.unwrapOr(Query.operator(">="), "") == ">=" { held = held + 1 }
   if Result.unwrapOr(Query.operator("LIKE"), "") == "like" { held = held + 1 }
   if let Err(BadOperator(_)) = Query.operator("= 1 or 1") { held = held + 1 }
-  if let Err(_) = Query.matching(&byName, "name", "= 1 or 1", Some("x")) { held = held + 1 }
+  if let Err(_) = Query.matching(&byName, "name", "= 1 or 1", Query.textValue("x")) { held = held + 1 }
 
   // Named columns, and a count.
   let named = orEmpty(Query.selecting(&["id", "name"], "users"))
@@ -77,7 +77,7 @@ export fn main() -> Int {
   // A list of values is a list of parameters, however long, so a list from
   // outside cannot become part of the text.
   let among = orEmpty(
-    Query.matchingOneOf(&orEmpty(Query.from("users")), "id", &[Some("1"), Some("2"), Some("3")])
+    Query.matchingOneOf(&orEmpty(Query.from("users")), "id", &[Query.textValue("1"), Query.textValue("2"), Query.textValue("3")])
   )
   if Query.textOf(&among) == "select * from users where id in ($1, $2, $3)" { held = held + 1 }
   if Query.valueCount(&among) == 3 { held = held + 1 }
@@ -105,25 +105,25 @@ export fn main() -> Int {
   if let Err(_) = Query.orderBy(&named, "name; drop table users", false) { held = held + 1 }
 
   // Adding a row: the columns are names and the values are parameters.
-  let added = orEmpty(Query.insert("users", &["name", "age"], &[Some("ada"), Some("36")]))
+  let added = orEmpty(Query.insert("users", &["name", "age"], &[Query.textValue("ada"), Query.textValue("36")]))
   if Query.textOf(&added) == "insert into users (name, age) values ($1, $2)" { held = held + 1 }
-  if Query.valuesOf(&added) == [Some("ada"), Some("36")] { held = held + 1 }
+  if Query.valuesOf(&added) == [Query.textValue("ada"), Query.textValue("36")] { held = held + 1 }
 
   // A column list and a value list that do not correspond is a mistake rather
   // than a statement with a hole in it.
-  if let Err(Empty) = Query.insert("users", &["name", "age"], &[Some("ada")]) { held = held + 1 }
+  if let Err(Empty) = Query.insert("users", &["name", "age"], &[Query.textValue("ada")]) { held = held + 1 }
   if let Err(Empty) = Query.insert("users", &[], &[]) { held = held + 1 }
 
   // Changing rows, with the conditions numbered after the assignments.
-  let changed = orEmpty(Query.insert("x", &["a"], &[Some("1")]))
-  let edited = orEmpty(Query.update("users", &["name"], &[Some("grace")]))
-  let edittedWhere = orEmpty(Query.matching(&edited, "id", "=", Some("7")))
+  let changed = orEmpty(Query.insert("x", &["a"], &[Query.textValue("1")]))
+  let edited = orEmpty(Query.update("users", &["name"], &[Query.textValue("grace")]))
+  let edittedWhere = orEmpty(Query.matching(&edited, "id", "=", Query.textValue("7")))
   if Query.textOf(&edittedWhere) == "update users set name = $1 where id = $2" { held = held + 1 }
-  if Query.valuesOf(&edittedWhere) == [Some("grace"), Some("7")] { held = held + 1 }
+  if Query.valuesOf(&edittedWhere) == [Query.textValue("grace"), Query.textValue("7")] { held = held + 1 }
   if Query.valueCount(&changed) == 1 { held = held + 1 }
 
   // Removing rows.
-  let removed = orEmpty(Query.matching(&orEmpty(Query.deleteFrom("users")), "id", "=", Some("7")))
+  let removed = orEmpty(Query.matching(&orEmpty(Query.deleteFrom("users")), "id", "=", Query.textValue("7")))
   if Query.textOf(&removed) == "delete from users where id = $1" { held = held + 1 }
 
   // A statement that answers with what it changed.
@@ -133,7 +133,7 @@ export fn main() -> Int {
 
   // Two statements joined keep every value, and the second's placeholders
   // follow the first's rather than repeating them.
-  let joined = Query.then(&byName, &Query.withValue(&Query.empty(), "and age >", Some("18")))
+  let joined = Query.then(&byName, &Query.withValue(&Query.empty(), "and age >", Query.textValue("18")))
   if Query.textOf(&joined) == "select * from users where name = $1 and age > $2" { held = held + 1 }
   if Query.valueCount(&joined) == 2 { held = held + 1 }
 

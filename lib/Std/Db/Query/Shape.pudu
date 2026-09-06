@@ -1,5 +1,7 @@
 module Std.Db.Query.Shape
 
+import Std.Db.Driver as Driver
+import Std.Db.Driver {NullValue, TextValue}
 import Std.Db.Query {BadName, BadOperator, Empty, QueryError, Statement}
 import Std.Db.Query as Query
 import Std.Db.Schema as Schema
@@ -31,8 +33,8 @@ export type Test
 export type Condition = {
   column: Str,
   comparison: Str,
-  value: Option[Str],
-  values: Array[Option[Str]],
+  value: Driver.Value,
+  values: Array[Driver.Value],
   test: Test
 }
 
@@ -185,30 +187,52 @@ export fn joinOn[K](
   }
 }
 
-/// A column compared against a value, which travels as a parameter.
+/// A column compared against text, which travels as a parameter.
+///
+/// Text, and only text. A number written here is compared as text, and SQLite
+/// orders every number before every text — so a bar written `is("total", ">",
+/// "6")` is one no total clears, and the answer is an empty result rather than
+/// an error. `isNumber` is what a numeric comparison is written with.
 export fn is(column: Str, comparison: Str, value: Str) -> Condition {
-  Condition{column: column, comparison: comparison, value: Some(value), values: [], test: Compares}
+  Condition{column: column, comparison: comparison, value: TextValue(value), values: [], test: Compares}
+}
+
+/// A column compared against a whole number, which crosses as one.
+export fn isNumber(column: Str, comparison: Str, value: Int) -> Condition {
+  Condition{column: column, comparison: comparison, value: Query.whole(value), values: [], test: Compares}
+}
+
+/// A column compared against a value that carries its own type.
+export fn isBound(column: Str, comparison: Str, value: Driver.Value) -> Condition {
+  Condition{column: column, comparison: comparison, value: value, values: [], test: Compares}
 }
 
 /// The same, where the value may be absent.
 export fn isValue(column: Str, comparison: Str, value: Option[Str]) -> Condition {
-  Condition{column: column, comparison: comparison, value: value, values: [], test: Compares}
+  Condition{column: column, comparison: comparison, value: Query.maybeText(value), values: [], test: Compares}
 }
 
 /// A column holding nothing.
 export fn isMissing(column: Str) -> Condition {
-  Condition{column: column, comparison: "=", value: None, values: [], test: Missing}
+  Condition{column: column, comparison: "=", value: NullValue, values: [], test: Missing}
 }
 
 /// A column holding something.
 export fn isPresent(column: Str) -> Condition {
-  Condition{column: column, comparison: "=", value: None, values: [], test: Present}
+  Condition{column: column, comparison: "=", value: NullValue, values: [], test: Present}
 }
 
 /// A column that is one of several values, each its own parameter, so a list
 /// from outside cannot become part of the text however long it is.
 export fn isOneOf(column: Str, values: &Array[Option[Str]]) -> Condition {
-  Condition{column: column, comparison: "=", value: None, values: *values, test: AmongThese}
+  var carried: Array[Driver.Value] = []
+  for value in *values { carried = carried.push(Query.maybeText(value)) }
+  Condition{column: column, comparison: "=", value: NullValue, values: carried, test: AmongThese}
+}
+
+/// The same, where each value carries its own type.
+export fn isAmong(column: Str, values: &Array[Driver.Value]) -> Condition {
+  Condition{column: column, comparison: "=", value: NullValue, values: *values, test: AmongThese}
 }
 
 /// Rows ordered by a column, with the ones holding nothing last.
@@ -371,7 +395,7 @@ fn conditionColumn(written: Str) -> Result[Str, QueryError] {
 fn amongThese(
   base: &Statement,
   column: Str,
-  values: &Array[Option[Str]],
+  values: &Array[Driver.Value],
   word: Str
 ) -> Statement {
   if values.length() == 0 {

@@ -43,6 +43,33 @@ of its length, which is exactly the shape a report generator produces. The parts
 when the text is asked for: three thousand appended clauses now cost what three thousand appends
 should, and the join at the end is a single pass.
 
+## A value carries its type
+
+`Statement.values` holds `Driver.Value`, not `Option[Str]`. A comparison written against a number
+reaches the backend as a number.
+
+The failure this closes is silent on both sides of it. Bound as text, a number is compared as text,
+and SQLite orders every number before every text — so `sum(quantity) > '6'` is false for every row it
+could be asked about, and the report comes back empty rather than wrong-looking. PostgreSQL coerces
+the text and answers correctly, so the same statement means two different things depending on where it
+runs, and neither backend reports anything.
+
+`textValuesOf` renders the values as the text PostgreSQL's wire protocol carries. That is a rendering
+for one transport, not a second opinion about what the values are.
+
+Values a caller supplies as `Option[Str]` — a row handed to `Std.Db.Store`, a condition written with
+`isValue` — were already spelled before they arrived, and nothing here can recover what they were.
+Those become text. The typed path is [[Std Db Schema]]'s `Bindable`, where the column's own type says
+what its value is, and `Shape.isNumber` where a condition is written by hand.
+
+### Resolved Grill
+
+- **Q:** Let the driver guess from the spelling — bind text that looks numeric as a number? **A:** No.
+  A zip code of `01234` and a quantity of `6` are spelled the same way and are not the same value;
+  guessing would corrupt the column that is genuinely text.
+- **Q:** Cast in the SQL instead? **A:** No; the cast that works differs per backend, which is the
+  problem rather than the fix.
+
 ## Grill Log
 
 - **Q:** Hold the statement as the text built so far? **A:** No; hold its parts and join once.

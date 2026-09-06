@@ -1,6 +1,6 @@
 module Std.Db.Query
 
-import Std.Db.Driver {DollarNumber, QuestionMark, Named}
+import Std.Db.Driver {DollarNumber, QuestionMark, Named, NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
 import Std.Db.Driver as Driver
 import Std.Db.Schema as Schema
 import Std.Option as Option
@@ -29,7 +29,15 @@ export type Part
 /// clause at a time and appending to text copies everything built so far — so
 /// a statement assembled from many pieces cost the square of its length. They
 /// are joined once, when the text is asked for.
-export type Statement = { parts: Array[Part], values: Array[Option[Str]] }
+/// The values are typed, not text.
+///
+/// A comparison written against a number has to reach the backend as one. Bound
+/// as text it is compared as text, and SQLite orders every number before every
+/// text — so `sum(quantity) > '6'` is false for every row it could be asked
+/// about, and the answer is an empty result rather than an error. PostgreSQL
+/// coerces the text and answers correctly, so the same query means two things.
+/// Carrying the type is what stops the builder deciding that by accident.
+export type Statement = { parts: Array[Part], values: Array[Driver.Value] }
 
 /// Why a statement would not be built.
 export type QueryError
@@ -67,7 +75,7 @@ export fn empty() -> Statement { Statement{parts: [], values: []} }
 /// numbering come out right. Written as text and left alone, `$1` in the
 /// second of two statements would still say `$1` after the first had already
 /// used it.
-export fn raw(source: Str, values: &Array[Option[Str]]) -> Statement {
+export fn raw(source: Str, values: &Array[Driver.Value]) -> Statement {
   Statement{parts: partsOf(source), values: *values}
 }
 
@@ -166,7 +174,51 @@ fn spaced(before: Str, after: Str) -> Bool {
 }
 
 /// The values that travel beside it.
-export fn valuesOf(held: &Statement) -> Array[Option[Str]] { held.values }
+export fn valuesOf(held: &Statement) -> Array[Driver.Value] { held.values }
+
+/// The same values as the text a wire carries.
+///
+/// PostgreSQL's protocol sends every parameter as text, so a session speaks
+/// this rather than the typed form. It is a rendering for one transport and not
+/// a second opinion about what the values are: a number is written out here and
+/// stays a number everywhere else.
+export fn textValuesOf(held: &Statement) -> Array[Option[Str]] {
+  var written: Array[Option[Str]] = []
+  for value in held.values {
+    written = written.push(match value {
+        case NullValue => None
+        case TextValue(text) => Some(text)
+        case IntegerValue(number) => Some(show(number))
+        case RealValue(number) => Some(show(number))
+        case DecimalValue(number) => Some(show(number))
+        case BooleanValue(flag) => Some(if flag { "true" } else { "false" })
+        case BytesValue(_) => None
+      })
+  }
+  written
+}
+
+/// A value that is text.
+export fn textValue(value: Str) -> Driver.Value { TextValue(value) }
+
+/// A value that is a whole number, so a numeric comparison is a numeric one.
+export fn whole(value: Int) -> Driver.Value {
+  IntegerValue(Option.unwrapOr(convertInteger[Int64](value), 0i64))
+}
+
+/// A value that is true or false.
+export fn flag(value: Bool) -> Driver.Value { BooleanValue(value) }
+
+/// A value that is absent.
+export fn absent() -> Driver.Value { NullValue }
+
+/// Text, or its absence.
+export fn maybeText(value: Option[Str]) -> Driver.Value {
+  match value {
+    case Some(held) => TextValue(held)
+    case None => NullValue
+  }
+}
 
 /// How many values a statement carries.
 export fn valueCount(held: &Statement) -> Int { held.values.length() }
@@ -190,7 +242,7 @@ export fn then(left: &Statement, right: &Statement) -> Statement {
 /// The only way a value enters a statement. The placeholder is written here
 /// rather than by the caller, so a caller cannot write one that does not
 /// correspond to a value they supplied.
-export fn withValue(base: &Statement, fragment: Str, value: Option[Str]) -> Statement {
+export fn withValue(base: &Statement, fragment: Str, value: Driver.Value) -> Statement {
   Statement {
     parts: base.parts.push(Literal(fragment)).push(Placeholder),
     values: base.values.push(value)
@@ -292,7 +344,7 @@ export fn matching(
   base: &Statement,
   column: Str,
   comparison: Str,
-  value: Option[Str]
+  value: Driver.Value
 ) -> Result[Statement, QueryError] {
   let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
@@ -304,7 +356,7 @@ export fn also(
   base: &Statement,
   column: Str,
   comparison: Str,
-  value: Option[Str]
+  value: Driver.Value
 ) -> Result[Statement, QueryError] {
   let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
@@ -316,7 +368,7 @@ export fn either(
   base: &Statement,
   column: Str,
   comparison: Str,
-  value: Option[Str]
+  value: Driver.Value
 ) -> Result[Statement, QueryError] {
   let checkedColumn = qualifiedName(column) ?
   let checkedOperator = operator(comparison) ?
@@ -330,7 +382,7 @@ export fn either(
 export fn matchingOneOf(
   base: &Statement,
   column: Str,
-  values: &Array[Option[Str]]
+  values: &Array[Driver.Value]
 ) -> Result[Statement, QueryError] {
   let checkedColumn = qualifiedName(column) ?
   if values.length() == 0 {
@@ -386,7 +438,7 @@ export fn offset(base: &Statement, count: Int) -> Statement {
 export fn insert(
   table: Str,
   columns: &Array[Str],
-  values: &Array[Option[Str]]
+  values: &Array[Driver.Value]
 ) -> Result[Statement, QueryError] {
   let checkedTable = name(table) ?
   if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
@@ -414,7 +466,7 @@ export fn insert(
 export fn update(
   table: Str,
   columns: &Array[Str],
-  values: &Array[Option[Str]]
+  values: &Array[Driver.Value]
 ) -> Result[Statement, QueryError] {
   let checkedTable = name(table) ?
   if columns.length() == 0 || columns.length() != values.length() { return Err(Empty) }
