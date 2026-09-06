@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Mask-based fixed-width wrapping
+
+- Replace general remainder with exact low-bit masks at the runtime wrapping boundary.
+- Share masks for admitted scalar widths while preserving signed reinterpretation and BigInt behavior.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Direct Unicode text hashing
 
 - Feed canonical UTF-8 bytes into the collection mixer directly from text scalars.

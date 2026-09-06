@@ -19,6 +19,7 @@ module Pudu.IntegerLiteral
   , splitIntegerSuffix
   ) where
 
+import Data.Bits ((.&.))
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -162,13 +163,24 @@ integerKindWrap kind value = case kind of
   BigIntKind -> value
   _
     | integerKindSigned kind -> wrapSigned (widthOf kind) value
-    | otherwise -> value `mod` (2 ^ widthOf kind)
+    | otherwise -> value .&. widthMask (widthOf kind)
  where
   widthOf other = maybe targetPointerWidth id (integerKindWidth other)
   wrapSigned width raw =
-    let modulus = 2 ^ width :: Integer
-        reduced = raw `mod` modulus
+    let mask = widthMask width
+        modulus = mask + 1
+        reduced = raw .&. mask
      in if reduced >= modulus `div` 2 then reduced - modulus else reduced
+
+{-| Shared bounds for admitted scalar widths; no narrowing of the input value. -}
+widthMask :: Int -> Integer
+widthMask width = case width of
+  8 -> 0xff
+  16 -> 0xffff
+  32 -> 0xffffffff
+  64 -> 0xffffffffffffffff
+  128 -> 0xffffffffffffffffffffffffffffffff
+  _ -> 2 ^ width - 1
 
 {-| The kind two operands share.
 

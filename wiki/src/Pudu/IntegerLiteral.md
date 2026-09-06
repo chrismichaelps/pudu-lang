@@ -80,3 +80,15 @@ DEPTH 0.66 (MEDIUM). One total boundary centralizes suffix vocabulary, arbitrary
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Number Scanner]] · [[Type Env]] · [[Eval Match]]
+
+## Fixed-width wrapping kernel
+
+Wrapping into a nonnegative width uses the low-bit mask `value .&. (2^width - 1)` rather than
+general integer remainder. The mask is exact for both positive and negative arbitrary-precision
+inputs under two's-complement bit semantics. Signed kinds reinterpret the upper half by subtracting
+the modulus; BigInt remains unchanged. Common admitted widths use shared mask constants, avoiding
+rebuilding bounds for each operation. This is not used to rescue checked arithmetic overflow.
+
+### Resolved Grill Log
+- **Q:** Apply the mask to ordinary checked addition? **A:** No; only the existing wrapping boundary changes.
+- **Q:** Narrow the mathematical input before masking? **A:** No; Integer retains all bits until the explicit reduction.

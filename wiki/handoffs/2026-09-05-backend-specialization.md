@@ -42,3 +42,7 @@ Own Eval.Hash and its mirror. Added a checked Word64-magnitude path that mixes d
 ## Text hash continuation
 
 Eval.Hash now feeds canonical UTF-8 bytes directly from Unicode scalars, avoiding explicit encoded ByteString construction in the text hashing path. Rendered fallback values share it. No normalization or hash encoding changes intended; no measurements, tests, builds or reviews run.
+
+## Wrapping kernel ownership
+
+Own IntegerLiteral and its mirror for mask-based fixed-width wrapping, consumed by existing runtime arithmetic and bit operations. Shared admitted-width masks replace general remainder; checked arithmetic remains unchanged. No measurements, tests, builds or reviews run.
