@@ -57,7 +57,7 @@ export fn renderResponse(value: &Http.Response) -> Str {
 export fn respond(code: Int, mediaType: Str, body: Str) -> Http.Response {
   Http.Response {
     status: Http.status(code),
-    headers: [("content-type", mediaType), ("content-length", show(body.length()))],
+    headers: [("content-type", mediaType), ("content-length", show(body.toBytes().length()))],
     body: body
   }
 }
@@ -82,7 +82,7 @@ export fn redirect(code: Int, target: Str) -> Http.Response {
 export fn checkLength(headers: &Array[(Str, Str)], body: Str) -> Result[(), MessageError] {
   match Http.contentLength(headers) {
     case Some(declared) => {
-      if body.length() < declared { Err(ShortBody(declared, body.length())) } else { Ok(()) }
+      if body.toBytes().length() < declared { Err(ShortBody(declared, body.toBytes().length())) } else { Ok(()) }
     }
     case None => Ok(())
   }

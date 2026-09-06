@@ -33,3 +33,8 @@ rather than for the drawing:
   caller of `runFor` needs no capability at all. The assumption stops at the
   edge, in the module that made it, rather than spreading to everything that
   draws.
+
+## web/Notes.pudu
+
+A persistent SQLite or PostgreSQL service with HTML and JSON routes, typed row mapping and
+ordered application stages. See [the web example](web/README.md).

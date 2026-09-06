@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Notes Web Application]] — database-backed HTML and JSON application composition.
+
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
 - [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.

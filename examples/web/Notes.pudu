@@ -1,0 +1,104 @@
+module Notes
+
+import Std.App as App
+import Std.App.Config as Config
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Html as Html
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+
+type Note = { title: Str, body: Str }
+
+fn readNote(rows: Driver.Rows, index: Int) -> Result[Note, Row.RowError] {
+  Ok(Note{title: Row.text(&rows, index, "title") ?, body: Row.text(&rows, index, "body") ?})
+}
+
+fn notes(database: &Database.Database) -> Result[Array[Note], Database.QueryError] {
+  Database.queryAll(database, "SELECT title, body FROM pudu_notes ORDER BY title", &[], readNote)
+}
+
+fn jsonNote(note: Note) -> Json.Json {
+  Json.object(&[("title", Json.Text(note.title)), ("body", Json.Text(note.body))])
+}
+
+fn page(database: &Database.Database) -> Http.Response {
+  match notes(database) {
+    case Err(_) => Reply.text(503, "notes are unavailable")
+    case Ok(items) => Reply.page(200, Html.html(&[], &[
+      Html.head(&[Html.title("Pudu Notes"), Html.meta(&[("charset", "utf-8")])]),
+      Html.body(&[], &[
+        Html.heading(1, &[], &[Html.text("Notes")]),
+        Html.paragraph(&[], &[Html.text("Create notes through POST /api/notes. Refresh to see saved changes.")]),
+        Html.each(&items, fn(note: Note) -> Html.Html {
+          Html.tag("article", &[
+            Html.heading(2, &[], &[Html.text(note.title)]),
+            Html.tag("pre", &[Html.text(note.body)])
+          ])
+        })
+      ])
+    ]))
+  }
+}
+
+fn listing(database: &Database.Database) -> Http.Response {
+  match notes(database) {
+    case Err(_) => Reply.text(503, "notes are unavailable")
+    case Ok(items) => Reply.jsonValue(200, Json.list(&items.map(jsonNote)))
+  }
+}
+
+fn create(database: &Database.Database, request: Route.Request, sql: Str) -> Http.Response {
+  let media = Option.unwrapOr(Route.header(&request, "content-type"), "").toLower()
+  let mediaType = media.split(";")[0].trim()
+  if mediaType != "application/json" { return Reply.unsupportedMediaType(&["application/json"]) }
+  let decoded = Json.decode(Route.body(&request))
+  if let Err(_) = decoded { return Reply.text(400, "malformed JSON") }
+  let value = Result.unwrapOr(decoded, Json.Null)
+  let title = Option.andThen(Json.field(&value, "title"), fn(held: Json.Json) -> Option[Str] { Json.asText(&held) })
+  let body = Option.andThen(Json.field(&value, "body"), fn(held: Json.Json) -> Option[Str] { Json.asText(&held) })
+  if let Some(name) = title {
+    if let Some(content) = body {
+      if name.trim().isEmpty() || name.length() > 200 || content.length() > 10000 {
+        return Reply.unprocessable("title must contain 1..200 characters; body must contain at most 10000")
+      }
+      match Database.query(database, sql, &[Driver.TextValue(name), Driver.TextValue(content)]) {
+        case Err(_) => Reply.text(500, "note could not be saved")
+        case Ok(_) => Reply.jsonValue(201, jsonNote(Note{title: name, body: content}))
+      }
+    } else { Reply.unprocessable("body must be a string") }
+  } else { Reply.unprocessable("title must be a string") }
+}
+
+export fn main() -> Result[Int, Str] {
+  let settings = Result.mapErr(Config.discover(&[
+    ("database.url", "sqlite:notes.db"), ("server.host", "127.0.0.1"),
+    ("server.port", "8080"), ("server.connections", "0")
+  ], "app.toml"), fn(problem: Config.ConfigError) -> Str { Config.explain(&problem) }) ?
+  let database = Result.mapErr(Database.fromConfig(&settings, "database.url", 4), describe) ?
+  let insertSql = match database.driver.placeholders {
+    case Driver.DollarNumber => "INSERT INTO pudu_notes (title, body) VALUES ($1, $2)"
+    case Driver.QuestionMark => "INSERT INTO pudu_notes (title, body) VALUES (?, ?)"
+    case Driver.Named => { return Err("this example requires dollar-number or question-mark placeholders") }
+  }
+  let routes = Route.routing(&[
+    Route.get("/", fn(_request: Route.Request) -> Http.Response { page(&database) }),
+    Route.get("/api/notes", fn(_request: Route.Request) -> Http.Response { listing(&database) }),
+    Route.post("/api/notes", fn(request: Route.Request) -> Http.Response { create(&database, request, insertSql) })
+  ])
+  let connected = App.using(&App.over("notes", &settings, &routes), Database.stage(&database, "database"))
+  let application = App.using(&connected, App.stage("schema",
+    fn() -> Result[(), Str] {
+      let _created = Result.mapErr(Database.execute(&database,
+        "CREATE TABLE IF NOT EXISTS pudu_notes (title VARCHAR(200) PRIMARY KEY, body TEXT NOT NULL)"), describe) ?
+      Ok(())
+    }, fn() -> Result[(), Str] { Ok(()) }))
+  Result.mapErr(App.run(&application), fn(problem: App.AppError) -> Str { App.explain(&problem) })
+}
+
+fn describe(problem: Driver.Error) -> Str { problem.category + ": database operation failed" }

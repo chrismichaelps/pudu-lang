@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Database-backed web composition
+
+Added [[Notes Web Application]] connecting configuration, database lifecycle, schema bootstrap,
+typed row mapping and HTML/JSON routes. Corrected [[Std Http Message]] response Content-Length
+and short-body checks to use UTF-8 bytes. No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Application data and response integration
 
 [[Std App Database]] now exposes driver transactions and typed all/one/optional row queries

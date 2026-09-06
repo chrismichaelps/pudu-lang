@@ -23,3 +23,12 @@ example with explicit configuration, routes and startup/shutdown ordering.
 
 ## Referenced by
 [[handoffs/_MOC]] · [[Std App Database]] · [[Std Http Server Reply]]
+
+## Runnable application composition
+
+STD Implementer owns examples/web/Notes.pudu and its mirror, example readmes and HTTP Message
+UTF-8 length correction. Implemented HTML listing, JSON read/create routes, parameterized writes,
+SQLite/PostgreSQL placeholder selection and database-before-schema startup. LSP remains untouched.
+No tests, builds, reviews or measurements run.
+Exact next action: add browser form submission and typed redirect responses, sharing validation
+and parameterized persistence with the JSON create route.
