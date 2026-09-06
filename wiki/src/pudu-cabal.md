@@ -62,3 +62,12 @@ type signatures, installation, builtin naming and pure dispatch. No IO or FFI ca
 Resolved Grill Log: Use an explicit primitive rather than recognize a library function by name,
 so shadowing and ordinary calls retain their meaning. Result width is UInt128; an Int-sized host
 map cannot contain enough 64-bit words to overflow it. This remains unvalidated.
+
+## Buffer and SwissTable runtime integration
+
+Registers [[Runtime Buffer Kernels]], [[Eval Buffer]], [[Runtime SwissTable Kernels]], and [[Eval SwissTable]]
+in `pudu.cabal` library exposed-modules.
+
+### Resolved Grill Log
+- **Q:** Rely on dynamic reflection or untyped FFI for low-level memory operations? **A:** No; register explicit Haskell modules with checked boundaries.
+

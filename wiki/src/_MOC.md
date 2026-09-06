@@ -7,6 +7,10 @@ tags: [moc, module]
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.
 - [[Eval Word Map]] — checked UInt64 map payload reductions for STD.
+- [[Runtime Buffer Kernels]] — unboxed contiguous byte buffer operations.
+- [[Eval Buffer]] — evaluator adapters for buffer builtins.
+- [[Runtime SwissTable Kernels]] — flat hash table with 1-byte control metadata.
+- [[Eval SwissTable]] — evaluator adapters for flat map builtins.
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 

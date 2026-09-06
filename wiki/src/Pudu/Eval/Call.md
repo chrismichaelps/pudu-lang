@@ -146,3 +146,14 @@ dispatching via pure builtin dispatch without effect capabilities.
 Resolved Grill Log: Include WordMapMembersBuiltin in `isHashingBuiltin` so it dispatches through
 pure primitive dispatch rather than falling through to effect dispatch with E7012.
 
+## Buffer and SwissTable call dispatch
+
+Include `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `BufferScanU64Builtin`,
+`BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
+`SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
+`SwissTableSizeBuiltin` in `isHashingBuiltin` so they are routed through pure primitive dispatch.
+
+Resolved Grill Log: Route buffer and flat map operations through the pure builtin dispatcher
+before effect handling to preserve compiler constant-folding and effect isolation.
+
+

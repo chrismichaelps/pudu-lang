@@ -143,3 +143,13 @@ pure primitive taking `Map[UInt64, UInt64]` and returning `Array[UInt64]`.
 Resolved Grill Log: Register as a pure built-in alongside existing word-map operations. Emit
 unpacked IDs directly as an ArrayValue. No tests or measurements run.
 
+## Buffer and SwissTable installation
+
+Binds the 12 primitive names in the initial evaluation environment:
+`bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
+`swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
+and `swissTableSize`. Each name maps to its corresponding `Builtin` constructor.
+
+Resolved Grill Log: Install all 12 primitives as first-class builtin values available at top-level scope without dynamic handle allocation.
+
+

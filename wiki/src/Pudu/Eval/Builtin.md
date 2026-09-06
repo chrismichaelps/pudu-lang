@@ -170,3 +170,13 @@ report E7001; wrong arity reports E7003.
 Resolved Grill Log: Register as a pure built-in alongside existing word-map operations. Emit
 unpacked IDs directly as an ArrayValue. No tests or measurements run.
 
+## Buffer and SwissTable pure dispatch
+
+Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `BufferScanU64Builtin`,
+`BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
+`SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
+`SwissTableSizeBuiltin` through pure built-in evaluators in [[Eval Buffer]] and [[Eval SwissTable]].
+
+Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.
+
+

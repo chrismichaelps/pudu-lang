@@ -105,6 +105,18 @@ data Builtin
   | DecimalToFloatBuiltin
   | DecimalDivideBuiltin
   | DecimalRoundBuiltin
+  | BufferAllocBuiltin
+  | BufferReadU64Builtin
+  | BufferWriteU64Builtin
+  | BufferScanU64Builtin
+  | BufferCopyBuiltin
+  | BufferSizeBuiltin
+  | SwissTableEmptyBuiltin
+  | SwissTableLookupBuiltin
+  | SwissTableInsertBuiltin
+  | SwissTableDeleteBuiltin
+  | SwissTableEntriesBuiltin
+  | SwissTableSizeBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -207,3 +219,15 @@ builtinName value = case value of
   DecimalToFloatBuiltin -> "decimalToFloat"
   DecimalDivideBuiltin -> "decimalDivide"
   DecimalRoundBuiltin -> "decimalRound"
+  BufferAllocBuiltin -> "bufferAlloc"
+  BufferReadU64Builtin -> "bufferReadU64"
+  BufferWriteU64Builtin -> "bufferWriteU64"
+  BufferScanU64Builtin -> "bufferScanU64"
+  BufferCopyBuiltin -> "bufferCopy"
+  BufferSizeBuiltin -> "bufferSize"
+  SwissTableEmptyBuiltin -> "swissTableEmpty"
+  SwissTableLookupBuiltin -> "swissTableLookup"
+  SwissTableInsertBuiltin -> "swissTableInsert"
+  SwissTableDeleteBuiltin -> "swissTableDelete"
+  SwissTableEntriesBuiltin -> "swissTableEntries"
+  SwissTableSizeBuiltin -> "swissTableSize"

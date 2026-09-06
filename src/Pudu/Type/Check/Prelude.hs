@@ -9,13 +9,16 @@ module Pudu.Type.Check.Prelude
   , effectSignatures
   ) where
 
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
+import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import Pudu.Type.Env
   ( Checker
   , bindName
   )
 import Pudu.Type.Value
-  ( Scheme
+  ( NominalId (..)
+  , Scheme
   , boolType
   , bytesType
   , charType
@@ -157,6 +160,30 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False
       [NominalType "Map" [NominalType "UInt64" [], NominalType "UInt64" []]]
       (NominalType "Array" [NominalType "UInt64" []])))
+  bindName "bufferAlloc"
+    (monotype (FunctionTypeValue False [integerType] bytesType))
+  bindName "bufferReadU64"
+    (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "UInt64" []])))
+  bindName "bufferWriteU64"
+    (monotype (FunctionTypeValue False [bytesType, integerType, NominalType "UInt64" []] (NominalType "Option" [bytesType])))
+  bindName "bufferScanU64"
+    (monotype (FunctionTypeValue False [bytesType, integerType, integerType, NominalType "UInt64" []] (NominalType "Option" [integerType])))
+  bindName "bufferCopy"
+    (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [bytesType])))
+  bindName "bufferSize"
+    (monotype (FunctionTypeValue False [bytesType] integerType))
+  bindName "swissTableEmpty"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [integerType] (flatMapType (RigidType "V"))))
+  bindName "swissTableLookup"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [borrowFlatMap (RigidType "V"), NominalType "UInt64" []] (NominalType "Option" [RigidType "V"])))
+  bindName "swissTableInsert"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [borrowFlatMap (RigidType "V"), NominalType "UInt64" [], RigidType "V"] (flatMapType (RigidType "V"))))
+  bindName "swissTableDelete"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [borrowFlatMap (RigidType "V"), NominalType "UInt64" []] (flatMapType (RigidType "V"))))
+  bindName "swissTableEntries"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [borrowFlatMap (RigidType "V")] (NominalType "Array" [TupleTypeValue [NominalType "UInt64" [], RigidType "V"]])))
+  bindName "swissTableSize"
+    (polytype [("V", 0)] [] (FunctionTypeValue False [borrowFlatMap (RigidType "V")] integerType))
   bindName "hashOf" (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   bindName "mixHash" (monotype (FunctionTypeValue False [integerType] integerType))
   {-| The indexed store `Std.HashMap` reaches its buckets through. Built empty
@@ -168,6 +195,9 @@ declareBuiltinConstructors = do
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
+  stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
+  flatMapType v = NominalType stdFlatMapId [v]
+  borrowFlatMap v = ReferenceTypeValue False (flatMapType v)
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]
 

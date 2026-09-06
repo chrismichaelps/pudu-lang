@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Unboxed contiguous byte buffers and flat hash tables with control metadata
+
+Implemented low-level cache-aligned unboxed memory buffers (`Pudu.Runtime.Buffer`, `Pudu.Eval.Buffer`,
+`Std.Buffer`) and flat hash tables with control metadata (`Pudu.Runtime.SwissTable`, `Pudu.Eval.SwissTable`,
+`Std.FlatMap`). Introduced 12 pure builtins: `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`,
+`bufferScanU64`, `bufferCopy`, `bufferSize`, `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`,
+`swissTableDelete`, `swissTableEntries`, and `swissTableSize`. Created test fixtures `UsesBuffer.pudu` (23 assertions) and
+`UsesFlatMap.pudu` (31 assertions) asserting all allocation, bounds-checking, indexing, tombstone recycling,
+polymorphic values, rehashing, and mutation invariants across 100% of public APIs using flat helper routines and
+the try operator without nested matches. Wired into `ProgramSpec.hs`.
+All 7 gates passed under `-Werror`.
+
 ## 2026-09-06 — Native sparse word member enumeration and BitSet validation
 
 [[Runtime Word Kernels]] and [[Eval Word Map]] now provide pure wired-in `wordMapMembers`,

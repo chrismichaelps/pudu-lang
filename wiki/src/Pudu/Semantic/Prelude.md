@@ -136,3 +136,13 @@ namespace as a pure built-in function.
 Resolved Grill Log: Include in prelude value names without requiring an explicit import.
 No tests or measurements run.
 
+## Buffer and SwissTable prelude bindings
+
+Adds the 12 primitive names to `preludeSymbols`:
+`bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
+`swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
+and `swissTableSize`. They are resolved in user code and STD modules without qualified import prefixes.
+
+Resolved Grill Log: Register symbols directly in prelude symbol tables alongside existing hashing and memory primitives.
+
+

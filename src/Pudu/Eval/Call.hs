@@ -517,4 +517,16 @@ isHashingBuiltin builtin = case builtin of
   WordMapMembersBuiltin -> True
   HashOfBuiltin -> True
   MixHashBuiltin -> True
+  BufferAllocBuiltin -> True
+  BufferReadU64Builtin -> True
+  BufferWriteU64Builtin -> True
+  BufferScanU64Builtin -> True
+  BufferCopyBuiltin -> True
+  BufferSizeBuiltin -> True
+  SwissTableEmptyBuiltin -> True
+  SwissTableLookupBuiltin -> True
+  SwissTableInsertBuiltin -> True
+  SwissTableDeleteBuiltin -> True
+  SwissTableEntriesBuiltin -> True
+  SwissTableSizeBuiltin -> True
   _ -> False

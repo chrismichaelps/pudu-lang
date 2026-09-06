@@ -537,6 +537,8 @@ testProgramEvaluation = do
   wide <- runEntry "test-fixtures/stdlib/UsesWide.pudu"
   keyed <- runEntry "test-fixtures/stdlib/UsesKeyed.pudu"
   bitSetInvariants <- runEntry "test-fixtures/stdlib/UsesBitSet.pudu"
+  buffers <- runEntry "test-fixtures/stdlib/UsesBuffer.pudu"
+  flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   keyedInvariants <- runEntry "test-fixtures/stdlib/KeyedInvariants.pudu"
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
@@ -1114,6 +1116,10 @@ testProgramEvaluation = do
         (keyedInvariants === Just "18")
     , counterexample "sparse bitsets keep their cardinality, members, algebra, and bounds"
         (bitSetInvariants === Just "39")
+    , counterexample "unboxed contiguous memory buffer operations evaluate"
+        (buffers === Just "23")
+    , counterexample "flat hash table with control metadata evaluates"
+        (flatMaps === Just "31")
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"

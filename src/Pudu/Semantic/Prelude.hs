@@ -42,6 +42,8 @@ preludeValueNames =
   , "wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"
   , "wordMapIsSubsetOf", "wordMapIsDisjointFrom"
   , "wordMapPopCount", "wordMapMembers", "sha256Of", "hmacSha256Of", "deriveKey", "hashOf"
+  , "bufferAlloc", "bufferReadU64", "bufferWriteU64", "bufferScanU64", "bufferCopy", "bufferSize"
+  , "swissTableEmpty", "swissTableLookup", "swissTableInsert", "swissTableDelete", "swissTableEntries", "swissTableSize"
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"

@@ -1,0 +1,75 @@
+module Std.FlatMap
+
+/// A high-performance flat hash table specialized for 64-bit unsigned keys.
+///
+/// Slots are indexed using 1-byte control metadata with 7-bit hash fingerprints
+/// to eliminate pointer chasing and false key equality comparisons. Collisions
+/// are resolved via linear probing, and tables automatically rehash at 75% load factor.
+export type FlatMap[V] = {
+  capacity: Int,
+  count: Int,
+  ctrl: Buckets[UInt64],
+  slots: Buckets[(UInt64, V)]
+}
+
+/// Creates an empty flat hash table with the requested minimum capacity.
+///
+/// Capacity is rounded up to the nearest power of two (minimum 16 slots).
+export fn empty[V](initialCapacity: Int) -> FlatMap[V] {
+  swissTableEmpty(initialCapacity)
+}
+
+/// The number of live key-value pairings currently stored in the table.
+export fn size[V](target: &FlatMap[V]) -> Int {
+  swissTableSize(target)
+}
+
+/// Whether the table contains zero entries.
+export fn isEmpty[V](target: &FlatMap[V]) -> Bool {
+  swissTableSize(target) == 0
+}
+
+/// Looks up a value by its 64-bit unsigned key.
+///
+/// Probes control metadata using the 7-bit fingerprint (H2); returns `None`
+/// immediately without dereferencing slot memory if an empty slot is encountered.
+export fn get[V](target: &FlatMap[V], key: UInt64) -> Option[V] {
+  swissTableLookup(target, key)
+}
+
+/// Looks up a value by its key, returning `fallback` if the key is absent.
+export fn getOr[V](target: &FlatMap[V], key: UInt64, fallback: V) -> V {
+  match swissTableLookup(target, key) {
+    case Some(value) => value
+    case None => fallback
+  }
+}
+
+/// Whether the table contains an entry for the specified 64-bit key.
+export fn containsKey[V](target: &FlatMap[V], key: UInt64) -> Bool {
+  match swissTableLookup(target, key) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Inserts or replaces a key-value pairing in the table.
+///
+/// If the addition causes the load factor to exceed 75%, the table automatically
+/// doubles in capacity and rehashes all active entries.
+export fn insert[V](target: &FlatMap[V], key: UInt64, value: V) -> FlatMap[V] {
+  swissTableInsert(target, key, value)
+}
+
+/// Removes a key-value pairing from the table.
+///
+/// Marks the deleted slot with a tombstone control tag to preserve linear probing
+/// chains for subsequent lookups.
+export fn remove[V](target: &FlatMap[V], key: UInt64) -> FlatMap[V] {
+  swissTableDelete(target, key)
+}
+
+/// Extracts all active key-value pairings as an array in slot order.
+export fn entries[V](target: &FlatMap[V]) -> Array[(UInt64, V)] {
+  swissTableEntries(target)
+}

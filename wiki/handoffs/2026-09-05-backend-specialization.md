@@ -153,3 +153,17 @@ Ran and passed all 7 CI validation gates in `test/gates.sh`:
 - documentation site keeps its contract (doc-site-parity.mjs)
 Status transitioned to VALIDATED.
 
+## Unboxed contiguous byte buffers and flat hash tables with control metadata
+
+Runtime Implementer owned `Runtime.Buffer`, `Runtime.SwissTable`, `Eval.Buffer`, `Eval.SwissTable`,
+`Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, `Type.Check.Prelude`,
+`lib/Std/Buffer.pudu`, `lib/Std/FlatMap.pudu`, and all mirrored wiki pages under `wiki/src/`.
+Implemented low-level contiguous byte buffers with unboxed scalar read/write, bulk copy, and vector word scanning.
+Implemented high-performance flat hash tables using 1-byte control metadata (empty `0xFF`, tombstone `0xFE`,
+7-bit $H2$ fingerprint) with linear triangular probing and automatic rehashing at 75% load factor.
+Wired 12 pure builtins across the compiler, evaluator, and type checker.
+Added test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (23 assertions) and `test-fixtures/stdlib/UsesFlatMap.pudu` (31 assertions), testing 100% of public APIs across typical cases, boundary limits (0, max values, unaligned offsets), tombstone recycling, polymorphic values (`FlatMap[Str]`), and 60-entry bulk rehashing, adhering strictly to flat helper routines with the try operator `?` to avoid nested matches.
+Wired both fixtures into `test/Pudu/Compiler/ProgramSpec.hs`.
+Ran and passed all 7 CI gates in `test/gates.sh` cleanly without warnings under `-Werror`.
+
+

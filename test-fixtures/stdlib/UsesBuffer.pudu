@@ -1,0 +1,145 @@
+module UsesBuffer
+
+import Std.Buffer as Buffer
+import Std.Option as Option
+
+fn testWriteReadRoundtrip() -> Option[Bool] {
+  let buf = Buffer.alloc(128)
+  let b1 = Buffer.writeU64(&buf, 0, 0x1122334455667788u64) ?
+  let b2 = Buffer.writeU64(&b1, 120, 0xAABBCCDDEEFF0011u64) ?
+  let b3 = Buffer.writeU64(&b2, 19, 0xDEADBEEFCAFEBABEu64) ?
+
+  let v1 = Buffer.readU64(&b3, 0) ?
+  let v2 = Buffer.readU64(&b3, 120) ?
+  let v3 = Buffer.readU64(&b3, 19) ?
+
+  // Verify immutability of the original buffer
+  let origV = Buffer.readU64(&buf, 0) ?
+
+  Some(v1 == 0x1122334455667788u64
+      && v2 == 0xAABBCCDDEEFF0011u64
+      && v3 == 0xDEADBEEFCAFEBABEu64
+      && origV == 0u64)
+}
+
+fn testScanVariants() -> Option[Bool] {
+  let buf = Buffer.alloc(64)
+  let b1 = Buffer.writeU64(&buf, 0, 0x11111111u64) ?
+  let b2 = Buffer.writeU64(&b1, 16, 0xDEADBEEFu64) ?
+  let b3 = Buffer.writeU64(&b2, 56, 0x99999999u64) ?
+
+  let first = Buffer.scanU64(&b3, 0, 8, 0x11111111u64) ?
+  let middle = Buffer.scanU64(&b3, 0, 8, 0xDEADBEEFu64) ?
+  let last = Buffer.scanU64(&b3, 0, 8, 0x99999999u64) ?
+  let subRange = Buffer.scanU64(&b3, 16, 6, 0xDEADBEEFu64) ?
+
+  let notFound = Buffer.scanU64(&b3, 0, 8, 0x42424242u64)
+  let zeroCount = Buffer.scanU64(&b3, 0, 0, 0x11111111u64)
+  let negCount = Buffer.scanU64(&b3, 0, -1, 0x11111111u64)
+  let oobScan = Buffer.scanU64(&b3, 0, 20, 0xDEADBEEFu64)
+
+  Some(first == 0
+      && middle == 2
+      && last == 7
+      && subRange == 0
+      && Option.isNone(&notFound)
+      && Option.isNone(&zeroCount)
+      && Option.isNone(&negCount)
+      && Option.isNone(&oobScan))
+}
+
+fn testCopyVariants() -> Option[Bool] {
+  let src = Buffer.alloc(32)
+  let srcW = Buffer.writeU64(&src, 0, 0xCAFEBABEu64) ?
+  let dst = Buffer.alloc(32)
+
+  // Non-overlapping copy
+  let dstW = Buffer.copy(&srcW, 0, &dst, 8, 8) ?
+  let v = Buffer.readU64(&dstW, 8) ?
+  let untouched = Buffer.readU64(&dstW, 0) ?
+
+  // Zero-length copy succeeds without modifying destination
+  let dstZero = Buffer.copy(&srcW, 0, &dstW, 0, 0) ?
+  let zeroV = Buffer.readU64(&dstZero, 8) ?
+
+  // Original dst unmodified
+  let origDstV = Buffer.readU64(&dst, 8) ?
+
+  Some(v == 0xCAFEBABEu64
+      && untouched == 0u64
+      && zeroV == 0xCAFEBABEu64
+      && origDstV == 0u64)
+}
+
+fn testBytesRoundtrip() -> Option[Bool] {
+  let buf = Buffer.alloc(32)
+  let b1 = Buffer.writeU64(&buf, 0, 0x123456789ABCDEF0u64) ?
+  let b2 = Buffer.writeU64(&b1, 24, 0xFEDCBA9876543210u64) ?
+
+  let raw = Buffer.toBytes(&b2)
+  let restored = Buffer.fromBytes(raw)
+
+  let r1 = Buffer.readU64(&restored, 0) ?
+  let r2 = Buffer.readU64(&restored, 24) ?
+
+  // Modifying restored does not affect b2
+  let r3 = Buffer.writeU64(&restored, 0, 0x9999u64) ?
+  let origB2 = Buffer.readU64(&b2, 0) ?
+  let newR = Buffer.readU64(&r3, 0) ?
+
+  Some(Buffer.size(&restored) == 32
+      && r1 == 0x123456789ABCDEF0u64
+      && r2 == 0xFEDCBA9876543210u64
+      && origB2 == 0x123456789ABCDEF0u64
+      && newR == 0x9999u64)
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Allocation and sizing
+  let zeroBuf = Buffer.alloc(0)
+  if Buffer.size(&zeroBuf) == 0 { held = held + 1 }
+
+  let oneBuf = Buffer.alloc(1)
+  if Buffer.size(&oneBuf) == 1 { held = held + 1 }
+
+  let buf = Buffer.alloc(128)
+  if Buffer.size(&buf) == 128 { held = held + 1 }
+
+  // 2. Read default zero value
+  if Option.unwrapOr(Buffer.readU64(&buf, 0), 1u64) == 0u64 { held = held + 1 }
+  if Option.unwrapOr(Buffer.readU64(&buf, 120), 1u64) == 0u64 { held = held + 1 }
+
+  // 3. Write & read roundtrip (endianness, unaligned offsets, immutability)
+  if Option.unwrapOr(testWriteReadRoundtrip(), false) { held = held + 1 }
+
+  // 4. Bounds checking on read & write
+  if Option.isNone(&Buffer.readU64(&buf, -1)) { held = held + 1 }
+  if Option.isNone(&Buffer.readU64(&buf, -8)) { held = held + 1 }
+  if Option.isNone(&Buffer.readU64(&buf, 121)) { held = held + 1 }
+  if Option.isNone(&Buffer.readU64(&buf, 128)) { held = held + 1 }
+  if Option.isNone(&Buffer.readU64(&zeroBuf, 0)) { held = held + 1 }
+
+  if Option.isNone(&Buffer.writeU64(&buf, -1, 1u64)) { held = held + 1 }
+  if Option.isNone(&Buffer.writeU64(&buf, 121, 1u64)) { held = held + 1 }
+  if Option.isNone(&Buffer.writeU64(&buf, 128, 1u64)) { held = held + 1 }
+  if Option.isNone(&Buffer.writeU64(&zeroBuf, 0, 1u64)) { held = held + 1 }
+
+  // 5. Scan operations (first, middle, last, subrange, not-found, zero-count, neg-count, oob)
+  if Option.unwrapOr(testScanVariants(), false) { held = held + 1 }
+
+  // 6. Copy operations (success, zero-length, bounds failures, immutability)
+  if Option.unwrapOr(testCopyVariants(), false) { held = held + 1 }
+  let smallDst = Buffer.alloc(16)
+  if Option.isNone(&Buffer.copy(&buf, 0, &smallDst, 0, 32)) { held = held + 1 }
+  if Option.isNone(&Buffer.copy(&buf, 120, &smallDst, 0, 16)) { held = held + 1 }
+  if Option.isNone(&Buffer.copy(&buf, -1, &smallDst, 0, 8)) { held = held + 1 }
+  if Option.isNone(&Buffer.copy(&buf, 0, &smallDst, -1, 8)) { held = held + 1 }
+  if Option.isNone(&Buffer.copy(&buf, 0, &smallDst, 0, -1)) { held = held + 1 }
+
+  // 7. toBytes and fromBytes roundtrip with serialization and isolation
+  if Option.unwrapOr(testBytesRoundtrip(), false) { held = held + 1 }
+
+  held
+}

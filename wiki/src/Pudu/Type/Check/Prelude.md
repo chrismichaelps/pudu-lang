@@ -108,3 +108,22 @@ so a counterexample does not force later lookups. No tests, builds, reviews or m
 Resolved Grill Log: Type signature expects Map[UInt64, UInt64] and returns Array[UInt64].
 No tests or measurements run.
 
+## Buffer and SwissTable type signatures
+
+Wires type schemes for all 12 primitives into `preludeTypes`:
+- `bufferAlloc: fn(Int) -> Bytes`
+- `bufferReadU64: fn(&Bytes, Int) -> Option[UInt64]`
+- `bufferWriteU64: fn(&Bytes, Int, UInt64) -> Option[Bytes]`
+- `bufferScanU64: fn(&Bytes, Int, Int, UInt64) -> Option[Int]`
+- `bufferCopy: fn(&Bytes, Int, &Bytes, Int, Int) -> Option[Bytes]`
+- `bufferSize: fn(&Bytes) -> Int`
+- `swissTableEmpty: fn[V](Int) -> FlatMap[V]`
+- `swissTableLookup: fn[V](&FlatMap[V], UInt64) -> Option[V]`
+- `swissTableInsert: fn[V](&FlatMap[V], UInt64, V) -> FlatMap[V]`
+- `swissTableDelete: fn[V](&FlatMap[V], UInt64) -> FlatMap[V]`
+- `swissTableEntries: fn[V](&FlatMap[V]) -> Array[(UInt64, V)]`
+- `swissTableSize: fn[V](&FlatMap[V]) -> Int`
+
+Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
+
+

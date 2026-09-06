@@ -168,6 +168,10 @@ library
     Pudu.Runtime.Word
     Pudu.Eval.WordMap
     Pudu.Runtime.Collection
+    Pudu.Runtime.Buffer
+    Pudu.Eval.Buffer
+    Pudu.Runtime.SwissTable
+    Pudu.Eval.SwissTable
   c-sources:        cbits/pudu_ffi.c
                    cbits/pudu_sqlite.c
   extra-libraries:  ffi

@@ -30,6 +30,8 @@ import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
 import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra, callWordMapPredicate, callWordMapMembers)
+import qualified Pudu.Eval.Buffer as Buffer
+import qualified Pudu.Eval.SwissTable as Swiss
 import qualified Pudu.Runtime.Word as Word
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
@@ -568,6 +570,18 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
       process started, so the bucket a key lands in cannot be predicted from
       the key alone. What a key equals is untouched. -}
   (MixHashBuiltin, [IntValue _ value]) -> pure (intOf (mixKey value))
+  (BufferAllocBuiltin, values) -> Buffer.callBufferAlloc spanValue values
+  (BufferReadU64Builtin, values) -> Buffer.callBufferReadU64 spanValue values
+  (BufferWriteU64Builtin, values) -> Buffer.callBufferWriteU64 spanValue values
+  (BufferScanU64Builtin, values) -> Buffer.callBufferScanU64 spanValue values
+  (BufferCopyBuiltin, values) -> Buffer.callBufferCopy spanValue values
+  (BufferSizeBuiltin, values) -> Buffer.callBufferSize spanValue values
+  (SwissTableEmptyBuiltin, values) -> Swiss.callSwissTableEmpty spanValue values
+  (SwissTableLookupBuiltin, values) -> Swiss.callSwissTableLookup spanValue values
+  (SwissTableInsertBuiltin, values) -> Swiss.callSwissTableInsert spanValue values
+  (SwissTableDeleteBuiltin, values) -> Swiss.callSwissTableDelete spanValue values
+  (SwissTableEntriesBuiltin, values) -> Swiss.callSwissTableEntries spanValue values
+  (SwissTableSizeBuiltin, values) -> Swiss.callSwissTableSize spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing
