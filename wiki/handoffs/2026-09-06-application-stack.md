@@ -56,3 +56,8 @@ serialization, mirrors and deployment contract. LSP changes remain untouched. No
 reviews performed. Universal deployment and enterprise readiness remain unproven.
 Exact next action: implement bounded concurrent request admission with configurable deadlines
 and draining, keeping it independent of provider-specific request adapters.
+
+Implemented shared request read deadlines and bounded delimiter admission. Own Net.Read, Server
+and App integration plus mirrors. No tests, builds or reviews.
+Exact next action: bounded worker admission and response-write deadlines; handler cancellation
+and full shutdown deadlines remain outstanding.

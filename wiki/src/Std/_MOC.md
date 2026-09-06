@@ -112,3 +112,5 @@ tags: [moc, module, stdlib]
 ## Referenced by
 
 [[src/_MOC]] · [[architecture/STDLIB]]
+
+- [[Std Net Bounded Read]] — shared-deadline delimiter and exact reads.

@@ -10,6 +10,7 @@ import Std.Http.Server.Reply {text}
 import Std.Http.Server.Route as Route
 import Std.Http.Server.Route {dispatch}
 import Std.Net as Net
+import Std.Net.Read as Read
 import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
@@ -25,7 +26,8 @@ export type Server = {
   router: Route.Router,
   middleware: Array[Route.Middleware],
   headLimit: Int,
-  bodyLimit: Int
+  bodyLimit: Int,
+  readMillis: Int
 }
 
 /// A running server, and the switch that stops it.
@@ -47,7 +49,7 @@ const BODY_LIMIT: Int = 8388608
 
 /// A server over a router, with no middleware and the default limits.
 export fn server(base: &Route.Router) -> Server {
-  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT}
+  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000}
 }
 
 /// A server with one more step wrapped around its handlers.
@@ -61,13 +63,14 @@ export fn using(base: &Server, step: Route.Middleware) -> Server {
     router: base.router,
     middleware: base.middleware.push(step),
     headLimit: base.headLimit,
-    bodyLimit: base.bodyLimit
+    bodyLimit: base.bodyLimit,
+    readMillis: base.readMillis
   }
 }
 
 /// A server with different limits on what a request may be.
 export fn withLimits(base: &Server, head: Int, payload: Int) -> Server {
-  Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload}
+  Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload, readMillis: base.readMillis}
 }
 
 /// The handler a server presents, with every step wrapped around it.
@@ -94,9 +97,11 @@ export fn handlerOf(target: &Server) -> Route.Handler {
 fn readRequest(
   connection: &Net.Connection,
   headLimit: Int,
-  bodyLimit: Int
+  bodyLimit: Int,
+  readMillis: Int
 ) -> Result[Route.Request, Http.Response] {
-  let split = Net.receiveUntil(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit)
+  let expires = clock() + readMillis
+  let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
   let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
   let head = Result.unwrapOr(ByteSeq.toText(&pair[0]), "")
@@ -118,7 +123,7 @@ fn readRequest(
   let carried = pair[1]
   var payload = carried.take(needed)
   if carried.length() < needed {
-    let more = Net.receiveExactly(connection, needed - carried.length())
+    let more = Read.exactly(connection, needed - carried.length(), expires)
     if let Err(_) = more { return Err(badRequest("the body did not arrive")) }
     payload = carried.concat(Result.unwrapOr(more, ByteSeq.empty()))
   }
@@ -147,7 +152,7 @@ fn readRequest(
 /// The response always states its own length, so the client knows where the
 /// body ends without the connection closing to tell it.
 export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool {
-  let read = readRequest(connection, target.headLimit, target.bodyLimit)
+  let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis)
   let handle = handlerOf(target)
   if let Err(refusal) = read {
     let _sent = sendResponse(connection, &withLength(&closing(&refusal)))
@@ -341,4 +346,9 @@ export fn logging(write: fn(Str) -> ()) -> Route.Middleware {
     )
     answer
   }
+}
+
+/// One deadline for the complete request read, including partial packets.
+export fn withReadDeadline(base: &Server, millis: Int) -> Server {
+  Server{..*base, readMillis: if millis < 1 { 1 } else { millis }}
 }

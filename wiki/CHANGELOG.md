@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bounded request reads
+
+Added [[Std Net Bounded Read]] and shared header/body deadlines in [[Std Http Server]],
+configured by [[Std App]]. Delimiter reads cap each receive to the remaining byte budget.
+No tests, builds or reviews run.
+
 ## 2026-09-06 — Configuration admission and mail hardening
 
 [[Std App]] rejects malformed server settings before resource startup and exposes request byte

@@ -117,3 +117,13 @@ malformed settings fail as Configuration naming the key without reflecting its v
 server.headBytes and server.bodyBytes feed Server.withLimits. server.connections remains a total
 accept limit, not a concurrency bound. Resolved Grill Log: a typo must not silently disable a
 limit, and invalid configuration must not open database resources.
+
+## Request read deadlines
+
+Server.readMillis defaults to 30000 and is set through Server.withReadDeadline. Application
+configuration server.readMillis must be in 1..86400000 and is validated before startup. One
+absolute clock deadline covers both header and body through Std.Net.Read, including idle
+keep-alive reads. Header limits count delimiter bytes. This does not interrupt handler work,
+bound response writes or impose a complete shutdown deadline.
+Resolved Grill Log: retain an absolute deadline across partial reads; timeout per packet lets
+a slow sender hold a worker indefinitely.

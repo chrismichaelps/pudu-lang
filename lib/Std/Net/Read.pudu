@@ -1,0 +1,44 @@
+module Std.Net.Read
+
+import Std.Bytes as ByteSeq
+import Std.Net as Net
+
+export fn until(connection: &Net.Connection, marker: &Bytes, limit: Int, expires: Int) -> Result[(Bytes, Bytes), Net.NetError] {
+  if marker.isEmpty() || limit < marker.length() { return Err(Net.Other("invalid delimiter read limit")) }
+  var buffer = ByteSeq.empty()
+  loop {
+    let found = buffer.indexOf(*marker)
+    if found >= 0 { return Ok((buffer.take(found), buffer.drop(found + marker.length()))) }
+    let capacity = limit - buffer.length()
+    if capacity <= 0 { return Err(Net.Other("delimiter exceeds read limit")) }
+    let left = expires - clock()
+    if left <= 0 { return Err(Net.Other("request read deadline exceeded")) }
+    let count = if capacity < 8192 { capacity } else { 8192 }
+    match Net.receiveWithin(connection, count, left) ? {
+      case None => { return Err(Net.Closed) }
+      case Some(piece) => {
+        if piece.isEmpty() { return Err(Net.Closed) }
+        buffer = buffer.concat(piece)
+      }
+    }
+  }
+}
+
+export fn exactly(connection: &Net.Connection, count: Int, expires: Int) -> Result[Bytes, Net.NetError] {
+  if count < 0 { return Err(Net.Other("negative read length")) }
+  var buffer = ByteSeq.empty()
+  while buffer.length() < count {
+    let left = expires - clock()
+    if left <= 0 { return Err(Net.Other("request read deadline exceeded")) }
+    let remaining = count - buffer.length()
+    let wanted = if remaining < 8192 { remaining } else { 8192 }
+    match Net.receiveWithin(connection, wanted, left) ? {
+      case None => { return Err(Net.Closed) }
+      case Some(piece) => {
+        if piece.isEmpty() { return Err(Net.Closed) }
+        buffer = buffer.concat(piece)
+      }
+    }
+  }
+  Ok(buffer)
+}
