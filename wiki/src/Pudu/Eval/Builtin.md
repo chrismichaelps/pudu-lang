@@ -83,6 +83,8 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 - **Q:** Why are effects blocked at fold time rather than refused statically? **A:** They are not,
   any more — see [[ADR-0009]] for the proposal that moves the check into the type. Today the gate is
   here because effects have no static vocabulary to check against.
+- **Q:** Why decompose `Eval.Builtin` into child layers (`Array`, `String`, `Collection`, `Numeric`)? **A:** To scale the runtime architecture into bounded child modules strictly under 200 lines each, isolating distinct method families and scalar conversion logic while preserving the single re-exporting coordinator for zero API regression. _Rationale:_ callers retain complete source compatibility through `Pudu.Eval.Builtin`.
+
 
 ## Referenced by
 

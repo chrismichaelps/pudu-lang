@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Eval.Builtin into layered dependency graph modules
+
+Decomposed the 621-line monolithic `src/Pudu/Eval/Builtin.hs` into a scalable, layered dependency graph runtime architecture strictly under 190 lines per module:
+- Isolated array built-in method dispatch, arity handling, and higher-order callbacks (`map`, `filter`, `reduce`) into `Pudu.Eval.Builtin.Array` (125 lines).
+- Isolated text operations, linear prefix scans, Unicode scalar indexing, and string manipulation into `Pudu.Eval.Builtin.String` (96 lines).
+- Isolated ordered Map and Set constructors, key comparability invariants, and method dispatch into `Pudu.Eval.Builtin.Collection` (134 lines).
+- Isolated decimal primitives, scalar rounding modes, integer type conversion bounds, and Unicode character codepoints into `Pudu.Eval.Builtin.Numeric` (139 lines).
+- Refactored `Pudu.Eval.Builtin` into a thin coordinator (184 lines) retaining display/show formatting, panics, and hardware-specialized hashing/column dispatch while re-exporting all submodules with zero API regression.
+- Complete vault parity established with new mirrored module documentation (`Builtin/Array.md`, `Builtin/String.md`, `Builtin/Collection.md`, `Builtin/Numeric.md`) and updated `Builtin.md` with resolved Grill Log.
+- Registered all 4 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Frontend.ParserExpressionSpec into layered dependency graph modules
 
 Decomposed the 638-line monolithic `test/Pudu/Frontend/ParserExpressionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 180 lines per module:

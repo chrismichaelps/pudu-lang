@@ -43,6 +43,10 @@ library
     Pudu.Eval.Array
     Pudu.Eval.Builtin
     Pudu.Eval.Builtin.Definition
+    Pudu.Eval.Builtin.Array
+    Pudu.Eval.Builtin.String
+    Pudu.Eval.Builtin.Collection
+    Pudu.Eval.Builtin.Numeric
     Pudu.Eval.Bytes
     Pudu.Eval.Call
     Pudu.Eval.Clock
