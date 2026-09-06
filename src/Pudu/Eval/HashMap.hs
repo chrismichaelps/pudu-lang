@@ -23,7 +23,6 @@ module Pudu.Eval.HashMap
 import Data.Bits (shiftL, shiftR, xor)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.ByteString as ByteString
-import Data.IORef (IORef, newIORef, readIORef)
 import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.Eval.Entropy (secureBytes)
@@ -51,9 +50,9 @@ import System.IO.Unsafe (unsafePerformIO)
     It is deliberately not observable. Iteration order is insertion order,
     which `Std.HashMap` keeps for itself, so nothing a program can print
     depends on where a bucket happened to land. -}
-bucketSeed :: IORef Word64
+bucketSeed :: Word64
 {-# NOINLINE bucketSeed #-}
-bucketSeed = unsafePerformIO (newIORef =<< startingSeed)
+bucketSeed = unsafePerformIO startingSeed
 
 {-| The seed a run starts from, taken from the operating system.
 
@@ -78,9 +77,8 @@ startingSeed = do
     ones a bucket index reads. Mixing moves every input bit into every output
     bit, so a key that differs anywhere lands somewhere else. -}
 mixKey :: Integer -> Integer
-mixKey value = fromIntegral (finalize (fromIntegral value `xor` seed))
+mixKey value = fromIntegral (finalize (fromIntegral value `xor` bucketSeed))
  where
-  seed = unsafePerformIO (readIORef bucketSeed)
   finalize :: Word64 -> Word64
   finalize start =
     let a = (start `xor` (start `shiftR` 30)) * 0xbf58476d1ce4e5b9

@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Immutable HashMap seed storage
+
+- Replace the never-mutated bucket seed IORef with a shared immutable word.
+- Remove mutable-reference reads from bucket mixing while preserving initialization and placement behavior.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-06 — Native bitwise kernels
 
 - Dispatch bounded AND/OR/XOR/complement through native words and declared-width reinterpretation.

@@ -74,3 +74,7 @@ Runtime.Collection now bulk-builds every monotone run and combines chronological
 ## Native bitwise kernel delivery
 
 Own IntegerLiteral, Eval.Operator and their mirrors. Implemented bounded AND/OR/XOR/complement with native-word dispatch and exact wider fallback. This completes the edit interrupted by the earlier approval-service usage limit. No measurements, tests, builds or reviews run.
+
+## Immutable seed continuation
+
+Own Eval.HashMap and its mirror. Removed the unused mutability of the process bucket seed and the IORef read inside mixing. Existing entropy initialization/fallback remains. No measurements, tests, builds or reviews run.

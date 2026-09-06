@@ -41,3 +41,15 @@ Legacy list-returning keyed helpers remain for callers that require lists.
 
 ### Resolved Grill Log
 - **Q:** Duplicate storage loops in each value adapter? **A:** No; share the internal generic kernel without changing public STD behavior.
+
+## Immutable bucket seed
+
+The process seed is a shared NOINLINE Word64 initialized once through the existing entropy
+boundary. It is no longer wrapped in an IORef, and bucket mixing does not perform an IORef read.
+Entropy selection, the existing fallback constant, word mixing and iteration behavior are unchanged.
+This removes mutable storage from the hot path; moving seed ownership into evaluation state remains
+a separate architectural task and is not claimed by this change.
+
+### Resolved Grill Log
+- **Q:** Keep a mutable reference for a seed that never changes? **A:** No; immutable shared storage expresses the actual lifetime.
+- **Q:** Generate a seed on each lookup? **A:** No; a table must retain stable placement for its lifetime.
