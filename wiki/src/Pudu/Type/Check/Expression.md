@@ -59,7 +59,7 @@ checkExpression :: CheckSurroundings -> DeclaredTypes -> [Text] -> Located Expre
 - **Requires:** [[Type Env]], [[Type Formation]], [[Type Unify]], [[Type Check Rule]],
   [[Type Check Call]], [[Type Check Record]], [[Type Check Method]],
   [[Type Check Pattern]], [[Type Check Safety]], [[Type Check Iteration]],
-  [[Type Exhaust]].
+  [[Type Exhaust]], [[Type Check Expression Control]].
 - **Consumed by:** [[Type Check]], which ties the knot.
 
 ## Algorithm
@@ -91,6 +91,10 @@ through the record.
 - **Q:** Default an empty Set's element type here? **A:** No. _Rationale:_ expression inference must
   first let annotations, arguments, and returns constrain it; a boundary diagnostic is more honest
   than a type chosen without evidence. _Rejected:_ `Int`, unit, or an implicit bottom element.
+- **Q:** Why decompose match arms, lambdas, and loop control into `Pudu.Type.Check.Expression.Control`?
+  **A:** To satisfy file length contracts (< 500 lines) and isolate sub-expression scope and branch checking
+  from expression AST dispatch. _Rationale:_ arms, closures, and loops represent distinct control-flow boundaries
+  that can be checked via parameterised runners without cyclic dependencies.
 
 ## Referenced by
 

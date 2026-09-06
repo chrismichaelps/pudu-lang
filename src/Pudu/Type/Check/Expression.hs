@@ -10,36 +10,24 @@ module Pudu.Type.Check.Expression
   ) where
 
 import Control.Monad (foldM, unless)
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.IntegerLiteral (ParsedInteger (..), parseIntegerLiteral)
-import qualified Pudu.Frontend.Syntax.Tree as Tree
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Expression (..)
-  , Function (..)
-  , FunctionBody (..)
-  , MatchArm (..)
   , Parameter
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
   ( Checker
-  , insideClosure
-  , capturedFromOutside
   , DeclaredTypes (..)
-  , bindName
   , finalizeIntegerLiteralsBetween
   , finalizeIntegerLiteralsSince
   , freshVariable
   , inTypeScope
   , inTypeScopeWith
   , integerLiteralCheckpoint
-  , enterLoop
   , enterUnsafe
-  , leaveLoop
-  , withoutLoops
   , lookupName
   , recordExpression
   , report
@@ -63,7 +51,6 @@ import Pudu.Type.Check.Record
   ( CheckValue (..)
   , recordType
   , recordUpdateType
-  , recordUpdateType
   )
 import Pudu.Type.Check.Rule
   ( awaitType
@@ -83,15 +70,18 @@ import Pudu.Type.Check.Rule
   , unaryType
   )
 import Pudu.Type.Check.Propagation (reportRedundantPropagation)
-import Pudu.Type.Exhaust (checkExhaustive)
-import Pudu.Type.Formation
-  ( formOptionalType
-  , formType
+import Pudu.Type.Check.Expression.Control
+  ( aroundLoop
+  , checkArms
+  , checkCapturedAssignment
+  , lambdaType
+  , literalIndex
   )
+import Pudu.Type.Exhaust (checkExhaustive)
+import Pudu.Type.Formation (formType)
 import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
-  ( monotype
-  , Type (..)
+  ( Type (..)
   , boolType
   , integerType
   )
@@ -193,7 +183,14 @@ inferExpression around declared rigid spanValue expression = case expression of
       first : rest -> foldM (unify spanValue) first rest
     pure (NominalType "Set" [inferredElementType])
   MacroCall _ _ -> pure ErrorType
-  LambdaExpression value -> lambdaType around declared rigid value
+  LambdaExpression value ->
+    lambdaType
+      (aroundParameter around declared rigid)
+      (aroundBlock around declared rigid)
+      (checkExpression around declared rigid)
+      declared
+      rigid
+      value
   ScopeExpression body -> do
     (asynchronous, _) <- enclosingFunctionType selfName
     unless asynchronous $
@@ -264,7 +261,7 @@ inferExpression around declared rigid spanValue expression = case expression of
         the only available answer would be to refuse the match entirely. -}
     subjectType <- throughBorrow borrowed
     subjectEnd <- integerLiteralCheckpoint
-    result <- checkArms around declared rigid spanValue subjectType arms
+    result <- checkArms (checkExpression around declared rigid) declared rigid spanValue subjectType arms
     finalizeIntegerLiteralsBetween subjectCheckpoint subjectEnd
     resolvedSubject <- zonk subjectType
     checkExhaustive spanValue resolvedSubject arms
@@ -356,165 +353,9 @@ inferExpression around declared rigid spanValue expression = case expression of
         pure ErrorType
   InvalidExpression -> pure ErrorType
 
-checkArms
-  :: CheckSurroundings
-  -> DeclaredTypes
-  -> [(Text, Int)]
-  -> Span
-  -> Type
-  -> [Located MatchArm]
-  -> Checker Type
-checkArms around declared rigid spanValue subjectType arms = case arms of
-  [] -> pure ErrorType
-  _ -> do
-    checkpoint <- integerLiteralCheckpoint
-    types <- mapM checkArm arms
-    unified <- case types of
-      [] -> pure ErrorType
-      first : rest -> foldUnify first rest
-    validateIntegerLiteralsSince checkpoint
-    resolved <- mapM zonk types
-    if ErrorType `elem` resolved then pure ErrorType else zonk unified
- where
-  checkArm (Located _ arm) = do
-    result <- freshVariable
-    inTypeScope $ do
-      bindPattern declared rigid (armPattern arm) subjectType
-      case armGuard arm of
-        Nothing -> pure ()
-        Just guard -> do
-          guardType <- checkExpression around declared rigid guard
-          _ <- unify (locatedSpan guard) boolType guardType
-          pure ()
-      bodyType <- checkExpression around declared rigid (armBody arm)
-      _ <- unify (locatedSpan (armBody arm)) result bodyType
-      pure ()
-    pure result
-  foldUnify current rest = case rest of
-    [] -> pure current
-    next : remaining -> do
-      unified <- unify spanValue current next
-      foldUnify unified remaining
-
-{-| Type a function literal.
-
-    The literal is checked exactly like a declaration's body — its parameters
-    bound, its result unified with what the body produced — and answers with the
-    function type a caller sees. Sharing the path is what keeps a literal and a
-    declaration from drifting into two dialects of the same thing.
-
-    A literal is not generalised. Its type is fixed at the point it is written,
-    so a literal used at two types is an error the reader can see, rather than a
-    silent second instantiation of something they wrote once. Generalisation
-    belongs to a declaration, which has a name to attach it to. -}
-
-literalIndex :: Located Expression -> Maybe Integer
-literalIndex (Located _ expression) = case expression of
-  LiteralExpression (Tree.IntegerValue text) ->
-    parsedIntegerValue <$> parseIntegerLiteral text
-  _ -> Nothing
-
-{-| A chain of names written as a path or as member accesses, joined back into
-    the dotted name it stands for. Anything else is not a name. -}
-
-{-| Type a function literal.
-
-    The literal is checked exactly like a declaration's body — its parameters
-    bound, its result unified with what the body produced — and answers with the
-    function type a caller sees. Sharing the path is what keeps a literal and a
-    declaration from drifting into two dialects of the same thing.
-
-    A literal is not generalised. Its type is fixed at the point it is written,
-    so a literal used at two types is an error the reader can see, rather than a
-    silent second instantiation of something they wrote once. Generalisation
-    belongs to a declaration, which has a name to attach it to. -}
-lambdaType :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Function -> Checker Type
-lambdaType around declared rigid value = withoutLoops $ insideClosure $ inTypeScopeWith $ do
-  inputs <- mapM (aroundParameter around declared rigid) (functionParameters value)
-  result <- formOptionalType declared rigid (functionReturn value)
-  let signature = FunctionTypeValue (functionAsync value) inputs result
-  bindName selfName (monotype signature)
-  case functionBody value of
-    Nothing -> pure ()
-    Just (Located bodySpan body) -> do
-      actual <- case body of
-        BlockBody block -> aroundBlock around declared rigid block
-        ExpressionBody expression -> checkExpression around declared rigid expression
-      _ <- unify bodySpan result actual
-      pure ()
-  zonk signature
-
-{-| Refuse an assignment to a name the closure only captured.
-
-    A closure captures a copy of what it can see, so the write lands on the
-    copy and the original is left as it was. The program states an intent the
-    language does not carry out, and says nothing: the value read afterwards is
-    simply the old one, somewhere else, with no line to look at.
-
-    That is not hypothetical. A test written this way accumulated into a
-    captured variable from inside a callback, compiled, ran, and never executed
-    the branch it existed to check — it passed while checking nothing, and was
-    caught only because a count came out one short.
-
-    Only a bare name is refused. A field or an element reaches through a value
-    that a copy still shares, and whether that write is visible outside is a
-    question about the value rather than about the capture. -}
-checkCapturedAssignment :: Text -> Located Expression -> Checker ()
-checkCapturedAssignment operator (Located spanValue expression)
-  | operator /= "=" = pure ()
-  | otherwise = case expression of
-      NameExpression names | [name] <- NonEmpty.toList names -> do
-        captured <- capturedFromOutside name
-        if captured
-          then
-            report "E3076" spanValue
-              ("assignment to " <> name <> " does not leave this closure")
-              ( Just
-                  ( "a closure holds its own copy of what it captured; return the "
-                      <> "value instead, or carry it in what the closure answers"
-                  )
-              )
-          else pure ()
-      _ -> pure ()
-
-{-| Warn when a statement throws away a value that is the whole point of the
-    call that produced it.
-
-    A built-in collection method never mutates its receiver; it returns a new
-    collection. So `items.push(value)` written as a statement does nothing at
-    all, and does it silently — the statement type-checks, the program runs, and
-    the array is unchanged. This is not a style preference: there is no reading
-    of that line under which it is correct.
-
-    The check is deliberately narrow. It fires only for the closed set of
-    built-in methods the compiler already knows the semantics of, on a receiver
-    the checker has confirmed is a collection. A general "unused result" warning
-    would need to know which functions are pure, which Pudu does not track, and
-    guessing would either miss this case or bury it in noise. -}
-
-{-| Check a loop body with that loop on the stack, reporting whether any
-    `break` left it. -}
-aroundLoop :: Maybe (Located Text) -> Type -> Bool -> Checker a -> Checker Bool
-aroundLoop label result carries action = do
-  enterLoop (fmap locatedValue label) result carries
-  _ <- action
-  leaveLoop
-
-{-| Check an expression against a type the context already knows.
-
-    Inference alone cannot place a value into a `dynamic`: the branches of an `if`,
-    the arms of a `match`, and the elements of an array literal are unified with
-    *each other* before any declared type is consulted, so two types that widen
-    to the same dynamic type disagree before the widening is ever considered.
-
-    Pushing the expectation inward fixes that at its source. Each branch is
-    checked against what the context wants rather than against its sibling, and
-    a widening happens per branch. Everything else falls through to ordinary
-    inference followed by the same unification as before, so this changes what
-    is accepted only where an expectation genuinely exists. -}
-
 {-| The two directions a field's value may be checked in, handed to record
     construction so it can reach back into checking without importing it. -}
 checkValue :: CheckSurroundings -> CheckValue
 checkValue around =
   CheckValue{valueOf = checkExpression around, valueAgainst = aroundAgainst around}
+

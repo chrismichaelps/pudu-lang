@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Type.Check.Expression into layered dependency graph modules
+
+Decomposed the 521-line monolithic `src/Pudu/Type/Check/Expression.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:
+- Isolated match arm checking (`checkArms`), closure lambda typing (`lambdaType`), captured assignment enforcement (`checkCapturedAssignment`), loop context scoping (`aroundLoop`), and integer index literal parsing (`literalIndex`) into child module `Pudu.Type.Check.Expression.Control` (151 lines).
+- Refactored `Pudu.Type.Check.Expression` into a focused AST expression coordinator (361 lines) retaining general expression type inference and dispatch, records, calls, members, and operators.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Type/Check/Expression/Control.md`) and updated `Expression.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Runtime.Column into layered dependency graph modules
 
 Decomposed the 521-line monolithic `src/Pudu/Runtime/Column.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:
