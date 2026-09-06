@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Eval.Operator into layered dependency graph modules
+
+Decomposed the 502-line monolithic `src/Pudu/Eval/Operator.hs` into a scalable, layered dependency graph runtime architecture strictly under 300 lines per module:
+- Isolated collection/string indexing (`readIndex`), record field and variant member dispatch (`readMember`), type reflection (`nominalNameOf`), IDE/REPL autocompletion tables (`builtinMethodNamesFor`), try operator unwinding (`unwrapTry`), and internal method lookup tables (`arrayMethods`, `stringMethods`, `mapMethods`, `setMethods`) into child module `Pudu.Eval.Operator.Access` (291 lines).
+- Refactored `Pudu.Eval.Operator` into a focused arithmetic coordinator (236 lines) retaining unary operations (`applyUnary`), binary combining (`combine`), integer meeting and checked/saturating/wrapping arithmetic, float normalization, and decimal exact operations while re-exporting all access functions with zero API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Operator/Access.md`) and updated `Operator.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Eval.Builtin into layered dependency graph modules
 
 Decomposed the 621-line monolithic `src/Pudu/Eval/Builtin.hs` into a scalable, layered dependency graph runtime architecture strictly under 190 lines per module:

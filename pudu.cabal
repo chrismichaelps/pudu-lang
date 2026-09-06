@@ -67,6 +67,7 @@ library
     Pudu.Eval.Match
     Pudu.Eval.Loop
     Pudu.Eval.Operator
+    Pudu.Eval.Operator.Access
     Pudu.Eval.Program
     Pudu.Eval.Socket
     Pudu.Eval.Tls

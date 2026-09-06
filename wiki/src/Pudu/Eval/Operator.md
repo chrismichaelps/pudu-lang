@@ -146,3 +146,11 @@ BigInt dispatch are unchanged.
 ### Resolved Grill Log
 - **Q:** Right-shift an unmasked wide unsigned operand? **A:** No; normalize to its declared bit pattern first.
 - **Q:** Use logical shifting for signed values? **A:** No; use an arithmetic signed carrier or the exact fallback.
+
+## Modular Access Decomposition
+
+Index retrieval (`readIndex`), member lookup (`readMember`), type reflection (`nominalNameOf`), autocompletion tables (`builtinMethodNamesFor`), and try unwinding (`unwrapTry`) are isolated into child module [[Eval Operator Access]]. `Eval.Operator` coordinates arithmetic, bitwise, and unary operators while re-exporting all access functions.
+
+### Resolved Grill Log
+- **Q:** Why extract access logic into a separate module? **A:** Indexing, member dispatch, and method tables form an independent concern from unary and binary arithmetic kernels (~240 lines), scaling both files below 270 lines.
+
