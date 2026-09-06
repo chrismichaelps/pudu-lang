@@ -25,6 +25,8 @@ Pudu is a statically typed native systems language for developers who need predi
 
 - [[architecture/FFI-SELF-HOSTING]] — remaining FFI ownership contracts and concrete self-hosting stages.
 
+- [[architecture/BACKEND-SPECIALIZATION]] — evidence-driven layouts, kernels and backend optimization roadmap.
+
 ## Governance Dashboard
 
 - **Maturity:** EXPLORING — fewer than 20k lines, pre-release, one active implementation team.

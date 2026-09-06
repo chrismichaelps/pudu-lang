@@ -106,3 +106,16 @@ DEPTH 0.50 (MEDIUM). One invariant, maintained by every operation.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Order]] · [[Evaluator]]
+
+## Adaptive bulk construction
+
+Constructors scan a nondecreasing prefix once, collapsing adjacent equal keys while preserving
+the first key representative and, for maps, the latest payload. The strictly ascending canonical
+prefix builds through `fromDistinctAscList`. At the first descending key, strict insertion consumes
+the remaining input. Fully ordered input therefore avoids repeated tree descent. Unordered input
+retains the existing worst-case bound and persistence. No user comparator is replaced.
+
+### Resolved Grill Log
+- **Q:** Trust that callers supply sorted input? **A:** No; runtime comparison establishes the prefix invariant before the unchecked ascending builder is used.
+- **Q:** Replace equal representatives during bulk loading? **A:** No; preserve the first representative exactly as incremental insertion does.
+- **Q:** Claim a measured speedup without execution? **A:** No; the algorithmic improvement is implemented, but throughput and allocation measurements remain pending.

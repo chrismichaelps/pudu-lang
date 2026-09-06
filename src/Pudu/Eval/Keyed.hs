@@ -21,6 +21,7 @@ module Pudu.Eval.Keyed
   , setUnion
   ) where
 
+import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Pudu.Eval.Order (OrdValue (..))
@@ -34,8 +35,12 @@ import Pudu.Eval.Value (Value (..))
     balanced tree keyed by the runtime's order holds it by construction, so no
     operation here has to re-establish it. -}
 mapFromEntries :: [(Value, Value)] -> Value
-mapFromEntries = MapValue . foldl addEntry Map.empty
+mapFromEntries input =
+  let (prefix, remaining) = ascendingPrefix (OrdValue . fst) replacePayload input
+      initial = Map.fromDistinctAscList [(OrdValue key, held) | (key, held) <- reverse prefix]
+   in MapValue (foldl' addEntry initial remaining)
  where
+  replacePayload (key, _) (_, held) = (key, held)
   addEntry entries (key, held) = insertEntry key held entries
 
 {-| A repeated key keeps the key it was first stored under and takes the new
@@ -92,9 +97,30 @@ mapMerge other _ = other
     set change how it reads when it gained nothing. This is the same rule the
     maps follow for keys. -}
 setFromMembers :: [Value] -> Value
-setFromMembers = SetValue . foldl addMember Set.empty
+setFromMembers input =
+  let (prefix, remaining) = ascendingPrefix OrdValue const input
+      initial = Set.fromDistinctAscList (map OrdValue (reverse prefix))
+   in SetValue (foldl' addMember initial remaining)
  where
   addMember members value = insertMember (OrdValue value) members
+
+{-| Establish a strictly ascending canonical prefix before using bulk tree builders.
+
+    The prefix is reversed for constant-time extension. Equality combines only
+    adjacent representatives; the first descending input remains unconsumed so
+    ordinary insertion handles it and every later duplicate. -}
+ascendingPrefix :: (a -> OrdValue) -> (a -> a -> a) -> [a] -> ([a], [a])
+ascendingPrefix key combine = begin
+ where
+  begin [] = ([], [])
+  begin (first : rest) = collect first [] rest
+  collect previous earlier [] = (previous : earlier, [])
+  collect previous earlier pending@(next : rest) =
+    case compare (key previous) (key next) of
+      LT -> collect next (previous : earlier) rest
+      EQ -> let merged = combine previous next
+             in merged `seq` collect merged earlier rest
+      GT -> (previous : earlier, pending)
 
 insertMember :: OrdValue -> Set.Set OrdValue -> Set.Set OrdValue
 insertMember value members
