@@ -103,3 +103,15 @@ resolve through targetPointerWidth. No host-width narrowing or change to overflo
 ### Resolved Grill Log
 - **Q:** Recompute powers independently in checked and saturating operations? **A:** No; share the width descriptor.
 - **Q:** Give BigInt artificial machine bounds? **A:** No; Nothing denotes its unbounded interval.
+
+## Native-width wrapping dispatch
+
+Signed and unsigned 8-, 16-, 32- and 64-bit wrapping dispatches through the corresponding Haskell
+fixed-width scalar conversion and widens the wrapped value back to Integer. These conversions
+implement the requested modular reduction; they are never used by checked arithmetic. Platform
+kinds select the target width. The 128-bit and general-width paths retain exact Integer masks,
+using the shared signed upper bound to identify the negative half. BigInt remains unbounded.
+
+### Resolved Grill Log
+- **Q:** Let the host Int determine a Pudu width? **A:** No; dispatch names explicit Int8/16/32/64 and Word8/16/32/64 carriers.
+- **Q:** Apply native narrowing before deciding the overflow mode? **A:** No; native carriers exist only inside integerKindWrap.

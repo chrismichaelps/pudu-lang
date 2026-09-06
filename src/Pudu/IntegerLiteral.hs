@@ -21,6 +21,8 @@ module Pudu.IntegerLiteral
   ) where
 
 import Data.Bits ((.&.))
+import Data.Int (Int8, Int16, Int32, Int64)
+import Data.Word (Word8, Word16, Word32, Word64)
 import Data.Text (Text)
 import qualified Data.Text as Text
 
@@ -177,16 +179,31 @@ signedBounds width = case width of
 integerKindWrap :: IntegerKind -> Integer -> Integer
 integerKindWrap kind value = case kind of
   BigIntKind -> value
-  _
-    | integerKindSigned kind -> wrapSigned (widthOf kind) value
-    | otherwise -> value .&. widthMask (widthOf kind)
- where
-  widthOf other = maybe targetPointerWidth id (integerKindWidth other)
-  wrapSigned width raw =
+  PlatformSigned -> wrapSigned targetPointerWidth value
+  PlatformUnsigned -> wrapUnsigned targetPointerWidth value
+  SignedKind width -> wrapSigned width value
+  UnsignedKind width -> wrapUnsigned width value
+
+{-| Explicit carriers preserve target widths independently of the host Int. -}
+wrapUnsigned :: Int -> Integer -> Integer
+wrapUnsigned width value = case width of
+  8 -> toInteger (fromInteger value :: Word8)
+  16 -> toInteger (fromInteger value :: Word16)
+  32 -> toInteger (fromInteger value :: Word32)
+  64 -> toInteger (fromInteger value :: Word64)
+  _ -> value .&. widthMask width
+
+wrapSigned :: Int -> Integer -> Integer
+wrapSigned width value = case width of
+  8 -> toInteger (fromInteger value :: Int8)
+  16 -> toInteger (fromInteger value :: Int16)
+  32 -> toInteger (fromInteger value :: Int32)
+  64 -> toInteger (fromInteger value :: Int64)
+  _ ->
     let mask = widthMask width
-        modulus = mask + 1
-        reduced = raw .&. mask
-     in if reduced >= modulus `div` 2 then reduced - modulus else reduced
+        (_, high) = signedBounds width
+        reduced = value .&. mask
+     in if reduced > high then reduced - mask - 1 else reduced
 
 {-| Shared bounds for admitted scalar widths; no narrowing of the input value. -}
 widthMask :: Int -> Integer

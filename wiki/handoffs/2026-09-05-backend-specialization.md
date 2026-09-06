@@ -50,3 +50,7 @@ Own IntegerLiteral and its mirror for mask-based fixed-width wrapping, consumed 
 ## Shared scalar bounds continuation
 
 Own IntegerLiteral, Eval.Operator and their mirrors. Checked arithmetic, saturation and literal fit checks now share inclusive kind bounds, using constant signed intervals and existing unsigned masks. No measurements, tests, builds or reviews run.
+
+## Native wrapping carriers
+
+Integer wrapping now dispatches admitted 8/16/32/64-bit kinds through explicit Haskell native carriers. Wider kinds retain exact masks and shared signed bounds. This is an internal modular-arithmetic implementation, not an implicit surface conversion. No measurements, tests, builds or reviews run.

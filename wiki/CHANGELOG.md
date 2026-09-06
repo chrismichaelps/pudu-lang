@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Native scalar wrapping carriers
+
+- Dispatch fixed-width wrapping through explicit signed/unsigned native scalar carriers.
+- Keep exact wide-integer fallback and target-specific platform widths.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Shared scalar bound descriptors
 
 - Share fixed-width intervals across checked arithmetic, saturation and literal fit checks.
