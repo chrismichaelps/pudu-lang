@@ -66,3 +66,8 @@ Implemented response write deadlines, including fallback responses, and document
 priorities. Own Server/App fields, copy helpers and mirrors. No tests, builds or reviews.
 Exact next action: bounded worker admission and cleanup on thread-start failure, with explicit
 backpressure rather than unbounded worker accumulation.
+
+Implemented fixed connection workers and bounded queue with configuration admission. Own Server,
+App and mirrors. LSP untouched. No tests, builds or reviews.
+Exact next action: cap keep-alive requests per connection and make handler chain construction
+once per worker rather than once per request, preserving middleware order.

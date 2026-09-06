@@ -2,6 +2,7 @@ module Std.Http.Server
 
 import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
+import Std.Channel as Channel
 import Std.Http as Http
 import Std.Http.Message as Message
 import Std.Http.Safe as Safe
@@ -28,7 +29,9 @@ export type Server = {
   headLimit: Int,
   bodyLimit: Int,
   readMillis: Int,
-  writeMillis: Int
+  writeMillis: Int,
+  workers: Int,
+  queueCapacity: Int
 }
 
 /// A running server, and the switch that stops it.
@@ -50,7 +53,7 @@ const BODY_LIMIT: Int = 8388608
 
 /// A server over a router, with no middleware and the default limits.
 export fn server(base: &Route.Router) -> Server {
-  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000}
+  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000, workers: 16, queueCapacity: 64}
 }
 
 /// A server with one more step wrapped around its handlers.
@@ -60,19 +63,12 @@ export fn server(base: &Route.Router) -> Server {
 /// the order a reader assumes from the order they wrote, and the reverse would
 /// make logging and timing report the wrong span.
 export fn using(base: &Server, step: Route.Middleware) -> Server {
-  Server {
-    router: base.router,
-    middleware: base.middleware.push(step),
-    headLimit: base.headLimit,
-    bodyLimit: base.bodyLimit,
-    readMillis: base.readMillis,
-    writeMillis: base.writeMillis
-  }
+  Server{..*base, middleware: base.middleware.push(step)}
 }
 
 /// A server with different limits on what a request may be.
 export fn withLimits(base: &Server, head: Int, payload: Int) -> Server {
-  Server{router: base.router, middleware: base.middleware, headLimit: head, bodyLimit: payload, readMillis: base.readMillis, writeMillis: base.writeMillis}
+  Server{..*base, headLimit: head, bodyLimit: payload}
 }
 
 /// The handler a server presents, with every step wrapped around it.
@@ -255,7 +251,7 @@ export fn stop(running: &Running) -> Result[(), ServerError] {
     })
 }
 
-/// Accept connections and serve them, each on a thread of its own.
+/// Accept connections into a bounded queue consumed by a fixed worker pool.
 ///
 /// A connection is handled on its own thread, so one slow request does not
 /// hold up every other client. That is the difference between a server and a
@@ -269,37 +265,67 @@ export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, Ser
   let listener = running.listener
   let stopping = running.stopping
   let serving = *target
-  var served = 0
+  let queue: Channel.Channel[Net.Connection] = Channel.channel(target.queueCapacity)
   var workers: Array[Concurrent.Task] = []
   var failure: Option[ServerError] = None
-  var going = true
-  while going {
-    let accepted = Net.accept(&listener)
-    if let Err(problem) = accepted {
-      if Result.unwrapOr(Sync.get(&stopping), false) {
-        failure = None
-      } else {
-        failure = Some(Accept(show(problem)))
+  var index = 0
+  let workerCount = if target.workers < 1 { 1 } else { target.workers }
+  while index < workerCount {
+    let started = Concurrent.start(fn() -> () {
+      var receiving = true
+      while receiving {
+        match Channel.receive(&queue) {
+          case Ok(Some(connection)) => {
+            var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
+            while keeping {
+              keeping = serveConnection(&serving, &connection)
+                && !Result.unwrapOr(Sync.get(&stopping), true)
+            }
+            let _closed = Net.close(&connection)
+          }
+          case Ok(None) => { receiving = false }
+          case Err(_) => { receiving = false }
+        }
       }
-      going = false
-    } else {
-      let connection = Result.unwrapOr(accepted, Net.Connection{token: 0})
-      let started = Concurrent.start(fn() -> () {
-          var keeping = true
-          while keeping { keeping = serveConnection(&serving, &connection) }
-          let _closed = Net.close(&connection)
-          ()
-        })
-      if let Ok(worker) = started { workers = workers.push(worker) }
-      served = served + 1
-      going = limit <= 0 || served < limit
+    })
+    match started {
+      case Ok(worker) => { workers = workers.push(worker) }
+      case Err(problem) => {
+        failure = Some(Other("worker startup failed: " + show(problem)))
+        break
+      }
+    }
+    index = index + 1
+  }
+  var served = 0
+  var going = Option.isNone(&failure)
+  while going {
+    match Net.accept(&listener) {
+      case Err(problem) => {
+        if !Result.unwrapOr(Sync.get(&stopping), false) { failure = Some(Accept(show(problem))) }
+        going = false
+      }
+      case Ok(connection) => {
+        match Channel.send(&queue, connection) {
+          case Err(problem) => {
+            let _closed = Net.close(&connection)
+            failure = Some(Other("connection admission failed: " + show(problem)))
+            going = false
+          }
+          case Ok(_) => {
+            served = served + 1
+            going = limit <= 0 || served < limit
+          }
+        }
+      }
     }
   }
-  // Every connection already accepted is finished before the loop answers, so
-  // a caller told how many were served is told about requests that completed
-  // rather than about connections that had merely arrived.
-  let _joined = Concurrent.joinAll(&workers)
-  if let Some(problem) = failure { Err(problem) } else { Ok(served) }
+  let closed = Channel.close(&queue)
+  let joined = Concurrent.joinAll(&workers)
+  if let Some(problem) = failure { return Err(problem) }
+  if let Err(problem) = closed { return Err(Other("queue close failed: " + show(problem))) }
+  if let Err(problem) = joined { return Err(Other("worker failed: " + show(problem))) }
+  Ok(served)
 }
 
 /// Start, serve, and stop, for a caller that wants one call.
@@ -358,4 +384,10 @@ export fn withReadDeadline(base: &Server, millis: Int) -> Server {
 /// Bound socket sending without renewing the budget for partial writes.
 export fn withWriteDeadline(base: &Server, millis: Int) -> Server {
   Server{..*base, writeMillis: if millis < 1 { 1 } else { millis }}
+}
+
+/// Bound both active connection consumers and queued accepted connections.
+export fn withWorkers(base: &Server, count: Int, capacity: Int) -> Server {
+  Server{..*base, workers: if count < 1 { 1 } else { count },
+    queueCapacity: if capacity < 1 { 1 } else { capacity }}
 }

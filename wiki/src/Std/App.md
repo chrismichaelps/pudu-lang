@@ -137,3 +137,19 @@ execution or response serialization. Tune for expected payload sizes and slow le
 timeouts protect capacity and do not increase available network bandwidth.
 Resolved Grill Log: bound fallback writes too, and preserve configured deadlines through server
 copy helpers. No tests, builds, reviews or measurements run.
+
+## Bounded connection workers
+
+Server uses workers=16 persistent consumers and queueCapacity=64 waiting connections by default.
+withWorkers configures both. App validates server.workers in 1..1024 and server.queueCapacity
+in 1..65536 before startup. A bounded channel applies backpressure to accept; at most one extra
+accepted connection can wait in the producer. The operating-system listen backlog is separate.
+Worker handles are bounded by worker count, rather than total lifetime connections.
+
+After acceptance ends the channel closes, queued work drains, and all workers are joined. A
+failed worker start closes the queue and joins started workers before returning an error. A
+failed queue send closes its accepted connection. Join failures are surfaced. Workers check the
+stop flag between keep-alive requests. Handler abort/cancellation cleanup and bounded overall
+shutdown remain unresolved; a handler that never returns can still hold one worker indefinitely.
+Resolved Grill Log: fixed workers bound tasks and retained handles; do not describe the connection
+accept count as concurrency. Do not discard worker-start or join errors. No tests or reviews run.

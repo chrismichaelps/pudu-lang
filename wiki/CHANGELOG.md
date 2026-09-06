@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bounded server workers
+
+[[Std Http Server]] uses a fixed worker pool and bounded connection queue, configured through
+[[Std App]]. Startup/admission failures close owned resources on ordinary Result paths and
+worker join failures are surfaced. No tests, builds or reviews run.
+
 ## 2026-09-06 — Response write deadlines
 
 [[Std Http Server]] now bounds ordinary and fallback response writes through a configurable
