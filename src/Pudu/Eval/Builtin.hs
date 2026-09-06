@@ -29,7 +29,7 @@ import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
 import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
 import Pudu.Eval.HashMap (mixKey)
-import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra)
+import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra, callWordMapPredicate)
 import qualified Pudu.Runtime.Word as Word
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
@@ -560,6 +560,8 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (WordMapIntersectionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapIntersection" Word.WordIntersection values
   (WordMapDifferenceBuiltin, values) -> callWordMapAlgebra spanValue "wordMapDifference" Word.WordDifference values
   (WordMapSymmetricDifferenceBuiltin, values) -> callWordMapAlgebra spanValue "wordMapSymmetricDifference" Word.WordSymmetricDifference values
+  (WordMapIsSubsetOfBuiltin, values) -> callWordMapPredicate spanValue "wordMapIsSubsetOf" Word.WordSubset values
+  (WordMapIsDisjointFromBuiltin, values) -> callWordMapPredicate spanValue "wordMapIsDisjointFrom" Word.WordDisjoint values
   (WordMapPopCountBuiltin, values) -> callWordMapPopCount spanValue values
   (HashOfBuiltin, [value]) -> pure (intOf (hashOfValue value))
   {-| A hash spread across the whole word against a value chosen when the

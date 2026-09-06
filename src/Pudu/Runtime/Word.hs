@@ -1,6 +1,8 @@
 {-| Pure native-word reductions over existing containers, without word-array staging. -}
 module Pudu.Runtime.Word
-  ( WordOperation (..)
+  ( WordPredicate (..)
+  , compareMaps
+  , WordOperation (..)
   , combineMaps
   , countWords
   ) where
@@ -44,3 +46,19 @@ combineMaps operation = Map.mergeWithKey matched leftOnly rightOnly
     WordSymmetricDifference -> keep
     _ -> const Map.empty
 {-# INLINE combineMaps #-}
+
+{-| Predicates retain left-first visitation even when either input is smaller. -}
+data WordPredicate = WordSubset | WordDisjoint
+
+compareMaps :: Ord k => WordPredicate -> (a -> Either e Word64)
+  -> Map.Map k a -> Map.Map k a -> Either e Bool
+compareMaps predicate project left right = Map.foldrWithKey step (Right True) left
+ where
+  step key value remaining = do
+    a <- project value
+    b <- maybe (Right 0) project (Map.lookup key right)
+    let holds = case predicate of
+          WordSubset -> a .&. complement b == 0
+          WordDisjoint -> a .&. b == 0
+    if holds then remaining else Right False
+{-# INLINE compareMaps #-}

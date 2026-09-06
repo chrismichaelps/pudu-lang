@@ -34,8 +34,8 @@ still requires memory proportional to the result and is intended for materializa
 
 Membership and point edits cost O(log b) map operations for b occupied blocks. Algebra calls
 [[Runtime Word Kernels]] through checked pure primitives, combining host trees without Pudu entry
-arrays or per-word interpreter calls. Subset and disjointness still use Pudu block scans and
-short-circuit at the first disproving block. Cardinality calls `wordMapPopCount`, which folds map payloads directly with native Word64
+arrays or per-word interpreter calls. Subset and disjointness use native host-map scans without projected maps or entry arrays,
+short-circuiting at the first disproving block. Cardinality calls `wordMapPopCount`, which folds map payloads directly with native Word64
 population counts through [[Runtime Word Kernels]], avoiding entry arrays and interpreted bit loops. No FFI, IO, global mutation, unchecked memory or
 new surface syntax is introduced. The evaluator still boxes words and stores tree nodes: this is
 word-packed membership, not a contiguous unboxed bitmap or a claim of C/C++ throughput.
@@ -92,3 +92,23 @@ intermediate native-word trees are an explicit allocation tradeoff, not an unbox
 Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
 discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
 No tests, builds, reviews or measurements run.
+
+## Short-circuit word predicates
+
+`wordMapIsSubsetOf` and `wordMapIsDisjointFrom` take two Map[K, UInt64] values and return Bool.
+They consume `compareMaps` in [[Runtime Word Kernels]] with a fallible UInt64 projection. A lazy
+ascending map fold visits left payloads and looks up corresponding right payloads; absent right
+keys mean zero. Subset requires `left & complement right == 0`; disjointness requires
+`left & right == 0`. Both return true for empty left input and stop at the first false block.
+No entry array, projected map or result map is constructed. Worst-case work is O(n log(m+1)),
+where n and m count left and right blocks. Tree nodes and payloads remain boxed.
+
+Only visited payloads are validated, left word before matching right word. Unmatched right
+payloads and blocks after the first counterexample are not inspected. This preserves STD's
+short-circuit traversal; unlike algebra it is not a full-map validation operation. A visited
+invalid UInt64 kind/range or non-map argument reports E7001; wrong arity reports E7003.
+Registration includes names, types, installation and pure dispatch. STD delegates directly.
+
+Resolved Grill Log: Do not swap inputs for disjointness even if the right map is smaller: the
+left-first visitation and failure order are explicit. Keep the right fold lazy in its remainder
+so a counterexample does not force later lookups. No tests, builds, reviews or measurements run.

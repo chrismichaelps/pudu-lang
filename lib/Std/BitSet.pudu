@@ -98,15 +98,9 @@ export fn symmetricDifference(left: &BitSet, right: &BitSet) -> BitSet {
 
 
 export fn isSubsetOf(left: &BitSet, right: &BitSet) -> Bool {
-  for pair in left.words.entries() {
-    if (pair[1] & (~wordAt(right, pair[0]))) != 0u64 { return false }
-  }
-  true
+  wordMapIsSubsetOf(left.words, right.words)
 }
 
 export fn isDisjointFrom(left: &BitSet, right: &BitSet) -> Bool {
-  for pair in left.words.entries() {
-    if (pair[1] & wordAt(right, pair[0])) != 0u64 { return false }
-  }
-  true
+  wordMapIsDisjointFrom(left.words, right.words)
 }

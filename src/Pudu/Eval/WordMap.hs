@@ -1,6 +1,7 @@
 {-| Checked evaluator adaptation of native-word map reductions. -}
 module Pudu.Eval.WordMap
-  ( callWordMapAlgebra
+  ( callWordMapPredicate
+  , callWordMapAlgebra
   , callWordMapPopCount
   ) where
 
@@ -39,3 +40,12 @@ projectWord :: Text -> Value -> Either Text Word64
 projectWord _ (IntValue (UnsignedKind 64) number)
   | number >= 0 && number <= toInteger (maxBound :: Word64) = Right (fromInteger number)
 projectWord name _ = Left (name <> " expects UInt64 map values")
+
+{-| Validate only the payloads visited by the short-circuiting kernel. -}
+callWordMapPredicate :: Span -> Text -> Word.WordPredicate -> [Value] -> Evaluator Value
+callWordMapPredicate spanValue name predicate arguments = case arguments of
+  [MapValue left, MapValue right] -> case Word.compareMaps predicate (projectWord name) left right of
+    Left problem -> abortAt (Just spanValue) "E7001" problem Nothing
+    Right answer -> pure (BoolValue answer)
+  [_, _] -> abortAt (Just spanValue) "E7001" (name <> " expects two maps") Nothing
+  _ -> abortAt (Just spanValue) "E7003" (name <> " expects two arguments") Nothing

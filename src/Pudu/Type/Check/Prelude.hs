@@ -146,6 +146,9 @@ declareBuiltinConstructors = do
   mapM_ (\name -> bindName name
     (polytype [("K", 0)] [] (FunctionTypeValue False [wordMapType, wordMapType] wordMapType)))
     ["wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"]
+  mapM_ (\name -> bindName name
+    (polytype [("K", 0)] [] (FunctionTypeValue False [wordMapType, wordMapType] (NominalType "Bool" []))))
+    ["wordMapIsSubsetOf", "wordMapIsDisjointFrom"]
   bindName "wordMapPopCount"
     (polytype [("K", 0)] [] (FunctionTypeValue False
       [NominalType "Map" [RigidType "K", NominalType "UInt64" []]]

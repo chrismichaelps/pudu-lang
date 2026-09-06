@@ -77,6 +77,8 @@ data Builtin
   | WordMapIntersectionBuiltin
   | WordMapDifferenceBuiltin
   | WordMapSymmetricDifferenceBuiltin
+  | WordMapIsSubsetOfBuiltin
+  | WordMapIsDisjointFromBuiltin
   | WordMapPopCountBuiltin
   | HashOfBuiltin
   | MixHashBuiltin
@@ -176,6 +178,8 @@ builtinName value = case value of
   WordMapIntersectionBuiltin -> "wordMapIntersection"
   WordMapDifferenceBuiltin -> "wordMapDifference"
   WordMapSymmetricDifferenceBuiltin -> "wordMapSymmetricDifference"
+  WordMapIsSubsetOfBuiltin -> "wordMapIsSubsetOf"
+  WordMapIsDisjointFromBuiltin -> "wordMapIsDisjointFrom"
   WordMapPopCountBuiltin -> "wordMapPopCount"
   HashOfBuiltin -> "hashOf"
   MixHashBuiltin -> "mixHash"

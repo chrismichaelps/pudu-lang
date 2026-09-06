@@ -100,6 +100,8 @@ installBuiltinConstructors = do
   bind "wordMapIntersection" (BuiltinValue WordMapIntersectionBuiltin)
   bind "wordMapDifference" (BuiltinValue WordMapDifferenceBuiltin)
   bind "wordMapSymmetricDifference" (BuiltinValue WordMapSymmetricDifferenceBuiltin)
+  bind "wordMapIsSubsetOf" (BuiltinValue WordMapIsSubsetOfBuiltin)
+  bind "wordMapIsDisjointFrom" (BuiltinValue WordMapIsDisjointFromBuiltin)
   bind "wordMapPopCount" (BuiltinValue WordMapPopCountBuiltin)
   bind "hashOf" (BuiltinValue HashOfBuiltin)
   bind "mixHash" (BuiltinValue MixHashBuiltin)

@@ -113,3 +113,14 @@ block loops with checked native tree algebra. Preserve unrelated changes. No val
 Implemented all four algebra kernels and STD consumers, unvalidated.
 Exact next action: move sparse subset/disjoint predicates into short-circuiting host-map kernels
 without allocating result maps.
+
+## Native predicate ownership
+
+Runtime Implementer owns Runtime.Word, Eval.WordMap, builtin registration modules and
+Std.BitSet predicates plus mirrors. Prior turn made progress: db3557d pushed. Implement
+left-first short-circuit host-map predicates without projected/result map allocation.
+Preserve other work. No tests, builds, reviews or measurements.
+
+Implemented both native predicates and STD consumers, unvalidated.
+Exact next action: remove projected UInt64 input trees from native word-map algebra by fusing
+checked payload conversion with tree merging while retaining full-input validation semantics.

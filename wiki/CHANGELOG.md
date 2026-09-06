@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native sparse word predicates
+
+[[Std BitSet]] subset and disjointness now consume checked host-map predicates in
+[[Runtime Word Kernels]]. Left-first traversal stops at the first counterexample without
+entry arrays, projected maps or result maps. No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Native sparse word algebra
 
 [[Std BitSet]] now delegates four algebra operations to [[Runtime Word Kernels]] through
