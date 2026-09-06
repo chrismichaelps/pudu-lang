@@ -24,7 +24,6 @@ import Data.Bits (shiftL, shiftR, xor)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.ByteString as ByteString
 import Data.IORef (IORef, newIORef, readIORef)
-import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import Data.Word (Word64)
 import Pudu.Eval.Entropy (secureBytes)
@@ -37,6 +36,7 @@ import Pudu.Eval.Value
   , bucketsMethodName
   )
 import Pudu.Source (Span)
+import qualified Pudu.Runtime.Collection as Collection
 import System.IO.Unsafe (unsafePerformIO)
 
 {-| A number mixed once more before it selects a bucket, against a value chosen
@@ -128,8 +128,8 @@ callBucketsMethod spanValue method receiver arguments = case receiver of
     (BucketsRemove, [IntValue _ key]) ->
       pure (BucketsValue (IntMap.delete (narrow key) entries))
     (BucketsKeys, []) ->
-      pure (ArrayValue (IntMap.foldlWithKey' (\out key _ -> out Seq.|> intOf (fromIntegral key)) Seq.empty entries))
-    (BucketsValues, []) -> pure (ArrayValue (IntMap.foldl' (Seq.|>) Seq.empty entries))
+      pure (ArrayValue (Collection.intMapSequence (\key _ -> intOf (fromIntegral key)) entries))
+    (BucketsValues, []) -> pure (ArrayValue (Collection.intMapSequence (\_ value -> value) entries))
     _ ->
       abortAt (Just spanValue) "E7003"
         ("wrong arguments for store method " <> bucketsMethodName method) Nothing

@@ -58,3 +58,7 @@ Integer wrapping now dispatches admitted 8/16/32/64-bit kinds through explicit H
 ## Native modular arithmetic continuation
 
 IntegerLiteral and Eval.Operator now compute wrapping add/subtract/multiply in Word64 for admitted widths up to 64, then reinterpret at the declared width. Wider and unbounded arithmetic retain exact fallback. Checked/saturating paths remain unchanged. No measurements, tests, builds or reviews run.
+
+## Internal collection API ownership
+
+Runtime Implementer owns Runtime.Collection, Eval.Keyed and Eval.HashMap integration, manifest registration and mirrors. Map/Set bulk construction and Map/Set/HashMap enumeration now consume one internal evaluator-independent API. No measurements, tests, builds or reviews run.

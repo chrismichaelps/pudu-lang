@@ -25,10 +25,10 @@ module Pudu.Eval.Keyed
   , setUnion
   ) where
 
-import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
+import qualified Pudu.Runtime.Collection as Collection
 import Pudu.Eval.Order (OrdValue (..))
 import Pudu.Eval.Value (Value (..))
 
@@ -40,13 +40,7 @@ import Pudu.Eval.Value (Value (..))
     balanced tree keyed by the runtime's order holds it by construction, so no
     operation here has to re-establish it. -}
 mapFromEntries :: [(Value, Value)] -> Value
-mapFromEntries input =
-  let (prefix, remaining) = ascendingPrefix (OrdValue . fst) replacePayload input
-      initial = Map.fromDistinctAscList [(OrdValue key, held) | (key, held) <- reverse prefix]
-   in MapValue (foldl' addEntry initial remaining)
- where
-  replacePayload (key, _) (_, held) = (key, held)
-  addEntry entries (key, held) = insertEntry key held entries
+mapFromEntries = MapValue . Collection.buildMap . map (\(key, value) -> (OrdValue key, value))
 
 {-| A repeated key keeps the key it was first stored under and takes the new
     value, matching every other map a reader has used.
@@ -102,30 +96,7 @@ mapMerge other _ = other
     set change how it reads when it gained nothing. This is the same rule the
     maps follow for keys. -}
 setFromMembers :: [Value] -> Value
-setFromMembers input =
-  let (prefix, remaining) = ascendingPrefix OrdValue const input
-      initial = Set.fromDistinctAscList (map OrdValue (reverse prefix))
-   in SetValue (foldl' addMember initial remaining)
- where
-  addMember members value = insertMember (OrdValue value) members
-
-{-| Establish a strictly ascending canonical prefix before using bulk tree builders.
-
-    The prefix is reversed for constant-time extension. Equality combines only
-    adjacent representatives; the first descending input remains unconsumed so
-    ordinary insertion handles it and every later duplicate. -}
-ascendingPrefix :: (a -> OrdValue) -> (a -> a -> a) -> [a] -> ([a], [a])
-ascendingPrefix key combine = begin
- where
-  begin [] = ([], [])
-  begin (first : rest) = collect first [] rest
-  collect previous earlier [] = (previous : earlier, [])
-  collect previous earlier pending@(next : rest) =
-    case compare (key previous) (key next) of
-      LT -> collect next (previous : earlier) rest
-      EQ -> let merged = combine previous next
-             in merged `seq` collect merged earlier rest
-      GT -> (previous : earlier, pending)
+setFromMembers = SetValue . Collection.buildSet . map OrdValue
 
 insertMember :: OrdValue -> Set.Set OrdValue -> Set.Set OrdValue
 insertMember value members
@@ -179,20 +150,20 @@ setDifference other _ = other
 {-| Enumerate directly into arrays without transient association lists. -}
 mapKeysArray :: Value -> Value
 mapKeysArray (MapValue entries) = ArrayValue
-  (Map.foldlWithKey' (\out key _ -> out Seq.|> unOrdValue key) Seq.empty entries)
+  (Collection.mapSequence (\key _ -> unOrdValue key) entries)
 mapKeysArray _ = ArrayValue Seq.empty
 
 mapValuesArray :: Value -> Value
 mapValuesArray (MapValue entries) = ArrayValue
-  (Map.foldl' (Seq.|>) Seq.empty entries)
+  (Collection.mapSequence (\_ held -> held) entries)
 mapValuesArray _ = ArrayValue Seq.empty
 
 mapEntriesArray :: Value -> Value
 mapEntriesArray (MapValue entries) = ArrayValue
-  (Map.foldlWithKey' (\out key held -> out Seq.|> TupleValue [unOrdValue key, held]) Seq.empty entries)
+  (Collection.mapSequence (\key held -> TupleValue [unOrdValue key, held]) entries)
 mapEntriesArray _ = ArrayValue Seq.empty
 
 setMembersArray :: Value -> Value
 setMembersArray (SetValue members) = ArrayValue
-  (Set.foldl' (\out member -> out Seq.|> unOrdValue member) Seq.empty members)
+  (Collection.setSequence unOrdValue members)
 setMembersArray _ = ArrayValue Seq.empty

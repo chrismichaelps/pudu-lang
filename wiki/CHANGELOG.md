@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Internal collection kernel API
+
+- Introduce pure generic bulk-construction and enumeration kernels independent of evaluator values.
+- Connect Map, Set and HashMap runtime adapters to the shared API and register it in the library.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Native modular arithmetic kernels
 
 - Compute bounded wrapping add/subtract/multiply in Word64 before declared-width reinterpretation.

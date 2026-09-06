@@ -12,6 +12,8 @@ tags: [moc, module]
 - [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge and test-only C++ conformance
   surface.
 
+- [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.
+
 ## Depth Baseline
 
 | Status | Count | Modules |

@@ -43,3 +43,10 @@ Compile `cbits/pudu_sqlite.c` beside the libffi bridge. SQLite itself is loaded 
 
 ### Resolved Grill Log
 - **Q:** Link every compiler invocation against SQLite? **A:** No; bundle the small ABI adapter and load SQLite only when its driver connects.
+
+## Internal collection kernel integration
+
+[[Runtime Collection Kernels]] owns reusable pure storage construction/enumeration; evaluator adapters supply value projections. The module is registered in the compiler library.
+
+### Resolved Grill Log
+- **Q:** Duplicate storage loops in each value adapter? **A:** No; share the internal generic kernel without changing public STD behavior.

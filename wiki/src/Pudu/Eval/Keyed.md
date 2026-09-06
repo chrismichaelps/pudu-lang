@@ -130,3 +130,10 @@ Legacy list-returning keyed helpers remain for callers that require lists.
 ### Resolved Grill Log
 - **Q:** Allocate intermediate key/value pairs to return values? **A:** No; traverse payloads directly.
 - **Q:** Change enumeration order for a faster layout? **A:** No; the native ascending fold preserves the existing order.
+
+## Internal collection kernel integration
+
+[[Runtime Collection Kernels]] owns reusable pure storage construction/enumeration; evaluator adapters supply value projections. The module is registered in the compiler library.
+
+### Resolved Grill Log
+- **Q:** Duplicate storage loops in each value adapter? **A:** No; share the internal generic kernel without changing public STD behavior.
