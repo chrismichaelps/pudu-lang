@@ -39,6 +39,7 @@ import Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindShift
   , integerKindAnd
   , integerKindOr
   , integerKindXor
@@ -178,7 +179,7 @@ shiftResult spanValue kind toHigh value count
                   <> "'s width"
               )
               (Just "mask the count, or use a wider type")
-        | otherwise -> pure (IntValue kind (integerKindWrap kind (moved (fromInteger count))))
+        | otherwise -> pure (IntValue kind (integerKindShift kind toHigh value (fromInteger count)))
  where
   moved places
     | toHigh = shiftL value places

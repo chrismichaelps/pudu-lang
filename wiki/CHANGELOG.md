@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native bounded shift kernels
+
+- Dispatch validated fixed-width shifts through explicit native carriers.
+- Preserve arithmetic signed shifts, unsigned width masking and wider fallback.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-06 — Immutable HashMap seed storage
 
 - Replace the never-mutated bucket seed IORef with a shared immutable word.

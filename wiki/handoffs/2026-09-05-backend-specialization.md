@@ -78,3 +78,7 @@ Own IntegerLiteral, Eval.Operator and their mirrors. Implemented bounded AND/OR/
 ## Immutable seed continuation
 
 Own Eval.HashMap and its mirror. Removed the unused mutability of the process bucket seed and the IORef read inside mixing. Existing entropy initialization/fallback remains. No measurements, tests, builds or reviews run.
+
+## Native shift continuation
+
+Own IntegerLiteral, Eval.Operator and mirrors. Bounded shifts now use native word carriers after existing count validation; unsigned right shifts normalize first and signed right shifts retain arithmetic behavior. No measurements, tests, builds or reviews run.

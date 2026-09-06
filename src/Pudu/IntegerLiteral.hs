@@ -11,6 +11,7 @@ module Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindShift
   , integerKindAnd
   , integerKindOr
   , integerKindXor
@@ -27,7 +28,7 @@ module Pudu.IntegerLiteral
   , splitIntegerSuffix
   ) where
 
-import Data.Bits (complement, xor, (.&.), (.|.))
+import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Word (Word8, Word16, Word32, Word64)
 import Data.Text (Text)
@@ -223,6 +224,24 @@ integerKindComplement kind value = case integerKindWidth kind of
     integerKindWrap kind (toInteger (complement (fromInteger value :: Word64)))
   _ -> integerKindWrap kind (complement value)
 {-# INLINE integerKindComplement #-}
+
+{-| Called after surface count validation; native shifts retain explicit bit width. -}
+integerKindShift :: IntegerKind -> Bool -> Integer -> Int -> Integer
+integerKindShift kind toHigh value places = integerKindWrap kind shifted
+ where
+  shifted = case integerKindWidth kind of
+    Just width | width > 0 && width <= 64 && places >= 0 && places < width ->
+      if toHigh
+        then toInteger (shiftL (fromInteger value :: Word64) places)
+        else if integerKindSigned kind
+          then if fitsSigned 64 value
+            then toInteger (shiftR (fromInteger value :: Int64) places)
+            else shiftR value places
+          else toInteger (shiftR (fromInteger (wrapUnsigned width value) :: Word64) places)
+    _ | toHigh -> shiftL value places
+      | integerKindSigned kind -> shiftR value places
+      | otherwise -> shiftR (integerKindWrap kind value) places
+{-# INLINE integerKindShift #-}
 
 wrappingBinary
   :: (Word64 -> Word64 -> Word64)

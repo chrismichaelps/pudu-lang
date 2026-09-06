@@ -133,3 +133,16 @@ target width; this introduces no implicit surface conversion or raw-pointer acce
 ### Resolved Grill Log
 - **Q:** Lose signed interpretation in an unsigned carrier? **A:** No; the existing declared-kind wrapping conversion restores it after the operation.
 - **Q:** Give BigInt a finite complement? **A:** No; its Integer fallback retains unbounded two's-complement behavior.
+
+## Native bounded shifts
+
+After existing shift-count validation, widths through 64 use Word64 left shifts and unsigned
+right shifts. Signed right shifts use Int64 only when the original mathematical value fits that
+carrier; otherwise they retain exact Integer shifting. Unsigned right shifts first reduce to the
+declared width so bits above it cannot enter the result. Wider widths retain Integer operations.
+The helper defensively falls back outside native shift-count bounds. Public count diagnostics and
+BigInt dispatch are unchanged.
+
+### Resolved Grill Log
+- **Q:** Right-shift an unmasked wide unsigned operand? **A:** No; normalize to its declared bit pattern first.
+- **Q:** Use logical shifting for signed values? **A:** No; use an arithmetic signed carrier or the exact fallback.
