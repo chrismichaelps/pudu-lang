@@ -26,6 +26,7 @@ unbounded work/allocation while admitting deployed password-hashing parameters.
 - **Q:** Convert an arbitrary Pudu count directly to host `Int`? **A:** No. _Rationale:_ conversion
   can wrap and a hostile peer can otherwise demand unbounded CPU or memory. _Rejected:_ relying on
   eventual allocation failure; an unbounded iteration count.
+- **Q:** Import `Data.List (foldl')` under GHC 9.10? **A:** No; `foldl'` is in Prelude; omit redundant import for -Werror compliance.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Std Db]] · [[architecture/STDLIB]]
 

@@ -26,7 +26,6 @@ import qualified Crypto.Hash as Hash
 import qualified Crypto.KDF.PBKDF2 as Pbkdf2
 import qualified Crypto.MAC.HMAC as Hmac
 import Data.Bits (shiftR, xor, (.&.))
-import Data.List (foldl')
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as ByteString
 import Data.Char (ord)

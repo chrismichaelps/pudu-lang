@@ -80,6 +80,7 @@ data Builtin
   | WordMapIsSubsetOfBuiltin
   | WordMapIsDisjointFromBuiltin
   | WordMapPopCountBuiltin
+  | WordMapMembersBuiltin
   | HashOfBuiltin
   | MixHashBuiltin
   | CreateDirectoryBuiltin
@@ -181,6 +182,7 @@ builtinName value = case value of
   WordMapIsSubsetOfBuiltin -> "wordMapIsSubsetOf"
   WordMapIsDisjointFromBuiltin -> "wordMapIsDisjointFrom"
   WordMapPopCountBuiltin -> "wordMapPopCount"
+  WordMapMembersBuiltin -> "wordMapMembers"
   HashOfBuiltin -> "hashOf"
   MixHashBuiltin -> "mixHash"
   CreateDirectoryBuiltin -> "createDirectory"

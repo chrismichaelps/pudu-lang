@@ -44,9 +44,9 @@ reports E7003. Existing argument evaluation remains left to right. These names a
 typed and dispatched as pure primitives; Std.BitSet uses them directly.
 
 The internal `WordOperation` enum selects `combineMaps`: tree-native mergeWithKey applies OR,
-AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator first
-projects each map to checked Word64 payloads and maps the result back to UInt64 values. These
-intermediate native-word trees are an explicit allocation tradeoff, not an unboxed-storage claim.
+AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator validates both input maps first, then projects payloads during merging and
+encodes directly into the final map. The input and result trees still hold boxed values; no
+projected input tree or separately encoded output tree is constructed.
 
 Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
 discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
@@ -71,3 +71,34 @@ Registration includes names, types, installation and pure dispatch. STD delegate
 Resolved Grill Log: Do not swap inputs for disjointness even if the right map is smaller: the
 left-first visitation and failure order are explicit. Keep the right fold lazy in its remainder
 so a counterexample does not force later lookups. No tests, builds, reviews or measurements run.
+
+## Direct payload-tree algebra
+
+`combineMapsWith` generalizes tree algebra with total `a -> Word64` and `Word64 -> a`
+representation adapters. `combineMaps` remains the identity-adapter specialization. Matched
+words combine and encode directly into the result; retained unmatched words are projected,
+zero-filtered and encoded with mapMaybe. No projected input trees or separate output encoding
+tree are needed. Existing map key representatives and sparse zero elimination remain intact.
+
+The evaluator performs ascending, left-before-right payload validation using traverse_ before
+calling the total projection kernel. Its local word extractor is used only after that successful
+pass over the same immutable trees; a non-integer fallback is unreachable through this entry
+point. Full-input error detection remains unchanged. Surviving payloads are read again during
+merging, trading a second scalar read for removing three temporary map transformations. No
+unsafe host operations, IO, hidden state or new surface signatures are introduced.
+
+Resolved Grill Log: Preserve full validation rather than letting discarded keys conceal malformed
+values. Do not cache validated words in another tree: the purpose is to reduce allocation. Native
+Word64 callers retain the original combineMaps API. No measured speedup or validation is claimed.
+
+## Native sparse word enumeration
+
+`unpackWords` accepts a base 64-bit ID and a word, extracting set bit positions using
+`countTrailingZeros` and bit clearing `w .&. (w - 1)`. Output IDs combine `base .|. tz` in
+ascending order and prepend onto the tail list. When the word is 0, it returns the tail
+directly. No per-bit shifting loop is performed.
+
+Resolved Grill Log: Use hardware trailing-zero counts and single-instruction bit clearing
+rather than stepping through 64 shifts. Ascending order is preserved by folding keys with
+foldrWithKey and prepending bits. No tests or measurements run.
+

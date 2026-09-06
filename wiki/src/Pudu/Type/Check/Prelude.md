@@ -73,9 +73,9 @@ reports E7003. Existing argument evaluation remains left to right. These names a
 typed and dispatched as pure primitives; Std.BitSet uses them directly.
 
 The internal `WordOperation` enum selects `combineMaps`: tree-native mergeWithKey applies OR,
-AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator first
-projects each map to checked Word64 payloads and maps the result back to UInt64 values. These
-intermediate native-word trees are an explicit allocation tradeoff, not an unboxed-storage claim.
+AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator validates both input maps first, then projects payloads during merging and
+encodes directly into the final map. The input and result trees still hold boxed values; no
+projected input tree or separately encoded output tree is constructed.
 
 Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
 discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
@@ -100,3 +100,11 @@ Registration includes names, types, installation and pure dispatch. STD delegate
 Resolved Grill Log: Do not swap inputs for disjointness even if the right map is smaller: the
 left-first visitation and failure order are explicit. Keep the right fold lazy in its remainder
 so a counterexample does not force later lookups. No tests, builds, reviews or measurements run.
+
+## Native sparse word enumeration
+
+`wordMapMembers` is typed as `Map[UInt64, UInt64] -> Array[UInt64]` in the type checker prelude.
+
+Resolved Grill Log: Type signature expects Map[UInt64, UInt64] and returns Array[UInt64].
+No tests or measurements run.
+

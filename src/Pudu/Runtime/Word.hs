@@ -4,12 +4,13 @@ module Pudu.Runtime.Word
   , compareMaps
   , WordOperation (..)
   , combineMaps
+  , combineMapsWith
   , countWords
+  , unpackWords
   ) where
 
-import Data.Bits (popCount, complement, xor, (.&.), (.|.))
+import Data.Bits (popCount, countTrailingZeros, complement, xor, (.&.), (.|.))
 import qualified Data.Map.Strict as Map
-import Data.Foldable (foldl')
 import Data.Word (Word64)
 
 {-| Retain the first projection failure and force each successful accumulated count.
@@ -29,15 +30,25 @@ countWords project = foldl' step (Right 0)
 data WordOperation = WordUnion | WordIntersection | WordDifference | WordSymmetricDifference
 
 combineMaps :: Ord k => WordOperation -> Map.Map k Word64 -> Map.Map k Word64 -> Map.Map k Word64
-combineMaps operation = Map.mergeWithKey matched leftOnly rightOnly
+combineMaps operation = combineMapsWith operation id id
+{-# INLINE combineMaps #-}
+
+{-| Project only words needed by the merge and encode directly into the result tree.
+    Representation validation, when required, belongs to the caller before this pure kernel. -}
+combineMapsWith :: Ord k => WordOperation -> (a -> Word64) -> (Word64 -> a)
+  -> Map.Map k a -> Map.Map k a -> Map.Map k a
+combineMapsWith operation project encode = Map.mergeWithKey matched leftOnly rightOnly
  where
-  nonzero word = if word == 0 then Nothing else Just word
-  keep = Map.filter (/= 0)
-  matched _ left right = nonzero $ case operation of
-    WordUnion -> left .|. right
-    WordIntersection -> left .&. right
-    WordDifference -> left .&. complement right
-    WordSymmetricDifference -> left `xor` right
+  nonzero word = if word == 0 then Nothing else Just (encode word)
+  keep = Map.mapMaybe (nonzero . project)
+  matched _ left right =
+    let a = project left
+        b = project right
+     in nonzero $ case operation of
+          WordUnion -> a .|. b
+          WordIntersection -> a .&. b
+          WordDifference -> a .&. complement b
+          WordSymmetricDifference -> a `xor` b
   leftOnly = case operation of
     WordIntersection -> const Map.empty
     _ -> keep
@@ -45,7 +56,7 @@ combineMaps operation = Map.mergeWithKey matched leftOnly rightOnly
     WordUnion -> keep
     WordSymmetricDifference -> keep
     _ -> const Map.empty
-{-# INLINE combineMaps #-}
+{-# INLINE combineMapsWith #-}
 
 {-| Predicates retain left-first visitation even when either input is smaller. -}
 data WordPredicate = WordSubset | WordDisjoint
@@ -62,3 +73,12 @@ compareMaps predicate project left right = Map.foldrWithKey step (Right True) le
           WordDisjoint -> a .&. b == 0
     if holds then remaining else Right False
 {-# INLINE compareMaps #-}
+
+{-| Unpack set bit positions in ascending order, prepending onto an existing list. -}
+unpackWords :: Word64 -> Word64 -> [Word64] -> [Word64]
+unpackWords _ 0 rest = rest
+unpackWords base w rest =
+  let tz = countTrailingZeros w
+      idVal = base .|. fromIntegral tz
+   in idVal : unpackWords base (w .&. (w - 1)) rest
+{-# INLINE unpackWords #-}

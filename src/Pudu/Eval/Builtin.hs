@@ -29,7 +29,7 @@ import Pudu.IntegerLiteral (integerKindFits, integerKindOf)
 import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
 import Pudu.Eval.HashMap (mixKey)
-import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra, callWordMapPredicate)
+import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra, callWordMapPredicate, callWordMapMembers)
 import qualified Pudu.Runtime.Word as Word
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
@@ -40,8 +40,7 @@ import Pudu.Eval.Env
   )
 import Pudu.Source (Span)
 import Pudu.Eval.Array
-  ( arrayFromList
-  , arrayToList
+  ( arrayToList
   , arrayLength
   , arrayIndex
   , arrayPush
@@ -563,6 +562,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (WordMapIsSubsetOfBuiltin, values) -> callWordMapPredicate spanValue "wordMapIsSubsetOf" Word.WordSubset values
   (WordMapIsDisjointFromBuiltin, values) -> callWordMapPredicate spanValue "wordMapIsDisjointFrom" Word.WordDisjoint values
   (WordMapPopCountBuiltin, values) -> callWordMapPopCount spanValue values
+  (WordMapMembersBuiltin, values) -> callWordMapMembers spanValue values
   (HashOfBuiltin, [value]) -> pure (intOf (hashOfValue value))
   {-| A hash spread across the whole word against a value chosen when the
       process started, so the bucket a key lands in cannot be predicted from

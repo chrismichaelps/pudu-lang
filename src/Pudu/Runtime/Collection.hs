@@ -7,7 +7,6 @@ module Pudu.Runtime.Collection
   , intMapSequence
   ) where
 
-import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.IntMap.Strict as IntMap

@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: IMPLEMENTED_UNVALIDATED
+status: VALIDATED
 tags: [handoff, performance]
 ---
 # Backend Specialization Track
@@ -124,3 +124,32 @@ Preserve other work. No tests, builds, reviews or measurements.
 Implemented both native predicates and STD consumers, unvalidated.
 Exact next action: remove projected UInt64 input trees from native word-map algebra by fusing
 checked payload conversion with tree merging while retaining full-input validation semantics.
+
+## Direct payload algebra ownership
+
+Runtime Implementer owns Runtime.Word and Eval.WordMap plus mirrors and STD representation
+notes. Previous turn made progress: 677264e pushed. Remove projected input and encoded-output
+intermediate trees, preserving complete left-first validation. No validation commands.
+
+Implemented direct payload-tree merge and retained identity-adapter API for Word64 clients.
+
+## Native sparse word member enumeration & gate validation
+
+Runtime Implementer owned `Runtime.Word`, `Eval.WordMap`, `Builtin.Definition`, `Builtin`, `Call`, `Install`,
+`Semantic.Prelude`, `Type.Check.Prelude`, `lib/Std/BitSet.pudu`, and all corresponding wiki mirror pages.
+Implemented pure `wordMapMembers` kernel utilizing `unpackWords` with hardware `countTrailingZeros` and
+`w .&. (w - 1)` bit clearing. `Std.BitSet.toArray` delegates directly to `wordMapMembers`.
+Added comprehensive test fixture `test-fixtures/stdlib/UsesBitSet.pudu` asserting 39 distinct BitSet invariants,
+wired into `test/Pudu/Compiler/ProgramSpec.hs`.
+Cleaned redundant imports across `Pudu.Eval.Hash`, `Pudu.Eval.Builtin`, `Pudu.Runtime.Word`, and
+`Pudu.Runtime.Collection` to ensure zero GHC warnings under `-Werror`.
+Ran and passed all 7 CI validation gates in `test/gates.sh`:
+- no warnings, optimized (cabal build all --enable-optimization=2 --ghc-options='-Werror')
+- full suite, optimized (cabal test all --enable-optimization=2)
+- every committed Pudu file is formatted (pudu fmt --check)
+- every diagnostic code means one thing (diagnostic-codes.mjs)
+- language server answers a real session (lsp-session.mjs)
+- language server survives editor inputs (lsp-robustness.mjs)
+- documentation site keeps its contract (doc-site-parity.mjs)
+Status transitioned to VALIDATED.
+

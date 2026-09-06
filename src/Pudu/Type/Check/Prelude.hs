@@ -153,6 +153,10 @@ declareBuiltinConstructors = do
     (polytype [("K", 0)] [] (FunctionTypeValue False
       [NominalType "Map" [RigidType "K", NominalType "UInt64" []]]
       (NominalType "UInt128" [])))
+  bindName "wordMapMembers"
+    (monotype (FunctionTypeValue False
+      [NominalType "Map" [NominalType "UInt64" [], NominalType "UInt64" []]]
+      (NominalType "Array" [NominalType "UInt64" []])))
   bindName "hashOf" (polytype [("T", 0)] [] (FunctionTypeValue False [RigidType "T"] integerType))
   bindName "mixHash" (monotype (FunctionTypeValue False [integerType] integerType))
   {-| The indexed store `Std.HashMap` reaches its buckets through. Built empty

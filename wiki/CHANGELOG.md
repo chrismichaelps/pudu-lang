@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native sparse word member enumeration and BitSet validation
+
+[[Runtime Word Kernels]] and [[Eval Word Map]] now provide pure wired-in `wordMapMembers`,
+dispatching directly to `unpackWords` with hardware `countTrailingZeros` and bit-clearing `w .&. (w - 1)`.
+[[Std BitSet]] delegates `toArray` directly to `wordMapMembers`, recovering ascending member IDs
+in $O(m)$ bit operations without map materialization. Added complete BitSet invariant test fixture
+`test-fixtures/stdlib/UsesBitSet.pudu`, wired into `test/Pudu/Compiler/ProgramSpec.hs`. Cleaned redundant
+imports under GHC 9.10 (`-Werror`). Full CI gates verified and passed.
+
+## 2026-09-06 — Direct word-map payload merging
+
+[[Runtime Word Kernels]] now accepts representation adapters so [[Eval Word Map]] can combine
+original payload trees directly. Preserves complete validation while removing both projected
+input maps and the separate output-encoding map. No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Native sparse word predicates
 
 [[Std BitSet]] subset and disjointness now consume checked host-map predicates in

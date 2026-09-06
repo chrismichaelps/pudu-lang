@@ -514,6 +514,7 @@ isHashingBuiltin builtin = case builtin of
   WordMapIsSubsetOfBuiltin -> True
   WordMapIsDisjointFromBuiltin -> True
   WordMapPopCountBuiltin -> True
+  WordMapMembersBuiltin -> True
   HashOfBuiltin -> True
   MixHashBuiltin -> True
   _ -> False

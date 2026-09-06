@@ -66,18 +66,7 @@ export fn size(value: &BitSet) -> UInt128 { wordMapPopCount(value.words) }
 
 /// Materialize members in ascending order.
 export fn toArray(value: &BitSet) -> Array[UInt64] {
-  var out: Array[UInt64] = []
-  for pair in value.words.entries() {
-    let base = pair[0] << 6
-    var word = pair[1]
-    var offset = 0u64
-    while word != 0u64 {
-      if (word & 1u64) != 0u64 { out = out.push(base | offset) }
-      word = word >> 1
-      offset = offset + 1u64
-    }
-  }
-  out
+  wordMapMembers(value.words)
 }
 
 export fn union(left: &BitSet, right: &BitSet) -> BitSet {
@@ -95,7 +84,6 @@ export fn difference(left: &BitSet, right: &BitSet) -> BitSet {
 export fn symmetricDifference(left: &BitSet, right: &BitSet) -> BitSet {
   BitSet{words: wordMapSymmetricDifference(left.words, right.words)}
 }
-
 
 export fn isSubsetOf(left: &BitSet, right: &BitSet) -> Bool {
   wordMapIsSubsetOf(left.words, right.words)

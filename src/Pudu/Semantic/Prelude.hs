@@ -41,7 +41,7 @@ preludeValueNames =
   [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "bucketsOf", "mixHash", "show", "display", "convertInteger"
   , "wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"
   , "wordMapIsSubsetOf", "wordMapIsDisjointFrom"
-  , "wordMapPopCount", "sha256Of", "hmacSha256Of", "deriveKey", "hashOf"
+  , "wordMapPopCount", "wordMapMembers", "sha256Of", "hmacSha256Of", "deriveKey", "hashOf"
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"
   , "Some", "None", "Ok", "Err"

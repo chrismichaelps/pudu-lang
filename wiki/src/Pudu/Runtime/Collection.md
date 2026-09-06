@@ -23,6 +23,7 @@ no raw storage pointer escapes. Generic kernels expose INLINE boundaries for con
 - **Q:** Couple low-level kernels to evaluator values? **A:** No; comparability and projections are supplied through normal static types.
 - **Q:** Accept an unchecked sorted-input flag? **A:** No; the scan establishes the precondition internally.
 - **Q:** Add a public unsafe capability to accelerate collections? **A:** No; persistent kernels remain pure and internal.
+- **Q:** Import `Data.List (foldl')` under GHC 9.10? **A:** No; `foldl'` is in Prelude; omit redundant import for -Werror compliance.
 
 ## Referenced by
 [[src/_MOC]] · [[Eval Keyed]] · [[Eval Hash Map]] · [[Pudu Cabal Manifest]]

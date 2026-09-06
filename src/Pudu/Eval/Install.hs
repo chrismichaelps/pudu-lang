@@ -103,6 +103,7 @@ installBuiltinConstructors = do
   bind "wordMapIsSubsetOf" (BuiltinValue WordMapIsSubsetOfBuiltin)
   bind "wordMapIsDisjointFrom" (BuiltinValue WordMapIsDisjointFromBuiltin)
   bind "wordMapPopCount" (BuiltinValue WordMapPopCountBuiltin)
+  bind "wordMapMembers" (BuiltinValue WordMapMembersBuiltin)
   bind "hashOf" (BuiltinValue HashOfBuiltin)
   bind "mixHash" (BuiltinValue MixHashBuiltin)
   bind "show" (BuiltinValue ShowBuiltin)
