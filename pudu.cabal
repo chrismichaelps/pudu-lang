@@ -114,6 +114,7 @@ library
     Pudu.DecimalLiteral
     Pudu.FloatLiteral
     Pudu.Format
+    Pudu.Format.Spacing
     Pudu.Lsp.Feature
     Pudu.Lsp.Hover
     Pudu.Lsp.Json

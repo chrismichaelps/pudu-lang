@@ -88,7 +88,7 @@ brace it closes rather than like whatever token sits beside it.
 
 ### Linkage
 
-- **Requires:** [[Lexer]], [[Token]], [[Source Text]], [[Diagnostic Model]].
+- **Requires:** [[Lexer]], [[Token]], [[Source Text]], [[Diagnostic Model]], [[src/Pudu/Format/Spacing]].
 - **Consumed by:** [[Pudu CLI]].
 
 ## Algorithm
@@ -130,12 +130,8 @@ layout, where a line is already a unit.
   ambiguity belongs to token structure, not one keyword sequence. _Rationale:_ saving and restoring
   the head state handles nested parentheses and any future parenthesized control head without
   teaching the formatter grammar productions. _Rejected:_ an `if let` token-pattern exception.
-- **Q:** Treat a Set literal as a block because it uses braces? **A:** No. _Rationale:_ it is a
-  comma-separated value literal and canonical collection spacing is unpadded; the preceding `#`
-  identifies it without parsing. _Rejected:_ `# { 1, 2 }`; parser-dependent formatting.
-- **Q:** Treat a Set literal as a block because it uses braces? **A:** No. _Rationale:_ it is a
-  comma-separated value literal and canonical collection spacing is unpadded; the preceding `#`
-  identifies it without parsing. _Rejected:_ `# { 1, 2 }`; parser-dependent formatting.
+- **Q:** Why decompose Format into coordinator and Spacing? **A:** Following AGENTS.md file length invariants (<500 lines), extracting token piece definitions, line classification (brace styles, prefix vs binary operators), and whitespace spacing rules into `Pudu.Format.Spacing` separates pure token spacing decisions from line layout and indentation.
+
 
 ## Referenced by
 

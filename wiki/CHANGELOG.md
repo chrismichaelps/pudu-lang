@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Format into layered dependency graph modules
+
+Decomposed the 510-line monolithic `src/Pudu/Format.hs` into a scalable, layered dependency graph architecture strictly under 300 lines per module:
+- Isolated token piece definitions (`Piece`), line classification for brace styles (`Shape`, `BraceStyle`, `Record`, `Selection`, `Block`), prefix vs binary operator detection (`prefixKinds`, `unaryOperators`), and whitespace spacing rules (`wantsSpace`, `spaced`, `isSymbol`) into child module `Pudu.Format.Spacing` (294 lines).
+- Refactored `Pudu.Format` into a focused coordinator (247 lines) retaining `FormatResult`, `formatSource`, `formatText`, token layout on source lines, blank line grouping, line indentation tracking, import run sorting, and line emission while importing and delegating spacing to `Pudu.Format.Spacing`.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Format/Spacing.md`) and updated `Format.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All 7 CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Eval.Operator into layered dependency graph modules
 
 Decomposed the 502-line monolithic `src/Pudu/Eval/Operator.hs` into a scalable, layered dependency graph runtime architecture strictly under 300 lines per module:
