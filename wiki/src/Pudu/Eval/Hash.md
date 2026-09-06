@@ -42,3 +42,17 @@ Integer before conversion; no high bits are discarded.
 - **Q:** Truncate large integers to enter the fast path? **A:** No; only proven Word64 magnitudes enter it.
 - **Q:** Reverse byte order to simplify traversal? **A:** No; preserve the existing stream and resulting hash.
 - **Q:** Allocate a buffer only to fold its bytes? **A:** No; mix the proven scalar representation directly.
+
+## Direct scalar-to-hash text path
+
+Text hashing folds Unicode scalars and feeds each scalar's UTF-8 bytes directly into the existing
+mixer. ASCII contributes one byte; larger scalars contribute the canonical two-, three-, or
+four-byte encoding. No intermediate encoded ByteString is requested by this path. Pudu text
+already contains valid Unicode scalars, so this does not introduce a decoding or replacement rule.
+Rendered fallback values use the same text mixer after rendering. Hash values remain those of the
+canonical UTF-8 stream. This removes an explicit representation conversion; throughput relative
+to the text library's optimized encoder is not measured and may vary by character distribution.
+
+### Resolved Grill Log
+- **Q:** Hash scalar numbers instead of encoded bytes? **A:** No; feed the original UTF-8 byte stream to preserve hashes.
+- **Q:** Normalize Unicode while hashing? **A:** No; normalization would change identity-related behavior.

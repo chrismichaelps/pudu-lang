@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Direct Unicode text hashing
+
+- Feed canonical UTF-8 bytes into the collection mixer directly from text scalars.
+- Reuse the path for rendered fallback values without requesting an encoded ByteString.
+- Preserve encoding semantics; no measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Scalar integer hash specialization
 
 - Mix word-sized integer keys directly without staging a byte list or packed buffer.

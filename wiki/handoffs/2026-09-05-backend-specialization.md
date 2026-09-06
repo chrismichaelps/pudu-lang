@@ -38,3 +38,7 @@ Own Eval.Keyed, Eval.Builtin, Eval.HashMap and their mirrors for direct ascendin
 ## Integer hash specialization
 
 Own Eval.Hash and its mirror. Added a checked Word64-magnitude path that mixes directly without list or byte-buffer staging. General Integer hashing avoids the packed intermediate buffer. Byte order, zero and sign encoding are retained. No measurements, tests, builds or reviews run.
+
+## Text hash continuation
+
+Eval.Hash now feeds canonical UTF-8 bytes directly from Unicode scalars, avoiding explicit encoded ByteString construction in the text hashing path. Rendered fallback values share it. No normalization or hash encoding changes intended; no measurements, tests, builds or reviews run.

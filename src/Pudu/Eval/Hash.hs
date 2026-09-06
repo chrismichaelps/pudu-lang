@@ -29,7 +29,9 @@ import Data.Bits (shiftR, xor, (.&.))
 import Data.List (foldl')
 import qualified Data.ByteArray as ByteArray
 import qualified Data.ByteString as ByteString
-import qualified Data.Text.Encoding as Encoding
+import Data.Char (ord)
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Word (Word64, Word8)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value (Value (..))
@@ -85,16 +87,39 @@ pbkdf2Sha256 password salt iterations wanted =
     byte and text cases below skip it. -}
 hashOfValue :: Value -> Integer
 hashOfValue value = case value of
-  StrValue text -> hashOfBytes (Encoding.encodeUtf8 text)
+  StrValue text -> hashOfText text
   BytesValue bytes -> hashOfBytes bytes
   IntValue _ number -> mixInteger number
-  other -> hashOfBytes (Encoding.encodeUtf8 (renderValue other))
+  other -> hashOfText (renderValue other)
 
 {-| The bytes mixed into one number, by the multiply-and-exclusive-or walk that
     spreads a changed byte across the whole result rather than leaving it in
     the position it changed. -}
 hashOfBytes :: ByteString.ByteString -> Integer
 hashOfBytes = fromIntegral . ByteString.foldl' mixByte offsetBasis
+
+{-| Feed canonical UTF-8 bytes directly, without constructing an encoded value. -}
+hashOfText :: Text -> Integer
+hashOfText = fromIntegral . Text.foldl' mixScalar offsetBasis
+
+mixScalar :: Word64 -> Char -> Word64
+mixScalar accumulated character
+  | code < 0x80 = emit accumulated code
+  | code < 0x800 =
+      continuation (emit accumulated (0xc0 + (code `shiftR` 6))) code
+  | code < 0x10000 =
+      continuation
+        (continuation (emit accumulated (0xe0 + (code `shiftR` 12))) (code `shiftR` 6)) code
+  | otherwise =
+      continuation
+        (continuation
+          (continuation (emit accumulated (0xf0 + (code `shiftR` 18))) (code `shiftR` 12))
+          (code `shiftR` 6)) code
+ where
+  code = ord character
+  emit held byte = mixByte held (fromIntegral byte)
+  continuation held byte = emit held (0x80 + (byte .&. 0x3f))
+{-# INLINE mixScalar #-}
 
 offsetBasis :: Word64
 offsetBasis = 0xcbf29ce484222325
