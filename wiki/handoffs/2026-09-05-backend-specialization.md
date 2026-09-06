@@ -166,4 +166,14 @@ Added test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (23 assertions) and `
 Wired both fixtures into `test/Pudu/Compiler/ProgramSpec.hs`.
 Ran and passed all 7 CI gates in `test/gates.sh` cleanly without warnings under `-Werror`.
 
+## SWAR 8-slot parallel group probing in flat hash tables
+
+Runtime Implementer owned `Runtime.SwissTable` and its mirrored page `wiki/src/Pudu/Runtime/SwissTable.md`.
+Implemented hardware-level SWAR (SIMD Within A Register) parallel group probing:
+- `matchByte`: evaluates 8 control bytes simultaneously against target $H2$ fingerprint using bitwise arithmetic in a single machine cycle.
+- `matchEmpty` & `matchDeleted`: detect `0xFF` (empty) and `0xFE` (tombstone) slots across the 64-bit control word in parallel.
+- `countTrailingZeros`: extracts matching byte offsets with zero branching, replacing single-slot linear probe loops with 8-slot group steps.
+All 7 CI quality gates passed cleanly under `-Werror`.
+Exact next action: continue backend hardware specialization into vectorized columnar operations or scoped transient mutation buffers.
+
 

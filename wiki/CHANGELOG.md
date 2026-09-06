@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — SWAR 8-slot parallel group probing in flat hash tables
+
+Accelerated [[Runtime SwissTable Kernels]] by implementing SIMD-within-a-register (SWAR) group probing.
+Instead of evaluating one control slot per iteration, lookups, insertions, and deletions inspect packed 64-bit
+control words (`Word64`, 8 control bytes) simultaneously using integer ALU arithmetic:
+`matchByte` and `matchEmpty` compute parallel byte equality in a single cycle, and `countTrailingZeros`
+jumps directly to candidate slot indices. Decreased probe loop iteration overhead by up to 8x.
+Passed all 7 CI quality gates under `-Werror`.
+
 ## 2026-09-06 — Unboxed contiguous byte buffers and flat hash tables with control metadata
 
 Implemented low-level cache-aligned unboxed memory buffers (`Pudu.Runtime.Buffer`, `Pudu.Eval.Buffer`,
