@@ -103,6 +103,200 @@ fn testEmptyAndAllNullColumns() -> Option[Bool] {
       && Option.isNone(&allNullMax))
 }
 
+fn testFloatColumnWorkflow() -> Option[Bool] {
+  let col0 = Column.createF64(10)
+  let col1 = Column.appendF64(&col0, 1.5) ?
+  let col2 = Column.appendF64(&col1, 2.5) ?
+  let col3 = Column.appendF64(&col2, 3.5) ?
+  let col4 = Column.appendF64(&col3, 4.5) ?
+
+  // Add null, then scalar, then another null
+  let col5 = Column.appendNullF64(&col4) ?
+  let col6 = Column.appendF64(&col5, 5.5) ?
+  let col7 = Column.appendNullF64(&col6) ?
+
+  let v0 = Column.getF64(&col7, 0) ?
+  let v1 = Column.getF64(&col7, 1) ?
+  let v2 = Column.getF64(&col7, 2) ?
+  let v3 = Column.getF64(&col7, 3) ?
+  let v5 = Column.getF64(&col7, 5) ?
+
+  let isNull4 = Column.isNullF64(&col7, 4)
+  let isNull6 = Column.isNullF64(&col7, 6)
+  let isNull0 = Column.isNullF64(&col7, 0)
+
+  let nullVal4 = Column.getF64(&col7, 4)
+  let nullVal6 = Column.getF64(&col7, 6)
+
+  // Vectorized float aggregations
+  let totalSum = Column.sumF64(&col7)
+  let minVal = Column.minF64(&col7) ?
+  let maxVal = Column.maxF64(&col7) ?
+
+  Some(Column.lengthF64(&col7) == 7
+      && Column.nullCountF64(&col7) == 2
+      && v0 == 1.5
+      && v1 == 2.5
+      && v2 == 3.5
+      && v3 == 4.5
+      && v5 == 5.5
+      && isNull4
+      && isNull6
+      && !isNull0
+      && Option.isNone(&nullVal4)
+      && Option.isNone(&nullVal6)
+      && totalSum == 17.5
+      && minVal == 1.5
+      && maxVal == 5.5)
+}
+
+fn testFloatFilterAndProject() -> Option[Bool] {
+  let col0 = Column.createF64(8)
+  let col1 = Column.appendF64(&col0, 1.0) ?
+  let col2 = Column.appendF64(&col1, 5.0) ?
+  let col3 = Column.appendNullF64(&col2) ?
+  let col4 = Column.appendF64(&col3, 8.0) ?
+  let col5 = Column.appendF64(&col4, 2.5) ?
+  let col6 = Column.appendF64(&col5, 10.0) ?
+
+  // Filter rows where value > 3.0: rows 1 (5.0), 3 (8.0), 5 (10.0)
+  let selGt = Column.filterGtF64(&col6, 3.0)
+  let projGt = Column.projectF64(&col6, &selGt)
+
+  let p0 = Column.getF64(&projGt, 0) ?
+  let p1 = Column.getF64(&projGt, 1) ?
+  let p2 = Column.getF64(&projGt, 2) ?
+
+  let projSum = Column.sumF64(&projGt)
+  let projMin = Column.minF64(&projGt) ?
+  let projMax = Column.maxF64(&projGt) ?
+
+  // Filter rows where value < 3.0: rows 0 (1.0), 4 (2.5)
+  let selLt = Column.filterLtF64(&col6, 3.0)
+  let projLt = Column.projectF64(&col6, &selLt)
+
+  let lt0 = Column.getF64(&projLt, 0) ?
+  let lt1 = Column.getF64(&projLt, 1) ?
+
+  Some(Column.lengthF64(&projGt) == 3
+      && Column.nullCountF64(&projGt) == 0
+      && p0 == 5.0
+      && p1 == 8.0
+      && p2 == 10.0
+      && projSum == 23.0
+      && projMin == 5.0
+      && projMax == 10.0
+      && Column.lengthF64(&projLt) == 2
+      && lt0 == 1.0
+      && lt1 == 2.5)
+}
+
+fn testFloatVectorAddition() -> Option[Bool] {
+  let colA0 = Column.createF64(4)
+  let colA1 = Column.appendF64(&colA0, 10.5) ?
+  let colA2 = Column.appendNullF64(&colA1) ?
+  let colA3 = Column.appendF64(&colA2, 30.0) ?
+  let colA4 = Column.appendF64(&colA3, 40.25) ?
+
+  let colB0 = Column.createF64(4)
+  let colB1 = Column.appendF64(&colB0, 5.5) ?
+  let colB2 = Column.appendF64(&colB1, 15.0) ?
+  let colB3 = Column.appendNullF64(&colB2) ?
+  let colB4 = Column.appendF64(&colB3, 10.75) ?
+
+  let sumCol = Column.addF64(&colA4, &colB4) ?
+
+  let r0 = Column.getF64(&sumCol, 0) ?
+  let isNull1 = Column.isNullF64(&sumCol, 1)
+  let isNull2 = Column.isNullF64(&sumCol, 2)
+  let r3 = Column.getF64(&sumCol, 3) ?
+
+  let totalSum = Column.sumF64(&sumCol)
+
+  Some(Column.lengthF64(&sumCol) == 4
+      && Column.nullCountF64(&sumCol) == 2
+      && r0 == 16.0
+      && isNull1
+      && isNull2
+      && r3 == 51.0
+      && totalSum == 67.0)
+}
+
+fn testBitmapAlgebra() -> Option[Bool] {
+  let col0 = Column.createF64(6)
+  let col1 = Column.appendF64(&col0, 10.0) ?
+  let col2 = Column.appendF64(&col1, 20.0) ?
+  let col3 = Column.appendF64(&col2, 30.0) ?
+  let col4 = Column.appendF64(&col3, 40.0) ?
+  let col5 = Column.appendF64(&col4, 50.0) ?
+  let col6 = Column.appendF64(&col5, 60.0) ?
+
+  // Mask 1: value > 15.0 (rows 1, 2, 3, 4, 5) -> count 5
+  let mask1 = Column.filterGtF64(&col6, 15.0)
+  let count1 = Column.bitmapCount(&mask1, 6)
+
+  // Mask 2: value < 45.0 (rows 0, 1, 2, 3) -> count 4
+  let mask2 = Column.filterLtF64(&col6, 45.0)
+  let count2 = Column.bitmapCount(&mask2, 6)
+
+  // AND: (15.0 < val < 45.0) -> rows 1, 2, 3 -> count 3
+  let andMask = Column.bitmapAnd(&mask1, &mask2, 6)
+  let andCount = Column.bitmapCount(&andMask, 6)
+  let andProj = Column.projectF64(&col6, &andMask)
+
+  // OR: (val > 15.0 || val < 45.0) -> rows 0, 1, 2, 3, 4, 5 -> count 6
+  let orMask = Column.bitmapOr(&mask1, &mask2, 6)
+  let orCount = Column.bitmapCount(&orMask, 6)
+
+  // NOT: !(andMask) -> rows 0, 4, 5 -> count 3
+  let notMask = Column.bitmapNot(&andMask, 6)
+  let notCount = Column.bitmapCount(&notMask, 6)
+  let notProj = Column.projectF64(&col6, &notMask)
+
+  let ap0 = Column.getF64(&andProj, 0) ?
+  let ap1 = Column.getF64(&andProj, 1) ?
+  let ap2 = Column.getF64(&andProj, 2) ?
+
+  let np0 = Column.getF64(&notProj, 0) ?
+  let np1 = Column.getF64(&notProj, 1) ?
+  let np2 = Column.getF64(&notProj, 2) ?
+
+  Some(count1 == 5
+      && count2 == 4
+      && andCount == 3
+      && orCount == 6
+      && notCount == 3
+      && Column.lengthF64(&andProj) == 3
+      && ap0 == 20.0
+      && ap1 == 30.0
+      && ap2 == 40.0
+      && Column.lengthF64(&notProj) == 3
+      && np0 == 10.0
+      && np1 == 50.0
+      && np2 == 60.0)
+}
+
+fn testEmptyAndAllNullFloatColumns() -> Option[Bool] {
+  let emptyCol = Column.createF64(0)
+  let emptySum = Column.sumF64(&emptyCol)
+  let emptyMin = Column.minF64(&emptyCol)
+  let emptyMax = Column.maxF64(&emptyCol)
+
+  let nullCol0 = Column.createF64(4)
+  let nullCol1 = Column.appendNullF64(&nullCol0) ?
+  let nullCol2 = Column.appendNullF64(&nullCol1) ?
+  let allNullSum = Column.sumF64(&nullCol2)
+  let allNullMin = Column.minF64(&nullCol2)
+  let allNullMax = Column.maxF64(&nullCol2)
+
+  Some(emptySum == 0.0
+      && Option.isNone(&emptyMin)
+      && Option.isNone(&emptyMax)
+      && allNullSum == 0.0
+      && Option.isNone(&allNullMin)
+      && Option.isNone(&allNullMax))
+}
+
 export fn main() -> Int {
   var held = 0
 
@@ -125,6 +319,30 @@ export fn main() -> Int {
 
   // 5. Empty and all-null column edge cases
   if Option.unwrapOr(testEmptyAndAllNullColumns(), false) { held = held + 1 }
+
+  // 6. Float column initialization & out of bounds queries
+  let fcol = Column.createF64(16)
+  if Column.lengthF64(&fcol) == 0 { held = held + 1 }
+  if Column.nullCountF64(&fcol) == 0 { held = held + 1 }
+  if Column.isNullF64(&fcol, -1) { held = held + 1 }
+  if Column.isNullF64(&fcol, 0) { held = held + 1 }
+  if Option.isNone(&Column.getF64(&fcol, -1)) { held = held + 1 }
+  if Option.isNone(&Column.getF64(&fcol, 0)) { held = held + 1 }
+
+  // 7. Basic float column workflow (appends, nulls, reads, aggregations)
+  if Option.unwrapOr(testFloatColumnWorkflow(), false) { held = held + 1 }
+
+  // 8. Vectorized float filter predicate scans and projections
+  if Option.unwrapOr(testFloatFilterAndProject(), false) { held = held + 1 }
+
+  // 9. Vectorized element-wise float addition
+  if Option.unwrapOr(testFloatVectorAddition(), false) { held = held + 1 }
+
+  // 10. SIMD/SWAR bitmap query algebra (AND, OR, NOT, popcount)
+  if Option.unwrapOr(testBitmapAlgebra(), false) { held = held + 1 }
+
+  // 11. Empty and all-null float columns
+  if Option.unwrapOr(testEmptyAndAllNullFloatColumns(), false) { held = held + 1 }
 
   held
 }

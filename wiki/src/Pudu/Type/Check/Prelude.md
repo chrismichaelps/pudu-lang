@@ -142,10 +142,22 @@ Wires type schemes for the 13 extended primitives:
 - `columnMaxU64: fn(Bytes, Bytes, Int) -> Option[UInt64]`
 - `columnFilterGtU64: fn(Bytes, Bytes, Int, UInt64) -> Bytes`
 - `columnProjectU64: fn(Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes, Int)`
-
+- `columnSumF64: fn(Bytes, Bytes, Int) -> Float64`
+- `columnMinF64: fn(Bytes, Bytes, Int) -> Option[Float64]`
+- `columnMaxF64: fn(Bytes, Bytes, Int) -> Option[Float64]`
+- `columnFilterGtF64: fn(Bytes, Bytes, Int, Float64) -> Bytes`
+- `columnFilterLtF64: fn(Bytes, Bytes, Int, Float64) -> Bytes`
+- `columnProjectF64: fn(Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes, Int)`
+- `columnAddF64: fn(Bytes, Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes)`
+- `columnBitmapAnd: fn(Bytes, Bytes, Int) -> Bytes`
+- `columnBitmapOr: fn(Bytes, Bytes, Int) -> Bytes`
+- `columnBitmapNot: fn(Bytes, Int) -> Bytes`
+- `columnBitmapCount: fn(Bytes, Int) -> Int`
 
 ### Resolved Grill Log
 - **Q:** Should buffer operations require unsafe casts or pointer types? **A:** No; type buffer arguments as `Bytes` and scalar values as their precise fixed-width nominal types (`Int64`, `Float64`, `UInt32`, `UInt8`, `UInt64`).
+- **Q:** How are multi-result vector projections typed? **A:** As structural tuples `(Bytes, Bytes, Int)` or `(Bytes, Bytes)` avoiding heap-allocated record overhead.
+
 
 
 

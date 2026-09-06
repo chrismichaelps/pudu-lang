@@ -130,6 +130,17 @@ data Builtin
   | ColumnMaxU64Builtin
   | ColumnFilterGtU64Builtin
   | ColumnProjectU64Builtin
+  | ColumnSumF64Builtin
+  | ColumnMinF64Builtin
+  | ColumnMaxF64Builtin
+  | ColumnFilterGtF64Builtin
+  | ColumnFilterLtF64Builtin
+  | ColumnProjectF64Builtin
+  | ColumnAddF64Builtin
+  | ColumnBitmapAndBuiltin
+  | ColumnBitmapOrBuiltin
+  | ColumnBitmapNotBuiltin
+  | ColumnBitmapCountBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -257,3 +268,14 @@ builtinName value = case value of
   ColumnMaxU64Builtin -> "columnMaxU64"
   ColumnFilterGtU64Builtin -> "columnFilterGtU64"
   ColumnProjectU64Builtin -> "columnProjectU64"
+  ColumnSumF64Builtin -> "columnSumF64"
+  ColumnMinF64Builtin -> "columnMinF64"
+  ColumnMaxF64Builtin -> "columnMaxF64"
+  ColumnFilterGtF64Builtin -> "columnFilterGtF64"
+  ColumnFilterLtF64Builtin -> "columnFilterLtF64"
+  ColumnProjectF64Builtin -> "columnProjectF64"
+  ColumnAddF64Builtin -> "columnAddF64"
+  ColumnBitmapAndBuiltin -> "columnBitmapAnd"
+  ColumnBitmapOrBuiltin -> "columnBitmapOr"
+  ColumnBitmapNotBuiltin -> "columnBitmapNot"
+  ColumnBitmapCountBuiltin -> "columnBitmapCount"

@@ -198,6 +198,28 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "UInt64" []] bytesType))
   bindName "columnProjectU64"
     (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType, integerType])))
+  bindName "columnSumF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "Float64" [])))
+  bindName "columnMinF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "Option" [NominalType "Float64" []])))
+  bindName "columnMaxF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "Option" [NominalType "Float64" []])))
+  bindName "columnFilterGtF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "Float64" []] bytesType))
+  bindName "columnFilterLtF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "Float64" []] bytesType))
+  bindName "columnProjectF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType, integerType])))
+  bindName "columnAddF64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType])))
+  bindName "columnBitmapAnd"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] bytesType))
+  bindName "columnBitmapOr"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] bytesType))
+  bindName "columnBitmapNot"
+    (monotype (FunctionTypeValue False [bytesType, integerType] bytesType))
+  bindName "columnBitmapCount"
+    (monotype (FunctionTypeValue False [bytesType, integerType] integerType))
 
 
   bindName "swissTableEmpty"

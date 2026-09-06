@@ -154,13 +154,16 @@ Resolved Grill Log: Install all 12 primitives as first-class builtin values avai
 
 ## Low-level buffer extensions and vectorized column installation
 
-Binds the 13 extended primitive names in the initial evaluation environment:
+Binds the 24 extended primitive names in the initial evaluation environment:
 `bufferReadI64`, `bufferWriteI64`, `bufferReadF64`, `bufferWriteF64`, `bufferReadU32`, `bufferWriteU32`,
-`bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, and `columnProjectU64`.
+`bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, `columnProjectU64`,
+`columnSumF64`, `columnMinF64`, `columnMaxF64`, `columnFilterGtF64`, `columnFilterLtF64`, `columnProjectF64`,
+`columnAddF64`, `columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, and `columnBitmapCount`.
 Each name maps directly to its `BuiltinValue` in the runtime environment.
 
 ### Resolved Grill Log
 - **Q:** Require manual import of columnar and hardware memory builtins? **A:** No; install them directly in the runtime environment matching existing buffer builtins for zero-cost primitive execution.
+
 
 
 

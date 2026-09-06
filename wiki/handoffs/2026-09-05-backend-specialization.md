@@ -196,7 +196,17 @@ Runtime Implementer owned `Runtime.Buffer`, `Eval.Buffer`, `lib/Std/Buffer.pudu`
   - Wired into `test/Pudu/Compiler/ProgramSpec.hs`.
 - Formatted all Pudu source files via `pudu fmt`.
 - Ran and passed all 7 CI quality gates in `test/gates.sh` under `-Werror`.
-Exact next action: continue backend hardware specialization into unboxed float/decimal columnar vectors or memory-mapped table scans.
+
+## Float columnar vectors, vector addition, and SIMD/SWAR bitmap query algebra
+
+Runtime Implementer owned `Runtime.Column`, `Eval.Column`, `lib/Std/Column.pudu`, `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, `Type.Check.Prelude`, and all mirrored wiki pages under `wiki/src/`.
+- Implemented `ColumnF64` with IEEE-754 double precision floats in contiguous unboxed buffer memory paired with null validity bitmaps.
+- Added hardware-accelerated float reductions (`sumF64`, `minF64`, `maxF64`) and predicate scans (`filterGtF64`, `filterLtF64`).
+- Implemented vectorized element-wise column addition (`addF64`) with bit-parallel null propagation.
+- Added SIMD/SWAR bitmap query algebra (`bitmapAnd`, `bitmapOr`, `bitmapNot`, `bitmapCount`) processing 64 rows per cycle.
+- 100% public API test coverage in `test-fixtures/stdlib/UsesColumn.pudu` (20 assertions) without nested matches.
+- All 7 CI quality gates passed under `-Werror`.
+Exact next action: proceed with next high-performance systems feature (such as zero-copy dictionary encoding, compressed bitset runs, or memory-mapped table scans).
 
 
 

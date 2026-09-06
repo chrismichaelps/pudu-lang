@@ -542,5 +542,16 @@ isHashingBuiltin builtin = case builtin of
   ColumnMaxU64Builtin -> True
   ColumnFilterGtU64Builtin -> True
   ColumnProjectU64Builtin -> True
+  ColumnSumF64Builtin -> True
+  ColumnMinF64Builtin -> True
+  ColumnMaxF64Builtin -> True
+  ColumnFilterGtF64Builtin -> True
+  ColumnFilterLtF64Builtin -> True
+  ColumnProjectF64Builtin -> True
+  ColumnAddF64Builtin -> True
+  ColumnBitmapAndBuiltin -> True
+  ColumnBitmapOrBuiltin -> True
+  ColumnBitmapNotBuiltin -> True
+  ColumnBitmapCountBuiltin -> True
   _ -> False
 

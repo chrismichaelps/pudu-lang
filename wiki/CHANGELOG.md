@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Float columnar vectors, vector addition, and SIMD/SWAR bitmap query algebra
+
+Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed 64-bit float columnar vectors (`ColumnF64`),
+vector arithmetic, and SIMD/SWAR bitmap query algebra:
+- Introduced `ColumnF64`, `createF64`, `lengthF64`, `nullCountF64`, `appendF64`, `appendNullF64`, `getF64`, `isNullF64`, `sumF64`, `minF64`, `maxF64`, `filterGtF64`, `filterLtF64`, `projectF64`, and `addF64`.
+- Added bit-parallel 64-row boolean algebra over packed selection masks: `bitmapAnd`, `bitmapOr`, `bitmapNot` (with trailing bit masking), and `bitmapCount` (hardware popcount).
+- All 11 new pure builtins wired across `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call` (immediate dispatch), `Eval.Install`, `Semantic.Prelude`, and `Type.Check.Prelude`.
+- Expanded test fixture `test-fixtures/stdlib/UsesColumn.pudu` from 9 to 20 assertions covering 100% of the public API, zero nested matches, and triple-slash LSP documentation.
+- All 7 CI quality gates verified and passing under `-Werror`.
+
 ## 2026-09-06 — Low-level memory primitives and vectorized columnar database engine
 
 Extended [[Runtime Buffer Kernels]], [[Eval Buffer]], and [[Std Buffer]] with 8 high-performance hardware memory primitives:

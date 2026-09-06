@@ -180,10 +180,247 @@ export fn filterGt(col: &ColumnU64, threshold: UInt64) -> Buffer.Buffer {
 /// Gathers selected rows according to `selection` bitmap into a new contiguous unboxed column.
 export fn project(col: &ColumnU64, selection: &Buffer.Buffer) -> ColumnU64 {
   let proj = columnProjectU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), Buffer.toBytes(selection), col.length)
+  let projRows = proj[2]
+  let projNullBuf = Buffer.fromBytes(proj[1])
+  let validCount = columnBitmapCount(Buffer.toBytes(&projNullBuf), projRows)
   ColumnU64 {
-    length: proj[2],
-    nullCount: 0,
-    nullBitmap: Buffer.fromBytes(proj[1]),
+    length: projRows,
+    nullCount: projRows - validCount,
+    nullBitmap: projNullBuf,
     data: Buffer.fromBytes(proj[0]),
   }
+}
+
+/// Contiguous unboxed 64-bit floating-point columnar vector.
+///
+/// Stores IEEE-754 double precision floats in contiguous unboxed buffer memory
+/// alongside a null validity bitmap for SIMD-accelerated analytical processing.
+export type ColumnF64 = {
+  length: Int,
+  nullCount: Int,
+  nullBitmap: Buffer.Buffer,
+  data: Buffer.Buffer,
+}
+
+/// Allocates an empty 64-bit float column with preallocated capacity.
+export fn createF64(capacity: Int) -> ColumnF64 {
+  let numWords = (capacity + 63) / 64
+  let safeWords = if numWords < 1 { 1 } else { numWords }
+  let dataBytes = capacity * 8
+  let safeDataBytes = if dataBytes < 8 { 8 } else { dataBytes }
+  ColumnF64 {
+    length: 0,
+    nullCount: 0,
+    nullBitmap: Buffer.alloc(safeWords * 8),
+    data: Buffer.alloc(safeDataBytes),
+  }
+}
+
+/// Returns the number of rows stored in the float column.
+export fn lengthF64(col: &ColumnF64) -> Int {
+  col.length
+}
+
+/// Returns the number of null values in the float column.
+export fn nullCountF64(col: &ColumnF64) -> Int {
+  col.nullCount
+}
+
+/// Appends a valid 64-bit float scalar to the column.
+export fn appendF64(col: &ColumnF64, value: Float64) -> Option[ColumnF64] {
+  let idx = col.length
+  let wordIdx = idx / 64
+  let bitIdx = idx % 64
+
+  // Ensure capacity in data buffer
+  let neededData = (idx + 1) * 8
+  let curDataSize = Buffer.size(&col.data)
+  let baseData = if curDataSize < neededData {
+    let newCap = if curDataSize == 0 { 64 } else { curDataSize * 2 }
+    let expCap = if newCap < neededData { neededData } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.data, 0, &grown, 0, curDataSize) ?
+  } else {
+    col.data
+  }
+
+  // Ensure capacity in null bitmap
+  let neededBitmap = (wordIdx + 1) * 8
+  let curBitmapSize = Buffer.size(&col.nullBitmap)
+  let baseBitmap = if curBitmapSize < neededBitmap {
+    let newCap = if curBitmapSize == 0 { 16 } else { curBitmapSize * 2 }
+    let expCap = if newCap < neededBitmap { neededBitmap } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.nullBitmap, 0, &grown, 0, curBitmapSize) ?
+  } else {
+    col.nullBitmap
+  }
+
+  // Write float scalar data
+  let updatedData = Buffer.writeF64(&baseData, idx * 8, value) ?
+
+  // Update validity bit: read word, or-in (1 << bitIdx), write back
+  let curWord = Buffer.readU64(&baseBitmap, wordIdx * 8) ?
+  let bitMask = 1u64 << bitIdx
+  let updatedWord = curWord | bitMask
+  let updatedBitmap = Buffer.writeU64(&baseBitmap, wordIdx * 8, updatedWord) ?
+
+  Some(ColumnF64 {
+      length: idx + 1,
+      nullCount: col.nullCount,
+      nullBitmap: updatedBitmap,
+      data: updatedData,
+    })
+}
+
+/// Appends a null row to the float column.
+export fn appendNullF64(col: &ColumnF64) -> Option[ColumnF64] {
+  let idx = col.length
+  let wordIdx = idx / 64
+
+  // Ensure capacity in data buffer
+  let neededData = (idx + 1) * 8
+  let curDataSize = Buffer.size(&col.data)
+  let baseData = if curDataSize < neededData {
+    let newCap = if curDataSize == 0 { 64 } else { curDataSize * 2 }
+    let expCap = if newCap < neededData { neededData } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.data, 0, &grown, 0, curDataSize) ?
+  } else {
+    col.data
+  }
+
+  // Ensure capacity in null bitmap
+  let neededBitmap = (wordIdx + 1) * 8
+  let curBitmapSize = Buffer.size(&col.nullBitmap)
+  let baseBitmap = if curBitmapSize < neededBitmap {
+    let newCap = if curBitmapSize == 0 { 16 } else { curBitmapSize * 2 }
+    let expCap = if newCap < neededBitmap { neededBitmap } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.nullBitmap, 0, &grown, 0, curBitmapSize) ?
+  } else {
+    col.nullBitmap
+  }
+
+  // Data slot zeroes out with 0.0 float
+  let updatedData = Buffer.writeF64(&baseData, idx * 8, 0.0) ?
+
+  Some(ColumnF64 {
+      length: idx + 1,
+      nullCount: col.nullCount + 1,
+      nullBitmap: baseBitmap,
+      data: updatedData,
+    })
+}
+
+/// Checks whether the float row at `row` is null or out of bounds.
+export fn isNullF64(col: &ColumnF64, row: Int) -> Bool {
+  if row < 0 || row >= col.length {
+    true
+  } else {
+    let wordIdx = row / 64
+    let bitIdx = row % 64
+    let word = Buffer.readU64(&col.nullBitmap, wordIdx * 8)
+    let w = Option.unwrapOr(word, 0u64)
+    let mask = 1u64 << bitIdx
+    (w & mask) == 0u64
+  }
+}
+
+/// Retrieves the float scalar at `row`, returning `None` if the row is null or out of bounds.
+export fn getF64(col: &ColumnF64, row: Int) -> Option[Float64] {
+  if isNullF64(col, row) {
+    None
+  } else {
+    Buffer.readF64(&col.data, row * 8)
+  }
+}
+
+/// Computes the vectorized sum of all valid non-null elements in the float column.
+export fn sumF64(col: &ColumnF64) -> Float64 {
+  columnSumF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Computes the minimum value among valid non-null elements in the float column.
+export fn minF64(col: &ColumnF64) -> Option[Float64] {
+  columnMinF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Computes the maximum value among valid non-null elements in the float column.
+export fn maxF64(col: &ColumnF64) -> Option[Float64] {
+  columnMaxF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Evaluates the predicate `(value > threshold)` on valid float rows, producing a packed selection bitmap buffer.
+export fn filterGtF64(col: &ColumnF64, threshold: Float64) -> Buffer.Buffer {
+  let selBytes = columnFilterGtF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length, threshold)
+  Buffer.fromBytes(selBytes)
+}
+
+/// Evaluates the predicate `(value < threshold)` on valid float rows, producing a packed selection bitmap buffer.
+export fn filterLtF64(col: &ColumnF64, threshold: Float64) -> Buffer.Buffer {
+  let selBytes = columnFilterLtF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length, threshold)
+  Buffer.fromBytes(selBytes)
+}
+
+/// Gathers selected float rows according to `selection` bitmap into a new contiguous unboxed column.
+export fn projectF64(col: &ColumnF64, selection: &Buffer.Buffer) -> ColumnF64 {
+  let proj = columnProjectF64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), Buffer.toBytes(selection), col.length)
+  let projRows = proj[2]
+  let projNullBuf = Buffer.fromBytes(proj[1])
+  let validCount = columnBitmapCount(Buffer.toBytes(&projNullBuf), projRows)
+  ColumnF64 {
+    length: projRows,
+    nullCount: projRows - validCount,
+    nullBitmap: projNullBuf,
+    data: Buffer.fromBytes(proj[0]),
+  }
+}
+
+/// Vectorized element-wise addition of two float columns.
+///
+/// Produces a new float column containing the sum for each row where both inputs are non-null.
+export fn addF64(colA: &ColumnF64, colB: &ColumnF64) -> Option[ColumnF64] {
+  if colA.length != colB.length {
+    None
+  } else {
+    let res = columnAddF64(
+      Buffer.toBytes(&colA.data),
+      Buffer.toBytes(&colA.nullBitmap),
+      Buffer.toBytes(&colB.data),
+      Buffer.toBytes(&colB.nullBitmap),
+      colA.length
+    )
+    let resNullBuf = Buffer.fromBytes(res[1])
+    let validCount = columnBitmapCount(Buffer.toBytes(&resNullBuf), colA.length)
+    Some(ColumnF64 {
+        length: colA.length,
+        nullCount: colA.length - validCount,
+        nullBitmap: resNullBuf,
+        data: Buffer.fromBytes(res[0]),
+      })
+  }
+}
+
+/// Computes the bitwise AND of two row selection bitmaps.
+export fn bitmapAnd(b1: &Buffer.Buffer, b2: &Buffer.Buffer, rowCount: Int) -> Buffer.Buffer {
+  let resBytes = columnBitmapAnd(Buffer.toBytes(b1), Buffer.toBytes(b2), rowCount)
+  Buffer.fromBytes(resBytes)
+}
+
+/// Computes the bitwise OR of two row selection bitmaps.
+export fn bitmapOr(b1: &Buffer.Buffer, b2: &Buffer.Buffer, rowCount: Int) -> Buffer.Buffer {
+  let resBytes = columnBitmapOr(Buffer.toBytes(b1), Buffer.toBytes(b2), rowCount)
+  Buffer.fromBytes(resBytes)
+}
+
+/// Inverts the selection bitmap up to `rowCount` bits.
+export fn bitmapNot(b: &Buffer.Buffer, rowCount: Int) -> Buffer.Buffer {
+  let resBytes = columnBitmapNot(Buffer.toBytes(b), rowCount)
+  Buffer.fromBytes(resBytes)
+}
+
+/// Counts the number of active matching rows set in the selection bitmap.
+export fn bitmapCount(b: &Buffer.Buffer, rowCount: Int) -> Int {
+  columnBitmapCount(Buffer.toBytes(b), rowCount)
 }

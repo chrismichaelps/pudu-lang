@@ -46,6 +46,8 @@ preludeValueNames =
   , "bufferReadI64", "bufferWriteI64", "bufferReadF64", "bufferWriteF64", "bufferReadU32", "bufferWriteU32"
   , "bufferFill", "bufferCompare"
   , "columnSumU64", "columnMinU64", "columnMaxU64", "columnFilterGtU64", "columnProjectU64"
+  , "columnSumF64", "columnMinF64", "columnMaxF64", "columnFilterGtF64", "columnFilterLtF64"
+  , "columnProjectF64", "columnAddF64", "columnBitmapAnd", "columnBitmapOr", "columnBitmapNot", "columnBitmapCount"
   , "swissTableEmpty", "swissTableLookup", "swissTableInsert", "swissTableDelete", "swissTableEntries", "swissTableSize"
 
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"

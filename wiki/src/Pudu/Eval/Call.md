@@ -160,12 +160,16 @@ before effect handling to preserve compiler constant-folding and effect isolatio
 
 Include `BufferReadI64Builtin`, `BufferWriteI64Builtin`, `BufferReadF64Builtin`, `BufferWriteF64Builtin`,
 `BufferReadU32Builtin`, `BufferWriteU32Builtin`, `BufferFillBuiltin`, `BufferCompareBuiltin`,
-`ColumnSumU64Builtin`, `ColumnMinU64Builtin`, `ColumnMaxU64Builtin`, `ColumnFilterGtU64Builtin`, and
-`ColumnProjectU64Builtin` in `isBuiltinImmediate` so they evaluate immediately without task scheduling
-or effect handler interception.
+`ColumnSumU64Builtin`, `ColumnMinU64Builtin`, `ColumnMaxU64Builtin`, `ColumnFilterGtU64Builtin`,
+`ColumnProjectU64Builtin`, `ColumnSumF64Builtin`, `ColumnMinF64Builtin`, `ColumnMaxF64Builtin`,
+`ColumnFilterGtF64Builtin`, `ColumnFilterLtF64Builtin`, `ColumnProjectF64Builtin`, `ColumnAddF64Builtin`,
+`ColumnBitmapAndBuiltin`, `ColumnBitmapOrBuiltin`, `ColumnBitmapNotBuiltin`, and `ColumnBitmapCountBuiltin`
+in `isBuiltinImmediate` so they evaluate immediately without task scheduling or effect handler interception.
 
 ### Resolved Grill Log
 - **Q:** Route vectorized columnar reductions through IO effects? **A:** No; column operations are pure mathematical and projection transformations operating deterministically on unboxed memory.
+- **Q:** Route bitmap boolean algebra through immediate evaluation? **A:** Yes; bitmap bitwise operations are pure register bit operations without runtime side-effects.
+
 
 
 
