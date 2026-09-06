@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Eval.Foreign into layered dependency graph modules
+
+Decomposed the 511-line monolithic `src/Pudu/Eval/Foreign.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:
+- Isolated argument crossing preparation, arity checking (`E7016`), null-character string detection (`E7017`), integer bitwidth overflow/underflow checking (`E7018`), crossing type validation (`E7019`), and record field marshaling (`E7023`) into child module `Pudu.Eval.Foreign.Argument` (133 lines).
+- Refactored `Pudu.Eval.Foreign` into a focused invocation and settlement coordinator (390 lines) retaining symbol resolution, handle liveness preparation and leasing, cancellation masking, slot and result resource claiming, and post-call cleanup.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Foreign/Argument.md`) and updated `Foreign.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Format into layered dependency graph modules
 
 Decomposed the 510-line monolithic `src/Pudu/Format.hs` into a scalable, layered dependency graph architecture strictly under 300 lines per module:

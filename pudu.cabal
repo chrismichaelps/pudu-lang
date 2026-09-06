@@ -56,6 +56,7 @@ library
     Pudu.Eval.Install
     Pudu.Eval.Env
     Pudu.Eval.Foreign
+    Pudu.Eval.Foreign.Argument
     Pudu.Eval.Foreign.Resource
     Pudu.Eval.Foreign.Result
     Pudu.Eval.Method

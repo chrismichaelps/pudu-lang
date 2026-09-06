@@ -56,7 +56,7 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 
 ### Linkage
 
-- **Requires:** [[Eval Env]], [[Eval Value]], [[Foreign Call]], [[Foreign Crossing]].
+- **Requires:** [[Eval Env]], [[Eval Value]], [[Foreign Call]], [[Foreign Crossing]], [[src/Pudu/Eval/Foreign/Argument]], [[src/Pudu/Eval/Foreign/Result]], [[src/Pudu/Eval/Foreign/Resource]].
 - **Used by:** [[Eval Call]].
 
 ## Grill Log
@@ -78,6 +78,7 @@ callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 - **Q:** Turn invalid returned UTF-8 into replacement characters? **A:** No. _Rationale:_ replacement
   silently changes data at the least trustworthy boundary. _Rejected:_ lossy decoding; host
   exceptions escaping the evaluator.
+- **Q:** Why decompose Eval.Foreign into coordinator and Argument submodule? **A:** Separating argument crossing and arity/shape validation into `Pudu.Eval.Foreign.Argument` leaves the coordinator focused on symbol invocation, handle leasing, and result settlement, adhering to <500 lines per module.
 
 
 ## Rejected output batches
