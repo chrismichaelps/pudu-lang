@@ -32,3 +32,22 @@ controlled, not promised by this API. The module has no evaluator or frontend de
 ## Referenced by
 
 [[src/_MOC]] · [[Backend Representation Specialization]]
+
+## Native word-map algebra
+
+Four pure primitives `wordMapUnion`, `wordMapIntersection`, `wordMapDifference`, and
+`wordMapSymmetricDifference` each take two Map[K, UInt64] values and return Map[K, UInt64].
+Absent keys denote zero words; zero results are omitted. Shared keys retain the left key
+representative. UInt64 payloads are validated in ascending key order, left input before right,
+including entries the operation will discard. Invalid runtime values report E7001; wrong arity
+reports E7003. Existing argument evaluation remains left to right. These names are installed,
+typed and dispatched as pure primitives; Std.BitSet uses them directly.
+
+The internal `WordOperation` enum selects `combineMaps`: tree-native mergeWithKey applies OR,
+AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator first
+projects each map to checked Word64 payloads and maps the result back to UInt64 values. These
+intermediate native-word trees are an explicit allocation tradeoff, not an unboxed-storage claim.
+
+Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
+discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
+No tests, builds, reviews or measurements run.

@@ -507,6 +507,10 @@ isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
   HmacBuiltin -> True
   DeriveKeyBuiltin -> True
+  WordMapUnionBuiltin -> True
+  WordMapIntersectionBuiltin -> True
+  WordMapDifferenceBuiltin -> True
+  WordMapSymmetricDifferenceBuiltin -> True
   WordMapPopCountBuiltin -> True
   HashOfBuiltin -> True
   MixHashBuiltin -> True

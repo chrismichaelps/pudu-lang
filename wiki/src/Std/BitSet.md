@@ -32,10 +32,9 @@ still requires memory proportional to the result and is intended for materializa
 
 ## Algorithm and backend integration
 
-Membership and point edits cost O(log b) map operations for b occupied blocks. Algebra visits
-blocks, does fixed-width native bit operations, and assembles sorted output through `mapOf`,
-consuming [[Runtime Collection Kernels]]. Union and symmetric difference merge two ordered block
-arrays; intersection and difference scan left blocks with right-map lookup. Subset and disjointness
+Membership and point edits cost O(log b) map operations for b occupied blocks. Algebra calls
+[[Runtime Word Kernels]] through checked pure primitives, combining host trees without Pudu entry
+arrays or per-word interpreter calls. Subset and disjointness still use Pudu block scans and
 short-circuit at the first disproving block. Cardinality calls `wordMapPopCount`, which folds map payloads directly with native Word64
 population counts through [[Runtime Word Kernels]], avoiding entry arrays and interpreted bit loops. No FFI, IO, global mutation, unchecked memory or
 new surface syntax is introduced. The evaluator still boxes words and stores tree nodes: this is
@@ -74,3 +73,22 @@ type signatures, installation, builtin naming and pure dispatch. No IO or FFI ca
 Resolved Grill Log: Use an explicit primitive rather than recognize a library function by name,
 so shadowing and ordinary calls retain their meaning. Result width is UInt128; an Int-sized host
 map cannot contain enough 64-bit words to overflow it. This remains unvalidated.
+
+## Native word-map algebra
+
+Four pure primitives `wordMapUnion`, `wordMapIntersection`, `wordMapDifference`, and
+`wordMapSymmetricDifference` each take two Map[K, UInt64] values and return Map[K, UInt64].
+Absent keys denote zero words; zero results are omitted. Shared keys retain the left key
+representative. UInt64 payloads are validated in ascending key order, left input before right,
+including entries the operation will discard. Invalid runtime values report E7001; wrong arity
+reports E7003. Existing argument evaluation remains left to right. These names are installed,
+typed and dispatched as pure primitives; Std.BitSet uses them directly.
+
+The internal `WordOperation` enum selects `combineMaps`: tree-native mergeWithKey applies OR,
+AND, AND-complement or XOR without interpreted callbacks or entry arrays. The evaluator first
+projects each map to checked Word64 payloads and maps the result back to UInt64 values. These
+intermediate native-word trees are an explicit allocation tradeoff, not an unboxed-storage claim.
+
+Resolved Grill Log: Validate all payloads before algebra so malformed values cannot hide in a
+discarded branch. Drop all zero results, including unmatched zeros, for canonical sparse output.
+No tests, builds, reviews or measurements run.

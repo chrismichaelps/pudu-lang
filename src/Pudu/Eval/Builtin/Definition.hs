@@ -73,6 +73,10 @@ data Builtin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
+  | WordMapUnionBuiltin
+  | WordMapIntersectionBuiltin
+  | WordMapDifferenceBuiltin
+  | WordMapSymmetricDifferenceBuiltin
   | WordMapPopCountBuiltin
   | HashOfBuiltin
   | MixHashBuiltin
@@ -168,6 +172,10 @@ builtinName value = case value of
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"
+  WordMapUnionBuiltin -> "wordMapUnion"
+  WordMapIntersectionBuiltin -> "wordMapIntersection"
+  WordMapDifferenceBuiltin -> "wordMapDifference"
+  WordMapSymmetricDifferenceBuiltin -> "wordMapSymmetricDifference"
   WordMapPopCountBuiltin -> "wordMapPopCount"
   HashOfBuiltin -> "hashOf"
   MixHashBuiltin -> "mixHash"

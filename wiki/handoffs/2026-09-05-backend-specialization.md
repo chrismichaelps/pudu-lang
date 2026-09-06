@@ -103,3 +103,13 @@ fallible Word64 reduction over host maps; preserve unrelated work. No validation
 Implemented native cardinality and connected Std.BitSet.size. Algebra still runs in Pudu.
 Exact next action: introduce checked native block-algebra primitives for Std.BitSet union and
 intersection, preserving sorted keys and canonical nonzero words.
+
+## Native block algebra ownership
+
+Runtime Implementer owns Runtime.Word, Eval.WordMap, existing primitive registration modules,
+Std.BitSet algebra and their mirrors. Previous turn was progress: a0d2846 pushed. Replace Pudu
+block loops with checked native tree algebra. Preserve unrelated changes. No validation commands.
+
+Implemented all four algebra kernels and STD consumers, unvalidated.
+Exact next action: move sparse subset/disjoint predicates into short-circuiting host-map kernels
+without allocating result maps.

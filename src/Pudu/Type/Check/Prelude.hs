@@ -143,6 +143,9 @@ declareBuiltinConstructors = do
   bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "deriveKey"
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  mapM_ (\name -> bindName name
+    (polytype [("K", 0)] [] (FunctionTypeValue False [wordMapType, wordMapType] wordMapType)))
+    ["wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"]
   bindName "wordMapPopCount"
     (polytype [("K", 0)] [] (FunctionTypeValue False
       [NominalType "Map" [RigidType "K", NominalType "UInt64" []]]
@@ -156,6 +159,7 @@ declareBuiltinConstructors = do
   bindName "bytesOf"
     (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
  where
+  wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   optionOf = NominalType "Option" [RigidType "T"]
   resultOf = NominalType "Result" [RigidType "T", RigidType "E"]

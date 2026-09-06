@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native sparse word algebra
+
+[[Std BitSet]] now delegates four algebra operations to [[Runtime Word Kernels]] through
+[[Eval Word Map]]. Checked UInt64 payload trees combine using native bit operations and omit
+zero results. Removes interpreted merge loops and entry arrays; temporary native-word maps
+remain an allocation tradeoff. No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Native word-map cardinality
 
 Added [[Runtime Word Kernels]] and [[Eval Word Map]], wired through the pure prelude as
