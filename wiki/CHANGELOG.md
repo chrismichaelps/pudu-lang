@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Foreign.Call into layered dependency graph modules
+
+Decomposed the 606-line monolithic `src/Pudu/Foreign/Call.hs` into a scalable, layered dependency graph FFI architecture strictly under 450 lines per module:
+- Isolated dynamic library handle management (`ForeignHandle`, `openedLibraries`), candidate name resolution (`candidates`, `tryCandidates`), process symbol discovery (`openProcess`), library loading (`openLibrary`), dynamic symbol lookup (`findSymbol`), lock-free address caching (`resolvedSymbols`, `resolveSymbol`), and low-level dynamic linker FFI imports (`c_open`, `c_symbol`, `c_error`) into child module `Pudu.Foreign.Call.Library` (146 lines).
+- Refactored `Pudu.Foreign.Call` into a focused native call bridge and parameter marshaling coordinator (443 lines) retaining `c_call`, argument layout and array staging, slot taking and leaf unrolling, text copying and UTF-8 verification, and record field reconstruction, while re-exporting all library resolution functions for zero public API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Foreign/Call/Library.md`) and updated `Foreign/Call.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Eval.Call into layered dependency graph modules
 
 Decomposed the 563-line monolithic `src/Pudu/Eval/Call.hs` into a scalable, layered dependency graph runtime architecture strictly under 390 lines per module:

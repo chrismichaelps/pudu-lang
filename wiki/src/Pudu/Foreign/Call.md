@@ -83,7 +83,7 @@ kindCode    :: Crossing -> Word8
 
 ### Linkage
 
-- **Requires:** [[Foreign Crossing]], `cbits/pudu_ffi.c`.
+- **Requires:** [[Foreign Crossing]], [[Foreign Call Library]], `cbits/pudu_ffi.c`.
 - **Used by:** [[Eval Foreign]].
 
 ## Grill Log
@@ -107,6 +107,10 @@ kindCode    :: Crossing -> Word8
 - **Q:** Decode returned bytes with the process locale? **A:** No. _Rationale:_ Pudu source and
   strings are Unicode, and the same library call must not mean different text because one host was
   started under a different locale. _Rejected:_ locale-dependent `CString` conversion; lossy UTF-8.
+- **Q:** Why decompose library loading and symbol caching into `Pudu.Foreign.Call.Library`?
+  **A:** To satisfy file length contracts (< 500 lines) and isolate loader candidate exploration,
+  process symbol reflection, and lock-free address caching from low-level FFI marshaling and call execution.
+  _Rationale:_ dynamic library loading and symbol finding are distinct from the C call bridge and data marshaling.
 
 ## Post-call conversion failures
 
