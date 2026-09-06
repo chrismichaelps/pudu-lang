@@ -48,3 +48,11 @@ static plans, typed slots, per-render reuse and bounded accepted UTF-8 output. O
 buffered; limits do not bound peak allocation. No tests, builds, reviews or measurements.
 Exact next action: integrate application-owned prepared plans into Notes routes and add HTTP
 conditional response handling with explicit private/public cache policy.
+
+## Enterprise configuration and mail boundary
+
+STD Implementer owns App numeric admission and configurable request limits, Mail validation and
+serialization, mirrors and deployment contract. LSP changes remain untouched. No testing or
+reviews performed. Universal deployment and enterprise readiness remain unproven.
+Exact next action: implement bounded concurrent request admission with configurable deadlines
+and draining, keeping it independent of provider-specific request adapters.

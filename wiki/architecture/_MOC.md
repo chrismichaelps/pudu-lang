@@ -40,3 +40,5 @@ Pudu is a statically typed native systems language for developers who need predi
 ## Referenced by
 
 [[00-INDEX]] · [[architecture/OVERVIEW]] · [[Tooling]]
+
+- [[Application Deployment Contract]] — process and platform adapter boundaries, security and scaling obligations.

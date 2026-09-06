@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Configuration admission and mail hardening
+
+[[Std App]] rejects malformed server settings before resource startup and exposes request byte
+limits. [[Std Mail]] revalidates public address records at the outbound boundary, rejects header
+controls and mailbox-list delimiters, normalizes SMTP body lines and offers renderChecked.
+[[Application Deployment Contract]] defines process/platform boundaries and remaining obligations.
+No tests, builds, reviews or measurements run.
+
 ## 2026-09-06 — Reusable server rendering
 
 [[Std Html]] now collects fragments and joins once instead of joining every subtree. Added

@@ -67,7 +67,9 @@ const DEFAULT_CONFIG_PATH: Str = "app.toml"
 const DEFAULT_SETTINGS: Array[(Str, Str)] = [
   ("server.host", DEFAULT_HOST),
   ("server.port", "8080"),
-  ("server.connections", "0")
+  ("server.connections", "0"),
+  ("server.headBytes", "65536"),
+  ("server.bodyBytes", "8388608")
 ]
 
 /// A name and a router, and a service is running.
@@ -291,12 +293,19 @@ export fn explainReport(held: &Report) -> Str {
 /// Stopping happens whether the serving succeeded or not, because the reason a
 /// program stopped serving is never a reason to leave its pool open.
 export fn run(target: &App) -> Result[Int, AppError] {
+  let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
+  let port = serverNumber(&target.config, "server.port", DEFAULT_PORT) ?
+  let limit = serverNumber(&target.config, "server.connections", 0) ?
+  let headBytes = serverNumber(&target.config, "server.headBytes", 65536) ?
+  let bodyBytes = serverNumber(&target.config, "server.bodyBytes", 8388608) ?
+  if host.trim().isEmpty() { return Err(Configuration("server.host must not be empty")) }
+  if port < 0 || port > 65535 { return Err(Configuration("server.port must be in 0..65535")) }
+  if limit < 0 { return Err(Configuration("server.connections must be nonnegative")) }
+  if headBytes < 1 { return Err(Configuration("server.headBytes must be positive")) }
+  if bodyBytes < 0 { return Err(Configuration("server.bodyBytes must be nonnegative")) }
   let coming = start(target)
   if let Some(problem) = coming.failure { return Err(StageFailed(problem[0], problem[1])) }
-  let host = Config.textOr(&target.config, "server.host", DEFAULT_HOST)
-  let port = Config.wholeOr(&target.config, "server.port", DEFAULT_PORT)
-  let limit = Config.wholeOr(&target.config, "server.connections", 0)
-  var listening = Server.server(&target.router)
+  var listening = Server.withLimits(&Server.server(&target.router), headBytes, bodyBytes)
   for step in target.steps { listening = Server.using(&listening, step) }
   let served = Server.listenAndServe(&listening, host, port, limit)
   let stopped = stop(target)
@@ -380,5 +389,13 @@ fn counting(into: Sync.Cell[Metrics.Metrics]) -> Route.Middleware {
     let timed = Metrics.observe(&counted, REQUEST_MILLISECONDS, &labels, clock() - began)
     let _kept = Sync.set(&store, timed)
     answer
+  }
+}
+
+fn serverNumber(settings: &Config.Config, key: Str, fallback: Int) -> Result[Int, AppError] {
+  match Config.whole(settings, key) {
+    case Ok(value) => Ok(value)
+    case Err(Config.Missing(_)) => Ok(fallback)
+    case Err(_) => Err(Configuration(key + " must be a whole number"))
   }
 }

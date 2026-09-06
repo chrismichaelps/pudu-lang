@@ -108,3 +108,12 @@ These callbacks cover typed returns, not host panic or forced cancellation.
 - **Q:** Return success when serving ends but teardown fails? **A:** No; return `StopFailed`.
 
 [[Std App Database]] is the optional database stage adapter, with pool-backed parameterized queries.
+
+## Validated server configuration
+
+App.run validates port (0..65535), total connection limit (nonnegative), header byte limit
+(positive) and body byte limit (nonnegative) before starting stages. Absent settings use defaults;
+malformed settings fail as Configuration naming the key without reflecting its value. New keys
+server.headBytes and server.bodyBytes feed Server.withLimits. server.connections remains a total
+accept limit, not a concurrency bound. Resolved Grill Log: a typo must not silently disable a
+limit, and invalid configuration must not open database resources.

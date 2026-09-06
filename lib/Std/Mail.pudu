@@ -41,14 +41,14 @@ const BREAKS: Set[Str] = setOf(["\r", "\n"])
 /// something the caller believes carries what they gave it.
 export fn address(written: Str) -> Result[Address, MailError] {
   let trimmed = written.trim()
-  if hasBreak(trimmed) {
+  if hasBreak(written) || hasControl(written) {
     Err(HeaderBreak(written))
   } else {
     let at = trimmed.indexOf("@")
     if at <= 0 || at == trimmed.length() - 1 {
       Err(NotAnAddress(written))
     } else {
-      if trimmed.contains(" ") || trimmed.drop(at + 1).contains("@") {
+      if invalidMailbox(trimmed) || trimmed.drop(at + 1).contains("@") {
         Err(NotAnAddress(written))
       } else {
         Ok(Address{written: trimmed})
@@ -62,7 +62,9 @@ export fn addressText(held: &Address) -> Str { held.written }
 
 /// A message from somebody to somebody, about something.
 export fn message(from: &Address, to: &Address, subject: Str, body: Str) -> Result[Message, MailError] {
-  if hasBreak(subject) {
+  let _sender = address(from.written) ?
+  let _recipient = address(to.written) ?
+  if hasControl(subject) {
     Err(HeaderBreak(subject))
   } else {
     Ok(
@@ -115,11 +117,19 @@ export fn headers(held: &Message) -> Array[(Str, Str)] {
 
 /// Whether a message can be sent at all.
 export fn sendable(held: &Message) -> Result[(), MailError] {
-  if envelope(held).length() == 0 {
-    Err(NoRecipient)
-  } else {
-    if hasBreak(held.subject) { Err(HeaderBreak(held.subject)) } else { Ok(()) }
+  let _sender = address(held.from.written) ?
+  let recipients = envelope(held)
+  if recipients.isEmpty() { return Err(NoRecipient) }
+  for recipient in recipients {
+    let _valid = address(recipient.written) ?
   }
+  if hasControl(held.subject) { Err(HeaderBreak(held.subject)) } else { Ok(()) }
+}
+
+/// Validate public records again at the outbound boundary.
+export fn renderChecked(held: &Message) -> Result[Str, MailError] {
+  sendable(held) ?
+  Ok(render(held))
 }
 
 /// What goes on the wire.
@@ -129,15 +139,15 @@ export fn sendable(held: &Message) -> Result[(), MailError] {
 /// property of the format rather than of the message, and a caller who has not
 /// read the format has no reason to know it.
 export fn render(held: &Message) -> Str {
-  var written = ""
-  for entry in headers(held) { written = written + entry[0] + ": " + entry[1] + "\r\n" }
-  written + "\r\n" + stuffed(held.body)
+  var pieces: Array[Str] = []
+  for entry in headers(held) { pieces = pieces.push(entry[0] + ": " + entry[1] + "\r\n") }
+  pieces.push("\r\n").push(stuffed(held.body)).join("")
 }
 
 /// A body with the lines that would end it escaped.
 export fn stuffed(body: Str) -> Str {
   var lines: Array[Str] = []
-  for line in body.replace("\r\n", "\n").split("\n") {
+  for line in body.replace("\r\n", "\n").replace("\r", "\n").split("\n") {
     lines = lines.push(if line.startsWith(".") { "." + line } else { line })
   }
   lines.join("\r\n")
@@ -157,7 +167,7 @@ export fn hasBlindCopies(held: &Message) -> Bool { held.blindCopies.length() > 0
 export fn explain(problem: &MailError) -> Str {
   match problem {
     case NotAnAddress(_written) => "that is not an address a message can be sent to"
-    case HeaderBreak(_written) => "that carries a line break, which would begin another header"
+    case HeaderBreak(_written) => "that carries a forbidden header control character"
     case NoRecipient => "the message names nobody to send it to"
   }
 }
@@ -176,4 +186,19 @@ fn joined(addresses: &Array[Address]) -> Str {
   var written: Array[Str] = []
   for one in addresses { written = written.push(one.written) }
   written.join(", ")
+}
+
+fn hasControl(value: Str) -> Bool {
+  for character in value.chars() {
+    if character.code() < 32 || character.code() == 127 { return true }
+  }
+  false
+}
+
+fn invalidMailbox(value: Str) -> Bool {
+  if hasControl(value) { return true }
+  for character in value.chars() {
+    if " <>(),;:\"[]\\".contains(character.toText()) { return true }
+  }
+  false
 }

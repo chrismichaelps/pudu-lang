@@ -54,3 +54,17 @@ the part that can be checked exhaustively.
   checkable part need a server. _Rejected:_ one module.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Safe]] · [[Std Tls]] · [[Std Validate]]
+
+## Checked outbound serialization
+
+Address parsing rejects raw CR/LF before trimming, ASCII control characters and mailbox-list
+delimiters. The supported form is a simple bare mailbox, not display names or full RFC mailbox
+grammar. message validates supplied sender/recipient records; sendable revalidates the sender and
+every envelope address, including Bcc, as records remain publicly constructible. Subjects reject
+ASCII controls. renderChecked validates before serializing. The old render remains an unchecked
+serialization helper for compatibility; sending adapters must call renderChecked or sendable.
+Body line endings normalize CRLF and lone CR before SMTP dot stuffing. Rendering joins header
+fragments once. This remains SMTP DATA-form output, not a provider REST payload or full MIME
+encoder. SMTPUTF8/8BITMIME negotiation, encoded headers and delivery are not implemented here.
+Resolved Grill Log: validation at construction is insufficient for public records; repeat it at
+the outbound boundary. Never expose blind recipients in headers.
