@@ -14,23 +14,41 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Sequence as Seq
 
 buildMap :: Ord k => [(k, v)] -> Map.Map k v
-buildMap input =
-  let (prefix, remaining) = orderedPrefix fst keepKey input
-   in foldl' insert (Map.fromDistinctAscList prefix) remaining
+buildMap = buildRuns Map.empty nextRun (Map.unionWith (\_ newer -> newer))
  where
   keepKey (key, _) (_, value) = (key, value)
-  insert table (key, value) = Map.insertWith const key value table
+  nextRun input =
+    let (prefix, remaining) = orderedPrefix fst keepKey input
+     in (Map.fromDistinctAscList prefix, remaining)
 {-# INLINE buildMap #-}
 
 buildSet :: Ord a => [a] -> Set.Set a
-buildSet input =
-  let (prefix, remaining) = orderedPrefix id const input
-   in foldl' insert (Set.fromDistinctAscList prefix) remaining
+buildSet = buildRuns Set.empty nextRun Set.union
  where
-  insert members value
-    | Set.member value members = members
-    | otherwise = Set.insert value members
+  nextRun input =
+    let (prefix, remaining) = orderedPrefix id const input
+     in (Set.fromDistinctAscList prefix, remaining)
 {-# INLINE buildSet #-}
+
+{-| Carry equal-rank chronological groups, retaining only logarithmically many roots.
+    The combining function always receives older input before newer input. -}
+buildRuns :: c -> ([a] -> (c, [a])) -> (c -> c -> c) -> [a] -> c
+buildRuns empty nextRun merge = consume []
+ where
+  consume pending [] = case pending of
+    [] -> empty
+    (_, latest) : earlier -> foldl' (\newer (_, older) -> merge older newer) latest earlier
+  consume pending input =
+    let (run, remaining) = nextRun input
+        next = carry (0 :: Int) run pending
+     in run `seq` next `seq` consume next remaining
+  carry rank newer pending = case pending of
+    (olderRank, older) : rest
+      | olderRank == rank ->
+          let combined = merge older newer
+           in combined `seq` carry (rank + 1) combined rest
+    _ -> (rank, newer) : pending
+{-# INLINE buildRuns #-}
 
 {-| Detect either monotone direction and return an ascending canonical prefix.
     Equal representatives combine in input order, independently of direction. -}

@@ -139,3 +139,5 @@ Legacy list-returning keyed helpers remain for callers that require lists.
 - **Q:** Duplicate storage loops in each value adapter? **A:** No; share the internal generic kernel without changing public STD behavior.
 
 The shared [[Runtime Collection Kernels]] bulk loader now recognizes both ascending and descending prefixes; duplicate handling still follows original input order.
+
+Map/Set constructors now use balanced monotone-run assembly in [[Runtime Collection Kernels]], superseding insertion fallback after the first prefix. Chronological duplicate precedence is preserved across run merges.

@@ -39,3 +39,20 @@ repeated insertion. Arbitrary input retains the persistent fallback.
 ### Resolved Grill Log
 - **Q:** Sort every input to recognize reverse order? **A:** No; select direction during the existing scan.
 - **Q:** Reverse duplicate precedence with descending keys? **A:** No; combine duplicates in original input order before ordering the canonical prefix.
+
+## Balanced monotone-run assembly
+
+Bulk construction now scans every monotone run, not only the initial prefix. Each canonical run
+builds a tree directly. A binary carry stack merges equally ranked groups; its roots represent
+chronologically contiguous runs, with newer groups nearest the front. Final folding combines older
+groups before newer ones. Map merging keeps the older key representative and newer payload;
+Set merging keeps the older representative. Rank counts runs, not entries, and bounds the number
+of pending roots logarithmically in the run count. A single monotone input still builds once.
+
+This supersedes strict per-element fallback after the first direction change. It targets partially
+ordered workloads without changing immutable output or equality. Merge cost depends on run sizes
+and overlap; no measured speedup or universal improvement over incremental construction is claimed.
+
+### Resolved Grill Log
+- **Q:** Merge each new run into one growing tree immediately? **A:** No; equal-rank carries prevent repeatedly joining every short run against the full history.
+- **Q:** Reorder runs by size and lose duplicate precedence? **A:** No; stack groups preserve chronological order, and merge argument order is explicit.

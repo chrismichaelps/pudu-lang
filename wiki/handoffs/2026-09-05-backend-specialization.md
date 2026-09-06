@@ -66,3 +66,7 @@ Runtime Implementer owns Runtime.Collection, Eval.Keyed and Eval.HashMap integra
 ## Bidirectional bulk loading
 
 Own Runtime.Collection and its mirror for monotone-direction detection. Map and Set consumers now bulk-load descending as well as ascending prefixes, preserving first representatives and latest map payloads. No measurements, tests, builds or reviews run.
+
+## Balanced run assembly continuation
+
+Runtime.Collection now bulk-builds every monotone run and combines chronological groups through a binary carry stack. Map/Set adapters consume it without changes. No measurements, tests, builds or reviews run.

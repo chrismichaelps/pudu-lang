@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Balanced collection run assembly
+
+- Bulk-build all monotone input runs and merge them through a balanced carry stack.
+- Preserve chronological key representatives and latest map payloads across merges.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-06 — Bidirectional collection bulk loading
 
 - Detect ascending or descending input prefixes in the shared Map/Set storage kernel.
