@@ -53,12 +53,13 @@ Key operations:
 - **Q:** How does bitmap algebra avoid temporary memory allocation in multi-predicate queries? **A:** Predicates emit packed bit-buffers that combine in 64-row machine cycles using single ALU instructions (`.&.`, `.|.`, `complement`), avoiding row ID array instantiation.
 - **Q:** Why use permutation index vectors for sorting instead of sorting rows in-place? **A:** Decoupling physical layout from logical order allows multiple different sorts and secondary indexes over the same underlying column data without copying megabytes of buffer memory.
 - **Q:** How does binary search handle null rows? **A:** Sorting partitions null rows to the end (`NULLS LAST`). Binary search restricts its search interval to `[0 .. validCount - 1]`, guaranteeing non-null comparisons.
+- **Q:** Why extract permutation indexing into `Runtime.Column.Index`? **A:** Isolating permutation sorting, binary search, and gather kernels into `Pudu.Runtime.Column.Index` separates logical index acceleration from base aggregations and filtering, keeping `Pudu.Runtime.Column` under 500 lines.
 
 
 
 ## Dependencies and consumers
 
-- **Requires:** [[Runtime Buffer Kernels]], [[Runtime Word Kernels]].
+- **Requires:** [[Runtime Buffer Kernels]], [[Runtime Word Kernels]], [[src/Pudu/Runtime/Column/Index]].
 - **Consumed by:** [[Eval Column]], [[Std Column]].
 
 ## Referenced by

@@ -181,6 +181,7 @@ library
     Pudu.Runtime.SwissTable
     Pudu.Eval.SwissTable
     Pudu.Runtime.Column
+    Pudu.Runtime.Column.Index
     Pudu.Eval.Column
 
   c-sources:        cbits/pudu_ffi.c

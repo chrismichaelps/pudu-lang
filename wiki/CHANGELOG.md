@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Runtime.Column into layered dependency graph modules
+
+Decomposed the 521-line monolithic `src/Pudu/Runtime/Column.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:
+- Isolated row validity testing (`isRowValid`), unsigned/float permutation index sorting (`columnSortIndicesU64`, `columnSortIndicesF64`), logarithmic binary search (`columnBinarySearchU64`, `columnBinarySearchF64`), and row permutation gather kernels (`columnGatherU64`, `columnGatherF64`) into child module `Pudu.Runtime.Column.Index` (150 lines).
+- Refactored `Pudu.Runtime.Column` into a focused aggregation and bitmap coordinator (396 lines) retaining continuous memory allocations, SIMD/SWAR vector aggregations (`columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnSumF64`, `columnMinF64`, `columnMaxF64`), vector predicates and projections (`columnFilterGtU64`, `columnProjectU64`, `columnFilterGtF64`, `columnFilterLtF64`, `columnProjectF64`, `columnAddF64`), and bitwise algebra (`columnBitmapAnd`, `columnBitmapOr`, `columnBitmapNot`, `columnBitmapCount`) while re-exporting all index operations.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Runtime/Column/Index.md`) and updated `Column.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Frontend.Expand into layered dependency graph modules
 
 Decomposed the 515-line monolithic `src/Pudu/Frontend/Expand.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:
