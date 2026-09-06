@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Frontend.ParserExpressionSpec into layered dependency graph modules
+
+Decomposed the 638-line monolithic `test/Pudu/Frontend/ParserExpressionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 180 lines per module:
+- Extracted shared parser runners, block builders, diagnostic extractors, and AST shape normalizers into `Pudu.Frontend.ParserExpression.Common` (178 lines).
+- Isolated binary precedence, associativity, closed binary vocabulary, precedence bands, and line-leading continuation into `Pudu.Frontend.ParserExpression.PrecedenceSpec` (145 lines).
+- Isolated literals, lambda forms, type arguments vs indexing, postfix member/call chaining, await, and collection/record aggregates into `Pudu.Frontend.ParserExpression.PrimarySpec` (133 lines).
+- Isolated unary expressions, conditional blocks, if-let refutable pattern binding, loop/while/for control expressions, and control recovery into `Pudu.Frontend.ParserExpression.ControlSpec` (133 lines).
+- Isolated expression recovery, reserved keyword guidance, hostile nesting chains, ambiguous tails, hostile conditionals, and budget exhaustion into `Pudu.Frontend.ParserExpression.RecoverySpec` (130 lines).
+- Refactored `Pudu.Frontend.ParserExpressionSpec` into a thin coordinator (67 lines) re-exporting all 20 QuickCheck properties with zero semantic delta.
+- Registered all 5 new submodules in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Repl.SessionSpec into layered dependency graph modules
 
 Decomposed the 681-line monolithic `test/Pudu/Repl/SessionSpec.hs` into a scalable, layered dependency graph test architecture strictly under 330 lines per module:

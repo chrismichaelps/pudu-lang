@@ -257,6 +257,11 @@ test-suite pudu-test
     Pudu.Frontend.ParserPatternSpec
     Pudu.Frontend.ParserTypeDeclarationSpec
     Pudu.Frontend.ParserExpressionSpec
+    Pudu.Frontend.ParserExpression.Common
+    Pudu.Frontend.ParserExpression.PrecedenceSpec
+    Pudu.Frontend.ParserExpression.PrimarySpec
+    Pudu.Frontend.ParserExpression.ControlSpec
+    Pudu.Frontend.ParserExpression.RecoverySpec
     Pudu.Frontend.ParserTypeSpec
     Pudu.Frontend.SyntaxSpec
     Pudu.Frontend.TokenSpec
