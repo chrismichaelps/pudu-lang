@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Eval.Call into layered dependency graph modules
+
+Decomposed the 563-line monolithic `src/Pudu/Eval/Call.hs` into a scalable, layered dependency graph runtime architecture strictly under 390 lines per module:
+- Isolated dotted path resolution (`readPath`), member chain path lookup (`pathValue`), module name segment extraction (`lastPathSegment`), AST path flattening (`flattenPath`), longest-prefix binding resolution (`longestBinding`), trait-qualified callee dispatch (`qualifiedCallee`, `qualifiedParts`), and type argument syntax extraction (`typeArgumentNames`, `typeArgumentName`) into child module `Pudu.Eval.Call.Path` (133 lines).
+- Migrated pure primitive hash/buffer predicate `isHashingBuiltin` (64 lines) to `Pudu.Eval.Builtin`, keeping pure primitives co-located with their evaluator implementation.
+- Refactored `Pudu.Eval.Call` into a focused invocation, closure application, and task/scope management coordinator (384 lines) while re-exporting `readPath`, `pathValue`, and `lastPathSegment` for zero public API regression.
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Eval/Call/Path.md`) and updated `Call.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Type.Check.Expression into layered dependency graph modules
 
 Decomposed the 521-line monolithic `src/Pudu/Type/Check/Expression.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:

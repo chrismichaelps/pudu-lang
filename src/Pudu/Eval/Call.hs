@@ -19,9 +19,6 @@ module Pudu.Eval.Call
   , scopeTo
   ) where
 
-import Data.Foldable (toList)
-import Data.List (inits)
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -43,12 +40,20 @@ import Pudu.Eval.Builtin
   , callShow
   , callStringMethod
   , isDecimalBuiltin
+  , isHashingBuiltin
   )
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar)
 import Control.Exception (SomeException, try)
 import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Bytes (callBytesMethod, callBytesOf)
+import Pudu.Eval.Call.Path
+  ( lastPathSegment
+  , pathValue
+  , qualifiedCallee
+  , readPath
+  , typeArgumentNames
+  )
 import Pudu.Eval.HashMap (callBucketsMethod, callBucketsOf)
 import Pudu.Eval.Concurrent (threadRegister)
 import Pudu.Eval.Foreign (callForeign)
@@ -76,7 +81,6 @@ import Pudu.Eval.Loop
   ( firstBound
   , receiverOwners
   )
-import Pudu.Eval.Install (lastSegmentOf)
 import Pudu.Eval.Operator (readMember, unwrapTry)
 import Pudu.Eval.Render (valueKind)
 import Pudu.Eval.Value
@@ -86,14 +90,12 @@ import Pudu.Eval.Value
   , Value (..)
   )
 import Pudu.Frontend.Syntax.Located (Located (..))
-import Pudu.Frontend.Syntax.Name (ModuleName (..), moduleNameText)
 import Pudu.Frontend.Syntax.Tree
   ( Block (..)
   , Expression (..)
   , Function (..)
   , FunctionBody (..)
   , Parameter (..)
-  , TypeSyntax (..)
   )
 import Pudu.Source (Span)
 
@@ -211,78 +213,6 @@ evaluateCallee needs located@(Located calleeSpan expression) = case expression o
       _ -> readMember calleeSpan receiver (locatedValue member)
   _ -> callEvaluate needs located
 
-{-| A two-segment path in callee position may select a method explicitly: by the
-    type that implements it, as in `Bot.label(bot)`, or by the trait that
-    declares it, as in `A.label(bot)`. The trait form dispatches on the first
-    argument's type, which is the receiver the method is being called on. -}
-qualifiedCallee :: Located Expression -> [Value] -> Evaluator (Maybe Value)
-qualifiedCallee (Located _ expression) values = case qualifiedParts expression of
-  Nothing -> pure Nothing
-  Just (first, method) -> do
-    direct <- lookupName (first <> "." <> method)
-    case direct of
-      Just found -> pure (Just found)
-      Nothing -> case values of
-        receiver : _ -> do
-          owners <- receiverOwners receiver
-          firstBound (\owner -> lookupName (first <> "." <> owner <> "." <> method)) owners
-        [] -> pure Nothing
-
-{-| A qualified callee reaches the parser as a member access on a bare name, so
-    `A.label` and a two-segment path are the same selection written twice. -}
-
-{-| A qualified callee reaches the parser as a member access on a bare name, so
-    `A.label` and a two-segment path are the same selection written twice. -}
-qualifiedParts :: Expression -> Maybe (Text, Text)
-qualifiedParts expression = case expression of
-  NameExpression (first :| [method]) -> Just (first, method)
-  MemberExpression (Located _ (NameExpression (first :| []))) member ->
-    Just (first, locatedValue member)
-  _ -> Nothing
-
-{-| Read a dotted path.
-
-    A path may name a value and then reach into it, or it may name a linked
-    module's member: `Std.List.sum` is one binding, while `point.x.y` is three
-    reads. The longest resolving prefix decides which, because a module path is
-    always fully written and a value's own name never contains a dot — so the
-    longer match is the one the reader meant, and preferring it cannot shadow a
-    local. -}
-readPath :: Span -> NonEmpty Text -> Evaluator Value
-readPath spanValue path@(first :| rest) = do
-  linked <- longestBinding path
-  case linked of
-    Just (value, remaining) -> foldMember value remaining
-    Nothing -> do
-      found <- lookupName first
-      base <- case found of
-        Just value -> pure value
-        Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> first) Nothing
-      foldMember base rest
- where
-  foldMember value segments = case segments of
-    [] -> pure value
-    segment : remaining -> do
-      next <- readMember spanValue value segment
-      foldMember next remaining
-
-{-| A member chain read as one dotted name, when every part of it is a plain
-    identifier and the whole thing is bound. Anything else is `Nothing`, so an
-    ordinary field read is untouched. -}
-
-{-| A member chain read as one dotted name, when every part of it is a plain
-    identifier and the whole thing is bound. Anything else is `Nothing`, so an
-    ordinary field read is untouched. -}
-pathValue :: Expression -> Evaluator (Maybe Value)
-pathValue expression = case flattenPath expression of
-  Nothing -> pure Nothing
-  Just path -> lookupName (Text.intercalate "." path)
-
-{-| The segments of a chain of names and member accesses, or nothing when any
-    part of it is a real expression. -}
-
-lastPathSegment :: ModuleName -> Text
-lastPathSegment (ModuleName segments) = lastSegmentOf segments
 
 {-| Await starts the retained async body. The tree evaluator has no scheduler,
     but preserving this cold boundary keeps calls and awaits observably ordered. -}
@@ -330,48 +260,6 @@ scopeTo environment value = case value of
         FunctionValue closure{closureCaptured = Just environment}
   other -> other
 
-{-| The segments of a chain of names and member accesses, or nothing when any
-    part of it is a real expression. -}
-flattenPath :: Expression -> Maybe [Text]
-flattenPath expression = case expression of
-  NameExpression names -> Just (toList names)
-  MemberExpression (Located _ target) member ->
-    (<> [locatedValue member]) <$> flattenPath target
-  _ -> Nothing
-
-{-| The longest dotted prefix of a path that is bound, with the segments it did
-    not consume. A single segment is not reported here: it is the ordinary case
-    and the caller handles it without this search. -}
-
-{-| The longest dotted prefix of a path that is bound, with the segments it did
-    not consume. A single segment is not reported here: it is the ordinary case
-    and the caller handles it without this search. -}
-longestBinding :: NonEmpty Text -> Evaluator (Maybe (Value, [Text]))
-longestBinding (first :| rest) = search (reverse (prefixes rest))
- where
-  prefixes segments =
-    [ (Text.intercalate "." (first : taken), drop (length taken) segments)
-    | taken <- drop 1 (inits segments)
-    ]
-
-  search [] = pure Nothing
-  search ((name, remaining) : shorter) = do
-    found <- lookupName name
-    case found of
-      Just value -> pure (Just (value, remaining))
-      Nothing -> search shorter
-
-{-| A member in callee position prefers a method over a field of the same name,
-    matching how the same call is typed: `value.name()` reads as a call, and a
-    field holding a function must be parenthesized to be called. -}
-
-{-| The type arguments a callee carries, and the callee under them. -}
-typeArgumentNames :: Expression -> Maybe ([Text], Located Expression)
-typeArgumentNames expression = case expression of
-  TypeApplication inner arguments -> Just (map typeArgumentName arguments, inner)
-  _ -> Nothing
-
-{-| A written type's name, or empty when it was not a plain nominal one. -}
 
 {-| Start a prepared closure body. Async calls retain these bindings in a cold
     task; ordinary calls enter here immediately. -}
@@ -427,11 +315,6 @@ joinChild needs spanValue child = do
 {-| Await starts the retained async body. The tree evaluator has no scheduler,
     but preserving this cold boundary keeps calls and awaits observably ordered. -}
 
-{-| A written type's name, or empty when it was not a plain nominal one. -}
-typeArgumentName :: Located TypeSyntax -> Text
-typeArgumentName located = case locatedValue located of
-  NamedType path _ -> moduleNameText path
-  _ -> Text.empty
 
 {-| Apply an evaluated callee to evaluated arguments. -}
 
@@ -498,66 +381,4 @@ callSpawnThread apply spanValue arguments = case arguments of
     Right (Aborted diagnostic) -> Just (diagnosticMessage diagnostic)
     Right _ -> Nothing
 
-{-| Whether a built-in is one of the hashing set, which is dispatched before
-    the effects because none of them reaches outside the program: a digest of
-    the same bytes is the same digest wherever it is taken, so a constant may
-    be folded through one. -}
-isHashingBuiltin :: Builtin -> Bool
-isHashingBuiltin builtin = case builtin of
-  Sha256Builtin -> True
-  HmacBuiltin -> True
-  DeriveKeyBuiltin -> True
-  WordMapUnionBuiltin -> True
-  WordMapIntersectionBuiltin -> True
-  WordMapDifferenceBuiltin -> True
-  WordMapSymmetricDifferenceBuiltin -> True
-  WordMapIsSubsetOfBuiltin -> True
-  WordMapIsDisjointFromBuiltin -> True
-  WordMapPopCountBuiltin -> True
-  WordMapMembersBuiltin -> True
-  HashOfBuiltin -> True
-  MixHashBuiltin -> True
-  BufferAllocBuiltin -> True
-  BufferReadU64Builtin -> True
-  BufferWriteU64Builtin -> True
-  BufferScanU64Builtin -> True
-  BufferCopyBuiltin -> True
-  BufferSizeBuiltin -> True
-  SwissTableEmptyBuiltin -> True
-  SwissTableLookupBuiltin -> True
-  SwissTableInsertBuiltin -> True
-  SwissTableDeleteBuiltin -> True
-  SwissTableEntriesBuiltin -> True
-  SwissTableSizeBuiltin -> True
-  BufferReadI64Builtin -> True
-  BufferWriteI64Builtin -> True
-  BufferReadF64Builtin -> True
-  BufferWriteF64Builtin -> True
-  BufferReadU32Builtin -> True
-  BufferWriteU32Builtin -> True
-  BufferFillBuiltin -> True
-  BufferCompareBuiltin -> True
-  ColumnSumU64Builtin -> True
-  ColumnMinU64Builtin -> True
-  ColumnMaxU64Builtin -> True
-  ColumnFilterGtU64Builtin -> True
-  ColumnProjectU64Builtin -> True
-  ColumnSumF64Builtin -> True
-  ColumnMinF64Builtin -> True
-  ColumnMaxF64Builtin -> True
-  ColumnFilterGtF64Builtin -> True
-  ColumnFilterLtF64Builtin -> True
-  ColumnProjectF64Builtin -> True
-  ColumnAddF64Builtin -> True
-  ColumnBitmapAndBuiltin -> True
-  ColumnBitmapOrBuiltin -> True
-  ColumnBitmapNotBuiltin -> True
-  ColumnBitmapCountBuiltin -> True
-  ColumnSortIndicesU64Builtin -> True
-  ColumnSortIndicesF64Builtin -> True
-  ColumnBinarySearchU64Builtin -> True
-  ColumnBinarySearchF64Builtin -> True
-  ColumnGatherU64Builtin -> True
-  ColumnGatherF64Builtin -> True
-  _ -> False
 

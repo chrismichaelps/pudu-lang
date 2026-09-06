@@ -18,6 +18,7 @@ module Pudu.Eval.Builtin
   , callStringMethod
   , effectBuiltins
   , isDecimalBuiltin
+  , isHashingBuiltin
   ) where
 
 import qualified Data.Text as Text
@@ -181,3 +182,67 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
       ("wrong arguments for " <> builtinName builtin) Nothing
  where
   refuse message = abortAt (Just spanValue) "E7004" message Nothing
+
+{-| Whether a built-in is one of the hashing set, which is dispatched before
+    the effects because none of them reaches outside the program: a digest of
+    the same bytes is the same digest wherever it is taken, so a constant may
+    be folded through one. -}
+isHashingBuiltin :: Builtin -> Bool
+isHashingBuiltin builtin = case builtin of
+  Sha256Builtin -> True
+  HmacBuiltin -> True
+  DeriveKeyBuiltin -> True
+  WordMapUnionBuiltin -> True
+  WordMapIntersectionBuiltin -> True
+  WordMapDifferenceBuiltin -> True
+  WordMapSymmetricDifferenceBuiltin -> True
+  WordMapIsSubsetOfBuiltin -> True
+  WordMapIsDisjointFromBuiltin -> True
+  WordMapPopCountBuiltin -> True
+  WordMapMembersBuiltin -> True
+  HashOfBuiltin -> True
+  MixHashBuiltin -> True
+  BufferAllocBuiltin -> True
+  BufferReadU64Builtin -> True
+  BufferWriteU64Builtin -> True
+  BufferScanU64Builtin -> True
+  BufferCopyBuiltin -> True
+  BufferSizeBuiltin -> True
+  SwissTableEmptyBuiltin -> True
+  SwissTableLookupBuiltin -> True
+  SwissTableInsertBuiltin -> True
+  SwissTableDeleteBuiltin -> True
+  SwissTableEntriesBuiltin -> True
+  SwissTableSizeBuiltin -> True
+  BufferReadI64Builtin -> True
+  BufferWriteI64Builtin -> True
+  BufferReadF64Builtin -> True
+  BufferWriteF64Builtin -> True
+  BufferReadU32Builtin -> True
+  BufferWriteU32Builtin -> True
+  BufferFillBuiltin -> True
+  BufferCompareBuiltin -> True
+  ColumnSumU64Builtin -> True
+  ColumnMinU64Builtin -> True
+  ColumnMaxU64Builtin -> True
+  ColumnFilterGtU64Builtin -> True
+  ColumnProjectU64Builtin -> True
+  ColumnSumF64Builtin -> True
+  ColumnMinF64Builtin -> True
+  ColumnMaxF64Builtin -> True
+  ColumnFilterGtF64Builtin -> True
+  ColumnFilterLtF64Builtin -> True
+  ColumnProjectF64Builtin -> True
+  ColumnAddF64Builtin -> True
+  ColumnBitmapAndBuiltin -> True
+  ColumnBitmapOrBuiltin -> True
+  ColumnBitmapNotBuiltin -> True
+  ColumnBitmapCountBuiltin -> True
+  ColumnSortIndicesU64Builtin -> True
+  ColumnSortIndicesF64Builtin -> True
+  ColumnBinarySearchU64Builtin -> True
+  ColumnBinarySearchF64Builtin -> True
+  ColumnGatherU64Builtin -> True
+  ColumnGatherF64Builtin -> True
+  _ -> False
+

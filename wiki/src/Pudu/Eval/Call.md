@@ -57,7 +57,7 @@ readPath       :: CallNeeds -> ...
 ### Linkage
 
 - **Requires:** [[Eval Env]], [[Eval Value]], [[Eval Builtin]], [[Eval Operator]],
-  [[Eval Dispatch]].
+  [[Eval Dispatch]], [[Eval Call Path]].
 - **Consumed by:** [[Evaluator]], which ties the record, and through it
   [[Eval Program]] and [[Eval Loop]].
 
@@ -81,6 +81,10 @@ constructor.
   forms reach these, and threading the record to them would spread a detail of
   this module's construction across two more. _Rejected:_ exporting only the
   record-taking forms.
+- **Q:** Why extract path reading and qualified callee dispatch to `Pudu.Eval.Call.Path`?
+  **A:** To satisfy file length contracts (< 500 lines) and separate AST identifier/member chain traversal
+  from runtime function application and task/scope evaluation. _Rationale:_ path resolution is a self-contained
+  read query on the environment with no dependency on closures or task execution.
 
 ## Referenced by
 
