@@ -30,3 +30,7 @@ Own Eval.Array and its mirror. Array search now stays in the sequence; pop uses 
 ## Higher-order sequence continuation
 
 Own Eval.Builtin and its mirror for sequence-native map/filter/reduce. Removed intermediate list conversion while preserving callback order and failure short-circuiting. No measurements, tests, builds or reviews run.
+
+## Direct enumeration ownership
+
+Own Eval.Keyed, Eval.Builtin, Eval.HashMap and their mirrors for direct ascending sequence construction. Maps no longer create association lists for value enumeration. Set and bucket enumeration also avoid transient lists. No measurements or validation commands run.

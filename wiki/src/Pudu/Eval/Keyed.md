@@ -119,3 +119,14 @@ retains the existing worst-case bound and persistence. No user comparator is rep
 - **Q:** Trust that callers supply sorted input? **A:** No; runtime comparison establishes the prefix invariant before the unchecked ascending builder is used.
 - **Q:** Replace equal representatives during bulk loading? **A:** No; preserve the first representative exactly as incremental insertion does.
 - **Q:** Claim a measured speedup without execution? **A:** No; the algorithmic improvement is implemented, but throughput and allocation measurements remain pending.
+
+## Direct enumeration continuation
+
+Runtime collection enumeration builds output sequences directly with ascending strict folds.
+Map values no longer construct key/value pairs merely to discard keys. Map keys, entries, set
+members and indexed-bucket enumeration retain their previous ordering and value representation.
+Legacy list-returning keyed helpers remain for callers that require lists.
+
+### Resolved Grill Log
+- **Q:** Allocate intermediate key/value pairs to return values? **A:** No; traverse payloads directly.
+- **Q:** Change enumeration order for a faster layout? **A:** No; the native ascending fold preserves the existing order.

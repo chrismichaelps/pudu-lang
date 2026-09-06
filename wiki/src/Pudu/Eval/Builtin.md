@@ -98,3 +98,14 @@ a failed callback prevents later invocations. Receiver and arity diagnostics are
 ### Resolved Grill Log
 - **Q:** Flatten every array before invoking callbacks? **A:** No; native Traversable/Foldable sequence operations preserve order without an intermediate input list.
 - **Q:** Parallelize callbacks while removing staging? **A:** No; evaluation order and effects remain observable and sequential.
+
+## Direct enumeration continuation
+
+Runtime collection enumeration builds output sequences directly with ascending strict folds.
+Map values no longer construct key/value pairs merely to discard keys. Map keys, entries, set
+members and indexed-bucket enumeration retain their previous ordering and value representation.
+Legacy list-returning keyed helpers remain for callers that require lists.
+
+### Resolved Grill Log
+- **Q:** Allocate intermediate key/value pairs to return values? **A:** No; traverse payloads directly.
+- **Q:** Change enumeration order for a faster layout? **A:** No; the native ascending fold preserves the existing order.

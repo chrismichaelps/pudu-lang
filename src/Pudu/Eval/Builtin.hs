@@ -256,10 +256,10 @@ callMapMethod spanValue method receiver arguments = case (method, arguments) of
     | comparableValue key -> pure (mapInsert receiver key held)
     | otherwise -> unorderableKey spanValue key "map key"
   (MapRemove, [key]) -> pure (mapRemove receiver key)
-  (MapKeys, []) -> pure (ArrayValue (Seq.fromList (mapKeys receiver)))
-  (MapValues, []) -> pure (ArrayValue (Seq.fromList (map snd (mapEntries receiver))))
+  (MapKeys, []) -> pure (mapKeysArray receiver)
+  (MapValues, []) -> pure (mapValuesArray receiver)
   (MapEntries, []) ->
-    pure (ArrayValue (Seq.fromList [TupleValue [key, held] | (key, held) <- mapEntries receiver]))
+    pure (mapEntriesArray receiver)
   (MapMerge, [other@(MapValue _)]) -> pure (mapMerge receiver other)
   _ ->
     abortAt (Just spanValue) "E7012"
@@ -275,7 +275,7 @@ callSetMethod spanValue method receiver arguments = case (method, arguments) of
     | comparableValue value -> pure (setInsert receiver value)
     | otherwise -> unorderableKey spanValue value "set member"
   (SetRemove, [value]) -> pure (setRemove receiver value)
-  (SetToArray, []) -> pure (ArrayValue (Seq.fromList (setMembers receiver)))
+  (SetToArray, []) -> pure (setMembersArray receiver)
   (SetUnion, [other@(SetValue _)]) -> pure (setUnion receiver other)
   (SetIntersect, [other@(SetValue _)]) -> pure (setIntersect receiver other)
   (SetDifference, [other@(SetValue _)]) -> pure (setDifference receiver other)

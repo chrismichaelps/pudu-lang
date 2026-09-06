@@ -128,8 +128,8 @@ callBucketsMethod spanValue method receiver arguments = case receiver of
     (BucketsRemove, [IntValue _ key]) ->
       pure (BucketsValue (IntMap.delete (narrow key) entries))
     (BucketsKeys, []) ->
-      pure (ArrayValue (Seq.fromList (map (intOf . fromIntegral) (IntMap.keys entries))))
-    (BucketsValues, []) -> pure (ArrayValue (Seq.fromList (IntMap.elems entries)))
+      pure (ArrayValue (IntMap.foldlWithKey' (\out key _ -> out Seq.|> intOf (fromIntegral key)) Seq.empty entries))
+    (BucketsValues, []) -> pure (ArrayValue (IntMap.foldl' (Seq.|>) Seq.empty entries))
     _ ->
       abortAt (Just spanValue) "E7003"
         ("wrong arguments for store method " <> bucketsMethodName method) Nothing

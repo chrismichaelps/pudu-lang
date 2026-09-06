@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Direct collection enumeration
+
+- Build Map, Set and indexed-bucket result arrays through native ascending folds.
+- Remove temporary association lists and discarded key/value pairs from value enumeration.
+- Preserve ordering and immutable results; no measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Sequence-native callback traversal
 
 - Keep array map, filter and reduce in native sequence traversal instead of flattening to lists.

@@ -1,6 +1,10 @@
 {-| @Eval.Keyed.Module — map and set runtime semantics -}
 module Pudu.Eval.Keyed
-  ( mapContainsKey
+  ( mapKeysArray
+  , mapValuesArray
+  , mapEntriesArray
+  , setMembersArray
+  , mapContainsKey
   , mapEntries
   , mapFromEntries
   , mapGet
@@ -24,6 +28,7 @@ module Pudu.Eval.Keyed
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Sequence as Seq
 import Pudu.Eval.Order (OrdValue (..))
 import Pudu.Eval.Value (Value (..))
 
@@ -170,3 +175,24 @@ setIntersect other _ = other
 setDifference :: Value -> Value -> Value
 setDifference (SetValue left) (SetValue right) = SetValue (Set.difference left right)
 setDifference other _ = other
+
+{-| Enumerate directly into arrays without transient association lists. -}
+mapKeysArray :: Value -> Value
+mapKeysArray (MapValue entries) = ArrayValue
+  (Map.foldlWithKey' (\out key _ -> out Seq.|> unOrdValue key) Seq.empty entries)
+mapKeysArray _ = ArrayValue Seq.empty
+
+mapValuesArray :: Value -> Value
+mapValuesArray (MapValue entries) = ArrayValue
+  (Map.foldl' (Seq.|>) Seq.empty entries)
+mapValuesArray _ = ArrayValue Seq.empty
+
+mapEntriesArray :: Value -> Value
+mapEntriesArray (MapValue entries) = ArrayValue
+  (Map.foldlWithKey' (\out key held -> out Seq.|> TupleValue [unOrdValue key, held]) Seq.empty entries)
+mapEntriesArray _ = ArrayValue Seq.empty
+
+setMembersArray :: Value -> Value
+setMembersArray (SetValue members) = ArrayValue
+  (Set.foldl' (\out member -> out Seq.|> unOrdValue member) Seq.empty members)
+setMembersArray _ = ArrayValue Seq.empty
