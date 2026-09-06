@@ -9,7 +9,7 @@ module Pudu.Eval.Operator
   , unwrapTry
   ) where
 
-import Data.Bits (complement, shiftL, shiftR, xor, (.&.), (.|.))
+import Data.Bits (shiftL, shiftR)
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -39,6 +39,10 @@ import Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindAnd
+  , integerKindOr
+  , integerKindXor
+  , integerKindComplement
   , integerKindAddWrapping
   , integerKindSubtractWrapping
   , integerKindMultiplyWrapping
@@ -59,7 +63,7 @@ applyUnary spanValue operator value = case (operator, value) of
   ("!", BoolValue flag) -> pure (BoolValue (not flag))
   {-| Complement is a bit pattern, so it is taken over the type's own width.
       Without one, `~0u8` answers `-1`, which is not a value `UInt8` has. -}
-  ("~", IntValue kind number) -> pure (IntValue kind (integerKindWrap kind (complement number)))
+  ("~", IntValue kind number) -> pure (IntValue kind (integerKindComplement kind number))
   ("&", _) -> pure value
   ("&mut", _) -> pure value
   ("*", _) -> pure value
@@ -120,9 +124,9 @@ integerOperation spanValue kind operator left right = case operator of
   "..=" -> pure (TupleValue (map (IntValue kind) [left .. right]))
   "<<" -> shiftResult spanValue kind True left right
   ">>" -> shiftResult spanValue kind False left right
-  "^" -> pure (IntValue kind (integerKindWrap kind (xor left right)))
-  "&" -> pure (IntValue kind (integerKindWrap kind (left .&. right)))
-  "|" -> pure (IntValue kind (integerKindWrap kind (left .|. right)))
+  "^" -> pure (IntValue kind (integerKindXor kind left right))
+  "&" -> pure (IntValue kind (integerKindAnd kind left right))
+  "|" -> pure (IntValue kind (integerKindOr kind left right))
   _ -> comparisonOnly spanValue operator left right
 
 {-| A checked result: the exact value, or a report that the type cannot hold it.

@@ -70,3 +70,7 @@ Own Runtime.Collection and its mirror for monotone-direction detection. Map and 
 ## Balanced run assembly continuation
 
 Runtime.Collection now bulk-builds every monotone run and combines chronological groups through a binary carry stack. Map/Set adapters consume it without changes. No measurements, tests, builds or reviews run.
+
+## Native bitwise kernel delivery
+
+Own IntegerLiteral, Eval.Operator and their mirrors. Implemented bounded AND/OR/XOR/complement with native-word dispatch and exact wider fallback. This completes the edit interrupted by the earlier approval-service usage limit. No measurements, tests, builds or reviews run.

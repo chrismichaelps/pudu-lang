@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Native bitwise kernels
+
+- Dispatch bounded AND/OR/XOR/complement through native words and declared-width reinterpretation.
+- Retain exact wider and BigInt behavior.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-06 — Balanced collection run assembly
 
 - Bulk-build all monotone input runs and merge them through a balanced carry stack.

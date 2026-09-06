@@ -122,3 +122,14 @@ operations; checked and saturating operations remain on their exact-result paths
 ### Resolved Grill Log
 - **Q:** Build an arbitrary-precision product only to discard its high bits? **A:** No; bounded modular multiplication computes only the carrier bits needed.
 - **Q:** Extend modular reduction to division? **A:** No; the reduction law does not justify that transformation.
+
+## Native bitwise kernels
+
+Fixed-width AND, OR, XOR and complement use Word64 carriers for widths through 64 bits and then
+reinterpret the result at its declared width. Wider types and BigInt retain Integer operations.
+Only the existing bitwise operators consume these internal kernels. Platform kinds retain their
+target width; this introduces no implicit surface conversion or raw-pointer access.
+
+### Resolved Grill Log
+- **Q:** Lose signed interpretation in an unsigned carrier? **A:** No; the existing declared-kind wrapping conversion restores it after the operation.
+- **Q:** Give BigInt a finite complement? **A:** No; its Integer fallback retains unbounded two's-complement behavior.

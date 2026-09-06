@@ -11,6 +11,10 @@ module Pudu.IntegerLiteral
   , integerKindSigned
   , integerKindWidth
   , integerKindWrap
+  , integerKindAnd
+  , integerKindOr
+  , integerKindXor
+  , integerKindComplement
   , integerKindAddWrapping
   , integerKindSubtractWrapping
   , integerKindMultiplyWrapping
@@ -23,7 +27,7 @@ module Pudu.IntegerLiteral
   , splitIntegerSuffix
   ) where
 
-import Data.Bits ((.&.))
+import Data.Bits (complement, xor, (.&.), (.|.))
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Word (Word8, Word16, Word32, Word64)
 import Data.Text (Text)
@@ -199,6 +203,26 @@ integerKindSubtractWrapping = wrappingBinary (-) (-)
 integerKindMultiplyWrapping :: IntegerKind -> Integer -> Integer -> Integer
 integerKindMultiplyWrapping = wrappingBinary (*) (*)
 {-# INLINE integerKindMultiplyWrapping #-}
+
+{-| Bitwise operations share bounded carriers with modular arithmetic. -}
+integerKindAnd :: IntegerKind -> Integer -> Integer -> Integer
+integerKindAnd = wrappingBinary (.&.) (.&.)
+{-# INLINE integerKindAnd #-}
+
+integerKindOr :: IntegerKind -> Integer -> Integer -> Integer
+integerKindOr = wrappingBinary (.|.) (.|.)
+{-# INLINE integerKindOr #-}
+
+integerKindXor :: IntegerKind -> Integer -> Integer -> Integer
+integerKindXor = wrappingBinary xor xor
+{-# INLINE integerKindXor #-}
+
+integerKindComplement :: IntegerKind -> Integer -> Integer
+integerKindComplement kind value = case integerKindWidth kind of
+  Just width | width > 0 && width <= 64 ->
+    integerKindWrap kind (toInteger (complement (fromInteger value :: Word64)))
+  _ -> integerKindWrap kind (complement value)
+{-# INLINE integerKindComplement #-}
 
 wrappingBinary
   :: (Word64 -> Word64 -> Word64)
