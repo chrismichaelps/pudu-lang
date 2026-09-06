@@ -174,6 +174,29 @@ Implemented hardware-level SWAR (SIMD Within A Register) parallel group probing:
 - `matchEmpty` & `matchDeleted`: detect `0xFF` (empty) and `0xFE` (tombstone) slots across the 64-bit control word in parallel.
 - `countTrailingZeros`: extracts matching byte offsets with zero branching, replacing single-slot linear probe loops with 8-slot group steps.
 All 7 CI quality gates passed cleanly under `-Werror`.
-Exact next action: continue backend hardware specialization into vectorized columnar operations or scoped transient mutation buffers.
+
+## Hardware memory extensions and vectorized columnar database engine
+
+Runtime Implementer owned `Runtime.Buffer`, `Eval.Buffer`, `lib/Std/Buffer.pudu`, `Runtime.Column`, `Eval.Column`, `lib/Std/Column.pudu`, `pudu.cabal`, `Eval.Builtin.Definition`, `Eval.Builtin`, `Eval.Call`, `Eval.Install`, `Semantic.Prelude`, `Type.Check.Prelude`, and all mirrored wiki pages under `wiki/src/`.
+- Extended `Std.Buffer` with hardware-speed memory operations:
+  - `readI64`, `writeI64`: two's-complement 64-bit integer representation.
+  - `readF64`, `writeF64`: zero-overhead hardware register bit-casting via `GHC.Float.castWord64ToDouble` and `GHC.Float.castDoubleToWord64`.
+  - `readU32`, `writeU32`: little-endian 32-bit integer scalar memory operations.
+  - `fill`: contiguous memory block initialization (memset semantics).
+  - `compare`: lexicographical block ordering comparison (memcmp semantics).
+- Designed and implemented native vectorized columnar database engine in `Pudu.Runtime.Column`, `Pudu.Eval.Column`, and `Std.Column`:
+  - `ColumnU64`: Contiguous column record pairing unboxed scalar memory with a bit-packed null validity bitmap.
+  - `createU64`, `appendU64`, `appendNullU64`, `getU64`, `isNull`: unboxed column construction and bounds-checked retrieval.
+  - `sum`, `min`, `max`: hardware-accelerated vector reductions skipping null rows at memory-bus speeds.
+  - `filterGt`: branchless SIMD/SWAR predicate filtering producing packed 64-bit word selection masks.
+  - `project`: zero-copy gather into contiguous unboxed column preserving null validity.
+- 100% public API testing with triple-slash LSP documentation and modular helpers without nested matches:
+  - Expanded `test-fixtures/stdlib/UsesBuffer.pudu` to 27 assertions covering all 8 new buffer operations and edge cases.
+  - Created `test-fixtures/stdlib/UsesColumn.pudu` with 9 assertions covering full columnar workflow, null handling, aggregations, filtering, and projections.
+  - Wired into `test/Pudu/Compiler/ProgramSpec.hs`.
+- Formatted all Pudu source files via `pudu fmt`.
+- Ran and passed all 7 CI quality gates in `test/gates.sh` under `-Werror`.
+Exact next action: continue backend hardware specialization into unboxed float/decimal columnar vectors or memory-mapped table scans.
+
 
 

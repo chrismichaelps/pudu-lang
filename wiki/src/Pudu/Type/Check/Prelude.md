@@ -126,4 +126,26 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 
+## Low-level buffer extensions and vectorized column type signatures
+
+Wires type schemes for the 13 extended primitives:
+- `bufferReadI64: fn(Bytes, Int) -> Option[Int64]`
+- `bufferWriteI64: fn(Bytes, Int, Int64) -> Option[Bytes]`
+- `bufferReadF64: fn(Bytes, Int) -> Option[Float64]`
+- `bufferWriteF64: fn(Bytes, Int, Float64) -> Option[Bytes]`
+- `bufferReadU32: fn(Bytes, Int) -> Option[UInt32]`
+- `bufferWriteU32: fn(Bytes, Int, UInt32) -> Option[Bytes]`
+- `bufferFill: fn(Bytes, Int, Int, UInt8) -> Option[Bytes]`
+- `bufferCompare: fn(Bytes, Int, Bytes, Int, Int) -> Option[Int]`
+- `columnSumU64: fn(Bytes, Bytes, Int) -> UInt64`
+- `columnMinU64: fn(Bytes, Bytes, Int) -> Option[UInt64]`
+- `columnMaxU64: fn(Bytes, Bytes, Int) -> Option[UInt64]`
+- `columnFilterGtU64: fn(Bytes, Bytes, Int, UInt64) -> Bytes`
+- `columnProjectU64: fn(Bytes, Bytes, Bytes, Int) -> (Bytes, Bytes, Int)`
+
+
+### Resolved Grill Log
+- **Q:** Should buffer operations require unsafe casts or pointer types? **A:** No; type buffer arguments as `Bytes` and scalar values as their precise fixed-width nominal types (`Int64`, `Float64`, `UInt32`, `UInt8`, `UInt64`).
+
+
 

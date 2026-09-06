@@ -141,5 +141,103 @@ export fn main() -> Int {
   // 7. toBytes and fromBytes roundtrip with serialization and isolation
   if Option.unwrapOr(testBytesRoundtrip(), false) { held = held + 1 }
 
+  // 8. Signed 64-bit integer read/write (two's-complement, boundaries, oob)
+  if Option.unwrapOr(testI64Roundtrip(), false) { held = held + 1 }
+
+  // 9. 64-bit IEEE 754 float read/write (hardware bit-casting, negative, oob)
+  if Option.unwrapOr(testF64Roundtrip(), false) { held = held + 1 }
+
+  // 10. Unsigned 32-bit integer read/write (little-endian, boundaries, oob)
+  if Option.unwrapOr(testU32Roundtrip(), false) { held = held + 1 }
+
+  // 11. Memory block fill and lexicographical compare (memset & memcmp semantics)
+  if Option.unwrapOr(testFillAndCompare(), false) { held = held + 1 }
+
   held
+}
+
+fn testI64Roundtrip() -> Option[Bool] {
+  let buf = Buffer.alloc(32)
+  let b1 = Buffer.writeI64(&buf, 0, -42i64) ?
+  let b2 = Buffer.writeI64(&b1, 8, 9223372036854775807i64) ?
+  let b3 = Buffer.writeI64(&b2, 16, -9223372036854775808i64) ?
+
+  let v1 = Buffer.readI64(&b3, 0) ?
+  let v2 = Buffer.readI64(&b3, 8) ?
+  let v3 = Buffer.readI64(&b3, 16) ?
+
+  let oobRead = Buffer.readI64(&b3, 25)
+  let oobWrite = Buffer.writeI64(&b3, 25, 1i64)
+
+  Some(v1 == -42i64
+      && v2 == 9223372036854775807i64
+      && v3 == -9223372036854775808i64
+      && Option.isNone(&oobRead)
+      && Option.isNone(&oobWrite))
+}
+
+fn testF64Roundtrip() -> Option[Bool] {
+  let buf = Buffer.alloc(32)
+  let b1 = Buffer.writeF64(&buf, 0, 3.141592653589793) ?
+  let b2 = Buffer.writeF64(&b1, 8, -271.8281828) ?
+
+  let v1 = Buffer.readF64(&b2, 0) ?
+  let v2 = Buffer.readF64(&b2, 8) ?
+
+  let oobRead = Buffer.readF64(&b2, 25)
+  let oobWrite = Buffer.writeF64(&b2, 25, 1.0)
+
+  Some(v1 == 3.141592653589793
+      && v2 == -271.8281828
+      && Option.isNone(&oobRead)
+      && Option.isNone(&oobWrite))
+}
+
+fn testU32Roundtrip() -> Option[Bool] {
+  let buf = Buffer.alloc(16)
+  let b1 = Buffer.writeU32(&buf, 0, 0x12345678u32) ?
+  let b2 = Buffer.writeU32(&b1, 4, 0xDEADBEEFu32) ?
+  let b3 = Buffer.writeU32(&b2, 12, 0xAABBCCDDu32) ?
+
+  let v1 = Buffer.readU32(&b3, 0) ?
+  let v2 = Buffer.readU32(&b3, 4) ?
+  let v3 = Buffer.readU32(&b3, 12) ?
+
+  let oobRead = Buffer.readU32(&b3, 13)
+  let oobWrite = Buffer.writeU32(&b3, 13, 1u32)
+
+  Some(v1 == 0x12345678u32
+      && v2 == 0xDEADBEEFu32
+      && v3 == 0xAABBCCDDu32
+      && Option.isNone(&oobRead)
+      && Option.isNone(&oobWrite))
+}
+
+fn testFillAndCompare() -> Option[Bool] {
+  let bufA = Buffer.alloc(16)
+  let bufB = Buffer.alloc(16)
+
+  // Fill bufA with 0xAA and bufB with 0xAA
+  let filledA = Buffer.fill(&bufA, 0, 16, 0xAAu8) ?
+  let filledB = Buffer.fill(&bufB, 0, 16, 0xAAu8) ?
+
+  // Equality comparison
+  let cmpEq = Buffer.compare(&filledA, 0, &filledB, 0, 16) ?
+
+  // Mutate one byte in filledB to make it larger: 0xBB > 0xAA
+  let bWithBB = Buffer.fill(&filledB, 4, 1, 0xBBu8) ?
+  let cmpLess = Buffer.compare(&filledA, 0, &bWithBB, 0, 16) ?
+  let cmpGreater = Buffer.compare(&bWithBB, 0, &filledA, 0, 16) ?
+
+  // Zero-length compare is 0
+  let cmpZero = Buffer.compare(&filledA, 0, &bWithBB, 0, 0) ?
+
+  // Out of bounds comparison returns None
+  let oobCmp = Buffer.compare(&filledA, 0, &bWithBB, 0, 20)
+
+  Some(cmpEq == 0
+      && cmpLess == -1
+      && cmpGreater == 1
+      && cmpZero == 0
+      && Option.isNone(&oobCmp))
 }

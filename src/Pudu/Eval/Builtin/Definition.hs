@@ -117,6 +117,19 @@ data Builtin
   | SwissTableDeleteBuiltin
   | SwissTableEntriesBuiltin
   | SwissTableSizeBuiltin
+  | BufferReadI64Builtin
+  | BufferWriteI64Builtin
+  | BufferReadF64Builtin
+  | BufferWriteF64Builtin
+  | BufferReadU32Builtin
+  | BufferWriteU32Builtin
+  | BufferFillBuiltin
+  | BufferCompareBuiltin
+  | ColumnSumU64Builtin
+  | ColumnMinU64Builtin
+  | ColumnMaxU64Builtin
+  | ColumnFilterGtU64Builtin
+  | ColumnProjectU64Builtin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -231,3 +244,16 @@ builtinName value = case value of
   SwissTableDeleteBuiltin -> "swissTableDelete"
   SwissTableEntriesBuiltin -> "swissTableEntries"
   SwissTableSizeBuiltin -> "swissTableSize"
+  BufferReadI64Builtin -> "bufferReadI64"
+  BufferWriteI64Builtin -> "bufferWriteI64"
+  BufferReadF64Builtin -> "bufferReadF64"
+  BufferWriteF64Builtin -> "bufferWriteF64"
+  BufferReadU32Builtin -> "bufferReadU32"
+  BufferWriteU32Builtin -> "bufferWriteU32"
+  BufferFillBuiltin -> "bufferFill"
+  BufferCompareBuiltin -> "bufferCompare"
+  ColumnSumU64Builtin -> "columnSumU64"
+  ColumnMinU64Builtin -> "columnMinU64"
+  ColumnMaxU64Builtin -> "columnMaxU64"
+  ColumnFilterGtU64Builtin -> "columnFilterGtU64"
+  ColumnProjectU64Builtin -> "columnProjectU64"

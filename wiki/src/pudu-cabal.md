@@ -71,3 +71,11 @@ in `pudu.cabal` library exposed-modules.
 ### Resolved Grill Log
 - **Q:** Rely on dynamic reflection or untyped FFI for low-level memory operations? **A:** No; register explicit Haskell modules with checked boundaries.
 
+## Columnar runtime integration
+
+Registers [[Pudu/Runtime/Column]] and [[Pudu/Eval/Column]] in `pudu.cabal` library exposed-modules for vectorized columnar aggregations and filtering.
+
+### Resolved Grill Log
+- **Q:** Implement columnar operations through dynamic interpreted loops? **A:** No; expose compiled native Haskell runtime kernels and evaluator primitives with strict bounds validation.
+
+

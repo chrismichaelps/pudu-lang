@@ -172,6 +172,9 @@ library
     Pudu.Eval.Buffer
     Pudu.Runtime.SwissTable
     Pudu.Eval.SwissTable
+    Pudu.Runtime.Column
+    Pudu.Eval.Column
+
   c-sources:        cbits/pudu_ffi.c
                    cbits/pudu_sqlite.c
   extra-libraries:  ffi

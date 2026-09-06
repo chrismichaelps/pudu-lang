@@ -172,6 +172,34 @@ declareBuiltinConstructors = do
     (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [bytesType])))
   bindName "bufferSize"
     (monotype (FunctionTypeValue False [bytesType] integerType))
+  bindName "bufferReadI64"
+    (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "Int64" []])))
+  bindName "bufferWriteI64"
+    (monotype (FunctionTypeValue False [bytesType, integerType, NominalType "Int64" []] (NominalType "Option" [bytesType])))
+  bindName "bufferReadF64"
+    (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "Float64" []])))
+  bindName "bufferWriteF64"
+    (monotype (FunctionTypeValue False [bytesType, integerType, NominalType "Float64" []] (NominalType "Option" [bytesType])))
+  bindName "bufferReadU32"
+    (monotype (FunctionTypeValue False [bytesType, integerType] (NominalType "Option" [NominalType "UInt32" []])))
+  bindName "bufferWriteU32"
+    (monotype (FunctionTypeValue False [bytesType, integerType, NominalType "UInt32" []] (NominalType "Option" [bytesType])))
+  bindName "bufferFill"
+    (monotype (FunctionTypeValue False [bytesType, integerType, integerType, NominalType "UInt8" []] (NominalType "Option" [bytesType])))
+  bindName "bufferCompare"
+    (monotype (FunctionTypeValue False [bytesType, integerType, bytesType, integerType, integerType] (NominalType "Option" [integerType])))
+  bindName "columnSumU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "UInt64" [])))
+  bindName "columnMinU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "Option" [NominalType "UInt64" []])))
+  bindName "columnMaxU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType] (NominalType "Option" [NominalType "UInt64" []])))
+  bindName "columnFilterGtU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, NominalType "UInt64" []] bytesType))
+  bindName "columnProjectU64"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, integerType] (TupleTypeValue [bytesType, bytesType, integerType])))
+
+
   bindName "swissTableEmpty"
     (polytype [("V", 0)] [] (FunctionTypeValue False [integerType] (flatMapType (RigidType "V"))))
   bindName "swissTableLookup"

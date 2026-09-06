@@ -1,0 +1,189 @@
+module Std.Column
+
+import Std.Buffer as Buffer
+import Std.Option as Option
+
+/// Contiguous unboxed 64-bit columnar vector.
+///
+/// Combines an unboxed scalar data buffer with a bit-packed null bitmap
+/// for analytical vector processing and database scans.
+export type ColumnU64 = {
+  length: Int,
+  nullCount: Int,
+  nullBitmap: Buffer.Buffer,
+  data: Buffer.Buffer,
+}
+
+/// Allocates an empty 64-bit unsigned integer column with preallocated capacity.
+export fn createU64(capacity: Int) -> ColumnU64 {
+  let numWords = (capacity + 63) / 64
+  let safeWords = if numWords < 1 { 1 } else { numWords }
+  let dataBytes = capacity * 8
+  let safeDataBytes = if dataBytes < 8 { 8 } else { dataBytes }
+  ColumnU64 {
+    length: 0,
+    nullCount: 0,
+    nullBitmap: Buffer.alloc(safeWords * 8),
+    data: Buffer.alloc(safeDataBytes),
+  }
+}
+
+/// Returns the number of rows stored in the column.
+export fn length(col: &ColumnU64) -> Int {
+  col.length
+}
+
+/// Returns the number of null values in the column.
+export fn nullCount(col: &ColumnU64) -> Int {
+  col.nullCount
+}
+
+/// Appends a valid unsigned 64-bit scalar to the column.
+///
+/// Sets the validity bit to valid (1) and writes the scalar into contiguous unboxed storage.
+export fn appendU64(col: &ColumnU64, value: UInt64) -> Option[ColumnU64] {
+  let idx = col.length
+  let wordIdx = idx / 64
+  let bitIdx = idx % 64
+
+  // Ensure capacity in data buffer
+  let neededData = (idx + 1) * 8
+  let curDataSize = Buffer.size(&col.data)
+  let baseData = if curDataSize < neededData {
+    let newCap = if curDataSize == 0 { 64 } else { curDataSize * 2 }
+    let expCap = if newCap < neededData { neededData } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.data, 0, &grown, 0, curDataSize) ?
+  } else {
+    col.data
+  }
+
+  // Ensure capacity in null bitmap
+  let neededBitmap = (wordIdx + 1) * 8
+  let curBitmapSize = Buffer.size(&col.nullBitmap)
+  let baseBitmap = if curBitmapSize < neededBitmap {
+    let newCap = if curBitmapSize == 0 { 16 } else { curBitmapSize * 2 }
+    let expCap = if newCap < neededBitmap { neededBitmap } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.nullBitmap, 0, &grown, 0, curBitmapSize) ?
+  } else {
+    col.nullBitmap
+  }
+
+  // Write scalar data
+  let updatedData = Buffer.writeU64(&baseData, idx * 8, value) ?
+
+  // Update validity bit: read word, or-in (1 << bitIdx), write back
+  let curWord = Buffer.readU64(&baseBitmap, wordIdx * 8) ?
+  let bitMask = 1u64 << bitIdx
+  let updatedWord = curWord | bitMask
+  let updatedBitmap = Buffer.writeU64(&baseBitmap, wordIdx * 8, updatedWord) ?
+
+  Some(ColumnU64 {
+      length: idx + 1,
+      nullCount: col.nullCount,
+      nullBitmap: updatedBitmap,
+      data: updatedData,
+    })
+}
+
+/// Appends a null row to the column.
+///
+/// Leaves the validity bit as 0 and zeroes the underlying data slot.
+export fn appendNullU64(col: &ColumnU64) -> Option[ColumnU64] {
+  let idx = col.length
+  let wordIdx = idx / 64
+
+  // Ensure capacity in data buffer
+  let neededData = (idx + 1) * 8
+  let curDataSize = Buffer.size(&col.data)
+  let baseData = if curDataSize < neededData {
+    let newCap = if curDataSize == 0 { 64 } else { curDataSize * 2 }
+    let expCap = if newCap < neededData { neededData } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.data, 0, &grown, 0, curDataSize) ?
+  } else {
+    col.data
+  }
+
+  // Ensure capacity in null bitmap
+  let neededBitmap = (wordIdx + 1) * 8
+  let curBitmapSize = Buffer.size(&col.nullBitmap)
+  let baseBitmap = if curBitmapSize < neededBitmap {
+    let newCap = if curBitmapSize == 0 { 16 } else { curBitmapSize * 2 }
+    let expCap = if newCap < neededBitmap { neededBitmap } else { newCap }
+    let grown = Buffer.alloc(expCap)
+    Buffer.copy(&col.nullBitmap, 0, &grown, 0, curBitmapSize) ?
+  } else {
+    col.nullBitmap
+  }
+
+  // Data slot zeroes out
+  let updatedData = Buffer.writeU64(&baseData, idx * 8, 0u64) ?
+
+  Some(ColumnU64 {
+      length: idx + 1,
+      nullCount: col.nullCount + 1,
+      nullBitmap: baseBitmap,
+      data: updatedData,
+    })
+}
+
+/// Checks whether the row at `row` is null or out of bounds.
+export fn isNull(col: &ColumnU64, row: Int) -> Bool {
+  if row < 0 || row >= col.length {
+    true
+  } else {
+    let wordIdx = row / 64
+    let bitIdx = row % 64
+    let word = Buffer.readU64(&col.nullBitmap, wordIdx * 8)
+    let w = Option.unwrapOr(word, 0u64)
+    let mask = 1u64 << bitIdx
+    (w & mask) == 0u64
+  }
+}
+
+/// Retrieves the scalar at `row`, returning `None` if the row is null or out of bounds.
+export fn getU64(col: &ColumnU64, row: Int) -> Option[UInt64] {
+  if isNull(col, row) {
+    None
+  } else {
+    Buffer.readU64(&col.data, row * 8)
+  }
+}
+
+/// Computes the vectorized sum of all valid non-null elements in the column.
+export fn sum(col: &ColumnU64) -> UInt64 {
+  columnSumU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Computes the minimum value among valid non-null elements in the column.
+///
+/// Returns `None` if the column contains zero valid elements.
+export fn min(col: &ColumnU64) -> Option[UInt64] {
+  columnMinU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Computes the maximum value among valid non-null elements in the column.
+///
+/// Returns `None` if the column contains zero valid elements.
+export fn max(col: &ColumnU64) -> Option[UInt64] {
+  columnMaxU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length)
+}
+
+/// Evaluates the predicate `(value > threshold)` on valid rows, producing a packed selection bitmap buffer.
+export fn filterGt(col: &ColumnU64, threshold: UInt64) -> Buffer.Buffer {
+  let selBytes = columnFilterGtU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), col.length, threshold)
+  Buffer.fromBytes(selBytes)
+}
+
+/// Gathers selected rows according to `selection` bitmap into a new contiguous unboxed column.
+export fn project(col: &ColumnU64, selection: &Buffer.Buffer) -> ColumnU64 {
+  let proj = columnProjectU64(Buffer.toBytes(&col.data), Buffer.toBytes(&col.nullBitmap), Buffer.toBytes(selection), col.length)
+  ColumnU64 {
+    length: proj[2],
+    nullCount: 0,
+    nullBitmap: Buffer.fromBytes(proj[1]),
+    data: Buffer.fromBytes(proj[0]),
+  }
+}

@@ -156,4 +156,16 @@ Include `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `
 Resolved Grill Log: Route buffer and flat map operations through the pure builtin dispatcher
 before effect handling to preserve compiler constant-folding and effect isolation.
 
+## Low-level buffer extensions and vectorized column dispatch
+
+Include `BufferReadI64Builtin`, `BufferWriteI64Builtin`, `BufferReadF64Builtin`, `BufferWriteF64Builtin`,
+`BufferReadU32Builtin`, `BufferWriteU32Builtin`, `BufferFillBuiltin`, `BufferCompareBuiltin`,
+`ColumnSumU64Builtin`, `ColumnMinU64Builtin`, `ColumnMaxU64Builtin`, `ColumnFilterGtU64Builtin`, and
+`ColumnProjectU64Builtin` in `isBuiltinImmediate` so they evaluate immediately without task scheduling
+or effect handler interception.
+
+### Resolved Grill Log
+- **Q:** Route vectorized columnar reductions through IO effects? **A:** No; column operations are pure mathematical and projection transformations operating deterministically on unboxed memory.
+
+
 

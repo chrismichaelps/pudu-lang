@@ -145,4 +145,15 @@ and `swissTableSize`. They are resolved in user code and STD modules without qua
 
 Resolved Grill Log: Register symbols directly in prelude symbol tables alongside existing hashing and memory primitives.
 
+## Low-level buffer extensions and vectorized column prelude bindings
+
+Adds the 13 extended primitive names to `preludeValueNames`:
+`bufferReadI64`, `bufferWriteI64`, `bufferReadF64`, `bufferWriteF64`, `bufferReadU32`, `bufferWriteU32`,
+`bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, and `columnProjectU64`.
+They are available implicitly in the value namespace for standard library modules.
+
+### Resolved Grill Log
+- **Q:** Introduce a separate namespace for columnar primitives? **A:** No; bind primitive names in prelude values and expose idiomatic record abstractions in `Std.Column`.
+
+
 

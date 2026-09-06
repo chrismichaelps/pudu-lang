@@ -152,4 +152,15 @@ and `swissTableSize`. Each name maps to its corresponding `Builtin` constructor.
 
 Resolved Grill Log: Install all 12 primitives as first-class builtin values available at top-level scope without dynamic handle allocation.
 
+## Low-level buffer extensions and vectorized column installation
+
+Binds the 13 extended primitive names in the initial evaluation environment:
+`bufferReadI64`, `bufferWriteI64`, `bufferReadF64`, `bufferWriteF64`, `bufferReadU32`, `bufferWriteU32`,
+`bufferFill`, `bufferCompare`, `columnSumU64`, `columnMinU64`, `columnMaxU64`, `columnFilterGtU64`, and `columnProjectU64`.
+Each name maps directly to its `BuiltinValue` in the runtime environment.
+
+### Resolved Grill Log
+- **Q:** Require manual import of columnar and hardware memory builtins? **A:** No; install them directly in the runtime environment matching existing buffer builtins for zero-cost primitive execution.
+
+
 

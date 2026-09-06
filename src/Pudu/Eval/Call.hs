@@ -529,4 +529,18 @@ isHashingBuiltin builtin = case builtin of
   SwissTableDeleteBuiltin -> True
   SwissTableEntriesBuiltin -> True
   SwissTableSizeBuiltin -> True
+  BufferReadI64Builtin -> True
+  BufferWriteI64Builtin -> True
+  BufferReadF64Builtin -> True
+  BufferWriteF64Builtin -> True
+  BufferReadU32Builtin -> True
+  BufferWriteU32Builtin -> True
+  BufferFillBuiltin -> True
+  BufferCompareBuiltin -> True
+  ColumnSumU64Builtin -> True
+  ColumnMinU64Builtin -> True
+  ColumnMaxU64Builtin -> True
+  ColumnFilterGtU64Builtin -> True
+  ColumnProjectU64Builtin -> True
   _ -> False
+

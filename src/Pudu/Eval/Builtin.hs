@@ -32,6 +32,7 @@ import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.WordMap (callWordMapPopCount, callWordMapAlgebra, callWordMapPredicate, callWordMapMembers)
 import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.SwissTable as Swiss
+import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Runtime.Word as Word
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Keyed
@@ -573,6 +574,14 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (BufferAllocBuiltin, values) -> Buffer.callBufferAlloc spanValue values
   (BufferReadU64Builtin, values) -> Buffer.callBufferReadU64 spanValue values
   (BufferWriteU64Builtin, values) -> Buffer.callBufferWriteU64 spanValue values
+  (BufferReadI64Builtin, values) -> Buffer.callBufferReadI64 spanValue values
+  (BufferWriteI64Builtin, values) -> Buffer.callBufferWriteI64 spanValue values
+  (BufferReadF64Builtin, values) -> Buffer.callBufferReadF64 spanValue values
+  (BufferWriteF64Builtin, values) -> Buffer.callBufferWriteF64 spanValue values
+  (BufferReadU32Builtin, values) -> Buffer.callBufferReadU32 spanValue values
+  (BufferWriteU32Builtin, values) -> Buffer.callBufferWriteU32 spanValue values
+  (BufferFillBuiltin, values) -> Buffer.callBufferFill spanValue values
+  (BufferCompareBuiltin, values) -> Buffer.callBufferCompare spanValue values
   (BufferScanU64Builtin, values) -> Buffer.callBufferScanU64 spanValue values
   (BufferCopyBuiltin, values) -> Buffer.callBufferCopy spanValue values
   (BufferSizeBuiltin, values) -> Buffer.callBufferSize spanValue values
@@ -582,6 +591,11 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (SwissTableDeleteBuiltin, values) -> Swiss.callSwissTableDelete spanValue values
   (SwissTableEntriesBuiltin, values) -> Swiss.callSwissTableEntries spanValue values
   (SwissTableSizeBuiltin, values) -> Swiss.callSwissTableSize spanValue values
+  (ColumnSumU64Builtin, values) -> Column.callColumnSumU64 spanValue values
+  (ColumnMinU64Builtin, values) -> Column.callColumnMinU64 spanValue values
+  (ColumnMaxU64Builtin, values) -> Column.callColumnMaxU64 spanValue values
+  (ColumnFilterGtU64Builtin, values) -> Column.callColumnFilterGtU64 spanValue values
+  (ColumnProjectU64Builtin, values) -> Column.callColumnProjectU64 spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing

@@ -11,6 +11,8 @@ tags: [moc, module]
 - [[Eval Buffer]] — evaluator adapters for buffer builtins.
 - [[Runtime SwissTable Kernels]] — flat hash table with 1-byte control metadata.
 - [[Eval SwissTable]] — evaluator adapters for flat map builtins.
+- [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
+- [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 

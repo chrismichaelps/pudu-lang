@@ -5,7 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Low-level memory primitives and vectorized columnar database engine
+
+Extended [[Runtime Buffer Kernels]], [[Eval Buffer]], and [[Std Buffer]] with 8 high-performance hardware memory primitives:
+`readI64`, `writeI64` (two's-complement arithmetic), `readF64`, `writeF64` (zero-overhead register bit-casting via `castWord64ToDouble`/`castDoubleToWord64`),
+`readU32`, `writeU32` (little-endian 32-bit words), `fill` (contiguous `memset` block stores), and `compare` (lexicographical `memcmp`).
+Implemented a native vectorized columnar engine in [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]], introducing
+`ColumnU64`, `createU64`, `appendU64`, `appendNullU64`, `getU64`, `isNull`, `sum`, `min`, `max`, `filterGt`, and `project`.
+Column storage pairs continuous unboxed scalars with bit-packed validity bitmaps, enabling memory-bus-speed analytical aggregations
+and SIMD/SWAR predicate filtering without per-element boxing.
+Expanded test fixtures `test-fixtures/stdlib/UsesBuffer.pudu` (27 assertions) and created `test-fixtures/stdlib/UsesColumn.pudu` (9 assertions)
+with 100% public API test coverage and triple-slash LSP documentation. All 7 CI quality gates passed under `-Werror`.
+
 ## 2026-09-06 — SWAR 8-slot parallel group probing in flat hash tables
+
 
 Accelerated [[Runtime SwissTable Kernels]] by implementing SIMD-within-a-register (SWAR) group probing.
 Instead of evaluating one control slot per iteration, lookups, insertions, and deletions inspect packed 64-bit
