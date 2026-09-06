@@ -1,7 +1,9 @@
 module Std.Http.Server.Reply
 
+import Std.Html as Html
 import Std.Http as Http
 import Std.Http.Message as Message
+import Std.Json as Json
 
 /// The answers a handler gives, apart from the routing that chose it and the
 /// connection that carries it.
@@ -60,3 +62,18 @@ export fn json(code: Int, content: Str) -> Http.Response {
 
 /// A response with a status and nothing else.
 export fn empty(code: Int) -> Http.Response { Message.respondEmpty(code) }
+
+/// Render a typed fragment using the standard HTML escaping rules.
+export fn view(code: Int, content: Html.Html) -> Http.Response {
+  html(code, Html.render(&content))
+}
+
+/// Render a complete HTML document, including its doctype.
+export fn page(code: Int, content: Html.Html) -> Http.Response {
+  html(code, Html.document(&content))
+}
+
+/// Encode the standard JSON model at the response boundary.
+export fn jsonValue(code: Int, content: Json.Json) -> Http.Response {
+  json(code, Json.encode(&content))
+}

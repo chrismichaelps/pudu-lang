@@ -5,7 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
-- [[2026-09-05-backend-specialization]] — active exclusive low-level backend optimization track.
+- [[2026-09-06-application-stack]] — active application, database and HTTP integration.
+- [[2026-09-05-backend-specialization]] — prior backend optimization track, set aside by user.
 
 - [[2026-09-05-database-framing]] — strict database field decoding and bounded frame admission.
 

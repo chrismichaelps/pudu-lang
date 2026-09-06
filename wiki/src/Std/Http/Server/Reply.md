@@ -21,8 +21,18 @@ acceptable, because one that only said no would leave the client guessing. A bod
 resource cannot read and a body it read but could not act on are separate answers — one says the
 type was wrong, the other says the content was, and a client acts differently on each.
 ## Grill Log
-- **Q:** Encode JSON here? **A:** No. _Rationale:_ the content is already text by the time a status
-  is being chosen, and encoding here would tie every reply to one encoder. _Rejected:_ taking a
-  value and serialising it.
+- **Q:** Must every handler serialize values manually? **A:** No. Retain raw text reply APIs
+  and add explicit typed helpers for the standard HTML and JSON models. Their names make the
+  encoding boundary visible; custom encoders can continue to supply serialized text.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Message]]
+
+## Typed response integration
+
+`view(code, Html.Html)` renders an HTML fragment, `page(code, Html.Html)` renders a document
+with its doctype, and `jsonValue(code, Json.Json)` serializes through Std.Json. All delegate to
+the existing reply/message path for media type and byte-length handling. Html.trusted and other
+explicit trust escapes retain their existing meaning; these helpers do not sanitize trusted input.
+
+Resolved Grill Log: Keep explicit status selection with the caller; do not infer success or
+convert database errors into responses automatically. Serialization happens exactly once.

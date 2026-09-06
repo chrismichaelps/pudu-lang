@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Application data and response integration
+
+[[Std App Database]] now exposes driver transactions and typed all/one/optional row queries
+with distinct database and mapping errors. [[Std Http Server Reply]] accepts typed HTML views,
+HTML documents and JSON values through the existing response path. LSP work is left intact.
+No tests, builds, reviews or measurements run, as directed.
+
 ## 2026-09-06 — Decompose Foreign.Call into layered dependency graph modules
 
 Decomposed the 606-line monolithic `src/Pudu/Foreign/Call.hs` into a scalable, layered dependency graph FFI architecture strictly under 450 lines per module:

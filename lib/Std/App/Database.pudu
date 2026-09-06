@@ -4,6 +4,7 @@ import Std.App as App
 import Std.App.Config as Config
 import Std.Db.Driver as Driver
 import Std.Db.Postgres as Postgres
+import Std.Db.Row as Row
 import Std.Db.Sqlite as Sqlite
 import Std.Result as Result
 import Std.Sync as Sync
@@ -110,3 +111,48 @@ fn available(database: &Database) -> Result[Driver.Client, Driver.Error] {
 
 fn syncError(problem: Sync.SyncError) -> Driver.Error { Driver.error("", "synchronization", show(problem)) }
 fn describe(problem: Driver.Error) -> Str { problem.driver + ": " + problem.category + ": " + problem.message }
+
+/// Preserve the distinction between database execution and application row decoding.
+export type QueryError = DatabaseFailure(Driver.Error) | MappingFailure(Row.RowError)
+
+export fn queryAll[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[Array[T], QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.map(&rows, mapper), mappingFailure)
+}
+
+export fn queryOne[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[T, QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.one(&rows, mapper), mappingFailure)
+}
+
+export fn queryOptional[T](
+  database: &Database,
+  sql: Str,
+  values: &Array[Driver.Value],
+  mapper: Row.Mapper[T]
+) -> Result[Option[T], QueryError] {
+  let rows = Result.mapErr(query(database, sql, values), databaseFailure) ?
+  Result.mapErr(Row.optional(&rows, mapper), mappingFailure)
+}
+
+/// The selected driver owns the connection for the complete action.
+export fn transaction(
+  database: &Database,
+  action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]
+) -> Result[Driver.Rows, Driver.Error] {
+  let client = available(database) ?
+  Driver.transaction(&client, action)
+}
+
+fn databaseFailure(problem: Driver.Error) -> QueryError { DatabaseFailure(problem) }
+fn mappingFailure(problem: Row.RowError) -> QueryError { MappingFailure(problem) }

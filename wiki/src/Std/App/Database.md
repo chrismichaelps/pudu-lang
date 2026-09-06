@@ -8,7 +8,7 @@ aliases: [Std App Database]
 # Std App Database
 
 ## Purpose
-An application-owned PostgreSQL pool.
+An application-owned database resource with explicit driver selection.
 
 ## Interface and algorithm
 A shared backend-neutral client starts and stops through explicit application stages. A lifecycle
@@ -92,3 +92,16 @@ and pass that list to `withDrivers` to extend selection. Unknown or ambiguous sc
 The SQL dialect and placeholders still belong to the chosen database.
 
 Use [[Std Db Row]] to consume result cells by unique column name or index and map rows into application values. It distinguishes SQL NULL, absent columns, ambiguous labels, wrong storage kinds and wrong cardinality.
+
+## Application data access
+
+`transaction` delegates to the active driver's transaction callback, keeping the action on the
+driver-owned connection. `queryAll`, `queryOne`, and `queryOptional` execute parameterized SQL
+and apply a Std.Db.Row.Mapper. Their QueryError distinguishes DatabaseFailure(Driver.Error) from
+MappingFailure(Row.RowError), preserving structured causes and cardinality errors. SQL dialect
+and transaction behavior belong to the selected driver. These helpers do not start resources
+implicitly; a stopped resource produces DatabaseFailure through the existing admission path.
+
+Resolved Grill Log: Do not flatten row failures into driver strings or emit HTTP responses from
+the database layer. Handlers choose how domain failures are presented. Transactions use the
+existing Driver.Tx callback contract, never separate BEGIN/COMMIT pool calls.
