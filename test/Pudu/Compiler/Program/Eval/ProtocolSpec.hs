@@ -1,0 +1,136 @@
+{-| @Test.Compiler.Program.Eval.ProtocolSpec — format, serialization, and wire protocol evaluation -}
+module Pudu.Compiler.Program.Eval.ProtocolSpec
+  ( testProtocolEvaluation
+  ) where
+
+import Pudu.Compiler.Program.Common (runEntry)
+import Test.QuickCheck (Property, conjoin, counterexample, (===))
+
+{-| Evaluates formats, JSON, printers, CSV, TOML, HTTP, TLS, sockets, and network protocols. -}
+testProtocolEvaluation :: IO Property
+testProtocolEvaluation = do
+  formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
+  realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
+  jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
+  lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
+  printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
+  shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
+  byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
+  separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
+  configured <- runEntry "test-fixtures/stdlib/UsesToml.pudu"
+  protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
+  serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
+  fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
+  secured <- runEntry "test-fixtures/stdlib/UsesTls.pudu"
+  lasting <- runEntry "test-fixtures/stdlib/UsesSocket.pudu"
+  endpoints <- runEntry "test-fixtures/stdlib/UsesNet.pudu"
+  uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
+  posted <- runEntry "test-fixtures/stdlib/UsesMail.pudu"
+  pure $ conjoin
+    [ {-| The five lookup tables at both ends and past the end, where a
+          mistranscribed table would show. These held as nested if ladders and
+          must hold as flat matches. -}
+      counterexample
+        "status reasons, methods, versions, hop-by-hop names, and scheme ports"
+        (lookupTables === Just "23")
+    {-| A printer's configuration, checked through its pure rendering rather
+        than by capturing output: nothing to print, a piece that already spans
+        lines, an indent on top of an indent, and an ending left empty so the
+        line stays open. Each check answers 1. -}
+    , counterexample
+        "a printer carries its separator, ending, prefix, and stream"
+        (printers === Just "35")
+    {-| A spec's shaping, checked by comparing values rather than by looking at
+        output. Weighted toward what a padding helper gets wrong: content wider
+        than its width, a sign that must stay in front of zero padding, grouping
+        that must not count the sign, and columns measured from the rows. -}
+    , counterexample
+        "a spec carries its width, fill, alignment, sign, and grouping"
+        (shaping === Just "46")
+    {-| A byte sequence answers for what it holds, and the two formats that
+        travel as text answer against their own published vectors rather than
+        against each other: a round trip through an encoder and its own decoder
+        agrees with itself however wrong both halves are. -}
+    , counterexample
+        "bytes slice, search, and carry the published base64 and hex vectors"
+        (byteSequences === Just "49")
+    {-| The three things that make a separated file harder than splitting on
+        the separator: a quoted field, a quote inside one, and a separator or
+        newline that a quoted field swallows. -}
+    , counterexample
+        "a separated file survives quotes, newlines, and its own separator"
+        (separated === Just "25")
+    {-| A listener on the loopback address, a client, and a round trip, all in
+        one program: the listener binds port zero and asks which port it was
+        given, so nothing is assumed about what else the machine holds. -}
+    , counterexample
+        "a connection carries a message and the reply comes back"
+        (endpoints === Just "14")
+    {-| Routing, the chain of steps, and the method that carries its terms in
+        its own body are checked by calling the handler directly; a request
+        arriving and a reply going back are checked over a real socket. -}
+    , counterexample
+        "a server routes, wraps, and answers over a connection"
+        (serving === Just "35")
+    {-| That a client bounds what a request may cost and where it may go: an
+        address the network trusts is refused unless the caller named it, and
+        refused again at every redirect rather than only at the first, since a
+        redirect to an internal address is how the first check is bypassed; a
+        chain longer than the bound and an answer larger than the caller will
+        read are refused rather than followed or truncated. -}
+    , counterexample
+        "a client is bounded in what it will fetch and where"
+        (fetched === Just "47")
+    {-| That a lasting connection is not offered to whoever asks: it is not
+        subject to the rule stopping one site reading another's answers, so a
+        page on any site could otherwise open one carrying the viewer's
+        cookies. The origin is a parameter of the upgrade rather than a step
+        that can be omitted. A message from the far end is refused unless
+        masked, and how large one may be is checked against the length it
+        states rather than against what arrived. The handshake is checked
+        against the example the protocol itself publishes. -}
+    , counterexample
+        "a lasting connection is not offered to whoever asks"
+        (lasting === Just "38")
+    {-| That the name a sender gave a file never becomes a path: a file
+        uploaded as an ascent has that as its name, and only what follows the
+        last separator of either kind survives being asked for a name to write
+        under — asked for, because a program reaching for a path should have to
+        say so. Nothing is decoded before checking, since undoing an encoding
+        first is how a check is bypassed, and every bound is applied while
+        reading rather than once the memory is gone. -}
+    , counterexample
+        "an uploaded name never becomes a path"
+        (uploaded === Just "44")
+    {-| That a message cannot carry more than it says. A line break in an
+        address or a subject would let whoever supplied it write headers of
+        their own, which is how bulk mail is sent through somebody else's
+        contact form; it is refused rather than stripped. Whoever is copied
+        without the others knowing reaches the envelope and never the headers,
+        so the disclosure nobody notices until afterwards has nothing that
+        could produce it. A body line that would end the message is escaped. -}
+    , counterexample
+        "a message cannot carry more than it says"
+        (posted === Just "46")
+    {-| A configuration file, in the shapes the format actually holds: every
+        base a whole number is written in, a fractional one kept as its text
+        rather than rounded into a binary float, sections and repeated
+        sections, dotted keys, and a document written and read back. -}
+    , counterexample
+        "a configuration reads back what it was written as"
+        (configured === Just "44")
+    {-| Every case here is a handshake that must fail. A handshake that
+        wrongly succeeds carries traffic and looks exactly like one that did
+        not, so failing closed is the only property worth checking offline. -}
+    , counterexample
+        "a secured connection refuses what it cannot prove"
+        (secured === Just "7")
+    , counterexample "the format modules parse and render"
+        (formats === Just "8885")
+    , counterexample "JSON strings decode, encode, and reject malformed escapes"
+        (jsonStrings === Just "0")
+    , counterexample "the protocol modules parse and render messages"
+        (protocol === Just "266")
+    , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
+        (realFormats === Just "16383")
+    ]

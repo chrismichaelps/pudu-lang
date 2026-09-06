@@ -229,6 +229,16 @@ test-suite pudu-test
     Pudu.Lsp.ServerSpec
     Pudu.Diagnostic.RenderSpec
     Pudu.Compiler.ProgramSpec
+    Pudu.Compiler.Program.Common
+    Pudu.Compiler.Program.GraphSpec
+    Pudu.Compiler.Program.TypeBoundarySpec
+    Pudu.Compiler.Program.ForeignSpec
+    Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.EvalSpec
+    Pudu.Compiler.Program.Eval.DataSpec
+    Pudu.Compiler.Program.Eval.ProtocolSpec
+    Pudu.Compiler.Program.Eval.ServiceSpec
+    Pudu.Compiler.Program.Eval.RuntimeSpec
     Pudu.Foreign.SlotSpec
     Pudu.Foreign.OwnershipSpec
     Pudu.Eval.Foreign.ResultSpec

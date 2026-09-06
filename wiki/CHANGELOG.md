@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose ProgramSpec into layered dependency graph modules
+
+Decomposed the 1269-line monolithic `test/Pudu/Compiler/ProgramSpec.hs` into a scalable, layered dependency graph test architecture:
+- Extracted shared runners and test helpers into `Pudu.Compiler.Program.Common` (97 lines).
+- Isolated dependency graph edges, topological ordering, signature cycles, and interface ambiguity into `Pudu.Compiler.Program.GraphSpec` (94 lines).
+- Isolated type-as-value boundaries, qualified type scoping, and REPL interface context into `Pudu.Compiler.Program.TypeBoundarySpec` (104 lines).
+- Isolated C++ FFI handle crossing, memory leases, slot management, and multithreaded foreign store serialization into `Pudu.Compiler.Program.ForeignSpec` (317 lines).
+- Isolated standard library distribution discovery and shadowing into `Pudu.Compiler.Program.StdlibSpec` (52 lines).
+- Partitioned the 650-line standard library evaluation suite into 4 cohesive domain layers:
+  - `Pudu.Compiler.Program.Eval.DataSpec` (92 lines): collections, structures, trees, buffers, flat maps, and column vectors.
+  - `Pudu.Compiler.Program.Eval.ProtocolSpec` (136 lines): formats, JSON, printers, CSV, TOML, HTTP, TLS, sockets, and network.
+  - `Pudu.Compiler.Program.Eval.ServiceSpec` (259 lines): database clients, SQL schema, query shapes, app lifecycle, probes, metrics, access control, and virtual UI.
+  - `Pudu.Compiler.Program.Eval.RuntimeSpec` (189 lines): language semantics, generic traits, runtime concurrency, effects, and numeric widths.
+  - `Pudu.Compiler.Program.EvalSpec` (27 lines): orchestrates the evaluation layers.
+- Simplified `Pudu.Compiler.ProgramSpec` into a lightweight top-level coordinator (44 lines) re-exporting all 13 properties with identical signatures.
+- All files reduced to well below the 500-line limit (max 317 lines). Registered all new modules in `pudu.cabal`.
+
 ## 2026-09-06 — Vectorized column sorting, permutation indexing, binary search, and gather
 
 Extended [[Runtime Column Kernels]], [[Eval Column]], and [[Std Column]] with unboxed permutation index sorting, hardware-speed binary search, and zero-copy gather:
