@@ -76,6 +76,7 @@ library
     Pudu.Eval.Render
     Pudu.Eval.Value
     Pudu.Frontend.Expand
+    Pudu.Frontend.Expand.Substitute
     Pudu.Frontend.Lexer
     Pudu.Frontend.Lexer.Cursor
     Pudu.Frontend.Lexer.Identifier

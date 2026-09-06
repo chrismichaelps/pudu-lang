@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Decompose Frontend.Expand into layered dependency graph modules
+
+Decomposed the 515-line monolithic `src/Pudu/Frontend/Expand.hs` into a scalable, layered dependency graph architecture strictly under 370 lines per module:
+- Isolated hygienic parameter substitution (`substituteExpression`), lexical rename scoping (`hygienicName`, `patternNames`, `renamePattern`), and span retagging (`retag`) into child module `Pudu.Frontend.Expand.Substitute` (183 lines).
+- Refactored `Pudu.Frontend.Expand` into a focused expansion coordinator (359 lines) retaining macro declaration collection (`collectMacros`), expansion state monad (`Expand`, `fresh`, `report`), declaration and expression traversals (`expandDeclaration`, `expandExpression`), recursion depth bounding (`expansionLimit`), and parameter kind validation (`checkKind`, `kindHelp`).
+- Complete vault parity established with new mirrored module documentation (`wiki/src/Pudu/Frontend/Expand/Substitute.md`) and updated `Expand.md` with resolved Grill Log.
+- Registered new submodule in `pudu.cabal`. All CI quality gates verified under `-Werror`.
+
 ## 2026-09-06 — Decompose Eval.Foreign into layered dependency graph modules
 
 Decomposed the 511-line monolithic `src/Pudu/Eval/Foreign.hs` into a scalable, layered dependency graph runtime architecture strictly under 400 lines per module:

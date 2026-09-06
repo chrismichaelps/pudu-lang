@@ -51,7 +51,7 @@ expandModule :: Module -> (Module, [Diagnostic])
 
 ### Linkage
 
-- **Requires:** [[Syntax Tree]], [[Diagnostic Model]], [[Source]], [[Macro Design]].
+- **Requires:** [[Syntax Tree]], [[Diagnostic Model]], [[Source]], [[Macro Design]], [[src/Pudu/Frontend/Expand/Substitute]].
 - **Consumed by:** [[Compiler Pipeline]], between parsing and [[Name Resolution]].
 
 ## Algorithm
@@ -82,6 +82,7 @@ DEPTH 0.78 (DEEP). One entry point hides collection, kind checking, hygiene rena
 - **Q:** May duplicate Set members be collapsed while expanding? **A:** No. _Rationale:_ two equal
   results may contain different macro calls or effects; uniqueness belongs to the evaluated Set,
   not to syntax. _Rejected:_ syntax-level deduplication.
+- **Q:** Why decompose Expand into coordinator and Substitute submodule? **A:** Following AGENTS.md guidelines (<500 lines), extracting pure AST expression/pattern substitution and hygienic variable renaming into `Pudu.Frontend.Expand.Substitute` cleanly isolates AST manipulation from expansion depth tracking and macro verification.
 
 ## Variants
 
