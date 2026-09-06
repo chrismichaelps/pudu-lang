@@ -32,6 +32,7 @@ import Pudu.Eval.Value (Closure (..), Value (..), ArrayMethod (..), StringMethod
 import Pudu.FloatLiteral (FloatWidth (..), normalizeFloat)
 import Pudu.IntegerLiteral
   ( IntegerKind (..)
+  , integerKindBounds
   , integerKindFits
   , integerKindMeet
   , integerKindName
@@ -148,14 +149,9 @@ wrappedResult kind value = pure (IntValue kind (integerKindWrap kind value))
 saturatedResult :: IntegerKind -> Integer -> Evaluator Value
 saturatedResult kind value = pure (IntValue kind clamped)
  where
-  clamped = case integerKindWidth kind of
+  clamped = case integerKindBounds kind of
     Nothing -> value
-    Just width ->
-      let (low, high) =
-            if integerKindSigned kind
-              then (negate (2 ^ (width - 1)), 2 ^ (width - 1) - 1)
-              else (0, 2 ^ width - 1)
-       in max low (min high value)
+    Just (low, high) -> max low (min high value)
 
 {-| A shift, in the checked form the vault requires.
 

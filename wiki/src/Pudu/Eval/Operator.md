@@ -99,3 +99,14 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]]
+
+## Shared scalar bounds
+
+`integerKindBounds` supplies the inclusive mathematical interval of a bounded kind, or Nothing
+for BigInt. Checked arithmetic, literal fit checks and saturation share these intervals. Admitted
+signed widths use constant interval pairs; unsigned widths reuse the existing masks. Platform kinds
+resolve through targetPointerWidth. No host-width narrowing or change to overflow behavior occurs.
+
+### Resolved Grill Log
+- **Q:** Recompute powers independently in checked and saturating operations? **A:** No; share the width descriptor.
+- **Q:** Give BigInt artificial machine bounds? **A:** No; Nothing denotes its unbounded interval.

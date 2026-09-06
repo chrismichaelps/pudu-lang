@@ -46,3 +46,7 @@ Eval.Hash now feeds canonical UTF-8 bytes directly from Unicode scalars, avoidin
 ## Wrapping kernel ownership
 
 Own IntegerLiteral and its mirror for mask-based fixed-width wrapping, consumed by existing runtime arithmetic and bit operations. Shared admitted-width masks replace general remainder; checked arithmetic remains unchanged. No measurements, tests, builds or reviews run.
+
+## Shared scalar bounds continuation
+
+Own IntegerLiteral, Eval.Operator and their mirrors. Checked arithmetic, saturation and literal fit checks now share inclusive kind bounds, using constant signed intervals and existing unsigned masks. No measurements, tests, builds or reviews run.

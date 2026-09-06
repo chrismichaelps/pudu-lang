@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-05 — Shared scalar bound descriptors
+
+- Share fixed-width intervals across checked arithmetic, saturation and literal fit checks.
+- Use constant admitted signed bounds and existing unsigned masks without narrowing inputs.
+- No measurements, tests, builds or reviews run.
+
 ## 2026-09-05 — Mask-based fixed-width wrapping
 
 - Replace general remainder with exact low-bit masks at the runtime wrapping boundary.

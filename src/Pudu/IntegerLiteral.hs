@@ -3,6 +3,7 @@ module Pudu.IntegerLiteral
   ( IntegerKind (..)
   , IntegerSuffix (..)
   , ParsedInteger (..)
+  , integerKindBounds
   , integerKindFits
   , integerKindMeet
   , integerKindName
@@ -146,12 +147,27 @@ integerKindSigned kind = case kind of
     arithmetic result: the exact mathematical answer or a typed overflow
     failure, never a silently truncated one. -}
 integerKindFits :: IntegerKind -> Integer -> Bool
-integerKindFits kind value = case kind of
-  SignedKind width -> fitsSigned width value
-  UnsignedKind width -> fitsUnsigned width value
-  PlatformSigned -> fitsSigned targetPointerWidth value
-  PlatformUnsigned -> fitsUnsigned targetPointerWidth value
-  BigIntKind -> True
+integerKindFits kind value = case integerKindBounds kind of
+  Nothing -> True
+  Just (low, high) -> value >= low && value <= high
+
+{-| Inclusive scalar bounds shared by checked and saturating runtime operations. -}
+integerKindBounds :: IntegerKind -> Maybe (Integer, Integer)
+integerKindBounds kind = case kind of
+  SignedKind width -> Just (signedBounds width)
+  UnsignedKind width -> Just (0, widthMask width)
+  PlatformSigned -> Just (signedBounds targetPointerWidth)
+  PlatformUnsigned -> Just (0, widthMask targetPointerWidth)
+  BigIntKind -> Nothing
+
+signedBounds :: Int -> (Integer, Integer)
+signedBounds width = case width of
+  8 -> (-128, 127)
+  16 -> (-32768, 32767)
+  32 -> (-2147483648, 2147483647)
+  64 -> (-9223372036854775808, 9223372036854775807)
+  128 -> (-170141183460469231731687303715884105728, 170141183460469231731687303715884105727)
+  _ -> let limit = 2 ^ (width - 1) in (negate limit, limit - 1)
 
 {-| A value reduced into a kind's interval by two's-complement wrapping.
 
@@ -280,11 +296,11 @@ digitValue scalar
 
 fitsSigned :: Int -> Integer -> Bool
 fitsSigned width value =
-  let limit = 2 ^ (width - 1)
-   in value >= negate limit && value < limit
+  let (low, high) = signedBounds width
+   in value >= low && value <= high
 
 fitsUnsigned :: Int -> Integer -> Bool
-fitsUnsigned width value = value >= 0 && value < 2 ^ width
+fitsUnsigned width value = value >= 0 && value <= widthMask width
 
 decimalText :: Int -> Text
 decimalText = Text.pack . show
