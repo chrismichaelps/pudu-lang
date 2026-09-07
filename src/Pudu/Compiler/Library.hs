@@ -9,6 +9,7 @@ import Control.Exception (IOException, try)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
+import Pudu.Compiler.Manifest (projectSearchRoots)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
 import System.Environment (getExecutablePath, lookupEnv)
@@ -43,15 +44,28 @@ libraryRoots = do
   existing (catMaybes [configured, installed, development])
 
 {-| The roots to search for one module: the program's own source root first,
-    then the library's, and only when the module is a standard one.
+    then whatever its manifest declares as a dependency, then the library's —
+    and the library only when the module is a standard one.
 
-    A non-standard module is never looked for outside the program. A typo in an
+    A non-standard module is never looked for in the library. A typo in an
     ordinary import must be reported as a missing module in the program, not
-    resolved against a library the author did not mean. -}
+    resolved against a library the author did not mean. It *is* looked for in
+    the project's declared dependencies, because those are the project's own
+    code by its own statement. -}
 searchRoots :: FilePath -> ModuleName -> IO [FilePath]
-searchRoots sourceRoot name
-  | isStandardModule name = (sourceRoot :) <$> libraryRoots
-  | otherwise = pure [sourceRoot]
+searchRoots sourceRoot name = do
+  declared <- dependencyRoots sourceRoot
+  if isStandardModule name
+    then ((sourceRoot : declared) <>) <$> libraryRoots
+    else pure (sourceRoot : declared)
+
+{-| The directories this project's manifest says its code also lives in.
+
+    Searched after the project's own root and before the library, so a project
+    may shadow a dependency's module the same way it may shadow a standard one:
+    visibly, with a file in its own tree. -}
+dependencyRoots :: FilePath -> IO [FilePath]
+dependencyRoots = projectSearchRoots
 
 {-| The library that ships beside the compiler. -}
 installedRoot :: IO (Maybe FilePath)

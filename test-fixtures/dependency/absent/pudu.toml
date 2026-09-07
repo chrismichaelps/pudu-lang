@@ -1,0 +1,6 @@
+[package]
+name = "absent"
+source = "src"
+
+[dependencies]
+shared = "../nothing-here"

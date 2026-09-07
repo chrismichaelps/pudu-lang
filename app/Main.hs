@@ -461,6 +461,15 @@ manifestTemplate name = Text.unlines
   , "version = \"0.1.0\""
   , "language = \">=" <> versionText <> "\""
   , "source = \"src\""
+  , ""
+  , "# A dependency is a directory of modules already on this machine: a"
+  , "# checkout beside this one, a directory shared across a repository, or"
+  , "# code vendored into it. Paths are relative to this file. Nothing here"
+  , "# reaches the network."
+  , "#"
+  , "# [dependencies]"
+  , "# shared = \"../shared\""
+  , "# billing = { path = \"vendor/billing\" }"
   ]
 
 tomlName :: Text -> Text

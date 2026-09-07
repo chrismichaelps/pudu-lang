@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+source = "src"
+
+# A dependency is a directory of modules on this machine. The path is relative
+# to this file, and both forms below mean the same thing.
+[dependencies]
+shared = "../shared"

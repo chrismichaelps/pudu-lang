@@ -1,0 +1,8 @@
+module Money
+
+/// Pennies, so nothing is ever half a penny.
+export fn addPence(left: Int, right: Int) -> Int { left + right }
+
+export fn render(pence: Int) -> Str {
+  display(pence / 100) + "." + display(pence % 100)
+}

@@ -9,7 +9,8 @@ is explicit, pattern matching is exhaustive, and unsafe code sits inside named c
 The standard library is ordinary Pudu source checked by the same compiler.
 
 Pudu is pre-release. The compiler checks, interprets, formats, documents, serves editor requests,
-and runs an interactive session. Native code generation, package management, and a stable 1.0
+and runs an interactive session. A project may depend on other directories of Pudu code by path;
+there is no registry, and nothing reaches the network. Native code generation and a stable 1.0
 compatibility promise are not implemented yet.
 
 Start with the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are

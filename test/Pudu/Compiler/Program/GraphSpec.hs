@@ -6,6 +6,7 @@ module Pudu.Compiler.Program.GraphSpec
   , testImportFailures
   , testImportedMethods
   , testInterfaceEdges
+  , testPathDependencies
   ) where
 
 import Pudu.Compiler.Program
@@ -23,6 +24,7 @@ graphProperties =
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
+  , ("a project reaches the code its manifest declares", testPathDependencies)
   ]
 
 testImportedMethods :: IO Property
@@ -37,6 +39,26 @@ testImportFailures = do
   pure $ conjoin
     [ counterexample "a method requires its trait import" (hiddenTrait === ["E3005"])
     , counterexample "private selections are rejected at the import" (privateName === ["E2013"])
+    ]
+
+{-| A dependency named by path is how the second program written in the
+    language shares a line with the first. Both spellings are checked because
+    both appear: the bare path is what a person writes, and the table is what
+    it has to become when a dependency needs to say anything else.
+
+    The third case is the one that matters for a diagnostic: a dependency that
+    is not on the machine must be reported at the import that wanted it, not
+    passed over so the module goes missing somewhere else. -}
+testPathDependencies :: IO Property
+testPathDependencies = do
+  bare <- codes "test-fixtures/dependency/app/src/Main.pudu"
+  table <- codes "test-fixtures/dependency/tableform/src/Main.pudu"
+  absent <- codes "test-fixtures/dependency/absent/src/Main.pudu"
+  pure $ conjoin
+    [ counterexample "a path dependency resolves" (bare === [])
+    , counterexample "written as a table it resolves the same way" (table === [])
+    , counterexample "a dependency that is not there is reported at the import"
+        (absent === ["E2014"])
     ]
 
 testDiscoveryFailures :: IO Property

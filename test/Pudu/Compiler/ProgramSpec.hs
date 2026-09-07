@@ -15,6 +15,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testImportFailures
   , testImportedMethods
   , testInterfaceEdges
+  , testPathDependencies
   )
 import Pudu.Compiler.Program.StdlibSpec (testStandardLibrary)
 import Pudu.Compiler.Program.TypeBoundarySpec
@@ -33,6 +34,7 @@ programProperties =
   , ("program discovery diagnoses missing and mismatched modules", testDiscoveryFailures)
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
+  , ("a project reaches the code its manifest declares", testPathDependencies)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)

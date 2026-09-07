@@ -36,6 +36,7 @@ library
   exposed-modules:
     Pudu.Compiler
     Pudu.Compiler.Library
+    Pudu.Compiler.Manifest
     Pudu.Compiler.Program
     Pudu.Diagnostic
     Pudu.Diagnostic.Render
