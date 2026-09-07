@@ -54,6 +54,11 @@ jobs:
         run: node test/lsp-session.mjs "$(cabal list-bin pudu)"
       - name: Verify the language server survives what an editor sends it
         run: node test/lsp-robustness.mjs "$(cabal list-bin pudu)"
+      # A running process is the only place this can be checked: the request
+      # arrives from outside, and what is under test is what a program already
+      # running does with it.
+      - name: Verify a program asked to stop drains rather than being killed
+        run: node test/signal-drain.mjs "$(cabal list-bin pudu)"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

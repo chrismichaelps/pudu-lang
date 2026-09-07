@@ -1,0 +1,34 @@
+module UsesSignal
+
+import Std.Signal as Signal
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Listening is possible on this platform
+  if Signal.listen() {
+    held = held + 1
+  }
+
+  // 2. Listening twice is allowed and says the same thing
+  if Signal.listen() && Signal.listen() {
+    held = held + 1
+  }
+
+  // 3. Nothing has asked this program to stop
+  if !Signal.requested() {
+    held = held + 1
+  }
+
+  // 4. So it is still running, which is the same question the other way
+  if Signal.running() == !Signal.requested() {
+    held = held + 1
+  }
+
+  // 5. Starting reports both at once: heard, and not yet asked
+  if Signal.start() {
+    held = held + 1
+  }
+
+  held
+}

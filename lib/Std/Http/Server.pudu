@@ -14,6 +14,7 @@ import Std.Net as Net
 import Std.Net.Read as Read
 import Std.Option as Option
 import Std.Result as Result
+import Std.Signal as Signal
 import Std.Sync as Sync
 
 export type ServerError
@@ -259,6 +260,45 @@ export fn stop(running: &Running) -> Result[(), ServerError] {
       Other(show(problem))
     })
 }
+
+/// Stop the server when the supervisor asks the program to stop.
+///
+/// The drain below is careful and, until something calls `stop`, unreachable
+/// in the one case it exists for: a deployment, where the request to stop
+/// arrives as a signal. This is the wire between the two.
+///
+/// A thread does the waiting because accepting blocks: the loop is inside
+/// `accept` when the signal arrives, and only closing the listener brings it
+/// out. Closing is what `stop` already does, so the drain that follows is the
+/// ordinary one and nothing here has to know how it works.
+///
+/// Answers whether the program can hear the request at all. `false` means this
+/// platform has no such signal and the server will run until something else
+/// stops it — worth reporting rather than assuming a drain that cannot happen.
+export fn stopOnSignal(running: &Running) -> Bool {
+  if !Signal.listen() {
+    return false
+  }
+  let held = *running
+  let _watcher = Concurrent.start(fn() -> () {
+      var waiting = true
+      while waiting {
+        if Signal.requested() {
+          waiting = false
+        } else {
+          let _slept = Concurrent.sleep(SIGNAL_POLL_MILLIS)
+        }
+      }
+      let _stopped = stop(&held)
+    })
+  true
+}
+
+/// How often the watcher asks whether a stop has been requested.
+///
+/// Short enough that a supervisor's grace period is not spent waiting for this
+/// loop to come round, long enough that an idle server is not busy asking.
+const SIGNAL_POLL_MILLIS: Int = 50
 
 /// Accept connections into a bounded queue consumed by a fixed worker pool.
 ///

@@ -25,6 +25,8 @@ data Builtin
   | WriteFileBuiltin
   | AppendFileBuiltin
   | FileExistsBuiltin
+  | SignalWatchStopBuiltin
+  | SignalStopRequestedBuiltin
   | RemoveFileBuiltin
   | ListDirectoryBuiltin
   | OpenReaderBuiltin
@@ -172,6 +174,8 @@ builtinName value = case value of
   WriteFileBuiltin -> "writeFile"
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
+  SignalWatchStopBuiltin -> "signalWatchStop"
+  SignalStopRequestedBuiltin -> "signalStopRequested"
   RemoveFileBuiltin -> "removeFile"
   ListDirectoryBuiltin -> "listDirectory"
   OpenReaderBuiltin -> "openReader"

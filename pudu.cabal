@@ -53,6 +53,7 @@ library
     Pudu.Eval.Clock
     Pudu.Eval.Concurrent
     Pudu.Eval.Effect
+    Pudu.Eval.Signal
     Pudu.Eval.Entropy
     Pudu.Eval.Install
     Pudu.Eval.Env
@@ -219,6 +220,9 @@ library
     process >=1.6 && <1.7,
     text >=2.1 && <2.2,
     time >=1.12 && <1.15
+  if !os(windows)
+    build-depends:  unix >=2.8 && <2.9
+    cpp-options:    -DPUDU_POSIX_SIGNALS
 
 executable pudu
   import:           warnings

@@ -49,6 +49,7 @@ testProtocolEvaluation = do
   intervalTree <- runEntry "test-fixtures/stdlib/UsesIntervalTree.pudu"
   tarArchive <- runEntry "test-fixtures/stdlib/UsesArchiveTar.pudu"
   regexEngine <- runEntry "test-fixtures/stdlib/UsesRegex.pudu"
+  stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -216,6 +217,13 @@ testProtocolEvaluation = do
     , counterexample
         "patterns compile, match, capture, replace, and refuse to run away"
         (regexEngine === Just "24")
+    {-| What can be checked from inside one process: that the platform can hear
+        a request to stop, and that a program nobody has asked to stop says so.
+        Whether an actual signal reaches a running program is checked by
+        `test/signal-drain.mjs`, which needs two processes to ask. -}
+    , counterexample
+        "a program can hear a request to stop, and knows it has not had one"
+        (stopSignals === Just "5")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

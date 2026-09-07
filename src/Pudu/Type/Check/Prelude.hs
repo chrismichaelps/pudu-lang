@@ -283,6 +283,8 @@ effectSignatures =
   , ("writeFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
   , ("appendFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
   , ("fileExists", monotype (FunctionTypeValue False [stringType] boolType))
+  , ("signalWatchStop", monotype (FunctionTypeValue False [] boolType))
+  , ("signalStopRequested", monotype (FunctionTypeValue False [] boolType))
   , ("removeFile", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))
   , ("listDirectory", monotype (FunctionTypeValue False [stringType] (resultOf (arrayOf stringType))))
   , ("createDirectory", monotype (FunctionTypeValue False [stringType] (resultOf unitTypeValue)))

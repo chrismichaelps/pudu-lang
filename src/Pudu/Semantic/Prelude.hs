@@ -64,6 +64,7 @@ effectValueNames :: [Text]
 effectValueNames =
   [ "print", "printError", "printPart", "printErrorPart", "readLine"
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
+  , "signalWatchStop", "signalStopRequested"
   , "listDirectory", "createDirectory"
   , "openReader", "openWriter", "openAppender"
   , "readChunk", "writeChunk", "flushWriter", "closeHandle"

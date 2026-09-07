@@ -12,6 +12,7 @@ import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Eval.Compress (compressGzip, decompressGzip)
 import Pudu.Eval.Clock
+import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
   ( closeHandleAt
   , flushHandleAt
@@ -98,6 +99,8 @@ effectBuiltins =
   , WriteFileBuiltin
   , AppendFileBuiltin
   , FileExistsBuiltin
+  , SignalWatchStopBuiltin
+  , SignalStopRequestedBuiltin
   , RemoveFileBuiltin
   , ListDirectoryBuiltin
   , CreateDirectoryBuiltin
@@ -202,6 +205,8 @@ callEffect spanValue builtin arguments = do
         effectUnit (appendTextFile (Text.unpack path) (textOf value))
       (FileExistsBuiltin, [StrValue path]) ->
         BoolValue <$> lift refusal (testFileExists (Text.unpack path))
+      (SignalWatchStopBuiltin, []) -> BoolValue <$> lift refusal watchForStop
+      (SignalStopRequestedBuiltin, []) -> BoolValue <$> lift refusal stopRequested
       (RemoveFileBuiltin, [StrValue path]) -> effectUnit (removeFileAt (Text.unpack path))
       (ListDirectoryBuiltin, [StrValue path]) ->
         resultOf . fmap textArray <$> lift refusal (listDirectoryAt (Text.unpack path))
