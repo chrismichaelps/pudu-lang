@@ -44,12 +44,12 @@ export type SmtpError
   | TimedOut
   | EmptyEnvelope
 
-/// Initializes default client configuration targeting host and port.
-export fn client(host: Str, port: Int) -> SmtpClient {
+/// Configure the relay destination and the application-supplied EHLO identity.
+export fn client(host: Str, port: Int, domain: Str) -> SmtpClient {
   SmtpClient {
     host: host,
     port: port,
-    domain: "localhost",
+    domain: domain,
     credentials: None,
     timeoutMs: 10000,
     security: if port == 465 { ImplicitTls } else { StartTlsRequired },
@@ -186,10 +186,11 @@ export fn parseReply(raw: Str) -> Result[SmtpReply, SmtpError] {
 /// Delivers a message to the target SMTP relay and returns the count of accepted envelope recipients.
 export fn deliver(c: &SmtpClient, msg: &Mail.Message) -> Result[Int, SmtpError] {
   let _valid = Result.mapErr(Mail.sendable(msg), fn(problem: Mail.MailError) -> SmtpError { ConnectionFailed(Mail.explain(&problem)) }) ?
+  if c.host.trim().isEmpty() || c.port < 1 || c.port > 65535 { return Err(ConnectionFailed("invalid SMTP destination")) }
   if c.timeoutMs < 1 { return Err(ConnectionFailed("timeout must be positive")) }
   if c.domain.isEmpty() { return Err(ConnectionFailed("EHLO domain is empty")) }
   for character in c.domain.chars() {
-    if character.code() <= 32 || character.code() == 127 { return Err(ConnectionFailed("invalid EHLO domain")) }
+    if character.code() <= 32 || character.code() >= 127 { return Err(ConnectionFailed("invalid EHLO domain; use an ASCII hostname or address literal")) }
   }
   if c.timeoutMs > 86400000 { return Err(ConnectionFailed("timeout exceeds one day")) }
   if c.domain.toBytes().length() > 255 { return Err(ConnectionFailed("EHLO domain is too long")) }

@@ -10,8 +10,8 @@ aliases: [Std Mail Smtp]
 ## Purpose and interface
 
 Deliver Std.Mail.Message values through SMTP with verified implicit TLS or required STARTTLS.
-`client(host,port)` selects ImplicitTls on port 465 and StartTlsRequired otherwise. Configuration
-contains host, port, domain, credentials, timeoutMs and security. `withSecurity` explicitly selects
+`client(host,port,domain)` selects ImplicitTls on port 465 and StartTlsRequired otherwise. Configuration
+contains host, port, domain, credentials, timeoutMs and security. EHLO domain is a required application setting; it is never inferred from the remote server or defaulted to localhost. `withSecurity` explicitly selects
 Plaintext, ImplicitTls or StartTlsRequired. `withDomain`, `withTimeout`, `withAuth` (LOGIN) and
 `withPlainAuth` (PLAIN) return updated configurations. Direct SmtpClient literals must include security.
 
@@ -47,11 +47,15 @@ accepted DATA. SMTPUTF8, MIME transfer encoding, OAuth SASL and delivery queues 
 ## Usage
 
 ```pudu
-let submission = Smtp.withAuth(&Smtp.client("smtp.example.com", 587), user, password)
+let submission = Smtp.withAuth(&Smtp.client(smtpHost, smtpPort, ehloDomain), user, password)
 let accepted = Smtp.deliver(&submission, &message) ?
-let implicit = Smtp.withPlainAuth(&Smtp.client("smtp.example.com", 465), user, password)
-let relay = Smtp.withSecurity(&Smtp.client("localhost", 25), Smtp.Plaintext)
 ```
+
+Supply `smtpHost`, `smtpPort` and `ehloDomain` from application configuration. The EHLO identity is
+the client's fully qualified name or address literal, distinct from the server destination. Host
+must be nonempty and port must be in 1..65535. `withSecurity` overrides port-based transport defaults.
+
+
 
 ## Grill Log
 
@@ -66,3 +70,5 @@ No builds, tests, reviews, measurements or live SMTP deliveries ran; readiness r
 ## Referenced by
 
 [[src/Std/_MOC]] · [[Std Mail]] · [[Std Net]] · [[Std Tls]] · [[architecture/WEB]]
+
+Resolved Grill Log: require the EHLO identity at construction; do not silently guess a deployment hostname. The constructor now takes three arguments.

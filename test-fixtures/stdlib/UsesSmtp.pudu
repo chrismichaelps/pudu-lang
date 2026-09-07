@@ -8,7 +8,7 @@ export fn main() -> Int {
   var held = 0
 
   // 1. Client configuration and builders
-  let defaultClient = Smtp.client("smtp.example.com", 587)
+  let defaultClient = Smtp.client("smtp.example.com", 587, "sender.example.com")
   let configuredClient = Smtp.withDomain(&defaultClient, "my-app.internal")
   let withAuthClient = Smtp.withAuth(&configuredClient, "mailer-bot", "secret-password-123")
   let withTimeoutClient = Smtp.withTimeout(&withAuthClient, 5000)
@@ -103,7 +103,7 @@ export fn main() -> Int {
   }
 
   // 8. Connection failure handling
-  let deadHostClient = Smtp.withTimeout(&Smtp.client("127.0.0.1", 1), 50)
+  let deadHostClient = Smtp.withTimeout(&Smtp.client("127.0.0.1", 1, "sender.example.com"), 50)
   let sender = Result.unwrapOr(Mail.address("outbound@example.com"), Mail.Address{written: ""})
   let rcpt = Result.unwrapOr(Mail.address("inbound@example.com"), Mail.Address{written: ""})
   let testMsg = Result.unwrapOr(Mail.message(&sender, &rcpt, "Status update", "Everything is working."), Mail.Message {
