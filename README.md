@@ -10,8 +10,15 @@ The standard library is ordinary Pudu source checked by the same compiler.
 
 Pudu is pre-release. The compiler checks, interprets, formats, documents, serves editor requests,
 and runs an interactive session. A project may depend on other directories of Pudu code by path;
-there is no registry, and nothing reaches the network. Native code generation and a stable 1.0
+there is no registry, and nothing reaches the network. `pudu build` writes one executable holding
+the program, every module it reached, and the compiler itself, so a deployment is one file to copy
+— the program is still interpreted when it starts. Native code generation and a stable 1.0
 compatibility promise are not implemented yet.
+
+```bash
+pudu build src/Main.pudu -o service
+./service          # runs anywhere the compiler runs, with nothing installed
+```
 
 Start with the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are
 [language](https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index),

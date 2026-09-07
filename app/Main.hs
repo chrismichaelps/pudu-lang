@@ -12,9 +12,11 @@ import System.Directory
   , doesDirectoryExist
   , doesFileExist
   , getCurrentDirectory
+  , getTemporaryDirectory
   , listDirectory
   )
-import System.FilePath ((</>), takeExtension, takeFileName)
+import System.FilePath ((</>), takeBaseName, takeExtension, takeFileName)
+import Pudu.Bundle (Bundle (..), attachedBundle, bundleOf, materialise, writeBundled)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
@@ -43,12 +45,67 @@ import Pudu.Diagnostic.Render
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
-import System.Environment (getArgs, lookupEnv)
+import System.Environment (getArgs, lookupEnv, setEnv, unsetEnv)
 import System.Exit (ExitCode (ExitFailure), exitFailure, exitSuccess, exitWith)
 import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 
 main :: IO ()
 main = do
+  carried <- attachedBundle
+  case carried of
+    Just bundle -> runBundled bundle
+    Nothing -> runCommand
+
+{-| Run the program attached to this executable.
+
+    Nothing about the command line is consulted: a bundled executable is the
+    program, so its arguments belong to the program rather than to the
+    compiler, and a bundle that read `run` or `--help` out of them would take
+    them away from it. -}
+runBundled :: Bundle -> IO ()
+runBundled bundle = do
+  style <- detectStyle
+  root <- bundleCacheRoot bundle
+  entry <- materialise root bundle
+  withEnvironment "PUDU_LIB" root (runProgram style entry)
+
+{-| Where a bundle lays its modules out.
+
+    Under the machine's temporary directory, in a directory named for what the
+    bundle holds, so a second run of the same program finds the files already
+    there and a different program never meets them. Temporary rather than
+    permanent because these are a detail of running, not something a person
+    installed. -}
+bundleCacheRoot :: Bundle -> IO FilePath
+bundleCacheRoot bundle = do
+  base <- getTemporaryDirectory
+  let stamp = Text.unpack (bundleFingerprint bundle)
+      root = base </> ("pudu-bundle-" <> stamp)
+  createDirectoryIfMissing True root
+  pure root
+
+{-| A name for a bundle's contents, stable across runs and different for
+    different programs. -}
+bundleFingerprint :: Bundle -> Text
+bundleFingerprint bundle =
+  Text.pack (show (abs (hashText (bundleEntry bundle <> Text.concat (map snd (bundleModules bundle))))))
+
+hashText :: Text -> Int
+hashText = Text.foldl' (\accumulated scalar -> accumulated * 33 + fromEnum scalar) 5381
+
+{-| Run an action with one environment variable set, restoring it afterwards. -}
+withEnvironment :: String -> String -> IO a -> IO a
+withEnvironment name value action = do
+  previous <- lookupEnv name
+  setEnv name value
+  outcome <- action
+  case previous of
+    Just held -> setEnv name held
+    Nothing -> unsetEnv name
+  pure outcome
+
+runCommand :: IO ()
+runCommand = do
   arguments <- getArgs
   style <- detectStyle
   case arguments of
@@ -59,6 +116,11 @@ main = do
     ("explain" : path : _) -> explainProgram style path
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
+      exitFailure
+    ("build" : path : "-o" : target : _) -> buildProgram style path target
+    ("build" : path : _) -> buildProgram style path (defaultTargetName path)
+    ("build" : []) -> do
+      hPutStrLn stderr "pudu build: no file given"
       exitFailure
     ("test" : paths) -> testPaths style paths
     ("init" : path : _) -> initProject (Just path)
@@ -192,6 +254,39 @@ runProgram style path = do
           Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure
           Just value -> reportResult value
           Nothing -> exitFailure
+
+{-| Write one file that runs this program anywhere the compiler runs.
+
+    The program is checked first and refused if it does not compile, because a
+    build that produced a file which fails at startup would have moved the
+    error to the worst possible place to meet it. -}
+buildProgram :: RenderStyle -> FilePath -> FilePath -> IO ()
+buildProgram style path target = do
+  program <- compileProgram path
+  let diagnostics = programDiagnostics program
+  unless (null diagnostics) $
+    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+  if hasErrors diagnostics
+    then exitFailure
+    else case programRoot program of
+      Nothing -> do
+        hPutStrLn stderr "pudu build: the program produced no module"
+        exitFailure
+      Just entry -> do
+        let bundle = bundleOf entry (programNamedSources program)
+        writeBundled target bundle
+        TextIO.putStrLn
+          ( Text.pack target
+              <> " ("
+              <> Text.pack (show (length (bundleModules bundle)))
+              <> " modules)"
+          )
+
+{-| What to call the built file when nobody said. -}
+defaultTargetName :: FilePath -> FilePath
+defaultTargetName path =
+  let stem = takeBaseName path
+   in if null stem then "program" else stem
 
 {-| The entry point every runnable program declares. -}
 entryPointName :: Text
@@ -553,6 +648,8 @@ usage =
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu build <file> [-o name]  write one file that runs anywhere the"
+    , "                       compiler runs, with every module it needs inside it"
     , "  pudu test [path]...  discover and execute test fixtures"
     , "  pudu init [path]     initialize a canonical project with pudu.toml"
     , "  pudu explain <file>  run a program and report what running it cost"

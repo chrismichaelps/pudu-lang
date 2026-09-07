@@ -54,6 +54,13 @@ data ProgramResult = ProgramResult
   { programRoot :: !(Maybe ModuleName)
   , programModules :: !(Map ModuleName CompileResult)
   , programSources :: ![Source]
+  {-| Every module the walk reached, by the name it was reached under.
+
+      `programSources` answers what was read; this answers what each one is
+      called, which is what anything reassembling the program somewhere else
+      needs — a module's canonical path is derived from its name, so the name
+      is the only part of a file's location that has to travel with it. -}
+  , programNamedSources :: !(Map ModuleName Source)
   , programOrder :: ![ModuleName]
   , programDiagnostics :: ![Diagnostic]
   , programContext :: !CompileContext
@@ -105,14 +112,14 @@ compileProgram rootPath = do
   case rootRead of
     Left _ -> do
       source <- newSource (SourceName (Text.pack rootPath)) Text.empty
-      pure (ProgramResult Nothing Map.empty [source] [] (rootReadFailure rootPath source)
+      pure (ProgramResult Nothing Map.empty [source] Map.empty [] (rootReadFailure rootPath source)
         (CompileContext (exportIndex Map.empty) Map.empty True))
     Right rootSource -> do
       let rootFrontend = runFrontend rootSource
       case frontendModule rootFrontend of
         Nothing ->
           pure
-            (ProgramResult Nothing Map.empty [rootSource] [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) Map.empty True))
+            (ProgramResult Nothing Map.empty [rootSource] Map.empty [] (frontendDiagnostics rootFrontend) (CompileContext (exportIndex Map.empty) Map.empty True))
         Just rootModule -> do
           let rootName = locatedValue (moduleName rootModule)
               (sourceRoot, rootMismatch) = deriveSourceRoot rootPath rootModule
@@ -123,7 +130,7 @@ compileProgram rootPath = do
               compiled <- compileFrontendWith emptyContext rootFrontend
               pure
                 (ProgramResult (Just rootName) (Map.singleton rootName compiled)
-                  [rootSource] [rootName]
+                  [rootSource] (Map.singleton rootName rootSource) [rootName]
                   (sortDiagnostics (frontendDiagnostics rootFrontend <> mismatch)) emptyContext)
             else discoverFrom sourceRoot rootSource rootFrontend rootModule
 
@@ -143,7 +150,7 @@ compileProgramSource sourceRoot rootSource = do
   case frontendModule rootFrontend of
     Nothing ->
       pure
-        ( ProgramResult Nothing Map.empty [rootSource] []
+        ( ProgramResult Nothing Map.empty [rootSource] Map.empty []
             (frontendDiagnostics rootFrontend)
             (CompileContext (exportIndex Map.empty) Map.empty True)
         )
@@ -225,7 +232,12 @@ finish rootName discovered = do
             <> concatMap frontendDiagnostics (Map.elems uncompiled)
             <> concatMap compileDiagnostics (Map.elems compiled)
         )
-  pure (ProgramResult (Just rootName) compiled (Map.elems (discoveredSources discovered)) order diagnostics context)
+  pure
+    ( ProgramResult (Just rootName) compiled
+        (Map.elems (discoveredSources discovered))
+        (discoveredSources discovered)
+        order diagnostics context
+    )
 
 dependencyOrder :: Map ModuleName Module -> [ModuleName]
 dependencyOrder modules =

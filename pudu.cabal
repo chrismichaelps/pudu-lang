@@ -34,6 +34,7 @@ library
   import:           warnings
   hs-source-dirs:   src
   exposed-modules:
+    Pudu.Bundle
     Pudu.Compiler
     Pudu.Compiler.Library
     Pudu.Compiler.Manifest

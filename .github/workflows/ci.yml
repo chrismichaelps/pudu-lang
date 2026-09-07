@@ -59,6 +59,10 @@ jobs:
       # running does with it.
       - name: Verify a program asked to stop drains rather than being killed
         run: node test/signal-drain.mjs "$(cabal list-bin pudu)"
+      # Run with an empty environment and from another directory, because what
+      # is under test is that the built file needs nothing from around it.
+      - name: Verify a built program runs with nothing installed
+        run: node test/build-bundle.mjs "$(cabal list-bin pudu)"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
