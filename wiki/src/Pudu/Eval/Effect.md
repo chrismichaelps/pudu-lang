@@ -74,3 +74,10 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Builtin]] · [[Evaluator]] · [[ADR-0009]]
+
+
+## TLS and binary compression implementation contract
+
+Dispatches tlsUpgradeWithin through socket/TLS ownership transfer. gzipCompress and gzipDecompress invoke bounded host codec adapters; these host effects are unavailable during constant evaluation.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

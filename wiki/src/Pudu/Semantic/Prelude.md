@@ -163,3 +163,10 @@ They are available implicitly in the value namespace for standard library module
 
 
 
+
+
+## TLS and binary compression implementation contract
+
+Adds tlsUpgradeWithin, gzipCompress and gzipDecompress to the prelude value vocabulary.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

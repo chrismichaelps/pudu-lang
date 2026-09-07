@@ -32,3 +32,10 @@ the peer may already have received a prefix, so no later operation can safely re
   must not alter another operation on the same runtime resource. _Rejected:_ ambient timeout state.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Std Net]] · [[Eval Effect]]
+
+
+## TLS and binary compression implementation contract
+
+takeSocket atomically removes a plain socket token for exclusive transfer into TLS. The caller owns cleanup after transfer; old tokens cannot initiate further operations. Callers must not race upgrade with in-flight plain operations.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

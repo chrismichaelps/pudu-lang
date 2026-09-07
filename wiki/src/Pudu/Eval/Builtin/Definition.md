@@ -134,3 +134,10 @@ Resolved Grill Log: Register explicit enum tags for low-level memory buffers and
 to enable direct O(1) builtin dispatch without runtime string lookups.
 
 
+
+
+## TLS and binary compression implementation contract
+
+Registers tlsUpgradeWithin(Int,Str,Int), gzipCompress(Bytes,Int,Int), gzipDecompress(Bytes,Int) as named effect primitives returning Result[T,Str].
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

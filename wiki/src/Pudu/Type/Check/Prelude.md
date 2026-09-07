@@ -168,3 +168,10 @@ Wires type schemes for the 13 extended primitives:
 
 
 
+
+
+## TLS and binary compression implementation contract
+
+tlsUpgradeWithin: (Int,Str,Int)->Result[Int,Str]; gzipCompress: (Bytes,Int,Int)->Result[Bytes,Str]; gzipDecompress: (Bytes,Int)->Result[Bytes,Str].
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

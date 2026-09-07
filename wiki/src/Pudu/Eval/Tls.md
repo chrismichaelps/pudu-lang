@@ -41,3 +41,10 @@ protocol goodbye only within its remaining budget, then closes the socket uncond
   other host failures. _Rejected:_ wrapping the raw handshake in a broad inner catch.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Std Tls]] · [[Eval Socket]]
+
+
+## TLS and binary compression implementation contract
+
+upgradeTlsWithin consumes a plain socket, verifies the named host using system trust and TLS 1.2/1.3, registers the secured token under masked ownership transfer, and closes on handshake failure or timeout. No plaintext fallback. Implicit connect uses the same handshake parameters.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

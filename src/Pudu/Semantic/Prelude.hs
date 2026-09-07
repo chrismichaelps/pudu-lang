@@ -70,7 +70,7 @@ effectValueNames =
   , "tcpListen", "tcpAccept", "tcpConnect", "tcpConnectWithin"
   , "socketSend", "socketSendWithin", "socketReceive", "socketReceiveWithin"
   , "socketClose", "socketPeer", "socketPort", "socketFinish"
-  , "tlsConnect", "tlsConnectWithin", "tlsSend", "tlsSendWithin"
+  , "gzipCompress", "gzipDecompress", "tlsUpgradeWithin", "tlsConnect", "tlsConnectWithin", "tlsSend", "tlsSendWithin"
   , "tlsReceive", "tlsReceiveWithin", "tlsClose", "tlsCloseWithin", "tlsPeer"
   , "spawnThread", "joinThread", "sleepMillis"
   , "channelOpen", "channelPush", "channelPull", "channelWaiting", "channelFinish"

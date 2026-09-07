@@ -26,9 +26,10 @@ module Pudu.Eval.Tls
   , sendTls
   , sendTlsWithin
   , tlsPeerName
+  , upgradeTlsWithin
   ) where
 
-import Control.Exception (SomeException, bracketOnError, try)
+import Control.Exception (SomeAsyncException, SomeException, bracketOnError, fromException, mask, mask_, onException, try, tryJust)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Default.Class (def)
@@ -41,6 +42,7 @@ import qualified Network.Socket as Net
 import qualified Network.TLS as Tls
 import qualified Network.TLS.Extra.Cipher as Cipher
 import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Socket (SocketStore, takeSocket)
 import qualified System.Timeout as Timeout
 import qualified System.X509 as X509
 
@@ -91,7 +93,7 @@ secureConnect store host port = secureConnectWithin store host port (-1)
 {-| Open and verify a connection within one operation budget. A negative
     budget retains the unbounded low-level primitive. -}
 secureConnectWithin :: TlsStore -> Text -> Int -> Integer -> IO (IoOutcome Int)
-secureConnectWithin store host port millis = do
+secureConnectWithin store host port millis = mask_ $ do
   attempted <- attemptWithin millis $ do
     resolved <- resolveAddressRaw (Text.unpack host) port
     case resolved of
@@ -101,7 +103,8 @@ secureConnectWithin store host port millis = do
     Left problem -> pure (IoFailed (Text.pack (show problem)))
     Right Nothing -> pure (IoFailed timeoutMessage)
     Right (Just (Left problem)) -> pure (IoFailed problem)
-    Right (Just (Right secured)) -> IoDone <$> remember store secured
+    Right (Just (Right secured)) ->
+      (IoDone <$> remember store secured) `onException` Net.close (securedSocket secured)
  where
   openSecured address =
     bracketOnError (Net.openSocket address) Net.close $ \socket -> do
@@ -113,7 +116,7 @@ secureConnectWithin store host port millis = do
 
   parameters trust =
     (Tls.defaultParamsClient (Text.unpack host) mempty)
-      { Tls.clientSupported = def{Tls.supportedCiphers = Cipher.ciphersuite_strong}
+      { Tls.clientSupported = def{Tls.supportedCiphers = Cipher.ciphersuite_strong, Tls.supportedVersions = [Tls.TLS13, Tls.TLS12]}
       , Tls.clientShared = def{Tls.sharedCAStore = trust}
       }
 
@@ -222,8 +225,8 @@ withSecured store token action = do
 
 attemptWithin :: Integer -> IO a -> IO (Either SomeException (Maybe a))
 attemptWithin millis action
-  | millis < 0 = fmap (fmap Just) (try action)
-  | otherwise = try (Timeout.timeout (microseconds millis) action)
+  | millis < 0 = fmap (fmap Just) (tryJust synchronousOnly action)
+  | otherwise = tryJust synchronousOnly (Timeout.timeout (microseconds millis) action)
 
 microseconds :: Integer -> Int
 microseconds millis =
@@ -242,3 +245,37 @@ invalidateTls store token = do
     Just secured -> do
       _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
       pure ()
+
+{-| Upgrade only after the application protocol has agreed to TLS. Ownership
+    stays masked between removing the plain token and registering the TLS one. -}
+upgradeTlsWithin :: SocketStore -> TlsStore -> Int -> Text -> Integer -> IO (IoOutcome Int)
+upgradeTlsWithin sockets store token host millis = mask $ \restore -> do
+  taken <- takeSocket sockets token
+  case taken of
+    Nothing -> pure (IoFailed "the plain connection is closed")
+    Just socket -> do
+      let handshake = do
+            trust <- X509.getSystemCertificateStore
+            let parameters = (Tls.defaultParamsClient (Text.unpack host) mempty)
+                  { Tls.clientSupported = def
+                      { Tls.supportedCiphers = Cipher.ciphersuite_strong
+                      , Tls.supportedVersions = [Tls.TLS13, Tls.TLS12]
+                      }
+                  , Tls.clientShared = def{Tls.sharedCAStore = trust}
+                  }
+            context <- Tls.contextNew socket parameters
+            Tls.handshake context
+            pure Secured{securedContext = context, securedSocket = socket, securedHost = host}
+          discard = do
+            _ <- try (Net.close socket) :: IO (Either SomeException ())
+            pure ()
+      attempted <- restore (attemptWithin millis handshake) `onException` discard
+      case attempted of
+        Left problem -> discard >> pure (IoFailed (Text.pack (show problem)))
+        Right Nothing -> discard >> pure (IoFailed timeoutMessage)
+        Right (Just secured) -> (IoDone <$> remember store secured) `onException` discard
+
+synchronousOnly :: SomeException -> Maybe SomeException
+synchronousOnly problem = case fromException problem :: Maybe SomeAsyncException of
+  Just _ -> Nothing
+  Nothing -> Just problem

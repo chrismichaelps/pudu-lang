@@ -47,6 +47,9 @@ data Builtin
   | SocketPortBuiltin
   | SocketFinishBuiltin
   | TlsConnectBuiltin
+  | GzipCompressBuiltin
+  | GzipDecompressBuiltin
+  | TlsUpgradeWithinBuiltin
   | TlsConnectWithinBuiltin
   | TlsSendBuiltin
   | TlsSendWithinBuiltin
@@ -191,6 +194,9 @@ builtinName value = case value of
   SocketPortBuiltin -> "socketPort"
   SocketFinishBuiltin -> "socketFinish"
   TlsConnectBuiltin -> "tlsConnect"
+  GzipCompressBuiltin -> "gzipCompress"
+  GzipDecompressBuiltin -> "gzipDecompress"
+  TlsUpgradeWithinBuiltin -> "tlsUpgradeWithin"
   TlsConnectWithinBuiltin -> "tlsConnectWithin"
   TlsSendBuiltin -> "tlsSend"
   TlsSendWithinBuiltin -> "tlsSendWithin"

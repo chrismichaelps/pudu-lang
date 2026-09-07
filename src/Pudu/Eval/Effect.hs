@@ -10,6 +10,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
+import Pudu.Eval.Compress (compressGzip, decompressGzip)
 import Pudu.Eval.Clock
 import Pudu.Eval.Handle
   ( closeHandleAt
@@ -45,6 +46,7 @@ import Pudu.Eval.Tls
   , sendTls
   , sendTlsWithin
   , tlsPeerName
+  , upgradeTlsWithin
   )
 import Pudu.Eval.Socket
   ( acceptOn
@@ -132,6 +134,9 @@ effectBuiltins =
   , SocketPortBuiltin
   , SocketFinishBuiltin
   , TlsConnectBuiltin
+  , GzipCompressBuiltin
+  , GzipDecompressBuiltin
+  , TlsUpgradeWithinBuiltin
   , TlsConnectWithinBuiltin
   , TlsSendBuiltin
   , TlsSendWithinBuiltin
@@ -262,6 +267,14 @@ callEffect spanValue builtin arguments = do
         store <- currentTlsStore
         resultOf . fmap (intOf . fromIntegral)
           <$> lift refusal (secureConnect store host (fromInteger port))
+      (GzipCompressBuiltin, [BytesValue payload, IntValue _ level, IntValue _ chunkSize]) ->
+        resultOf . fmap BytesValue <$> lift refusal (compressGzip payload level chunkSize)
+      (GzipDecompressBuiltin, [BytesValue payload, IntValue _ limit]) ->
+        resultOf . fmap BytesValue <$> lift refusal (decompressGzip payload limit)
+      (TlsUpgradeWithinBuiltin, [IntValue _ token, StrValue host, IntValue _ timeout]) -> do
+        store <- currentTlsStore
+        resultOf . fmap (intOf . fromIntegral)
+          <$> lift refusal (upgradeTlsWithin sockets store (fromInteger token) host timeout)
       (TlsConnectWithinBuiltin, [StrValue host, IntValue _ port, IntValue _ timeout]) -> do
         store <- currentTlsStore
         resultOf . fmap (intOf . fromIntegral)

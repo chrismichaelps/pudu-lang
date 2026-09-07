@@ -15,6 +15,7 @@ module Pudu.Eval.Socket
   , sendOn
   , sendOnWithin
   , shutdownWriteAt
+  , takeSocket
   ) where
 
 import Control.Exception (IOException, SomeException, bracketOnError, try)
@@ -282,3 +283,9 @@ invalidateSocket :: SocketStore -> Int -> IO ()
 invalidateSocket store token = do
   _ <- closeSocketAt store token
   pure ()
+
+{-| Transfer ownership to a protocol upgrade. The plain token is retired before
+    the handshake starts; the recipient must close on every failure path. -}
+takeSocket :: SocketStore -> Int -> IO (Maybe Net.Socket)
+takeSocket store token = atomicModifyIORef' (socketTable store) $ \table ->
+  (IntMap.delete token table, IntMap.lookup token table)
