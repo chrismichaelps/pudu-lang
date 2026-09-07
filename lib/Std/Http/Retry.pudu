@@ -1,0 +1,189 @@
+module Std.Http.Retry
+
+import Std.Concurrent as Concurrent
+import Std.Http.Client as Client
+import Std.Http {Delete, Get, Head, Options, Put, Trace}
+import Std.Http as Http
+import Std.Option as Option
+
+/// How many times to try, and how long to wait between attempts.
+///
+/// A service that calls another over a network will meet a failure that would
+/// have succeeded a moment later: a connection reset while an instance
+/// restarts, a gateway between deployments, a rate limit that clears. Trying
+/// again is the whole answer, and doing it without these three rules is worse
+/// than not doing it at all.
+///
+/// **Wait longer each time.** Retrying immediately turns one failure into
+/// several, and every caller retrying at once at the moment a service comes
+/// back is what stops it coming back.
+///
+/// **Wait a random amount.** Every caller backing off by the same doubling
+/// arrives together anyway, one step later. The spread is what breaks that up,
+/// and it is why `jitter` is not a refinement to add afterwards.
+///
+/// **Give up.** A budget bounds the total wait, so a request cannot sit for
+/// minutes behind a service that is simply down while whoever asked for it
+/// waits.
+export type Backoff = {
+  attempts: Int,
+  firstWaitMillis: Int,
+  maxWaitMillis: Int,
+  /// The proportion of each wait that is chosen at random, from 0 to 100.
+  jitterPercent: Int,
+  /// The most that may be spent waiting across all attempts.
+  budgetMillis: Int
+}
+
+/// A starting point that suits a call between services.
+///
+/// Three attempts rather than more: a fault that survives two retries is
+/// usually not the kind that a third fixes, and the caller is waiting.
+export fn backoff() -> Backoff {
+  Backoff{attempts: 3, firstWaitMillis: 100, maxWaitMillis: 2000, jitterPercent: 50, budgetMillis: 5000}
+}
+
+export fn attempts(base: &Backoff, count: Int) -> Backoff {
+  Backoff{..*base, attempts: if count < 1 { 1 } else { count }}
+}
+
+export fn waiting(base: &Backoff, firstMillis: Int, maxMillis: Int) -> Backoff {
+  Backoff{..*base, firstWaitMillis: firstMillis, maxWaitMillis: maxMillis}
+}
+
+export fn budget(base: &Backoff, millis: Int) -> Backoff {
+  Backoff{..*base, budgetMillis: millis}
+}
+
+export fn jitter(base: &Backoff, percent: Int) -> Backoff {
+  let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
+  Backoff{..*base, jitterPercent: bounded}
+}
+
+/// How long to wait before attempt `attempt`, counting the first as zero.
+///
+/// Doubling from the first wait, capped, then reduced by up to the jitter
+/// proportion. Reduced rather than increased so the cap stays a cap.
+export fn waitFor(base: &Backoff, attempt: Int, seed: Int) -> Int {
+  var wait = base.firstWaitMillis
+  var doubled = 0
+  while doubled < attempt && wait < base.maxWaitMillis {
+    wait = wait * 2
+    doubled = doubled + 1
+  }
+  if wait > base.maxWaitMillis {
+    wait = base.maxWaitMillis
+  }
+  if base.jitterPercent <= 0 {
+    return wait
+  }
+  let spread = (wait * base.jitterPercent) / 100
+  if spread <= 0 {
+    return wait
+  }
+  wait - (positive(seed) % (spread + 1))
+}
+
+fn positive(value: Int) -> Int {
+  if value < 0 { 0 - value } else { value }
+}
+
+/// Whether a failure is worth trying again.
+///
+/// A request is retried when nothing says it was received and acted on: a
+/// connection that failed, a deadline that passed, a gateway that had nothing
+/// behind it. It is not retried when the answer says the request itself was
+/// wrong — a 400 sent twice is wrong twice — nor on a 500, which says the
+/// request was received and something went wrong while acting on it, and which
+/// may well have half-happened.
+///
+/// The exception is 429 and 503, which are a service asking to be asked later.
+export fn worthRetrying(outcome: &Result[Http.Response, Client.ClientError]) -> Bool {
+  match *outcome {
+    case Err(_) => true
+    case Ok(response) => response.status.code == 429 || response.status.code == 502
+      || response.status.code == 503 || response.status.code == 504
+  }
+}
+
+/// Whether a request may be sent twice without meaning something different.
+///
+/// The question a retry actually turns on, and the one that is usually skipped.
+/// Reading the same thing twice is reading it; charging a card twice is
+/// charging it twice. A `POST` is therefore not retried here unless the caller
+/// says it carries a key that makes a repeat harmless.
+export fn repeatable(request: &Http.Request) -> Bool {
+  match request.method {
+    case Get => true
+    case Head => true
+    case Put => true
+    case Delete => true
+    case Options => true
+    case Trace => true
+    case _ => hasIdempotencyKey(request)
+  }
+}
+
+fn hasIdempotencyKey(request: &Http.Request) -> Bool {
+  var index = 0
+  while index < request.headers.length() {
+    let name = request.headers[index][0].toLower()
+    if name == "idempotency-key" || name == "x-idempotency-key" {
+      return true
+    }
+    index = index + 1
+  }
+  false
+}
+
+/// Send a request, trying again when trying again could help.
+///
+/// A request that cannot be repeated safely is sent once whatever the backoff
+/// says, because the alternative is a duplicate order rather than a slow one.
+/// Mark such a request with an idempotency key if the service accepts one, and
+/// it will be retried.
+export fn send(
+  request: &Http.Request,
+  held: &Client.Limits,
+  base: &Backoff,
+  seed: Int
+) -> Result[Http.Response, Client.ClientError] {
+  if !repeatable(request) {
+    return Client.send(request, held)
+  }
+  var attempt = 0
+  var spent = 0
+  var last = Client.send(request, held)
+  while attempt + 1 < base.attempts && worthRetrying(&last) {
+    let wait = waitFor(base, attempt, seed + attempt)
+    if spent + wait > base.budgetMillis {
+      return last
+    }
+    let _slept = Concurrent.sleep(wait)
+    spent = spent + wait
+    attempt = attempt + 1
+    last = Client.send(request, held)
+  }
+  last
+}
+
+/// Fetch a page, trying again when trying again could help.
+export fn fetch(
+  target: Str,
+  held: &Client.Limits,
+  base: &Backoff,
+  seed: Int
+) -> Result[Http.Response, Client.ClientError] {
+  send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held, base, seed)
+}
+
+/// How many attempts a plan makes, and how long it may spend waiting.
+///
+/// For a caller deciding whether a retry plan fits inside its own deadline: a
+/// retry that outlives the request it belongs to is a retry nobody is waiting
+/// for.
+export fn describe(base: &Backoff) -> Str {
+  "up to " + display(base.attempts) + " attempts, waiting from "
+    + display(base.firstWaitMillis) + "ms to " + display(base.maxWaitMillis)
+    + "ms, at most " + display(base.budgetMillis) + "ms in all"
+}

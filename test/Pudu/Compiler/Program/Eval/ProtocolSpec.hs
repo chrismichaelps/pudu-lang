@@ -56,6 +56,7 @@ testProtocolEvaluation = do
   versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
   zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
+  clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -283,6 +284,15 @@ testProtocolEvaluation = do
     , counterexample
         "an archive round-trips its entries and is actually compressed"
         (zipArchives === Just "12")
+    {-| Which failures are retried, and which requests may be, are the two
+        halves of the same question and the second is the one usually skipped:
+        a POST retried after a timeout charges twice, and the timeout is
+        exactly when a caller wants to retry. The jitter cases are here
+        because backing off by a fixed doubling sends every caller back at the
+        same moment, which is the failure a retry is supposed to prevent. -}
+    , counterexample
+        "a retry backs off, spreads out, and refuses to repeat what must not be repeated"
+        (clientRetries === Just "14")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

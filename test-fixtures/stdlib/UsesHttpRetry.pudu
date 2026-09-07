@@ -1,0 +1,116 @@
+module UsesHttpRetry
+
+import Std.Http {Get, Post, Put}
+import Std.Http as Http
+import Std.Http.Retry as Retry
+
+fn answer(code: Int, reason: Str) -> Http.Response {
+  Http.Response {
+    status: Http.Status{code: code, reason: reason},
+    headers: [],
+    body: "",
+    binaryBody: None
+  }
+}
+
+fn request(method: Http.Method, headers: Array[(Str, Str)]) -> Http.Request {
+  Http.Request{method: method, target: "/orders", headers: headers, body: ""}
+}
+
+fn main() -> Int {
+  var held = 0
+  let plan = Retry.backoff()
+
+  // 1. Waiting doubles with each attempt
+  let plain = Retry.jitter(&plan, 0)
+  if Retry.waitFor(&plain, 0, 0) == 100 && Retry.waitFor(&plain, 1, 0) == 200
+    && Retry.waitFor(&plain, 2, 0) == 400 {
+    held = held + 1
+  }
+
+  // 2. And stops at the ceiling rather than growing without bound
+  if Retry.waitFor(&plain, 20, 0) == 2000 {
+    held = held + 1
+  }
+
+  // 3. Jitter spreads callers out rather than sending them together
+  let spread = Retry.jitter(&plan, 50)
+  var differed = false
+  var seed = 0
+  while seed < 8 {
+    if Retry.waitFor(&spread, 1, seed) != Retry.waitFor(&spread, 1, seed + 1) {
+      differed = true
+    }
+    seed = seed + 1
+  }
+  if differed {
+    held = held + 1
+  }
+
+  // 4. Jitter only ever shortens a wait, so the ceiling stays a ceiling
+  var withinCeiling = true
+  var attempt = 0
+  while attempt < 10 {
+    let wait = Retry.waitFor(&spread, attempt, attempt * 37)
+    if wait > 2000 || wait < 0 {
+      withinCeiling = false
+    }
+    attempt = attempt + 1
+  }
+  if withinCeiling {
+    held = held + 1
+  }
+
+  // 5. Reading twice is reading, so a GET is repeatable
+  if Retry.repeatable(&request(Get, [])) {
+    held = held + 1
+  }
+
+  // 6. A POST is not, because sending it twice may charge twice
+  if !Retry.repeatable(&request(Post, [])) {
+    held = held + 1
+  }
+
+  // 7. Unless it carries a key that makes a repeat harmless
+  if Retry.repeatable(&request(Post, [("Idempotency-Key", "order-42")])) {
+    held = held + 1
+  }
+
+  // 8. A PUT names what the result should be, so repeating it is harmless
+  if Retry.repeatable(&request(Put, [])) {
+    held = held + 1
+  }
+
+  // 9. A service asking to be asked later is worth asking later
+  if Retry.worthRetrying(&Ok(answer(503, "Unavailable"))) {
+    held = held + 1
+  }
+
+  // 10. A request that was wrong is wrong again, and is not retried
+  if !Retry.worthRetrying(&Ok(answer(400, "Bad Request"))) {
+    held = held + 1
+  }
+
+  // 11. Nor is a 500, which says the request was received and acted on
+  if !Retry.worthRetrying(&Ok(answer(500, "Server Error"))) {
+    held = held + 1
+  }
+
+  // 12. A success is not retried
+  if !Retry.worthRetrying(&Ok(answer(200, "OK"))) {
+    held = held + 1
+  }
+
+  // 13. The plan says what it will do, for a caller checking its own deadline
+  if Retry.describe(&plan).contains("3 attempts") {
+    held = held + 1
+  }
+
+  // 14. A budget can be made smaller than the waits would otherwise take
+  let brief = Retry.budget(&plan, 150)
+  if brief.budgetMillis == 150 {
+    held = held + 1
+  }
+
+  held
+}
