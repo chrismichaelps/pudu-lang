@@ -1,5 +1,17 @@
 module Std.RateLimiter
 
+/// A bucket is a value, so where it is kept decides what it limits.
+///
+/// Kept inside one process, a bucket limits what that process admits. Running
+/// the same limit on four instances therefore admits four times the rate,
+/// which is the direction that matters: a limit protecting something
+/// downstream — an API quota, a database, a payment provider — is exceeded by
+/// exactly the factor nobody counted.
+///
+/// A limit that must hold for the service as a whole is counted where the
+/// whole service can see it. A limit that only protects one process from one
+/// caller is correct here as it stands.
+
 /// Fixed-point token bucket rate limiter with 64-bit integer arithmetic.
 export type RateLimiter = {
   ratePerSec: Int,

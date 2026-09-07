@@ -1,5 +1,20 @@
 module Std.App.Session
 
+/// A store of sessions is a value, so where it is kept decides who shares it.
+///
+/// Nothing is held behind this module: a service keeps the store it is given
+/// back, and where it keeps it decides what a second instance sees.
+///
+/// This is the one of these where a per-process copy is not merely
+/// approximate. Kept inside one process, a session signed in on one instance
+/// does not exist on another, so a load balancer that moves a person between
+/// instances signs them out — intermittently, and more often the more
+/// instances there are, which is the shape of bug that reaches production
+/// because one instance never reproduces it.
+///
+/// A service on more than one instance keeps sessions where every instance can
+/// read them, or carries the session in a signed cookie and keeps nothing.
+
 import Std.Bytes as ByteSeq
 import Std.Http as Http
 import Std.Map as Map

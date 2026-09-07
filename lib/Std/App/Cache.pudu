@@ -1,5 +1,22 @@
 module Std.App.Cache
 
+/// A cache is a value, so where it is kept decides who shares it.
+///
+/// Every function here takes a cache and answers a new one; nothing is held
+/// behind the module. A service therefore keeps its cache somewhere of its own
+/// choosing, and that choice — not this module — decides the question a second
+/// instance raises.
+///
+/// Kept in a cell inside one process, a cache is that process's own. Running
+/// two instances behind a load balancer then gives each its own copy: the hit
+/// rate divides, and a key rewritten on one instance stays stale on the other
+/// until it expires there too. That is correct for a cache, which is allowed
+/// to be a little behind, and it is worth knowing before it is measured.
+///
+/// A service that needs one answer across instances keeps the entries where
+/// both can see them, and uses this to decide freshness rather than to hold
+/// the data.
+
 import Std.LruCache as Lru
 import Std.Option as Option
 

@@ -1,5 +1,18 @@
 module Std.App.Work
 
+/// A schedule is a value, so where it is kept decides who runs its jobs.
+///
+/// Nothing is held behind this module, and nothing here elects who should run.
+/// A schedule kept inside each of several instances means each instance
+/// believes every job is its own: a nightly invoice run on three instances
+/// sends three invoices, and the jobs whose side effects are visible outside
+/// the program are exactly the jobs worth scheduling.
+///
+/// A service on more than one instance runs its schedule on one of them, or
+/// takes a lock the instances share before running a job. Deciding that is not
+/// this module's to make, but running the schedule without deciding it is the
+/// mistake this note exists to name.
+
 import Std.Option as Option
 
 /// When a job is due again.
