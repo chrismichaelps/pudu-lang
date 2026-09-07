@@ -41,6 +41,9 @@ testProtocolEvaluation = do
   disjointSet <- runEntry "test-fixtures/stdlib/UsesDisjointSet.pudu"
   murmur3Hash <- runEntry "test-fixtures/stdlib/UsesMurmur3.pudu"
   rateLimiter <- runEntry "test-fixtures/stdlib/UsesRateLimiter.pudu"
+  hexCodec <- runEntry "test-fixtures/stdlib/UsesHex.pudu"
+  adler32Checksum <- runEntry "test-fixtures/stdlib/UsesAdler32.pudu"
+  radixSort <- runEntry "test-fixtures/stdlib/UsesRadixSort.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -172,6 +175,15 @@ testProtocolEvaluation = do
     , counterexample
         "RateLimiter 64-bit fixed-point integer token bucket traffic shaper"
         (rateLimiter === Just "10")
+    , counterexample
+        "Hex low-level Base16 encoder, decoder, validator, and prefix handler"
+        (hexCodec === Just "10")
+    , counterexample
+        "Adler32 RFC 1950 unrolled checksum with 5552-byte blocks and O(1) rolling hash"
+        (adler32Checksum === Just "10")
+    , counterexample
+        "RadixSort linear-time O(N) hardware radix sort for 64-bit integers"
+        (radixSort === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
