@@ -193,7 +193,7 @@ fn slowly(_request: Route.Request) -> Http.Response {
 
 fn chunks(_request: Route.Request) -> Http.Response {
   Http.Response {
-    status: Http.Status{code: 200, reason: "OK"},
+    binaryBody: None, status: Http.Status{code: 200, reason: "OK"},
     headers: [("Transfer-Encoding", "chunked")],
     body: "5\r\nhello\r\n0\r\n\r\n"
   }
@@ -201,7 +201,7 @@ fn chunks(_request: Route.Request) -> Http.Response {
 
 fn elsewhere(_request: Route.Request) -> Http.Response {
   Http.Response {
-    status: Http.Status{code: 302, reason: "Found"},
+    binaryBody: None, status: Http.Status{code: 302, reason: "Found"},
     headers: [("Location", "/hello")],
     body: ""
   }
@@ -210,7 +210,7 @@ fn elsewhere(_request: Route.Request) -> Http.Response {
 fn pausedElsewhere(_request: Route.Request) -> Http.Response {
   let _waited = Concurrent.sleep(100)
   Http.Response {
-    status: Http.Status{code: 302, reason: "Found"},
+    binaryBody: None, status: Http.Status{code: 302, reason: "Found"},
     headers: [("Location", "/pause-hello")],
     body: ""
   }
@@ -224,7 +224,7 @@ fn pausedGreeting(_request: Route.Request) -> Http.Response {
 /// A redirect that points at itself, for the bound to catch.
 fn roundAndRound(_request: Route.Request) -> Http.Response {
   Http.Response {
-    status: Http.Status{code: 302, reason: "Found"},
+    binaryBody: None, status: Http.Status{code: 302, reason: "Found"},
     headers: [("Location", "/loop")],
     body: ""
   }

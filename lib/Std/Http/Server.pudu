@@ -163,7 +163,9 @@ fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler
     let request = Result.unwrapOr(read, emptyServerRequest())
     let answer = handle(request)
     let keeping = wantsKeepAlive(&request.message)
-    let finished = if keeping { withLength(&answer) } else { withLength(&closing(&answer)) }
+    let framed = withLength(&answer)
+    let selected = if request.message.method == Http.Head { Http.Response{..framed, body: "", binaryBody: None} } else { framed }
+    let finished = if keeping { selected } else { closing(&selected) }
     let sent = sendResponse(connection, &finished, target.writeMillis)
     keeping && Result.isOk(&sent)
   }
@@ -176,10 +178,13 @@ fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler
 /// carrying one is replaced rather than escaped: escaping guesses at an intent
 /// no legitimate value has.
 fn sendResponse(connection: &Net.Connection, answer: &Http.Response, millis: Int) -> Result[(), Net.NetError] {
+  if answer.status.reason.contains("\r") || answer.status.reason.contains("\n") || answer.status.code < 100 || answer.status.code > 599 {
+    return Net.sendWithin(connection, &Message.renderResponseBytes(&withLength(&text(500, "invalid response status"))), millis)
+  }
   if let Err(_) = Safe.headersWritable(&answer.headers) {
-    Net.sendTextWithin(connection, Message.renderResponse(&withLength(&text(500, "the response could not be written"))), millis)
+    Net.sendWithin(connection, &Message.renderResponseBytes(&withLength(&text(500, "the response could not be written"))), millis)
   } else {
-    Net.sendTextWithin(connection, Message.renderResponse(answer), millis)
+    Net.sendWithin(connection, &Message.renderResponseBytes(answer), millis)
   }
 }
 
@@ -198,7 +203,7 @@ fn wantsKeepAlive(message: &Http.Request) -> Bool {
 
 fn closing(answer: &Http.Response) -> Http.Response {
   Http.Response {
-    status: answer.status,
+    binaryBody: answer.binaryBody, status: answer.status,
     headers: answer.headers.push(("Connection", "close")),
     body: answer.body
   }
@@ -210,19 +215,19 @@ fn closing(answer: &Http.Response) -> Http.Response {
 /// leaves the client reading until the connection closes: the body arrives,
 /// but only after a wait that looks like the server being slow.
 fn withLength(answer: &Http.Response) -> Http.Response {
-  var already = false
+  var headers: Array[(Str, Str)] = []
   for entry in answer.headers {
-    if entry[0].toLower() == "content-length" { already = true }
+    let name = entry[0].toLower()
+    if name != "content-length" && name != "transfer-encoding" { headers = headers.push(entry) }
   }
-  if already {
-      *answer
-  } else {
-    Http.Response {
-      status: answer.status,
-      headers: answer.headers.push(("Content-Length", show(answer.body.toBytes().length()))),
-      body: answer.body
-    }
+  let code = answer.status.code
+  if code < 200 || code == 204 || code == 304 {
+    return Http.Response{..*answer, headers: headers, body: "", binaryBody: None}
   }
+  if code == 205 {
+    return Http.Response{..*answer, headers: headers.push(("Content-Length", "0")), body: "", binaryBody: None}
+  }
+  Http.Response{..*answer, headers: headers.push(("Content-Length", show(Http.responseBytes(answer).length())))}
 }
 
 /// Start listening, and answer what is needed to stop.

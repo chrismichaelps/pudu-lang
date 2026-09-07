@@ -1,6 +1,7 @@
 module Std.Http.Message
 
 import Std.Http as Http
+import Std.Bytes as ByteSeq
 import Std.Text as Text
 
 /// What stopped a message from being read.
@@ -37,7 +38,7 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   if lines.length() == 0 { Err(NoStatusLine) } else {
     let status = parseStatusLine(lines[0]) ?
     let headers = parseHeaders(&lines.slice(1, lines.length())) ?
-    Ok(Http.Response{status: status, headers: headers, body: split[1]})
+    Ok(Http.Response{binaryBody: None, status: status, headers: headers, body: split[1]})
   }
 }
 
@@ -48,6 +49,7 @@ export fn renderRequest(value: &Http.Request) -> Str {
 
 /// A response written as the protocol writes it.
 export fn renderResponse(value: &Http.Response) -> Str {
+  if let Some(_) = value.binaryBody { panic("binary responses require renderResponseBytes") }
   var out = Http.renderStatusLine(&value.status) + "\r\n"
   for pair in value.headers { out = out + pair[0] + ": " + pair[1] + "\r\n" }
   out + "\r\n" + value.body
@@ -56,7 +58,7 @@ export fn renderResponse(value: &Http.Response) -> Str {
 /// A response built from a status and a body, with the headers that describe it.
 export fn respond(code: Int, mediaType: Str, body: Str) -> Http.Response {
   Http.Response {
-    status: Http.status(code),
+    binaryBody: None, status: Http.status(code),
     headers: [("content-type", mediaType), ("content-length", show(body.toBytes().length()))],
     body: body
   }
@@ -64,13 +66,13 @@ export fn respond(code: Int, mediaType: Str, body: Str) -> Http.Response {
 
 /// A response with no body, for the statuses that carry none.
 export fn respondEmpty(code: Int) -> Http.Response {
-  Http.Response{status: Http.status(code), headers: [], body: ""}
+  Http.Response{binaryBody: None, status: Http.status(code), headers: [], body: ""}
 }
 
 /// A redirect to a target, with the status a caller chooses.
 export fn redirect(code: Int, target: Str) -> Http.Response {
   Http.Response {
-    status: Http.status(code),
+    binaryBody: None, status: Http.status(code),
     headers: [("location", target)],
     body: ""
   }
@@ -215,5 +217,57 @@ fn hexOf(text: Str) -> Option[Int] {
       total = total * 16 + found
     }
     Some(total)
+  }
+}
+
+/// Serialize binary payloads without a text or base64 conversion.
+export fn renderResponseBytes(value: &Http.Response) -> Bytes {
+  var head = Http.renderStatusLine(&value.status) + "\r\n"
+  for pair in value.headers { head = head + pair[0] + ": " + pair[1] + "\r\n" }
+  (head + "\r\n").toBytes().concat(Http.responseBytes(value))
+}
+
+export fn respondBytes(code: Int, mediaType: Str, payload: &Bytes) -> Http.Response {
+  Http.Response{status: Http.status(code),
+    headers: [("content-type", mediaType), ("content-length", show(payload.length()))],
+    body: "", binaryBody: Some(*payload)}
+}
+
+/// Remove chunk framing in octets, refusing truncated or malformed data.
+export fn decodeChunkedBytes(source: &Bytes, limit: Int) -> Result[Bytes, MessageError] {
+  var rest = *source
+  var parts: Array[Bytes] = []
+  var total = 0
+  loop {
+    let end = rest.indexOf("\r\n".toBytes())
+    if end < 0 || end > 8192 { return Err(BadHeader("invalid chunk size line")) }
+    let line = match ByteSeq.toText(&rest.take(end)) {
+      case Ok(value) => value
+      case Err(_) => { return Err(BadHeader("invalid chunk size encoding")) }
+    }
+    let digits = line.split(";")[0]
+    if digits.isEmpty() || digits.length() > 8 { return Err(BadHeader("invalid chunk size")) }
+    let size = match hexOf(digits) {
+      case Some(value) => value
+      case None => { return Err(BadHeader("invalid chunk size")) }
+    }
+    rest = rest.drop(end + 2)
+    if size == 0 {
+      if rest == "\r\n".toBytes() { return Ok(ByteSeq.join(&parts)) }
+      let trailerEnd = rest.indexOf("\r\n\r\n".toBytes())
+      if trailerEnd < 0 || trailerEnd + 4 != rest.length() { return Err(BadHeader("incomplete chunk trailer")) }
+      let trailer = match ByteSeq.toText(&rest.take(trailerEnd)) {
+        case Ok(value) => value
+        case Err(_) => { return Err(BadHeader("invalid chunk trailer")) }
+      }
+      let _headers = parseHeaders(&trailer.split("\r\n")) ?
+      return Ok(ByteSeq.join(&parts))
+    }
+    if size > limit - total { return Err(BadHeader("chunked body exceeds limit")) }
+    if size > rest.length() - 2 { return Err(ShortBody(size, rest.length())) }
+    if rest.slice(size, size + 2) != "\r\n".toBytes() { return Err(BadHeader("chunk missing CRLF")) }
+    parts = parts.push(rest.take(size))
+    total = total + size
+    rest = rest.drop(size + 2)
   }
 }

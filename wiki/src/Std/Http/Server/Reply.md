@@ -65,3 +65,9 @@ Grill Log:
   whereas 429 Too Many Requests is used for client peer quota violations.
 
 
+
+
+## Binary payload migration
+
+Text response literals initialize binaryBody: None. Header-only response copies preserve binaryBody. Reply.bytes constructs an exact binary payload.
+Resolved Grill Log: changing headers must not discard encoded bytes; text replacement must clear the binary override.

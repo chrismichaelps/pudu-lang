@@ -105,3 +105,9 @@ the controlled fixture can, and remains the release-blocking behavioral evidence
   timeout per operation; an unbounded default.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http]] · [[Std Tls]] · [[Std Net]] · [[Std Http Safe]] · [[ADR-0017 What the Web Layer Refuses]]
+
+
+## Binary response reading
+
+Read headers as UTF-8 separately from payload bytes. Decode chunk framing in bytes with explicit failure; preserve exact payload as binaryBody and expose body text only when valid UTF-8. No automatic content decompression; callers use Gzip.decompressWithin with their own limit.
+Resolved Grill Log: compressed data must never be decoded as UTF-8 before content decoding.

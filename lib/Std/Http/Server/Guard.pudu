@@ -104,7 +104,7 @@ export fn protectedHeaders() -> Route.Middleware {
     if secureConnection(&request) {
       if !hasHeader(&headers, TRANSPORT_HEADER[0]) { headers = headers.push(TRANSPORT_HEADER) }
     }
-    Http.Response{status: answer.status, headers: headers, body: answer.body}
+    Http.Response{binaryBody: answer.binaryBody, status: answer.status, headers: headers, body: answer.body}
   }
 }
 
@@ -116,7 +116,7 @@ export fn shared(sharing: &Sharing) -> Route.Middleware {
     if let Some(origin) = Route.header(&request, "origin") {
       if listed(&permitted.origins, origin) {
         Http.Response {
-          status: answer.status,
+          binaryBody: answer.binaryBody, status: answer.status,
           headers: sharingHeaders(&answer.headers, &permitted, origin),
           body: answer.body
         }
@@ -180,7 +180,7 @@ export fn identified() -> Route.Middleware {
       answer
     } else {
       Http.Response {
-        status: answer.status,
+        binaryBody: answer.binaryBody, status: answer.status,
         headers: answer.headers.push((IDENTITY_HEADER, identity)),
         body: answer.body
       }
@@ -217,7 +217,7 @@ export fn quiet(report: fn(Str) -> ()) -> Route.Middleware {
           + show(answer.status.code) + ": " + answer.body
       )
       Http.Response {
-        status: answer.status,
+        binaryBody: None, status: answer.status,
         headers: [(IDENTITY_HEADER, identity)],
         body: FAILURE_TEXT
       }
@@ -235,7 +235,7 @@ export fn quiet(report: fn(Str) -> ()) -> Route.Middleware {
 export fn redirect(code: Int, target: Str, permitted: &Array[Str]) -> Http.Response {
   if let Ok(allowed) = Safe.redirectTarget(target, permitted) {
     Http.Response {
-      status: Http.Status{code: code, reason: Http.reasonFor(code)},
+      binaryBody: None, status: Http.Status{code: code, reason: Http.reasonFor(code)},
       headers: [("Location", allowed)],
       body: ""
     }
@@ -293,7 +293,7 @@ export fn traced(recordedWhenNew: Bool) -> Route.Middleware {
       answer
     } else {
       Http.Response {
-        status: answer.status,
+        binaryBody: answer.binaryBody, status: answer.status,
         headers: answer.headers.push(Trace.asHeader(&following)),
         body: answer.body
       }

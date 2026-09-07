@@ -302,7 +302,7 @@ fn guarded(target: &App.App, request: Route.Request) -> Http.Response {
 fn stamping() -> Route.Middleware {
   fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let answer = next(request)
-    Http.Response{status: answer.status, headers: answer.headers.push(("X-Step", "yes")), body: answer.body}
+    Http.Response{binaryBody: answer.binaryBody, status: answer.status, headers: answer.headers.push(("X-Step", "yes")), body: answer.body}
   }
 }
 

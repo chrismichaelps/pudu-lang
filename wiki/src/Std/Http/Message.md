@@ -26,3 +26,10 @@ length against the same byte count and reports received bytes in ShortBody. It c
 accept extra body bytes under its existing minimum-length contract.
 Resolved Grill Log: HTTP lengths count octets, never Unicode characters. The server already
 uses UTF-8 bytes when adding an absent length; explicit reply headers must use that same unit.
+
+
+## TLS and binary compression implementation contract
+
+renderResponseBytes serializes headers as UTF-8 and appends Http.responseBytes without decoding. renderResponse remains text-only and refuses binary payloads. respondBytes constructs binary responses with an exact octet Content-Length.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

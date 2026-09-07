@@ -89,3 +89,10 @@ original character.
 ## Referenced by
 
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[ADR-0010 Refutable Pattern Conditions]]
+
+
+## TLS and binary compression implementation contract
+
+Response adds binaryBody: Option[Bytes]. None transmits UTF-8 body; Some transmits those exact bytes, including an empty byte payload. responseBytes centralizes selection. Text construction initializes None; header-only transformations preserve the complete record. Existing direct response literals must add binaryBody: None.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

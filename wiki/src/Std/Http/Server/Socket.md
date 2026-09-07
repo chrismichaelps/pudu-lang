@@ -66,3 +66,9 @@ followed by 4-byte and scalar tail unmasking, eliminating heap thrashing and acc
   and enabling gigabit-speed WebSocket frame processing.
 ## Referenced by
 [[src/Std/_MOC]] · [[Std Http Server]] · [[Std Crypto]] · [[Std Ui Live]] · [[Std Buffer]] · [[ADR-0017 What the Web Layer Refuses]]
+
+
+## Binary payload migration
+
+Text response literals initialize binaryBody: None. Header-only response copies preserve binaryBody. Reply.bytes constructs an exact binary payload.
+Resolved Grill Log: changing headers must not discard encoded bytes; text replacement must clear the binary override.

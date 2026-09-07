@@ -47,7 +47,7 @@ export fn acceptQuery(types: &Array[Str]) -> (Str, Str) {
 export fn unsupportedMediaType(accepted: &Array[Str]) -> Http.Response {
   let answer = text(415, "this resource does not read that media type")
   Http.Response {
-    status: answer.status,
+    binaryBody: answer.binaryBody, status: answer.status,
     headers: answer.headers.push(acceptQuery(accepted)),
     body: answer.body
   }
@@ -84,7 +84,7 @@ export fn jsonValue(code: Int, content: Json.Json) -> Http.Response {
 /// Reuse server-rendered output and its UTF-8 length without rendering again.
 export fn rendered(code: Int, content: Ssr.Rendered) -> Http.Response {
   Http.Response {
-    status: Http.status(code),
+    binaryBody: None, status: Http.status(code),
     headers: [("content-type", "text/html; charset=utf-8"), ("content-length", show(content.byteLength))],
     body: content.body
   }
@@ -95,7 +95,7 @@ export fn withEtag(response: &Http.Response, etag: Str) -> Http.Response {
   var headers = response.headers
   headers = headers.push(("ETag", "\"" + etag + "\""))
   Http.Response {
-    status: response.status,
+    binaryBody: response.binaryBody, status: response.status,
     headers: headers,
     body: response.body
   }
@@ -104,7 +104,7 @@ export fn withEtag(response: &Http.Response, etag: Str) -> Http.Response {
 /// A 304 Not Modified response with an ETag and empty body.
 export fn notModified(etag: Str) -> Http.Response {
   Http.Response {
-    status: Http.status(304),
+    binaryBody: None, status: Http.status(304),
     headers: [("ETag", "\"" + etag + "\"")],
     body: ""
   }
@@ -136,7 +136,7 @@ export fn computeEtag(body: Str) -> Str {
 /// A 429 Too Many Requests response with a Retry-After directive in seconds.
 export fn tooManyRequests(retryAfterSeconds: Int) -> Http.Response {
   Http.Response {
-    status: Http.status(429),
+    binaryBody: None, status: Http.status(429),
     headers: [
       ("content-type", "text/plain; charset=utf-8"),
       ("Retry-After", show(retryAfterSeconds))
@@ -148,7 +148,7 @@ export fn tooManyRequests(retryAfterSeconds: Int) -> Http.Response {
 /// A 503 Service Unavailable response with a Retry-After directive in seconds.
 export fn serviceUnavailable(retryAfterSeconds: Int) -> Http.Response {
   Http.Response {
-    status: Http.status(503),
+    binaryBody: None, status: Http.status(503),
     headers: [
       ("content-type", "text/plain; charset=utf-8"),
       ("Retry-After", show(retryAfterSeconds))
@@ -161,4 +161,9 @@ export fn serviceUnavailable(retryAfterSeconds: Int) -> Http.Response {
 export fn gatewayTimeout(reason: Str) -> Http.Response {
   let message = if reason.length() > 0 { reason } else { "gateway timeout" }
   text(504, message)
+}
+
+/// A response carrying arbitrary bytes with an explicit media type.
+export fn bytes(code: Int, mediaType: Str, payload: &Bytes) -> Http.Response {
+  Message.respondBytes(code, mediaType, payload)
 }

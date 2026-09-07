@@ -116,3 +116,9 @@ Grill Log:
 [[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std App Audit]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Server Reply]]
 
 
+
+
+## Binary payload migration
+
+Text response literals initialize binaryBody: None. Header-only response copies preserve binaryBody. Reply.bytes constructs an exact binary payload.
+Resolved Grill Log: changing headers must not discard encoded bytes; text replacement must clear the binary override.

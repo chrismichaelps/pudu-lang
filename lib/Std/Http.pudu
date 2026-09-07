@@ -46,7 +46,8 @@ export type Request = {
 export type Response = {
   status: Status,
   headers: Array[(Str, Str)],
-  body: Str
+  body: Str,
+  binaryBody: Option[Bytes]
 }
 
 /// A method written the way the protocol writes it.
@@ -826,4 +827,12 @@ fn hexPairOf(text: Str) -> Option[Int] {
     total = total * 16 + found
   }
   Some(total)
+}
+
+/// Exact wire payload; a binary override takes precedence over display text.
+export fn responseBytes(response: &Response) -> Bytes {
+  match response.binaryBody {
+    case Some(payload) => payload
+    case None => response.body.toBytes()
+  }
 }

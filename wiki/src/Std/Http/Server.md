@@ -88,3 +88,10 @@ deadline timer. If in-flight requests do not drain within `drainMillis`, `Server
 
 Resolved Grill Log:
 - **Q:** Why bound worker joining with a deadline? **A:** If a slow client or long-running request hangs, unbounded joining causes deployment orchestrators (Kubernetes / systemd) to SIGKILL the process abruptly, corrupting unclosed streams. A draining deadline allows in-flight requests a graceful completion window before forcing termination.
+
+
+## TLS and binary compression implementation contract
+
+Socket output uses renderResponseBytes and Net.sendWithin. Framing is regenerated from actual payload bytes, removing user Transfer-Encoding and Content-Length. HEAD emits no body but retains selected representation length; 1xx, 204, 205, and 304 emit no payload under status-specific framing rules.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

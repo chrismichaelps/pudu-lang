@@ -353,27 +353,19 @@ fn receivePlain(
 /// Refused rather than truncated: a truncated body parses to something the
 /// sender did not send, and the caller has no way to know that it did.
 fn readAnswer(received: &Bytes, held: &Limits) -> Result[Http.Response, ClientError] {
-  let text = ByteSeq.toText(received)
-  if let Err(_) = text {
-    Err(Malformed("the answer is not text"))
-  } else {
-    let parsed = Message.parseResponse(Result.unwrapOr(text, ""))
-    if let Err(problem) = parsed {
-      Err(Malformed(Message.explain(&problem)))
-    } else {
-      let response = Result.unwrapOr(parsed, emptyResponse())
-      let body = if Http.isChunked(&response.headers) {
-        Message.decodeChunked(response.body)
-      } else {
-        response.body
-      }
-      if body.toBytes().length() > held.bodyBytes {
-        Err(TooLarge(held.bodyBytes))
-      } else {
-        Ok(Http.Response{status: response.status, headers: response.headers, body: body})
-      }
-    }
-  }
+  let split = received.indexOf("\r\n\r\n".toBytes())
+  if split < 0 { return Err(Malformed("response head is incomplete")) }
+  let head = Result.mapErr(ByteSeq.toText(&received.take(split + 4)),
+    fn(_problem) -> ClientError { Malformed("response head is not text") }) ?
+  let response = Result.mapErr(Message.parseResponse(head),
+    fn(problem: Message.MessageError) -> ClientError { Malformed(Message.explain(&problem)) }) ?
+  let carried = received.drop(split + 4)
+  let payload = if Http.isChunked(&response.headers) {
+    Result.mapErr(Message.decodeChunkedBytes(&carried, held.bodyBytes),
+      fn(problem: Message.MessageError) -> ClientError { Malformed(Message.explain(&problem)) }) ?
+  } else { carried }
+  if payload.length() > held.bodyBytes { return Err(TooLarge(held.bodyBytes)) }
+  Ok(Http.Response{..response, body: Result.unwrapOr(ByteSeq.toText(&payload), ""), binaryBody: Some(payload)})
 }
 
 export fn isRedirect(code: Int) -> Bool {
@@ -491,7 +483,7 @@ fn plainFailure(problem: Net.NetError, millis: Int) -> Result[Http.Response, Cli
 }
 
 fn emptyResponse() -> Http.Response {
-  Http.Response{status: Http.Status{code: 0, reason: ""}, headers: [], body: ""}
+  Http.Response{binaryBody: None, status: Http.Status{code: 0, reason: ""}, headers: [], body: ""}
 }
 
 fn emptyUrl() -> Url.Url {

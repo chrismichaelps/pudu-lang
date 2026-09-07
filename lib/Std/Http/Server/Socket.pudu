@@ -82,7 +82,7 @@ export fn accept(
   if let Some(key) = offered {
     Ok(
       Http.Response {
-        status: Http.Status{code: 101, reason: "Switching Protocols"},
+        binaryBody: None, status: Http.Status{code: 101, reason: "Switching Protocols"},
         headers: [
           ("Upgrade", "websocket"),
           ("Connection", "Upgrade"),

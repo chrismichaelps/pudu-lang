@@ -201,7 +201,7 @@ fn stamping(name: Str) -> Route.Middleware {
   fn(request: Route.Request, next: Route.Handler) -> Http.Response {
     let answer = next(request)
     Http.Response {
-      status: answer.status,
+      binaryBody: answer.binaryBody, status: answer.status,
       headers: answer.headers.push(("X-Step-" + name, "yes")),
       body: answer.body
     }
