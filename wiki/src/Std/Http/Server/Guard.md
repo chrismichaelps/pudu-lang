@@ -57,5 +57,20 @@ other. This is deliberate: an error page that explains itself is a reconnaissanc
 - **Q:** Refuse a state-changing request that states no provenance? **A:** Yes. _Rationale:_ an old
   client and a hostile one are indistinguishable, and only one reading is safe for both. The cost is
   that a very old client cannot post, which is the correct trade. _Rejected:_ trusting silence.
+## Rate limiting middleware
+
+`rateLimited(maxRequests: Int, windowSeconds: Int) -> Route.Middleware` protects routes from brute-force
+and denial-of-service surges. Tracks peer request frequencies per moving window in thread-safe cell storage.
+When a peer exceeds `maxRequests` within `windowSeconds`, the middleware refuses the request with
+`Reply.tooManyRequests(windowSeconds)` and sets `Retry-After: {windowSeconds}`, halting further handler
+invocation and preventing downstream database and compute exhaustion.
+
+Grill Log:
+- **Q:** How are peers identified for rate limiting? **A:** Using `request.peer`, or fallback to `"client"`
+  when peer address is unstated.
+- **Q:** Is rate limiting global or per worker? **A:** Global state shared across server workers via a
+  synchronized reference cell, ensuring distributed throttling across the connection pool.
+
 ## Referenced by
-[[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]]
+[[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Server Reply]]
+

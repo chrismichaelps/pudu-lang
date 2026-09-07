@@ -43,3 +43,19 @@ convert database errors into responses automatically. Serialization happens exac
 length, avoiding another HTML traversal or UTF-8 length calculation. Values produced by Ssr
 constructors keep body and length consistent; manually constructed records must preserve that
 invariant. Resolved Grill Log: do not rerender reusable output at the HTTP boundary.
+
+## Conditional responses and ETags
+
+`withEtag(response, etag)` attaches the ETag entity validator. `notModified(etag)` responds with
+HTTP `304 Not Modified` and an empty body. `conditional(request, response, etag)` inspects the
+incoming `If-None-Match` header: if the validator matches or contains `*`, it yields `notModified`
+immediately, preserving 100% of body transport bandwidth on poor connections; otherwise it yields
+the response with the ETag header attached. `computeEtag(body)` generates a fast hex hash.
+`tooManyRequests(retryAfterSeconds)` emits RFC 6585 status 429 with `Retry-After`.
+
+Grill Log:
+- **Q:** Should `conditional` automatically compute ETags from the response body? **A:** No; callers
+  supply the computed ETag or pre-computed revision hash to avoid hashing large bodies repeatedly.
+- **Q:** Does 304 include headers from the original response? **A:** It preserves cache headers and
+  the ETag validator without sending the body.
+

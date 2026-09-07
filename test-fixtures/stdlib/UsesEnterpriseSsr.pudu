@@ -4,11 +4,26 @@ import Std.Bytes as ByteSeq
 import Std.Html.Buffer as HtmlBuffer
 import Std.Html as Html
 import Std.Html.Stream as HtmlStream
+import Std.Http {Get}
+import Std.Http as Http
+import Std.Http.Server.Guard as Guard
+import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Resilience as Resilience
 import Std.Http.Server.Resilience {SaveDataActive, ConstrainedCellular, FastBroadband}
+import Std.Http.Server.Route as Route
 import Std.Http.Server.Security as Security
 import Std.Result as Result
 import Std.Ui.Island as Island
+
+fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Get, target: "/", headers: headers, body: ""},
+    path: "/",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: peer
+  }
+}
 
 export fn main() -> Int {
   var passed = 0
@@ -193,6 +208,47 @@ export fn main() -> Int {
   if renderedRuntime.contains("<script nonce=\"" + nonce + "\"") && renderedRuntime.contains("fetch(f.action") {
     passed = passed + 1
   }
+
+  // 11. Reply: withEtag and notModified
+  let baseResp = Reply.text(200, "resource-body")
+  let taggedResp = Reply.withEtag(&baseResp, "v123")
+  var hasEtag = false
+  for pair in taggedResp.headers {
+    if pair[0] == "ETag" && pair[1] == "\"v123\"" { hasEtag = true }
+  }
+  if hasEtag { passed = passed + 1 }
+
+  let notModResp = Reply.notModified("v123")
+  if notModResp.status.code == 304 && notModResp.body == "" { passed = passed + 1 }
+
+  // 12. Reply: conditional evaluation (304 on match, 200 on miss)
+  let matchReq = testRequest([("if-none-match", "\"v123\"")], "127.0.0.1")
+  let condMatch = Reply.conditional(&matchReq.message.headers, &baseResp, "v123")
+  if condMatch.status.code == 304 { passed = passed + 1 }
+
+  let missReq = testRequest([("if-none-match", "\"v999\"")], "127.0.0.1")
+  let condMiss = Reply.conditional(&missReq.message.headers, &baseResp, "v123")
+  if condMiss.status.code == 200 { passed = passed + 1 }
+
+  // 13. Reply: tooManyRequests
+  let tmr = Reply.tooManyRequests(45)
+  var hasRetryAfter = false
+  for pair in tmr.headers {
+    if pair[0] == "Retry-After" && pair[1] == "45" { hasRetryAfter = true }
+  }
+  if tmr.status.code == 429 && hasRetryAfter { passed = passed + 1 }
+
+  // 14. Guard: rateLimited middleware
+  let limiter = Guard.rateLimited(2, 60)
+  let okHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "ok") }
+
+  let r1 = limiter(matchReq, okHandler)
+  let r2 = limiter(matchReq, okHandler)
+  let r3 = limiter(matchReq, okHandler)
+
+  if r1.status.code == 200 { passed = passed + 1 }
+  if r2.status.code == 200 { passed = passed + 1 }
+  if r3.status.code == 429 { passed = passed + 1 }
 
   passed
 }

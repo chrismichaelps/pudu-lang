@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Server rate limiting and conditional ETag responses
+
+- [[Std Http Server Guard]]: Added `rateLimited(maxRequests, windowSeconds)` middleware to throttle peer requests per moving window and emit RFC 6585 `429 Too Many Requests` with `Retry-After`.
+- [[Std Http Server Reply]]: Added `withEtag`, `notModified`, `conditional`, `computeEtag`, and `tooManyRequests` for HTTP `304 Not Modified` conditional response evaluation.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 31 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] verdicts for Rate Limiting and Caching to Ready.
+
 ## 2026-09-06 — Enterprise-grade SSR application framework with hardware integration
 
 Engineered low-level hardware-conscious streaming and resilience modules:

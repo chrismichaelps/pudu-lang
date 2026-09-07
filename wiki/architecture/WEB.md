@@ -97,8 +97,8 @@ library at all — see the rendering table below. That limit is real and is not 
 | Is there backpressure? | **Absent** | Accepting is not tied to what is already in flight. A limit exists on how many connections are accepted in total, which is not the same thing. |
 | Are request sizes bounded? | **Ready** | Head and body limits are enforced before anything is buffered. |
 | Is there a deadline on a request? | **Absent** | A handler that does not finish is not interrupted. Named in [[architecture/STDLIB]] as owed. |
-| Rate limiting? | **Absent** | Not written. [[Std Http Server Guard]] holds the other steps. |
-| Caching, and a content network in front? | **Partial** | [[Std App Cache]] holds answers in the process and says whether one is stale, so a hot key that expires is refreshed once rather than by every request at once. Cache directives for anything in front can be set; nothing helps a program decide them. |
+| Rate limiting? | **Ready** | [[Std Http Server Guard]]: `rateLimited` middleware enforces moving-window peer request limits and emits RFC 6585 429 Too Many Requests with Retry-After. |
+| Caching, and a content network in front? | **Ready** | [[Std App Cache]] holds in-process answers; [[Std Http Server Reply]] `conditional` and `withEtag` evaluate `If-None-Match` to emit 304 Not Modified without body retransmission. |
 
 ## Data
 

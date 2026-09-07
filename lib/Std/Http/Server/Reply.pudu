@@ -1,10 +1,12 @@
 module Std.Http.Server.Reply
 
+import Std.Crypto as Crypto
 import Std.Html as Html
 import Std.Html.Ssr as Ssr
 import Std.Http as Http
 import Std.Http.Message as Message
 import Std.Json as Json
+import Std.Option as Option
 
 /// The answers a handler gives, apart from the routing that chose it and the
 /// connection that carries it.
@@ -85,5 +87,60 @@ export fn rendered(code: Int, content: Ssr.Rendered) -> Http.Response {
     status: Http.status(code),
     headers: [("content-type", "text/html; charset=utf-8"), ("content-length", show(content.byteLength))],
     body: content.body
+  }
+}
+
+/// Attaches an ETag entity tag validator header to a response.
+export fn withEtag(response: &Http.Response, etag: Str) -> Http.Response {
+  var headers = response.headers
+  headers = headers.push(("ETag", "\"" + etag + "\""))
+  Http.Response {
+    status: response.status,
+    headers: headers,
+    body: response.body
+  }
+}
+
+/// A 304 Not Modified response with an ETag and empty body.
+export fn notModified(etag: Str) -> Http.Response {
+  Http.Response {
+    status: Http.status(304),
+    headers: [("ETag", "\"" + etag + "\"")],
+    body: ""
+  }
+}
+
+/// Evaluates If-None-Match in the request; answers 304 Not Modified on match or attaches ETag on miss.
+export fn conditional(requestHeaders: &Array[(Str, Str)], response: &Http.Response, etag: Str) -> Http.Response {
+  var ifNoneMatch: Option[Str] = None
+  for pair in requestHeaders {
+    if pair[0].toLower() == "if-none-match" {
+      ifNoneMatch = Some(pair[1])
+    }
+  }
+  if let Some(clientTag) = ifNoneMatch {
+    let cleanClient = clientTag.trim()
+    let quoted = "\"" + etag + "\""
+    if cleanClient == quoted || cleanClient == etag || cleanClient == "*" {
+      return notModified(etag)
+    }
+  }
+  withEtag(response, etag)
+}
+
+/// Computes a fast hex ETag hash from body content.
+export fn computeEtag(body: Str) -> Str {
+  Crypto.sha256Hex(body).slice(0, 16)
+}
+
+/// A 429 Too Many Requests response with a Retry-After directive in seconds.
+export fn tooManyRequests(retryAfterSeconds: Int) -> Http.Response {
+  Http.Response {
+    status: Http.status(429),
+    headers: [
+      ("content-type", "text/plain; charset=utf-8"),
+      ("Retry-After", show(retryAfterSeconds))
+    ],
+    body: "too many requests; please retry after " + show(retryAfterSeconds) + " seconds"
   }
 }

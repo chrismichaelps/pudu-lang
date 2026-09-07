@@ -93,6 +93,16 @@ Implemented enterprise streaming SSR application framework:
 - `Std.Http.Server.Security`: Strict security headers, CSP nonces, origin validation, and constant-time token comparison.
 - `Std.Ui.Island`: `<pudu-island>` container elements, server action forms with CSRF, and ultra-lightweight client micro-runtime (< 1.5 KB).
 - Added `EnterpriseSsr.pudu` reference example and `UsesEnterpriseSsr.pudu` integration test suite registered in `RuntimeSpec.hs`.
-- All 6 module mirrors created with resolved Grill Logs; updated `_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
-Exact next action: Run full repository quality gates `bash test/gates.sh` to validate build and test suites.
+Exact next action: Implement rate limiting and conditional 304 Not Modified responses with ETags.
+
+## Server rate limiting and conditional ETag responses
+
+Implemented moving-window rate limiting and conditional HTTP responses:
+- `Std.Http.Server.Guard.rateLimited`: Thread-safe per-peer request frequency throttling with moving windows, returning RFC 6585 `429 Too Many Requests` and `Retry-After`.
+- `Std.Http.Server.Reply`: `withEtag`, `notModified`, `conditional`, `computeEtag`, and `tooManyRequests`.
+- Updated `UsesEnterpriseSsr.pudu` (31 assertions) and `RuntimeSpec.hs`.
+- Updated module mirrors `Guard.md` and `Reply.md` with resolved Grill Logs; updated `WEB.md` and `CHANGELOG.md`.
+- Validated with `bash test/gates.sh` (all gates passed).
+Exact next action: Proceed with next application stack capability or user direction.
+
 

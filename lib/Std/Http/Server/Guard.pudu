@@ -6,6 +6,8 @@ import Std.Http.Safe as Safe
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
 
 /// Which origins a service permits to read its answers.
 ///
@@ -307,6 +309,59 @@ export fn traced(recordedWhenNew: Bool) -> Route.Middleware {
         headers: answer.headers.push(Trace.asHeader(&following)),
         body: answer.body
       }
+    }
+  }
+}
+
+/// A rate limiting middleware that restricts requests per peer within a moving window.
+///
+/// Refuses requests exceeding `maxRequests` per `windowSeconds` with RFC 6585 status 429
+/// and sets the `Retry-After` header.
+export fn rateLimited(maxRequests: Int, windowSeconds: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let state: Sync.Cell[Map[Str, (Int, Int)]] = Sync.cell(mapOf([]))
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let peerKey = if request.peer.length() > 0 { request.peer } else { "client" }
+    let now = clock() / 1000
+
+    let decision = Sync.withLock(&lock, fn() -> (Bool, Int) {
+        let currentMap = Result.unwrapOr(Sync.get(&state), mapOf([]))
+        match currentMap.get(peerKey) {
+          case Some(entry) => {
+            let windowStart = entry[0]
+            let count = entry[1]
+            if now - windowStart < windowSeconds {
+              if count >= maxRequests {
+                var retry = windowSeconds - (now - windowStart)
+                if retry <= 0 { retry = 1 }
+                (false, retry)
+              } else {
+                let updated = currentMap.insert(peerKey, (windowStart, count + 1))
+                let _s = Sync.set(&state, updated)
+                (true, 0)
+              }
+            } else {
+              let updated = currentMap.insert(peerKey, (now, 1))
+              let _s = Sync.set(&state, updated)
+              (true, 0)
+            }
+          }
+          case None => {
+            let updated = currentMap.insert(peerKey, (now, 1))
+            let _s = Sync.set(&state, updated)
+            (true, 0)
+          }
+        }
+      })
+
+    let outcome = Result.unwrapOr(decision, (true, 0))
+    let allowed = outcome[0]
+    let retryAfter = outcome[1]
+    if !allowed {
+      Reply.tooManyRequests(retryAfter)
+    } else {
+      next(request)
     }
   }
 }
