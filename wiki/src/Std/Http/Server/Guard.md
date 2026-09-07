@@ -71,6 +71,27 @@ Grill Log:
 - **Q:** Is rate limiting global or per worker? **A:** Global state shared across server workers via a
   synchronized reference cell, ensuring distributed throttling across the connection pool.
 
+## Bounded concurrency and backpressure middleware
+
+`boundedConcurrency(maxInflight: Int) -> Route.Middleware` limits active concurrent requests in flight.
+When active requests reach `maxInflight`, excess requests are shed immediately with `Reply.serviceUnavailable(1)`
+and `Retry-After: 1`, preventing memory exhaustion and thread thrashing under load surges.
+
+## Circuit breaker middleware
+
+`circuitBreaker(failureThreshold: Int, resetTimeoutSeconds: Int) -> Route.Middleware` protects downstream
+services and database layers from cascading failures. Tracks consecutive 5xx errors:
+when failures reach `failureThreshold`, the circuit breaker trips open, failing fast with `Reply.serviceUnavailable`
+for `resetTimeoutSeconds`. Once the timeout expires, it permits a probe request (half-open) and resets upon success.
+
+Grill Log:
+- **Q:** Why shed load with 503 instead of queueing indefinitely? **A:** Unbounded request queues hide
+  overload and cause memory exhaustion or cascading timeouts. Fast-shedding with 503 allows load balancers
+  and retry policies to redistribute traffic.
+- **Q:** What errors trip the circuit breaker? **A:** Only server error statuses ($\ge 500$). Client
+  errors ($4xx$) do not trip the breaker.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Server Reply]]
+
 

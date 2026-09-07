@@ -365,3 +365,89 @@ export fn rateLimited(maxRequests: Int, windowSeconds: Int) -> Route.Middleware 
     }
   }
 }
+
+/// Bounded concurrent request admission middleware enforcing backpressure.
+///
+/// When active inflight requests reach `maxInflight`, excess requests are shed immediately
+/// with status 503 Service Unavailable and `Retry-After: 1`, preventing memory starvation.
+export fn boundedConcurrency(maxInflight: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let inflightCell = Sync.cell(0)
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let admitted = Sync.withLock(&lock, fn() -> Bool {
+        let current = Result.unwrapOr(Sync.get(&inflightCell), 0)
+        if current >= maxInflight {
+          false
+        } else {
+          let _s = Sync.set(&inflightCell, current + 1)
+          true
+        }
+      })
+
+    if !Result.unwrapOr(admitted, false) {
+      Reply.serviceUnavailable(1)
+    } else {
+      let answer = next(request)
+      let _cleanup = Sync.withLock(&lock, fn() -> () {
+          let current = Result.unwrapOr(Sync.get(&inflightCell), 1)
+          let updated = if current > 0 { current - 1 } else { 0 }
+          let _s = Sync.set(&inflightCell, updated)
+        })
+      answer
+    }
+  }
+}
+
+/// Circuit breaker middleware protecting downstream dependencies from cascading failure.
+///
+/// Trips open when consecutive 5xx errors reach `failureThreshold`, fast-failing with 503
+/// for `resetTimeoutSeconds` before permitting a half-open probe request.
+export fn circuitBreaker(failureThreshold: Int, resetTimeoutSeconds: Int) -> Route.Middleware {
+  let lock = Sync.mutex()
+  let stateCell = Sync.cell((0, 0))
+
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let now = clock() / 1000
+
+    let check = Sync.withLock(&lock, fn() -> (Bool, Int) {
+        let st = Result.unwrapOr(Sync.get(&stateCell), (0, 0))
+        let failures = st[0]
+        let openedAt = st[1]
+
+        if failures >= failureThreshold {
+          let elapsed = now - openedAt
+          if elapsed < resetTimeoutSeconds {
+            var retry = resetTimeoutSeconds - elapsed
+            if retry <= 0 { retry = 1 }
+            (false, retry)
+          } else {
+            (true, 0)
+          }
+        } else {
+          (true, 0)
+        }
+      })
+
+    let outcome = Result.unwrapOr(check, (true, 0))
+    if !outcome[0] {
+      Reply.serviceUnavailable(outcome[1])
+    } else {
+      let answer = next(request)
+      let isFailure = answer.status.code >= 500
+
+      let _update = Sync.withLock(&lock, fn() -> () {
+          let st = Result.unwrapOr(Sync.get(&stateCell), (0, 0))
+          if isFailure {
+            let updatedFailures = st[0] + 1
+            let opened = if updatedFailures >= failureThreshold { now } else { st[1] }
+            let _s = Sync.set(&stateCell, (updatedFailures, opened))
+          } else {
+            let _s = Sync.set(&stateCell, (0, 0))
+          }
+        })
+
+      answer
+    }
+  }
+}

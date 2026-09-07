@@ -144,3 +144,21 @@ export fn tooManyRequests(retryAfterSeconds: Int) -> Http.Response {
     body: "too many requests; please retry after " + show(retryAfterSeconds) + " seconds"
   }
 }
+
+/// A 503 Service Unavailable response with a Retry-After directive in seconds.
+export fn serviceUnavailable(retryAfterSeconds: Int) -> Http.Response {
+  Http.Response {
+    status: Http.status(503),
+    headers: [
+      ("content-type", "text/plain; charset=utf-8"),
+      ("Retry-After", show(retryAfterSeconds))
+    ],
+    body: "service temporarily unavailable; please retry after " + show(retryAfterSeconds) + " seconds"
+  }
+}
+
+/// A 504 Gateway Timeout response.
+export fn gatewayTimeout(reason: Str) -> Http.Response {
+  let message = if reason.length() > 0 { reason } else { "gateway timeout" }
+  text(504, message)
+}

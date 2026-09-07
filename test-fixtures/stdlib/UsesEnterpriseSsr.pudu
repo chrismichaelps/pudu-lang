@@ -350,5 +350,37 @@ export fn main() -> Int {
   let isrStats = IsrCache.stats(&isr)
   if isrStats[0] == 0 { passed = passed + 1 }
 
+  // 21. Reply: serviceUnavailable and gatewayTimeout
+  let su = Reply.serviceUnavailable(30)
+  var hasSuRetry = false
+  for pair in su.headers {
+    if pair[0] == "Retry-After" && pair[1] == "30" { hasSuRetry = true }
+  }
+  if su.status.code == 503 && hasSuRetry { passed = passed + 1 }
+
+  let gt = Reply.gatewayTimeout("custom upstream timeout")
+  if gt.status.code == 504 && gt.body == "custom upstream timeout" { passed = passed + 1 }
+
+  // 22. Guard: boundedConcurrency backpressure
+  let backpressureLimiter = Guard.boundedConcurrency(1)
+  let slowHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response {
+    Reply.text(200, "admitted")
+  }
+  let bp1 = backpressureLimiter(matchReq, slowHandler)
+  if bp1.status.code == 200 { passed = passed + 1 }
+
+  // 23. Guard: circuitBreaker trips open after consecutive failures
+  let cb = Guard.circuitBreaker(2, 60)
+  let failHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(500, "internal error") }
+  let successHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "healthy") }
+
+  let cb1 = cb(matchReq, failHandler)
+  let cb2 = cb(matchReq, failHandler)
+  let cb3 = cb(matchReq, successHandler)
+
+  if cb1.status.code == 500 { passed = passed + 1 }
+  if cb2.status.code == 500 { passed = passed + 1 }
+  if cb3.status.code == 503 { passed = passed + 1 }
+
   passed
 }

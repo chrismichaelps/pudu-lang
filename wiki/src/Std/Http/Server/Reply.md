@@ -52,10 +52,16 @@ incoming `If-None-Match` header: if the validator matches or contains `*`, it yi
 immediately, preserving 100% of body transport bandwidth on poor connections; otherwise it yields
 the response with the ETag header attached. `computeEtag(body)` generates a fast hex hash.
 `tooManyRequests(retryAfterSeconds)` emits RFC 6585 status 429 with `Retry-After`.
+`serviceUnavailable(retryAfterSeconds)` emits RFC 7231 status 503 with `Retry-After`.
+`gatewayTimeout(reason)` emits RFC 7231 status 504 for timeout conditions.
 
 Grill Log:
 - **Q:** Should `conditional` automatically compute ETags from the response body? **A:** No; callers
   supply the computed ETag or pre-computed revision hash to avoid hashing large bodies repeatedly.
 - **Q:** Does 304 include headers from the original response? **A:** It preserves cache headers and
   the ETag validator without sending the body.
+- **Q:** When should 503 be preferred over 429? **A:** 503 Service Unavailable is used when server
+  capacity is exhausted or downstream dependencies are unavailable (backpressure/circuit breaker),
+  whereas 429 Too Many Requests is used for client peer quota violations.
+
 

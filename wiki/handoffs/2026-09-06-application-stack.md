@@ -112,7 +112,17 @@ Implemented poor-network asset adaptation, streaming resilience, and tag-based I
 - `Std.App.IsrCache`: Thread-safe zero-copy cache storing contiguous byte payloads (`Bytes`) with tag-based multi-route invalidation (`revalidateTag`, `purgeTag`) and SWR serving.
 - Updated `UsesEnterpriseSsr.pudu` (43 assertions) and `RuntimeSpec.hs`.
 - Added module mirrors `Media.md` and `IsrCache.md` with resolved Grill Logs; updated `Stream.md`, `Std/_MOC.md`, and `CHANGELOG.md`.
+
+## Server backpressure and circuit breaker middleware
+
+Implemented admission control, load shedding, and cascading failure protection:
+- `Std.Http.Server.Guard.boundedConcurrency`: Admission backpressure middleware shedding excess in-flight requests immediately with RFC 7231 status 503 Service Unavailable and `Retry-After: 1`.
+- `Std.Http.Server.Guard.circuitBreaker`: Fault isolation middleware tripping open upon consecutive 5xx errors to fast-fail and prevent downstream database saturation.
+- `Std.Http.Server.Reply`: `serviceUnavailable` and `gatewayTimeout`.
+- Updated `UsesEnterpriseSsr.pudu` (49 assertions) and `RuntimeSpec.hs`.
+- Updated module mirrors `Guard.md` and `Reply.md` with resolved Grill Logs; updated `WEB.md` and `CHANGELOG.md`.
 Exact next action: Validate with full repository gates and commit to dev.
+
 
 
 

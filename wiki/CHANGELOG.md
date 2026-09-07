@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bounded concurrency backpressure and circuit breaker middleware
+
+- [[Std Http Server Guard]]: Added `boundedConcurrency(maxInflight)` for admission backpressure and fast-shedding of excess load via status 503 Service Unavailable, and `circuitBreaker(failureThreshold, resetTimeoutSeconds)` for cascading failure isolation.
+- [[Std Http Server Reply]]: Added `serviceUnavailable(retryAfterSeconds)` and `gatewayTimeout(reason)`.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 49 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] backpressure verdict from Absent to Ready.
+
 ## 2026-09-06 — Network-adaptive media, streaming error boundaries, and zero-copy ISR cache
 
 - [[Std Html Media]]: Adaptive `<img>` and `<picture>` elements tailored to client network profiles (`Save-Data`, 2G/3G), downscaling and omitting desktop descriptors to prevent packet drops and buffer bloat over mobile networks.

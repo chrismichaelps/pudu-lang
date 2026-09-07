@@ -94,11 +94,11 @@ library at all — see the rendering table below. That limit is real and is not 
 |---|---|---|
 | Can it run more than one process behind a balancer? | **Partial** | For rendered pages, yes — a request carries everything needed. Once a viewer's state is on the server, that viewer is bound to that process, and nothing yet handles moving or sharing it. |
 | Concurrent connections per process? | **Partial** | Each connection is served on its own worker, so one slow request does not block others. The number of workers is unbounded, which is itself a limit. |
-| Is there backpressure? | **Absent** | Accepting is not tied to what is already in flight. A limit exists on how many connections are accepted in total, which is not the same thing. |
+| Is there backpressure? | **Ready** | [[Std Http Server Guard]]: `boundedConcurrency` middleware bounds concurrent in-flight requests and fast-sheds excess load with RFC 7231 status 503 Service Unavailable and `Retry-After: 1`. |
 | Are request sizes bounded? | **Ready** | Head and body limits are enforced before anything is buffered. |
 | Is there a deadline on a request? | **Absent** | A handler that does not finish is not interrupted. Named in [[architecture/STDLIB]] as owed. |
 | Rate limiting? | **Ready** | [[Std Http Server Guard]]: `rateLimited` middleware enforces moving-window peer request limits and emits RFC 6585 429 Too Many Requests with Retry-After. |
-| Caching, and a content network in front? | **Ready** | [[Std App Cache]] holds in-process answers; [[Std Http Server Reply]] `conditional` and `withEtag` evaluate `If-None-Match` to emit 304 Not Modified without body retransmission. |
+| Caching, and a content network in front? | **Ready** | [[Std App Cache]] holds in-process answers; [[Std App IsrCache]] provides zero-copy tag-based ISR; [[Std Http Server Reply]] `conditional` and `withEtag` evaluate `If-None-Match` to emit 304 Not Modified without body retransmission. |
 
 ## Data
 
