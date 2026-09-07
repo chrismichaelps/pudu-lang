@@ -33,7 +33,7 @@ signatureHelpAt :: Analysis -> Int -> Json
 
 1. Trace backward from cursor offset to find an unmatched opening parenthesis `(`.
 2. Identify the callee identifier immediately preceding the parenthesis.
-3. Look up the callee's signature in `analysisIndex` or `analysisResolution`.
+3. Look up the callee's signature in `analysisProgramIndex` or `analysisResolution`.
 4. Count commas at the same nesting depth between `(` and cursor.
 5. Construct `SignatureHelp` containing `signatures` with parameter labels and `activeParameter`.
 

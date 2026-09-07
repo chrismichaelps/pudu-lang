@@ -33,7 +33,7 @@ completionAt :: Documents -> Json -> Json
 
 1. Locate cursor position and check if it follows a dot delimiter on a receiver expression.
 2. If after a dot: determine receiver expression end offset, query `analysisTypes` for the receiver's type, and collect built-in and `impl` methods for that nominal type.
-3. If not after a dot: return documented symbols from `analysisIndex` merged with language keywords and primitive types.
+3. If not after a dot: return documented symbols from `analysisProgramIndex` merged with language keywords and primitive types.
 
 ## Negative Logic (Prohibited Paths)
 

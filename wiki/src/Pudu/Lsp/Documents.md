@@ -22,7 +22,7 @@ What the server knows about each open document: one compile's answers, kept by t
 ## Interface
 
 ```haskell
-data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisIndex, analysisTypes, .. }
+data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisFileIndex, analysisProgramIndex, analysisTypes, .. }
 data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
 emptyDocuments   :: Documents
@@ -43,6 +43,12 @@ uriOf            :: Json -> Maybe Text
   documentation index, resolved symbol identities, and what the checker made of each expression by
   span. Hover and definition use resolution to distinguish a foreign declaration from a local or
   parameter with the same spelling.
+- **Two documentation indexes, because a span belongs to one file.** `analysisFileIndex` holds this
+  document's declarations and is what anything starting from a cursor must ask — hover, the outline,
+  token classification — since an offset compared against another module's spans matches a
+  declaration the reader is nowhere near. `analysisProgramIndex` holds every module's and answers
+  questions keyed by name, where an imported function counts as much as a local one: completion and
+  signature help.
 - A document the editor closed is forgotten rather than kept, so a stale answer about a file nobody has open cannot be given.
 
 ### Linkage

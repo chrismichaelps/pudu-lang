@@ -33,7 +33,7 @@ semanticTokensFull   :: Analysis -> Json
 ## Algorithm
 
 1. Scan all lexical tokens and comments from the document source.
-2. For identifier tokens, cross-reference with `analysisIndex` and `analysisResolution` to classify as type, trait, function, method, parameter, or variable.
+2. For identifier tokens, cross-reference with `analysisFileIndex` and `analysisResolution` to classify as type, trait, function, method, parameter, or variable.
 3. Sort tokens monotonically by start position.
 4. Delta-encode the line and column offsets relative to the preceding token and output the integer array `{ data: [...] }`.
 

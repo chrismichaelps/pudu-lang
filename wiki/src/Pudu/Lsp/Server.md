@@ -21,10 +21,11 @@ Answer an editor's questions about an open program, over the language server pro
 
 ```haskell
 data Analysis = Analysis
-  { analysisText        :: !Text
-  , analysisSource      :: !Source
-  , analysisDiagnostics :: ![Diagnostic]
-  , analysisIndex       :: !DocIndex
+  { analysisText         :: !Text
+  , analysisSource       :: !Source
+  , analysisDiagnostics  :: ![Diagnostic]
+  , analysisFileIndex    :: !DocIndex
+  , analysisProgramIndex :: !DocIndex
   }
 data Documents
 analyse            :: Text -> Text -> IO Analysis
