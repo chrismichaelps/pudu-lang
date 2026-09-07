@@ -1,0 +1,423 @@
+module Std.IntMap
+
+import Std.List as List
+
+/// A purely functional bitwise integer Patricia Trie mapping 64-bit integer keys to values.
+export type IntMap[V]
+  = Empty
+  | Tip(Int, V)
+  | Bin(Int, Int, IntMap[V], IntMap[V])
+
+/// A key-value pairing retrieved from an IntMap.
+export type IntMapEntry[V] = {
+  key: Int,
+  value: V
+}
+
+/// Constructs an empty integer map.
+export fn empty[V]() -> IntMap[V] {
+  Empty
+}
+
+/// Constructs an integer map with a single key-value pairing.
+export fn singleton[V](key: Int, value: V) -> IntMap[V] {
+  Tip(key, value)
+}
+
+/// Whether the map contains no entries.
+export fn isEmpty[V](map: &IntMap[V]) -> Bool {
+  match map {
+    case Empty => true
+    case _ => false
+  }
+}
+
+/// The number of entries contained in the map.
+export fn size[V](map: &IntMap[V]) -> Int {
+  match map {
+    case Empty => 0
+    case Tip(_, _) => 1
+    case Bin(_, _, left, right) => size(&left) + size(&right)
+  }
+}
+
+/// Returns the highest one-bit of x (smearing followed by subtraction).
+fn highestBit(x: Int) -> Int {
+  if x < 0 { return -9223372036854775808 }
+  var v = x
+  v = v | (v >> 1)
+  v = v | (v >> 2)
+  v = v | (v >> 4)
+  v = v | (v >> 8)
+  v = v | (v >> 16)
+  v = v | (v >> 32)
+  v - (v >> 1)
+}
+
+/// Computes the critical branching bit where two prefixes differ.
+fn branchingBit(p1: Int, p2: Int) -> Int {
+  let diff = p1 ^ p2
+  highestBit(diff)
+}
+
+/// Masks integer k above bit m, zeroing bit m and all lower bits.
+fn maskPrefix(k: Int, m: Int) -> Int {
+  if m == -9223372036854775808 { 0 } else { k & ~(m | (m - 1)) }
+}
+
+/// Tests whether mask m1 represents a higher bit than mask m2 in unsigned 64-bit order.
+fn higherMask(m1: Int, m2: Int) -> Bool {
+  if m1 < 0 { m2 >= 0 } else if m2 < 0 { false } else { m1 > m2 }
+}
+
+/// Tests whether the critical bit m in key is zero (left) or one (right).
+fn zeroBit(k: Int, m: Int) -> Bool {
+  (k & m) == 0
+}
+
+/// Tests whether key k has prefix p with branching bit m.
+fn matchPrefix(k: Int, p: Int, m: Int) -> Bool {
+  maskPrefix(k, m) == p
+}
+
+/// Looks up the value associated with key in the map.
+export fn get[V](map: &IntMap[V], key: Int) -> Option[V] {
+  match map {
+    case Empty => None
+    case Tip(k, v) => {
+      if k == key { Some(v) } else { None }
+    }
+    case Bin(p, m, left, right) => {
+      if !matchPrefix(key, p, m) { return None }
+      if zeroBit(key, m) { get(&left, key) } else { get(&right, key) }
+    }
+  }
+}
+
+/// Looks up the value associated with key, returning fallback if absent.
+export fn getOr[V](map: &IntMap[V], key: Int, fallback: V) -> V {
+  match get(map, key) {
+    case Some(val) => val
+    case None => fallback
+  }
+}
+
+/// Whether the map contains an entry for key.
+export fn member[V](map: &IntMap[V], key: Int) -> Bool {
+  match get(map, key) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Smart constructor joining two branches with distinct prefixes.
+fn join[V](p1: Int, t1: IntMap[V], p2: Int, t2: IntMap[V]) -> IntMap[V] {
+  let m = branchingBit(p1, p2)
+  let p = maskPrefix(p1, m)
+  if zeroBit(p1, m) {
+    Bin(p, m, t1, t2)
+  } else {
+    Bin(p, m, t2, t1)
+  }
+}
+
+/// Inserts or replaces a key-value pairing in the map.
+export fn insert[V](map: &IntMap[V], key: Int, value: V) -> IntMap[V] {
+  match map {
+    case Empty => Tip(key, value)
+    case Tip(k, v) => {
+      if k == key {
+        Tip(key, value)
+      } else {
+        join(key, Tip(key, value), k, Tip(k, v))
+      }
+    }
+    case Bin(p, m, left, right) => {
+      if matchPrefix(key, p, m) {
+        if zeroBit(key, m) {
+          Bin(p, m, insert(&left, key, value), right)
+        } else {
+          Bin(p, m, left, insert(&right, key, value))
+        }
+      } else {
+        join(key, Tip(key, value), p, *map)
+      }
+    }
+  }
+}
+
+/// Deletes the entry for key if present in the map.
+export fn delete[V](map: &IntMap[V], key: Int) -> IntMap[V] {
+  match map {
+    case Empty => Empty
+    case Tip(k, _) => {
+      if k == key { Empty } else { *map }
+    }
+    case Bin(p, m, left, right) => {
+      if !matchPrefix(key, p, m) { return *map }
+      if zeroBit(key, m) {
+        let newLeft = delete(&left, key)
+        match newLeft {
+          case Empty => right
+          case _ => Bin(p, m, newLeft, right)
+        }
+      } else {
+        let newRight = delete(&right, key)
+        match newRight {
+          case Empty => left
+          case _ => Bin(p, m, left, newRight)
+        }
+      }
+    }
+  }
+}
+
+/// Updates the value at key if present using function f.
+export fn adjust[V](map: &IntMap[V], key: Int, f: fn(V) -> V) -> IntMap[V] {
+  match map {
+    case Empty => Empty
+    case Tip(k, v) => {
+      if k == key { Tip(key, f(v)) } else { *map }
+    }
+    case Bin(p, m, left, right) => {
+      if !matchPrefix(key, p, m) { return *map }
+      if zeroBit(key, m) {
+        Bin(p, m, adjust(&left, key, f), right)
+      } else {
+        Bin(p, m, left, adjust(&right, key, f))
+      }
+    }
+  }
+}
+
+/// Computes the union of two maps, preferring values in left on duplicate keys.
+export fn union[V](left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match left {
+    case Empty => *right
+    case Tip(k, v) => insert(right, k, v)
+    case Bin(p1, m1, l1, r1) => unionBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn unionBin[V](p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V], left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match right {
+    case Empty => *left
+    case Tip(k, v) => if member(left, k) { *left } else { insert(left, k, v) }
+    case Bin(p2, m2, l2, r2) => unionTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn unionTwoBins[V](
+  p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V],
+  p2: Int, m2: Int, l2: &IntMap[V], r2: &IntMap[V],
+  left: &IntMap[V], right: &IntMap[V]
+) -> IntMap[V] {
+  if m1 == m2 && p1 == p2 {
+    Bin(p1, m1, union(l1, l2), union(r1, r2))
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) {
+      Bin(p1, m1, union(l1, right), *r1)
+    } else {
+      Bin(p1, m1, *l1, union(r1, right))
+    }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) {
+      Bin(p2, m2, union(left, l2), *r2)
+    } else {
+      Bin(p2, m2, *l2, union(left, r2))
+    }
+  } else {
+    join(p1, *left, p2, *right)
+  }
+}
+
+/// Computes the intersection of two maps, keeping values from the left map.
+export fn intersection[V](left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match left {
+    case Empty => Empty
+    case Tip(k, v) => if member(right, k) { Tip(k, v) } else { Empty }
+    case Bin(p1, m1, l1, r1) => intersectBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn intersectBin[V](p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V], left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match right {
+    case Empty => Empty
+    case Tip(k, _) => {
+      match get(left, k) {
+        case Some(v) => Tip(k, v)
+        case None => Empty
+      }
+    }
+    case Bin(p2, m2, l2, r2) => intersectTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn intersectTwoBins[V](
+  p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V],
+  p2: Int, m2: Int, l2: &IntMap[V], r2: &IntMap[V],
+  left: &IntMap[V], right: &IntMap[V]
+) -> IntMap[V] {
+  if m1 == m2 && p1 == p2 {
+    let leftIntersect = intersection(l1, l2)
+    let rightIntersect = intersection(r1, r2)
+    match leftIntersect {
+      case Empty => rightIntersect
+      case _ => {
+        match rightIntersect {
+          case Empty => leftIntersect
+          case _ => Bin(p1, m1, leftIntersect, rightIntersect)
+        }
+      }
+    }
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) { intersection(l1, right) } else { intersection(r1, right) }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) { intersection(left, l2) } else { intersection(left, r2) }
+  } else {
+    Empty
+  }
+}
+
+/// Computes the difference of two maps (entries in left whose keys are not in right).
+export fn difference[V](left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match left {
+    case Empty => Empty
+    case Tip(k, v) => if member(right, k) { Empty } else { Tip(k, v) }
+    case Bin(p1, m1, l1, r1) => diffBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn diffBin[V](p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V], left: &IntMap[V], right: &IntMap[V]) -> IntMap[V] {
+  match right {
+    case Empty => *left
+    case Tip(k, _) => delete(left, k)
+    case Bin(p2, m2, l2, r2) => diffTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn diffTwoBins[V](
+  p1: Int, m1: Int, l1: &IntMap[V], r1: &IntMap[V],
+  p2: Int, m2: Int, l2: &IntMap[V], r2: &IntMap[V],
+  left: &IntMap[V], right: &IntMap[V]
+) -> IntMap[V] {
+  if m1 == m2 && p1 == p2 {
+    let leftDiff = difference(l1, l2)
+    let rightDiff = difference(r1, r2)
+    match leftDiff {
+      case Empty => rightDiff
+      case _ => {
+        match rightDiff {
+          case Empty => leftDiff
+          case _ => Bin(p1, m1, leftDiff, rightDiff)
+        }
+      }
+    }
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) {
+      let leftDiff = difference(l1, right)
+      match leftDiff {
+        case Empty => *r1
+        case _ => Bin(p1, m1, leftDiff, *r1)
+      }
+    } else {
+      let rightDiff = difference(r1, right)
+      match rightDiff {
+        case Empty => *l1
+        case _ => Bin(p1, m1, *l1, rightDiff)
+      }
+    }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) { difference(left, l2) } else { difference(left, r2) }
+  } else {
+      *left
+  }
+}
+
+/// Transforms all values in the map using function f.
+export fn mapValues[A, B](map: &IntMap[A], f: fn(A) -> B) -> IntMap[B] {
+  match map {
+    case Empty => Empty
+    case Tip(k, v) => Tip(k, f(v))
+    case Bin(p, m, left, right) => Bin(p, m, mapValues(&left, f), mapValues(&right, f))
+  }
+}
+
+/// Appends all keys in ascending order to the accumulator array.
+fn collectKeys[V](map: &IntMap[V], acc: Array[Int]) -> Array[Int] {
+  match map {
+    case Empty => acc
+    case Tip(k, _) => acc.push(k)
+    case Bin(p, m, left, right) => {
+      if m < 0 {
+        let withRight = collectKeys(&right, acc)
+        collectKeys(&left, withRight)
+      } else {
+        let withLeft = collectKeys(&left, acc)
+        collectKeys(&right, withLeft)
+      }
+    }
+  }
+}
+
+/// Returns an array of all keys in ascending order.
+export fn keys[V](map: &IntMap[V]) -> Array[Int] {
+  collectKeys(map, [])
+}
+
+/// Appends all values in key order to the accumulator array.
+fn collectValues[V](map: &IntMap[V], acc: Array[V]) -> Array[V] {
+  match map {
+    case Empty => acc
+    case Tip(_, v) => acc.push(v)
+    case Bin(p, m, left, right) => {
+      if m < 0 {
+        let withRight = collectValues(&right, acc)
+        collectValues(&left, withRight)
+      } else {
+        let withLeft = collectValues(&left, acc)
+        collectValues(&right, withLeft)
+      }
+    }
+  }
+}
+
+/// Returns an array of all values in key order.
+export fn values[V](map: &IntMap[V]) -> Array[V] {
+  collectValues(map, [])
+}
+
+/// Appends all entries in key order to the accumulator array.
+fn collectEntries[V](map: &IntMap[V], acc: Array[IntMapEntry[V]]) -> Array[IntMapEntry[V]] {
+  match map {
+    case Empty => acc
+    case Tip(k, v) => acc.push(IntMapEntry{key: k, value: v})
+    case Bin(p, m, left, right) => {
+      if m < 0 {
+        let withRight = collectEntries(&right, acc)
+        collectEntries(&left, withRight)
+      } else {
+        let withLeft = collectEntries(&left, acc)
+        collectEntries(&right, withLeft)
+      }
+    }
+  }
+}
+
+/// Returns an array of all key-value entries in key order.
+export fn entries[V](map: &IntMap[V]) -> Array[IntMapEntry[V]] {
+  collectEntries(map, [])
+}
+
+/// Returns the smallest key present in the map, or None if empty.
+export fn minKey[V](map: &IntMap[V]) -> Option[Int] {
+  let ks = keys(map)
+  if ks.length() == 0 { None } else { Some(ks[0]) }
+}
+
+/// Returns the largest key present in the map, or None if empty.
+export fn maxKey[V](map: &IntMap[V]) -> Option[Int] {
+  let ks = keys(map)
+  let len = ks.length()
+  if len == 0 { None } else { Some(ks[len - 1]) }
+}
