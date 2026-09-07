@@ -300,6 +300,136 @@ export fn decodeUnverified(token: Str) -> Result[JwtClaims, JwtError] {
   decodePayloadClaims(parts[1])
 }
 
+/// A public key an identity provider publishes, and the algorithm it signs with.
+///
+/// A provider publishes its keys as numbers rather than as a file: a JWKS
+/// carries an RSA key as a modulus and an exponent, and a curve key as the two
+/// coordinates of a point, each base64url. So that is what this takes.
+///
+/// A key is named by `kid` because a provider holds several and rotates them;
+/// a token says in its header which one signed it, and checking the wrong one
+/// fails in a way that looks exactly like a forgery.
+export type PublicKey
+/// RSASSA-PKCS1-v1_5 over SHA-256 — `RS256`, what nearly every provider issues.
+  = RsaKey(Str, Bytes, Bytes)
+/// ECDSA on P-256 over SHA-256 — `ES256`.
+  | EcdsaKey(Str, Bytes, Bytes)
+
+/// The identifier a provider gave this key.
+export fn keyId(key: &PublicKey) -> Str {
+  match *key {
+    case RsaKey(id, _, _) => id
+    case EcdsaKey(id, _, _) => id
+  }
+}
+
+/// The algorithm name that appears in a token's header for this key.
+export fn keyAlgorithm(key: &PublicKey) -> Str {
+  match *key {
+    case RsaKey(_, _, _) => "RS256"
+    case EcdsaKey(_, _, _) => "ES256"
+  }
+}
+
+/// Verify a token signed with a provider's private key, and read its claims.
+///
+/// This is the direction a service that trusts an identity provider needs, and
+/// the only one it needs: the provider signs, the service checks. Nothing here
+/// can produce a token, which is the point of using a key pair rather than a
+/// shared secret — a service that could sign could impersonate the provider.
+///
+/// The algorithm is taken from the key rather than from the token. A token
+/// naming its own algorithm and being checked with it is the oldest hole in
+/// this format: an attacker changes `RS256` to `HS256`, signs with the public
+/// key as though it were a shared secret, and the token verifies. Here a
+/// header that does not name the key's own algorithm is refused before
+/// anything is computed.
+export fn decodeWithKey(
+  token: Str,
+  key: &PublicKey,
+  rule: &JwtValidation,
+  nowSeconds: Int
+) -> Result[JwtClaims, JwtError] {
+  if token.length() > 65536 || rule.leewaySeconds < 0 { return Err(MalformedToken) }
+  let parts = token.split(".")
+  if parts.length() != 3 {
+    return Err(MalformedToken)
+  }
+  let headerB64 = parts[0]
+  let payloadB64 = parts[1]
+  let signatureB64 = parts[2]
+
+  let _hdrVerified = verifyAsymmetricHeader(headerB64, key) ?
+  let signature = match ByteSeq.decodeBase64Url(signatureB64) {
+    case Ok(raw) => raw
+    case Err(_) => { return Err(MalformedToken) }
+  }
+  let signingInput = (headerB64 + "." + payloadB64).toBytes()
+  let genuine = match *key {
+    case RsaKey(_, modulus, exponent) =>
+    verifyRsaSha256(modulus, exponent, signingInput, signature)
+    case EcdsaKey(_, x, y) => verifyEcdsaSha256(x, y, signingInput, signature)
+  }
+  if !genuine {
+    return Err(InvalidSignature)
+  }
+
+  let parsedClaims = decodePayloadClaims(payloadB64) ?
+  match checkBounds(&parsedClaims, rule, nowSeconds) {
+    case Some(err) => { return Err(err) }
+    case None => {}
+  }
+  Ok(parsedClaims)
+}
+
+/// Which of a provider's keys a token says signed it.
+///
+/// Read before verifying, so a caller holding several keys picks the one to
+/// check against. A token that names no key answers nothing, and a caller must
+/// then decide for itself rather than being given a guess.
+export fn tokenKeyId(token: Str) -> Option[Str] {
+  let parts = token.split(".")
+  if parts.length() != 3 {
+    return None
+  }
+  match parseJsonSegment(parts[0]) {
+    case Ok(header) => fieldText(&header, "kid")
+    case Err(_) => None
+  }
+}
+
+/// Pick the key a token names, out of the set a provider published.
+export fn keyFor(keys: &Array[PublicKey], token: Str) -> Option[PublicKey] {
+  let named = tokenKeyId(token) ?
+  var index = 0
+  while index < keys.length() {
+    let candidate = keys[index]
+    if keyId(&candidate) == named {
+      return Some(candidate)
+    }
+    index = index + 1
+  }
+  None
+}
+
+fn verifyAsymmetricHeader(headerB64: Str, key: &PublicKey) -> Result[Bool, JwtError] {
+  let headerJson = parseJsonSegment(headerB64) ?
+  let fields = match Json.asObject(&headerJson) {
+    case Some(entries) => entries
+    case None => { return Err(MalformedToken) }
+  }
+  var seen: Set[Str] = setOf([])
+  for field in fields {
+    if seen.contains(field[0]) { return Err(MalformedToken) }
+    seen = seen.insert(field[0])
+    if field[0] == "crit" || field[0] == "b64" { return Err(UnsupportedAlgorithm) }
+  }
+  if fieldText(&headerJson, "alg") != Some(keyAlgorithm(key)) {
+    return Err(UnsupportedAlgorithm)
+  }
+  Ok(true)
+}
+
 fn asMalformed[T](_err: T) -> JwtError {
   MalformedToken
 }

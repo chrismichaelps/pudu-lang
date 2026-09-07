@@ -1,0 +1,122 @@
+module UsesJwtKeys
+
+import Std.App.Jwt {EcdsaKey, RsaKey}
+import Std.App.Jwt as Jwt
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+import Std.Text as Text
+
+/// A token and a key from a real identity provider's shapes: the token was
+/// signed with a private key this fixture does not hold, and the key is the
+/// public half as a JWKS publishes it. Verifying it here is therefore the
+/// whole property — nothing in this file could have produced the signature.
+const RS_TOKEN: Str =
+"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InByb2QtMSJ9.eyJzdWIiOiJ1c2VyLTkiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwiYXVkIjoiYXBpIiwiZXhwIjo0MTAyNDQ0ODAwfQ.Ms1WGN-CuZIito4Gu01zognn12XtjyD4Lyjsgn-IQAYYcedTQCrxswJZ8JK5szc19zAegp0XUbg3l-dfCUboKLkcNL-_0RBrFFUV-aGXPGC2fFExAnYC6Yye6RZjuaD5Ca90ZFFw7P4myTUjzUHOBzBBg8a6BgcChGMMg_weSyPUZNsCwF1Zz6ZwTYMAjD5JpBnozBY3157JueKPgEpMFq-f68jd0qiHEFplZenVT4n2Qekeu_p3p_EbgavOPNU8Ls3FirJfH_twQTdhYA7HqQkH58ucLWsW5hKi85Es6E2Z_6UnEpjbPFPELN8hCcM7aBijqvQcpt4XbeuC9Fn8Rw"
+const RS_N: Str = "xZ2QUXrWdOtiR99utG9S-xEtC_QaVhrvdfeUVu95dPIIY6JMq8_nkAngr_-I7Qm09-EIabMaGGulQL8xe9DL6pjCHH3gwXRbDBfTKJf3De-0QqiCGOvtEQIp5haKWWf6PpW7paLZwsDUVwG-AuAzeo78OoOaFjCBzSrVYG8gPVizzPtynxMP1_vxLrjeUBhqdVxt_HGJj-qhT_vYAuH5nBJA4ymdovKq-fSkCRuBYlwbb2O72l7PkbY8o1qmtxMGviUUDUc2WI88-EtJ8hm-0eL1bFQ693giaOuoMTlbYoOWXxGW3zJbI4jxrp7XZvuvlR9sX1KcJmZs39PpVnsvkw"
+const RS_E: Str = "AQAB"
+const ES_TOKEN: Str =
+"eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImVzLTEifQ.eyJzdWIiOiJ1c2VyLTkiLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwiYXVkIjoiYXBpIiwiZXhwIjo0MTAyNDQ0ODAwfQ.WfAbDWu6UWM_trmLThSiIxKrPOSlc4Fabqaprytb55b1p7nnHfUR6Q5kcfJQYsWBNARpdJGQRb1GMdInWql-JA"
+const ES_X: Str = "WJ3JU6O8nEWbJ9KJmYinUlU_gIV2qWxoZCgWTJgQrLs"
+const ES_Y: Str = "ir0utvIjqXrEDVMtoN1zhYaB3WMrukEbZ8siY7rHhZM"
+
+fn raw(encoded: Str) -> Bytes {
+  match ByteSeq.decodeBase64Url(encoded) {
+    case Ok(bytes) => bytes
+    case Err(_) => ByteSeq.empty()
+  }
+}
+
+fn rsaKey(id: Str) -> Jwt.PublicKey { RsaKey(id, raw(RS_N), raw(RS_E)) }
+
+fn ecdsaKey(id: Str) -> Jwt.PublicKey { EcdsaKey(id, raw(ES_X), raw(ES_Y)) }
+
+fn rule() -> Jwt.JwtValidation { Jwt.validation() }
+
+fn main() -> Int {
+  var held = 0
+  let now = 1757000000
+
+  // 1. A genuine RS256 token verifies against the provider's public key
+  match Jwt.decodeWithKey(RS_TOKEN, &rsaKey("prod-1"), &rule(), now) {
+    case Ok(claims) => {
+      if Option.unwrapOr(claims.subject, "") == "user-9" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 2. Its issuer and audience survive the decode
+  match Jwt.decodeWithKey(RS_TOKEN, &rsaKey("prod-1"), &rule(), now) {
+    case Ok(claims) => {
+      if Option.unwrapOr(claims.issuer, "") == "https://issuer.example"
+        && Option.unwrapOr(claims.audience, "") == "api" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 3. A token whose payload was altered no longer verifies
+  let parts = RS_TOKEN.split(".")
+  let forged = parts[0] + "." + Text.dropEnd(parts[1], 4) + "AAAA" + "." + parts[2]
+  match Jwt.decodeWithKey(forged, &rsaKey("prod-1"), &rule(), now) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 4. A different public key does not verify it
+  match Jwt.decodeWithKey(RS_TOKEN, &ecdsaKey("prod-1"), &rule(), now) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 5. A genuine ES256 token verifies against its curve key
+  match Jwt.decodeWithKey(ES_TOKEN, &ecdsaKey("es-1"), &rule(), now) {
+    case Ok(claims) => {
+      if Option.unwrapOr(claims.subject, "") == "user-9" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 6. The token says which key signed it, so a holder of several can choose
+  if Option.unwrapOr(Jwt.tokenKeyId(RS_TOKEN), "") == "prod-1"
+    && Option.unwrapOr(Jwt.tokenKeyId(ES_TOKEN), "") == "es-1" {
+    held = held + 1
+  }
+
+  // 7. Choosing from a published set picks the one the token names
+  let published = [rsaKey("prod-1"), ecdsaKey("es-1")]
+  match Jwt.keyFor(&published, ES_TOKEN) {
+    case Some(chosen) => {
+      if Jwt.keyId(&chosen) == "es-1" && Jwt.keyAlgorithm(&chosen) == "ES256" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 8. A key the token does not name is not offered
+  match Jwt.keyFor(&[rsaKey("other")], RS_TOKEN) {
+    case Some(_) => {}
+    case None => { held = held + 1 }
+  }
+
+  // 9. The algorithm comes from the key, not from the token: a header claiming
+  //    a different algorithm is refused before anything is computed. This is
+  //    the substitution that lets a public key be used as a shared secret.
+  match Jwt.decodeWithKey(ES_TOKEN, &rsaKey("es-1"), &rule(), now) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 10. An expired token is refused even though its signature is genuine
+  match Jwt.decodeWithKey(RS_TOKEN, &rsaKey("prod-1"), &rule(), 4102444801) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  held
+}

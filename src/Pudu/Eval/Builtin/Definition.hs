@@ -26,6 +26,8 @@ data Builtin
   | AppendFileBuiltin
   | FileExistsBuiltin
   | Sha512Builtin
+  | VerifyRsaBuiltin
+  | VerifyEcdsaBuiltin
   | SealBuiltin
   | OpenSealedBuiltin
   | SignalWatchStopBuiltin
@@ -178,6 +180,8 @@ builtinName value = case value of
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
   Sha512Builtin -> "sha512Of"
+  VerifyRsaBuiltin -> "verifyRsaSha256"
+  VerifyEcdsaBuiltin -> "verifyEcdsaSha256"
   SealBuiltin -> "sealBytes"
   OpenSealedBuiltin -> "openSealedBytes"
   SignalWatchStopBuiltin -> "signalWatchStop"

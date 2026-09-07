@@ -95,6 +95,8 @@ installBuiltinConstructors = do
   bind "bucketsOf" (BuiltinValue BucketsOfBuiltin)
   bind "sha256Of" (BuiltinValue Sha256Builtin)
   bind "sha512Of" (BuiltinValue Sha512Builtin)
+  bind "verifyRsaSha256" (BuiltinValue VerifyRsaBuiltin)
+  bind "verifyEcdsaSha256" (BuiltinValue VerifyEcdsaBuiltin)
   bind "sealBytes" (BuiltinValue SealBuiltin)
   bind "openSealedBytes" (BuiltinValue OpenSealedBuiltin)
   bind "hmacSha256Of" (BuiltinValue HmacBuiltin)

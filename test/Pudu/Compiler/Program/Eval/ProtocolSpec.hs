@@ -51,6 +51,7 @@ testProtocolEvaluation = do
   regexEngine <- runEntry "test-fixtures/stdlib/UsesRegex.pudu"
   stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
   cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
+  providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -234,6 +235,15 @@ testProtocolEvaluation = do
     , counterexample
         "keyed digests match their vectors, and a sealed message refuses to open wrongly"
         (cryptoSurface === Just "14")
+    {-| The tokens were signed elsewhere, by a private key the fixture does not
+        hold, so verifying them is a property nothing in the fixture could have
+        arranged. The case that matters most is the one where the header lies
+        about its algorithm: a token checked with the algorithm it names rather
+        than the one its key uses lets a public key be presented as a shared
+        secret, and every token then verifies. -}
+    , counterexample
+        "a provider's tokens verify, and a token that lies about its algorithm does not"
+        (providerTokens === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

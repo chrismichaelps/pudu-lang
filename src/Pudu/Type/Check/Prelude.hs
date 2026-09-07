@@ -144,6 +144,10 @@ declareBuiltinConstructors = do
       not a digest; the other three are. -}
   bindName "sha256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
   bindName "sha512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "verifyRsaSha256"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType] boolType))
+  bindName "verifyEcdsaSha256"
+    (monotype (FunctionTypeValue False [bytesType, bytesType, bytesType, bytesType] boolType))
   bindName "sealBytes"
     ( monotype
         ( FunctionTypeValue False

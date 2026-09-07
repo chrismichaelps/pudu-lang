@@ -41,7 +41,7 @@ preludeValueNames =
   [ "panic", "charFromCode", "mapOf", "setOf", "bytesOf", "bucketsOf", "mixHash", "show", "display", "convertInteger"
   , "wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"
   , "wordMapIsSubsetOf", "wordMapIsDisjointFrom"
-  , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sealBytes", "openSealedBytes", "hmacSha256Of", "deriveKey", "hashOf"
+  , "wordMapPopCount", "wordMapMembers", "sha256Of", "sha512Of", "sealBytes", "openSealedBytes", "verifyRsaSha256", "verifyEcdsaSha256", "hmacSha256Of", "deriveKey", "hashOf"
   , "bufferAlloc", "bufferReadU64", "bufferWriteU64", "bufferScanU64", "bufferCopy", "bufferSize"
   , "bufferReadI64", "bufferWriteI64", "bufferReadF64", "bufferWriteF64", "bufferReadU32", "bufferWriteU32"
   , "bufferFill", "bufferCompare"

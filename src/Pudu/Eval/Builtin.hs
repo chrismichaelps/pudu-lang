@@ -47,6 +47,7 @@ import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
 import Pudu.Eval.Aead (openBytes, sealBytes)
+import Pudu.Eval.Verify (verifyEcdsaP256Sha256, verifyRsaSha256)
 import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256, sha512)
 import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.Render (renderValue)
@@ -126,6 +127,10 @@ callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
 callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
   (Sha512Builtin, [BytesValue message]) -> pure (BytesValue (sha512 message))
+  (VerifyRsaBuiltin, [BytesValue modulus, BytesValue exponent, BytesValue message, BytesValue signature]) ->
+    pure (BoolValue (verifyRsaSha256 modulus exponent message signature))
+  (VerifyEcdsaBuiltin, [BytesValue x, BytesValue y, BytesValue message, BytesValue signature]) ->
+    pure (BoolValue (verifyEcdsaP256Sha256 x y message signature))
   (SealBuiltin, [BytesValue key, BytesValue nonce, BytesValue message, BytesValue associated]) ->
     pure (optionalBytes (sealBytes key nonce message associated))
   (OpenSealedBuiltin, [BytesValue key, BytesValue nonce, BytesValue sealed, BytesValue associated]) ->
@@ -208,6 +213,8 @@ isHashingBuiltin :: Builtin -> Bool
 isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
   Sha512Builtin -> True
+  VerifyRsaBuiltin -> True
+  VerifyEcdsaBuiltin -> True
   SealBuiltin -> True
   OpenSealedBuiltin -> True
   HmacBuiltin -> True
