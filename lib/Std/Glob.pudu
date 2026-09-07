@@ -1,0 +1,202 @@
+module Std.Glob
+
+/// Whether a path matches a pattern written the way a shell writes one.
+///
+/// The vocabulary is small and fixed, which is the point: a glob is written by
+/// a person into a configuration file — files to include, paths to ignore,
+/// routes to match — and every piece of it has to be guessable without a
+/// reference.
+///
+/// - `?` matches one character, but never a separator.
+/// - `*` matches any run of characters within one segment, never a separator.
+/// - `**` matches whole segments, separators and all.
+/// - `[abc]` and `[a-z]` match one of a set, `[!abc]` one outside it.
+/// - `\` makes the next character ordinary.
+///
+/// The separator rule is what makes a glob a path pattern rather than a text
+/// pattern: `src/*.pudu` names files in one directory and `src/**/*.pudu`
+/// names them at any depth. A `*` that crossed separators would make the two
+/// the same, and there would be no way to write the first.
+///
+/// For matching text rather than paths, use `Std.Regex`.
+
+/// Whether a path matches a pattern.
+export fn matches(pattern: Str, path: Str) -> Bool {
+  matchFrom(&pattern.chars(), 0, &path.chars(), 0)
+}
+
+/// Whether any of several patterns matches, which is how an include list reads.
+export fn matchesAny(patterns: &Array[Str], path: Str) -> Bool {
+  var index = 0
+  while index < patterns.length() {
+    if matches(patterns[index], path) {
+      return true
+    }
+    index = index + 1
+  }
+  false
+}
+
+/// The paths a pattern selects, out of the ones given.
+export fn select(pattern: Str, paths: &Array[Str]) -> Array[Str] {
+  var kept: Array[Str] = []
+  var index = 0
+  while index < paths.length() {
+    if matches(pattern, paths[index]) {
+      kept = kept.push(paths[index])
+    }
+    index = index + 1
+  }
+  kept
+}
+
+/// The paths left after removing everything an ignore list names.
+export fn reject(patterns: &Array[Str], paths: &Array[Str]) -> Array[Str] {
+  var kept: Array[Str] = []
+  var index = 0
+  while index < paths.length() {
+    if !matchesAny(patterns, paths[index]) {
+      kept = kept.push(paths[index])
+    }
+    index = index + 1
+  }
+  kept
+}
+
+/// Whether a pattern has anything in it that varies.
+///
+/// A pattern with nothing to match is a name, and a caller can look it up
+/// directly rather than walking a tree to compare every path against it.
+export fn isLiteral(pattern: Str) -> Bool {
+  let chars = pattern.chars()
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '*' || here == '?' || here == '[' || here == '\\' {
+      return false
+    }
+    index = index + 1
+  }
+  true
+}
+
+/// The longest leading run of a pattern that varies in no way.
+///
+/// What a caller walking a directory tree starts from: everything the pattern
+/// can match is under this, so nothing above it needs to be looked at.
+export fn literalPrefix(pattern: Str) -> Str {
+  let chars = pattern.chars()
+  var index = 0
+  var lastSeparator = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '*' || here == '?' || here == '[' || here == '\\' {
+      break
+    }
+    if here == '/' {
+      lastSeparator = index + 1
+    }
+    index = index + 1
+  }
+  pattern.take(lastSeparator)
+}
+
+/// Match a pattern from one position against a path from another.
+///
+/// Written as a walk with backtracking rather than as a program, because the
+/// vocabulary has one construct that needs it — `*` — and the length it can
+/// consume is bounded by the segment it is inside.
+fn matchFrom(pattern: &Array[Char], patternAt: Int, path: &Array[Char], pathAt: Int) -> Bool {
+  var p = patternAt
+  var s = pathAt
+  while p < pattern.length() {
+    let here = pattern[p]
+    if here == '*' {
+      // `**` crosses separators; a single `*` stops at one.
+      let crossing = p + 1 < pattern.length() && pattern[p + 1] == '*'
+      var rest = if crossing { p + 2 } else { p + 1 }
+      // `**/` matches nothing at all as well as whole segments, so a pattern
+      // written `**/x` matches a bare `x`.
+      if crossing && rest < pattern.length() && pattern[rest] == '/' {
+        if matchFrom(pattern, rest + 1, path, s) {
+          return true
+        }
+        rest = rest + 1
+      }
+      var take = s
+      while take <= path.length() {
+        if matchFrom(pattern, rest, path, take) {
+          return true
+        }
+        if take < path.length() && path[take] == '/' && !crossing {
+          break
+        }
+        take = take + 1
+      }
+      return false
+    }
+    if s >= path.length() {
+      return false
+    }
+    if here == '?' {
+      if path[s] == '/' {
+        return false
+      }
+      p = p + 1
+      s = s + 1
+    } else if here == '[' {
+      let decided = matchSet(pattern, p, path[s])
+      if !decided[0] {
+        return false
+      }
+      p = decided[1]
+      s = s + 1
+    } else if here == '\\' && p + 1 < pattern.length() {
+      if path[s] != pattern[p + 1] {
+        return false
+      }
+      p = p + 2
+      s = s + 1
+    } else {
+      if path[s] != here {
+        return false
+      }
+      p = p + 1
+      s = s + 1
+    }
+  }
+  s == path.length()
+}
+
+/// Whether a character is in the set starting at `open`, and where the set ends.
+fn matchSet(pattern: &Array[Char], open: Int, value: Char) -> (Bool, Int) {
+  var index = open + 1
+  var negated = false
+  if index < pattern.length() && (pattern[index] == '!' || pattern[index] == '^') {
+    negated = true
+    index = index + 1
+  }
+  var inside = false
+  var first = true
+  while index < pattern.length() {
+    let here = pattern[index]
+    if here == ']' && !first {
+      let decided = if negated { !inside } else { inside }
+      return (decided, index + 1)
+    }
+    first = false
+    if index + 2 < pattern.length() && pattern[index + 1] == '-' && pattern[index + 2] != ']' {
+      if value >= here && value <= pattern[index + 2] {
+        inside = true
+      }
+      index = index + 3
+    } else {
+      if value == here {
+        inside = true
+      }
+      index = index + 1
+    }
+  }
+  // A set nobody closed is a `[` that was meant literally.
+  (value == '[', open + 1)
+}

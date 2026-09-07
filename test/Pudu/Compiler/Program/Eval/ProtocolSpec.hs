@@ -53,6 +53,7 @@ testProtocolEvaluation = do
   cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
   providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
   yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
+  versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -255,6 +256,14 @@ testProtocolEvaluation = do
     , counterexample
         "a manifest's mappings, sequences, block scalars, and quoting all survive"
         (yamlDocuments === Just "18")
+    {-| The two orderings each have one case that a plausible implementation
+        gets wrong and no ordinary use would reveal: `1.10.0` after `1.9.0`,
+        which comparing as text reverses, and a `*` that stops at a separator,
+        without which `src/*.pudu` and `src/**/*.pudu` name the same files and
+        one of them cannot be written. -}
+    , counterexample
+        "versions order by number and globs stop at separators"
+        (versionsAndGlobs === Just "24")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

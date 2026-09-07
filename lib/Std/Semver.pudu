@@ -1,0 +1,242 @@
+module Std.Semver
+
+/// A version, in the three numbers and two tails the scheme defines.
+///
+/// The point of the scheme is that the numbers carry a promise: a change to
+/// `patch` fixes something, a change to `minor` adds something that does not
+/// break what was there, and a change to `major` is allowed to break it. A
+/// comparison that read the version as text would order `1.10.0` before
+/// `1.9.0`, which is the one thing this exists to get right.
+export type Version = {
+  major: Int,
+  minor: Int,
+  patch: Int,
+  /// What follows a `-`, as the identifiers it is made of.
+  prerelease: Array[Str],
+  /// What follows a `+`. It takes no part in comparison, by definition.
+  build: Str
+}
+
+/// Why text does not name a version.
+export type VersionError
+  = NotThreeNumbers
+  | LeadingZero(Str)
+  | NotANumber(Str)
+  | EmptyIdentifier
+
+/// Read a version.
+///
+/// A leading zero is refused rather than trimmed. `01.0.0` and `1.0.0` would
+/// otherwise be the same version written two ways, and a registry keyed by the
+/// text would hold both.
+export fn parse(text: Str) -> Result[Version, VersionError] {
+  var core = text
+  var build = ""
+  var prerelease: Array[Str] = []
+
+  let plus = core.indexOf("+")
+  if plus >= 0 {
+    build = core.drop(plus + 1)
+    core = core.take(plus)
+  }
+  let dash = core.indexOf("-")
+  if dash >= 0 {
+    let tail = core.drop(dash + 1)
+    core = core.take(dash)
+    prerelease = tail.split(".")
+    var index = 0
+    while index < prerelease.length() {
+      if prerelease[index].isEmpty() {
+        return Err(EmptyIdentifier)
+      }
+      index = index + 1
+    }
+  }
+
+  let parts = core.split(".")
+  if parts.length() != 3 {
+    return Err(NotThreeNumbers)
+  }
+  let major = numberOf(parts[0]) ?
+  let minor = numberOf(parts[1]) ?
+  let patch = numberOf(parts[2]) ?
+  Ok(Version{major: major, minor: minor, patch: patch, prerelease: prerelease, build: build})
+}
+
+fn numberOf(text: Str) -> Result[Int, VersionError] {
+  if text.isEmpty() {
+    return Err(NotANumber(text))
+  }
+  if text.length() > 1 && text.startsWith("0") {
+    return Err(LeadingZero(text))
+  }
+  let chars = text.chars()
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return Err(NotANumber(text))
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Ok(total)
+}
+
+/// A version written back out, which reads back as the same version.
+export fn render(value: &Version) -> Str {
+  var out = display(value.major) + "." + display(value.minor) + "." + display(value.patch)
+  if value.prerelease.length() > 0 {
+    out = out + "-" + joinWith(&value.prerelease, ".")
+  }
+  if !value.build.isEmpty() {
+    out = out + "+" + value.build
+  }
+  out
+}
+
+fn joinWith(pieces: &Array[Str], separator: Str) -> Str {
+  var out = ""
+  var index = 0
+  while index < pieces.length() {
+    if index > 0 {
+      out = out + separator
+    }
+    out = out + pieces[index]
+    index = index + 1
+  }
+  out
+}
+
+/// A version with no prerelease or build, which is what most callers want.
+export fn of(major: Int, minor: Int, patch: Int) -> Version {
+  Version{major: major, minor: minor, patch: patch, prerelease: [], build: ""}
+}
+
+/// Whether the first version comes before the second.
+///
+/// Numbers first, then the prerelease tail. Two rules of the tail are the ones
+/// worth stating: a version with a tail comes *before* the same version
+/// without one, because `1.0.0-rc.1` is a run-up to `1.0.0`; and build
+/// metadata is ignored entirely, because two builds of one version are that
+/// version.
+export fn before(left: &Version, right: &Version) -> Bool {
+  if left.major != right.major { return left.major < right.major }
+  if left.minor != right.minor { return left.minor < right.minor }
+  if left.patch != right.patch { return left.patch < right.patch }
+  let leftEarly = left.prerelease.length() > 0
+  let rightEarly = right.prerelease.length() > 0
+  if leftEarly != rightEarly { return leftEarly }
+  if !leftEarly { return false }
+  comparePrerelease(&left.prerelease, &right.prerelease)
+}
+
+/// Identifier by identifier: numbers compare as numbers and rank below text,
+/// and a tail that runs out first ranks below one that continues.
+fn comparePrerelease(left: &Array[Str], right: &Array[Str]) -> Bool {
+  var index = 0
+  while index < left.length() && index < right.length() {
+    let here = left[index]
+    let there = right[index]
+    if here != there {
+      let hereNumber = numericOf(here)
+      let thereNumber = numericOf(there)
+      match hereNumber {
+        case Some(a) => {
+          match thereNumber {
+            case Some(b) => { return a < b }
+            case None => { return true }
+          }
+        }
+        case None => {
+          match thereNumber {
+            case Some(_) => { return false }
+            case None => { return here < there }
+          }
+        }
+      }
+    }
+    index = index + 1
+  }
+  left.length() < right.length()
+}
+
+fn numericOf(text: Str) -> Option[Int] {
+  match numberOf(text) {
+    case Ok(value) => Some(value)
+    case Err(_) => None
+  }
+}
+
+/// Whether two versions are the same version, ignoring build metadata.
+export fn same(left: &Version, right: &Version) -> Bool {
+  !before(left, right) && !before(right, left)
+}
+
+/// Whether the first version comes after the second.
+export fn after(left: &Version, right: &Version) -> Bool { before(right, left) }
+
+/// Whether a version is a release rather than a run-up to one.
+export fn isStable(value: &Version) -> Bool {
+  value.prerelease.length() == 0 && value.major > 0
+}
+
+/// Whether the second version may stand where the first was asked for.
+///
+/// The promise the scheme makes, written as a test: a caller that asked for
+/// `1.2.0` accepts `1.4.1`, because a later minor version added things without
+/// taking any away, and refuses `2.0.0`, because a new major version is
+/// allowed to have taken something away.
+///
+/// Below `1.0.0` the promise does not hold — the scheme says so — and the
+/// minor number takes the major's place, which is what every registry does in
+/// practice.
+///
+/// A prerelease satisfies nothing but itself: `1.2.0-rc.1` is not `1.2.0`, and
+/// a caller who wants it names it.
+export fn satisfies(wanted: &Version, offered: &Version) -> Bool {
+  if offered.prerelease.length() > 0 || wanted.prerelease.length() > 0 {
+    return same(wanted, offered)
+  }
+  if wanted.major != offered.major { return false }
+  if wanted.major == 0 {
+    return wanted.minor == offered.minor && offered.patch >= wanted.patch
+  }
+  if offered.minor != wanted.minor { return offered.minor > wanted.minor }
+  offered.patch >= wanted.patch
+}
+
+/// The newest of a set of versions that may stand where one was asked for.
+///
+/// What a resolver answers: given what is published and what was asked for,
+/// the one to use, or nothing when none of them will do.
+export fn best(wanted: &Version, offered: &Array[Version]) -> Option[Version] {
+  var found: Option[Version] = None
+  var index = 0
+  while index < offered.length() {
+    let candidate = offered[index]
+    if satisfies(wanted, &candidate) {
+      match found {
+        case None => { found = Some(candidate) }
+        case Some(held) => {
+          if before(&held, &candidate) {
+            found = Some(candidate)
+          }
+        }
+      }
+    }
+    index = index + 1
+  }
+  found
+}
+
+/// Why text was refused, written for a person to read.
+export fn explain(reason: &VersionError) -> Str {
+  match *reason {
+    case NotThreeNumbers => "a version is three numbers separated by dots"
+    case LeadingZero(part) => "`" + part + "` has a leading zero, so it names no single version"
+    case NotANumber(part) => "`" + part + "` is not a number"
+    case EmptyIdentifier => "the prerelease has an empty identifier"
+  }
+}

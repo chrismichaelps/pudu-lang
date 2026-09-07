@@ -1,0 +1,151 @@
+module UsesSemverGlob
+
+import Std.Glob as Glob
+import Std.Option as Option
+import Std.Semver as Semver
+
+fn version(text: Str) -> Semver.Version {
+  match Semver.parse(text) {
+    case Ok(parsed) => parsed
+    case Err(_) => Semver.of(0, 0, 0)
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. The three numbers are read as numbers
+  let one = version("1.4.2")
+  if one.major == 1 && one.minor == 4 && one.patch == 2 {
+    held = held + 1
+  }
+
+  // 2. Ordering is by number, not by text: 1.10.0 comes after 1.9.0
+  if Semver.after(&version("1.10.0"), &version("1.9.0")) {
+    held = held + 1
+  }
+
+  // 3. A prerelease comes before the release it leads to
+  if Semver.before(&version("1.0.0-rc.1"), &version("1.0.0")) {
+    held = held + 1
+  }
+
+  // 4. Prerelease identifiers order numerically where they are numbers
+  if Semver.before(&version("1.0.0-rc.2"), &version("1.0.0-rc.10")) {
+    held = held + 1
+  }
+
+  // 5. A shorter prerelease ranks below a longer one that starts the same
+  if Semver.before(&version("1.0.0-alpha"), &version("1.0.0-alpha.1")) {
+    held = held + 1
+  }
+
+  // 6. Build metadata takes no part in comparison
+  if Semver.same(&version("1.0.0+build.9"), &version("1.0.0+other")) {
+    held = held + 1
+  }
+
+  // 7. A version written back reads as the same version
+  if Semver.render(&version("2.1.0-rc.1+sha.abc")) == "2.1.0-rc.1+sha.abc" {
+    held = held + 1
+  }
+
+  // 8. A leading zero names no single version and is refused
+  match Semver.parse("01.0.0") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 9. Two numbers is not a version
+  match Semver.parse("1.2") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 10. A later minor version stands where an earlier one was asked for
+  if Semver.satisfies(&version("1.2.0"), &version("1.4.1")) {
+    held = held + 1
+  }
+
+  // 11. A new major version does not
+  if !Semver.satisfies(&version("1.2.0"), &version("2.0.0")) {
+    held = held + 1
+  }
+
+  // 12. Below one, the minor number takes the major's place
+  if !Semver.satisfies(&version("0.2.0"), &version("0.3.0"))
+    && Semver.satisfies(&version("0.2.0"), &version("0.2.5")) {
+    held = held + 1
+  }
+
+  // 13. Resolving picks the newest that will do, not merely one that will
+  let published = [version("1.2.0"), version("1.5.3"), version("1.4.0"), version("2.0.0")]
+  match Semver.best(&version("1.2.0"), &published) {
+    case Some(chosen) => {
+      if Semver.render(&chosen) == "1.5.3" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 14. A star stays inside one segment
+  if Glob.matches("src/*.pudu", "src/Main.pudu") && !Glob.matches("src/*.pudu", "src/deep/Main.pudu") {
+    held = held + 1
+  }
+
+  // 15. A double star crosses them
+  if Glob.matches("src/**/*.pudu", "src/deep/inner/Main.pudu") {
+    held = held + 1
+  }
+
+  // 16. And matches no segments at all as well as several
+  if Glob.matches("**/Main.pudu", "Main.pudu") {
+    held = held + 1
+  }
+
+  // 17. A question mark is one character and never a separator
+  if Glob.matches("a?c", "abc") && !Glob.matches("a?c", "a/c") {
+    held = held + 1
+  }
+
+  // 18. A set matches one of its members, and a negated set the rest
+  if Glob.matches("f[aeiou]le", "file") && !Glob.matches("f[!aeiou]le", "file") {
+    held = held + 1
+  }
+
+  // 19. A range inside a set
+  if Glob.matches("v[0-9].txt", "v7.txt") && !Glob.matches("v[0-9].txt", "vx.txt") {
+    held = held + 1
+  }
+
+  // 20. An escape makes a wildcard ordinary
+  if Glob.matches("a\\*b", "a*b") && !Glob.matches("a\\*b", "axb") {
+    held = held + 1
+  }
+
+  // 21. An ignore list removes what it names and keeps the rest
+  let paths = ["src/Main.pudu", "build/out.o", "src/Deep.pudu", "build/log.txt"]
+  let kept = Glob.reject(&["build/**"], &paths)
+  if kept.length() == 2 && kept[0] == "src/Main.pudu" {
+    held = held + 1
+  }
+
+  // 22. Selecting keeps what a pattern names, in order
+  let chosen = Glob.select("src/*.pudu", &paths)
+  if chosen.length() == 2 && chosen[1] == "src/Deep.pudu" {
+    held = held + 1
+  }
+
+  // 23. A pattern with nothing variable in it is a name
+  if Glob.isLiteral("src/Main.pudu") && !Glob.isLiteral("src/*.pudu") {
+    held = held + 1
+  }
+
+  // 24. The fixed leading part is where a walk can start
+  if Glob.literalPrefix("src/deep/**/*.pudu") == "src/deep/" {
+    held = held + 1
+  }
+
+  held
+}
