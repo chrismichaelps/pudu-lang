@@ -250,8 +250,8 @@ export fn commonPrefix(left: Str, right: Str) -> (Str, Str, Str) {
   let limit = if left.length() < right.length() { left.length() } else { right.length() }
   while shared < limit && left.charAt(shared) == right.charAt(shared) { shared = shared + 1 }
   (left.slice(0, shared)
-      , left.slice(shared, left.length())
-      , right.slice(shared, right.length())
+    , left.slice(shared, left.length())
+    , right.slice(shared, right.length())
   )
 }
 

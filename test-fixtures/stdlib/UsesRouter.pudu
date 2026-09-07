@@ -12,8 +12,8 @@ type Route = { method: Http.Method, path: Str, status: Int }
 
 fn table() -> Array[Route] {
   [Route{method: Http.Get, path: "/", status: 200}
-      , Route{method: Http.Get, path: "/health", status: 204}
-      , Route{method: Http.Post, path: "/items", status: 201}
+    , Route{method: Http.Get, path: "/health", status: 204}
+    , Route{method: Http.Post, path: "/items", status: 201}
   ]
 }
 

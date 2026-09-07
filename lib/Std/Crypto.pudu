@@ -131,7 +131,7 @@ fn twoTo(power: Int) -> Int {
 /// square roots of the first eight primes.
 fn initialState() -> Array[UInt32] {
   [1779033703u32, 3144134277u32, 1013904242u32, 2773480762u32
-      , 1359893119u32, 2600822924u32, 528734635u32, 1541459225u32
+    , 1359893119u32, 2600822924u32, 528734635u32, 1541459225u32
   ]
 }
 
@@ -189,7 +189,7 @@ fn compress(state: &Array[UInt32], block: &Array[UInt32]) -> Array[UInt32] {
     round = round + 1
   }
   [state[0] &+ a, state[1] &+ b, state[2] &+ c, state[3] &+ d
-      , state[4] &+ e, state[5] &+ f, state[6] &+ g, state[7] &+ h
+    , state[4] &+ e, state[5] &+ f, state[6] &+ g, state[7] &+ h
   ]
 }
 

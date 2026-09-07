@@ -170,6 +170,12 @@ indentLines = go 0 []
           a continuation it sat one level deeper than the fields beside it,
           which says the two are not siblings when they are. -}
       Symbol SymRangeExclusive -> False
+      {-| A list written one item to a line puts the comma in front of every
+          item after the first. Those items are siblings of the first, and the
+          bracket they are inside has already been counted, so reading the
+          comma as a continuation indented each of them one level past the item
+          they line up with. -}
+      Symbol SymComma -> False
       Symbol symbol -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
       Keyword KwElse -> True
       _ -> False

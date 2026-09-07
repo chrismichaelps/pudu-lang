@@ -16,6 +16,7 @@ formatProperties =
   , ("formatting preserves every comment", testCommentsPreserved)
   , ("indentation follows brace depth", testIndentation)
   , ("a wrapped parameter list belongs to its declaration", testWrappedParameters)
+  , ("a list written one item to a line keeps its items level", testLeadingCommas)
   , ("spacing is normalised inside a line", testSpacing)
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
@@ -90,6 +91,38 @@ testWrappedParameters = do
     , "  (first: Int, second: Int) -> Int {"
     , "  let pair = 1"
     , "  (pair, second)[0]"
+    , "}"
+    ]
+
+{-| A list written one item to a line puts the comma in front of every item
+    after the first. Those items sit inside the bracket, one level in and level
+    with each other. Read as a continuation of the line above, each carried an
+    extra level of its own, which said the first item was their parent. -}
+testLeadingCommas :: IO Property
+testLeadingCommas = do
+  formatted <- formatOf listed
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expectedListed)
+    )
+ where
+  listed =
+    Text.unlines
+      [ "module M"
+      , "fn held() -> Array[Int] {"
+      , "[ 1"
+      , ", 2"
+      , ", 3"
+      , "]"
+      , "}"
+      ]
+  expectedListed =
+    [ "module M"
+    , "fn held() -> Array[Int] {"
+    , "  [1"
+    , "    , 2"
+    , "    , 3"
+    , "  ]"
     , "}"
     ]
 
