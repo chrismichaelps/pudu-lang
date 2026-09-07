@@ -135,9 +135,10 @@ substitute substitution typeValue = case typeValue of
   RigidType name -> maybe typeValue id (lookup name substitution)
   NominalType owner arguments -> NominalType owner (map (substitute substitution) arguments)
   TupleTypeValue members -> TupleTypeValue (map (substitute substitution) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
+  FunctionTypeRequiring asynchronous inputs required result ->
+    FunctionTypeRequiring asynchronous
       (map (substitute substitution) inputs)
+      required
       (substitute substitution result)
   ReferenceTypeValue mutable target -> ReferenceTypeValue mutable (substitute substitution target)
   other -> other

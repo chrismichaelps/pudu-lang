@@ -57,6 +57,7 @@ import Pudu.Type.Value
   ( Scheme (..)
   , NominalId (..)
   , Type (..)
+  , requiredCount
   , boolType
   , charType
   , bytesType
@@ -503,12 +504,25 @@ callType spanValue calleeType argumentTypes = case calleeType of
               (Just "wrap the call in unsafe { ... }, or declare the caller unsafe")
       required -> mapM_ (requireCallCapability spanValue) required
     callType spanValue inner argumentTypes
-  FunctionTypeValue asynchronous inputs result
+  FunctionTypeRequiring asynchronous inputs required result
     | length inputs == length argumentTypes -> do
         _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
         callResult asynchronous result
-    | length argumentTypes < length inputs -> do
+    {-| Fewer arguments than parameters is only a call that leaned on defaults,
+        and only the trailing run of them may be left out. The count came from
+        the declaration and travels in the type, so this holds for a call
+        through a function value as much as for one written against the name. -}
+    | length argumentTypes < length inputs
+    , length argumentTypes >= requiredCount required -> do
         _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
+        callResult asynchronous result
+    | length argumentTypes < requiredCount required -> do
+        _ <- sequence (zipWith (unify spanValue) inputs argumentTypes)
+        report "E3003" spanValue
+          ( "expected " <> countText (requiredCount required)
+              <> ", found " <> countText (length argumentTypes)
+          )
+          (Just "pass one argument per parameter, or give the parameter a default")
         callResult asynchronous result
     | otherwise -> do
         report "E3003" spanValue

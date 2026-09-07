@@ -36,7 +36,6 @@ import Pudu.Type.Env
   , leaveUnsafe
   , recordUnsafeFunction
   , recordComptimeFunction
-  , recordRequiredArity
   , withComptime
   , lookupName
   , recordExpression
@@ -88,6 +87,7 @@ import Pudu.Type.Formation
 import Pudu.Type.Unify (unify)
 import Pudu.Type.Value
   ( NominalId (..)
+  , Required (..)
   , Scheme (..)
   , monotype
   , polytype
@@ -169,7 +169,10 @@ declareFunction declared value = do
   bindName (locatedValue (functionName value))
     ( polytype rigid (declareBounds declared value)
         ( restrictedBy (map locatedValue <$> functionUnsafe value)
-            (FunctionTypeValue (functionAsync value) inputs result)
+            ( FunctionTypeRequiring (functionAsync value) inputs
+                (Required (Tree.requiredParameterCount value))
+                result
+            )
         )
     )
   case functionUnsafe value of
@@ -177,8 +180,6 @@ declareFunction declared value = do
     Just capabilities ->
       recordUnsafeFunction (locatedValue (functionName value)) (map locatedValue capabilities)
   recordComptimeFunction (locatedValue (functionName value)) (functionComptime value)
-  recordRequiredArity (locatedValue (functionName value))
-    (Tree.requiredParameterCount value, length (functionParameters value))
 
 {-| A sum's variants become constructors: a payload-carrying variant is a
     function to its own type, a unit variant is a value of it. -}

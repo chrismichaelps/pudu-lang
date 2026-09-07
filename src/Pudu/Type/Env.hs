@@ -15,8 +15,6 @@ module Pudu.Type.Env
   , isComptimeFunction
   , inComptime
   , withComptime
-  , recordRequiredArity
-  , requiredArityOf
   , recordUnsafeFunction
   , unsafeFunctionCapabilities
   , inheritRestrictions
@@ -183,7 +181,6 @@ data CheckerState = CheckerState
       known where the declaration is read and is kept here under its name. A
       name absent from the map is a parameter, a local, or a value obtained some
       other way, about which nothing is claimed. -}
-  , stateRequiredArity :: !(Map Text (Int, Int))
   , stateInComptime :: !Bool
   , stateObligations :: ![(Span, Type, NominalId)]
   , stateIntegerLiterals :: ![IntegerConstraint]
@@ -279,7 +276,6 @@ initialState =
     , stateReportedSpans = []
     , stateUnsafeFunctions = Map.empty
     , stateComptimeFunctions = Map.empty
-    , stateRequiredArity = Map.empty
     , stateInComptime = False
     , stateObligations = []
     , stateIntegerLiterals = []
@@ -465,9 +461,10 @@ resolveFinal substitutions typeValue = case typeValue of
     Just found -> resolveFinal substitutions found
   NominalType name arguments -> NominalType name (map (resolveFinal substitutions) arguments)
   TupleTypeValue members -> TupleTypeValue (map (resolveFinal substitutions) members)
-  FunctionTypeValue asynchronous inputs result ->
-    FunctionTypeValue asynchronous
+  FunctionTypeRequiring asynchronous inputs required result ->
+    FunctionTypeRequiring asynchronous
       (map (resolveFinal substitutions) inputs)
+      required
       (resolveFinal substitutions result)
   ReferenceTypeValue mutable target ->
     ReferenceTypeValue mutable (resolveFinal substitutions target)
@@ -833,25 +830,6 @@ recordComptimeFunction :: Text -> Bool -> Checker ()
 recordComptimeFunction name folds =
   Checker $ \state ->
     ((), state{stateComptimeFunctions = Map.insert name folds (stateComptimeFunctions state)})
-
-{-| Record how many arguments a declared name must be given, and how many it
-    declares in all.
-
-    Both, because the table is keyed by the bare name and a parameter may carry
-    the same one as a declaration elsewhere. The total is what identifies which
-    of them a call actually reached: a predicate parameter named `holds` takes
-    one argument where the declaration named `holds` takes two, and checking the
-    first against the second refused correct code. -}
-recordRequiredArity :: Text -> (Int, Int) -> Checker ()
-recordRequiredArity name counts =
-  Checker $ \state ->
-    ((), state{stateRequiredArity = Map.insert name counts (stateRequiredArity state)})
-
-{-| How many arguments this name must be given and how many it declares, where
-    that is known. -}
-requiredArityOf :: Text -> Checker (Maybe (Int, Int))
-requiredArityOf name =
-  Checker $ \state -> (Map.lookup name (stateRequiredArity state), state)
 
 {-| What is known about calling this name from a compile-time body.
 

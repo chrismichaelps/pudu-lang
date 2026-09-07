@@ -9,7 +9,14 @@ import Data.Text (Text)
 import Pudu.Source (Span)
 import Control.Monad (unless)
 import Pudu.Type.Env (Checker, implementsTrait, report, reportedAt, resolveVariable, setVariable)
-import Pudu.Type.Value (Type (..), TypeVar, nominalKey, nominalName, renderType)
+import Pudu.Type.Value
+  ( Type (..)
+  , TypeVar
+  , nominalKey
+  , nominalName
+  , renderType
+  , requiredCount
+  )
 
 {-| Unify two types, reporting `E3001` when they cannot be made equal.
 
@@ -56,11 +63,22 @@ unify spanValue expected actual = do
     (TupleTypeValue leftMembers, TupleTypeValue rightMembers)
       | length leftMembers == length rightMembers ->
           TupleTypeValue <$> unifyAll spanValue leftMembers rightMembers
-    (FunctionTypeValue leftAsync leftInputs leftResult, FunctionTypeValue rightAsync rightInputs rightResult)
+    ( FunctionTypeRequiring leftAsync leftInputs leftRequired leftResult
+      , FunctionTypeRequiring rightAsync rightInputs rightRequired rightResult
+      )
       | leftAsync == rightAsync && length leftInputs == length rightInputs -> do
           inputs <- unifyAll spanValue leftInputs rightInputs
           result <- unify spanValue leftResult rightResult
-          pure (FunctionTypeValue leftAsync inputs result)
+          {-| The smaller count survives, because the value that ends up here
+              is whichever function was written, and a call reaches its
+              defaults whatever type the value was stored under. Annotating a
+              defaulted function with a written signature must not make its
+              defaults unreachable. -}
+          let required =
+                if requiredCount leftRequired <= requiredCount rightRequired
+                  then leftRequired
+                  else rightRequired
+          pure (FunctionTypeRequiring leftAsync inputs required result)
     {-| Two restricted functions agree when they require the same abilities and
         the functions underneath them agree.
 
@@ -211,8 +229,9 @@ zonk typeValue = do
         NominalType name existing -> NominalType name (existing <> solvedArgs)
         _ -> AppliedType solvedHead solvedArgs
     TupleTypeValue members -> TupleTypeValue <$> mapM zonk members
-    FunctionTypeValue asynchronous inputs result ->
-      FunctionTypeValue asynchronous <$> mapM zonk inputs <*> zonk result
+    FunctionTypeRequiring asynchronous inputs required result ->
+      (\zonkedInputs zonkedResult -> FunctionTypeRequiring asynchronous zonkedInputs required zonkedResult)
+        <$> mapM zonk inputs <*> zonk result
     RestrictedType capabilities inner -> RestrictedType capabilities <$> zonk inner
     ReferenceTypeValue mutable target -> ReferenceTypeValue mutable <$> zonk target
     other -> pure other

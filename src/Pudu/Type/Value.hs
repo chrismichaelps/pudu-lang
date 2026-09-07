@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 {-| @Type.Value.Module — represents formed types -}
 module Pudu.Type.Value
   ( NominalId (..)
@@ -6,7 +8,9 @@ module Pudu.Type.Value
   , nominalKey
   , monotype
   , polytype
-  , Type (..)
+  , Type (.., FunctionTypeValue)
+  , Required (..)
+  , requiredCount
   , TypeVar (..)
   , boolType
   , charType
@@ -36,6 +40,23 @@ import Data.String (IsString (..))
 import Data.Word (Word8)
 import Pudu.Frontend.Syntax.Name (ModuleName, moduleNameText)
 import Pudu.Frontend.Syntax.Tree (Capability (..))
+
+{-| How many of a function's parameters a call must supply.
+
+    Two function types that differ only here are the same type, which is what
+    the `Eq` instance says: a function whose second parameter has a default is
+    usable wherever one taking both is expected, and refusing that assignment
+    would make a default a breaking change to every caller that stores the
+    function. The count decides one question — whether a call supplied enough —
+    and takes no part in whether two types match. -}
+newtype Required = Required Int
+  deriving stock (Show)
+
+instance Eq Required where
+  _ == _ = True
+
+requiredCount :: Required -> Int
+requiredCount (Required value) = value
 
 {-| The unchecked abilities a function requires of whoever calls it.
 
@@ -117,7 +138,17 @@ data Type
       type per call site. -}
   | DynamicTypeValue !NominalId
   | TupleTypeValue ![Type]
-  | FunctionTypeValue !Bool ![Type] !Type
+  {-| A function, beside how many of its parameters a call must supply.
+
+      The count is here rather than in a table keyed by name because a default
+      applies through a function value as much as at a direct call: `let f =
+      greet` then `f("a")` supplies the default too, and by then the name the
+      declaration was written under is gone. Only the type still travels with
+      the value, so the count travels in the type.
+
+      Build one with `FunctionTypeValue` wherever every parameter is required,
+      which is everywhere but a declaration that wrote a default. -}
+  | FunctionTypeRequiring !Bool ![Type] !Required !Type
   | ReferenceTypeValue !Bool !Type
   | RigidType !Text
   {-| A parameter of higher kind applied to its arguments.
@@ -142,6 +173,29 @@ data Type
   | NeverType
   | ErrorType
   deriving stock (Eq, Show)
+
+{-| A function every parameter of which must be supplied.
+
+    Matching with it ignores the count, so a rule that only wants the shape —
+    unification, rendering, substitution — reads the same as it did before the
+    count existed. Building with it says every parameter is required, which is
+    true of every function type but one formed from a declaration that wrote a
+    default: a written `fn(Int, Int) -> Int` states no defaults, and neither
+    does an inferred one. Those declarations use `FunctionTypeRequiring` directly. -}
+pattern FunctionTypeValue :: Bool -> [Type] -> Type -> Type
+pattern FunctionTypeValue asynchronous inputs result <-
+  FunctionTypeRequiring asynchronous inputs _ result
+  where
+    FunctionTypeValue asynchronous inputs result =
+      FunctionTypeRequiring asynchronous inputs (Required (length inputs)) result
+
+{-| Matching every constructor but reaching the function through the pattern
+    covers a type, which the compiler cannot work out for itself. -}
+{-# COMPLETE
+  NominalType, DynamicTypeValue, TupleTypeValue, FunctionTypeValue,
+  ReferenceTypeValue, RigidType, AppliedType, VariableType, RestrictedType,
+  UnitTypeValue, NeverType, ErrorType
+  #-}
 
 {-| @Type.Value.Scheme — a type with the parameters a call instantiates and the
     trait bounds each of them must satisfy -}

@@ -35,7 +35,6 @@ import Pudu.Type.Env
   , inheritRestrictions
   , lookupName
   , recordComptimeFunction
-  , recordRequiredArity
   , recordUnsafeFunction
   )
 import Pudu.Type.Formation
@@ -57,6 +56,7 @@ import Pudu.Type.Interface
   )
 import Pudu.Type.Value
   ( NominalId (..)
+  , Required (..)
   , Type (..)
   , canonicalNominal
   , monotype
@@ -250,15 +250,16 @@ declareFunction declared value = do
   bindName name
     ( polytype rigid (declareBounds declared value)
         ( restrictedBy (map locatedValue <$> functionUnsafe value)
-            (FunctionTypeValue (functionAsync value) inputs result)
+            ( FunctionTypeRequiring (functionAsync value) inputs
+                (Required (Tree.requiredParameterCount value))
+                result
+            )
         )
     )
   case functionUnsafe value of
     Nothing -> pure ()
     Just capabilities -> recordUnsafeFunction name (map locatedValue capabilities)
   recordComptimeFunction name (functionComptime value)
-  recordRequiredArity name
-    (Tree.requiredParameterCount value, length (functionParameters value))
 
 declareConstructors :: DeclaredTypes -> Tree.TypeDeclarationValue -> Checker ()
 declareConstructors declared value = case locatedValue (Tree.typeDefinition value) of

@@ -37,7 +37,6 @@ import Pudu.Type.Check.Pattern (bindPattern)
 import Pudu.Type.Check.Iteration (iterationElement)
 import Pudu.Type.Check.Safety
   ( checkComptimeCall
-  , checkSuppliedArguments
   , dottedName
   , reportUnusedCapabilities
   )
@@ -130,7 +129,6 @@ inferExpression around declared rigid spanValue expression = case expression of
       Just (calleeType, argumentTypes) -> callType spanValue calleeType argumentTypes
       Nothing -> do
         calleeType <- checkCallee (expressionChecker around) declared rigid callee
-        checkSuppliedArguments spanValue callee calleeType (length arguments)
         argumentTypes <- mapM (checkExpression around declared rigid) arguments
         callType spanValue calleeType argumentTypes
   MemberExpression target member -> do

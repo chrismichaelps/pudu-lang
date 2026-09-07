@@ -37,7 +37,7 @@ import Pudu.Frontend.Syntax.Tree
   )
 import Pudu.Source (Span)
 import Pudu.Type.Env
-  ( Checker, DeclaredTypes, bindName, recordRequiredArity, recordUnsafeFunction, report )
+  ( Checker, DeclaredTypes, bindName, recordUnsafeFunction, report )
 import Pudu.Type.Formation (formType)
 import Pudu.Type.Value (Type (..), capabilitiesOf, monotype)
 
@@ -80,7 +80,6 @@ declareOne declared layouts handles (Located _ function) = do
   recordUnsafeFunction name [ForeignCapability]
   {-| A foreign parameter never has a default: there is no caller on this side
       to apply one, so every argument the declaration names must be supplied. -}
-  recordRequiredArity name (length inputs, length inputs)
 
 {-| The parameters a caller supplies, and the ones the library writes.
 

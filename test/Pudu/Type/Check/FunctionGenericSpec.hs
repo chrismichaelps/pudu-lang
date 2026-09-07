@@ -127,12 +127,38 @@ testCalls = do
     , "fn run() -> Int { scale(3) }"
     ]
   notCallable <- codes ["module M", "const VALUE: Int = 1", "fn run() -> Int { VALUE(1) }"]
+  tooFew <- codes
+    [ "module M"
+    , "fn add(left: Int, right: Int) -> Int { left + right }"
+    , "fn run() -> Int { add(1) }"
+    ]
+  {-| A call through a value reaches the same rule, because the count the
+      declaration set travels in the type rather than in a table the name
+      would have to be looked up in. -}
+  tooFewByValue <- codes
+    [ "module M"
+    , "fn add(left: Int, right: Int) -> Int { left + right }"
+    , "fn run() -> Int { let indirect = add"
+    , "  indirect(1) }"
+    ]
+  defaultedByValue <- codes
+    [ "module M"
+    , "fn scale(n: Int, factor: Int = 2) -> Int { n * factor }"
+    , "fn run() -> Int { let indirect = scale"
+    , "  indirect(3) }"
+    ]
   pure $ conjoin
     [ correct === []
     , wrongType === ["E3001"]
     , tooMany === ["E3003"]
     , counterexample "a default covers a missing argument" (defaulted === [])
     , counterexample "a non-function is not callable" (notCallable === ["E3004"])
+    , counterexample "too few arguments is refused at the check, not at the run"
+        (tooFew === ["E3003"])
+    , counterexample "and refused through a function value too"
+        (tooFewByValue === ["E3003"])
+    , counterexample "a default still applies through a function value"
+        (defaultedByValue === [])
     ]
 
 testGenerics :: IO Property
