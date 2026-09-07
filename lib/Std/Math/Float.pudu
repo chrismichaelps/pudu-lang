@@ -1,0 +1,410 @@
+module Std.Math.Float
+
+/// The mathematical constant pi (ratio of a circle's circumference to diameter).
+export fn pi() -> Float {
+  3.141592653589793
+}
+
+/// The circle constant tau (2 * pi, full turn in radians).
+export fn tau() -> Float {
+  6.283185307179586
+}
+
+/// Euler's number e (base of natural logarithms).
+export fn e() -> Float {
+  2.718281828459045
+}
+
+/// Natural logarithm of 2.
+export fn ln2() -> Float {
+  0.6931471805599453
+}
+
+/// Natural logarithm of 10.
+export fn ln10() -> Float {
+  2.302585092994046
+}
+
+/// Square root of 2.
+export fn sqrt2() -> Float {
+  1.4142135623730951
+}
+
+/// Machine epsilon for 64-bit IEEE-754 floating point (2^-52).
+export fn epsilon() -> Float {
+  0.0000000000000002220446049250313
+}
+
+/// The absolute value of a float.
+export fn abs(x: Float) -> Float {
+  if x < 0.0 { -x } else { x }
+}
+
+/// Confines a floating-point value to [lower, upper].
+export fn clamp(value: Float, lower: Float, upper: Float) -> Float {
+  if value < lower { lower } else if value > upper { upper } else { value }
+}
+
+/// Linearly interpolates between a and b by amount t.
+export fn lerp(a: Float, b: Float, t: Float) -> Float {
+  a + t * (b - a)
+}
+
+/// Converts an angle in degrees to radians.
+export fn radians(deg: Float) -> Float {
+  deg * (pi() / 180.0)
+}
+
+/// Converts an angle in radians to degrees.
+export fn degrees(rad: Float) -> Float {
+  rad * (180.0 / pi())
+}
+
+/// Produces a value with the magnitude of first argument and sign of second.
+export fn copysign(magnitude: Float, sign: Float) -> Float {
+  let m = abs(magnitude)
+  if sign < 0.0 { -m } else { m }
+}
+
+/// Whether the value is IEEE-754 NaN.
+export fn isNan(x: Float) -> Bool {
+  x != x
+}
+
+/// Whether the value is positive or negative infinity.
+export fn isInfinite(x: Float) -> Bool {
+  x > 1.7976931348623157e308 || x < -1.7976931348623157e308
+}
+
+/// Whether the value is a valid finite real number (neither NaN nor infinite).
+export fn isFinite(x: Float) -> Bool {
+  !isNan(x) && !isInfinite(x)
+}
+
+/// Truncates the fractional part, rounding toward zero.
+export fn trunc(x: Float) -> Float {
+  if isNan(x) || isInfinite(x) { return x }
+  if abs(x) >= 4503599627370496.0 { return x }
+  var n = x
+  if n >= 0.0 {
+    var step = 1.0
+    while step * 2.0 <= n { step = step * 2.0 }
+    var result = 0.0
+    while step >= 1.0 {
+      if result + step <= n { result = result + step }
+      step = step / 2.0
+    }
+    result
+  } else {
+      -trunc(-x)
+  }
+}
+
+/// Returns the fractional part of a float (x - trunc(x)).
+export fn fract(x: Float) -> Float {
+  x - trunc(x)
+}
+
+/// The greatest integer float not greater than x.
+export fn floor(x: Float) -> Float {
+  let tr = trunc(x)
+  if x < 0.0 && x != tr { tr - 1.0 } else { tr }
+}
+
+/// The smallest integer float not less than x.
+export fn ceil(x: Float) -> Float {
+  let tr = trunc(x)
+  if x > 0.0 && x != tr { tr + 1.0 } else { tr }
+}
+
+/// Rounds half away from zero to nearest integer float.
+export fn round(x: Float) -> Float {
+  if x >= 0.0 { floor(x + 0.5) } else { ceil(x - 0.5) }
+}
+
+/// Square root via Newton-Raphson iteration. Returns None if x < 0.
+export fn sqrt(x: Float) -> Option[Float] {
+  if x < 0.0 || isNan(x) { return None }
+  if x == 0.0 { return Some(0.0) }
+  if isInfinite(x) { return Some(x) }
+
+  var guess = if x > 1.0 { x / 2.0 } else { 1.0 }
+  var i = 0
+  while i < 20 {
+    let next = 0.5 * (guess + x / guess)
+    if abs(next - guess) <= epsilon() * guess { return Some(next) }
+    guess = next
+    i = i + 1
+  }
+  Some(guess)
+}
+
+/// Cube root via Halley's iteration. Preserves negative sign.
+export fn cbrt(x: Float) -> Float {
+  if x == 0.0 || isNan(x) || isInfinite(x) { return x }
+  if x < 0.0 { return -cbrt(-x) }
+
+  var y = if x > 1.0 { x / 3.0 } else { 1.0 }
+  var i = 0
+  while i < 20 {
+    let y3 = y * y * y
+    let next = y * (y3 + 2.0 * x) / (2.0 * y3 + x)
+    if abs(next - y) <= epsilon() * y { return next }
+    y = next
+    i = i + 1
+  }
+  y
+}
+
+/// Euclidean distance sqrt(x^2 + y^2) scaled to avoid overflow/underflow.
+export fn hypot(x: Float, y: Float) -> Float {
+  if isNan(x) || isNan(y) { return 0.0 / 0.0 }
+  if isInfinite(x) || isInfinite(y) { return 1.0 / 0.0 }
+  let ax = abs(x)
+  let ay = abs(y)
+  if ax == 0.0 { return ay }
+  if ay == 0.0 { return ax }
+  let maxVal = if ax > ay { ax } else { ay }
+  let minVal = if ax > ay { ay } else { ax }
+  let ratio = minVal / maxVal
+  match sqrt(1.0 + ratio * ratio) {
+    case Some(factor) => maxVal * factor
+    case None => maxVal
+  }
+}
+
+/// Reduces angle x into [-pi, pi].
+fn reduceAngle(x: Float) -> Float {
+  let twoPi = tau()
+  var rem = x - twoPi * floor((x + pi()) / twoPi)
+  if rem > pi() { rem = rem - twoPi }
+  if rem < -pi() { rem = rem + twoPi }
+  rem
+}
+
+/// Evaluates sin polynomial on [-pi/4, pi/4].
+fn sinPoly(x: Float) -> Float {
+  let x2 = x * x
+  x * (1.0 - x2 * (1.0 / 6.0 - x2 * (1.0 / 120.0 - x2 * (1.0 / 5040.0 - x2 * (1.0 / 362880.0 - x2 / 39916800.0)))))
+}
+
+/// Evaluates cos polynomial on [-pi/4, pi/4].
+fn cosPoly(x: Float) -> Float {
+  let x2 = x * x
+  1.0 - x2 * (0.5 - x2 * (1.0 / 24.0 - x2 * (1.0 / 720.0 - x2 * (1.0 / 40320.0 - x2 / 3628800.0))))
+}
+
+/// Computes sine in radians.
+export fn sin(x: Float) -> Float {
+  if isNan(x) || isInfinite(x) { return 0.0 / 0.0 }
+  let r = reduceAngle(x)
+  let halfPi = 1.5707963267948966
+  if r > halfPi / 2.0 {
+    cosPoly(r - halfPi)
+  } else if r < -halfPi / 2.0 {
+      -cosPoly(r + halfPi)
+  } else {
+    sinPoly(r)
+  }
+}
+
+/// Computes cosine in radians.
+export fn cos(x: Float) -> Float {
+  if isNan(x) || isInfinite(x) { return 0.0 / 0.0 }
+  let r = reduceAngle(x)
+  let halfPi = 1.5707963267948966
+  if r > halfPi / 2.0 {
+      -sinPoly(r - halfPi)
+  } else if r < -halfPi / 2.0 {
+    sinPoly(r + halfPi)
+  } else {
+    cosPoly(r)
+  }
+}
+
+/// Computes tangent in radians.
+export fn tan(x: Float) -> Float {
+  sin(x) / cos(x)
+}
+
+/// Computes arc tangent in radians across (-pi/2, pi/2).
+export fn atan(x: Float) -> Float {
+  if isNan(x) { return x }
+  if isInfinite(x) { return if x > 0.0 { 1.5707963267948966 } else { -1.5707963267948966 } }
+  if x < 0.0 { return -atan(-x) }
+  if x > 1.0 { return 1.5707963267948966 - atan(1.0 / x) }
+  if x > 0.41421356237309505 {
+    return 0.7853981633974483 + atan((x - 1.0) / (x + 1.0))
+  }
+
+  let x2 = x * x
+  let x3 = x2 * x
+  let x5 = x3 * x2
+  let x7 = x5 * x2
+  let x9 = x7 * x2
+  let x11 = x9 * x2
+  x - x3 / 3.0 + x5 / 5.0 - x7 / 7.0 + x9 / 9.0 - x11 / 11.0
+}
+
+/// Computes 4-quadrant arc tangent atan2(y, x).
+export fn atan2(y: Float, x: Float) -> Float {
+  if isNan(y) || isNan(x) { return 0.0 / 0.0 }
+  let piVal = pi()
+  let halfPi = 1.5707963267948966
+  if isInfinite(y) {
+    if isInfinite(x) {
+      if y > 0.0 {
+        return if x > 0.0 { piVal / 4.0 } else { 3.0 * piVal / 4.0 }
+      } else {
+        return if x > 0.0 { -piVal / 4.0 } else { -3.0 * piVal / 4.0 }
+      }
+    }
+    return if y > 0.0 { halfPi } else { -halfPi }
+  }
+  if isInfinite(x) {
+    if x > 0.0 { return 0.0 }
+    return if y >= 0.0 { piVal } else { -piVal }
+  }
+  if x > 0.0 {
+    atan(y / x)
+  } else if x < 0.0 && y >= 0.0 {
+    atan(y / x) + piVal
+  } else if x < 0.0 && y < 0.0 {
+    atan(y / x) - piVal
+  } else if x == 0.0 && y > 0.0 {
+    halfPi
+  } else if x == 0.0 && y < 0.0 {
+      -halfPi
+  } else {
+    0.0
+  }
+}
+
+/// Computes arc sine in radians. Returns None if |x| > 1.
+export fn asin(x: Float) -> Option[Float] {
+  if x < -1.0 || x > 1.0 || isNan(x) { return None }
+  if x == 1.0 { return Some(1.5707963267948966) }
+  if x == -1.0 { return Some(-1.5707963267948966) }
+  let denom = sqrt(1.0 - x * x) ?
+  Some(atan(x / denom))
+}
+
+/// Computes arc cosine in radians. Returns None if |x| > 1.
+export fn acos(x: Float) -> Option[Float] {
+  let asVal = asin(x) ?
+  Some(1.5707963267948966 - asVal)
+}
+
+/// Computes e^x using range reduction and Taylor polynomial.
+export fn exp(x: Float) -> Float {
+  if isNan(x) { return x }
+  if x > 709.782712893384 { return 1.0 / 0.0 }
+  if x < -745.1332191019412 { return 0.0 }
+  if x == 0.0 { return 1.0 }
+
+  let log2e = 1.4426950408889634
+  let k = round(x * log2e)
+  let r = x - k * ln2()
+
+  var rTerm = 1.0
+  var sum = 1.0
+  var n = 1.0
+  while n <= 14.0 {
+    rTerm = rTerm * (r / n)
+    sum = sum + rTerm
+    n = n + 1.0
+  }
+
+  var scale = 1.0
+  var p = if k < 0.0 { -k } else { k }
+  var base = 2.0
+  while p >= 1.0 {
+    if fract(p / 2.0) != 0.0 { scale = scale * base }
+    base = base * base
+    p = trunc(p / 2.0)
+  }
+  if k < 0.0 { sum / scale } else { sum * scale }
+}
+
+/// Natural logarithm ln(x). Returns None if x <= 0.
+export fn ln(x: Float) -> Option[Float] {
+  if x <= 0.0 || isNan(x) { return None }
+  if isInfinite(x) { return Some(x) }
+  if x == 1.0 { return Some(0.0) }
+
+  var val = x
+  var k = 0.0
+  while val > 1.4142135623730951 {
+    val = val / 2.0
+    k = k + 1.0
+  }
+  while val < 0.7071067811865475 {
+    val = val * 2.0
+    k = k - 1.0
+  }
+
+  let z = (val - 1.0) / (val + 1.0)
+  let z2 = z * z
+  var term = z
+  var sum = z
+  var i = 3.0
+  while i <= 15.0 {
+    term = term * z2
+    sum = sum + term / i
+    i = i + 2.0
+  }
+  Some(2.0 * sum + k * ln2())
+}
+
+/// Base-2 logarithm log2(x). Returns None if x <= 0.
+export fn log2(x: Float) -> Option[Float] {
+  let val = ln(x) ?
+  Some(val / ln2())
+}
+
+/// Base-10 logarithm log10(x). Returns None if x <= 0.
+export fn log10(x: Float) -> Option[Float] {
+  let val = ln(x) ?
+  Some(val / ln10())
+}
+
+/// Floating power base^exponent. Returns None on invalid negative base with non-integer power.
+export fn powf(base: Float, exponent: Float) -> Option[Float] {
+  if isNan(base) || isNan(exponent) { return None }
+  if exponent == 0.0 { return Some(1.0) }
+  if base == 0.0 { return if exponent > 0.0 { Some(0.0) } else { None } }
+  if base == 1.0 { return Some(1.0) }
+  if fract(exponent) == 0.0 && abs(exponent) <= 1000.0 {
+    var result = 1.0
+    var p = trunc(abs(exponent))
+    var b = base
+    while p >= 1.0 {
+      if fract(p / 2.0) != 0.0 { result = result * b }
+      b = b * b
+      p = trunc(p / 2.0)
+    }
+    return Some(if exponent < 0.0 { 1.0 / result } else { result })
+  }
+  if base > 0.0 {
+    let l = ln(base) ?
+    Some(exp(exponent * l))
+  } else {
+    None
+  }
+}
+
+/// Hyperbolic sine (e^x - e^-x) / 2.
+export fn sinh(x: Float) -> Float {
+  0.5 * (exp(x) - exp(-x))
+}
+
+/// Hyperbolic cosine (e^x + e^-x) / 2.
+export fn cosh(x: Float) -> Float {
+  0.5 * (exp(x) + exp(-x))
+}
+
+/// Hyperbolic tangent (e^2x - 1) / (e^2x + 1).
+export fn tanh(x: Float) -> Float {
+  let e2x = exp(2.0 * x)
+  (e2x - 1.0) / (e2x + 1.0)
+}

@@ -230,3 +230,103 @@ fn halve[T: Zero + One + Add + Div](value: T) -> T {
     case None => value
   }
 }
+
+/// Stein's binary algorithm for the greatest common divisor.
+///
+/// Replaces slow hardware division and modulo operations with bitwise shifts
+/// and subtractions, executing with high efficiency close to the hardware.
+export fn binaryGcd(u: Int, v: Int) -> Int {
+  var a = if u < 0 { -u } else { u }
+  var b = if v < 0 { -v } else { v }
+  if a == 0 { return b }
+  if b == 0 { return a }
+
+  var shift = 0
+  while (a & 1) == 0 && (b & 1) == 0 {
+    a = a >> 1
+    b = b >> 1
+    shift = shift + 1
+  }
+
+  while (a & 1) == 0 { a = a >> 1 }
+
+  while b != 0 {
+    while (b & 1) == 0 { b = b >> 1 }
+    if a > b {
+      let temp = a
+      a = b
+      b = temp
+    }
+    b = b - a
+  }
+
+  a << shift
+}
+
+/// Tests whether an integer is an exact positive power of two (1, 2, 4, 8, ...).
+export fn isPowerOfTwo(n: Int) -> Bool {
+  n > 0 && (n & (n - 1)) == 0
+}
+
+/// Computes the smallest power of two greater than or equal to n.
+export fn nextPowerOfTwo(n: Int) -> Int {
+  if n <= 1 { return 1 }
+  var v = n - 1
+  v = v | (v >> 1)
+  v = v | (v >> 2)
+  v = v | (v >> 4)
+  v = v | (v >> 8)
+  v = v | (v >> 16)
+  v = v | (v >> 32)
+  v + 1
+}
+
+/// Fast integer base-2 logarithm (floor(log2(n))) using bit shifts.
+/// Returns None if n <= 0.
+export fn ilog2(n: Int) -> Option[Int] {
+  if n <= 0 { return None }
+  var v = n
+  var log = 0
+  if v >= 4294967296 {
+    v = v >> 32
+    log = log + 32
+  }
+  if v >= 65536 {
+    v = v >> 16
+    log = log + 16
+  }
+  if v >= 256 {
+    v = v >> 8
+    log = log + 8
+  }
+  if v >= 16 {
+    v = v >> 4
+    log = log + 4
+  }
+  if v >= 4 {
+    v = v >> 2
+    log = log + 2
+  }
+  if v >= 2 {
+    log = log + 1
+  }
+  Some(log)
+}
+
+/// Branchless minimum of two integers.
+export fn branchlessMin(a: Int, b: Int) -> Int {
+  let diff = a - b
+  b + (diff & (diff >> 63))
+}
+
+/// Branchless maximum of two integers.
+export fn branchlessMax(a: Int, b: Int) -> Int {
+  let diff = a - b
+  a - (diff & (diff >> 63))
+}
+
+/// Branchless absolute value of an integer.
+export fn branchlessAbs(n: Int) -> Int {
+  let mask = n >> 63
+  (n ^ mask) - mask
+}

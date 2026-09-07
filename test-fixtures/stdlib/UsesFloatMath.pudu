@@ -1,0 +1,437 @@
+module UsesFloatMath
+
+import Std.Math.Float as F
+import Std.Math as Math
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. All Float Constants (pi, tau, e, ln2, ln10, sqrt2, epsilon)
+  let piVal = F.pi()
+  let tauVal = F.tau()
+  let eVal = F.e()
+  let ln2Val = F.ln2()
+  let ln10Val = F.ln10()
+  let sqrt2Val = F.sqrt2()
+  let epsVal = F.epsilon()
+  if piVal > 3.14159 && piVal < 3.1416
+    && tauVal == 2.0 * piVal
+    && eVal > 2.71828 && eVal < 2.71829
+    && ln2Val > 0.6931 && ln2Val < 0.6932
+    && ln10Val > 2.3025 && ln10Val < 2.3026
+    && sqrt2Val > 1.4142 && sqrt2Val < 1.4143
+    && epsVal > 0.0 && epsVal < 0.000000000000001 {
+    held = held + 1
+  }
+
+  // 2. Float Basic Operators: abs, clamp, lerp, copysign
+  let fa1 = F.abs(-42.5)
+  let fa2 = F.abs(42.5)
+  let fcl1 = F.clamp(5.0, 10.0, 20.0)
+  let fcl2 = F.clamp(25.0, 10.0, 20.0)
+  let fcl3 = F.clamp(15.0, 10.0, 20.0)
+  let flerp = F.lerp(10.0, 30.0, 0.25)
+  let fcs1 = F.copysign(5.0, -1.0)
+  let fcs2 = F.copysign(-5.0, 1.0)
+  if fa1 == 42.5 && fa2 == 42.5
+    && fcl1 == 10.0 && fcl2 == 20.0 && fcl3 == 15.0
+    && flerp == 15.0 && fcs1 == -5.0 && fcs2 == 5.0 {
+    held = held + 1
+  }
+
+  // 3. Angular conversions: radians, degrees
+  let rad90 = F.radians(90.0)
+  let degHalfPi = F.degrees(piVal / 2.0)
+  let rad360 = F.radians(360.0)
+  let degTau = F.degrees(tauVal)
+  if F.abs(rad90 - piVal / 2.0) < 0.000001
+    && F.abs(degHalfPi - 90.0) < 0.000001
+    && F.abs(rad360 - tauVal) < 0.000001
+    && F.abs(degTau - 360.0) < 0.000001 {
+    held = held + 1
+  }
+
+  // 4. IEEE-754 properties: isNan, isInfinite, isFinite
+  let nanVal = 0.0 / 0.0
+  let posInf = 1.0 / 0.0
+  let negInf = -1.0 / 0.0
+  if F.isNan(nanVal) && !F.isNan(1.0)
+    && F.isInfinite(posInf) && F.isInfinite(negInf) && !F.isInfinite(42.0)
+    && F.isFinite(42.0) && !F.isFinite(nanVal) && !F.isFinite(posInf) {
+    held = held + 1
+  }
+
+  // 5. Rounding and Decomposition: trunc, fract, floor, ceil, round
+  let trPos = F.trunc(3.8)
+  let trNeg = F.trunc(-3.8)
+  let frPos = F.fract(3.25)
+  let flPos = F.floor(3.8)
+  let flNeg = F.floor(-3.2)
+  let cePos = F.ceil(3.2)
+  let ceNeg = F.ceil(-3.8)
+  let ro1 = F.round(3.4)
+  let ro2 = F.round(3.5)
+  let ro3 = F.round(-3.5)
+  if trPos == 3.0 && trNeg == -3.0
+    && F.abs(frPos - 0.25) < 0.000001
+    && flPos == 3.0 && flNeg == -4.0
+    && cePos == 4.0 && ceNeg == -3.0
+    && ro1 == 3.0 && ro2 == 4.0 && ro3 == -4.0 {
+    held = held + 1
+  }
+
+  // 6. Trigonometry: sin, cos, tan
+  let s0 = F.sin(0.0)
+  let c0 = F.cos(0.0)
+  let t0 = F.tan(0.0)
+  let sPi6 = F.sin(piVal / 6.0)
+  let cPi3 = F.cos(piVal / 3.0)
+  let tPi4 = F.tan(piVal / 4.0)
+  if s0 == 0.0 && c0 == 1.0 && t0 == 0.0
+    && F.abs(sPi6 - 0.5) < 0.00001
+    && F.abs(cPi3 - 0.5) < 0.00001
+    && F.abs(tPi4 - 1.0) < 0.00001 {
+    held = held + 1
+  }
+
+  // 7. Inverse Trigonometry: asin, acos, atan, atan2
+  let asin0 = F.asin(0.0)
+  let asin1 = F.asin(1.0)
+  let asinInvalid = F.asin(1.5)
+  let acos1 = F.acos(1.0)
+  let acos0 = F.acos(0.0)
+  let acosInvalid = F.acos(-2.0)
+  let atan0 = F.atan(0.0)
+  let atan1 = F.atan(1.0)
+  let at2_q1 = F.atan2(1.0, 1.0)
+  let at2_q2 = F.atan2(1.0, -1.0)
+  let at2_q3 = F.atan2(-1.0, -1.0)
+  let at2_q4 = F.atan2(-1.0, 1.0)
+  if asin0 == Some(0.0) && asinInvalid == None && acos1 == Some(0.0) && acosInvalid == None
+    && atan0 == 0.0
+    && F.abs(atan1 - piVal / 4.0) < 0.0001
+    && F.abs(at2_q1 - piVal / 4.0) < 0.0001
+    && F.abs(at2_q2 - 3.0 * piVal / 4.0) < 0.0001
+    && F.abs(at2_q3 - (-3.0 * piVal / 4.0)) < 0.0001
+    && F.abs(at2_q4 - (-piVal / 4.0)) < 0.0001 {
+    if let Some(vAsin1) = asin1 {
+      if F.abs(vAsin1 - piVal / 2.0) < 0.0001 {
+        if let Some(vAcos0) = acos0 {
+          if F.abs(vAcos0 - piVal / 2.0) < 0.0001 { held = held + 1 }
+        }
+      }
+    }
+  }
+
+  // 8. Exponentials and Logarithms: exp, ln, log2, log10, powf
+  let exp0 = F.exp(0.0)
+  let exp1 = F.exp(1.0)
+  let ln1 = F.ln(1.0)
+  let lne = F.ln(eVal)
+  let ln0 = F.ln(0.0)
+  let lnNeg = F.ln(-5.0)
+  let log2_8 = F.log2(8.0)
+  let log10_1000 = F.log10(1000.0)
+  let pow2_4 = F.powf(2.0, 4.0)
+  let powNeg2_3 = F.powf(-2.0, 3.0)
+  let powNeg2_4 = F.powf(-2.0, 4.0)
+  if exp0 == 1.0 && F.abs(exp1 - eVal) < 0.0001
+    && ln1 == Some(0.0) && ln0 == None && lnNeg == None
+    && log2_8 == Some(3.0)
+    && pow2_4 == Some(16.0) && powNeg2_3 == Some(-8.0) && powNeg2_4 == Some(16.0) {
+    if let Some(vlne) = lne {
+      if let Some(vlog10) = log10_1000 {
+        if F.abs(vlne - 1.0) < 0.0001 && F.abs(vlog10 - 3.0) < 0.0001 {
+          held = held + 1
+        }
+      }
+    }
+  }
+
+  // 9. Roots and Hypot: sqrt, cbrt, hypot
+  let sq0 = F.sqrt(0.0)
+  let sq25 = F.sqrt(25.0)
+  let sqNeg = F.sqrt(-4.0)
+  let cb0 = F.cbrt(0.0)
+  let cb8 = F.cbrt(8.0)
+  let cbNeg8 = F.cbrt(-8.0)
+  let hyp34 = F.hypot(3.0, 4.0)
+  let hyp512 = F.hypot(5.0, 12.0)
+  if sq0 == Some(0.0) && sq25 == Some(5.0) && sqNeg == None
+    && cb0 == 0.0 && F.abs(cb8 - 2.0) < 0.0001 && F.abs(cbNeg8 + 2.0) < 0.0001
+    && F.abs(hyp34 - 5.0) < 0.0001 && F.abs(hyp512 - 13.0) < 0.0001 {
+    held = held + 1
+  }
+
+  // 10. Hyperbolic Functions: sinh, cosh, tanh
+  let sh0 = F.sinh(0.0)
+  let ch0 = F.cosh(0.0)
+  let th0 = F.tanh(0.0)
+  let sh1 = F.sinh(1.0)
+  let ch1 = F.cosh(1.0)
+  let th1 = F.tanh(1.0)
+  let cosh2_sinh2 = ch1 * ch1 - sh1 * sh1
+  if sh0 == 0.0 && ch0 == 1.0 && th0 == 0.0
+    && F.abs(cosh2_sinh2 - 1.0) < 0.0001
+    && F.abs(th1 - (sh1 / ch1)) < 0.0001 {
+    held = held + 1
+  }
+
+  // 11. Std.Math Trait Algorithms: min, max, abs, clamp, between, signum
+  let mMin = Math.min(10, 20)
+  let mMax = Math.max(10, 20)
+  let mAbs = Math.abs(-15)
+  let mClamp = Math.clamp(25, 0, 10)
+  let mBetween1 = Math.between(5, 1, 10)
+  let mBetween2 = Math.between(15, 1, 10)
+  let mSigPos = Math.signum(42)
+  let mSigNeg = Math.signum(-42)
+  let mSigZero = Math.signum(0)
+  if mMin == 10 && mMax == 20 && mAbs == 15 && mClamp == 10
+    && mBetween1 && !mBetween2
+    && mSigPos == 1 && mSigNeg == -1 && mSigZero == 0 {
+    held = held + 1
+  }
+
+  // 12. Std.Math Discrete Arithmetic: succ, pred, subtract, divide, remainder, divMod, divides, isEven, isOdd
+  let sVal = Math.succ(9)
+  let pVal = Math.pred(9)
+  let subVal = Math.subtract(3, 10)
+  let divVal = Math.divide(20, 4)
+  let divZero = Math.divide(20, 0)
+  let remVal = Math.remainder(22, 5)
+  let divModVal = Math.divMod(22, 5)
+  let divTrue = Math.divides(7, 49)
+  let divFalse = Math.divides(7, 50)
+  let evenTrue = Math.isEven(100)
+  let oddTrue = Math.isOdd(101)
+  if sVal == 10 && pVal == 8 && subVal == 7
+    && divVal == Some(5) && divZero == None && remVal == Some(2)
+    && divModVal == Some((4, 2))
+    && divTrue && !divFalse && evenTrue && oddTrue {
+    held = held + 1
+  }
+
+  // 13. Std.Math Powers and Combinatorics: square, cube, pow, checkedPow, gcd, lcm, factorial, isqrt, isPrime, digitCount
+  let sqVal = Math.square(7)
+  let cbVal = Math.cube(3)
+  let powVal = Math.pow(2, 5)
+  let chkPow1 = Math.checkedPow(2, 5)
+  let chkPowNeg = Math.checkedPow(2, -1)
+  let gcdVal = Math.gcd(48, 18)
+  let lcmVal = Math.lcm(12, 18)
+  let factVal = Math.factorial(5)
+  let isqrtVal = Math.isqrt(49)
+  let primeTrue = Math.isPrime(29)
+  let primeFalse = Math.isPrime(30)
+  let dCount = Math.digitCount(123456)
+  if sqVal == 49 && cbVal == 27 && powVal == 32
+    && chkPow1 == Some(32) && chkPowNeg == None
+    && gcdVal == 6 && lcmVal == 36 && factVal == 120
+    && isqrtVal == Some(7) && primeTrue && !primeFalse && dCount == 6 {
+    held = held + 1
+  }
+
+  // 14. Std.Math Comparators and Low-Level Primitives: minBy, maxBy, binaryGcd, isPowerOfTwo, nextPowerOfTwo, ilog2, branchlessMin, branchlessMax, branchlessAbs
+  let mBy = Math.minBy(10, 20, fn(a: Int, b: Int) -> Bool { a > b })
+  let mxBy = Math.maxBy(10, 20, fn(a: Int, b: Int) -> Bool { a > b })
+  let bGcd1 = Math.binaryGcd(48, 18)
+  let bGcd2 = Math.binaryGcd(101, 103)
+  let p2_1 = Math.isPowerOfTwo(128)
+  let p2_2 = Math.isPowerOfTwo(127)
+  let nextP2 = Math.nextPowerOfTwo(33)
+  let log2_val = Math.ilog2(256)
+  let brMin = Math.branchlessMin(10, 20)
+  let brMax = Math.branchlessMax(10, 20)
+  let brAbs = Math.branchlessAbs(-99)
+  if mBy == 20 && mxBy == 10
+    && bGcd1 == 6 && bGcd2 == 1
+    && p2_1 && !p2_2 && nextP2 == 64
+    && log2_val == Some(8)
+    && brMin == 10 && brMax == 20 && brAbs == 99 {
+    held = held + 1
+  }
+
+  // 15. Float IEEE-754 Special Values Edge Cases (NaN, +/-Inf, signed zero, lerp boundaries)
+  let edNan = 0.0 / 0.0
+  let edPosInf = 1.0 / 0.0
+  let edNegInf = -1.0 / 0.0
+  let csZero = F.copysign(0.0, -1.0)
+  let csInf = F.copysign(edPosInf, -1.0)
+  let lerp0 = F.lerp(10.0, 50.0, 0.0)
+  let lerp1 = F.lerp(10.0, 50.0, 1.0)
+  let flInf = F.floor(edPosInf)
+  let ceInf = F.ceil(edNegInf)
+  if csZero == -0.0 && csInf == edNegInf
+    && lerp0 == 10.0 && lerp1 == 50.0
+    && flInf == edPosInf && ceInf == edNegInf
+    && F.isInfinite(edPosInf) && F.isInfinite(edNegInf)
+    && F.isNan(edNan) && !F.isFinite(edNan) && !F.isFinite(edPosInf) {
+    held = held + 1
+  }
+
+  // 16. Float Trigonometric & Inverse Trig Edge Cases (zeros, out-of-domain, infinities)
+  let sinInf = F.sin(edPosInf)
+  let cosInf = F.cos(edPosInf)
+  let tanInf = F.tan(edPosInf)
+  let asin0_ed = F.asin(0.0)
+  let asin1_ed = F.asin(1.0)
+  let asinNeg1_ed = F.asin(-1.0)
+  let asinOut1 = F.asin(1.0001)
+  let asinOut2 = F.asin(-1.0001)
+  let asinInf = F.asin(edPosInf)
+  let acos1_ed = F.acos(1.0)
+  let acosNeg1_ed = F.acos(-1.0)
+  let acosOut1 = F.acos(1.5)
+  let atan0_ed = F.atan(0.0)
+  let atan1_ed = F.atan(1.0)
+  let atanNeg1_ed = F.atan(-1.0)
+  let atanPosInf = F.atan(edPosInf)
+  let atanNegInf = F.atan(edNegInf)
+  let at2_zero = F.atan2(0.0, 0.0)
+  let at2_negX = F.atan2(0.0, -1.0)
+  let at2_posY = F.atan2(1.0, 0.0)
+  let at2_negY = F.atan2(-1.0, 0.0)
+  let at2_inf1 = F.atan2(edPosInf, edPosInf)
+  let at2_inf2 = F.atan2(edPosInf, edNegInf)
+  if F.isNan(sinInf) && F.isNan(cosInf) && F.isNan(tanInf)
+    && asin0_ed == Some(0.0) && asinOut1 == None && asinOut2 == None && asinInf == None
+    && acos1_ed == Some(0.0) && acosOut1 == None
+    && atan0_ed == 0.0
+    && F.abs(atan1_ed - piVal / 4.0) < 0.000001
+    && F.abs(atanNeg1_ed - (-piVal / 4.0)) < 0.000001
+    && F.abs(atanPosInf - piVal / 2.0) < 0.000001
+    && F.abs(atanNegInf - (-piVal / 2.0)) < 0.000001
+    && at2_zero == 0.0
+    && F.abs(at2_negX - piVal) < 0.000001
+    && F.abs(at2_posY - piVal / 2.0) < 0.000001
+    && F.abs(at2_negY - (-piVal / 2.0)) < 0.000001
+    && F.abs(at2_inf1 - piVal / 4.0) < 0.000001
+    && F.abs(at2_inf2 - 3.0 * piVal / 4.0) < 0.000001 {
+    if let Some(vAsin1) = asin1_ed {
+      if let Some(vAsinNeg1) = asinNeg1_ed {
+        if let Some(vAcosNeg1) = acosNeg1_ed {
+          if F.abs(vAsin1 - piVal / 2.0) < 0.000001
+            && F.abs(vAsinNeg1 - (-piVal / 2.0)) < 0.000001
+            && F.abs(vAcosNeg1 - piVal) < 0.000001 {
+            held = held + 1
+          }
+        }
+      }
+    }
+  }
+
+  // 17. Float Exponentials, Logarithms & Powers Edge Cases (0^0, negative base, inf)
+  let expZero = F.exp(0.0)
+  let expPosInf = F.exp(edPosInf)
+  let expNegInf = F.exp(edNegInf)
+  let expNan = F.exp(edNan)
+  let lnOne = F.ln(1.0)
+  let lnZero = F.ln(0.0)
+  let lnNegVal = F.ln(-10.0)
+  let lnPosInf = F.ln(edPosInf)
+  let log2One = F.log2(1.0)
+  let log2Zero = F.log2(0.0)
+  let log10One = F.log10(1.0)
+  let log10Zero = F.log10(0.0)
+  let pow0_0 = F.powf(0.0, 0.0)
+  let pow10_0 = F.powf(10.0, 0.0)
+  let pow0_5 = F.powf(0.0, 5.0)
+  let pow0_neg = F.powf(0.0, -2.0)
+  let powNegFract = F.powf(-2.0, 0.5)
+  let powNanBase = F.powf(edNan, 2.0)
+  let powNanExp = F.powf(2.0, edNan)
+  if expZero == 1.0 && F.isInfinite(expPosInf) && expNegInf == 0.0 && F.isNan(expNan)
+    && lnOne == Some(0.0) && lnZero == None && lnNegVal == None && lnPosInf == Some(edPosInf)
+    && log2One == Some(0.0) && log2Zero == None
+    && log10One == Some(0.0) && log10Zero == None
+    && pow0_0 == Some(1.0) && pow10_0 == Some(1.0) && pow0_5 == Some(0.0)
+    && pow0_neg == None && powNegFract == None
+    && powNanBase == None && powNanExp == None {
+    held = held + 1
+  }
+
+  // 18. Float Roots and Hypotenuse Edge Cases
+  let sqZero = F.sqrt(0.0)
+  let sqNeg_ed = F.sqrt(-0.0001)
+  let sqPosInf = F.sqrt(edPosInf)
+  let sqNan = F.sqrt(edNan)
+  let cbZero = F.cbrt(0.0)
+  let cbNegZero = F.cbrt(-0.0)
+  let cbPosInf = F.cbrt(edPosInf)
+  let cbNegInf = F.cbrt(edNegInf)
+  let cbNan = F.cbrt(edNan)
+  let hypZero = F.hypot(0.0, 0.0)
+  let hypNegY = F.hypot(0.0, -7.0)
+  let hypInf = F.hypot(edPosInf, 5.0)
+  let hypNan = F.hypot(edNan, 1.0)
+  if sqZero == Some(0.0) && sqNeg_ed == None && sqPosInf == Some(edPosInf) && sqNan == None
+    && cbZero == 0.0 && cbNegZero == 0.0 && cbPosInf == edPosInf && cbNegInf == edNegInf && F.isNan(cbNan)
+    && hypZero == 0.0 && hypNegY == 7.0 && hypInf == edPosInf && F.isNan(hypNan) {
+    held = held + 1
+  }
+
+  // 19. Std.Math Discrete Arithmetic Edge Cases (division by zero, gcd(0, 0), powers of 0, prime bounds)
+  let dZero = Math.divide(10, 0)
+  let remZero = Math.remainder(10, 0)
+  let dmZero = Math.divMod(10, 0)
+  let divZeroCheck = Math.divides(0, 10)
+  let gcd0_0 = Math.gcd(0, 0)
+  let gcd0_17 = Math.gcd(0, 17)
+  let gcdNeg_0 = Math.gcd(-17, 0)
+  let lcm0_17 = Math.lcm(0, 17)
+  let lcm17_0 = Math.lcm(17, 0)
+  let pow10_0_ed = Math.pow(10, 0)
+  let pow0_5_ed = Math.pow(0, 5)
+  let pow0_0_ed = Math.pow(0, 0)
+  let chkPowNeg_ed = Math.checkedPow(5, -1)
+  let chkPowZero = Math.checkedPow(5, 0)
+  let fact0 = Math.factorial(0)
+  let fact1 = Math.factorial(1)
+  let isqrt0 = Math.isqrt(0)
+  let isqrtNeg = Math.isqrt(-1)
+  let prime0 = Math.isPrime(0)
+  let prime1 = Math.isPrime(1)
+  let prime2 = Math.isPrime(2)
+  if dZero == None && remZero == None && dmZero == None && !divZeroCheck
+    && gcd0_0 == 0 && gcd0_17 == 17 && gcdNeg_0 == 17
+    && lcm0_17 == 0 && lcm17_0 == 0
+    && pow10_0_ed == 1 && pow0_5_ed == 0 && pow0_0_ed == 1
+    && chkPowNeg_ed == None && chkPowZero == Some(1)
+    && fact0 == 1 && fact1 == 1
+    && isqrt0 == Some(0) && isqrtNeg == None
+    && !prime0 && !prime1 && prime2 {
+    held = held + 1
+  }
+
+  // 20. Std.Math Low-Level Bitwise Edge Cases (binaryGcd with negatives/zeros, power of two extremes, ilog2 domain)
+  let bg0_0 = Math.binaryGcd(0, 0)
+  let bg0_42 = Math.binaryGcd(0, 42)
+  let bg42_0 = Math.binaryGcd(42, 0)
+  let bgNeg = Math.binaryGcd(-48, -18)
+  let p2_0 = Math.isPowerOfTwo(0)
+  let p2_neg = Math.isPowerOfTwo(-8)
+  let p2_one = Math.isPowerOfTwo(1)
+  let nextP2_0 = Math.nextPowerOfTwo(0)
+  let nextP2_1 = Math.nextPowerOfTwo(1)
+  let nextP2_2 = Math.nextPowerOfTwo(2)
+  let ilog2_0 = Math.ilog2(0)
+  let ilog2_neg = Math.ilog2(-10)
+  let ilog2_1 = Math.ilog2(1)
+  let brMin0 = Math.branchlessMin(0, 0)
+  let brMax0 = Math.branchlessMax(0, 0)
+  let brAbs0 = Math.branchlessAbs(0)
+  let brMinNeg = Math.branchlessMin(-50, 50)
+  let brMaxNeg = Math.branchlessMax(-50, 50)
+  let brAbsNeg = Math.branchlessAbs(-12345)
+  if bg0_0 == 0 && bg0_42 == 42 && bg42_0 == 42 && bgNeg == 6
+    && !p2_0 && !p2_neg && p2_one
+    && nextP2_0 == 1 && nextP2_1 == 1 && nextP2_2 == 2
+    && ilog2_0 == None && ilog2_neg == None && ilog2_1 == Some(0)
+    && brMin0 == 0 && brMax0 == 0 && brAbs0 == 0
+    && brMinNeg == -50 && brMaxNeg == 50 && brAbsNeg == 12345 {
+    held = held + 1
+  }
+
+  held
+}
