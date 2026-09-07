@@ -50,6 +50,7 @@ testProtocolEvaluation = do
   tarArchive <- runEntry "test-fixtures/stdlib/UsesArchiveTar.pudu"
   regexEngine <- runEntry "test-fixtures/stdlib/UsesRegex.pudu"
   stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
+  cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -224,6 +225,15 @@ testProtocolEvaluation = do
     , counterexample
         "a program can hear a request to stop, and knows it has not had one"
         (stopSignals === Just "5")
+    {-| The keyed digest and the digest are checked against their own published
+        vectors rather than against each other, because two halves of one
+        wrong implementation agree perfectly. Sealing is checked the other way
+        — by what must fail: the wrong key, a changed byte, and context that
+        does not match must each answer nothing, since a sealed message that
+        opens under any of them is not sealed. -}
+    , counterexample
+        "keyed digests match their vectors, and a sealed message refuses to open wrongly"
+        (cryptoSurface === Just "14")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

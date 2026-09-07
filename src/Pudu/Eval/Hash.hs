@@ -20,6 +20,7 @@ module Pudu.Eval.Hash
   , hmacSha256
   , pbkdf2Sha256
   , sha256
+  , sha512
   ) where
 
 import qualified Crypto.Hash as Hash
@@ -45,6 +46,14 @@ sha256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA256
 
 
 
+
+{-| The SHA-512 digest of bytes, as its sixty-four bytes.
+
+    Beside SHA-256 rather than instead of it: a signature algorithm names the
+    digest it is defined over, and a reader implementing one cannot substitute
+    the digest they happen to have. -}
+sha512 :: ByteString.ByteString -> ByteString.ByteString
+sha512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA512)
 
 {-| The keyed digest, which is what proves a message came from someone holding
     the key rather than only that it was not altered.

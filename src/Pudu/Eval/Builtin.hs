@@ -45,7 +45,9 @@ import Pudu.Eval.Builtin.Numeric
 import Pudu.Eval.Builtin.String (callStringMethod)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
-import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256)
+import qualified Data.ByteString as ByteString
+import Pudu.Eval.Aead (openBytes, sealBytes)
+import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256, sha512)
 import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value
@@ -110,9 +112,24 @@ callPanic spanValue values =
     arithmetic to open one connection. A hash map's lookup cannot pay a digest
     either. Both answer the same digests, and the fixtures check them against
     each other rather than trusting that they do. -}
+{-| A sealed or opened message as the `Option` a caller matches on.
+
+    Nothing is answered for a wrong key length and for a message that failed
+    its tag alike, because the two are not distinguished on purpose: see
+    `Pudu.Eval.Aead`. -}
+optionalBytes :: Maybe ByteString.ByteString -> Value
+optionalBytes found = case found of
+  Just bytes -> VariantValue "Some" [BytesValue bytes]
+  Nothing -> VariantValue "None" []
+
 callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
 callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
+  (Sha512Builtin, [BytesValue message]) -> pure (BytesValue (sha512 message))
+  (SealBuiltin, [BytesValue key, BytesValue nonce, BytesValue message, BytesValue associated]) ->
+    pure (optionalBytes (sealBytes key nonce message associated))
+  (OpenSealedBuiltin, [BytesValue key, BytesValue nonce, BytesValue sealed, BytesValue associated]) ->
+    pure (optionalBytes (openBytes key nonce sealed associated))
   (HmacBuiltin, [BytesValue key, BytesValue message]) ->
     pure (BytesValue (hmacSha256 key message))
   (DeriveKeyBuiltin, [BytesValue password, BytesValue salt, IntValue _ rounds, IntValue _ wanted])
@@ -190,6 +207,9 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
 isHashingBuiltin :: Builtin -> Bool
 isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
+  Sha512Builtin -> True
+  SealBuiltin -> True
+  OpenSealedBuiltin -> True
   HmacBuiltin -> True
   DeriveKeyBuiltin -> True
   WordMapUnionBuiltin -> True

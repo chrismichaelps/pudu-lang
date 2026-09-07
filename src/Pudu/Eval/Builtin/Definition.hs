@@ -25,6 +25,9 @@ data Builtin
   | WriteFileBuiltin
   | AppendFileBuiltin
   | FileExistsBuiltin
+  | Sha512Builtin
+  | SealBuiltin
+  | OpenSealedBuiltin
   | SignalWatchStopBuiltin
   | SignalStopRequestedBuiltin
   | RemoveFileBuiltin
@@ -174,6 +177,9 @@ builtinName value = case value of
   WriteFileBuiltin -> "writeFile"
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
+  Sha512Builtin -> "sha512Of"
+  SealBuiltin -> "sealBytes"
+  OpenSealedBuiltin -> "openSealedBytes"
   SignalWatchStopBuiltin -> "signalWatchStop"
   SignalStopRequestedBuiltin -> "signalStopRequested"
   RemoveFileBuiltin -> "removeFile"

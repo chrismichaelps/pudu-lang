@@ -53,6 +53,7 @@ library
     Pudu.Eval.Clock
     Pudu.Eval.Concurrent
     Pudu.Eval.Effect
+    Pudu.Eval.Aead
     Pudu.Eval.Signal
     Pudu.Eval.Entropy
     Pudu.Eval.Install

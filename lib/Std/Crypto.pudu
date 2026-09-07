@@ -363,3 +363,76 @@ fn legacyExpand(block: &Array[UInt32]) -> Array[UInt32] {
 fn legacyRotate(value: UInt32, places: Int) -> UInt32 {
   (value << places) | (value >> (32 - places))
 }
+
+/// The keyed digest that proves who a message came from.
+///
+/// A digest says a message was not altered by accident. A keyed digest says it
+/// came from someone holding the key, which is the question a webhook, a
+/// signed cookie, and an API signature all ask. Anyone can compute a digest of
+/// a forged message; only a holder of the key can compute this.
+///
+/// This is where the compiler's own implementation is reached rather than the
+/// one written above in Pudu. The reason is speed: a key derivation runs
+/// thousands of these, and the readable implementation is for reading.
+export fn hmacSha256(key: &Bytes, message: &Bytes) -> Bytes {
+  hmacSha256Of(*key, *message)
+}
+
+/// The same, over text taken as UTF-8.
+export fn hmacSha256Text(key: Str, message: Str) -> Bytes {
+  hmacSha256Of(key.toBytes(), message.toBytes())
+}
+
+/// The SHA-512 digest of bytes.
+///
+/// Beside SHA-256 rather than instead of it. A protocol names the digest it is
+/// defined over — a signature algorithm, a key derivation, a transcript hash —
+/// and substituting the one to hand produces a value that is not the one the
+/// other side will compute.
+export fn sha512(message: &Bytes) -> Bytes { sha512Of(*message) }
+
+/// A key derived from a password, slowly and on purpose.
+///
+/// Slowness is the property: a password is short enough to guess, and this is
+/// what makes each guess cost the guesser what it cost the owner once. The
+/// iteration count is therefore not a tuning knob to lower — raise it as
+/// machines get faster. See `Std.App.Password` for storing one.
+export fn derive(password: &Bytes, salt: &Bytes, rounds: Int, length: Int) -> Bytes {
+  deriveKey(*password, *salt, rounds, length)
+}
+
+/// How long a key for `seal` must be, in bytes.
+export fn keyLength() -> Int { 32 }
+
+/// How long a nonce for `seal` must be, in bytes.
+export fn nonceLength() -> Int { 12 }
+
+/// Encrypt a message so that changing it is detected.
+///
+/// Encryption alone hides a message and says nothing about whether it arrived
+/// as it was sent. Someone who cannot read a message can still change it, and
+/// a program that decrypts whatever it is handed will act on the result. This
+/// answers a sealed message whose tag covers both the encrypted part and the
+/// `associated` part beside it — a record identifier, a version, a purpose —
+/// which is how context that must travel in the clear is still protected from
+/// being swapped.
+///
+/// The nonce must never be used twice with one key. Reusing one does not
+/// merely weaken this, it reveals the messages, so derive a nonce or count
+/// one; never reuse a fixed value.
+///
+/// Answers nothing when the key or nonce is the wrong length, which is a
+/// mistake in the program rather than a fact about the message.
+export fn seal(key: &Bytes, nonce: &Bytes, message: &Bytes, associated: &Bytes) -> Option[Bytes] {
+  sealBytes(*key, *nonce, *message, *associated)
+}
+
+/// Open a sealed message, or answer nothing.
+///
+/// Nothing is answered for every reason a message might not be genuine — the
+/// wrong key, a changed byte, a truncated message, associated data that does
+/// not match. They are not told apart on purpose: saying which one failed
+/// tells whoever changed the message which change got closer.
+export fn open(key: &Bytes, nonce: &Bytes, sealed: &Bytes, associated: &Bytes) -> Option[Bytes] {
+  openSealedBytes(*key, *nonce, *sealed, *associated)
+}

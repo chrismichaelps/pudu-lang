@@ -143,6 +143,21 @@ declareBuiltinConstructors = do
       implementation in a loop. `hashOf` is a number for a keyed collection and
       not a digest; the other three are. -}
   bindName "sha256Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "sha512Of" (monotype (FunctionTypeValue False [bytesType] bytesType))
+  bindName "sealBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [bytesType, bytesType, bytesType, bytesType]
+            (NominalType "Option" [bytesType])
+        )
+    )
+  bindName "openSealedBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [bytesType, bytesType, bytesType, bytesType]
+            (NominalType "Option" [bytesType])
+        )
+    )
   bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "deriveKey"
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
