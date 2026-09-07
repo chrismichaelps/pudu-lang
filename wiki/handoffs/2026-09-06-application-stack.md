@@ -103,6 +103,16 @@ Implemented moving-window rate limiting and conditional HTTP responses:
 - Updated `UsesEnterpriseSsr.pudu` (31 assertions) and `RuntimeSpec.hs`.
 - Updated module mirrors `Guard.md` and `Reply.md` with resolved Grill Logs; updated `WEB.md` and `CHANGELOG.md`.
 - Validated with `bash test/gates.sh` (all gates passed).
-Exact next action: Proceed with next application stack capability or user direction.
+
+## Adaptive media, streaming error boundaries, and zero-copy ISR cache
+
+Implemented poor-network asset adaptation, streaming resilience, and tag-based ISR caching:
+- `Std.Html.Media`: `adaptiveImage` and `adaptivePicture` with network constraint detection (`Save-Data`, 2G/3G), downscaling and omitting heavy desktop source variants to prevent packet drops and buffer bloat over mobile networks.
+- `Std.Html.Stream`: `suspenseError(boundaryId, fallback)` boundary resolution chunks that swap placeholders with error UI without breaking the HTTP chunked stream or terminating the TCP connection.
+- `Std.App.IsrCache`: Thread-safe zero-copy cache storing contiguous byte payloads (`Bytes`) with tag-based multi-route invalidation (`revalidateTag`, `purgeTag`) and SWR serving.
+- Updated `UsesEnterpriseSsr.pudu` (43 assertions) and `RuntimeSpec.hs`.
+- Added module mirrors `Media.md` and `IsrCache.md` with resolved Grill Logs; updated `Stream.md`, `Std/_MOC.md`, and `CHANGELOG.md`.
+Exact next action: Validate with full repository gates and commit to dev.
+
 
 

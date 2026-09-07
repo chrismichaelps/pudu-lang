@@ -20,6 +20,7 @@ Exports:
 - `documentTail() -> Bytes`: Renders closing `</body></html>` markup.
 - `suspensePlaceholder(boundaryId: Str, fallback: &Bytes) -> Bytes`: Generates `<div id="pudu-s-{id}">{fallback}</div>` boundary container.
 - `suspenseReplacement(boundaryId: Str, content: &Bytes) -> Bytes`: Generates `<template id="pudu-t-{id}">{content}</template>` and an inline replacement snippet that swaps placeholder contents as soon as the chunk arrives over the network stream.
+- `suspenseError(boundaryId: Str, errorFallback: &Bytes) -> Bytes`: Generates an out-of-order error fallback chunk that replaces the pending suspense placeholder and tags it with `data-pudu-error="true"`, preventing stream failure.
 - `renderSuspended(boundaryId: Str, fallback: &Bytes, content: &Bytes) -> (Bytes, Bytes)`: Produces paired initial placeholder chunk and deferred resolution chunk.
 
 ## Complexity and limits

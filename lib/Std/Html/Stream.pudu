@@ -49,6 +49,15 @@ export fn suspenseReplacement(boundaryId: Str, content: &Bytes) -> Bytes {
   ByteSeq.join(&[tOpen, *content, tClose])
 }
 
+/// Generates the out-of-order error template and inline resolution script.
+///
+/// Replaces the placeholder contents with the error fallback without crashing the HTTP stream.
+export fn suspenseError(boundaryId: Str, errorFallback: &Bytes) -> Bytes {
+  let tOpen = ("<template id=\"pudu-e-" + boundaryId + "\">").toBytes()
+  let tClose = ("</template><script>(function()\{var t=document.getElementById(\"pudu-e-" + boundaryId + "\");var s=document.getElementById(\"pudu-s-" + boundaryId + "\");if(t&&s)\{s.replaceChildren(t.content.cloneNode(true));s.setAttribute(\"data-pudu-error\",\"true\");t.remove();\}\})();</script>").toBytes()
+  ByteSeq.join(&[tOpen, *errorFallback, tClose])
+}
+
 /// Paired helper generating both initial fallback and deferred replacement chunks.
 export fn renderSuspended(
   boundaryId: Str,

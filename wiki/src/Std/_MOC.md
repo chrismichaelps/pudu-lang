@@ -11,6 +11,8 @@ tags: [moc, module, stdlib]
 - [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
 - [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
 - [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.
+- [[Std Html Media]] — network-adaptive responsive image and media delivery with low-bandwidth budgeting.
+- [[Std App IsrCache]] — zero-copy thread-safe byte cache with tag-based invalidation for ISR.
 - [[Std Ui Island]] — isolated island elements, client micro-runtime, and zero-JS form fallback.
 
 - [[Std Html Compose]] — fluent content composition with reusable view functions.

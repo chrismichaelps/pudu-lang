@@ -1,8 +1,12 @@
 module UsesEnterpriseSsr
 
+import Std.App.IsrCache {Fresh, Stale, Miss}
+import Std.App.IsrCache as IsrCache
 import Std.Bytes as ByteSeq
 import Std.Html.Buffer as HtmlBuffer
 import Std.Html as Html
+import Std.Html.Media {Critical, Standard, Low}
+import Std.Html.Media as Media
 import Std.Html.Stream as HtmlStream
 import Std.Http {Get}
 import Std.Http as Http
@@ -12,8 +16,13 @@ import Std.Http.Server.Resilience as Resilience
 import Std.Http.Server.Resilience {SaveDataActive, ConstrainedCellular, FastBroadband}
 import Std.Http.Server.Route as Route
 import Std.Http.Server.Security as Security
+import Std.Option as Option
 import Std.Result as Result
 import Std.Ui.Island as Island
+
+fn textOf(b: &Bytes) -> Str {
+  Option.unwrapOr(b.toText(), "")
+}
 
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
   Route.Request {
@@ -249,6 +258,97 @@ export fn main() -> Int {
   if r1.status.code == 200 { passed = passed + 1 }
   if r2.status.code == 200 { passed = passed + 1 }
   if r3.status.code == 429 { passed = passed + 1 }
+
+  // 15. HtmlStream: suspenseError boundary
+  let errFallback = "<div>Async Error Boundary</div>".toBytes()
+  let errChunk = HtmlStream.suspenseError("user-feed", &errFallback)
+  let errStr = textOf(&errChunk)
+  if errStr.contains("<template id=\"pudu-e-user-feed\">") && errStr.contains("data-pudu-error") {
+    passed = passed + 1
+  }
+
+  // 16. Media: adaptiveImage on constrained vs broadband networks
+  let constrainedProfile = Resilience.inspectClientNetwork(&[("save-data", "on")])
+  let fastProfile = Resilience.inspectClientNetwork(&[("ect", "4g")])
+
+  let lqipUri = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
+  let imgConstrained = Media.adaptiveImage(&constrainedProfile, "/hero.jpg", "Hero", 800, 400, Critical, lqipUri)
+  let imgConstrainedStr = textOf(&imgConstrained)
+  if imgConstrainedStr.contains("src=\"data:image/svg+xml") && imgConstrainedStr.contains("fetchpriority=\"low\"") && imgConstrainedStr.contains("data-pudu-network=\"constrained\"") {
+    passed = passed + 1
+  }
+
+  let imgFast = Media.adaptiveImage(&fastProfile, "/hero.jpg", "Hero", 800, 400, Critical, lqipUri)
+  let imgFastStr = textOf(&imgFast)
+  if imgFastStr.contains("src=\"/hero.jpg\"") && imgFastStr.contains("fetchpriority=\"high\"") && imgFastStr.contains("loading=\"eager\"") {
+    passed = passed + 1
+  }
+
+  // 17. Media: adaptivePicture
+  let sourceRules = [
+    Media.SourceRule{srcset: "/hero-desktop.webp", mediaQuery: "(min-width: 1024px)", typeMime: "image/webp", minWidth: 1024}
+  ]
+  let picFast = Media.adaptivePicture(&fastProfile, "/hero.jpg", "Hero", 800, 400, &sourceRules, Standard)
+  if textOf(&picFast).contains("<source srcset=\"/hero-desktop.webp\"") {
+    passed = passed + 1
+  }
+
+  let picConstrained = Media.adaptivePicture(&constrainedProfile, "/hero.jpg", "Hero", 800, 400, &sourceRules, Standard)
+  if !textOf(&picConstrained).contains("<source srcset=\"/hero-desktop.webp\"") {
+    passed = passed + 1
+  }
+
+  // 18. IsrCache: create, put, get Fresh, Stale, and Miss
+  let isr = IsrCache.create(5)
+  let pageBytes1 = "<h1>Cached Article 1</h1>".toBytes()
+  IsrCache.put(&isr, "/article/1", &pageBytes1, "v1", &["article", "author:alice"], 10, 60, 1000)
+
+  // Fresh lookup at now = 1005 (expiresAt = 1010)
+  match IsrCache.get(&isr, "/article/1", 1005) {
+    case Fresh(b, tag) => {
+      if tag == "v1" && textOf(&b).contains("Cached Article 1") { passed = passed + 1 }
+    }
+    case Stale(_, _) => {}
+    case Miss => {}
+  }
+
+  // Stale lookup at now = 1030 (after expiresAt 1010, before staleUntil 1070)
+  match IsrCache.get(&isr, "/article/1", 1030) {
+    case Fresh(_, _) => {}
+    case Stale(b, tag) => {
+      if tag == "v1" && textOf(&b).contains("Cached Article 1") { passed = passed + 1 }
+    }
+    case Miss => {}
+  }
+
+  // Miss lookup at now = 1080 (after staleUntil 1070)
+  match IsrCache.get(&isr, "/article/1", 1080) {
+    case Fresh(_, _) => {}
+    case Stale(_, _) => {}
+    case Miss => { passed = passed + 1 }
+  }
+
+  // 19. IsrCache: revalidateTag
+  let pageBytes2 = "<h1>Cached Article 2</h1>".toBytes()
+  IsrCache.put(&isr, "/article/2", &pageBytes2, "v2", &["article", "author:bob"], 50, 60, 1000)
+  let revalCount = IsrCache.revalidateTag(&isr, "author:bob", 1002)
+  if revalCount == 1 { passed = passed + 1 }
+
+  // Lookup /article/2 at 1003 should now be Stale because expiresAt was set to 1001
+  match IsrCache.get(&isr, "/article/2", 1003) {
+    case Fresh(_, _) => {}
+    case Stale(b, tag) => {
+      if tag == "v2" { passed = passed + 1 }
+    }
+    case Miss => {}
+  }
+
+  // 20. IsrCache: purgeTag and stats
+  let purgedCount = IsrCache.purgeTag(&isr, "article")
+  if purgedCount == 2 { passed = passed + 1 }
+
+  let isrStats = IsrCache.stats(&isr)
+  if isrStats[0] == 0 { passed = passed + 1 }
 
   passed
 }

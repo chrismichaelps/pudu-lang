@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Network-adaptive media, streaming error boundaries, and zero-copy ISR cache
+
+- [[Std Html Media]]: Adaptive `<img>` and `<picture>` elements tailored to client network profiles (`Save-Data`, 2G/3G), downscaling and omitting desktop descriptors to prevent packet drops and buffer bloat over mobile networks.
+- [[Std Html Stream]]: Added `suspenseError(boundaryId, fallback)` boundary resolution chunks that swap placeholders with error UI without aborting the chunked HTTP stream.
+- [[Std App IsrCache]]: Thread-safe zero-copy cache storing contiguous byte payloads (`Bytes`) with tag-based multi-route invalidation (`revalidateTag`, `purgeTag`) and SWR serving.
+- Updated `UsesEnterpriseSsr.pudu` integration test suite to 43 assertions and updated `RuntimeSpec.hs`.
+
 ## 2026-09-06 — Server rate limiting and conditional ETag responses
 
 - [[Std Http Server Guard]]: Added `rateLimited(maxRequests, windowSeconds)` middleware to throttle peer requests per moving window and emit RFC 6585 `429 Too Many Requests` with `Retry-After`.

@@ -1,0 +1,164 @@
+module Std.Html.Media
+
+import Std.Bytes as ByteSeq
+import Std.Http.Server.Resilience as Resilience
+
+/// Rendering priority for responsive media.
+export type Priority
+  = Critical
+  | Standard
+  | Low
+
+/// Specification for a responsive source candidate within a `<picture>` element.
+export type SourceRule = {
+  srcset: Str,
+  mediaQuery: Str,
+  typeMime: Str,
+  minWidth: Int
+}
+
+/// Helper to determine whether a network profile is constrained.
+fn isConstrained(profile: &Resilience.NetworkProfile) -> Bool {
+  match *profile {
+    case Resilience.SaveDataActive => true
+    case Resilience.ConstrainedCellular(_) => true
+    case Resilience.FastBroadband => false
+  }
+}
+
+/// Escapes characters that break out of HTML attribute strings.
+fn escapeAttr(raw: Str) -> Str {
+  var escaped = ""
+  var i = 0
+  let len = raw.length()
+  while i < len {
+    let ch = raw.slice(i, i + 1)
+    if ch == "&" {
+      escaped = escaped + "&amp;"
+    } else {
+      if ch == "\"" {
+        escaped = escaped + "&quot;"
+      } else {
+        if ch == "<" {
+          escaped = escaped + "&lt;"
+        } else {
+          if ch == ">" {
+            escaped = escaped + "&gt;"
+          } else {
+            escaped = escaped + ch
+          }
+        }
+      }
+    }
+    i = i + 1
+  }
+  escaped
+}
+
+/// Renders a network-adaptive `<img>` tag tuned for device telemetry and network bandwidth.
+///
+/// On poor networks (2G/3G) or `Save-Data: on`:
+/// - If `lqipDataUri` is provided, it is used directly as the `src` to avoid round-trips.
+/// - Enforces `loading="lazy"`, `decoding="async"`, and `fetchpriority="low"`.
+///
+/// On high-speed networks:
+/// - With `Priority.Critical`, enforces `loading="eager"`, `decoding="sync"`, and `fetchpriority="high"`.
+export fn adaptiveImage(
+  profile: &Resilience.NetworkProfile,
+  src: Str,
+  alt: Str,
+  width: Int,
+  height: Int,
+  priority: Priority,
+  lqipDataUri: Str
+) -> Bytes {
+  var actualSrc = src
+  var loading = "lazy"
+  var decoding = "async"
+  var fetchPriority = "auto"
+
+  let constrained = isConstrained(profile)
+
+  if constrained {
+    if lqipDataUri.length() > 0 {
+      actualSrc = lqipDataUri
+    }
+    loading = "lazy"
+    decoding = "async"
+    fetchPriority = "low"
+  } else {
+    match priority {
+      case Critical => {
+        loading = "eager"
+        decoding = "sync"
+        fetchPriority = "high"
+      }
+      case Standard => {
+        loading = "lazy"
+        decoding = "async"
+        fetchPriority = "auto"
+      }
+      case Low => {
+        loading = "lazy"
+        decoding = "async"
+        fetchPriority = "low"
+      }
+    }
+  }
+
+  var tag = "<img src=\"" + escapeAttr(actualSrc) + "\""
+  tag = tag + " alt=\"" + escapeAttr(alt) + "\""
+  if width > 0 {
+    tag = tag + " width=\"" + show(width) + "\""
+  }
+  if height > 0 {
+    tag = tag + " height=\"" + show(height) + "\""
+  }
+  tag = tag + " loading=\"" + loading + "\""
+  tag = tag + " decoding=\"" + decoding + "\""
+  tag = tag + " fetchpriority=\"" + fetchPriority + "\""
+
+  if constrained {
+    tag = tag + " data-pudu-network=\"constrained\""
+  }
+
+  tag = tag + ">"
+  tag.toBytes()
+}
+
+/// Renders a network-adaptive `<picture>` container.
+///
+/// Filters out bandwidth-heavy and desktop-only sources (`minWidth > 800`) on constrained
+/// mobile connections, drastically reducing payload sizes over 2G/3G links.
+export fn adaptivePicture(
+  profile: &Resilience.NetworkProfile,
+  defaultSrc: Str,
+  alt: Str,
+  width: Int,
+  height: Int,
+  sources: &Array[SourceRule],
+  priority: Priority
+) -> Bytes {
+  let constrained = isConstrained(profile)
+  var markup = "<picture>"
+
+  for rule in sources {
+    // Under poor network conditions, drop dense wide-screen variants (> 800px)
+    let dropRule = constrained && (rule.minWidth > 800)
+    if !dropRule {
+      markup = markup + "<source srcset=\"" + escapeAttr(rule.srcset) + "\""
+      if rule.mediaQuery.length() > 0 {
+        markup = markup + " media=\"" + escapeAttr(rule.mediaQuery) + "\""
+      }
+      if rule.typeMime.length() > 0 {
+        markup = markup + " type=\"" + escapeAttr(rule.typeMime) + "\""
+      }
+      markup = markup + ">"
+    }
+  }
+
+  let pre = markup.toBytes()
+  let post = "</picture>".toBytes()
+  let imgTag = adaptiveImage(profile, defaultSrc, alt, width, height, priority, "")
+  ByteSeq.join(&[pre, imgTag, post])
+}
