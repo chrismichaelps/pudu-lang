@@ -1,0 +1,198 @@
+module UsesEnterpriseSsr
+
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
+import Std.Html as Html
+import Std.Html.Stream as HtmlStream
+import Std.Http.Server.Resilience as Resilience
+import Std.Http.Server.Resilience {SaveDataActive, ConstrainedCellular, FastBroadband}
+import Std.Http.Server.Security as Security
+import Std.Result as Result
+import Std.Ui.Island as Island
+
+export fn main() -> Int {
+  var passed = 0
+
+  // 1. HtmlBuffer: compile and zero-copy assemble into unboxed memory
+  let chunks = [
+    HtmlBuffer.Static("<h1>Title: ".toBytes()),
+    HtmlBuffer.Dynamic("name"),
+    HtmlBuffer.Static("</h1>".toBytes())
+  ]
+  let plan = HtmlBuffer.compile(&chunks)
+  if plan.totalStaticBytes == 16 { passed = passed + 1 }
+
+  let values = mapOf([("name", "Enterprise SSR".toBytes())])
+  let assembled = HtmlBuffer.renderToBytes(&plan, &values)
+  let textResult = ByteSeq.toText(&assembled)
+  match textResult {
+    case Ok(str) => {
+      if str == "<h1>Title: Enterprise SSR</h1>" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // 2. HtmlBuffer: bitwise chunk hex header formatting
+  let zeroHeader = HtmlBuffer.formatHexChunkHeader(0)
+  match ByteSeq.toText(&zeroHeader) {
+    case Ok(str) => {
+      if str == "0\r\n" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  let mssHeader = HtmlBuffer.formatHexChunkHeader(1460)
+  match ByteSeq.toText(&mssHeader) {
+    case Ok(str) => {
+      if str == "5b4\r\n" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // 3. HtmlBuffer: TCP MSS coalescing
+  let c1 = "aaaa".toBytes()
+  let c2 = "bbbb".toBytes()
+  let c3 = "cccc".toBytes()
+  let batched = HtmlBuffer.coalesceToMss(&[c1, c2, c3], 8)
+  // c1(4) + c2(4) = 8 fits in first batch; c3(4) starts second batch
+  if batched.length() == 2 { passed = passed + 1 }
+  match ByteSeq.toText(&batched[0]) {
+    case Ok(str) => {
+      if str == "aaaabbbb" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // 4. HtmlStream: documentHead and 14KB initcwnd budget
+  let headBytes = HtmlStream.documentHead("My Portal", &[], "body\{margin:0;\}", &[])
+  match ByteSeq.toText(&headBytes) {
+    case Ok(str) => {
+      if str.contains("<title>My Portal</title>") && str.contains("<style>body\{margin:0;\}</style>") {
+        passed = passed + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  let budgetOk = Resilience.enforceInitcwndBudget(&headBytes, 14000)
+  if Result.isOk(&budgetOk) { passed = passed + 1 }
+
+  let hugeBytes = ByteSeq.repeat(&"x".toBytes(), 15000)
+  let budgetErr = Resilience.enforceInitcwndBudget(&hugeBytes, 14000)
+  if Result.isErr(&budgetErr) { passed = passed + 1 }
+
+  // 5. HtmlStream: Suspense placeholder and replacement
+  let suspensePair = HtmlStream.renderSuspended("orders", &"loading".toBytes(), &"orders-data".toBytes())
+  let fallback = suspensePair[0]
+  let replacement = suspensePair[1]
+  match ByteSeq.toText(&fallback) {
+    case Ok(str) => {
+      if str == "<div id=\"pudu-s-orders\">loading</div>" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  match ByteSeq.toText(&replacement) {
+    case Ok(str) => {
+      if str.contains("<template id=\"pudu-t-orders\">orders-data</template>") && str.contains("replaceChildren") {
+        passed = passed + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 6. Resilience: Network profile inspection
+  let saveHeaders = [("Save-Data", "on"), ("Host", "example.com")]
+  let saveProf = Resilience.inspectClientNetwork(&saveHeaders)
+  match saveProf {
+    case SaveDataActive => { passed = passed + 1 }
+    case _ => {}
+  }
+
+  let cellularHeaders = [("ECT", "2g")]
+  let cellProf = Resilience.inspectClientNetwork(&cellularHeaders)
+  match cellProf {
+    case ConstrainedCellular(kind) => {
+      if kind == "2g" { passed = passed + 1 }
+    }
+    case _ => {}
+  }
+
+  let broadbandHeaders = [("ECT", "4g"), ("RTT", "40")]
+  let broadProf = Resilience.inspectClientNetwork(&broadbandHeaders)
+  match broadProf {
+    case FastBroadband => { passed = passed + 1 }
+    case _ => {}
+  }
+
+  // 7. Resilience: SWR headers and adaptive payload
+  let swr = Resilience.swrHeaders(60, 300, &["catalog", "v1"])
+  var hasSwr = false
+  var hasTags = false
+  for pair in swr {
+    if pair[0] == "Cache-Control" && pair[1].contains("stale-while-revalidate=300") {
+      hasSwr = true
+    }
+    if pair[0] == "Cache-Tags" && pair[1] == "catalog,v1" {
+      hasTags = true
+    }
+  }
+  if hasSwr && hasTags { passed = passed + 1 }
+
+  let full = "full-markup".toBytes()
+  let minimal = "minimal-markup".toBytes()
+  let chosen = Resilience.selectAdaptivePayload(&saveProf, &full, &minimal)
+  match ByteSeq.toText(&chosen) {
+    case Ok(str) => {
+      if str == "minimal-markup" { passed = passed + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // 8. Security: Nonce generation and strict security headers
+  let nonce = Security.generateNonce(42)
+  if nonce.length() == 32 { passed = passed + 1 }
+
+  let secHeaders = Security.strictSecurityHeaders(nonce)
+  var hasCsp = false
+  var hasHsts = false
+  var hasFrame = false
+  for pair in secHeaders {
+    if pair[0] == "Content-Security-Policy" && pair[1].contains("nonce-" + nonce) {
+      hasCsp = true
+    }
+    if pair[0] == "Strict-Transport-Security" { hasHsts = true }
+    if pair[0] == "X-Frame-Options" && pair[1] == "DENY" { hasFrame = true }
+  }
+  if hasCsp && hasHsts && hasFrame { passed = passed + 1 }
+
+  // 9. Security: Origin and constant-time token comparison
+  let validOrigin = Security.verifyOrigin(Some("https://app.example.com"), None, "app.example.com")
+  let invalidOrigin = Security.verifyOrigin(Some("https://malicious.com"), None, "app.example.com")
+  if validOrigin && !invalidOrigin { passed = passed + 1 }
+
+  let matchTok = Security.constantTimeCompare(&"secret-token-abc", &"secret-token-abc")
+  let mismatchTok = Security.constantTimeCompare(&"secret-token-abc", &"secret-token-xyz")
+  if matchTok && !mismatchTok { passed = passed + 1 }
+
+  // 10. Ui.Island: Island element, form action, and micro-runtime
+  let islandElem = Island.island("cart", "\{\"items\":2\}", Html.text("Fallback Cart"))
+  let renderedIsland = Html.render(&islandElem)
+  if renderedIsland.contains("<pudu-island") && renderedIsland.contains("data-name=\"cart\"") {
+    passed = passed + 1
+  }
+
+  let formElem = Island.serverActionForm("/api/cart", "token123", &[Html.text("Input")])
+  let renderedForm = Html.render(&formElem)
+  if renderedForm.contains("<form method=\"POST\" action=\"/api/cart\"") && renderedForm.contains("value=\"token123\"") {
+    passed = passed + 1
+  }
+
+  let runtimeElem = Island.microRuntime(nonce)
+  let renderedRuntime = Html.render(&runtimeElem)
+  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"") && renderedRuntime.contains("fetch(f.action") {
+    passed = passed + 1
+  }
+
+  passed
+}

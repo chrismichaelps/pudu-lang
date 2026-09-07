@@ -1,0 +1,59 @@
+module Std.Html.Stream
+
+import Std.Bytes as ByteSeq
+
+/// Generates the early flush HTML document head strictly bounded for 1-RTT delivery.
+export fn documentHead(
+  title: Str,
+  meta: &Array[(Str, Str)],
+  criticalCss: Str,
+  preloads: &Array[Str]
+) -> Bytes {
+  var markup = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + title + "</title>"
+
+  for pair in meta {
+    markup = markup + "<meta name=\"" + pair[0] + "\" content=\"" + pair[1] + "\">"
+  }
+
+  for href in preloads {
+    markup = markup + "<link rel=\"preload\" href=\"" + href + "\" as=\"style\">"
+  }
+
+  if criticalCss.length() > 0 {
+    markup = markup + "<style>" + criticalCss + "</style>"
+  }
+
+  markup = markup + "</head><body>"
+  markup.toBytes()
+}
+
+/// Generates closing markup for the document stream.
+export fn documentTail() -> Bytes {
+  "</body></html>".toBytes()
+}
+
+/// Generates the initial placeholder container for a Suspense boundary.
+export fn suspensePlaceholder(boundaryId: Str, fallback: &Bytes) -> Bytes {
+  let open = ("<div id=\"pudu-s-" + boundaryId + "\">").toBytes()
+  let close = "</div>".toBytes()
+  ByteSeq.join(&[open, *fallback, close])
+}
+
+/// Generates the out-of-order replacement template and inline resolution script.
+///
+/// Executes immediately upon stream receipt in the browser, swapping the placeholder
+/// contents synchronously without an external client framework runtime.
+export fn suspenseReplacement(boundaryId: Str, content: &Bytes) -> Bytes {
+  let tOpen = ("<template id=\"pudu-t-" + boundaryId + "\">").toBytes()
+  let tClose = ("</template><script>(function()\{var t=document.getElementById(\"pudu-t-" + boundaryId + "\");var s=document.getElementById(\"pudu-s-" + boundaryId + "\");if(t&&s)\{s.replaceChildren(t.content.cloneNode(true));t.remove();\}\})();</script>").toBytes()
+  ByteSeq.join(&[tOpen, *content, tClose])
+}
+
+/// Paired helper generating both initial fallback and deferred replacement chunks.
+export fn renderSuspended(
+  boundaryId: Str,
+  fallback: &Bytes,
+  content: &Bytes
+) -> (Bytes, Bytes) {
+  (suspensePlaceholder(boundaryId, fallback), suspenseReplacement(boundaryId, content))
+}

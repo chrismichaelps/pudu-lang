@@ -1,0 +1,125 @@
+module Std.Http.Server.Resilience
+
+import Std.Bytes as ByteSeq
+
+/// Classification of client connection constraints.
+export type NetworkProfile
+  = FastBroadband
+  | ConstrainedCellular(Str)
+  | SaveDataActive
+
+fn parseDecimal(text: Str) -> Int {
+  var value = 0
+  var index = 0
+  while index < text.length() {
+    let ch = text.slice(index, index + 1)
+    if ch >= "0" && ch <= "9" {
+      let digit = match ch {
+        case "0" => 0
+        case "1" => 1
+        case "2" => 2
+        case "3" => 3
+        case "4" => 4
+        case "5" => 5
+        case "6" => 6
+        case "7" => 7
+        case "8" => 8
+        case "9" => 9
+        case _ => 0
+      }
+      value = value * 10 + digit
+    }
+    index = index + 1
+  }
+  value
+}
+
+/// Inspects request headers for Client Hints and data-saving directives.
+export fn inspectClientNetwork(headers: &Array[(Str, Str)]) -> NetworkProfile {
+  var saveData = false
+  var ectType = ""
+  var roundTrip = 0
+
+  for pair in headers {
+    let key = pair[0].toLower()
+    let val = pair[1].trim().toLower()
+
+    if key == "save-data" && val == "on" {
+      saveData = true
+    } else {
+      if key == "ect" {
+        ectType = val
+      } else {
+        if key == "rtt" {
+          roundTrip = parseDecimal(val)
+        }
+      }
+    }
+  }
+
+  if saveData {
+    SaveDataActive
+  } else {
+    if ectType == "2g" || ectType == "slow-2g" || ectType == "3g" {
+      ConstrainedCellular(ectType)
+    } else {
+      if roundTrip > 300 {
+        ConstrainedCellular("high-latency")
+      } else {
+        FastBroadband
+      }
+    }
+  }
+}
+
+/// Enforces that an early flush payload fits strictly within the TCP initial congestion window (initcwnd).
+///
+/// Standard OS kernel `initcwnd` is 10 segments (~14,600 bytes). Staying below `maxBytes`
+/// (default 14,000 bytes) ensures delivery to the client NIC in a single round-trip (1-RTT).
+export fn enforceInitcwndBudget(payload: &Bytes, maxBytes: Int) -> Result[Bytes, Str] {
+  let len = payload.length()
+  if len > maxBytes {
+    Err("payload length " + show(len) + "B exceeds 1-RTT initcwnd budget " + show(maxBytes) + "B")
+  } else {
+    Ok(*payload)
+  }
+}
+
+/// Constructs RFC 5861 `stale-while-revalidate` Cache-Control directives and optional cache tags.
+export fn swrHeaders(
+  maxAgeSeconds: Int,
+  swrSeconds: Int,
+  tags: &Array[Str]
+) -> Array[(Str, Str)] {
+  let cc = "public, max-age=" + show(maxAgeSeconds) + ", stale-while-revalidate=" + show(swrSeconds)
+  var headers = [("Cache-Control", cc)]
+
+  if tags.length() > 0 {
+    var tagList = ""
+    var first = true
+    for tag in tags {
+      if first {
+        tagList = tag
+        first = false
+      } else {
+        tagList = tagList + "," + tag
+      }
+    }
+    headers = headers.push(("Cache-Tags", tagList))
+  }
+
+  headers
+}
+
+/// Selects lightweight minimal markup on poor connections and full markup on broadband.
+export fn selectAdaptivePayload(
+  profile: &NetworkProfile,
+  full: &Bytes,
+  minimal: &Bytes
+) -> Bytes {
+  match profile {
+    case FastBroadband => *full
+    case ConstrainedCellular(_) => *minimal
+    case SaveDataActive => *minimal
+  }
+}

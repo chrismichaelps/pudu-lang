@@ -6,6 +6,12 @@ tags: [moc, module, stdlib]
 # Standard Library Module Map
 
 - [[Std Html SSR]] — reusable static render plans, typed slots and output budgets.
+- [[Std Html Buffer]] — hardware-aware unboxed byte templates, memcpy rendering, and MSS coalescing.
+- [[Std Html Stream]] — progressive streaming document shells and out-of-order Suspense boundaries.
+- [[Std Http Server Stream]] — chunked HTTP/1.1 transport over raw sockets with early flush.
+- [[Std Http Server Resilience]] — network-aware adaptive delivery, 2G/Save-Data profiles, and 14KB initcwnd budget.
+- [[Std Http Server Security]] — defense-in-depth security headers, CSP nonces, and constant-time token verification.
+- [[Std Ui Island]] — isolated island elements, client micro-runtime, and zero-JS form fallback.
 
 - [[Std Html Compose]] — fluent content composition with reusable view functions.
 

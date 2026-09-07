@@ -1,0 +1,59 @@
+module Std.Ui.Island
+
+import Std.Html as Html
+
+/// Wraps a server-rendered component in an isolated progressive island element.
+export fn island(name: Str, propsJson: Str, fallback: Html.Html) -> Html.Html {
+  Html.element(
+    "pudu-island",
+      &[("data-name", name), ("data-props", propsJson)],
+      &[fallback]
+  )
+}
+
+/// Builds an accessible HTML form with automatic CSRF token protection.
+///
+/// Submits natively via standard HTTP POST if scripting is unavailable, or progressively
+/// enhances via client fetch when the micro-runtime is mounted.
+export fn serverActionForm(
+  actionUrl: Str,
+  csrfToken: Str,
+  fields: &Array[Html.Html]
+) -> Html.Html {
+  let csrfInput = Html.element(
+    "input",
+      &[("type", "hidden"), ("name", "_csrf"), ("value", csrfToken)],
+      &[]
+  )
+  var children = [csrfInput]
+  for field in fields {
+    children = children.push(field)
+  }
+
+  Html.element(
+    "form",
+      &[("method", "POST"), ("action", actionUrl)],
+      &children
+  )
+}
+
+/// Generates the self-contained micro-runtime (< 1.5 KB) authorized by the CSP nonce.
+export fn microRuntime(nonce: Str) -> Html.Html {
+  let scriptBody = "(function()\{" +
+  "document.addEventListener('submit',function(e)\{" +
+  "var f=e.target;if(f.tagName==='FORM'&&!f.dataset.native)\{" +
+  "e.preventDefault();" +
+  "var d=new FormData(f);" +
+  "fetch(f.action,\{method:'POST',body:d,headers:\{'X-Pudu-Action':'1'\}\})" +
+  ".then(function(r)\{if(r.redirected)\{window.location.href=r.url;\}else\{return r.text();\}\})" +
+  ".then(function(h)\{if(h)\{document.body.innerHTML=h;\}\});" +
+  "\}" +
+  "\});" +
+  "\})();"
+
+  Html.element(
+    "script",
+      &[("nonce", nonce)],
+      &[Html.trusted(scriptBody)]
+  )
+}

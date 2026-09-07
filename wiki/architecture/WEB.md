@@ -74,7 +74,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Can the language run in the browser? | **Absent** | The evaluator walks a tree; there is no code generation backend. This is a compiler project and a language decision, not a library one. Nothing here approximates it. |
 | Does a page work without scripting? | **Ready** | A rendered page is markup and forms. Nothing in [[Std Html]] requires a script to display or to submit. |
 | Is the markup crawlable? | **Ready** | It is markup, present in the first response. |
-| Can a response be streamed as it is produced? | **Absent** | Rendering produces a complete value before anything is written. Work not done. |
+| Can a response be streamed as it is produced? | **Ready** | [[Std Http Server Stream]] and [[Std Html Stream]]: HTTP/1.1 chunked transport over raw sockets with early flush of `<head>` and out-of-order Suspense streaming. |
 | Can it call another service? | **Partial** | [[Std Http Client]]. Verified transport, a whole-chain deadline, bounded redirects and response size, transfer decoding, trusted-network refusal, and cross-origin credential stripping are covered locally and against public HTTP/HTTPS/JSON endpoints. Explicit cancellation and connection reuse are absent. |
 | Client-side routing? | **Absent** | Follows the browser-execution row. |
 

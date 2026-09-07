@@ -40,6 +40,7 @@ testRuntimeEvaluation = do
   calendars <- runEntry "test-fixtures/stdlib/UsesTimeFormat.pudu"
   measurements <- runEntry "test-fixtures/stdlib/UsesBench.pudu"
   threads <- runEntry "test-fixtures/stdlib/UsesConcurrent.pudu"
+  enterpriseSsr <- runEntry "test-fixtures/stdlib/UsesEnterpriseSsr.pudu"
   callbacks <- runEntry "test-fixtures/stdlib/UsesCallbacks.pudu"
   scoped2 <- runEntry "test-fixtures/stdlib/UsesVariantScope.pudu"
   numbers <- runEntry "test-fixtures/stdlib/UsesNumberText.pudu"
@@ -95,6 +96,9 @@ testRuntimeEvaluation = do
     , counterexample
         "threads share a channel, a lock, and a cell without losing a write"
         (threads === Just "32")
+    , counterexample
+        "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
+        (enterpriseSsr === Just "23")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having

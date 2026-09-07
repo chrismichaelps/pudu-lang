@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Enterprise-grade SSR application framework with hardware integration
+
+Engineered low-level hardware-conscious streaming and resilience modules:
+- [[Std Html Buffer]]: Unboxed contiguous byte templates, zero-copy slot rendering via `Buffer.copy`, bitwise chunk hex headers, and TCP MSS coalescing (~1460 bytes).
+- [[Std Http Server Stream]]: HTTP/1.1 chunked transport over raw sockets (`Net.sendWithin`) with early flush of `<head>` shells.
+- [[Std Html Stream]]: Streaming document shells, `<head>` early flush, and out-of-order Suspense boundaries with inline DOM resolution scripts.
+- [[Std Http Server Resilience]]: Network profile inspection (`Save-Data`, `ECT: 2g/3g`), 1-RTT 14KB `initcwnd` budget enforcement, and SWR caching headers.
+- [[Std Http Server Security]]: Strict security headers, CSP nonces, origin validation, and constant-time token comparison.
+- [[Std Ui Island]]: `<pudu-island>` container elements, server action forms with CSRF, and ultra-lightweight client micro-runtime (< 1.5 KB).
+- Added `EnterpriseSsr.pudu` reference example and `UsesEnterpriseSsr.pudu` integration test suite registered in `RuntimeSpec.hs`. Updated [[WEB]] streaming verdict to Ready.
+
 ## 2026-09-06 — Bounded parallel mapping
 
 [[Std Concurrent]] adds mapBounded and mapResultBounded with fixed workers, input order

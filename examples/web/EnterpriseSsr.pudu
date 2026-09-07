@@ -1,0 +1,104 @@
+module EnterpriseSsr
+
+import Std.Bytes as ByteSeq
+import Std.Html.Buffer as HtmlBuffer
+import Std.Html as Html
+import Std.Html.Stream as HtmlStream
+import Std.Http.Server.Resilience as Resilience
+import Std.Http.Server.Security as Security
+import Std.Ui.Island as Island
+
+/// Builds the early flush document head strictly within the 1-RTT 14KB TCP initcwnd budget.
+export fn renderEarlyHead(title: Str, nonce: Str) -> Result[Bytes, Str] {
+  let criticalCss = ":root\{font-family:sans-serif;color:#111;background:#fff;\}body\{margin:0;padding:2rem;\}header\{border-bottom:1px solid #ddd;margin-bottom:2rem;\}badge\{background:#0066cc;color:#fff;\}"
+  let meta = [("description", "Enterprise SSR Streaming with Low-Level Buffer Integration")]
+  let preloads = ["/assets/main.css"]
+
+  let head = HtmlStream.documentHead(title, &meta, criticalCss, &preloads)
+  // Enforce 14 KB budget (14,000 bytes <= 14,600 bytes initcwnd)
+  Resilience.enforceInitcwndBudget(&head, 14000)
+}
+
+/// Renders an interactive product counter island with server action form and zero-JS fallback.
+export fn renderProductIsland(csrfToken: Str, count: Int) -> Html.Html {
+  let staticView = Html.tag("div", &[
+      Html.tag("h3", &[Html.text("Active Inventory")]),
+      Html.tag("p", &[Html.text("Current stock level: " + show(count))])
+    ])
+
+  let countInput = Html.element("input", &[("type", "number"), ("name", "quantity"), ("value", "1")], &[])
+  let submitBtn = Html.element("button", &[("type", "submit")], &[Html.text("Restock")])
+  let form = Island.serverActionForm("/api/inventory/restock", csrfToken, &[countInput, submitBtn])
+
+  let islandContent = Html.tag("div", &[staticView, form])
+  Island.island("inventory-widget", "\{\"stock\":" + show(count) + "\}", islandContent)
+}
+
+/// Assembles complete streaming chunks with out-of-order Suspense and MSS coalescing.
+export fn assemblePageStream(
+  reqHeaders: &Array[(Str, Str)],
+  csrfToken: Str,
+  nonce: Str
+) -> Result[Array[Bytes], Str] {
+  // 1. Inspect network profile (e.g. 2G, 3G, Save-Data)
+  let _profile = Resilience.inspectClientNetwork(reqHeaders)
+
+  // 2. Early flush head chunk
+  let headBytes = renderEarlyHead("Enterprise SSR Portal", nonce) ?
+
+  // 3. Main body layout
+  let headerHtml = "<header><h1>Enterprise SSR Portal</h1><span class=\"badge\">Hardware-Aware Streaming</span></header>".toBytes()
+
+  // 4. Suspense boundary for deferred slow data
+  let fallbackHtml = "<div class=\"skeleton\"><p>Loading live telemetry...</p></div>".toBytes()
+  let resolvedHtml = "<div class=\"telemetry\"><h3>Real-time Metrics</h3><p>Throughput: 14,200 req/sec | LCP: 210ms | MSS Coalesced</p></div>".toBytes()
+  let suspensePair = HtmlStream.renderSuspended("telemetry", &fallbackHtml, &resolvedHtml)
+  let suspenseFallback = suspensePair[0]
+  let suspenseResolution = suspensePair[1]
+
+  // 5. Interactive island
+  let islandWidget = renderProductIsland(csrfToken, 42)
+  let islandHtml = Html.render(&islandWidget).toBytes()
+
+  // 6. Micro-runtime script authorized by CSP nonce
+  let runtimeScript = Island.microRuntime(nonce)
+  let runtimeHtml = Html.render(&runtimeScript).toBytes()
+
+  // 7. Closing document tag
+  let tailBytes = HtmlStream.documentTail()
+
+  // 8. Coalesce body fragments to TCP MSS (1460 bytes)
+  let bodyChunks = [
+    headerHtml,
+    suspenseFallback,
+    islandHtml,
+    suspenseResolution,
+    runtimeHtml,
+    tailBytes
+  ]
+  let coalescedBody = HtmlBuffer.coalesceToMss(&bodyChunks, 1460)
+
+  // Early flush head is kept separate for 1-RTT delivery, followed by coalesced body chunks
+  var fullStream = [headBytes]
+  for chunk in coalescedBody {
+    fullStream = fullStream.push(chunk)
+  }
+
+  Ok(fullStream)
+}
+
+export fn main() -> () {
+  let headers = [("Save-Data", "on"), ("ECT", "3g")]
+  let nonce = Security.generateNonce(12345)
+  let csrfToken = "sec-csrf-token-9988"
+
+  let stream = assemblePageStream(&headers, csrfToken, nonce)
+  match stream {
+    case Ok(chunks) => {
+      let _printed = print("Generated " + show(chunks.length()) + " streaming chunks successfully.\n")
+    }
+    case Err(err) => {
+      let _printed = print("Failed to assemble stream: " + err + "\n")
+    }
+  }
+}
