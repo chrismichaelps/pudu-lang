@@ -47,6 +47,7 @@ testProtocolEvaluation = do
   byteOrder <- runEntry "test-fixtures/stdlib/UsesByteOrder.pudu"
   sipHash <- runEntry "test-fixtures/stdlib/UsesSipHash.pudu"
   intervalTree <- runEntry "test-fixtures/stdlib/UsesIntervalTree.pudu"
+  tarArchive <- runEntry "test-fixtures/stdlib/UsesArchiveTar.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -196,6 +197,15 @@ testProtocolEvaluation = do
     , counterexample
         "IntervalTree augmented 1D interval tree with O(log n + k) stabbing queries"
         (intervalTree === Just "10")
+    {-| A whole archive written and read back, because the two halves are only
+        correct together: a header field written at the wrong offset reads back
+        at the same wrong offset, and a round trip through one implementation
+        agrees with itself. What is checked against the format rather than
+        against the writer is the block size, the two-block ending, and the
+        padding that a body shorter or longer than a block must get. -}
+    , counterexample
+        "a USTAR archive round-trips entries, sizes, directories, and padding"
+        (tarArchive === Just "13")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
