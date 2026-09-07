@@ -3,6 +3,7 @@ module Std.Mail.Smtp
 import Std.Bytes as ByteSeq
 import Std.Mail as Mail
 import Std.Net as Net
+import Std.Tls as Tls
 import Std.Option as Option
 import Std.Result as Result
 import Std.Text.Parse as Parse
@@ -12,6 +13,10 @@ export type SmtpAuth
   = Login(Str, Str)
   | Plain(Str, Str)
 
+export type SmtpSecurity = Plaintext | ImplicitTls | StartTlsRequired
+
+type Transport = Tcp(Net.Connection) | Secure(Tls.Secured)
+
 /// Configuration parameters for connecting to an SMTP submission or relay host.
 export type SmtpClient = {
   host: Str,
@@ -19,6 +24,7 @@ export type SmtpClient = {
   domain: Str,
   credentials: Option[SmtpAuth],
   timeoutMs: Int,
+  security: SmtpSecurity,
 }
 
 /// A parsed RFC 5321 server reply containing a status code and message lines.
@@ -46,6 +52,7 @@ export fn client(host: Str, port: Int) -> SmtpClient {
     domain: "localhost",
     credentials: None,
     timeoutMs: 10000,
+    security: if port == 465 { ImplicitTls } else { StartTlsRequired },
   }
 }
 
@@ -57,6 +64,7 @@ export fn withDomain(c: &SmtpClient, domain: Str) -> SmtpClient {
     domain: domain,
     credentials: c.credentials,
     timeoutMs: c.timeoutMs,
+    security: c.security,
   }
 }
 
@@ -68,6 +76,7 @@ export fn withAuth(c: &SmtpClient, user: Str, pass: Str) -> SmtpClient {
     domain: c.domain,
     credentials: Some(Login(user, pass)),
     timeoutMs: c.timeoutMs,
+    security: c.security,
   }
 }
 
@@ -79,6 +88,7 @@ export fn withPlainAuth(c: &SmtpClient, user: Str, pass: Str) -> SmtpClient {
     domain: c.domain,
     credentials: Some(Plain(user, pass)),
     timeoutMs: c.timeoutMs,
+    security: c.security,
   }
 }
 
@@ -90,6 +100,7 @@ export fn withTimeout(c: &SmtpClient, timeoutMs: Int) -> SmtpClient {
     domain: c.domain,
     credentials: c.credentials,
     timeoutMs: timeoutMs,
+    security: c.security,
   }
 }
 
@@ -180,39 +191,101 @@ export fn deliver(c: &SmtpClient, msg: &Mail.Message) -> Result[Int, SmtpError] 
   for character in c.domain.chars() {
     if character.code() <= 32 || character.code() == 127 { return Err(ConnectionFailed("invalid EHLO domain")) }
   }
-  if let Some(_) = c.credentials { return Err(ConnectionFailed("credentials require a TLS transport; plaintext authentication is refused")) }
-
-  let recipients = Mail.envelope(msg)
-  if recipients.isEmpty() {
-    return Err(EmptyEnvelope)
+  if c.timeoutMs > 86400000 { return Err(ConnectionFailed("timeout exceeds one day")) }
+  if c.domain.toBytes().length() > 255 { return Err(ConnectionFailed("EHLO domain is too long")) }
+  if c.security == Plaintext && Option.isSome(&c.credentials) {
+    return Err(ConnectionFailed("plaintext authentication is refused"))
   }
-
-  let conn = match Net.connectWithin(c.host, c.port, c.timeoutMs) {
-    case Ok(connection) => connection
-    case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
+  if let Some(auth) = c.credentials {
+    let pair = match auth {
+      case Login(user, pass) => (user, pass)
+      case Plain(user, pass) => (user, pass)
+    }
+    if pair[0].contains("\0") || pair[1].contains("\0") {
+      return Err(AuthFailed(0, "credentials contain a NUL separator"))
+    }
+    if pair[0].toBytes().length() + pair[1].toBytes().length() > 360 {
+      return Err(AuthFailed(0, "credentials exceed the supported AUTH line budget"))
+    }
   }
-
-  let outcome = deliverConnected(c, msg, &conn)
-  let closed = Net.close(&conn)
+  if Mail.envelope(msg).isEmpty() { return Err(EmptyEnvelope) }
+  let opened = openTransport(c) ?
+  let negotiated = negotiate(c, &opened)
+  if let Err(problem) = negotiated {
+    let _closed = closeTransport(&opened, c.timeoutMs)
+    return Err(problem)
+  }
+  let pair = negotiated ?
+  let conn = pair[0]
+  let outcome = deliverConnected(c, msg, &conn, &pair[1])
+  let closed = closeTransport(&conn, c.timeoutMs)
   if let Err(problem) = outcome { return Err(problem) }
-  if let Err(problem) = closed { return Err(ConnectionFailed(explainNet(&problem))) }
+  closed ?
   outcome
 }
 
-fn deliverConnected(c: &SmtpClient, msg: &Mail.Message, conn: &Net.Connection) -> Result[Int, SmtpError] {
-  let recipients = Mail.envelope(msg)
+export fn withSecurity(c: &SmtpClient, security: SmtpSecurity) -> SmtpClient {
+  SmtpClient{..*c, security: security}
+}
+
+fn openTransport(c: &SmtpClient) -> Result[Transport, SmtpError] {
+  if c.security == ImplicitTls {
+    return Result.map(Result.mapErr(Tls.connectWithin(c.host, c.port, c.timeoutMs), tlsError),
+      fn(connection: Tls.Secured) -> Transport { Secure(connection) })
+  }
+  Result.map(Result.mapErr(Net.connectWithin(c.host, c.port, c.timeoutMs), netError),
+    fn(connection: Net.Connection) -> Transport { Tcp(connection) })
+}
+
+fn negotiate(c: &SmtpClient, conn: &Transport) -> Result[(Transport, SmtpReply), SmtpError] {
   let greeting = readReply(conn, c.timeoutMs) ?
-  if greeting.code != 220 {
-    return Err(HandshakeFailed(greeting.code, summaryReply(&greeting)))
+  if greeting.code != 220 { return Err(HandshakeFailed(greeting.code, summaryReply(&greeting))) }
+  let hello = execCommand(conn, ehloCommand(c.domain), c.timeoutMs) ?
+  if hello.code != 250 { return Err(CommandFailed("EHLO", hello.code, summaryReply(&hello))) }
+  if c.security != StartTlsRequired { return Ok((*conn, hello)) }
+  if !advertises(&hello, "STARTTLS") { return Err(HandshakeFailed(0, "server does not advertise required STARTTLS")) }
+  let ready = execCommand(conn, "STARTTLS\r\n", c.timeoutMs) ?
+  if ready.code != 220 { return Err(HandshakeFailed(ready.code, "server refused required STARTTLS")) }
+  let upgraded = match conn {
+    case Tcp(plain) => Result.mapErr(Tls.upgradeWithin(&plain, c.host, c.timeoutMs), tlsError) ?
+    case Secure(_) => { return Err(ConnectionFailed("connection is already secured")) }
   }
-
-  let ehloReply = execCommand(conn, ehloCommand(c.domain), c.timeoutMs) ?
-  if ehloReply.code != 250 {
-    return Err(CommandFailed("EHLO", ehloReply.code, summaryReply(&ehloReply)))
+  let secured = Secure(upgraded)
+  let refreshed = execCommand(&secured, ehloCommand(c.domain), c.timeoutMs)
+  if let Ok(reply) = refreshed {
+    if reply.code == 250 { return Ok((secured, reply)) }
   }
+  let _closed = closeTransport(&secured, c.timeoutMs)
+  Err(HandshakeFailed(0, "EHLO failed after TLS upgrade"))
+}
 
+fn advertises(reply: &SmtpReply, capability: Str) -> Bool {
+  for line in reply.lines.slice(1, reply.lines.length()) {
+    let tokens = line.toUpper().split(" ")
+    if !tokens.isEmpty() && tokens[0] == capability { return true }
+  }
+  false
+}
+
+fn supportsAuth(reply: &SmtpReply, auth: &SmtpAuth) -> Bool {
+  let wanted = match auth {
+    case Login(_, _) => "LOGIN"
+    case Plain(_, _) => "PLAIN"
+  }
+  for line in reply.lines.slice(1, reply.lines.length()) {
+    let tokens = line.toUpper().split(" ")
+    if !tokens.isEmpty() && tokens[0] == "AUTH" {
+      for token in tokens.slice(1, tokens.length()) { if token == wanted { return true } }
+    }
+  }
+  false
+}
+
+fn deliverConnected(c: &SmtpClient, msg: &Mail.Message, conn: &Transport, capabilities: &SmtpReply) -> Result[Int, SmtpError] {
+  let recipients = Mail.envelope(msg)
   match c.credentials {
     case Some(auth) => {
+      if !supportsAuth(capabilities, &auth) { return Err(AuthFailed(0, "authentication mechanism is not advertised")) }
       let _authOk = executeAuth(conn, &auth, c.timeoutMs) ?
     }
     case None => {}
@@ -248,7 +321,7 @@ fn deliverConnected(c: &SmtpClient, msg: &Mail.Message, conn: &Net.Connection) -
   Ok(accepted)
 }
 
-fn executeAuth(conn: &Net.Connection, auth: &SmtpAuth, timeoutMs: Int) -> Result[Bool, SmtpError] {
+fn executeAuth(conn: &Transport, auth: &SmtpAuth, timeoutMs: Int) -> Result[Bool, SmtpError] {
   match auth {
     case Login(user, pass) => {
       let authStart = execCommand(conn, "AUTH LOGIN\r\n", timeoutMs) ?
@@ -277,15 +350,12 @@ fn executeAuth(conn: &Net.Connection, auth: &SmtpAuth, timeoutMs: Int) -> Result
   }
 }
 
-fn execCommand(conn: &Net.Connection, cmd: Str, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
-  match Net.sendTextWithin(conn, cmd, timeoutMs) {
-    case Ok(_) => {}
-    case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
-  }
+fn execCommand(conn: &Transport, cmd: Str, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
+  sendText(conn, cmd, timeoutMs) ?
   readReply(conn, timeoutMs)
 }
 
-fn readReply(conn: &Net.Connection, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
+fn readReply(conn: &Transport, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
   let expires = clock() + timeoutMs
   var buffer = ByteSeq.empty()
   loop {
@@ -293,15 +363,16 @@ fn readReply(conn: &Net.Connection, timeoutMs: Int) -> Result[SmtpReply, SmtpErr
     if remaining <= 0 { return Err(TimedOut) }
     let capacity = 65536 - buffer.length()
     if capacity <= 0 { return Err(HandshakeFailed(0, "reply exceeds 65536 bytes")) }
-    let maybeChunk = match Net.receiveWithin(conn, capacity, remaining) {
+    let maybeChunk = match receive(conn, capacity, remaining) {
       case Ok(c) => c
-      case Err(Net.NetOperationTimedOut) => { return Err(TimedOut) }
-      case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
+      case Err(TimedOut) => { return Err(TimedOut) }
+      case Err(err) => { return Err(err) }
     }
     let chunk = match maybeChunk {
       case Some(bytes) => bytes
       case None => { return Err(ConnectionFailed("connection closed by mail server")) }
     }
+    if chunk.length() > capacity { return Err(HandshakeFailed(0, "reply exceeds 65536 bytes")) }
     if chunk.isEmpty() { return Err(ConnectionFailed("empty reply read")) }
     buffer = buffer.concat(chunk)
     if buffer.endsWith("\r\n".toBytes()) {
@@ -333,5 +404,40 @@ fn explainNet(err: &Net.NetError) -> Str {
     case Net.NetOperationTimedOut => "operation timed out"
     case Net.NotText => "data is not text"
     case Net.Other(msg) => msg
+  }
+}
+
+fn netError(problem: Net.NetError) -> SmtpError {
+  match problem {
+    case Net.NetOperationTimedOut => TimedOut
+    case _ => ConnectionFailed(explainNet(&problem))
+  }
+}
+
+fn tlsError(problem: Tls.TlsError) -> SmtpError {
+  match problem {
+    case Tls.TlsOperationTimedOut => TimedOut
+    case _ => ConnectionFailed(show(problem))
+  }
+}
+
+fn sendText(conn: &Transport, payload: Str, millis: Int) -> Result[(), SmtpError] {
+  match conn {
+    case Tcp(plain) => Result.mapErr(Net.sendTextWithin(&plain, payload, millis), netError)
+    case Secure(secured) => Result.mapErr(Tls.sendTextWithin(&secured, payload, millis), tlsError)
+  }
+}
+
+fn receive(conn: &Transport, count: Int, millis: Int) -> Result[Option[Bytes], SmtpError] {
+  match conn {
+    case Tcp(plain) => Result.mapErr(Net.receiveWithin(&plain, count, millis), netError)
+    case Secure(secured) => Result.mapErr(Tls.receiveWithin(&secured, count, millis), tlsError)
+  }
+}
+
+fn closeTransport(conn: &Transport, millis: Int) -> Result[(), SmtpError] {
+  match conn {
+    case Tcp(plain) => Result.mapErr(Net.close(&plain), netError)
+    case Secure(secured) => Result.mapErr(Tls.closeWithin(&secured, millis), tlsError)
   }
 }

@@ -46,3 +46,10 @@ Timed send/receive invalidates the connection because an interrupted record cann
   socket while attempting a goodbye on a handshake that never completed.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Tls]] · [[Std Net]]
+
+
+## TLS and binary compression implementation contract
+
+upgradeWithin(connection: &Net.Connection, host: Str, millis: Int) -> Result[Secured,TlsError] consumes the plain token even on failure. Call only at a protocol-agreed upgrade boundary with no concurrent readers/writers.
+
+Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.

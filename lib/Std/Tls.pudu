@@ -2,6 +2,7 @@ module Std.Tls
 
 import Std.Bytes as ByteSeq
 import Std.Option as Option
+import Std.Net as Net
 import Std.Result as Result
 
 /// Why a secured connection did not do what it was asked.
@@ -266,4 +267,11 @@ export fn withConnection[T](
       if let Err(reason) = closed { Err(reason) } else { outcome }
     }
   }
+}
+
+/// Consume a plain connection at an agreed TLS boundary, verifying the host.
+/// The plain token is retired on both success and failure; do not use it again.
+export fn upgradeWithin(connection: &Net.Connection, host: Str, millis: Int) -> Result[Secured, TlsError] {
+  Result.map(Result.mapErr(tlsUpgradeWithin(connection.token, host, millis), causeOf),
+    fn(token: Int) -> Secured { Secured{token: token} })
 }
