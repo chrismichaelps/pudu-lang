@@ -1,0 +1,218 @@
+module UsesRegex
+
+import Std.Option as Option
+import Std.Regex as Regex
+import Std.Regex {StepLimit, UnbalancedParen}
+
+fn compiled(pattern: Str) -> Regex.Regex {
+  match Regex.compile(pattern) {
+    case Ok(built) => built
+    case Err(_) => Regex.unmatchable()
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. A literal matches where it appears
+  let literal = compiled("cat")
+  if Regex.isMatch(&literal, "the cat sat") && !Regex.isMatch(&literal, "the dog sat") {
+    held = held + 1
+  }
+
+  // 2. A match reports where it is, in characters
+  match Regex.find(&literal, "the cat sat") {
+    case Some(found) => {
+      if found.start == 4 && found.end == 7 && found.text == "cat" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 3. Anchors hold the pattern to the ends
+  let anchored = compiled("^cat$")
+  if Regex.isMatch(&anchored, "cat") && !Regex.isMatch(&anchored, "a cat") {
+    held = held + 1
+  }
+
+  // 4. A shorthand class matches what it stands for
+  let digits = compiled("\\d+")
+  match Regex.find(&digits, "order 1234 shipped") {
+    case Some(found) => {
+      if found.text == "1234" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 5. A set matches any of its members, and a negated set the rest
+  let vowels = compiled("[aeiou]")
+  let notVowels = compiled("[^aeiou]")
+  if Regex.isMatch(&vowels, "sky is blue") && Regex.isMatch(&notVowels, "aeiobx") {
+    held = held + 1
+  }
+
+  // 6. A range inside a set
+  let hex = compiled("^[0-9a-f]+$")
+  if Regex.isMatch(&hex, "beef42") && !Regex.isMatch(&hex, "beefzz") {
+    held = held + 1
+  }
+
+  // 7. Alternation tries branches in the order written
+  let named = compiled("cat|dog|bird")
+  match Regex.find(&named, "a dog here") {
+    case Some(found) => {
+      if found.text == "dog" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 8. Groups capture what they matched
+  let dated = compiled("(\\d\{4\})-(\\d\{2\})-(\\d\{2\})")
+  match Regex.find(&dated, "on 2026-09-07 at noon") {
+    case Some(found) => {
+      let year = Option.unwrapOr(Regex.capture(&found, 1), "")
+      let month = Option.unwrapOr(Regex.capture(&found, 2), "")
+      let day = Option.unwrapOr(Regex.capture(&found, 3), "")
+      if year == "2026" && month == "09" && day == "07" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 9. A group that did not take part captures nothing
+  let optional = compiled("a(b)?c")
+  match Regex.find(&optional, "ac") {
+    case Some(found) => {
+      match Regex.capture(&found, 1) {
+        case Some(_) => {}
+        case None => { held = held + 1 }
+      }
+    }
+    case None => {}
+  }
+
+  // 10. Greedy takes the longest, lazy the shortest
+  let greedy = compiled("<.+>")
+  let lazy = compiled("<.+?>")
+  let markup = "<a><b>"
+  let greedyText = match Regex.find(&greedy, markup) {
+    case Some(found) => found.text
+    case None => ""
+  }
+  let lazyText = match Regex.find(&lazy, markup) {
+    case Some(found) => found.text
+    case None => ""
+  }
+  if greedyText == "<a><b>" && lazyText == "<a>" {
+    held = held + 1
+  }
+
+  // 11. A bounded repetition counts
+  let three = compiled("^a\{3\}$")
+  if Regex.isMatch(&three, "aaa") && !Regex.isMatch(&three, "aa") && !Regex.isMatch(&three, "aaaa") {
+    held = held + 1
+  }
+
+  // 12. An open-ended bound
+  let twoOrMore = compiled("^a\{2,\}$")
+  if Regex.isMatch(&twoOrMore, "aaaa") && !Regex.isMatch(&twoOrMore, "a") {
+    held = held + 1
+  }
+
+  // 13. Every match is found, left to right
+  let words = compiled("[a-z]+")
+  let all = Regex.findAll(&words, "one two three")
+  if all.length() == 3 && all[1].text == "two" && all[1].start == 4 {
+    held = held + 1
+  }
+
+  // 14. Replacement puts fixed text in each match's place
+  let spaces = compiled("\\s+")
+  if Regex.replaceAll(&spaces, "a  b   c", "-") == "a-b-c" {
+    held = held + 1
+  }
+
+  // 15. Only the first, when only the first was asked for
+  if Regex.replaceFirst(&spaces, "a  b   c", "-") == "a-b   c" {
+    held = held + 1
+  }
+
+  // 16. Splitting cuts at every match and keeps the pieces
+  let comma = compiled(",")
+  let pieces = Regex.split(&comma, "a,b,c")
+  if pieces.length() == 3 && pieces[2] == "c" {
+    held = held + 1
+  }
+
+  // 17. A word boundary is where a word starts or stops
+  let wholeWord = compiled("\\bcat\\b")
+  if Regex.isMatch(&wholeWord, "one cat here") && !Regex.isMatch(&wholeWord, "concatenate") {
+    held = held + 1
+  }
+
+  // 18. Escaped text matches itself, metacharacters and all
+  let quoted = compiled(Regex.escape("a.b*c"))
+  if Regex.isMatch(&quoted, "a.b*c") && !Regex.isMatch(&quoted, "axbxc") {
+    held = held + 1
+  }
+
+  // 19. A pattern that is not one is refused, and says where
+  match Regex.compile("a(b") {
+    case Ok(_) => {}
+    case Err(reason) => {
+      match reason {
+        case UnbalancedParen(_) => { held = held + 1 }
+        case _ => {}
+      }
+    }
+  }
+
+  // 20. A repetition with nothing before it is refused
+  match Regex.compile("*a") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 21. A search that would take exponential time gives up rather than hanging
+  let pathological = compiled("(a+)+$")
+  match Regex.search(&pathological, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaab") {
+    case Ok(_) => {}
+    case Err(reason) => {
+      match reason {
+        case StepLimit => { held = held + 1 }
+        case _ => {}
+      }
+    }
+  }
+
+  // 22. A non-capturing group groups without capturing
+  let grouped = compiled("^(?:ab)+$")
+  if Regex.isMatch(&grouped, "ababab") && !Regex.isMatch(&grouped, "aba") {
+    held = held + 1
+  }
+
+  // 23. The whole subject, not merely part of it
+  let letters = compiled("[a-z]+")
+  if Regex.isExact(&letters, "abc") && !Regex.isExact(&letters, "abc1") {
+    held = held + 1
+  }
+
+  // 24. A replacement built from what was captured
+  let pair = compiled("(\\w+)@(\\w+)")
+  let flipped = Regex.replaceAllWith(&pair, "one@two", fn(found: Regex.Match) -> Str {
+      Option.unwrapOr(Regex.capture(&found, 2), "")
+        + "@"
+        + Option.unwrapOr(Regex.capture(&found, 1), "")
+    })
+  if flipped == "two@one" {
+    held = held + 1
+  }
+
+  held
+}

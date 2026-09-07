@@ -48,6 +48,7 @@ testProtocolEvaluation = do
   sipHash <- runEntry "test-fixtures/stdlib/UsesSipHash.pudu"
   intervalTree <- runEntry "test-fixtures/stdlib/UsesIntervalTree.pudu"
   tarArchive <- runEntry "test-fixtures/stdlib/UsesArchiveTar.pudu"
+  regexEngine <- runEntry "test-fixtures/stdlib/UsesRegex.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -206,6 +207,15 @@ testProtocolEvaluation = do
     , counterexample
         "a USTAR archive round-trips entries, sizes, directories, and padding"
         (tarArchive === Just "13")
+    {-| Each piece of pattern syntax against a subject that distinguishes it
+        from the piece next to it: greedy against lazy on the same subject, a
+        group that took part against one that did not, a bound that is met
+        against one that is exceeded. The last case is the one a server
+        depends on — a pattern whose search would take exponential time gives
+        up and says so rather than running. -}
+    , counterexample
+        "patterns compile, match, capture, replace, and refuse to run away"
+        (regexEngine === Just "24")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

@@ -1,0 +1,937 @@
+module Std.Regex
+
+import Std.Char as Char
+import Std.Text as Text
+
+/// One step of a compiled pattern.
+///
+/// A pattern is compiled to a flat program rather than walked as a tree,
+/// because a tree walk needs the call stack to remember where to resume and a
+/// deeply nested pattern then decides how much stack a match costs. A program
+/// carries its own stack, so the cost of a match is a number this module
+/// chooses rather than one the pattern chooses.
+///
+/// Jumps are relative to the instruction holding them. That is what lets a
+/// piece of a pattern be compiled on its own and then placed anywhere, which
+/// is how the compiler below is written without a patching pass.
+type Inst
+  = MatchChar(Char)
+  | MatchAny
+  | MatchClass(Int)
+  | Split(Int, Int)
+  | Jump(Int)
+  | Save(Int)
+  | AtStart
+  | AtEnd
+  | AtBoundary(Bool)
+  | Halt
+
+/// A set of characters, as the ranges it admits.
+///
+/// `negated` applies to the whole set, which is what `[^...]` means. A negated
+/// shorthand inside a set — `[\D]` — would need a second negation that applies
+/// to one member, and is refused rather than silently read as its opposite.
+type CharClass = { negated: Bool, ranges: Array[(Int, Int)] }
+
+/// A compiled pattern.
+///
+/// `groups` counts the capturing groups, so a caller knows how many captures a
+/// match can carry without looking at the pattern text again.
+export type Regex = {
+  program: Array[Inst],
+  classes: Array[CharClass],
+  groups: Int,
+  source: Str
+}
+
+/// Where a pattern matched, and what its groups captured.
+///
+/// Positions are character offsets, not byte offsets: a pattern is written
+/// against the characters a reader sees, and answering in bytes would make
+/// every position wrong for any text outside ASCII.
+export type Match = {
+  start: Int,
+  end: Int,
+  text: Str,
+  captures: Array[Option[Str]]
+}
+
+/// Why a pattern could not be compiled, or a search could not finish.
+export type RegexError
+  = UnexpectedEnd
+  | UnbalancedParen(Int)
+  | UnclosedClass(Int)
+  | BadRepeat(Int)
+  | NothingToRepeat(Int)
+  | TrailingBackslash
+  | UnknownEscape(Int)
+  | NegatedShorthandInClass(Int)
+/// The search gave up before deciding. See `stepLimit`.
+  | StepLimit
+
+/// How many instructions one search may run before it gives up.
+///
+/// A backtracking search over a pattern like `(a+)+b` can take time
+/// exponential in the length of the subject, and a pattern is often written by
+/// someone other than whoever runs it — a rule in a configuration file, a
+/// filter typed into a form. Without a bound, that is a way to stop a server
+/// with one line of text.
+///
+/// The bound is on work rather than on time so that the same input decides the
+/// same way on every machine. `search` reports reaching it; `find` and
+/// `isMatch` answer "no match", which is the safe direction for a filter.
+export fn stepLimit() -> Int { 1000000 }
+
+/// The characters a shorthand stands for.
+fn digitRanges() -> Array[(Int, Int)] { [(48, 57)] }
+
+/// The value of a digit already known to be one.
+fn digitValue(value: Char) -> Int {
+  match Char.toDigit(value) {
+    case Some(found) => found
+    case None => 0
+  }
+}
+
+fn wordRanges() -> Array[(Int, Int)] {
+  [(48, 57), (65, 90), (95, 95), (97, 122)]
+}
+
+fn spaceRanges() -> Array[(Int, Int)] {
+  [(9, 13), (32, 32)]
+}
+
+/// The state a compile carries between the pieces of a pattern.
+type Build = { pos: Int, groups: Int, classes: Array[CharClass] }
+
+/// Compile a pattern, or say where it stopped making sense.
+///
+/// The whole pattern is read here rather than at each use, so a pattern used in
+/// a loop is examined once. A caller holding a `Regex` holds something that is
+/// known to be a pattern; nothing below can fail for a reason of syntax.
+///
+/// A pattern written as a Pudu literal meets one rule of the language first:
+/// `{` and `}` open and close an interpolation, so a counted repetition is
+/// written `"a\{3\}"` and a backslash the pattern should see is written `\\`.
+/// A pattern read from a file or a form needs none of that.
+export fn compile(pattern: Str) -> Result[Regex, RegexError] {
+  let chars = pattern.chars()
+  let built = parseAlternation(&chars, Build{pos: 0, groups: 0, classes: []}) ?
+  let body = built[0]
+  let state = built[1]
+  if state.pos < chars.length() {
+    return Err(UnbalancedParen(state.pos))
+  }
+  // Slot 0 and slot 1 hold where the whole match began and ended, so group `n`
+  // is at slots `2n` and `2n + 1` and nothing has to shift when a group is
+  // added.
+  var program: Array[Inst] = [Save(0)]
+  var i = 0
+  while i < body.length() {
+    program = program.push(body[i])
+    i = i + 1
+  }
+  program = program.push(Save(1))
+  program = program.push(Halt)
+  Ok(Regex {
+      program: program,
+      classes: state.classes,
+      groups: state.groups,
+      source: pattern
+    })
+}
+
+/// A pattern that matches nothing.
+///
+/// What a caller falls back to when a pattern would not compile and there is
+/// nothing sensible to match instead. Matching nothing is the safe answer: a
+/// filter that admits everything because its rule was malformed is the failure
+/// worth avoiding.
+export fn unmatchable() -> Regex {
+  Regex{program: [AtStart, AtEnd, MatchAny, Halt], classes: [], groups: 0, source: ""}
+}
+
+/// `a|b|c`, the widest thing a pattern can be.
+fn parseAlternation(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  let firstPair = parseConcat(chars, state) ?
+  var branches = [firstPair[0]]
+  var current = firstPair[1]
+  while current.pos < chars.length() && chars[current.pos] == '|' {
+    let next = parseConcat(chars, Build {
+        pos: current.pos + 1,
+        groups: current.groups,
+        classes: current.classes
+      }) ?
+    branches = branches.push(next[0])
+    current = next[1]
+  }
+  if branches.length() == 1 {
+    return Ok((branches[0], current))
+  }
+  Ok((joinBranches(&branches), current))
+}
+
+/// Branches laid out so each one is tried in the order it was written.
+///
+/// Built from the last branch backwards: every split has to know how far it is
+/// jumping, and that distance is the size of what follows it.
+fn joinBranches(branches: &Array[Array[Inst]]) -> Array[Inst] {
+  var index = branches.length() - 2
+  var tail = branches[branches.length() - 1]
+  while index >= 0 {
+    let head = branches[index]
+    var joined: Array[Inst] = [Split(1, head.length() + 2)]
+    var i = 0
+    while i < head.length() {
+      joined = joined.push(head[i])
+      i = i + 1
+    }
+    joined = joined.push(Jump(tail.length() + 1))
+    var j = 0
+    while j < tail.length() {
+      joined = joined.push(tail[j])
+      j = j + 1
+    }
+    tail = joined
+    index = index - 1
+  }
+  tail
+}
+
+/// A run of repeated pieces, one after another.
+fn parseConcat(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  var emitted: Array[Inst] = []
+  var current = state
+  while current.pos < chars.length() && chars[current.pos] != '|' && chars[current.pos] != ')' {
+    let piece = parseRepeat(chars, current) ?
+    let instructions = piece[0]
+    var i = 0
+    while i < instructions.length() {
+      emitted = emitted.push(instructions[i])
+      i = i + 1
+    }
+    current = piece[1]
+  }
+  Ok((emitted, current))
+}
+
+/// One piece, and whatever repetition was written after it.
+fn parseRepeat(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  let atom = parseAtom(chars, state) ?
+  var body = atom[0]
+  var current = atom[1]
+  if current.pos >= chars.length() {
+    return Ok((body, current))
+  }
+  let marker = chars[current.pos]
+  if marker != '*' && marker != '+' && marker != '?' && marker != '{' {
+    return Ok((body, current))
+  }
+  if body.length() == 0 {
+    return Err(NothingToRepeat(current.pos))
+  }
+  var low = 0
+  var high = -1
+  var after = current.pos + 1
+  if marker == '*' {
+    low = 0
+    high = -1
+  } else if marker == '+' {
+    low = 1
+    high = -1
+  } else if marker == '?' {
+    low = 0
+    high = 1
+  } else {
+    let counted = parseCount(chars, current.pos) ?
+    low = counted[0]
+    high = counted[1]
+    after = counted[2]
+  }
+  // A `?` after the repetition asks for the shortest match rather than the
+  // longest, which is the order the two arms of the split are written in.
+  var greedy = true
+  if after < chars.length() && chars[after] == '?' {
+    greedy = false
+    after = after + 1
+  }
+  let repeated = repeatOf(&body, low, high, greedy)
+  Ok((repeated, Build{pos: after, groups: current.groups, classes: current.classes}))
+}
+
+/// `{n}`, `{n,}` and `{n,m}`, answering the bounds and where the brace ended.
+fn parseCount(chars: &Array[Char], open: Int) -> Result[(Int, Int, Int), RegexError] {
+  var index = open + 1
+  var low = 0
+  var sawLow = false
+  while index < chars.length() && Char.isDigit(chars[index]) {
+    low = low * 10 + digitValue(chars[index])
+    sawLow = true
+    index = index + 1
+  }
+  if !sawLow {
+    return Err(BadRepeat(open))
+  }
+  if index >= chars.length() {
+    return Err(UnexpectedEnd)
+  }
+  if chars[index] == '}' {
+    return Ok((low, low, index + 1))
+  }
+  if chars[index] != ',' {
+    return Err(BadRepeat(open))
+  }
+  index = index + 1
+  var high = -1
+  var sawHigh = false
+  var counted = 0
+  while index < chars.length() && Char.isDigit(chars[index]) {
+    counted = counted * 10 + digitValue(chars[index])
+    sawHigh = true
+    index = index + 1
+  }
+  if sawHigh {
+    high = counted
+  }
+  if index >= chars.length() {
+    return Err(UnexpectedEnd)
+  }
+  if chars[index] != '}' {
+    return Err(BadRepeat(open))
+  }
+  if sawHigh && high < low {
+    return Err(BadRepeat(open))
+  }
+  Ok((low, high, index + 1))
+}
+
+/// A body repeated between `low` and `high` times.
+///
+/// A bounded repetition is written out rather than counted at run time. The
+/// program then says exactly what it accepts, and the search needs no counter
+/// per repetition; the cost is that `a{1000}` compiles to a thousand copies,
+/// which is why `maxExpansion` caps it.
+fn repeatOf(body: &Array[Inst], low: Int, high: Int, greedy: Bool) -> Array[Inst] {
+  if high < 0 {
+    if low == 0 {
+      return starOf(body, greedy)
+    }
+    var emitted: Array[Inst] = []
+    var written = 0
+    while written < low - 1 {
+      emitted = appendAll(&emitted, body)
+      written = written + 1
+    }
+    return appendAll(&emitted, &plusOf(body, greedy))
+  }
+  var emitted: Array[Inst] = []
+  var required = 0
+  while required < low {
+    emitted = appendAll(&emitted, body)
+    required = required + 1
+  }
+  var optional = high - low
+  if optional > maxExpansion() {
+    optional = maxExpansion()
+  }
+  var written = 0
+  while written < optional {
+    emitted = appendAll(&emitted, &questionOf(body, greedy))
+    written = written + 1
+  }
+  emitted
+}
+
+/// The largest number of copies a bounded repetition may be written out as.
+fn maxExpansion() -> Int { 1000 }
+
+fn starOf(body: &Array[Inst], greedy: Bool) -> Array[Inst] {
+  let enter = if greedy { Split(1, body.length() + 2) } else { Split(body.length() + 2, 1) }
+  var emitted: Array[Inst] = [enter]
+  emitted = appendAll(&emitted, body)
+  emitted.push(Jump(0 - (body.length() + 1)))
+}
+
+fn plusOf(body: &Array[Inst], greedy: Bool) -> Array[Inst] {
+  var emitted = appendAll(&[], body)
+  let again = 0 - body.length()
+  let loopBack = if greedy { Split(again, 1) } else { Split(1, again) }
+  emitted.push(loopBack)
+}
+
+fn questionOf(body: &Array[Inst], greedy: Bool) -> Array[Inst] {
+  let enter = if greedy { Split(1, body.length() + 1) } else { Split(body.length() + 1, 1) }
+  var emitted: Array[Inst] = [enter]
+  appendAll(&emitted, body)
+}
+
+fn appendAll(left: &Array[Inst], right: &Array[Inst]) -> Array[Inst] {
+  var joined = *left
+  var i = 0
+  while i < right.length() {
+    joined = joined.push(right[i])
+    i = i + 1
+  }
+  joined
+}
+
+/// One indivisible piece: a group, a set, a wildcard, an anchor, or a literal.
+fn parseAtom(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  if state.pos >= chars.length() {
+    return Ok(([], state))
+  }
+  let head = chars[state.pos]
+  if head == '(' {
+    return parseGroup(chars, state)
+  }
+  if head == '[' {
+    return parseClass(chars, state)
+  }
+  if head == '.' {
+    return Ok(([MatchAny], advanced(state, 1)))
+  }
+  if head == '^' {
+    return Ok(([AtStart], advanced(state, 1)))
+  }
+  if head == '$' {
+    return Ok(([AtEnd], advanced(state, 1)))
+  }
+  if head == '\\' {
+    return parseEscape(chars, state)
+  }
+  if head == '*' || head == '+' || head == '?' {
+    return Err(NothingToRepeat(state.pos))
+  }
+  if head == ')' {
+    return Err(UnbalancedParen(state.pos))
+  }
+  Ok(([MatchChar(head)], advanced(state, 1)))
+}
+
+fn advanced(state: Build, by: Int) -> Build {
+  Build{pos: state.pos + by, groups: state.groups, classes: state.classes}
+}
+
+/// `(...)` and `(?:...)`.
+fn parseGroup(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  let open = state.pos
+  var inner = state.pos + 1
+  var capturing = true
+  if inner + 1 < chars.length() && chars[inner] == '?' && chars[inner + 1] == ':' {
+    capturing = false
+    inner = inner + 2
+  }
+  var slot = 0
+  var opened = state.groups
+  if capturing {
+    opened = state.groups + 1
+    slot = opened
+  }
+  let parsed = parseAlternation(chars, Build {
+      pos: inner,
+      groups: opened,
+      classes: state.classes
+    }) ?
+  let after = parsed[1]
+  if after.pos >= chars.length() || chars[after.pos] != ')' {
+    return Err(UnbalancedParen(open))
+  }
+  let closed = Build{pos: after.pos + 1, groups: after.groups, classes: after.classes}
+  if !capturing {
+    return Ok((parsed[0], closed))
+  }
+  var emitted: Array[Inst] = [Save(slot * 2)]
+  emitted = appendAll(&emitted, &parsed[0])
+  Ok((emitted.push(Save(slot * 2 + 1)), closed))
+}
+
+/// `[abc]`, `[^a-z]`, `[\d_]`.
+fn parseClass(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  let open = state.pos
+  var index = state.pos + 1
+  var negated = false
+  if index < chars.length() && chars[index] == '^' {
+    negated = true
+    index = index + 1
+  }
+  var ranges: Array[(Int, Int)] = []
+  var closedAt = -1
+  // A `]` written first is the character itself: an empty set can never match,
+  // so nobody means one.
+  var first = true
+  while index < chars.length() {
+    let here = chars[index]
+    if here == ']' && !first {
+      closedAt = index
+      break
+    }
+    first = false
+    if here == '\\' {
+      if index + 1 >= chars.length() {
+        return Err(TrailingBackslash)
+      }
+      let escaped = chars[index + 1]
+      if escaped == 'd' {
+        ranges = concatRanges(&ranges, &digitRanges())
+      } else if escaped == 'w' {
+        ranges = concatRanges(&ranges, &wordRanges())
+      } else if escaped == 's' {
+        ranges = concatRanges(&ranges, &spaceRanges())
+      } else if escaped == 'D' || escaped == 'W' || escaped == 'S' {
+        return Err(NegatedShorthandInClass(index))
+      } else {
+        let literal = escapedChar(escaped) ?
+        ranges = ranges.push((Char.ord(literal), Char.ord(literal)))
+      }
+      index = index + 2
+    } else if index + 2 < chars.length() && chars[index + 1] == '-' && chars[index + 2] != ']' {
+      let low = Char.ord(here)
+      let high = Char.ord(chars[index + 2])
+      if high < low {
+        return Err(UnclosedClass(open))
+      }
+      ranges = ranges.push((low, high))
+      index = index + 3
+    } else {
+      ranges = ranges.push((Char.ord(here), Char.ord(here)))
+      index = index + 1
+    }
+  }
+  if closedAt < 0 {
+    return Err(UnclosedClass(open))
+  }
+  let added = state.classes.push(CharClass{negated: negated, ranges: ranges})
+  Ok((
+      [MatchClass(added.length() - 1)],
+      Build{pos: closedAt + 1, groups: state.groups, classes: added}
+    ))
+}
+
+fn concatRanges(left: &Array[(Int, Int)], right: &Array[(Int, Int)]) -> Array[(Int, Int)] {
+  var joined = *left
+  var i = 0
+  while i < right.length() {
+    joined = joined.push(right[i])
+    i = i + 1
+  }
+  joined
+}
+
+/// `\d`, `\b`, `\n`, `\.` and the rest.
+fn parseEscape(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+  if state.pos + 1 >= chars.length() {
+    return Err(TrailingBackslash)
+  }
+  let marker = chars[state.pos + 1]
+  if marker == 'd' {
+    return Ok(classInstruction(state, false, &digitRanges()))
+  }
+  if marker == 'D' {
+    return Ok(classInstruction(state, true, &digitRanges()))
+  }
+  if marker == 'w' {
+    return Ok(classInstruction(state, false, &wordRanges()))
+  }
+  if marker == 'W' {
+    return Ok(classInstruction(state, true, &wordRanges()))
+  }
+  if marker == 's' {
+    return Ok(classInstruction(state, false, &spaceRanges()))
+  }
+  if marker == 'S' {
+    return Ok(classInstruction(state, true, &spaceRanges()))
+  }
+  if marker == 'b' {
+    return Ok(([AtBoundary(true)], advanced(state, 2)))
+  }
+  if marker == 'B' {
+    return Ok(([AtBoundary(false)], advanced(state, 2)))
+  }
+  let literal = escapedChar(marker) ?
+  Ok(([MatchChar(literal)], advanced(state, 2)))
+}
+
+fn classInstruction(state: Build, negated: Bool, ranges: &Array[(Int, Int)]) -> (Array[Inst], Build) {
+  let added = state.classes.push(CharClass{negated: negated, ranges: *ranges})
+  (
+    [MatchClass(added.length() - 1)],
+    Build{pos: state.pos + 2, groups: state.groups, classes: added}
+  )
+}
+
+/// The character an escape stands for.
+///
+/// A letter with no meaning is refused rather than read as itself, because a
+/// pattern that writes `\q` is more likely to have meant something this module
+/// does not do than to have meant the letter q.
+fn escapedChar(marker: Char) -> Result[Char, RegexError] {
+  if marker == 'n' { return Ok('\n') }
+  if marker == 't' { return Ok('\t') }
+  if marker == 'r' { return Ok('\r') }
+  if marker == '0' { return Ok('\u{0}') }
+  if Char.isAlphanumeric(marker) {
+    return Err(UnknownEscape(0))
+  }
+  Ok(marker)
+}
+
+/// One entry on the search's own stack: somewhere else the search may resume.
+type Resume = { pc: Int, at: Int, slots: Array[Int] }
+
+/// Run the program from one starting position.
+///
+/// The stack holds the alternatives not taken, so a failed branch resumes at
+/// the most recent one rather than unwinding the machine's call stack. `steps`
+/// is what stops a pattern that would otherwise take exponential time.
+fn runFrom(
+  compiled: &Regex,
+  chars: &Array[Char],
+  start: Int
+) -> Result[Option[Array[Int]], RegexError] {
+  let slotCount = (compiled.groups + 1) * 2
+  var slots: Array[Int] = []
+  var s = 0
+  while s < slotCount {
+    slots = slots.push(-1)
+    s = s + 1
+  }
+  var stack: Array[Resume] = []
+  var pc = 0
+  var at = start
+  var steps = 0
+  let limit = stepLimit()
+
+  while true {
+    steps = steps + 1
+    if steps > limit {
+      return Err(StepLimit)
+    }
+    var failed = false
+    match compiled.program[pc] {
+      case Halt => { return Ok(Some(slots)) }
+      case MatchChar(wanted) => {
+        if at < chars.length() && chars[at] == wanted {
+          pc = pc + 1
+          at = at + 1
+        } else {
+          failed = true
+        }
+      }
+      case MatchAny => {
+        if at < chars.length() {
+          pc = pc + 1
+          at = at + 1
+        } else {
+          failed = true
+        }
+      }
+      case MatchClass(index) => {
+        if at < chars.length() && admits(&compiled.classes[index], chars[at]) {
+          pc = pc + 1
+          at = at + 1
+        } else {
+          failed = true
+        }
+      }
+      case AtStart => {
+        if at == 0 { pc = pc + 1 } else { failed = true }
+      }
+      case AtEnd => {
+        if at == chars.length() { pc = pc + 1 } else { failed = true }
+      }
+      case AtBoundary(wanted) => {
+        if boundaryAt(chars, at) == wanted { pc = pc + 1 } else { failed = true }
+      }
+      case Save(slot) => {
+        stack = stack.push(Resume{pc: 0 - 1, at: slot, slots: slots})
+        slots = withSlot(&slots, slot, at)
+        pc = pc + 1
+      }
+      case Jump(offset) => { pc = pc + offset }
+      case Split(firstArm, secondArm) => {
+        stack = stack.push(Resume{pc: pc + secondArm, at: at, slots: slots})
+        pc = pc + firstArm
+      }
+    }
+    if failed {
+      var resumed = false
+      while stack.length() > 0 && !resumed {
+        let top = stack[stack.length() - 1]
+        stack = stack.pop()
+        // A saved slot is undone rather than resumed at: it recorded a
+        // position on a path that has since failed, and leaving it set would
+        // report a capture from a branch that did not match.
+        if top.pc >= 0 {
+          pc = top.pc
+          at = top.at
+          slots = top.slots
+          resumed = true
+        } else {
+          slots = top.slots
+        }
+      }
+      if !resumed {
+        return Ok(None)
+      }
+    }
+  }
+  Ok(None)
+}
+
+fn withSlot(slots: &Array[Int], slot: Int, value: Int) -> Array[Int] {
+  slots.remove(slot).insert(slot, value)
+}
+
+fn admits(set: &CharClass, value: Char) -> Bool {
+  let code = Char.ord(value)
+  var inside = false
+  var i = 0
+  while i < set.ranges.length() {
+    let range = set.ranges[i]
+    if code >= range[0] && code <= range[1] {
+      inside = true
+      break
+    }
+    i = i + 1
+  }
+  if set.negated { !inside } else { inside }
+}
+
+/// Whether a word character stands on exactly one side of this position.
+fn boundaryAt(chars: &Array[Char], at: Int) -> Bool {
+  let before = at > 0 && isWordChar(chars[at - 1])
+  let after = at < chars.length() && isWordChar(chars[at])
+  before != after
+}
+
+fn isWordChar(value: Char) -> Bool {
+  Char.isAlphanumeric(value) || value == '_'
+}
+
+/// Search from each position in turn, reporting a search that gave up.
+///
+/// The leftmost match wins, which is what every other tool answers and what a
+/// reader replacing text expects: a later match that happens to be longer does
+/// not displace an earlier one.
+export fn search(compiled: &Regex, subject: Str) -> Result[Option[Match], RegexError] {
+  let chars = subject.chars()
+  var start = 0
+  while start <= chars.length() {
+    let outcome = runFrom(compiled, &chars, start) ?
+    match outcome {
+      case Some(slots) => { return Ok(Some(matchOf(compiled, &chars, &slots))) }
+      case None => {}
+    }
+    start = start + 1
+  }
+  Ok(None)
+}
+
+fn matchOf(compiled: &Regex, chars: &Array[Char], slots: &Array[Int]) -> Match {
+  let from = slots[0]
+  let to = slots[1]
+  var captures: Array[Option[Str]] = []
+  var group = 1
+  while group <= compiled.groups {
+    let low = slots[group * 2]
+    let high = slots[group * 2 + 1]
+    if low >= 0 && high >= low {
+      captures = captures.push(Some(sliceChars(chars, low, high)))
+    } else {
+      captures = captures.push(None)
+    }
+    group = group + 1
+  }
+  Match{start: from, end: to, text: sliceChars(chars, from, to), captures: captures}
+}
+
+fn sliceChars(chars: &Array[Char], from: Int, to: Int) -> Str {
+  var taken: Array[Char] = []
+  var i = from
+  while i < to {
+    taken = taken.push(chars[i])
+    i = i + 1
+  }
+  Text.fromChars(&taken)
+}
+
+/// Where the pattern first matches, or nothing.
+///
+/// A search that gave up answers nothing, which is the safe direction: a filter
+/// admits less rather than more. Use `search` where the difference matters.
+export fn find(compiled: &Regex, subject: Str) -> Option[Match] {
+  match search(compiled, subject) {
+    case Ok(found) => found
+    case Err(_) => None
+  }
+}
+
+/// Whether the pattern matches anywhere in the subject.
+export fn isMatch(compiled: &Regex, subject: Str) -> Bool {
+  match find(compiled, subject) {
+    case Some(_) => true
+    case None => false
+  }
+}
+
+/// Whether the pattern matches the whole subject, and nothing less.
+export fn isExact(compiled: &Regex, subject: Str) -> Bool {
+  match find(compiled, subject) {
+    case Some(found) => found.start == 0 && found.end == subject.chars().length()
+    case None => false
+  }
+}
+
+/// Every match, left to right, without overlapping.
+///
+/// A pattern that can match nothing — `a*` against `bbb` — still advances one
+/// character per answer, so this cannot fail to terminate.
+export fn findAll(compiled: &Regex, subject: Str) -> Array[Match] {
+  let chars = subject.chars()
+  var found: Array[Match] = []
+  var from = 0
+  while from <= chars.length() {
+    let tail = sliceChars(&chars, from, chars.length())
+    match find(compiled, tail) {
+      case Some(here) => {
+        found = found.push(Match {
+            start: here.start + from,
+            end: here.end + from,
+            text: here.text,
+            captures: here.captures
+          })
+        if here.end > here.start {
+          from = from + here.end
+        } else {
+          from = from + here.start + 1
+        }
+      }
+      case None => { return found }
+    }
+  }
+  found
+}
+
+/// One group of a match, by number. Group 0 is the whole match.
+export fn capture(found: &Match, group: Int) -> Option[Str] {
+  if group == 0 {
+    return Some(found.text)
+  }
+  if group < 1 || group > found.captures.length() {
+    return None
+  }
+  found.captures[group - 1]
+}
+
+/// The first match replaced by fixed text.
+export fn replaceFirst(compiled: &Regex, subject: Str, replacement: Str) -> Str {
+  match find(compiled, subject) {
+    case None => subject
+    case Some(found) => {
+      let chars = subject.chars()
+      sliceChars(&chars, 0, found.start)
+        + replacement
+        + sliceChars(&chars, found.end, chars.length())
+    }
+  }
+}
+
+/// Every match replaced by fixed text.
+export fn replaceAll(compiled: &Regex, subject: Str, replacement: Str) -> Str {
+  let chars = subject.chars()
+  let found = findAll(compiled, subject)
+  var out = ""
+  var copied = 0
+  var i = 0
+  while i < found.length() {
+    let here = found[i]
+    out = out + sliceChars(&chars, copied, here.start) + replacement
+    copied = here.end
+    i = i + 1
+  }
+  out + sliceChars(&chars, copied, chars.length())
+}
+
+/// Every match replaced by what a function makes of it.
+///
+/// The function is given the match, so a replacement can use what was
+/// captured — which is what a fixed replacement cannot do.
+export fn replaceAllWith(compiled: &Regex, subject: Str, rewrite: fn(Match) -> Str) -> Str {
+  let chars = subject.chars()
+  let found = findAll(compiled, subject)
+  var out = ""
+  var copied = 0
+  var i = 0
+  while i < found.length() {
+    let here = found[i]
+    out = out + sliceChars(&chars, copied, here.start) + rewrite(here)
+    copied = here.end
+    i = i + 1
+  }
+  out + sliceChars(&chars, copied, chars.length())
+}
+
+/// The subject cut at every match.
+///
+/// A match at the very start or end leaves an empty piece, which is kept: the
+/// number of pieces is then one more than the number of separators, whatever
+/// the subject looked like.
+export fn split(compiled: &Regex, subject: Str) -> Array[Str] {
+  let chars = subject.chars()
+  let found = findAll(compiled, subject)
+  var pieces: Array[Str] = []
+  var copied = 0
+  var i = 0
+  while i < found.length() {
+    let here = found[i]
+    if here.end > here.start {
+      pieces = pieces.push(sliceChars(&chars, copied, here.start))
+      copied = here.end
+    }
+    i = i + 1
+  }
+  pieces.push(sliceChars(&chars, copied, chars.length()))
+}
+
+/// Text quoted so a pattern matches it exactly.
+///
+/// What a caller reaches for when part of a pattern comes from somewhere else —
+/// a name typed into a form, a value read from a file — which is otherwise a
+/// way to have someone else's text change what the pattern means.
+export fn escape(literal: Str) -> Str {
+  let chars = literal.chars()
+  var out = ""
+  var i = 0
+  while i < chars.length() {
+    let here = chars[i]
+    if isMeta(here) {
+      out = out + "\\"
+    }
+    out = out + Char.toText(here)
+    i = i + 1
+  }
+  out
+}
+
+fn isMeta(value: Char) -> Bool {
+  value == '.' || value == '^' || value == '$' || value == '*' || value == '+'
+    || value == '?' || value == '(' || value == ')' || value == '['
+    || value == ']' || value == '{' || value == '}' || value == '|'
+    || value == '\\'
+}
+
+/// Why a pattern was refused, written for a person to read.
+export fn explain(reason: &RegexError) -> Str {
+  match *reason {
+    case UnexpectedEnd => "the pattern ends in the middle of something"
+    case UnbalancedParen(at) => "the bracket at " + display(at) + " is not closed"
+    case UnclosedClass(at) => "the set at " + display(at) + " is not closed"
+    case BadRepeat(at) => "the repetition at " + display(at) + " is not a count"
+    case NothingToRepeat(at) => "there is nothing before the repetition at " + display(at)
+    case TrailingBackslash => "the pattern ends with a backslash"
+    case UnknownEscape(at) => "the escape at " + display(at) + " means nothing here"
+    case NegatedShorthandInClass(at) =>
+    "the shorthand at " + display(at) + " is already negated; write it outside the set"
+    case StepLimit => "the search gave up before deciding"
+  }
+}
