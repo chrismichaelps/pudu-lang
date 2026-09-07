@@ -52,6 +52,7 @@ testProtocolEvaluation = do
   stopSignals <- runEntry "test-fixtures/stdlib/UsesSignal.pudu"
   cryptoSurface <- runEntry "test-fixtures/stdlib/UsesCryptoSurface.pudu"
   providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
+  yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -244,6 +245,16 @@ testProtocolEvaluation = do
     , counterexample
         "a provider's tokens verify, and a token that lies about its algorithm does not"
         (providerTokens === Just "10")
+    {-| A deployment manifest of the shape one is really written in, because
+        the parts that break a reader are the ones that only appear together:
+        a sequence of mappings whose first key shares the dash's line, a
+        sequence written level with its own key, and a block scalar whose
+        lines must not be read as structure. The quoted `"3"` is the other
+        half: a reader that decides kinds before it decides quoting turns a
+        version string into a number. -}
+    , counterexample
+        "a manifest's mappings, sequences, block scalars, and quoting all survive"
+        (yamlDocuments === Just "18")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

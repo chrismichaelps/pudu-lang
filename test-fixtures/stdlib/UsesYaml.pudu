@@ -1,0 +1,182 @@
+module UsesYaml
+
+import Std.Option as Option
+import Std.Yaml {TabIndent}
+import Std.Yaml as Yaml
+
+/// A deployment manifest of the shape one is actually written in: nested
+/// mappings, a sequence of mappings, a flow sequence, a block scalar, a
+/// comment, and values whose kind is decided by how they are written.
+const MANIFEST: Str =
+"apiVersion: apps/v1\n"
+  + "kind: Deployment\n"
+  + "# the name is what a rollout refers to\n"
+  + "metadata:\n"
+  + "  name: checkout\n"
+  + "  labels:\n"
+  + "    tier: web\n"
+  + "spec:\n"
+  + "  replicas: 3\n"
+  + "  paused: false\n"
+  + "  template:\n"
+  + "    spec:\n"
+  + "      containers:\n"
+  + "        - name: api\n"
+  + "          image: registry.example/api:1.4\n"
+  + "          ports: [8080, 9090]\n"
+  + "          command:\n"
+  + "            - /bin/sh\n"
+  + "            - -c\n"
+  + "        - name: sidecar\n"
+  + "          image: registry.example/proxy:2.0\n"
+  + "  ratio: 0.75\n"
+  + "  note: \"3\"\n"
+  + "  script: |\n"
+  + "    set -e\n"
+  + "    run --now\n"
+
+fn main() -> Int {
+  var held = 0
+  let document = match Yaml.decode(MANIFEST) {
+    case Ok(parsed) => parsed
+    case Err(_) => Yaml.Empty
+  }
+
+  // 1. A top-level scalar reads as text
+  if Yaml.asText(&Option.unwrapOr(Yaml.field(&document, "kind"), Yaml.Empty)) == Some("Deployment") {
+    held = held + 1
+  }
+
+  // 2. A nested mapping is reached by its path
+  if Yaml.asText(&Option.unwrapOr(Yaml.path(&document, "metadata.name"), Yaml.Empty)) == Some("checkout") {
+    held = held + 1
+  }
+
+  // 3. Two levels of nesting
+  if Yaml.asText(&Option.unwrapOr(Yaml.path(&document, "metadata.labels.tier"), Yaml.Empty)) == Some("web") {
+    held = held + 1
+  }
+
+  // 4. A number written as a number is one
+  if Yaml.asWhole(&Option.unwrapOr(Yaml.path(&document, "spec.replicas"), Yaml.Empty)) == Some(3) {
+    held = held + 1
+  }
+
+  // 5. A quoted number stays text, which is why quoting it is written
+  if Yaml.asText(&Option.unwrapOr(Yaml.path(&document, "spec.note"), Yaml.Empty)) == Some("3") {
+    held = held + 1
+  }
+
+  // 6. A boolean is one
+  if Yaml.asBoolean(&Option.unwrapOr(Yaml.path(&document, "spec.paused"), Yaml.Empty)) == Some(false) {
+    held = held + 1
+  }
+
+  // 7. A fractional value is kept as it was written rather than rounded
+  if Yaml.asFractional(&Option.unwrapOr(Yaml.path(&document, "spec.ratio"), Yaml.Empty)) == Some("0.75") {
+    held = held + 1
+  }
+
+  // 8. A sequence of mappings keeps both its length and its order
+  let containers = Option.unwrapOr(
+    Yaml.asList(&Option.unwrapOr(Yaml.path(&document, "spec.template.spec.containers"), Yaml.Empty)),
+    []
+  )
+  if containers.length() == 2 {
+    held = held + 1
+  }
+
+  // 9. Each item of it is a mapping with its own keys
+  if containers.length() == 2 {
+    let first = containers[0]
+    if Yaml.asText(&Option.unwrapOr(Yaml.field(&first, "name"), Yaml.Empty)) == Some("api")
+      && Yaml.asText(&Option.unwrapOr(Yaml.field(&first, "image"), Yaml.Empty))
+      == Some("registry.example/api:1.4") {
+      held = held + 1
+    }
+  }
+
+  // 10. The second item is not the first
+  if containers.length() == 2 {
+    if Yaml.asText(&Option.unwrapOr(Yaml.field(&containers[1], "name"), Yaml.Empty)) == Some("sidecar") {
+      held = held + 1
+    }
+  }
+
+  // 11. A flow sequence on one line
+  if containers.length() == 2 {
+    let ports = Option.unwrapOr(Yaml.asList(&Option.unwrapOr(Yaml.field(&containers[0], "ports"), Yaml.Empty)), [])
+    if ports.length() == 2 && Yaml.asWhole(&ports[1]) == Some(9090) {
+      held = held + 1
+    }
+  }
+
+  // 12. A sequence nested under a key inside a sequence item
+  if containers.length() == 2 {
+    let command = Option.unwrapOr(Yaml.asList(&Option.unwrapOr(Yaml.field(&containers[0], "command"), Yaml.Empty)), [])
+    if command.length() == 2 && Yaml.asText(&command[0]) == Some("/bin/sh") {
+      held = held + 1
+    }
+  }
+
+  // 13. A block scalar keeps its line breaks
+  match Yaml.asText(&Option.unwrapOr(Yaml.path(&document, "spec.script"), Yaml.Empty)) {
+    case Some(script) => {
+      if script.contains("set -e") && script.contains("run --now") && script.contains("\n") {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 14. Keys keep the order they were written in
+  let names = Yaml.keys(&document)
+  if names.length() == 4 && names[0] == "apiVersion" && names[3] == "spec" {
+    held = held + 1
+  }
+
+  // 15. A tab used to indent is refused rather than guessed at
+  match Yaml.decode("a:\n\tb: 1\n") {
+    case Ok(_) => {}
+    case Err(reason) => {
+      match reason {
+        case TabIndent(_) => { held = held + 1 }
+        case _ => {}
+      }
+    }
+  }
+
+  // 16. An empty document is empty rather than an error
+  match Yaml.decode("# only a comment\n") {
+    case Ok(parsed) => {
+      if Yaml.isEmpty(&parsed) {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 17. A key with nothing under it holds nothing
+  match Yaml.decode("a:\nb: 1\n") {
+    case Ok(parsed) => {
+      if Yaml.isEmpty(&Option.unwrapOr(Yaml.field(&parsed, "a"), Yaml.Whole(0)))
+        && Yaml.asWhole(&Option.unwrapOr(Yaml.field(&parsed, "b"), Yaml.Empty)) == Some(1) {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 18. A sequence written level with its key belongs to it
+  match Yaml.decode("steps:\n- one\n- two\n") {
+    case Ok(parsed) => {
+      let steps = Option.unwrapOr(Yaml.asList(&Option.unwrapOr(Yaml.field(&parsed, "steps"), Yaml.Empty)), [])
+      if steps.length() == 2 && Yaml.asText(&steps[1]) == Some("two") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  held
+}
