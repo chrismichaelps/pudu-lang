@@ -36,3 +36,19 @@ Resolved Grill Log: use a counter rather than a blocking producer queue so faile
 strand a producer on queue admission. Input closures still occupy O(n) storage; concurrency and
 retained task handles are O(min(n,workers)). Workers stop through typed counter failures rather
 than silently repeating an index. No tests, builds or reviews run.
+
+## Bounded parallel mapping
+
+mapBounded(items, workers, transform) applies a transform with at most min(workers, items.length)
+concurrent threads, populating preallocated indexed synchronization cells to guarantee results are
+collected in exact input order regardless of task completion timing. Unwritten slots or worker
+panics surface as typed ConcurrentError. mapResultBounded evaluates fallible transforms, returning
+the first application error in input order while retaining host ConcurrentError observation.
+
+Resolved Grill Log:
+- **Q:** How are results ordered without sorting or synchronization contention? **A:** Each item is
+  assigned an isolated slot cell before thread scheduling. Workers write strictly to their own slot
+  index; results are gathered sequentially from slot 0 to N-1 after joinAll.
+- **Q:** How are fallible transforms handled? **A:** Both pure and fallible mapping are supported:
+  mapBounded collects arbitrary typed values U, while mapResultBounded unpacks Result[U, E] to
+  preserve the first typed failure in input order.

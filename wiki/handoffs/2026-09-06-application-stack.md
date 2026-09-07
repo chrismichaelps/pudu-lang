@@ -78,5 +78,8 @@ Exact next action: implement the clarified STD feature, retaining server worker 
 
 User clarified threads/concurrency. Implemented Std.Concurrent.parallelBounded and
 forEachBounded with atomic claiming and joining all started tasks. Own Concurrent and mirror.
-Exact next action: add typed result collection for bounded parallel mapping, retaining input
-order independently of completion order. No tests, builds or reviews run.
+
+Implemented Std.Concurrent.mapBounded and mapResultBounded for bounded parallel mapping,
+retaining input order independently of completion order via isolated synchronization cells,
+and preserving typed failures. Updated UsesConcurrent.pudu and RuntimeSpec.hs.
+Exact next action: proceed with next enterprise application stack capability requested by user.

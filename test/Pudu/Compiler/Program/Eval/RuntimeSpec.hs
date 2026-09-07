@@ -94,7 +94,7 @@ testRuntimeEvaluation = do
         additions only under the load that makes the loss hardest to find. -}
     , counterexample
         "threads share a channel, a lock, and a cell without losing a write"
-        (threads === Just "22")
+        (threads === Just "32")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having

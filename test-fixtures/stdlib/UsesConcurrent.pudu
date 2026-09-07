@@ -113,6 +113,52 @@ export fn main() -> Int {
   // Waiting does not hold the machine while it waits.
   if Result.isOk(&Concurrent.sleep(1)) { held = held + 1 }
 
+  // Bounded batch concurrency executes with fixed workers and reports failures.
+  if Result.isOk(&Concurrent.parallelBounded(&[], 2)) { held = held + 1 }
+  if Result.isErr(&Concurrent.parallelBounded(&[], 0)) { held = held + 1 }
+  let batchTally = Sync.counter(0)
+  let batchActions = [
+    fn() -> () {
+      let _added1 = Sync.increment(&batchTally, 1)
+      ()
+    },
+    fn() -> () {
+      let _added2 = Sync.increment(&batchTally, 2)
+      ()
+    }
+  ]
+  if Result.isOk(&Concurrent.parallelBounded(&batchActions, 2)) && Result.unwrapOr(Sync.count(&batchTally), 0) == 3 {
+    held = held + 1
+  }
+
+  // forEachBounded processes every value with bounded workers.
+  let forEachTally = Sync.counter(0)
+  let forEachRes = Concurrent.forEachBounded(&[10, 20, 30], 2, fn(x: Int) -> () {
+      let _added = Sync.increment(&forEachTally, x)
+      ()
+    })
+  if Result.isOk(&forEachRes) && Result.unwrapOr(Sync.count(&forEachTally), 0) == 60 {
+    held = held + 1
+  }
+
+  // mapBounded collects results in input order.
+  let emptyMapped = Concurrent.mapBounded(&[], 2, fn(x: Int) -> Int { x * 2 })
+  if Result.unwrapOr(emptyMapped, [1]) == [] { held = held + 1 }
+  if Result.isErr(&Concurrent.mapBounded(&[1], 0, fn(x: Int) -> Int { x })) { held = held + 1 }
+  let ordered = Concurrent.mapBounded(&[1, 2, 3, 4, 5], 3, fn(x: Int) -> Int { x * 10 })
+  if Result.unwrapOr(ordered, []) == [10, 20, 30, 40, 50] { held = held + 1 }
+
+  // mapResultBounded preserves input order and typed failures.
+  let okMapped = Concurrent.mapResultBounded(&[1, 2, 3], 2, fn(x: Int) -> Result[Int, Str] { Ok(x + 100) })
+  if Result.unwrapOr(okMapped, Err("")) == Ok([101, 102, 103]) { held = held + 1 }
+  let errMapped = Concurrent.mapResultBounded(&[1, 2, 3], 2, fn(x: Int) -> Result[Int, Str] {
+      if x == 2 { Err("failed on 2") } else { Ok(x) }
+    })
+  if Result.unwrapOr(errMapped, Ok([])) == Err("failed on 2") { held = held + 1 }
+  if Result.isErr(&Concurrent.mapResultBounded(&[1], -1, fn(x: Int) -> Result[Int, Str] { Ok(x) })) {
+    held = held + 1
+  }
+
   held
 }
 

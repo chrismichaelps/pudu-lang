@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Bounded parallel mapping
+
+[[Std Concurrent]] adds mapBounded and mapResultBounded with fixed workers, input order
+retention via indexed synchronization cells, and preserved typed failures.
+
 ## 2026-09-06 — Complete LSP capabilities and client runtime bundle
 
 Completed language server capabilities across bounded modules: references (`textDocument/references`),

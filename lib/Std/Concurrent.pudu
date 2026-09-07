@@ -133,3 +133,50 @@ export fn forEachBounded[T](items: &Array[T], workers: Int, action: fn(T) -> ())
   }
   parallelBounded(&actions, workers)
 }
+
+/// Map values with bounded concurrency, preserving input order and typed failures.
+export fn mapBounded[T, U](items: &Array[T], workers: Int, transform: fn(T) -> U) -> Result[Array[U], ConcurrentError] {
+  if workers < 1 { return Err(Other("worker count must be positive")) }
+  let total = items.length()
+  if total == 0 { return Ok([]) }
+  var slots: Array[Sync.Cell[Option[U]]] = []
+  var i = 0
+  while i < total {
+    let emptySlot: Option[U] = None
+    slots = slots.push(Sync.cell(emptySlot))
+    i = i + 1
+  }
+  var actions: Array[fn() -> ()] = []
+  var index = 0
+  for item in items {
+    let slot = slots[index]
+    actions = actions.push(fn() -> () {
+        let result = transform(item)
+        let _saved = Sync.set(&slot, Some(result))
+      })
+    index = index + 1
+  }
+  parallelBounded(&actions, workers) ?
+  var results: Array[U] = []
+  for slot in slots {
+    let held = Result.mapErr(Sync.get(&slot), fn(problem: Sync.SyncError) -> ConcurrentError { Other(show(problem)) }) ?
+    match held {
+      case Some(value) => { results = results.push(value) }
+      case None => { return Err(Other("missing slot result")) }
+    }
+  }
+  Ok(results)
+}
+
+/// Apply a fallible transform with bounded concurrency, returning the first error in input order.
+export fn mapResultBounded[T, U, E](items: &Array[T], workers: Int, transform: fn(T) -> Result[U, E]) -> Result[Result[Array[U], E], ConcurrentError] {
+  let mapped = mapBounded(items, workers, transform) ?
+  var collected: Array[U] = []
+  for item in mapped {
+    match item {
+      case Ok(value) => { collected = collected.push(value) }
+      case Err(problem) => { return Ok(Err(problem)) }
+    }
+  }
+  Ok(Ok(collected))
+}
