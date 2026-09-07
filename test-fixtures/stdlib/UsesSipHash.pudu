@@ -1,0 +1,98 @@
+module UsesSipHash
+
+import Std.SipHash as SipHash
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Key construction from words and bytes
+  let k0 = 0x0706050403020100u64
+  let k1 = 0x0f0e0d0c0b0a0908u64
+  let k = SipHash.key(k0, k1)
+  if k.k0 == k0 && k.k1 == k1 {
+    held = held + 1
+  }
+
+  // 2. Key parsed from 16 bytes
+  let keyBytes: Array[UInt8] = [
+    0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8,
+    0x08u8, 0x09u8, 0x0au8, 0x0bu8, 0x0cu8, 0x0du8, 0x0eu8, 0x0fu8
+  ]
+  let parsedKeyOpt = SipHash.keyFromBytes(&keyBytes)
+  match parsedKeyOpt {
+    case Some(pk) => {
+      if pk.k0 == 0x0706050403020100u64 && pk.k1 == 0x0f0e0d0c0b0a0908u64 {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 3. Invalid key length rejection
+  let shortKey: Array[UInt8] = [0x01u8, 0x02u8]
+  if SipHash.keyFromBytes(&shortKey) == None {
+    held = held + 1
+  }
+
+  // 4. Standard SipHash-2-4 reference test vector: 0-byte message
+  // Reference hash for len=0: 0x726fdb47dd0e0e31
+  let emptyMsg: Array[UInt8] = []
+  let h0 = SipHash.sipHash24(&k, &emptyMsg)
+  if h0 == 0x726fdb47dd0e0e31u64 {
+    held = held + 1
+  }
+
+  // 5. Standard SipHash-2-4 reference test vector: 1-byte message [0x00]
+  // Reference hash for len=1: 0x74f839c593dc67fd
+  let msg1: Array[UInt8] = [0x00u8]
+  let h1 = SipHash.sipHash24(&k, &msg1)
+  if h1 == 0x74f839c593dc67fdu64 {
+    held = held + 1
+  }
+
+  // 6. Standard SipHash-2-4 reference test vector: 15-byte message [0..14]
+  // Reference hash for len=15: 0xa129ca6149be45e5
+  let msg15: Array[UInt8] = [
+    0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8,
+    0x08u8, 0x09u8, 0x0au8, 0x0bu8, 0x0cu8, 0x0du8, 0x0eu8
+  ]
+  let h15 = SipHash.sipHash24(&k, &msg15)
+  if h15 == 0xa129ca6149be45e5u64 {
+    held = held + 1
+  }
+
+  // 7. Text hashing consistency
+  let hText1 = SipHash.sipHash24Text(&k, "pudu-lang")
+  let hText2 = SipHash.sipHash24Text(&k, "pudu-lang")
+  let hText3 = SipHash.sipHash24Text(&k, "pudu-lang-diff")
+  if hText1 == hText2 && hText1 != hText3 {
+    held = held + 1
+  }
+
+  // 8. Key sensitivity (avalanche effect under key change)
+  let kAlt = SipHash.key(k0 ^ 1u64, k1)
+  let hAlt = SipHash.sipHash24(&kAlt, &msg15)
+  if hAlt != h15 {
+    held = held + 1
+  }
+
+  // 9. sipHash24Int fast path
+  let hInt1 = SipHash.sipHash24Int(&k, 42)
+  let hInt2 = SipHash.sipHash24Int(&k, 42)
+  let hInt3 = SipHash.sipHash24Int(&k, 43)
+  if hInt1 == hInt2 && hInt1 != hInt3 {
+    held = held + 1
+  }
+
+  // 10. Multi-block message hash determinism (16 bytes = exactly 2 full 8-byte blocks)
+  let msg16: Array[UInt8] = [
+    0x00u8, 0x01u8, 0x02u8, 0x03u8, 0x04u8, 0x05u8, 0x06u8, 0x07u8,
+    0x08u8, 0x09u8, 0x0au8, 0x0bu8, 0x0cu8, 0x0du8, 0x0eu8, 0x0fu8
+  ]
+  let h16 = SipHash.sipHash24(&k, &msg16)
+  if h16 != 0u64 && h16 != h15 && h16 != h0 {
+    held = held + 1
+  }
+
+  held
+}

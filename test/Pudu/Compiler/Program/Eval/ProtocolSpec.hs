@@ -44,6 +44,9 @@ testProtocolEvaluation = do
   hexCodec <- runEntry "test-fixtures/stdlib/UsesHex.pudu"
   adler32Checksum <- runEntry "test-fixtures/stdlib/UsesAdler32.pudu"
   radixSort <- runEntry "test-fixtures/stdlib/UsesRadixSort.pudu"
+  byteOrder <- runEntry "test-fixtures/stdlib/UsesByteOrder.pudu"
+  sipHash <- runEntry "test-fixtures/stdlib/UsesSipHash.pudu"
+  intervalTree <- runEntry "test-fixtures/stdlib/UsesIntervalTree.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -184,6 +187,15 @@ testProtocolEvaluation = do
     , counterexample
         "RadixSort linear-time O(N) hardware radix sort for 64-bit integers"
         (radixSort === Just "10")
+    , counterexample
+        "ByteOrder endian conversions, network byte order, and buffer codecs"
+        (byteOrder === Just "10")
+    , counterexample
+        "SipHash-2-4 cryptographic-strength short-input PRF with 64-bit word rotations"
+        (sipHash === Just "10")
+    , counterexample
+        "IntervalTree augmented 1D interval tree with O(log n + k) stabbing queries"
+        (intervalTree === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
