@@ -72,3 +72,5 @@ No builds, tests, reviews, measurements or live SMTP deliveries ran; readiness r
 [[src/Std/_MOC]] · [[Std Mail]] · [[Std Net]] · [[Std Tls]] · [[architecture/WEB]]
 
 Resolved Grill Log: require the EHLO identity at construction; do not silently guess a deployment hostname. The constructor now takes three arguments.
+
+Existing constructor migration: [[src/test-fixtures/stdlib/UsesSmtp]].

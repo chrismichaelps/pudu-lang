@@ -96,3 +96,10 @@ original character.
 Response adds binaryBody: Option[Bytes]. None transmits UTF-8 body; Some transmits those exact bytes, including an empty byte payload. responseBytes centralizes selection. Text construction initializes None; header-only transformations preserve the complete record. Existing direct response literals must add binaryBody: None.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+
+## Constructor migration references
+
+Existing fixture mirrors: [[src/test-fixtures/stdlib/UsesApp]],
+[[src/test-fixtures/stdlib/UsesHttpServer]], [[src/test-fixtures/stdlib/UsesHttpClient]].
+Only record construction was migrated; these fixtures were not run.

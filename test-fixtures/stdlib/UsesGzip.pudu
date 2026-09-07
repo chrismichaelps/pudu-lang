@@ -46,7 +46,7 @@ export fn main() -> Int {
     held = held + 1
   }
 
-  // 5. Multi-block DEFLATE streaming (chunk size 16 bytes forcing multiple blocks)
+  // 5. Roundtrip with a small requested codec output buffer
   let streamingCfg = Gzip.withChunkSize(&defCfg, 16)
   let multiBlockStream = Gzip.compressText(testPhrase, &streamingCfg)
   let decompressedMulti = Gzip.decompressText(&multiBlockStream)
@@ -75,7 +75,7 @@ export fn main() -> Int {
     case _ => {}
   }
 
-  // 9. Error handling: Checksum mismatch upon corrupted data byte
+  // 9. Error handling: Corrupt DEFLATE or checksum is refused
   let corruptDataIndex = 16
   let corruptOctet = match compressedStream.at(corruptDataIndex) {
     case Some(b) => b ^ 0xffu8
@@ -86,7 +86,7 @@ export fn main() -> Int {
       &ByteSeq.concat(&bytesOf([corruptOctet]), &compressedStream.drop(corruptDataIndex + 1))
   )
   match Gzip.decompress(&corruptedPayload) {
-    case Err(Gzip.ChecksumMismatch(_, _)) => { held = held + 1 }
+    case Err(Gzip.CodecFailure(_)) => { held = held + 1 }
     case _ => {}
   }
 
@@ -98,7 +98,7 @@ export fn main() -> Int {
     Reply.text(200, "This is a detailed response payload intended for HTTP gzip compression testing.")
   }
 
-  // Text responses remain unchanged until binary response transport is available.
+  // A short payload that does not shrink remains identity encoded.
   let clientReqGzip = Route.Request {
     message: Http.Request {
       method: Http.Get,

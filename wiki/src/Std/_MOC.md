@@ -130,3 +130,10 @@ tags: [moc, module, stdlib]
 [[src/_MOC]] · [[architecture/STDLIB]]
 
 - [[Std Net Bounded Read]] — shared-deadline delimiter and exact reads.
+
+
+## TLS and binary response integration
+
+[[Std Mail Smtp]] requires explicit destination and EHLO identity; verified implicit TLS and required
+STARTTLS use [[Std Tls]]. [[Std Compress Gzip]] delegates to [[Eval Compress]] and emits binary
+[[Std Http]] responses through [[Std Http Message]] and [[Std Http Server]].

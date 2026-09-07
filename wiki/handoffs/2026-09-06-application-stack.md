@@ -233,3 +233,22 @@ Published feature commits: 141170c (JWT), d57b270 (SMTP), 20fcbd0 (gzip), f6cdbe
 (WebSocket), 0bda2e0 (CLI), and 7f8d62c (LSP/REPL). Production readiness remains unproven.
 Exact next action: define the binary HTTP response-body contract in the HTTP module mirror before
 implementing transport support required for usable gzip middleware.
+
+
+## Active TLS and compression implementation
+
+Role transition: Runtime/STD Implementer owns SMTP, TLS socket upgrade, codec primitives, binary HTTP response transport and corresponding constructor migrations. User requests code-only implementation and direct feature commits to dev. No agents delegated.
+
+
+## 2026-09-07 TLS and compression delivery
+
+Implemented implicit TLS/required STARTTLS and post-TLS AUTH, zlib codec primitives, binary HTTP response
+transport and active gzip middleware. These supersede prior missing-TLS/stored-only/passthrough notes.
+Existing response literals migrated mechanically; no tests, builds, reviews or measurements executed.
+Direct response literals gain binaryBody and direct SMTP configurations gain security. New zlib dependency
+uses the documented 0.7.1 API. SMTPUTF8/MIME encoding and whole-transaction deadlines remain separate.
+Exact next action: when validation is authorized, compile and exercise the TLS upgrade, gzip integrity,
+output-limit and binary HTTP paths before declaring readiness.
+
+
+User corrected the implicit localhost EHLO identity. Smtp.client now requires host, port and domain; application configuration supplies all three. Existing call sites migrated, with no fixture execution.

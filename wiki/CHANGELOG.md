@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-07 — Verified SMTP transports and binary gzip responses
+
+- Require application-supplied EHLO identity in `Smtp.client(host, port, domain)`; remove the localhost default.
+- Add implicit TLS and required STARTTLS SMTP submission with post-upgrade EHLO and advertised AUTH checks. Plaintext relays remain explicit and cannot send credentials.
+- Add socket-to-TLS ownership transfer and TLS 1.2/1.3 selection.
+- Add zlib compression levels and bounded single-member decompression.
+- Add Response.binaryBody, Reply.bytes, byte serialization and binary client response reading. Direct response literals require binaryBody: None for text.
+- Activate gzip middleware with exact negotiation, Vary, payload limits and conservative transformation exclusions.
+- No builds, tests, reviews, measurements or live mail delivery ran; readiness remains unproven.
+
 ## 2026-09-06 — Tooling and pending STD boundaries
 
 LSP decodes percent-encoded UTF-8 URI paths, refuses negative/reversed protocol positions and

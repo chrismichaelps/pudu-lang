@@ -155,7 +155,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
 | Background work outside a request? | **Ready** for scheduling, **Absent** for queues. | [[Std App Work]]: jobs as values, both interval kinds, no overlapping runs, and a failure recorded rather than fatal. A durable queue is still absent. |
 | Feature flags? | **Ready** | [[Std App Flag]]: value-based flags supporting targeted rollouts, deterministic sticky percentage canary releases, and entity allowlists without centralized service calls. |
-| Sending mail? | **Partial; unvalidated** | [[Std Mail]] builds messages with header validation. [[Std Mail Smtp]] provides bounded multiline replies and plaintext relay delivery over [[Std Net]]. Credentialed delivery is refused until TLS is implemented; AUTH helpers only format commands. |
+| Sending mail? | **Implemented; unvalidated** | [[Std Mail Smtp]] implements implicit TLS and required STARTTLS, verified host identity, post-TLS AUTH negotiation and bounded replies. MIME transfer encoding and durable delivery queues remain separate. |
 | Data protection and the right to erasure? | **Absent** | A program's own concern; nothing here helps or hinders. |
 | A package ecosystem to get any of this from? | **Absent** | Designed in [[architecture/PACKAGES]] and deliberately not half-built: a resolver and archive extractor that are partly there is where a supply chain is compromised. |
 
@@ -172,3 +172,13 @@ and a way to obtain anything not in this library. Those are the queue, roughly i
 ## Referenced by
 
 [[architecture/STDLIB]] · [[ADR-0016 An Application Is a Value]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Ui]] · [[Std Html]]
+
+
+## Binary response and gzip integration
+
+Response.binaryBody optionally overrides the text body with exact wire bytes. Direct text response
+literals must include binaryBody: None; prefer Reply constructors to avoid coupling to record fields.
+Header-only transformations preserve both fields. [[Std Http Server]] writes bytes and regenerates
+framing, with body suppression for HEAD and bodyless statuses. [[Std Http Client]] preserves payload
+bytes independently of text decoding. [[Std Compress Gzip]] now uses zlib and active HTTP negotiation;
+its compression policy excludes confidential/nontransformable responses. These changes are unvalidated.
