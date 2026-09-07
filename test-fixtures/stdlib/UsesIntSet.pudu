@@ -1,0 +1,177 @@
+module UsesIntSet
+
+import Std.IntSet as IntSet
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Empty and singleton
+  let emp = IntSet.empty()
+  let s1 = IntSet.singleton(42)
+  if IntSet.isEmpty(&emp) && IntSet.size(&emp) == 0 && !IntSet.isEmpty(&s1) && IntSet.size(&s1) == 1 {
+    held = held + 1
+  }
+
+  // 2. Query singleton
+  let mem42 = IntSet.member(&s1, 42)
+  let mem99 = IntSet.member(&s1, 99)
+  if mem42 && !mem99 {
+    held = held + 1
+  }
+
+  // 3. Multi-element insertion across bit boundaries
+  var s = IntSet.empty()
+  s = IntSet.insert(&s, 1)
+  s = IntSet.insert(&s, 2)
+  s = IntSet.insert(&s, 8)
+  s = IntSet.insert(&s, 15)
+  s = IntSet.insert(&s, 1024)
+  if IntSet.size(&s) == 5 && IntSet.member(&s, 8) && IntSet.member(&s, 1024) && !IntSet.member(&s, 99) {
+    held = held + 1
+  }
+
+  // 4. Duplicate insertion idempotency
+  let sDup = IntSet.insert(&s, 8)
+  if IntSet.size(&sDup) == 5 && IntSet.member(&sDup, 8) {
+    held = held + 1
+  }
+
+  // 5. Deletion
+  let sDeleted = IntSet.delete(&s, 8)
+  let sAbsentDel = IntSet.delete(&s, 9999)
+  if IntSet.size(&sDeleted) == 4 && !IntSet.member(&sDeleted, 8) && IntSet.member(&sDeleted, 15) && IntSet.size(&sAbsentDel) == 5 {
+    held = held + 1
+  }
+
+  // 6. Union of two sets
+  var setA = IntSet.empty()
+  setA = IntSet.insert(&setA, 1)
+  setA = IntSet.insert(&setA, 2)
+  var setB = IntSet.empty()
+  setB = IntSet.insert(&setB, 2)
+  setB = IntSet.insert(&setB, 3)
+  let u = IntSet.union(&setA, &setB)
+  if IntSet.size(&u) == 3 && IntSet.member(&u, 1) && IntSet.member(&u, 2) && IntSet.member(&u, 3) {
+    held = held + 1
+  }
+
+  // 7. Intersection of two sets
+  let inter = IntSet.intersection(&setA, &setB)
+  if IntSet.size(&inter) == 1 && IntSet.member(&inter, 2) && !IntSet.member(&inter, 1) && !IntSet.member(&inter, 3) {
+    held = held + 1
+  }
+
+  // 8. Set difference
+  let diffAB = IntSet.difference(&setA, &setB)
+  let diffBA = IntSet.difference(&setB, &setA)
+  if IntSet.size(&diffAB) == 1 && IntSet.member(&diffAB, 1) && IntSet.size(&diffBA) == 1 && IntSet.member(&diffBA, 3) {
+    held = held + 1
+  }
+
+  // 9. Symmetric difference
+  let symDiff = IntSet.symmetricDifference(&setA, &setB)
+  if IntSet.size(&symDiff) == 2 && IntSet.member(&symDiff, 1) && IntSet.member(&symDiff, 3) && !IntSet.member(&symDiff, 2) {
+    held = held + 1
+  }
+
+  // 10. isSubsetOf
+  let isSub1 = IntSet.isSubsetOf(&inter, &setA)
+  let isSub2 = IntSet.isSubsetOf(&inter, &setB)
+  let notSub = IntSet.isSubsetOf(&setA, &setB)
+  if isSub1 && isSub2 && !notSub {
+    held = held + 1
+  }
+
+  // 11. Disjoint
+  var setC = IntSet.empty()
+  setC = IntSet.insert(&setC, 100)
+  setC = IntSet.insert(&setC, 200)
+  let isDisj = IntSet.disjoint(&setA, &setC)
+  let notDisj = IntSet.disjoint(&setA, &setB)
+  if isDisj && !notDisj {
+    held = held + 1
+  }
+
+  // 12. fromArray and toArray ascending sort
+  let arrIn = [50, 10, 30, 20, 40]
+  let sFromArr = IntSet.fromArray(&arrIn)
+  let arrOut = IntSet.toArray(&sFromArr)
+  if IntSet.size(&sFromArr) == 5 && arrOut.length() == 5 && arrOut[0] == 10 && arrOut[1] == 20 && arrOut[2] == 30 && arrOut[3] == 40 && arrOut[4] == 50 {
+    held = held + 1
+  }
+
+  // 13. findMin and findMax
+  let minElem = IntSet.findMin(&sFromArr)
+  let maxElem = IntSet.findMax(&sFromArr)
+  let empMin = IntSet.findMin(&emp)
+  let empMax = IntSet.findMax(&emp)
+  if minElem == Some(10) && maxElem == Some(50) && empMin == None && empMax == None {
+    held = held + 1
+  }
+
+  // 14. deleteMin and deleteMax
+  let delMinSet = IntSet.deleteMin(&sFromArr)
+  let delMaxSet = IntSet.deleteMax(&sFromArr)
+  if IntSet.size(&delMinSet) == 4 && IntSet.findMin(&delMinSet) == Some(20) && IntSet.size(&delMaxSet) == 4 && IntSet.findMax(&delMaxSet) == Some(40) {
+    held = held + 1
+  }
+
+  // 15. split
+  let splitPair = IntSet.split(&sFromArr, 30)
+  let leftPart = splitPair[0]
+  let rightPart = splitPair[1]
+  if IntSet.size(&leftPart) == 2 && IntSet.member(&leftPart, 10) && IntSet.member(&leftPart, 20) && IntSet.size(&rightPart) == 2 && IntSet.member(&rightPart, 40) && IntSet.member(&rightPart, 50) {
+    held = held + 1
+  }
+
+  // 16. splitMember
+  let splitMemRes = IntSet.splitMember(&sFromArr, 30)
+  let sLeft = splitMemRes[0]
+  let present = splitMemRes[1]
+  let sRight = splitMemRes[2]
+  let splitMemAbsent = IntSet.splitMember(&sFromArr, 99)
+  if present && IntSet.size(&sLeft) == 2 && IntSet.size(&sRight) == 2 && !splitMemAbsent[1] {
+    held = held + 1
+  }
+
+  // 17. filter
+  let evens = IntSet.filter(&sFromArr, fn(x: Int) -> Bool { x % 20 == 0 })
+  if IntSet.size(&evens) == 2 && IntSet.member(&evens, 20) && IntSet.member(&evens, 40) && !IntSet.member(&evens, 10) {
+    held = held + 1
+  }
+
+  // 18. Signed negative integers ordered before non-negative
+  var negSet = IntSet.empty()
+  negSet = IntSet.insert(&negSet, 100)
+  negSet = IntSet.insert(&negSet, -1)
+  negSet = IntSet.insert(&negSet, 0)
+  negSet = IntSet.insert(&negSet, -100)
+  negSet = IntSet.insert(&negSet, 1)
+  let negMin = IntSet.findMin(&negSet)
+  let negMax = IntSet.findMax(&negSet)
+  let negArr = IntSet.toArray(&negSet)
+  if IntSet.size(&negSet) == 5 && negMin == Some(-100) && negMax == Some(100) && negArr.length() == 5 && negArr[0] == -100 && negArr[1] == -1 && negArr[2] == 0 && negArr[3] == 1 && negArr[4] == 100 {
+    held = held + 1
+  }
+
+  // 19. Extreme 64-bit integer boundaries
+  var extSet = IntSet.empty()
+  let minInt = -9223372036854775808
+  let maxInt = 9223372036854775807
+  extSet = IntSet.insert(&extSet, minInt)
+  extSet = IntSet.insert(&extSet, maxInt)
+  let extMin = IntSet.findMin(&extSet)
+  let extMax = IntSet.findMax(&extSet)
+  if IntSet.size(&extSet) == 2 && extMin == Some(minInt) && extMax == Some(maxInt) && IntSet.member(&extSet, minInt) && IntSet.member(&extSet, maxInt) {
+    held = held + 1
+  }
+
+  // 20. Identity laws: difference with self is empty, union with empty is identity
+  let diffSelf = IntSet.difference(&sFromArr, &sFromArr)
+  let unionEmp = IntSet.union(&sFromArr, &emp)
+  if IntSet.isEmpty(&diffSelf) && IntSet.size(&unionEmp) == IntSet.size(&sFromArr) {
+    held = held + 1
+  }
+
+  held
+}

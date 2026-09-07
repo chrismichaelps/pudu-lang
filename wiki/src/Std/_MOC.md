@@ -106,6 +106,7 @@ tags: [moc, module, stdlib]
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.
 - [[Std IntMap]] — high-performance bitwise Patricia Trie integer map inspired by Haskell Data.IntMap.
+- [[Std IntSet]] — high-performance bitwise Patricia Trie integer set inspired by Haskell Data.IntSet.
 - [[Std Tree]] — a value with trees beneath it, with orders, paths, and pruning.
 - [[Std Mappable]] — a trait over the container, so one definition serves several.
 - [[Std SortedMap]] — a map ordered by the caller's comparison, with neighbour and range queries.

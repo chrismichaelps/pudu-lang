@@ -1,0 +1,412 @@
+module Std.IntSet
+
+import Std.List as List
+
+/// A purely functional bitwise integer Patricia Trie storing 64-bit integer elements.
+export type IntSet
+  = Empty
+  | Tip(Int)
+  | Bin(Int, Int, IntSet, IntSet)
+
+/// Constructs an empty integer set.
+export fn empty() -> IntSet {
+  Empty
+}
+
+/// Constructs a set with a single element.
+export fn singleton(value: Int) -> IntSet {
+  Tip(value)
+}
+
+/// Whether the set contains no elements.
+export fn isEmpty(set: &IntSet) -> Bool {
+  match set {
+    case Empty => true
+    case _ => false
+  }
+}
+
+/// The number of elements contained in the set.
+export fn size(set: &IntSet) -> Int {
+  match set {
+    case Empty => 0
+    case Tip(_) => 1
+    case Bin(_, _, left, right) => size(&left) + size(&right)
+  }
+}
+
+/// Returns the highest one-bit of x (smearing followed by subtraction).
+fn highestBit(x: Int) -> Int {
+  if x < 0 { return -9223372036854775808 }
+  var v = x
+  v = v | (v >> 1)
+  v = v | (v >> 2)
+  v = v | (v >> 4)
+  v = v | (v >> 8)
+  v = v | (v >> 16)
+  v = v | (v >> 32)
+  v - (v >> 1)
+}
+
+/// Computes the critical branching bit where two prefixes differ.
+fn branchingBit(p1: Int, p2: Int) -> Int {
+  let diff = p1 ^ p2
+  highestBit(diff)
+}
+
+/// Masks integer k above bit m, zeroing bit m and all lower bits.
+fn maskPrefix(k: Int, m: Int) -> Int {
+  if m == -9223372036854775808 { 0 } else { k & ~(m | (m - 1)) }
+}
+
+/// Tests whether mask m1 represents a higher bit than mask m2 in unsigned 64-bit order.
+fn higherMask(m1: Int, m2: Int) -> Bool {
+  if m1 < 0 { m2 >= 0 } else if m2 < 0 { false } else { m1 > m2 }
+}
+
+/// Tests whether the critical bit m in element is zero (left) or one (right).
+fn zeroBit(k: Int, m: Int) -> Bool {
+  (k & m) == 0
+}
+
+/// Tests whether element k has prefix p with branching bit m.
+fn matchPrefix(k: Int, p: Int, m: Int) -> Bool {
+  maskPrefix(k, m) == p
+}
+
+/// Tests whether element is present in the set.
+export fn member(set: &IntSet, value: Int) -> Bool {
+  match set {
+    case Empty => false
+    case Tip(x) => x == value
+    case Bin(p, m, left, right) => {
+      if !matchPrefix(value, p, m) { return false }
+      if zeroBit(value, m) { member(&left, value) } else { member(&right, value) }
+    }
+  }
+}
+
+/// Smart constructor joining two branches with distinct prefixes.
+fn join(p1: Int, t1: IntSet, p2: Int, t2: IntSet) -> IntSet {
+  let m = branchingBit(p1, p2)
+  let p = maskPrefix(p1, m)
+  if zeroBit(p1, m) {
+    Bin(p, m, t1, t2)
+  } else {
+    Bin(p, m, t2, t1)
+  }
+}
+
+/// Inserts an integer element into the set.
+export fn insert(set: &IntSet, value: Int) -> IntSet {
+  match set {
+    case Empty => Tip(value)
+    case Tip(x) => {
+      if x == value {
+          *set
+      } else {
+        join(value, Tip(value), x, Tip(x))
+      }
+    }
+    case Bin(p, m, left, right) => {
+      if matchPrefix(value, p, m) {
+        if zeroBit(value, m) {
+          Bin(p, m, insert(&left, value), right)
+        } else {
+          Bin(p, m, left, insert(&right, value))
+        }
+      } else {
+        join(value, Tip(value), p, *set)
+      }
+    }
+  }
+}
+
+/// Deletes an integer element from the set if present.
+export fn delete(set: &IntSet, value: Int) -> IntSet {
+  match set {
+    case Empty => Empty
+    case Tip(x) => {
+      if x == value { Empty } else { *set }
+    }
+    case Bin(p, m, left, right) => {
+      if !matchPrefix(value, p, m) { return *set }
+      if zeroBit(value, m) {
+        let newLeft = delete(&left, value)
+        match newLeft {
+          case Empty => right
+          case _ => Bin(p, m, newLeft, right)
+        }
+      } else {
+        let newRight = delete(&right, value)
+        match newRight {
+          case Empty => left
+          case _ => Bin(p, m, left, newRight)
+        }
+      }
+    }
+  }
+}
+
+/// Computes the union of two integer sets.
+export fn union(left: &IntSet, right: &IntSet) -> IntSet {
+  match left {
+    case Empty => *right
+    case Tip(x) => insert(right, x)
+    case Bin(p1, m1, l1, r1) => unionBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn unionBin(p1: Int, m1: Int, l1: &IntSet, r1: &IntSet, left: &IntSet, right: &IntSet) -> IntSet {
+  match right {
+    case Empty => *left
+    case Tip(x) => insert(left, x)
+    case Bin(p2, m2, l2, r2) => unionTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn unionTwoBins(
+  p1: Int, m1: Int, l1: &IntSet, r1: &IntSet,
+  p2: Int, m2: Int, l2: &IntSet, r2: &IntSet,
+  left: &IntSet, right: &IntSet
+) -> IntSet {
+  if m1 == m2 && p1 == p2 {
+    Bin(p1, m1, union(l1, l2), union(r1, r2))
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) {
+      Bin(p1, m1, union(l1, right), *r1)
+    } else {
+      Bin(p1, m1, *l1, union(r1, right))
+    }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) {
+      Bin(p2, m2, union(left, l2), *r2)
+    } else {
+      Bin(p2, m2, *l2, union(left, r2))
+    }
+  } else {
+    join(p1, *left, p2, *right)
+  }
+}
+
+/// Computes the intersection of two integer sets.
+export fn intersection(left: &IntSet, right: &IntSet) -> IntSet {
+  match left {
+    case Empty => Empty
+    case Tip(x) => if member(right, x) { Tip(x) } else { Empty }
+    case Bin(p1, m1, l1, r1) => intersectBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn intersectBin(p1: Int, m1: Int, l1: &IntSet, r1: &IntSet, left: &IntSet, right: &IntSet) -> IntSet {
+  match right {
+    case Empty => Empty
+    case Tip(x) => if member(left, x) { Tip(x) } else { Empty }
+    case Bin(p2, m2, l2, r2) => intersectTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn intersectTwoBins(
+  p1: Int, m1: Int, l1: &IntSet, r1: &IntSet,
+  p2: Int, m2: Int, l2: &IntSet, r2: &IntSet,
+  left: &IntSet, right: &IntSet
+) -> IntSet {
+  if m1 == m2 && p1 == p2 {
+    let newL = intersection(l1, l2)
+    let newR = intersection(r1, r2)
+    match newL {
+      case Empty => newR
+      case _ => match newR {
+        case Empty => newL
+        case _ => Bin(p1, m1, newL, newR)
+      }
+    }
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) { intersection(l1, right) } else { intersection(r1, right) }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) { intersection(left, l2) } else { intersection(left, r2) }
+  } else {
+    Empty
+  }
+}
+
+/// Computes the set difference (elements in left not present in right).
+export fn difference(left: &IntSet, right: &IntSet) -> IntSet {
+  match left {
+    case Empty => Empty
+    case Tip(x) => if member(right, x) { Empty } else { *left }
+    case Bin(p1, m1, l1, r1) => diffBin(p1, m1, &l1, &r1, left, right)
+  }
+}
+
+fn diffBin(p1: Int, m1: Int, l1: &IntSet, r1: &IntSet, left: &IntSet, right: &IntSet) -> IntSet {
+  match right {
+    case Empty => *left
+    case Tip(x) => delete(left, x)
+    case Bin(p2, m2, l2, r2) => diffTwoBins(p1, m1, l1, r1, p2, m2, &l2, &r2, left, right)
+  }
+}
+
+fn diffTwoBins(
+  p1: Int, m1: Int, l1: &IntSet, r1: &IntSet,
+  p2: Int, m2: Int, l2: &IntSet, r2: &IntSet,
+  left: &IntSet, right: &IntSet
+) -> IntSet {
+  if m1 == m2 && p1 == p2 {
+    let newL = difference(l1, l2)
+    let newR = difference(r1, r2)
+    match newL {
+      case Empty => newR
+      case _ => match newR {
+        case Empty => newL
+        case _ => Bin(p1, m1, newL, newR)
+      }
+    }
+  } else if higherMask(m1, m2) && matchPrefix(p2, p1, m1) {
+    if zeroBit(p2, m1) {
+      let leftDiff = difference(l1, right)
+      match leftDiff {
+        case Empty => *r1
+        case _ => Bin(p1, m1, leftDiff, *r1)
+      }
+    } else {
+      let rightDiff = difference(r1, right)
+      match rightDiff {
+        case Empty => *l1
+        case _ => Bin(p1, m1, *l1, rightDiff)
+      }
+    }
+  } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+    if zeroBit(p1, m2) { difference(left, l2) } else { difference(left, r2) }
+  } else {
+      *left
+  }
+}
+
+/// Computes the symmetric difference of two sets.
+export fn symmetricDifference(left: &IntSet, right: &IntSet) -> IntSet {
+  let diffLR = difference(left, right)
+  let diffRL = difference(right, left)
+  union(&diffLR, &diffRL)
+}
+
+/// Tests whether every element of subset is in superset.
+export fn isSubsetOf(subset: &IntSet, superset: &IntSet) -> Bool {
+  match subset {
+    case Empty => true
+    case Tip(x) => member(superset, x)
+    case Bin(p1, m1, l1, r1) => subsetBin(p1, m1, &l1, &r1, subset, superset)
+  }
+}
+
+fn subsetBin(p1: Int, m1: Int, l1: &IntSet, r1: &IntSet, subset: &IntSet, superset: &IntSet) -> Bool {
+  match superset {
+    case Empty => false
+    case Tip(_) => false
+    case Bin(p2, m2, l2, r2) => {
+      if m1 == m2 && p1 == p2 {
+        isSubsetOf(l1, &l2) && isSubsetOf(r1, &r2)
+      } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
+        if zeroBit(p1, m2) { isSubsetOf(subset, &l2) } else { isSubsetOf(subset, &r2) }
+      } else {
+        false
+      }
+    }
+  }
+}
+
+/// Tests whether the two sets share no common elements.
+export fn disjoint(left: &IntSet, right: &IntSet) -> Bool {
+  isEmpty(&intersection(left, right))
+}
+
+/// Appends all elements in ascending order to the accumulator array.
+fn collectElements(set: &IntSet, acc: Array[Int]) -> Array[Int] {
+  match set {
+    case Empty => acc
+    case Tip(x) => acc.push(x)
+    case Bin(_, m, left, right) => {
+      if m < 0 {
+        let withRight = collectElements(&right, acc)
+        collectElements(&left, withRight)
+      } else {
+        let withLeft = collectElements(&left, acc)
+        collectElements(&right, withLeft)
+      }
+    }
+  }
+}
+
+/// Returns an array of all elements in ascending order.
+export fn toArray(set: &IntSet) -> Array[Int] {
+  collectElements(set, [])
+}
+
+/// Constructs a set from an array of integers.
+export fn fromArray(values: &Array[Int]) -> IntSet {
+  var s = empty()
+  for v in *values {
+    s = insert(&s, v)
+  }
+  s
+}
+
+/// Returns the minimum element present in the set, or None if empty.
+export fn findMin(set: &IntSet) -> Option[Int] {
+  let elems = toArray(set)
+  if elems.length() == 0 { None } else { Some(elems[0]) }
+}
+
+/// Returns the maximum element present in the set, or None if empty.
+export fn findMax(set: &IntSet) -> Option[Int] {
+  let elems = toArray(set)
+  let len = elems.length()
+  if len == 0 { None } else { Some(elems[len - 1]) }
+}
+
+/// Deletes the minimum element from the set.
+export fn deleteMin(set: &IntSet) -> IntSet {
+  match findMin(set) {
+    case Some(minVal) => delete(set, minVal)
+    case None => Empty
+  }
+}
+
+/// Deletes the maximum element from the set.
+export fn deleteMax(set: &IntSet) -> IntSet {
+  match findMax(set) {
+    case Some(maxVal) => delete(set, maxVal)
+    case None => Empty
+  }
+}
+
+/// Partitions elements into strictly smaller and strictly greater than pivot.
+export fn split(set: &IntSet, pivot: Int) -> (IntSet, IntSet) {
+  var lesser = empty()
+  var greater = empty()
+  for x in toArray(set) {
+    if x < pivot {
+      lesser = insert(&lesser, x)
+    } else if x > pivot {
+      greater = insert(&greater, x)
+    }
+  }
+  (lesser, greater)
+}
+
+/// Partitions into strictly smaller, presence boolean, and strictly greater.
+export fn splitMember(set: &IntSet, pivot: Int) -> (IntSet, Bool, IntSet) {
+  let pair = split(set, pivot)
+  (pair[0], member(set, pivot), pair[1])
+}
+
+/// Filters the set, retaining only elements satisfying the predicate.
+export fn filter(set: &IntSet, predicate: fn(Int) -> Bool) -> IntSet {
+  var result = empty()
+  for x in toArray(set) {
+    if predicate(x) {
+      result = insert(&result, x)
+    }
+  }
+  result
+}
