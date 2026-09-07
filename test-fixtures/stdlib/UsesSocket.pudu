@@ -87,6 +87,22 @@ export fn main() -> Int {
     }
   }
 
+  // 64-bit SWAR chunk unmasking (multiple of 8 bytes: 24 bytes)
+  let swar24 = maskedFrame(1, "0123456789abcdef01234567")
+  if let Ok(found24) = Socket.decode(&swar24, Socket.messageLimit()) {
+    if let Ok(Text(content24)) = Socket.messageOf(&found24[0]) {
+      if content24 == "0123456789abcdef01234567" { held = held + 1 }
+    }
+  }
+
+  // SWAR mixed chunk unmasking (8-byte word + 4-byte word + 2 scalar bytes = 14 bytes)
+  let swar14 = maskedFrame(1, "abcdefghijklmn")
+  if let Ok(found14) = Socket.decode(&swar14, Socket.messageLimit()) {
+    if let Ok(Text(content14)) = Socket.messageOf(&found14[0]) {
+      if content14 == "abcdefghijklmn" { held = held + 1 }
+    }
+  }
+
   // How large a message may be is checked against the length it states, not
   // against what has arrived: by the time it has arrived the memory has been
   // allocated, and that is the whole of the attack.

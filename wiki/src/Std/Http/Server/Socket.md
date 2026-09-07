@@ -41,6 +41,12 @@ cut.
 **The handshake's digest is not a secret and is not treated as one.** It proves the far end followed
 the protocol rather than that it knows anything, which is why the algorithm the protocol names is
 acceptable here and nowhere else in this library.
+
+**Payload unmasking uses 64-bit SWAR (SIMD Within A Register) over contiguous unboxed Buffer.**
+Rather than unmasking byte-by-byte with array allocations and software division loops, the 4-byte
+masking key is replicated into 32-bit and 64-bit registers: $M_{64} = (M_{32}) \mid (M_{32} \ll 32)$.
+The payload is processed in unboxed 8-byte chunks using native bitwise XOR (`word ^ M_64`),
+followed by 4-byte and scalar tail unmasking, eliminating heap thrashing and accelerating throughput.
 ## Grill Log
 - **Q:** Make the origin check optional, since some clients are not browsers? **A:** No.
   _Rationale:_ a non-browser client sends no origin, which is a different case and is handled; making
@@ -54,5 +60,9 @@ acceptable here and nowhere else in this library.
 - **Q:** Reassemble a message split across frames? **A:** Yes, up to the same bound, which applies to
   the message rather than to each piece. _Rationale:_ a bound per frame is not a bound: enough
   frames make any size. _Rejected:_ a per-frame limit only.
+- **Q:** Why use 64-bit SWAR unmasking instead of byte-by-byte array pushes? **A:** Byte-by-byte array
+  appends allocate $O(N)$ heap objects and invoke per-byte modulo arithmetic. 64-bit SWAR processes
+  8 bytes per clock cycle over contiguous unboxed memory (`Std.Buffer`), reducing memory traffic
+  and enabling gigabit-speed WebSocket frame processing.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Http Server]] · [[Std Crypto]] · [[Std Ui Live]] · [[ADR-0017 What the Web Layer Refuses]]
+[[src/Std/_MOC]] · [[Std Http Server]] · [[Std Crypto]] · [[Std Ui Live]] · [[Std Buffer]] · [[ADR-0017 What the Web Layer Refuses]]

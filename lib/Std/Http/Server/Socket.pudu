@@ -1,5 +1,6 @@
 module Std.Http.Server.Socket
 
+import Std.Buffer as Buffer
 import Std.Bytes as ByteSeq
 import Std.Crypto as Crypto
 import Std.Http as Http
@@ -196,15 +197,68 @@ export fn decode(source: &Bytes, limit: Int) -> Result[(Frame, Int), SocketError
   )
 }
 
-/// A frame's payload with the mask removed.
+/// A frame's payload with the mask removed using 64-bit SWAR unmasking over contiguous unboxed Buffer.
 fn unmasked(source: &Bytes, from: Int, count: Int, key: &Array[Int]) -> Bytes {
-  var out: Array[UInt8] = []
+  if count <= 0 {
+    return ByteSeq.fromArray(&[])
+  }
+
+  let k0 = Option.unwrapOr(convertInteger[UInt32](key[0]), 0u32)
+  let k1 = Option.unwrapOr(convertInteger[UInt32](key[1]), 0u32)
+  let k2 = Option.unwrapOr(convertInteger[UInt32](key[2]), 0u32)
+  let k3 = Option.unwrapOr(convertInteger[UInt32](key[3]), 0u32)
+
+  let mask32 = k0 | (k1 << 8) | (k2 << 16) | (k3 << 24)
+  let mask64Low = Option.unwrapOr(convertInteger[UInt64](mask32), 0u64)
+  let mask64 = mask64Low | (mask64Low << 32)
+
+  let srcBuf = Buffer.fromBytes(*source)
+  var dstBuf = Buffer.alloc(count)
   var index = 0
+
+  // 1. 64-bit SWAR chunked unmasking (8 bytes per iteration)
+  while index + 8 <= count {
+    match Buffer.readU64(&srcBuf, from + index) {
+      case Some(word) => {
+        let unmaskedWord = word ^ mask64
+        match Buffer.writeU64(&dstBuf, index, unmaskedWord) {
+          case Some(updated) => { dstBuf = updated }
+          case None => {}
+        }
+      }
+      case None => {}
+    }
+    index = index + 8
+  }
+
+  // 2. 32-bit chunked unmasking (4 bytes)
+  while index + 4 <= count {
+    match Buffer.readU32(&srcBuf, from + index) {
+      case Some(word) => {
+        let unmaskedWord = word ^ mask32
+        match Buffer.writeU32(&dstBuf, index, unmaskedWord) {
+          case Some(updated) => { dstBuf = updated }
+          case None => {}
+        }
+      }
+      case None => {}
+    }
+    index = index + 4
+  }
+
+  // 3. Scalar tail unmasking (1 to 3 bytes remaining)
   while index < count {
-    out = out.push(byteOf(xorOf(octet(source, from + index), key[index % 4])))
+    let rawByte = octet(source, from + index)
+    let keyByte = key[index % 4]
+    let unmaskedByte = byteOf(rawByte ^ keyByte)
+    match Buffer.fill(&dstBuf, index, 1, unmaskedByte) {
+      case Some(updated) => { dstBuf = updated }
+      case None => {}
+    }
     index = index + 1
   }
-  ByteSeq.fromArray(&out)
+
+  Buffer.toBytes(&dstBuf)
 }
 
 /// What a frame means, once it is whole.
@@ -339,17 +393,7 @@ fn byteOf(value: Int) -> UInt8 {
 
 /// One byte combined with one byte of the mask.
 fn xorOf(left: Int, right: Int) -> Int {
-  var out = 0
-  var place = 1
-  var a = left
-  var b = right
-  while place <= 128 {
-    if (a % 2) != (b % 2) { out = out + place }
-    a = a / 2
-    b = b / 2
-    place = place * 2
-  }
-  out
+  left ^ right
 }
 
 fn twoTo(power: Int) -> Int {
