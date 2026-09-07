@@ -1,0 +1,362 @@
+module Std.Archive.Tar
+
+import Std.Bytes as ByteSeq
+import Std.Option as Option
+
+/// Classification of a filesystem entry stored in a tar archive.
+export type TarType
+  = File
+  | Directory
+  | Symlink
+
+/// A single file, directory, or link stored within a USTAR archive.
+export type TarEntry = {
+  path: Str,
+  mode: Int,
+  size: Int,
+  mtime: Int,
+  typeFlag: TarType,
+  linkName: Str,
+  data: Bytes
+}
+
+/// Structured failure conditions encountered while reading a tar stream.
+export type TarError
+  = CorruptHeader
+  | InvalidChecksum
+  | UnexpectedEof
+  | UnsupportedType
+
+/// Convenience constructor for a regular file entry.
+export fn entry(path: Str, data: Bytes) -> TarEntry {
+  TarEntry {
+    path: path,
+    mode: 420,
+    size: data.length(),
+    mtime: 1700000000,
+    typeFlag: File,
+    linkName: "",
+    data: data
+  }
+}
+
+/// Convenience constructor for a directory entry.
+export fn directory(path: Str) -> TarEntry {
+  let dirPath = if path.endsWith("/") { path } else { path < > "/" }
+  TarEntry {
+    path: dirPath,
+    mode: 493,
+    size: 0,
+    mtime: 1700000000,
+    typeFlag: Directory,
+    linkName: "",
+    data: ByteSeq.empty()
+  }
+}
+
+/// Formats an integer as an ASCII octal string into an octet array of fixed width.
+fn formatOctal(val: Int, width: Int) -> Array[UInt8] {
+  var digits: Array[UInt8] = []
+  var num = val
+  var count = 0
+  while count < width - 1 {
+    let rem = num % 8
+    let asciiDigit = convertInteger(48 + rem)
+    digits = digits.push(asciiDigit)
+    num = num / 8
+    count = count + 1
+  }
+  var reversed: Array[UInt8] = []
+  var i = digits.length() - 1
+  while i >= 0 {
+    reversed = reversed.push(digits[i])
+    i = i - 1
+  }
+  reversed.push(0u8)
+}
+
+/// Parses an octal ASCII number from a byte slice.
+fn parseOctal(source: &Bytes, offset: Int, length: Int) -> Option[Int] {
+  var result = 0
+  var started = false
+  var i = 0
+  while i < length {
+    match source.at(offset + i) {
+      case Some(b) => {
+        let code = convertInteger(b)
+        if code == 0 || code == 32 {
+          if started { return Some(result) }
+        } else if code >= 48 && code <= 55 {
+          started = true
+          result = result * 8 + (code - 48)
+        } else {
+          return None
+        }
+      }
+      case None => { return None }
+    }
+    i = i + 1
+  }
+  Some(result)
+}
+
+/// Calculates the unsigned byte sum of a 512-byte header with checksum bytes treated as spaces (32).
+fn computeHeaderChecksum(block: &Array[UInt8]) -> Int {
+  var sum = 0
+  var i = 0
+  while i < 512 {
+    let b = if i >= 148 && i < 156 { 32 } else { convertInteger(block[i]) }
+    sum = sum + b
+    i = i + 1
+  }
+  sum
+}
+
+/// Serializes a TarEntry into its 512-byte USTAR header block.
+fn buildHeader(item: &TarEntry) -> Array[UInt8] {
+  var block: Array[UInt8] = []
+  var i = 0
+  while i < 512 {
+    block = block.push(0u8)
+    i = i + 1
+  }
+
+  let pathBytes = item.path.toBytes().toArray()
+  var p = 0
+  while p < pathBytes.length() && p < 100 {
+    block = block.set(p, pathBytes[p])
+    p = p + 1
+  }
+
+  let modeOct = formatOctal(item.mode, 8)
+  var m = 0
+  while m < 8 {
+    block = block.set(100 + m, modeOct[m])
+    m = m + 1
+  }
+
+  let sizeOct = formatOctal(item.size, 12)
+  var s = 0
+  while s < 12 {
+    block = block.set(124 + s, sizeOct[s])
+    s = s + 1
+  }
+
+  let mtimeOct = formatOctal(item.mtime, 12)
+  var t = 0
+  while t < 12 {
+    block = block.set(136 + t, mtimeOct[t])
+    t = t + 1
+  }
+
+  let typeByte = match item.typeFlag {
+    case File => 48u8
+    case Directory => 53u8
+    case Symlink => 50u8
+  }
+  block = block.set(156, typeByte)
+
+  let linkBytes = item.linkName.toBytes().toArray()
+  var l = 0
+  while l < linkBytes.length() && l < 100 {
+    block = block.set(157 + l, linkBytes[l])
+    l = l + 1
+  }
+
+  let magic = "ustar".toBytes().toArray()
+  var mg = 0
+  while mg < magic.length() {
+    block = block.set(257 + mg, magic[mg])
+    mg = mg + 1
+  }
+  block = block.set(262, 0u8)
+  block = block.set(263, 48u8)
+  block = block.set(264, 48u8)
+
+  let chk = computeHeaderChecksum(&block)
+  let chkOct = formatOctal(chk, 7)
+  var c = 0
+  while c < 7 {
+    block = block.set(148 + c, chkOct[c])
+    c = c + 1
+  }
+  block = block.set(155, 32u8)
+
+  block
+}
+
+/// Encodes an array of tar entries into a complete POSIX USTAR byte archive.
+export fn writeArchive(entries: Array[TarEntry]) -> Bytes {
+  var allBytes: Array[UInt8] = []
+
+  var idx = 0
+  while idx < entries.length() {
+    let headerBlock = buildHeader(&entries[idx])
+    var h = 0
+    while h < 512 {
+      allBytes = allBytes.push(headerBlock[h])
+      h = h + 1
+    }
+
+    let payload = entries[idx].data.toArray()
+    var b = 0
+    while b < payload.length() {
+      allBytes = allBytes.push(payload[b])
+      b = b + 1
+    }
+
+    let padBytes = if payload.length() % 512 != 0 {
+      512 - (payload.length() % 512)
+    } else {
+      0
+    }
+    var p = 0
+    while p < padBytes {
+      allBytes = allBytes.push(0u8)
+      p = p + 1
+    }
+
+    idx = idx + 1
+  }
+
+  var term = 0
+  while term < 1024 {
+    allBytes = allBytes.push(0u8)
+    term = term + 1
+  }
+
+  ByteSeq.fromArray(&allBytes)
+}
+
+/// Checks whether a 512-byte slice represents a zero terminator block.
+fn isZeroBlock(source: &Bytes, offset: Int) -> Bool {
+  var i = 0
+  while i < 512 {
+    match source.at(offset + i) {
+      case Some(b) => { if b != 0u8 { return false } }
+      case None => { return true }
+    }
+    i = i + 1
+  }
+  true
+}
+
+/// Decodes all TarEntries from a POSIX USTAR archive byte stream.
+export fn readArchive(archive: &Bytes) -> Result[Array[TarEntry], TarError] {
+  var entries: Array[TarEntry] = []
+  var offset = 0
+  let totalLen = archive.length()
+
+  while offset + 512 <= totalLen {
+    if isZeroBlock(archive, offset) {
+      break
+    }
+
+    var rawHeader: Array[UInt8] = []
+    var h = 0
+    while h < 512 {
+      match archive.at(offset + h) {
+        case Some(b) => { rawHeader = rawHeader.push(b) }
+        case None => { return Err(UnexpectedEof) }
+      }
+      h = h + 1
+    }
+
+    let recordedChecksum = match parseOctal(archive, offset + 148, 8) {
+      case Some(sum) => sum
+      case None => { return Err(InvalidChecksum) }
+    }
+    let calculatedChecksum = computeHeaderChecksum(&rawHeader)
+    if recordedChecksum != calculatedChecksum {
+      return Err(InvalidChecksum)
+    }
+
+    var pathBytes: Array[UInt8] = []
+    var p = 0
+    while p < 100 {
+      let b = rawHeader[p]
+      if b == 0u8 { break }
+      pathBytes = pathBytes.push(b)
+      p = p + 1
+    }
+    let entryPath = match ByteSeq.fromArray(&pathBytes).toText() {
+      case Ok(txt) => txt
+      case Err(_) => { return Err(CorruptHeader) }
+    }
+
+    let modeVal = match parseOctal(archive, offset + 100, 8) {
+      case Some(m) => m
+      case None => 420
+    }
+
+    let sizeVal = match parseOctal(archive, offset + 124, 12) {
+      case Some(s) => s
+      case None => { return Err(CorruptHeader) }
+    }
+
+    let mtimeVal = match parseOctal(archive, offset + 136, 12) {
+      case Some(t) => t
+      case None => 0
+    }
+
+    let typeCode = convertInteger(rawHeader[156])
+    let entryType = if typeCode == 53 {
+      Directory
+    } else if typeCode == 50 {
+      Symlink
+    } else {
+      File
+    }
+
+    var linkBytes: Array[UInt8] = []
+    var l = 0
+    while l < 100 {
+      let b = rawHeader[157 + l]
+      if b == 0u8 { break }
+      linkBytes = linkBytes.push(b)
+      l = l + 1
+    }
+    let linkStr = match ByteSeq.fromArray(&linkBytes).toText() {
+      case Ok(txt) => txt
+      case Err(_) => ""
+    }
+
+    let dataStart = offset + 512
+    if dataStart + sizeVal > totalLen {
+      return Err(UnexpectedEof)
+    }
+    let payload = archive.slice(dataStart, dataStart + sizeVal)
+
+    entries = entries.push(TarEntry {
+        path: entryPath,
+        mode: modeVal,
+        size: sizeVal,
+        mtime: mtimeVal,
+        typeFlag: entryType,
+        linkName: linkStr,
+        data: payload
+      })
+
+    let padBytes = if sizeVal % 512 != 0 {
+      512 - (sizeVal % 512)
+    } else {
+      0
+    }
+    offset = dataStart + sizeVal + padBytes
+  }
+
+  Ok(entries)
+}
+
+/// Searches entries for a regular file matching the exact relative path.
+export fn extractFile(entries: &Array[TarEntry], targetPath: Str) -> Option[Bytes] {
+  var i = 0
+  while i < entries.length() {
+    let item = &entries[i]
+    if item.path == targetPath {
+      return Some(item.data)
+    }
+    i = i + 1
+  }
+  None
+}
