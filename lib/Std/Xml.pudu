@@ -1,0 +1,544 @@
+module Std.Xml
+
+import Std.Text as Reading
+
+/// A node of a document.
+///
+/// Text and elements are the two kinds a reader acts on. Comments and
+/// processing instructions are dropped while reading rather than carried,
+/// because a document is read here to get at what it says, and a reader that
+/// had to skip them at every level would skip them wrongly somewhere.
+export type Node
+  = Element(Tag)
+  | Content(Str)
+
+/// One element: its name, its attributes, and what is inside it.
+///
+/// Namespaces are kept as they were written — `soap:Body` stays that name —
+/// rather than resolved against their declarations. Resolving would mean every
+/// document had to declare correctly before anything could be read from it,
+/// and a service reading one endpoint's replies knows what prefix that
+/// endpoint uses. `localName` is there for the cases where it does not.
+export type Tag = {
+  name: Str,
+  attributes: Array[(Str, Str)],
+  children: Array[Node]
+}
+
+/// Why text does not name a document.
+export type XmlError
+  = Unterminated(Int)
+  | MismatchedClose(Str, Str)
+  | UnexpectedEnd
+  | NoRootElement
+  | Malformed(Int, Str)
+
+/// What this reads.
+///
+/// Elements, attributes, text, CDATA, comments, the declaration, and the five
+/// entities the format defines plus numeric character references. That is what
+/// a SOAP envelope, a SAML assertion, an RSS feed, and a configuration file
+/// are made of.
+///
+/// It reads rather than validates: no schema, no DTD, no entity declarations.
+/// A DTD is refused rather than skipped, because a document that declares its
+/// own entities means something this cannot work out, and the way that
+/// normally goes wrong — a declaration that expands to gigabytes, or one that
+/// reads a file off the machine — is not a failure worth having.
+
+/// Read a document, answering its root element.
+export fn decode(source: Str) -> Result[Tag, XmlError] {
+  let chars = source.chars()
+  var index = skipProlog(&chars, 0) ?
+  index = skipSpace(&chars, index)
+  if index >= chars.length() {
+    return Err(NoRootElement)
+  }
+  let parsed = parseElement(&chars, index) ?
+  Ok(parsed[0])
+}
+
+/// Everything before the root element: the declaration, comments, and
+/// instructions. A document type declaration is refused here.
+fn skipProlog(chars: &Array[Char], from: Int) -> Result[Int, XmlError] {
+  var index = from
+  while true {
+    index = skipSpace(chars, index)
+    if index + 1 >= chars.length() || chars[index] != '<' {
+      return Ok(index)
+    }
+    let next = chars[index + 1]
+    if next == '?' {
+      index = afterMarker(chars, index, "?>") ?
+    } else if next == '!' {
+      if startsWith(chars, index, "<!--") {
+        index = afterMarker(chars, index, "-->") ?
+      } else if startsWith(chars, index, "<!DOCTYPE") {
+        return Err(Malformed(index, "a document type declaration is not read here"))
+      } else {
+        return Err(Malformed(index, "a declaration this does not read"))
+      }
+    } else {
+      return Ok(index)
+    }
+  }
+  Ok(index)
+}
+
+fn startsWith(chars: &Array[Char], from: Int, marker: Str) -> Bool {
+  let wanted = marker.chars()
+  if from + wanted.length() > chars.length() {
+    return false
+  }
+  var index = 0
+  while index < wanted.length() {
+    if chars[from + index] != wanted[index] {
+      return false
+    }
+    index = index + 1
+  }
+  true
+}
+
+fn afterMarker(chars: &Array[Char], from: Int, marker: Str) -> Result[Int, XmlError] {
+  var index = from
+  while index < chars.length() {
+    if startsWith(chars, index, marker) {
+      return Ok(index + marker.chars().length())
+    }
+    index = index + 1
+  }
+  Err(Unterminated(from))
+}
+
+fn skipSpace(chars: &Array[Char], from: Int) -> Int {
+  var index = from
+  while index < chars.length() && isSpace(chars[index]) {
+    index = index + 1
+  }
+  index
+}
+
+fn isSpace(value: Char) -> Bool {
+  value == ' ' || value == '\t' || value == '\n' || value == '\r'
+}
+
+/// One element and everything inside it, answering where it ended.
+fn parseElement(chars: &Array[Char], from: Int) -> Result[(Tag, Int), XmlError] {
+  if from >= chars.length() || chars[from] != '<' {
+    return Err(Malformed(from, "an element starts with <"))
+  }
+  var index = from + 1
+  let nameEnd = nameEndFrom(chars, index)
+  if nameEnd == index {
+    return Err(Malformed(index, "an element needs a name"))
+  }
+  let name = sliceOf(chars, index, nameEnd)
+  index = nameEnd
+
+  var attributes: Array[(Str, Str)] = []
+  var selfClosing = false
+  while true {
+    index = skipSpace(chars, index)
+    if index >= chars.length() {
+      return Err(UnexpectedEnd)
+    }
+    if chars[index] == '/' {
+      if index + 1 >= chars.length() || chars[index + 1] != '>' {
+        return Err(Malformed(index, "a self-closing element ends with />"))
+      }
+      selfClosing = true
+      index = index + 2
+      break
+    }
+    if chars[index] == '>' {
+      index = index + 1
+      break
+    }
+    let attributeEnd = nameEndFrom(chars, index)
+    if attributeEnd == index {
+      return Err(Malformed(index, "an attribute needs a name"))
+    }
+    let attributeName = sliceOf(chars, index, attributeEnd)
+    index = skipSpace(chars, attributeEnd)
+    if index >= chars.length() || chars[index] != '=' {
+      return Err(Malformed(index, "an attribute needs a value"))
+    }
+    index = skipSpace(chars, index + 1)
+    if index >= chars.length() || (chars[index] != '"' && chars[index] != '\'') {
+      return Err(Malformed(index, "an attribute value is quoted"))
+    }
+    let quote = chars[index]
+    var valueEnd = index + 1
+    while valueEnd < chars.length() && chars[valueEnd] != quote {
+      valueEnd = valueEnd + 1
+    }
+    if valueEnd >= chars.length() {
+      return Err(Unterminated(index))
+    }
+    attributes = attributes.push((attributeName, unescape(sliceOf(chars, index + 1, valueEnd))))
+    index = valueEnd + 1
+  }
+
+  if selfClosing {
+    return Ok((Tag{name: name, attributes: attributes, children: []}, index))
+  }
+
+  var inside: Array[Node] = []
+  while true {
+    if index >= chars.length() {
+      return Err(Unterminated(from))
+    }
+    if startsWith(chars, index, "</") {
+      let closeEnd = nameEndFrom(chars, index + 2)
+      let closing = sliceOf(chars, index + 2, closeEnd)
+      if closing != name {
+        return Err(MismatchedClose(name, closing))
+      }
+      var after = skipSpace(chars, closeEnd)
+      if after >= chars.length() || chars[after] != '>' {
+        return Err(Malformed(after, "a closing tag ends with >"))
+      }
+      return Ok((Tag{name: name, attributes: attributes, children: inside}, after + 1))
+    }
+    if startsWith(chars, index, "<!--") {
+      index = afterMarker(chars, index, "-->") ?
+    } else if startsWith(chars, index, "<![CDATA[") {
+      let end = afterMarker(chars, index, "]]>") ?
+      // Held exactly as written: the whole point of CDATA is that nothing in
+      // it is a reference or a tag.
+      inside = inside.push(Content(sliceOf(chars, index + 9, end - 3)))
+      index = end
+    } else if startsWith(chars, index, "<?") {
+      index = afterMarker(chars, index, "?>") ?
+    } else if chars[index] == '<' {
+      let nested = parseElement(chars, index) ?
+      inside = inside.push(Element(nested[0]))
+      index = nested[1]
+    } else {
+      var textEnd = index
+      while textEnd < chars.length() && chars[textEnd] != '<' {
+        textEnd = textEnd + 1
+      }
+      let raw = sliceOf(chars, index, textEnd)
+      // Whitespace between elements is layout rather than content. Text that
+      // is only layout is dropped so a reader asking for an element's text
+      // does not get the newlines that indented its children.
+      if !Reading.isBlank(raw) {
+        inside = inside.push(Content(unescape(raw)))
+      }
+      index = textEnd
+    }
+  }
+  Err(Unterminated(from))
+}
+
+fn nameEndFrom(chars: &Array[Char], from: Int) -> Int {
+  var index = from
+  while index < chars.length() && isNameChar(chars[index]) {
+    index = index + 1
+  }
+  index
+}
+
+fn isNameChar(value: Char) -> Bool {
+  !isSpace(value) && value != '<' && value != '>' && value != '/' && value != '='
+    && value != '"' && value != '\'' && value != '?' && value != '!'
+}
+
+fn sliceOf(chars: &Array[Char], from: Int, to: Int) -> Str {
+  var taken: Array[Char] = []
+  var index = from
+  while index < to && index < chars.length() {
+    taken = taken.push(chars[index])
+    index = index + 1
+  }
+  Reading.fromChars(&taken)
+}
+
+/// The five entities the format defines, and numeric character references.
+fn unescape(value: Str) -> Str {
+  if !value.contains("&") {
+    return value
+  }
+  let chars = value.chars()
+  var out = ""
+  var index = 0
+  while index < chars.length() {
+    if chars[index] != '&' {
+      out = out + chars[index].toText()
+      index = index + 1
+      continue
+    }
+    var semi = index + 1
+    while semi < chars.length() && chars[semi] != ';' && semi - index < 12 {
+      semi = semi + 1
+    }
+    if semi >= chars.length() || chars[semi] != ';' {
+      out = out + "&"
+      index = index + 1
+      continue
+    }
+    let named = sliceOf(&chars, index + 1, semi)
+    out = out + entityOf(named)
+    index = semi + 1
+  }
+  out
+}
+
+fn entityOf(named: Str) -> Str {
+  if named == "lt" { return "<" }
+  if named == "gt" { return ">" }
+  if named == "amp" { return "&" }
+  if named == "quot" { return "\"" }
+  if named == "apos" { return "'" }
+  if named.startsWith("#") {
+    let digits = if named.startsWith("#x") || named.startsWith("#X") {
+      named.drop(2)
+    } else {
+      named.drop(1)
+    }
+    let base = if named.startsWith("#x") || named.startsWith("#X") { 16 } else { 10 }
+    match codeOf(digits, base) {
+      case Some(code) => {
+        match charFromCode(code) {
+          case Some(found) => { return found.toText() }
+          case None => { return "" }
+        }
+      }
+      case None => { return "&" + named + ";" }
+    }
+  }
+  // An entity nothing declared is left as it was written rather than dropped:
+  // dropping it would silently change the text.
+  "&" + named + ";"
+}
+
+fn codeOf(digits: Str, base: Int) -> Option[Int] {
+  let chars = digits.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    var value = 0 - 1
+    if here >= '0' && here <= '9' {
+      value = here.code() - '0'.code()
+    } else if here >= 'a' && here <= 'f' {
+      value = here.code() - 'a'.code() + 10
+    } else if here >= 'A' && here <= 'F' {
+      value = here.code() - 'A'.code() + 10
+    }
+    if value < 0 || value >= base {
+      return None
+    }
+    total = total * base + value
+    index = index + 1
+  }
+  Some(total)
+}
+
+/// Text so that reading it back gives the same text.
+export fn escape(value: Str) -> Str {
+  let chars = value.chars()
+  var out = ""
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here == '<' {
+      out = out + "&lt;"
+    } else if here == '>' {
+      out = out + "&gt;"
+    } else if here == '&' {
+      out = out + "&amp;"
+    } else if here == '"' {
+      out = out + "&quot;"
+    } else if here == '\'' {
+      out = out + "&apos;"
+    } else {
+      out = out + here.toText()
+    }
+    index = index + 1
+  }
+  out
+}
+
+/// The part of a name after its namespace prefix.
+export fn localName(name: Str) -> Str {
+  let colon = name.indexOf(":")
+  if colon < 0 { name } else { name.drop(colon + 1) }
+}
+
+/// The namespace prefix of a name, or nothing when it has none.
+export fn prefixOf(name: Str) -> Option[Str] {
+  let colon = name.indexOf(":")
+  if colon < 0 { None } else { Some(name.take(colon)) }
+}
+
+/// An attribute's value, or nothing when the element has no such attribute.
+export fn attribute(tag: &Tag, name: Str) -> Option[Str] {
+  var index = 0
+  while index < tag.attributes.length() {
+    if tag.attributes[index][0] == name {
+      return Some(tag.attributes[index][1])
+    }
+    index = index + 1
+  }
+  None
+}
+
+/// The elements directly inside this one, in order.
+export fn elements(tag: &Tag) -> Array[Tag] {
+  var found: Array[Tag] = []
+  var index = 0
+  while index < tag.children.length() {
+    match tag.children[index] {
+      case Element(held) => { found = found.push(held) }
+      case Content(_) => {}
+    }
+    index = index + 1
+  }
+  found
+}
+
+/// The elements directly inside this one with a given name.
+///
+/// Matched on the name as written and on the local name alike, so a caller
+/// reading `soap:Body` finds it whether or not the endpoint uses that prefix.
+export fn children(tag: &Tag, name: Str) -> Array[Tag] {
+  var found: Array[Tag] = []
+  var index = 0
+  while index < tag.children.length() {
+    match tag.children[index] {
+      case Element(held) => {
+        if held.name == name || localName(held.name) == name {
+          found = found.push(held)
+        }
+      }
+      case Content(_) => {}
+    }
+    index = index + 1
+  }
+  found
+}
+
+/// The first element inside this one with a given name.
+export fn child(tag: &Tag, name: Str) -> Option[Tag] {
+  let found = children(tag, name)
+  if found.length() == 0 { None } else { Some(found[0]) }
+}
+
+/// An element reached by a path of names, which is how a field is named.
+export fn path(tag: &Tag, dotted: Str) -> Option[Tag] {
+  let names = dotted.split(".")
+  var current = *tag
+  var index = 0
+  while index < names.length() {
+    current = child(&current, names[index]) ?
+    index = index + 1
+  }
+  Some(current)
+}
+
+/// The text an element holds, with the text of everything inside it.
+export fn text(tag: &Tag) -> Str {
+  var out = ""
+  var index = 0
+  while index < tag.children.length() {
+    match tag.children[index] {
+      case Content(held) => { out = out + held }
+      case Element(held) => { out = out + text(&held) }
+    }
+    index = index + 1
+  }
+  out
+}
+
+/// Every element anywhere inside this one with a given name.
+///
+/// What a reader of a feed or a report wants: the items, wherever the format
+/// decided to put them.
+export fn descendants(tag: &Tag, name: Str) -> Array[Tag] {
+  var found: Array[Tag] = []
+  var index = 0
+  while index < tag.children.length() {
+    match tag.children[index] {
+      case Element(inner) => {
+        if inner.name == name || localName(inner.name) == name {
+          found = found.push(inner)
+        }
+        let deeper = descendants(&inner, name)
+        var deep = 0
+        while deep < deeper.length() {
+          found = found.push(deeper[deep])
+          deep = deep + 1
+        }
+      }
+      case Content(_) => {}
+    }
+    index = index + 1
+  }
+  found
+}
+
+/// A document written back out.
+export fn encode(tag: &Tag) -> Str {
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + render(tag)
+}
+
+/// One element written out, and everything inside it.
+export fn render(tag: &Tag) -> Str {
+  var out = "<" + tag.name
+  var index = 0
+  while index < tag.attributes.length() {
+    out = out + " " + tag.attributes[index][0] + "=\"" + escape(tag.attributes[index][1]) + "\""
+    index = index + 1
+  }
+  if tag.children.length() == 0 {
+    return out + "/>"
+  }
+  out = out + ">"
+  index = 0
+  while index < tag.children.length() {
+    match tag.children[index] {
+      case Content(held) => { out = out + escape(held) }
+      case Element(held) => { out = out + render(&held) }
+    }
+    index = index + 1
+  }
+  out + "</" + tag.name + ">"
+}
+
+/// An element with a name and nothing else.
+export fn element(name: Str) -> Tag {
+  Tag{name: name, attributes: [], children: []}
+}
+
+/// The same element with one more attribute.
+export fn withAttribute(tag: &Tag, name: Str, value: Str) -> Tag {
+  Tag{..*tag, attributes: tag.attributes.push((name, value))}
+}
+
+/// The same element with one more element inside it.
+export fn withChild(tag: &Tag, held: &Tag) -> Tag {
+  Tag{..*tag, children: tag.children.push(Element(*held))}
+}
+
+/// The same element with text inside it.
+export fn withText(tag: &Tag, held: Str) -> Tag {
+  Tag{..*tag, children: tag.children.push(Content(held))}
+}
+
+/// Why a document was refused, written for a person to read.
+export fn explain(reason: &XmlError) -> Str {
+  match *reason {
+    case Unterminated(at) => "what opened at " + display(at) + " is never closed"
+    case MismatchedClose(opened, closed) =>
+    "<" + opened + "> is closed by </" + closed + ">"
+    case UnexpectedEnd => "the document ends in the middle of an element"
+    case NoRootElement => "the document has no element in it"
+    case Malformed(at, what) => "at " + display(at) + ": " + what
+  }
+}

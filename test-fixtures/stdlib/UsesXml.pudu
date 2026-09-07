@@ -1,0 +1,176 @@
+module UsesXml
+
+import Std.Option as Option
+import Std.Xml as Xml
+
+/// A SOAP envelope of the shape one arrives in: a declaration, namespace
+/// prefixes, nested bodies, an attribute, a self-closing element, an escaped
+/// character, and a CDATA section.
+const ENVELOPE: Str =
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+  + "<!-- issued by the billing endpoint -->\n"
+  + "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">\n"
+  + "  <soap:Header/>\n"
+  + "  <soap:Body>\n"
+  + "    <GetInvoiceResponse currency=\"GBP\">\n"
+  + "      <Invoice id=\"42\">\n"
+  + "        <Customer>Smith &amp; Sons</Customer>\n"
+  + "        <Total>1250.75</Total>\n"
+  + "        <Note><![CDATA[terms: 30 days & <strict>]]></Note>\n"
+  + "      </Invoice>\n"
+  + "      <Invoice id=\"43\">\n"
+  + "        <Customer>Jones</Customer>\n"
+  + "        <Total>99.00</Total>\n"
+  + "      </Invoice>\n"
+  + "    </GetInvoiceResponse>\n"
+  + "  </soap:Body>\n"
+  + "</soap:Envelope>\n"
+
+fn root() -> Xml.Tag {
+  match Xml.decode(ENVELOPE) {
+    case Ok(parsed) => parsed
+    case Err(_) => Xml.element("failed")
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+  let document = root()
+
+  // 1. The declaration and comment are passed over to reach the root
+  if document.name == "soap:Envelope" {
+    held = held + 1
+  }
+
+  // 2. A namespace prefix is kept as written, and can be split off
+  if Xml.localName(document.name) == "Envelope"
+    && Option.unwrapOr(Xml.prefixOf(document.name), "") == "soap" {
+    held = held + 1
+  }
+
+  // 3. An attribute on the root is read
+  if Option.unwrapOr(Xml.attribute(&document, "xmlns:soap"), "")
+    == "http://schemas.xmlsoap.org/soap/envelope/" {
+    held = held + 1
+  }
+
+  // 4. A self-closing element is an element with nothing inside it
+  match Xml.child(&document, "Header") {
+    case Some(header) => {
+      if header.children.length() == 0 {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 5. A child is found by its local name whatever prefix it carries
+  match Xml.child(&document, "Body") {
+    case Some(_) => { held = held + 1 }
+    case None => {}
+  }
+
+  // 6. A path reaches down through the nesting
+  match Xml.path(&document, "Body.GetInvoiceResponse") {
+    case Some(response) => {
+      if Option.unwrapOr(Xml.attribute(&response, "currency"), "") == "GBP" {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 7. Repeated elements are all found, in order
+  let invoices = Xml.descendants(&document, "Invoice")
+  if invoices.length() == 2 && Option.unwrapOr(Xml.attribute(&invoices[1], "id"), "") == "43" {
+    held = held + 1
+  }
+
+  // 8. An entity in text is what it stands for, not what was written
+  if invoices.length() == 2 {
+    match Xml.child(&invoices[0], "Customer") {
+      case Some(customer) => {
+        if Xml.text(&customer) == "Smith & Sons" {
+          held = held + 1
+        }
+      }
+      case None => {}
+    }
+  }
+
+  // 9. CDATA is held exactly, tags and ampersands and all
+  if invoices.length() == 2 {
+    match Xml.child(&invoices[0], "Note") {
+      case Some(note) => {
+        if Xml.text(&note) == "terms: 30 days & <strict>" {
+          held = held + 1
+        }
+      }
+      case None => {}
+    }
+  }
+
+  // 10. Indentation between elements is layout, not content
+  match Xml.path(&document, "Body.GetInvoiceResponse") {
+    case Some(response) => {
+      if Xml.elements(&response).length() == 2 {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 11. A document written out and read back is the same document
+  let built = Xml.withChild(
+      &Xml.withAttribute(&Xml.element("order"), "id", "7"),
+      &Xml.withText(&Xml.element("who"), "Smith & Sons")
+  )
+  match Xml.decode(Xml.encode(&built)) {
+    case Ok(again) => {
+      match Xml.child(&again, "who") {
+        case Some(who) => {
+          if Xml.text(&who) == "Smith & Sons" {
+            held = held + 1
+          }
+        }
+        case None => {}
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 12. A tag closed by the wrong name is refused rather than guessed at
+  match Xml.decode("<a><b></c></a>") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 13. A document that ends inside an element is refused
+  match Xml.decode("<a><b>text") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 14. A document type declaration is refused rather than skipped
+  match Xml.decode("<!DOCTYPE a [<!ENTITY x \"y\">]><a/>") {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // 15. A numeric character reference is the character it names
+  match Xml.decode("<a>&#65;&#x42;</a>") {
+    case Ok(parsed) => {
+      if Xml.text(&parsed) == "AB" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 16. Escaping text makes it safe to write and read back
+  if Xml.escape("a < b & \"c\"") == "a &lt; b &amp; &quot;c&quot;" {
+    held = held + 1
+  }
+
+  held
+}

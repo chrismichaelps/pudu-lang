@@ -54,6 +54,7 @@ testProtocolEvaluation = do
   providerTokens <- runEntry "test-fixtures/stdlib/UsesJwtKeys.pudu"
   yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
   versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
+  xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -264,6 +265,15 @@ testProtocolEvaluation = do
     , counterexample
         "versions order by number and globs stop at separators"
         (versionsAndGlobs === Just "24")
+    {-| A SOAP envelope, because the parts that break a reader arrive together
+        in one: a prefixed name, a self-closing element, an entity in text,
+        and a CDATA section whose content must not be read as either. The
+        refusals matter as much — a document type declaration is where a
+        reader that skipped what it did not understand would read a file off
+        the machine it is running on. -}
+    , counterexample
+        "an envelope's names, entities, and CDATA survive, and a DTD is refused"
+        (xmlDocuments === Just "16")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
