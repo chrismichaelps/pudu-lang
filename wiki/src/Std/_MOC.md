@@ -71,6 +71,7 @@ tags: [moc, module, stdlib]
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
+- [[Std App Totp]] — RFC 6238 time-based one-time passwords for multi-factor authentication.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.
 - [[Std App Health]] — restarting and receiving traffic, kept apart by the types.

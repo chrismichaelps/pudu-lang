@@ -1,0 +1,263 @@
+module Std.App.Totp
+
+import Std.Bytes as Bytes
+import Std.Crypto as Crypto
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+import Std.Url as Url
+
+/// Immutable parameters for RFC 6238 TOTP generation and validation.
+export type TotpConfig = {
+  secret: Bytes,
+  digits: Int,
+  stepSeconds: Int,
+  skewSteps: Int,
+  issuer: Str,
+  account: Str
+}
+
+/// Stateful replay prevention tracking the highest authenticated time counter step.
+export type TotpState = {
+  lastUsedStep: Sync.Cell[Int]
+}
+
+const BASE32_ALPHABET: Str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+const BASE32_VALUES: Map[Char, Int] = base32Table()
+
+fn base32Table() -> Map[Char, Int] {
+  var table: Map[Char, Int] = mapOf([])
+  var index = 0
+  while index < BASE32_ALPHABET.length() {
+    table = table.insert(BASE32_ALPHABET.charAt(index), index)
+    index = index + 1
+  }
+  table
+}
+
+fn powerOfTwo(n: Int) -> Int {
+  match n {
+    case 0 => 1
+    case 1 => 2
+    case 2 => 4
+    case 3 => 8
+    case 4 => 16
+    case 5 => 32
+    case 6 => 64
+    case 7 => 128
+    case 8 => 256
+    case _ => 1
+  }
+}
+
+fn powerOfTen(digits: Int) -> Int {
+  match digits {
+    case 6 => 1000000
+    case 7 => 10000000
+    case 8 => 100000000
+    case 9 => 1000000000
+    case _ => 1000000
+  }
+}
+
+/// Initializes standard TOTP configuration with 6 digits, 30-second interval, and 1-step skew tolerance.
+export fn config(secret: Bytes, issuer: Str, account: Str) -> TotpConfig {
+  TotpConfig {
+    secret: secret,
+    digits: 6,
+    stepSeconds: 30,
+    skewSteps: 1,
+    issuer: issuer,
+    account: account
+  }
+}
+
+/// Configures output code length (typically 6 or 8 digits).
+export fn withDigits(cfg: &TotpConfig, digits: Int) -> TotpConfig {
+  TotpConfig {
+    secret: cfg.secret,
+    digits: if digits > 0 { digits } else { 6 },
+    stepSeconds: cfg.stepSeconds,
+    skewSteps: cfg.skewSteps,
+    issuer: cfg.issuer,
+    account: cfg.account
+  }
+}
+
+/// Configures interval duration (RFC 6238 default: 30 seconds).
+export fn withStep(cfg: &TotpConfig, stepSeconds: Int) -> TotpConfig {
+  TotpConfig {
+    secret: cfg.secret,
+    digits: cfg.digits,
+    stepSeconds: if stepSeconds > 0 { stepSeconds } else { 30 },
+    skewSteps: cfg.skewSteps,
+    issuer: cfg.issuer,
+    account: cfg.account
+  }
+}
+
+/// Configures clock skew allowance in steps (default: 1 step, covering +-30s drift).
+export fn withSkew(cfg: &TotpConfig, skewSteps: Int) -> TotpConfig {
+  TotpConfig {
+    secret: cfg.secret,
+    digits: cfg.digits,
+    stepSeconds: cfg.stepSeconds,
+    skewSteps: if skewSteps >= 0 { skewSteps } else { 0 },
+    issuer: cfg.issuer,
+    account: cfg.account
+  }
+}
+
+/// Constructs replay prevention tracking state.
+export fn state() -> TotpState {
+  TotpState {
+    lastUsedStep: Sync.cell(-1)
+  }
+}
+
+/// Computes the canonical time-based OTP code for the given epoch timestamp using HMAC-SHA256.
+export fn generate(cfg: &TotpConfig, timestampSeconds: Int) -> Str {
+  let step = if timestampSeconds < 0 { 0 } else { timestampSeconds / cfg.stepSeconds }
+  generateForStep(cfg, step)
+}
+
+fn generateForStep(cfg: &TotpConfig, step: Int) -> Str {
+  let stepU64 = Option.unwrapOr(convertInteger[UInt64](step), 0u64)
+  let counterBytes = Bytes.putU64Be(stepU64)
+  let digest = hmacSha256Of(cfg.secret, counterBytes)
+  let lastByte = Option.unwrapOr(digest.at(digest.length() - 1), 0u8)
+  let lastInt = Option.unwrapOr(convertInteger[Int](lastByte), 0)
+  let offset = lastInt % 16
+
+  let b0 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(digest.at(offset), 0u8)), 0)
+  let b1 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(digest.at(offset + 1), 0u8)), 0)
+  let b2 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(digest.at(offset + 2), 0u8)), 0)
+  let b3 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(digest.at(offset + 3), 0u8)), 0)
+
+  let p = ((b0 % 128) * 16777216) + (b1 * 65536) + (b2 * 256) + b3
+  let codeInt = p % powerOfTen(cfg.digits)
+
+  var codeStr = show(codeInt)
+  while codeStr.length() < cfg.digits {
+    codeStr = "0" + codeStr
+  }
+  codeStr
+}
+
+/// Validates a user-submitted code against all allowed steps in [C - skew, C + skew]
+/// using constant-time string comparison and atomically guards against replay attacks.
+export fn verify(
+  cfg: &TotpConfig,
+  heldState: &TotpState,
+  code: Str,
+  timestampSeconds: Int
+) -> Bool {
+  let currentStep = if timestampSeconds < 0 { 0 } else { timestampSeconds / cfg.stepSeconds }
+  let lastUsed = Result.unwrapOr(Sync.get(&heldState.lastUsedStep), -1)
+
+  if currentStep > lastUsed {
+    let expectedCurrent = generateForStep(cfg, currentStep)
+    if Crypto.secretsMatch(code, expectedCurrent) {
+      let _updated = Sync.set(&heldState.lastUsedStep, currentStep)
+      return true
+    }
+  }
+
+  var delta = 1
+  while delta <= cfg.skewSteps {
+    let fwdStep = currentStep + delta
+    if fwdStep > lastUsed {
+      let expectedFwd = generateForStep(cfg, fwdStep)
+      if Crypto.secretsMatch(code, expectedFwd) {
+        let _updated = Sync.set(&heldState.lastUsedStep, fwdStep)
+        return true
+      }
+    }
+
+    let backStep = currentStep - delta
+    if backStep > lastUsed && backStep >= 0 {
+      let expectedBack = generateForStep(cfg, backStep)
+      if Crypto.secretsMatch(code, expectedBack) {
+        let _updated = Sync.set(&heldState.lastUsedStep, backStep)
+        return true
+      }
+    }
+
+    delta = delta + 1
+  }
+
+  false
+}
+
+/// Builds the standard otpauth URI for authenticator app enrollment.
+export fn provisioningUri(cfg: &TotpConfig) -> Str {
+  let encIssuer = Url.encodeComponent(cfg.issuer)
+  let encAccount = Url.encodeComponent(cfg.account)
+  let secretB32 = encodeBase32(&cfg.secret)
+  "otpauth://totp/" + encIssuer + ":" + encAccount + "?secret=" + secretB32 + "&issuer=" + encIssuer + "&algorithm=SHA256&digits=" + show(cfg.digits) + "&period=" + show(cfg.stepSeconds)
+}
+
+/// RFC 4648 Base32 encoder converting binary secrets into uppercase strings without padding.
+export fn encodeBase32(source: &Bytes) -> Str {
+  let octets = source.toArray()
+  var out = ""
+  var buffer = 0
+  var bitsLeft = 0
+  var index = 0
+  while index < octets.length() {
+    let b = Option.unwrapOr(convertInteger[Int](octets[index]), 0)
+    buffer = (buffer * 256) + b
+    bitsLeft = bitsLeft + 8
+    while bitsLeft >= 5 {
+      bitsLeft = bitsLeft - 5
+      let digitIndex = (buffer / powerOfTwo(bitsLeft)) % 32
+      out = out + BASE32_ALPHABET.charAt(digitIndex).toText()
+      buffer = buffer % powerOfTwo(bitsLeft)
+    }
+    index = index + 1
+  }
+  if bitsLeft > 0 {
+    let digitIndex = (buffer * powerOfTwo(5 - bitsLeft)) % 32
+    out = out + BASE32_ALPHABET.charAt(digitIndex).toText()
+  }
+  out
+}
+
+fn normalizeBase32(text: Str) -> Str {
+  var out = ""
+  for c in text.toUpper().chars() {
+    if c != ' ' && c != '\t' && c != '\r' && c != '\n' && c != '-' && c != '=' {
+      out = out + c.toText()
+    }
+  }
+  out
+}
+
+/// RFC 4648 Base32 decoder with whitespace stripping and case normalization.
+export fn decodeBase32(text: Str) -> Result[Bytes, Str] {
+  let cleaned = normalizeBase32(text)
+  var octets: Array[UInt8] = []
+  var buffer = 0
+  var bitsLeft = 0
+  var index = 0
+  while index < cleaned.length() {
+    let c = cleaned.charAt(index)
+    match BASE32_VALUES.get(c) {
+      case Some(val) => {
+        buffer = (buffer * 32) + val
+        bitsLeft = bitsLeft + 5
+        while bitsLeft >= 8 {
+          bitsLeft = bitsLeft - 8
+          let byteVal = (buffer / powerOfTwo(bitsLeft)) % 256
+          octets = octets.push(Option.unwrapOr(convertInteger[UInt8](byteVal), 0u8))
+          buffer = buffer % powerOfTwo(bitsLeft)
+        }
+      }
+      case None => {
+        return Err("invalid base32 character: " + c.toText())
+      }
+    }
+    index = index + 1
+  }
+  Ok(bytesOf(octets))
+}

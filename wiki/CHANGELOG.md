@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — RFC 6238 TOTP multi-factor authentication and Base32 codecs
+
+- [[Std App Totp]]: Multi-factor authentication (MFA) implementing RFC 6238 Time-Based One-Time Passwords (TOTP) and RFC 4226 dynamic truncation over HMAC-SHA256 with constant-time equality validation, clock skew windows, replay prevention, and RFC 4648 Base32 codecs.
+- Provisioning URI generation (`otpauth://totp/...`) compatible with Google Authenticator, 1Password, and Authy.
+- Updated `UsesEnterpriseSsr.pudu` with TOTP validation and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] Authentication verdict from Partial/Absent to Ready.
+
 ## 2026-09-06 — Multi-tenant isolation, noisy-neighbor bounding, and admission quotas
 
 - [[Std App Tenant]]: Synchronized multi-tenant registry, resource quota definitions (`Free`, `Standard`, `Enterprise`), data isolation keying (`scopedKey`), per-tenant admission backpressure (noisy-neighbor protection), moving-window rate limiting, and instant account suspension.

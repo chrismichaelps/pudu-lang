@@ -8,6 +8,7 @@ import Std.App.IsrCache {Fresh, Stale, Miss}
 import Std.App.IsrCache as IsrCache
 import Std.App.Secret as Secret
 import Std.App.Tenant as Tenant
+import Std.App.Totp as Totp
 import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Html.Buffer as HtmlBuffer
@@ -29,7 +30,10 @@ import Std.Result as Result
 import Std.Ui.Island as Island
 
 fn textOf(b: &Bytes) -> Str {
-  Option.unwrapOr(b.toText(), "")
+  match ByteSeq.toText(b) {
+    case Ok(str) => str
+    case Err(_) => ""
+  }
 }
 
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
@@ -46,11 +50,7 @@ export fn main() -> Int {
   var passed = 0
 
   // 1. HtmlBuffer: compile and zero-copy assemble into unboxed memory
-  let chunks = [
-    HtmlBuffer.Static("<h1>Title: ".toBytes()),
-    HtmlBuffer.Dynamic("name"),
-    HtmlBuffer.Static("</h1>".toBytes())
-  ]
+  let chunks = [HtmlBuffer.Static("<h1>Title: ".toBytes()), HtmlBuffer.Dynamic("name"), HtmlBuffer.Static("</h1>".toBytes())]
   let plan = HtmlBuffer.compile(&chunks)
   if plan.totalStaticBytes == 16 { passed = passed + 1 }
 
@@ -66,10 +66,7 @@ export fn main() -> Int {
   if textOf(&mssHeader) == "5b4\r\n" { passed = passed + 1 }
 
   // 3. HtmlBuffer: TCP MSS coalescing
-  let c1 = "aaaa".toBytes()
-  let c2 = "bbbb".toBytes()
-  let c3 = "cccc".toBytes()
-  let batched = HtmlBuffer.coalesceToMss(&[c1, c2, c3], 8)
+  let batched = HtmlBuffer.coalesceToMss(&["aaaa".toBytes(), "bbbb".toBytes(), "cccc".toBytes()], 8)
   if batched.length() == 2 { passed = passed + 1 }
   if textOf(&batched[0]) == "aaaabbbb" { passed = passed + 1 }
 
@@ -99,28 +96,17 @@ export fn main() -> Int {
   }
 
   // 6. Resilience: Network profile inspection
-  let saveHeaders = [("Save-Data", "on"), ("Host", "example.com")]
-  let saveProf = Resilience.inspectClientNetwork(&saveHeaders)
-  match saveProf {
-    case SaveDataActive => { passed = passed + 1 }
-    case _ => {}
-  }
+  let saveProf = Resilience.inspectClientNetwork(&[("Save-Data", "on"), ("Host", "example.com")])
+  match saveProf { case SaveDataActive => { passed = passed + 1 } case _ => {} }
 
-  let cellularHeaders = [("ECT", "2g")]
-  let cellProf = Resilience.inspectClientNetwork(&cellularHeaders)
+  let cellProf = Resilience.inspectClientNetwork(&[("ECT", "2g")])
   match cellProf {
-    case ConstrainedCellular(kind) => {
-      if kind == "2g" { passed = passed + 1 }
-    }
+    case ConstrainedCellular(kind) => { if kind == "2g" { passed = passed + 1 } }
     case _ => {}
   }
 
-  let broadbandHeaders = [("ECT", "4g"), ("RTT", "40")]
-  let broadProf = Resilience.inspectClientNetwork(&broadbandHeaders)
-  match broadProf {
-    case FastBroadband => { passed = passed + 1 }
-    case _ => {}
-  }
+  let broadProf = Resilience.inspectClientNetwork(&[("ECT", "4g"), ("RTT", "40")])
+  match broadProf { case FastBroadband => { passed = passed + 1 } case _ => {} }
 
   // 7. Resilience: SWR headers and adaptive payload
   let swr = Resilience.swrHeaders(60, 300, &["catalog", "v1"])
@@ -173,23 +159,14 @@ export fn main() -> Int {
   if matchTok && !mismatchTok { passed = passed + 1 }
 
   // 10. Ui.Island: Island element, form action, and micro-runtime
-  let islandElem = Island.island("cart", "\{\"items\":2\}", Html.text("Fallback Cart"))
-  let renderedIsland = Html.render(&islandElem)
-  if renderedIsland.contains("<pudu-island") && renderedIsland.contains("data-name=\"cart\"") {
-    passed = passed + 1
-  }
+  let renderedIsland = Html.render(&Island.island("cart", "\{\"items\":2\}", Html.text("Fallback Cart")))
+  if renderedIsland.contains("<pudu-island") && renderedIsland.contains("data-name=\"cart\"") { passed = passed + 1 }
 
-  let formElem = Island.serverActionForm("/api/cart", "token123", &[Html.text("Input")])
-  let renderedForm = Html.render(&formElem)
-  if renderedForm.contains("<form method=\"POST\" action=\"/api/cart\"") && renderedForm.contains("value=\"token123\"") {
-    passed = passed + 1
-  }
+  let renderedForm = Html.render(&Island.serverActionForm("/api/cart", "token123", &[Html.text("Input")]))
+  if renderedForm.contains("<form method=\"POST\" action=\"/api/cart\"") && renderedForm.contains("value=\"token123\"") { passed = passed + 1 }
 
-  let runtimeElem = Island.microRuntime(nonce)
-  let renderedRuntime = Html.render(&runtimeElem)
-  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"") && renderedRuntime.contains("fetch(f.action") {
-    passed = passed + 1
-  }
+  let renderedRuntime = Html.render(&Island.microRuntime(nonce))
+  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"") && renderedRuntime.contains("fetch(f.action") { passed = passed + 1 }
 
   // 11. Reply: withEtag and notModified
   let baseResp = Reply.text(200, "resource-body")
@@ -441,10 +418,7 @@ export fn main() -> Int {
   if Tenant.scopedKey("tenant-alpha", "cache:home") == "tenant:tenant-alpha:cache:home" { passed = passed + 1 }
 
   let adm1 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
-  match adm1 {
-    case Tenant.Admitted(_) => { passed = passed + 1 }
-    case _ => {}
-  }
+  match adm1 { case Tenant.Admitted(_) => { passed = passed + 1 } case _ => {} }
 
   // Tenant-alpha free quota maxInflight is 2: 2nd request admitted, 3rd request fast-sheds noisy neighbor!
   let adm2 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
@@ -457,18 +431,12 @@ export fn main() -> Int {
   // Releasing one inflight request allows admission again
   Tenant.release(&tenantReg, "tenant-alpha")
   let adm4 = Tenant.admit(&tenantReg, "tenant-alpha", 500)
-  match adm4 {
-    case Tenant.Admitted(_) => { passed = passed + 1 }
-    case _ => {}
-  }
+  match adm4 { case Tenant.Admitted(_) => { passed = passed + 1 } case _ => {} }
 
   // Account suspension immediately refuses admission with Suspended
   let _deact = Tenant.setActive(&tenantReg, "tenant-alpha", false)
   let admSusp = Tenant.admit(&tenantReg, "tenant-alpha", 500)
-  match admSusp {
-    case Tenant.Suspended(_) => { passed = passed + 1 }
-    case _ => {}
-  }
+  match admSusp { case Tenant.Suspended(_) => { passed = passed + 1 } case _ => {} }
 
   // Tenant middleware integration
   let tenantGuard = Tenant.guard(&tenantReg, Tenant.resolveFromHeader("x-tenant-id"))
@@ -483,6 +451,39 @@ export fn main() -> Int {
   let suspReq = testRequest([("x-tenant-id", "tenant-alpha")], "127.0.0.1")
   let suspResp = tenantGuard(suspReq, fastHandler)
   if suspResp.status.code == 403 { passed = passed + 1 }
+
+  // 31. Totp: Base32, RFC 6238 generation, constant-time verify, replay prevention, and clock skew
+  let foobarBs = "foobar".toBytes()
+  if Totp.encodeBase32(&foobarBs) == "MZXW6YTBOI" { passed = passed + 1 }
+  match Totp.decodeBase32("mzx-w6-ytboi===") {
+    case Ok(bs) => { if bs == foobarBs { passed = passed + 1 } }
+    case Err(_) => {}
+  }
+
+  let totpSec = "12345678901234567890".toBytes()
+  let totpCfg = Totp.config(totpSec, "Acme Corp", "alice@example.com")
+  let totpUri = Totp.provisioningUri(&totpCfg)
+  if totpUri.contains("otpauth://totp/Acme%20Corp:alice%40example.com")
+    && totpUri.contains("algorithm=SHA256")
+    && totpUri.contains("digits=6") {
+    passed = passed + 1
+  }
+
+  let totpSt = Totp.state()
+  let codeT0 = Totp.generate(&totpCfg, 0)
+  if codeT0.length() == 6 { passed = passed + 1 }
+  if Totp.verify(&totpCfg, &totpSt, codeT0, 0) { passed = passed + 1 }
+
+  // Replay of same code within same window is rejected
+  if !Totp.verify(&totpCfg, &totpSt, codeT0, 5) { passed = passed + 1 }
+
+  // Next window at t=30 generates fresh code and succeeds
+  let codeT30 = Totp.generate(&totpCfg, 30)
+  if Totp.verify(&totpCfg, &totpSt, codeT30, 30) { passed = passed + 1 }
+
+  // Forward clock skew (+1 step) within skew allowance succeeds
+  let codeT90 = Totp.generate(&totpCfg, 90)
+  if Totp.verify(&totpCfg, &totpSt, codeT90, 60) { passed = passed + 1 }
 
   passed
 }

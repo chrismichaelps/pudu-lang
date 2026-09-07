@@ -149,9 +149,13 @@ Implemented SaaS multi-tenancy isolation and resource bounds:
 - Updated `UsesEnterpriseSsr.pudu` (77 assertions) and `RuntimeSpec.hs`.
 - Added module mirror `Tenant.md` with resolved Grill Log; updated `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
 - Validated via `bash test/gates.sh` (all 7 gates passed cleanly).
-Exact next action: Commit and push changes to dev refs #193.
 
+## RFC 6238 TOTP Multi-Factor Authentication and Base32 Codecs
 
-
-
-
+Implemented enterprise multi-factor authentication (MFA):
+- `Std.App.Totp`: RFC 6238 Time-Based One-Time Passwords (TOTP) and RFC 4226 HMAC-Based One-Time Passwords (HOTP) using HMAC-SHA256, dynamic truncation, constant-time verification, clock skew tolerance, and replay prevention.
+- Built-in RFC 4648 Base32 codecs (`encodeBase32`, `decodeBase32`) with whitespace stripping and case normalization.
+- Authenticator app enrollment URI generator (`provisioningUri`).
+- Added module mirror `Totp.md` with resolved Grill Log; updated `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
+- Expanded `UsesEnterpriseSsr.pudu` with TOTP assertions and updated `RuntimeSpec.hs`.
+Exact next action: Run all repository quality gates (`test/gates.sh`) and commit/push to dev refs #193.

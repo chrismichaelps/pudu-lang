@@ -98,7 +98,7 @@ testRuntimeEvaluation = do
         (threads === Just "32")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "77")
+        (enterpriseSsr === Just "85")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having
