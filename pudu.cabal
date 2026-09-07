@@ -126,6 +126,15 @@ library
     Pudu.Lsp.Definition
     Pudu.Lsp.Protocol
     Pudu.Lsp.Server
+    Pudu.Lsp.References
+    Pudu.Lsp.Rename
+    Pudu.Lsp.Highlight
+    Pudu.Lsp.SemanticTokens
+    Pudu.Lsp.SignatureHelp
+    Pudu.Lsp.InlayHints
+    Pudu.Lsp.WorkspaceSymbols
+    Pudu.Lsp.CodeAction
+    Pudu.Lsp.Completion
     Pudu.IntegerLiteral
     Pudu.Doc
     Pudu.Doc.Json

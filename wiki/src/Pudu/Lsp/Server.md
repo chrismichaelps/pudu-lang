@@ -50,9 +50,10 @@ serverCapabilities :: Json
   within one keystroke would otherwise compile the program three times.
 - The stored analysis retains the root module's resolver result. Hover and definition therefore use
   symbol identity from the same compile as diagnostics and types rather than guessing by spelling.
-- **Only implemented capabilities are announced.** A capability claimed and not honoured is worse
-  than one withheld — the editor stops offering its own fallback and the reader gets nothing at all.
-  Rename, references, and semantic tokens are absent for that reason.
+- **All standard capabilities are implemented and announced.** In addition to hover, definition,
+  outline, formatting, and completions, the server provides find references, rename (with prepare),
+  document highlight, semantic tokens (full), signature help, inlay hints, workspace symbols,
+  and code actions. Each capability is isolated in its own bounded pure module.
 - Synchronisation is full-document. An incremental edit is not accepted, because the server would be
   applying a range it has no guarantee it can interpret.
 - A notification is never answered. Replying to one is the single protocol error a client cannot
@@ -62,8 +63,9 @@ serverCapabilities :: Json
 - Formatting replaces the whole document in one edit. The formatter guarantees it only moves
   whitespace, so a full replacement cannot change the program, and a client applies one edit
   atomically.
-- A file's own directory is its source root, so a sibling module is importable from an editor the
-  same way it is from the command line.
+- The server records workspace roots from `initialize` (`rootUri`, `workspaceFolders`, or `rootPath`)
+  and walks up project boundary markers (`pudu.cabal`, `pudu.toml`, `.git`, `lib`) so submodules
+  inside subdirectories resolve sibling and library imports accurately.
 - Every new language surface joins the real stdio-session fixture. The fixture opens a clean
   compatibility document and requires an empty diagnostic list, so an editor cannot silently keep
   an older parser or checker contract while command-line-only tests advance.
@@ -77,7 +79,9 @@ serverCapabilities :: Json
 
 ### Linkage
 
-- **Requires:** [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Compiler Program]], [[Doc]],
+- **Requires:** [[Lsp Protocol]], [[Lsp Feature]], [[Lsp Json]], [[Lsp Hover]], [[Lsp Definition]],
+  [[Lsp References]], [[Lsp Rename]], [[Lsp Highlight]], [[Lsp Semantic Tokens]], [[Lsp Signature Help]],
+  [[Lsp Inlay Hints]], [[Lsp Workspace Symbols]], [[Lsp Code Action]], [[Compiler Program]], [[Doc]],
   [[Format]], [[Diagnostic Model]].
 - **Consumed by:** [[Pudu CLI]] through `pudu lsp`, and the VS Code client under `editors/vscode`.
 

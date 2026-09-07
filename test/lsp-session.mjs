@@ -117,6 +117,55 @@ const messages = [
     method: "textDocument/definition",
     params: { textDocument: { uri: foreignUri }, position: { line: 7, character: 52 } },
   },
+  {
+    id: 12,
+    method: "textDocument/references",
+    params: { textDocument: { uri }, position: { line: 1, character: 4 }, context: { includeDeclaration: true } },
+  },
+  {
+    id: 13,
+    method: "textDocument/prepareRename",
+    params: { textDocument: { uri }, position: { line: 1, character: 4 } },
+  },
+  {
+    id: 14,
+    method: "textDocument/rename",
+    params: { textDocument: { uri }, position: { line: 1, character: 4 }, newName: "multiply2" },
+  },
+  {
+    id: 15,
+    method: "textDocument/documentHighlight",
+    params: { textDocument: { uri }, position: { line: 1, character: 4 } },
+  },
+  {
+    id: 16,
+    method: "textDocument/semanticTokens/full",
+    params: { textDocument: { uri } },
+  },
+  {
+    id: 17,
+    method: "textDocument/inlayHint",
+    params: { textDocument: { uri }, range: { start: { line: 0, character: 0 }, end: { line: 20, character: 0 } } },
+  },
+  {
+    id: 18,
+    method: "textDocument/signatureHelp",
+    params: { textDocument: { uri }, position: { line: 10, character: 9 } },
+  },
+  {
+    id: 19,
+    method: "workspace/symbol",
+    params: { query: "double" },
+  },
+  {
+    id: 20,
+    method: "textDocument/codeAction",
+    params: {
+      textDocument: { uri },
+      range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+      context: { diagnostics: [] },
+    },
+  },
   { id: 5, method: "shutdown", params: null },
   { method: "exit", params: null },
 ];
@@ -191,7 +240,20 @@ const notifications = method => frames.filter(frame => frame.method === method);
 
 const capabilities = replyTo(1)?.result?.capabilities;
 assert(capabilities, "initialize returned no capabilities");
-for (const provider of ["hoverProvider", "definitionProvider", "documentSymbolProvider"]) {
+for (const provider of [
+  "hoverProvider",
+  "definitionProvider",
+  "referencesProvider",
+  "renameProvider",
+  "documentHighlightProvider",
+  "semanticTokensProvider",
+  "signatureHelpProvider",
+  "inlayHintProvider",
+  "documentSymbolProvider",
+  "workspaceSymbolProvider",
+  "documentFormattingProvider",
+  "codeActionProvider",
+]) {
   assert(capabilities[provider], `${provider} was not advertised`);
 }
 
@@ -294,6 +356,42 @@ const foreignDefinition = replyTo(11)?.result;
 assert(foreignDefinition, "definition returned nothing for a foreign function use");
 const foreignTarget = Array.isArray(foreignDefinition) ? foreignDefinition[0] : foreignDefinition;
 assert(foreignTarget.range.start.line === 4, "foreign definition did not reach its declaration");
+
+// References: declaration and use sites
+const refs = replyTo(12)?.result;
+assert(Array.isArray(refs) && refs.length >= 2, "references did not locate declaration and call sites");
+
+// Prepare rename: placeholder
+const prepRename = replyTo(13)?.result;
+assert(prepRename?.placeholder === "double", "prepareRename did not return placeholder");
+
+// Rename: workspace edits
+const renameRes = replyTo(14)?.result;
+assert(renameRes?.changes && Object.keys(renameRes.changes).length > 0, "rename did not return workspace edits");
+
+// Document highlight
+const highlights = replyTo(15)?.result;
+assert(Array.isArray(highlights) && highlights.length >= 2, "documentHighlight did not find occurrences");
+
+// Semantic tokens full
+const semTokens = replyTo(16)?.result;
+assert(Array.isArray(semTokens?.data) && semTokens.data.length > 0, "semanticTokens did not return token data");
+
+// Inlay hints
+const inlays = replyTo(17)?.result;
+assert(Array.isArray(inlays), "inlayHint did not return array");
+
+// Signature help
+const sigHelp = replyTo(18)?.result;
+assert(sigHelp?.signatures && sigHelp.signatures.length > 0, "signatureHelp did not return signatures");
+
+// Workspace symbols
+const wsSyms = replyTo(19)?.result;
+assert(Array.isArray(wsSyms) && wsSyms.some(s => s.name === "double"), "workspace symbols did not find double");
+
+// Code actions
+const codeActions = replyTo(20)?.result;
+assert(Array.isArray(codeActions), "codeAction did not return array");
 
 console.log(
   JSON.stringify({

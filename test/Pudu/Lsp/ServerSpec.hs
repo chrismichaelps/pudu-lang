@@ -18,10 +18,15 @@ import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
 serverProperties :: [(String, IO Property)]
 serverProperties =
-  [ ("only implemented capabilities are announced", testCapabilities)
+  [ ("all implemented capabilities are announced", testCapabilities)
   , ("opening a document publishes what the compiler said", testDiagnostics)
   , ("hover reports the signature the checker inferred", testHover)
   , ("definition points at the declaration of the name under the cursor", testDefinition)
+  , ("references locates declaration and use sites", testReferences)
+  , ("rename produces atomic workspace edits", testRename)
+  , ("document highlight covers identifier occurrences", testHighlight)
+  , ("semantic tokens classifies syntax and symbols", testSemanticTokens)
+  , ("inlay hints show inferred types for bindings", testInlayHints)
   , ("the outline lists what the file declares", testSymbols)
   , ("completion offers every documented name", testCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
@@ -113,15 +118,87 @@ testCapabilities =
   pure $ conjoin
     [ counterexample "hover" (announced "hoverProvider" === Just (JsonBool True))
     , counterexample "definition" (announced "definitionProvider" === Just (JsonBool True))
+    , counterexample "references" (announced "referencesProvider" === Just (JsonBool True))
+    , counterexample "rename" (announced "renameProvider" === Just (JsonObject [("prepareProvider", JsonBool True)]))
+    , counterexample "highlight" (announced "documentHighlightProvider" === Just (JsonBool True))
+    , counterexample "semanticTokens" (property (announced "semanticTokensProvider" /= Nothing))
+    , counterexample "signatureHelp" (property (announced "signatureHelpProvider" /= Nothing))
+    , counterexample "inlayHint" (announced "inlayHintProvider" === Just (JsonBool True))
     , counterexample "symbols" (announced "documentSymbolProvider" === Just (JsonBool True))
+    , counterexample "workspaceSymbols" (announced "workspaceSymbolProvider" === Just (JsonBool True))
     , counterexample "formatting" (announced "documentFormattingProvider" === Just (JsonBool True))
-    , counterexample "nothing claims to rename, which is not implemented"
-        (announced "renameProvider" === Nothing)
-    , counterexample "nor to find references"
-        (announced "referencesProvider" === Nothing)
+    , counterexample "codeAction" (announced "codeActionProvider" === Just (JsonBool True))
     ]
  where
   announced name = lookupField "capabilities" serverCapabilities >>= lookupField name
+
+testReferences :: IO Property
+testReferences = do
+  documents <- opened demo
+  let refs = request "textDocument/references" (atPosition 3 10) documents
+  pure $ conjoin
+    [ counterexample "references found for add"
+        (property (case refs of Just (JsonArray items) -> not (null items); _ -> False))
+    ]
+
+testRename :: IO Property
+testRename = do
+  documents <- opened demo
+  let prepared = request "textDocument/prepareRename" (atPosition 3 10) documents
+      renameParams =
+        JsonObject
+          [ ("textDocument", JsonObject [("uri", JsonText uri)])
+          , ("position", JsonObject [("line", JsonNumber 3), ("character", JsonNumber 10)])
+          , ("newName", JsonText "sum")
+          ]
+      renamed = request "textDocument/rename" renameParams documents
+  pure $ conjoin
+    [ counterexample "prepare rename provides placeholder"
+        (property (case prepared of Just (JsonObject fields) -> lookup "placeholder" fields == Just (JsonText "add"); _ -> False))
+    , counterexample "rename generates workspace edits"
+        (property (case renamed of Just (JsonObject fields) -> lookup "changes" fields /= Nothing; _ -> False))
+    ]
+
+testHighlight :: IO Property
+testHighlight = do
+  documents <- opened demo
+  let highlights = request "textDocument/documentHighlight" (atPosition 3 10) documents
+  pure $ conjoin
+    [ counterexample "highlights found for add"
+        (property (case highlights of Just (JsonArray items) -> not (null items); _ -> False))
+    ]
+
+testSemanticTokens :: IO Property
+testSemanticTokens = do
+  documents <- opened demo
+  let tokens = request "textDocument/semanticTokens/full" wholeDocument documents
+  let hasTokens = case tokens of
+        Just (JsonObject fields) -> case lookup "data" fields of
+          Just (JsonArray items) -> not (null items)
+          _ -> False
+        _ -> False
+  pure $ conjoin
+    [ counterexample "semantic tokens data array present" (property hasTokens)
+    ]
+
+testInlayHints :: IO Property
+testInlayHints = do
+  documents <- opened demo
+  let rangeParam =
+        JsonObject
+          [ ("textDocument", JsonObject [("uri", JsonText uri)])
+          , ( "range"
+            , JsonObject
+                [ ("start", JsonObject [("line", JsonNumber 0), ("character", JsonNumber 0)])
+                , ("end", JsonObject [("line", JsonNumber 10), ("character", JsonNumber 0)])
+                ]
+            )
+          ]
+      hints = request "textDocument/inlayHint" rangeParam documents
+  pure $ conjoin
+    [ counterexample "inlay hints returns array"
+        (property (case hints of Just (JsonArray _) -> True; _ -> False))
+    ]
 
 {-| The editor sees exactly what `pudu check` prints, because it is the same
     compile. -}
@@ -295,7 +372,7 @@ testFormatting = do
 testUnknownRequest :: IO Property
 testUnknownRequest = do
   documents <- opened demo
-  let (_, replies) = answer documents (Request (JsonNumber 7) "textDocument/rename" (JsonObject []))
+  let (_, replies) = answer documents (Request (JsonNumber 7) "workspace/unknownRequest" (JsonObject []))
       body = case replies of
         [reply] -> parse reply
         _ -> Nothing

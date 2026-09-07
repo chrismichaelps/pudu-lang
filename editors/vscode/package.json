@@ -1,8 +1,8 @@
 {
   "name": "pudu",
   "displayName": "Pudu",
-  "description": "Language support for Pudu: diagnostics, hover, go to definition, outline, completion, and formatting.",
-  "version": "0.2.0",
+  "description": "Language support for Pudu: diagnostics, hover, definition, references, rename, semantic tokens, inlay hints, signature help, outline, workspace symbols, completion, code actions, and formatting.",
+  "version": "0.3.0",
   "publisher": "pudu-lang",
   "license": "MIT",
   "icon": "icon.png",

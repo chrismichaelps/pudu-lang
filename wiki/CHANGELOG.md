@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Complete LSP capabilities and client runtime bundle
+
+Completed language server capabilities across bounded modules: references (`textDocument/references`),
+atomic rename (`textDocument/rename`, `textDocument/prepareRename`), document highlight (`textDocument/documentHighlight`),
+semantic tokens (`textDocument/semanticTokens/full`), inlay hints (`textDocument/inlayHint`), signature help
+(`textDocument/signatureHelp`), workspace symbols (`workspace/symbol`), code actions (`textDocument/codeAction`),
+and contextual member/keyword completions (`textDocument/completion`).
+Fixed IDE extension activation failure by bundling flat transitive dependencies (`vscode-languageserver-protocol`,
+`vscode-jsonrpc`) and updated root detection to derive workspace root across directory trees.
+
 ## 2026-09-06 — Bounded STD batch concurrency
 
 [[Std Concurrent]] adds parallelBounded and forEachBounded with fixed workers, atomic work

@@ -10,6 +10,7 @@ module Pudu.Lsp.Feature
   , rangeOfOffsets
   , entryForSymbol
   , symbolAt
+  , symbolKind
   , wordAt
   ) where
 

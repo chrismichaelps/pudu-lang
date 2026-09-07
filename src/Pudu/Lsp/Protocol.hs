@@ -9,6 +9,7 @@ module Pudu.Lsp.Protocol
   , notification
   , positionOf
   , rangeJson
+  , rangeOf
   , readMessage
   , response
   , positionJson
@@ -71,6 +72,12 @@ positionOf value = do
   line <- lookupField "line" value >>= integerOf
   character <- lookupField "character" value >>= integerOf
   pure (Position line character)
+
+rangeOf :: Json -> Maybe Range
+rangeOf value = do
+  startPos <- lookupField "start" value >>= positionOf
+  endPos <- lookupField "end" value >>= positionOf
+  pure (Range startPos endPos)
 
 {-| Read one message, or nothing when the input ends.
 

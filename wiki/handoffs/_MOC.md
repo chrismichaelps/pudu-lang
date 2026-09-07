@@ -5,6 +5,7 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-06-lsp-full-capabilities]] — complete LSP capabilities, editor extension bundle, and validation gates.
 - [[2026-09-06-application-stack]] — active application, database and HTTP integration.
 - [[2026-09-05-backend-specialization]] — prior backend optimization track, set aside by user.
 

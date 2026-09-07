@@ -3,6 +3,7 @@ module Pudu.Lsp.Server
   ( Analysis (..)
   , Documents
   , analyse
+  , analyseIn
   , answer
   , emptyDocuments
   , rememberAnalysis
@@ -10,7 +11,7 @@ module Pudu.Lsp.Server
   , serverCapabilities
   ) where
 
-import Control.Exception (SomeException, evaluate, displayException, try)
+import Control.Exception (SomeException, displayException, evaluate, try)
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Text (Text)
@@ -28,17 +29,10 @@ import Pudu.Diagnostic
   , diagnosticSeverity
   , diagnosticSpan
   )
-import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Format (FormatResult (..), formatSource)
-import Pudu.Lsp.Feature
-  ( completionItems
-  , documentSymbols
-  , offsetAt
-  , rangeOfOffsets
-  )
-import Pudu.Lsp.Json (Json (..), lookupField, textOf)
+import Pudu.Lsp.CodeAction (codeActionsAt)
+import Pudu.Lsp.Completion (completionAt)
 import Pudu.Lsp.Definition (definitionAt)
-import Pudu.Lsp.Hover (hoverAt)
 import Pudu.Lsp.Documents
   ( Analysis (..)
   , Documents (..)
@@ -47,8 +41,19 @@ import Pudu.Lsp.Documents
   , emptyDocuments
   , forgetDocument
   , rememberAnalysis
+  , setWorkspaceRoot
   , uriOf
+  , workspaceRoot
   )
+import Pudu.Lsp.Feature
+  ( documentSymbols
+  , offsetAt
+  , rangeOfOffsets
+  )
+import Pudu.Lsp.Highlight (documentHighlightAt)
+import Pudu.Lsp.Hover (hoverAt)
+import Pudu.Lsp.InlayHints (inlayHintsAt)
+import Pudu.Lsp.Json (Json (..), lookupField, textOf)
 import Pudu.Lsp.Protocol
   ( Incoming (..)
   , Message (..)
@@ -57,18 +62,19 @@ import Pudu.Lsp.Protocol
   , notification
   , positionOf
   , rangeJson
+  , rangeOf
   , readMessage
   , response
   )
+import Pudu.Lsp.References (referencesAt)
+import Pudu.Lsp.Rename (prepareRenameAt, renameAt)
+import Pudu.Lsp.SemanticTokens (semanticTokensFull, semanticTokensLegend)
+import Pudu.Lsp.SignatureHelp (signatureHelpAt)
+import Pudu.Lsp.WorkspaceSymbols (workspaceSymbolsAt)
 import Pudu.Source (SourceName (..), newSource, spanEnd, spanStart, unOffset)
-import Data.Char (isAlphaNum)
-import Data.List (nub, sort)
-import Pudu.Eval.Operator (builtinMethodNamesFor)
-import Pudu.Type (Type (..), narrowestAt)
-import Pudu.Type.Value (nominalName)
-import System.Directory (getCurrentDirectory)
+import System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory)
 import System.Exit (ExitCode (ExitFailure), exitWith)
-import System.FilePath (takeDirectory)
+import System.FilePath ((</>), takeDirectory)
 import System.IO
   ( BufferMode (NoBuffering)
   , Handle
@@ -88,9 +94,12 @@ import System.IO
     would drift from the first within a release. -}
 analyse :: Text -> Text -> IO Analysis
 analyse uri content = do
+  root <- resolveSourceRoot Nothing uri
+  analyseIn root uri content
+
+analyseIn :: FilePath -> Text -> Text -> IO Analysis
+analyseIn root uri content = do
   source <- newSource (SourceName (pathOf uri)) content
-  working <- getCurrentDirectory
-  let root = sourceRootFor uri working
   program <- compileProgramSource root source
   pure
     Analysis
@@ -102,19 +111,37 @@ analyse uri content = do
       , analysisTypes = rootCompileResult program >>= compileTypes
       }
 
-{-| A file's own directory is its source root, which is what makes a sibling
-    module importable from an editor the same way it is from the command
-    line. When the URI is not a file path, the working directory stands in. -}
-sourceRootFor :: Text -> FilePath -> FilePath
-sourceRootFor uri working = case Text.stripPrefix "file://" uri of
-  Just path -> takeDirectory (Text.unpack (decodeUri path))
-  Nothing -> working
+{-| Determine the project root for compilation.
+
+    When the client declared a workspace root at initialization, that root is
+    authoritative. Otherwise, walk up looking for repository/project boundary
+    markers (`pudu.cabal`, `.git`, or `lib`), falling back to the file's directory. -}
+resolveSourceRoot :: Maybe FilePath -> Text -> IO FilePath
+resolveSourceRoot (Just root) _ = pure root
+resolveSourceRoot Nothing uri = do
+  working <- getCurrentDirectory
+  case Text.stripPrefix "file://" uri of
+    Nothing -> pure working
+    Just path -> do
+      let docDir = takeDirectory (Text.unpack (decodeUri path))
+      findProjectRoot docDir docDir (8 :: Int)
+ where
+  findProjectRoot fallback current depth
+    | depth <= 0 = pure fallback
+    | otherwise = do
+        hasCabal <- doesFileExist (current </> "pudu.cabal")
+        hasGit <- doesDirectoryExist (current </> ".git")
+        hasLib <- doesDirectoryExist (current </> "lib")
+        if hasCabal || hasGit || hasLib
+          then pure current
+          else
+            let parent = takeDirectory current
+             in if parent == current then pure fallback else findProjectRoot fallback parent (depth - 1)
 
 pathOf :: Text -> Text
 pathOf uri = maybe uri decodeUri (Text.stripPrefix "file://" uri)
 
-{-| Turn `%20` and friends back into the scalars they stand for, so a path with
-    a space is the path the reader sees. -}
+{-| Turn `%20` and friends back into the scalars they stand for. -}
 decodeUri :: Text -> Text
 decodeUri = go Text.empty
  where
@@ -139,11 +166,6 @@ decodeUri = go Text.empty
     | scalar >= 'A' && scalar <= 'F' = Just (fromEnum scalar - fromEnum 'A' + 10)
     | otherwise = Nothing
 
-{-| Run the server over stdin and stdout until the client closes the stream.
-
-    Both handles are binary: the protocol frames messages by byte length, and a
-    handle that translated newlines or re-encoded text would make that length a
-    lie. -}
 runServer :: IO ()
 runServer = do
   hSetBinaryMode stdin True
@@ -152,11 +174,6 @@ runServer = do
   store <- newIORef emptyDocuments
   loop store
 
-{-| Read a message, answer it, and go round again.
-
-    Only the stream ending stops the loop. A frame the server cannot decode
-    costs that frame and nothing else, which is what the protocol asks of a
-    server, and a client's own reply carries no method and needs no answer. -}
 loop :: IORef Documents -> IO ()
 loop store = do
   incoming <- readMessage stdin
@@ -167,10 +184,6 @@ loop store = do
       TextIO.hPutStrLn stderr ("pudu lsp: ignored a message; " <> reason)
       hFlush stderr
       loop store
-    {-| A framing fault cannot be recovered from: there is no marker in the
-        protocol to resynchronise on, so every later read would be guesswork.
-        It leaves with a failing status, because an editor that saw success
-        would report a clean shutdown for a session that actually broke. -}
     Unframed reason -> do
       TextIO.hPutStrLn stderr ("pudu lsp: stopping; " <> reason)
       hFlush stderr
@@ -185,12 +198,6 @@ loop store = do
         Left failure -> mapM_ (emit stdout) =<< excuse message failure
       unless (isExit message) (loop store)
 
-{-| Work out the answer to one message, with its replies forced.
-
-    `answer` is pure and its replies are built lazily, so a failure inside one
-    would otherwise surface where it is written to the handle rather than where
-    it can be caught. Forcing them here puts the whole of the work inside the
-    same guarded region. -}
 prepare :: Documents -> Message -> IO (Documents, [Text])
 prepare documents message = do
   documents' <- refresh documents message
@@ -198,13 +205,6 @@ prepare documents message = do
   mapM_ (evaluate . Text.length) replies
   pure (documents'', replies)
 
-{-| Report a failure without ending the session.
-
-    A request is answered, because a client that receives nothing waits for it
-    for as long as the session lasts. A notification has no reply to carry the
-    news, so it goes to the error stream, which is where an editor collects a
-    server's output. The document store keeps whatever it last held, since what
-    a failed analysis would have stored is unknown. -}
 excuse :: Message -> SomeException -> IO [Text]
 excuse message failure = do
   TextIO.hPutStrLn stderr ("pudu lsp: " <> subject <> " failed; " <> detail)
@@ -218,11 +218,12 @@ excuse message failure = do
     Notification method _ -> method
   detail = Text.strip (Text.pack (displayException failure))
 
-{-| Recompile before answering, when the message carried new text. This is the
-    only place the server does IO on a document's behalf, which is what keeps
-    every handler a pure function of what was compiled. -}
 refresh :: Documents -> Message -> IO Documents
 refresh documents message = case message of
+  Request _ "initialize" parameters ->
+    pure $ case extractWorkspaceRoot parameters of
+      Just root -> setWorkspaceRoot root documents
+      Nothing -> documents
   Notification "textDocument/didOpen" parameters ->
     case (uriOf parameters, openedText parameters) of
       (Just uri, Just content) -> store uri content
@@ -234,8 +235,24 @@ refresh documents message = case message of
   _ -> pure documents
  where
   store uri content = do
-    analysed <- analyse uri content
+    root <- resolveSourceRoot (workspaceRoot documents) uri
+    analysed <- analyseIn root uri content
     pure (rememberAnalysis uri analysed documents)
+
+extractWorkspaceRoot :: Json -> Maybe FilePath
+extractWorkspaceRoot params =
+  case lookupField "rootUri" params >>= textOf of
+    Just uri | Just path <- Text.stripPrefix "file://" uri ->
+      Just (Text.unpack (decodeUri path))
+    _ -> case lookupField "workspaceFolders" params of
+      Just (JsonArray (folder : _)) ->
+        case lookupField "uri" folder >>= textOf of
+          Just uri | Just path <- Text.stripPrefix "file://" uri ->
+            Just (Text.unpack (decodeUri path))
+          _ -> Nothing
+      _ -> case lookupField "rootPath" params >>= textOf of
+        Just path | not (Text.null path) -> Just (Text.unpack path)
+        _ -> Nothing
 
 isExit :: Message -> Bool
 isExit message = case message of
@@ -247,10 +264,6 @@ emit handle body = do
   TextIO.hPutStr handle (frame body)
   hFlush handle
 
-{-| Answer one message.
-
-    A pure function of what has already been compiled, so every behaviour here
-    is testable without a client, a socket, or a running editor. -}
 answer :: Documents -> Message -> (Documents, [Text])
 answer documents message = case message of
   Request identity "initialize" _ ->
@@ -279,9 +292,18 @@ handler :: Text -> Maybe (Documents -> Json -> Json)
 handler method = case method of
   "textDocument/hover" -> Just hover
   "textDocument/definition" -> Just definition
+  "textDocument/references" -> Just references
+  "textDocument/prepareRename" -> Just prepareRename
+  "textDocument/rename" -> Just rename
+  "textDocument/documentHighlight" -> Just highlight
+  "textDocument/semanticTokens/full" -> Just semanticTokens
+  "textDocument/signatureHelp" -> Just signatureHelp
+  "textDocument/inlayHint" -> Just inlayHint
   "textDocument/documentSymbol" -> Just symbols
-  "textDocument/completion" -> Just completion
+  "textDocument/completion" -> Just completionAt
   "textDocument/formatting" -> Just formatting
+  "textDocument/codeAction" -> Just codeAction
+  "workspace/symbol" -> Just workspaceSymbols
   _ -> Nothing
 
 methodNotFound :: Int
@@ -290,11 +312,6 @@ methodNotFound = -32601
 internalError :: Int
 internalError = -32603
 
-{-| What this server can do, answered once at startup.
-
-    Only what is implemented is claimed. A capability announced and then not
-    honoured is worse than one withheld: the editor stops offering its own
-    fallback and the reader gets nothing at all. -}
 serverCapabilities :: Json
 serverCapabilities =
   JsonObject
@@ -303,8 +320,26 @@ serverCapabilities =
           [ ("textDocumentSync", JsonNumber 1)
           , ("hoverProvider", JsonBool True)
           , ("definitionProvider", JsonBool True)
+          , ("referencesProvider", JsonBool True)
+          , ("renameProvider", JsonObject [("prepareProvider", JsonBool True)])
+          , ("documentHighlightProvider", JsonBool True)
+          , ( "semanticTokensProvider"
+            , JsonObject
+                [ ("legend", semanticTokensLegend)
+                , ("full", JsonBool True)
+                ]
+            )
+          , ( "signatureHelpProvider"
+            , JsonObject
+                [ ("triggerCharacters", JsonArray [JsonText "(", JsonText ","])
+                , ("retriggerCharacters", JsonArray [JsonText ","])
+                ]
+            )
+          , ("inlayHintProvider", JsonBool True)
           , ("documentSymbolProvider", JsonBool True)
+          , ("workspaceSymbolProvider", JsonBool True)
           , ("documentFormattingProvider", JsonBool True)
+          , ("codeActionProvider", JsonBool True)
           , ( "completionProvider"
             , JsonObject [("triggerCharacters", JsonArray [JsonText "."])]
             )
@@ -326,13 +361,6 @@ diagnosticEntries found = case found of
   Nothing -> []
   Just value -> map (diagnosticJson (analysisText value)) (analysisDiagnostics value)
 
-{-| Render one compiler diagnostic as the protocol's shape.
-
-    The code travels as `code` rather than being folded into the message, so an
-    editor can link `E3001` to its documentation and a reader can silence one
-    class of warning without matching on prose. The help line is appended to the
-    message because the protocol has nowhere else for it and losing it would
-    lose the part that says what to do. -}
 diagnosticJson :: Text -> Diagnostic -> Json
 diagnosticJson content value =
   JsonObject
@@ -350,8 +378,6 @@ diagnosticJson content value =
     Nothing -> diagnosticMessage value
     Just guidance -> diagnosticMessage value <> "\n\n" <> guidance
 
-{-| The protocol's severity numbers. A note is information rather than a
-    problem, which is what keeps it out of an editor's error count. -}
 severityCode :: Severity -> Int
 severityCode severity = case severity of
   Error -> 1
@@ -363,105 +389,72 @@ hover documents parameters = case located documents parameters of
   Nothing -> JsonNull
   Just (value, offset) -> hoverAt value offset
 
-{-| Jump to where a name was declared.
-
-    The name under the cursor is matched against the index rather than the span
-    under it, because a reader asks for the definition of a *use*, and a use is
-    nowhere near the declaration's span. -}
 definition :: Documents -> Json -> Json
 definition documents parameters = case (uriOf parameters, located documents parameters) of
   (Just uri, Just (value, offset)) -> definitionAt uri value offset
   _ -> JsonNull
+
+references :: Documents -> Json -> Json
+references documents parameters = case (uriOf parameters, located documents parameters) of
+  (Just uri, Just (value, offset)) ->
+    let includeDecl =
+          case lookupField "context" parameters >>= lookupField "includeDeclaration" of
+            Just (JsonBool b) -> b
+            _ -> False
+     in referencesAt uri value offset includeDecl
+  _ -> JsonArray []
+
+prepareRename :: Documents -> Json -> Json
+prepareRename documents parameters = case located documents parameters of
+  Just (value, offset) -> prepareRenameAt value offset
+  Nothing -> JsonNull
+
+rename :: Documents -> Json -> Json
+rename documents parameters = case (uriOf parameters, located documents parameters) of
+  (Just uri, Just (value, offset)) ->
+    case lookupField "newName" parameters >>= textOf of
+      Just newName -> renameAt uri value offset newName
+      Nothing -> JsonNull
+  _ -> JsonNull
+
+highlight :: Documents -> Json -> Json
+highlight documents parameters = case located documents parameters of
+  Just (value, offset) -> documentHighlightAt value offset
+  Nothing -> JsonArray []
+
+semanticTokens :: Documents -> Json -> Json
+semanticTokens documents parameters = case documentOf documents parameters of
+  Just value -> semanticTokensFull value
+  Nothing -> JsonObject [("data", JsonArray [])]
+
+signatureHelp :: Documents -> Json -> Json
+signatureHelp documents parameters = case located documents parameters of
+  Just (value, offset) -> signatureHelpAt value offset
+  Nothing -> JsonNull
+
+inlayHint :: Documents -> Json -> Json
+inlayHint documents parameters =
+  case (documentOf documents parameters, lookupField "range" parameters >>= rangeOf) of
+    (Just value, Just reqRange) -> inlayHintsAt value reqRange
+    _ -> JsonArray []
 
 symbols :: Documents -> Json -> Json
 symbols documents parameters = case documentOf documents parameters of
   Nothing -> JsonArray []
   Just value -> documentSymbols (analysisText value) (analysisIndex value)
 
-completion :: Documents -> Json -> Json
-completion documents parameters = case documentOf documents parameters of
-  Nothing -> JsonArray []
-  Just value -> case located documents parameters of
-    {-| After a dot, offer what the value carries rather than what the module
-        declares. The names come from the tables dispatch reads, so what the
-        editor offers and what a call finds cannot drift apart.
+workspaceSymbols :: Documents -> Json -> Json
+workspaceSymbols documents parameters =
+  let query = maybe "" id (lookupField "query" parameters >>= textOf)
+   in workspaceSymbolsAt documents query
 
-        A request without a position asks about the document rather than a
-        place in it, and is answered as it always was. -}
-    Just (_, offset) -> case memberMethods value offset of
-      names@(_ : _) -> JsonArray (map methodItem names)
-      [] -> completionItems (analysisIndex value)
-    Nothing -> completionItems (analysisIndex value)
+codeAction :: Documents -> Json -> Json
+codeAction documents parameters =
+  case (uriOf parameters, documentOf documents parameters, lookupField "range" parameters >>= rangeOf) of
+    (Just uri, Just value, Just reqRange) ->
+      codeActionsAt uri value reqRange (maybe (JsonObject []) id (lookupField "context" parameters))
+    _ -> JsonArray []
 
-{-| The methods the value before the cursor's dot carries, or none.
-
-    The receiver is the expression ending where the dot is, which the checker
-    already recorded a type for. Nothing is offered where the cursor is not
-    after a dot, or where the receiver has no type — a list of names that do not
-    apply costs a reader more than no list. -}
-memberMethods :: Analysis -> Int -> [Text]
-memberMethods value offset = case receiverEnd (analysisText value) offset of
-  Nothing -> []
-  Just dotOffset -> case analysisTypes value >>= narrowestAt (dotOffset - 1) of
-    Nothing -> []
-    Just typeValue ->
-      let owner = ownerNameOf typeValue
-       in sort (nub (methodsOfType typeValue <> implMethodsFor (analysisIndex value) owner))
-
-{-| The methods an `impl` block wrote for this type.
-
-    A type a reader declared carries what they gave it, and offering only the
-    built-in sets would answer for `Str` and `Array` and say nothing about
-    anything they wrote themselves. The index already names the type each
-    method was implemented for. -}
-implMethodsFor :: DocIndex -> Text -> [Text]
-implMethodsFor index owner
-  | Text.null owner = []
-  | otherwise =
-      [ docName entry
-      | entry <- indexEntries index
-      , DocMethod target <- [docKind entry]
-      , target == owner
-      ]
-
-{-| The name a type is written under, which is what selects its methods. -}
-ownerNameOf :: Type -> Text
-ownerNameOf typeValue = case throughReferenceType typeValue of
-  NominalType identity _ -> nominalName identity
-  _ -> ""
-
-{-| Where the receiver ends, when the cursor is completing a member of it.
-
-    The cursor may sit straight after the dot or partway through a name, so the
-    name being typed is skipped back over first. -}
-receiverEnd :: Text -> Int -> Maybe Int
-receiverEnd content offset =
-  let before = Text.take offset content
-      typed = Text.takeWhileEnd nameScalar before
-      atDot = Text.dropEnd (Text.length typed) before
-   in if Text.isSuffixOf "." atDot then Just (Text.length atDot - 1) else Nothing
- where
-  nameScalar scalar = isAlphaNum scalar || scalar == '_'
-
-methodsOfType :: Type -> [Text]
-methodsOfType typeValue = case throughReferenceType typeValue of
-  NominalType identity _ -> builtinMethodNamesFor (nominalName identity)
-  _ -> []
-
-throughReferenceType :: Type -> Type
-throughReferenceType typeValue = case typeValue of
-  ReferenceTypeValue _ target -> throughReferenceType target
-  other -> other
-
-methodItem :: Text -> Json
-methodItem name =
-  JsonObject [("label", JsonText name), ("kind", JsonNumber 2), ("detail", JsonText "method")]
-
-{-| Format the whole document in one edit.
-
-    One edit rather than a computed minimal set: the formatter guarantees it
-    only moves whitespace, so replacing everything cannot change the program,
-    and a client applies a single replacement atomically. -}
 formatting :: Documents -> Json -> Json
 formatting documents parameters = case documentOf documents parameters of
   Nothing -> JsonArray []
@@ -487,9 +480,6 @@ openedText :: Json -> Maybe Text
 openedText parameters =
   lookupField "textDocument" parameters >>= lookupField "text" >>= textOf
 
-{-| A change carries the whole document, because the server announced full
-    synchronisation. Accepting an incremental edit it did not ask for would mean
-    applying a range it has no guarantee it can interpret. -}
 changedText :: Json -> Maybe Text
 changedText parameters = case lookupField "contentChanges" parameters of
   Just (JsonArray changes) -> case reverse changes of

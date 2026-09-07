@@ -23,9 +23,13 @@ What the server knows about each open document: one compile's answers, kept by t
 
 ```haskell
 data Analysis = Analysis { analysisText, analysisSource, analysisDiagnostics, analysisIndex, analysisTypes, .. }
-newtype Documents = Documents (Map Text Analysis)
+data Documents = Documents { docWorkspaceRoot :: !(Maybe FilePath), docMap :: !(Map Text Analysis) }
 
+emptyDocuments   :: Documents
+setWorkspaceRoot :: FilePath -> Documents -> Documents
+workspaceRoot    :: Documents -> Maybe FilePath
 analysisOf       :: Text -> Documents -> Maybe Analysis
+allDocuments     :: Documents -> [(Text, Analysis)]
 rememberAnalysis :: Text -> Analysis -> Documents -> Documents
 forgetDocument   :: Text -> Documents -> Documents
 documentOf       :: Documents -> Json -> Maybe Analysis
