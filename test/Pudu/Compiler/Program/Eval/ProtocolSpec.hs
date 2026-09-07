@@ -55,6 +55,7 @@ testProtocolEvaluation = do
   yamlDocuments <- runEntry "test-fixtures/stdlib/UsesYaml.pudu"
   versionsAndGlobs <- runEntry "test-fixtures/stdlib/UsesSemverGlob.pudu"
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
+  zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -274,6 +275,14 @@ testProtocolEvaluation = do
     , counterexample
         "an envelope's names, entities, and CDATA survive, and a DTD is refused"
         (xmlDocuments === Just "16")
+    {-| A round trip proves the two halves agree; the size proves they agree
+        about a real archive rather than about storing everything, which would
+        also round-trip. That an archive written here is read by an ordinary
+        zip tool, and one written by an ordinary zip tool is read here, is
+        checked outside the language, where another implementation exists. -}
+    , counterexample
+        "an archive round-trips its entries and is actually compressed"
+        (zipArchives === Just "12")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

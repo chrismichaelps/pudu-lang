@@ -1,0 +1,350 @@
+module Std.Archive.Zip
+
+import Std.Bytes as ByteSeq
+import Std.Compress.Gzip as Gzip
+
+/// One file in an archive.
+///
+/// `stored` says whether the bytes were kept as they are or compressed. It is
+/// read back rather than chosen by a reader, because an archive written
+/// elsewhere decides it per entry: a JPEG compresses to nothing, so most
+/// writers store it, and a reader that assumed either would be wrong half the
+/// time.
+export type Entry = {
+  path: Str,
+  data: Bytes,
+  stored: Bool
+}
+
+/// Why bytes do not make an archive.
+export type ZipError
+  = NotAnArchive
+  | Truncated(Int)
+  | UnsupportedMethod(Int)
+  | BadChecksum(Str)
+  | TooLarge
+
+/// What this reads and writes.
+///
+/// The zip format as it is used for the things that arrive: a document from a
+/// spreadsheet program, a deployment bundle, an upload from a browser. Entries
+/// are stored or deflated, which is what every writer produces; the archive's
+/// directory is at the end, which is what every reader looks for first.
+///
+/// It does not read encrypted entries, spanned archives, or the 64-bit
+/// extensions. Each is refused rather than half-read: an encrypted entry read
+/// as though it were not is a file of noise, and a reader that ignored the
+/// 64-bit fields would answer with the low half of a size.
+
+/// How large a single entry may be when read, in bytes.
+///
+/// A compressed entry can claim to expand to any size at all, and a reader
+/// that believed it would allocate whatever an archive asked for. This is what
+/// makes a hostile archive a refusal rather than a memory exhaustion.
+export fn entryLimit() -> Int { 268435456 }
+
+/// A file to be written into an archive, compressed.
+export fn file(path: Str, data: Bytes) -> Entry {
+  Entry{path: path, data: data, stored: false}
+}
+
+/// A file to be written as it is.
+///
+/// For bytes that are already compressed, where deflating again costs time and
+/// gains nothing.
+export fn stored(path: Str, data: Bytes) -> Entry {
+  Entry{path: path, data: data, stored: true}
+}
+
+/// Write an archive.
+export fn writeArchive(entries: &Array[Entry]) -> Result[Bytes, ZipError] {
+  var body: Array[UInt8] = []
+  var directory: Array[UInt8] = []
+  var count = 0
+  var index = 0
+  while index < entries.length() {
+    let entry = entries[index]
+    let nameBytes = entry.path.toBytes().toArray()
+    let raw = entry.data.toArray()
+    let checksum = Gzip.crc32(&entry.data)
+    let compressed = if entry.stored {
+      raw
+    } else {
+      match deflateRaw(entry.data, 6, 32768) {
+        case Ok(packed) => packed.toArray()
+        case Err(_) => raw
+      }
+    }
+    // A deflate that came out larger than what went in is not used: the format
+    // allows either, and storing is both smaller and quicker to read.
+    let useStored = entry.stored || compressed.length() >= raw.length()
+    let payload = if useStored { raw } else { compressed }
+    let method = if useStored { 0 } else { 8 }
+    let offset = body.length()
+
+    var local: Array[UInt8] = []
+    local = appendU32(&local, 67324752)
+    local = appendU16(&local, 20)
+    local = appendU16(&local, 0)
+    local = appendU16(&local, method)
+    local = appendU16(&local, 0)
+    local = appendU16(&local, 0)
+    local = appendU32(&local, checksum)
+    local = appendU32(&local, payload.length())
+    local = appendU32(&local, raw.length())
+    local = appendU16(&local, nameBytes.length())
+    local = appendU16(&local, 0)
+    local = appendAll(&local, &nameBytes)
+    local = appendAll(&local, &payload)
+    body = appendAll(&body, &local)
+
+    var record: Array[UInt8] = []
+    record = appendU32(&record, 33639248)
+    record = appendU16(&record, 20)
+    record = appendU16(&record, 20)
+    record = appendU16(&record, 0)
+    record = appendU16(&record, method)
+    record = appendU16(&record, 0)
+    record = appendU16(&record, 0)
+    record = appendU32(&record, checksum)
+    record = appendU32(&record, payload.length())
+    record = appendU32(&record, raw.length())
+    record = appendU16(&record, nameBytes.length())
+    record = appendU16(&record, 0)
+    record = appendU16(&record, 0)
+    record = appendU16(&record, 0)
+    record = appendU16(&record, 0)
+    record = appendU32(&record, 0)
+    record = appendU32(&record, offset)
+    record = appendAll(&record, &nameBytes)
+    directory = appendAll(&directory, &record)
+
+    count = count + 1
+    index = index + 1
+  }
+
+  let directoryOffset = body.length()
+  var out = appendAll(&body, &directory)
+  var ending: Array[UInt8] = []
+  ending = appendU32(&ending, 101010256)
+  ending = appendU16(&ending, 0)
+  ending = appendU16(&ending, 0)
+  ending = appendU16(&ending, count)
+  ending = appendU16(&ending, count)
+  ending = appendU32(&ending, directory.length())
+  ending = appendU32(&ending, directoryOffset)
+  ending = appendU16(&ending, 0)
+  out = appendAll(&out, &ending)
+  Ok(ByteSeq.fromArray(&out))
+}
+
+/// Read an archive.
+///
+/// The directory at the end is read rather than the entries walked from the
+/// front. That is the format's own answer to what an archive holds — a writer
+/// that appended to an existing archive leaves the superseded entries in
+/// place, and only the directory says which ones count.
+export fn readArchive(archive: &Bytes) -> Result[Array[Entry], ZipError] {
+  let bytes = archive.toArray()
+  let ending = findEnding(&bytes)
+  if ending < 0 {
+    return Err(NotAnArchive)
+  }
+  let count = readU16(&bytes, ending + 10)
+  let directoryOffset = readU32(&bytes, ending + 16)
+  var entries: Array[Entry] = []
+  var at = directoryOffset
+  var index = 0
+  while index < count {
+    if at + 46 > bytes.length() {
+      return Err(Truncated(at))
+    }
+    if readU32(&bytes, at) != 33639248 {
+      return Err(Truncated(at))
+    }
+    let flags = readU16(&bytes, at + 8)
+    // Bit zero says the entry is encrypted. Reading it as though it were not
+    // answers a file of noise that looks exactly like a successful read.
+    if flags % 2 == 1 {
+      return Err(UnsupportedMethod(0 - 1))
+    }
+    let method = readU16(&bytes, at + 10)
+    let checksum = readU32(&bytes, at + 16)
+    let packedSize = readU32(&bytes, at + 20)
+    let plainSize = readU32(&bytes, at + 24)
+    let nameLength = readU16(&bytes, at + 28)
+    let extraLength = readU16(&bytes, at + 30)
+    let commentLength = readU16(&bytes, at + 32)
+    let localOffset = readU32(&bytes, at + 42)
+    if plainSize > entryLimit() {
+      return Err(TooLarge)
+    }
+    let name = textOf(&bytes, at + 46, nameLength)
+
+    if localOffset + 30 > bytes.length() {
+      return Err(Truncated(localOffset))
+    }
+    let localNameLength = readU16(&bytes, localOffset + 26)
+    let localExtraLength = readU16(&bytes, localOffset + 28)
+    let dataAt = localOffset + 30 + localNameLength + localExtraLength
+    if dataAt + packedSize > bytes.length() {
+      return Err(Truncated(dataAt))
+    }
+    let payload = sliceOf(&bytes, dataAt, dataAt + packedSize)
+
+    // A name is not allowed to leave the directory it is unpacked into. An
+    // archive naming `../etc/passwd` is the oldest way to write a file
+    // somewhere nobody asked for, and it is refused here rather than left to
+    // whoever unpacks it.
+    if name.contains("..") || name.startsWith("/") {
+      return Err(NotAnArchive)
+    }
+
+    let content = if method == 0 {
+      payload
+    } else if method == 8 {
+      match inflateRaw(payload, entryLimit()) {
+        case Ok(expanded) => expanded
+        case Err(_) => { return Err(Truncated(dataAt)) }
+      }
+    } else {
+      return Err(UnsupportedMethod(method))
+    }
+
+    if Gzip.crc32(&content) != checksum {
+      return Err(BadChecksum(name))
+    }
+    entries = entries.push(Entry{path: name, data: content, stored: method == 0})
+    at = at + 46 + nameLength + extraLength + commentLength
+    index = index + 1
+  }
+  Ok(entries)
+}
+
+/// One named file out of an archive's entries.
+export fn find(entries: &Array[Entry], path: Str) -> Option[Bytes] {
+  var index = 0
+  while index < entries.length() {
+    if entries[index].path == path {
+      return Some(entries[index].data)
+    }
+    index = index + 1
+  }
+  None
+}
+
+/// Every name an archive holds, in the order its directory lists them.
+export fn names(entries: &Array[Entry]) -> Array[Str] {
+  var found: Array[Str] = []
+  var index = 0
+  while index < entries.length() {
+    found = found.push(entries[index].path)
+    index = index + 1
+  }
+  found
+}
+
+/// Where the directory's ending record starts, or -1.
+///
+/// Searched backwards because the record is last and carries a comment of any
+/// length after it, so its position cannot be computed from the size.
+fn findEnding(bytes: &Array[UInt8]) -> Int {
+  var at = bytes.length() - 22
+  let floor = if bytes.length() > 65557 { bytes.length() - 65557 } else { 0 }
+  while at >= floor {
+    if at >= 0 && readU32(bytes, at) == 101010256 {
+      return at
+    }
+    at = at - 1
+  }
+  0 - 1
+}
+
+fn readU16(bytes: &Array[UInt8], at: Int) -> Int {
+  if at + 2 > bytes.length() {
+    return 0
+  }
+  byteAt(bytes, at) + byteAt(bytes, at + 1) * 256
+}
+
+fn readU32(bytes: &Array[UInt8], at: Int) -> Int {
+  if at + 4 > bytes.length() {
+    return 0
+  }
+  byteAt(bytes, at)
+    + byteAt(bytes, at + 1) * 256
+    + byteAt(bytes, at + 2) * 65536
+    + byteAt(bytes, at + 3) * 16777216
+}
+
+fn byteAt(bytes: &Array[UInt8], at: Int) -> Int {
+  match convertInteger[Int](bytes[at]) {
+    case Some(value) => value
+    case None => 0
+  }
+}
+
+fn appendU16(into: &Array[UInt8], value: Int) -> Array[UInt8] {
+  let low = lowByte(value)
+  let high = lowByte(value / 256)
+  into.push(low).push(high)
+}
+
+fn appendU32(into: &Array[UInt8], value: Int) -> Array[UInt8] {
+  into
+    .push(lowByte(value))
+    .push(lowByte(value / 256))
+    .push(lowByte(value / 65536))
+    .push(lowByte(value / 16777216))
+}
+
+fn lowByte(value: Int) -> UInt8 {
+  match convertInteger[UInt8](value % 256) {
+    case Some(byte) => byte
+    case None => 0u8
+  }
+}
+
+fn appendAll(left: &Array[UInt8], right: &Array[UInt8]) -> Array[UInt8] {
+  var joined = *left
+  var index = 0
+  while index < right.length() {
+    joined = joined.push(right[index])
+    index = index + 1
+  }
+  joined
+}
+
+fn sliceOf(bytes: &Array[UInt8], from: Int, to: Int) -> Bytes {
+  var taken: Array[UInt8] = []
+  var index = from
+  while index < to && index < bytes.length() {
+    taken = taken.push(bytes[index])
+    index = index + 1
+  }
+  ByteSeq.fromArray(&taken)
+}
+
+fn textOf(bytes: &Array[UInt8], from: Int, length: Int) -> Str {
+  let piece = sliceOf(bytes, from, from + length)
+  match ByteSeq.toText(&piece) {
+    case Ok(text) => text
+    case Err(_) => ""
+  }
+}
+
+/// Why an archive was refused, written for a person to read.
+export fn explain(reason: &ZipError) -> Str {
+  match *reason {
+    case NotAnArchive => "these bytes hold no archive directory"
+    case Truncated(at) => "the archive stops at " + display(at)
+    case UnsupportedMethod(method) =>
+    if method < 0 {
+      "an entry is encrypted, which this does not read"
+    } else {
+      "an entry uses compression method " + display(method) + ", which this does not read"
+    }
+    case BadChecksum(name) => "`" + name + "` did not survive the archive intact"
+    case TooLarge => "an entry claims to be larger than this will read"
+  }
+}

@@ -10,7 +10,7 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
-import Pudu.Eval.Compress (compressGzip, decompressGzip)
+import Pudu.Eval.Compress (compressGzip, compressRaw, decompressGzip, decompressRaw)
 import Pudu.Eval.Clock
 import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
@@ -100,6 +100,8 @@ effectBuiltins =
   , AppendFileBuiltin
   , FileExistsBuiltin
   , SignalWatchStopBuiltin
+  , DeflateBuiltin
+  , InflateBuiltin
   , SignalStopRequestedBuiltin
   , RemoveFileBuiltin
   , ListDirectoryBuiltin
@@ -205,6 +207,10 @@ callEffect spanValue builtin arguments = do
         effectUnit (appendTextFile (Text.unpack path) (textOf value))
       (FileExistsBuiltin, [StrValue path]) ->
         BoolValue <$> lift refusal (testFileExists (Text.unpack path))
+      (DeflateBuiltin, [BytesValue payload, IntValue _ level, IntValue _ chunkSize]) ->
+        resultOf . fmap BytesValue <$> lift refusal (compressRaw payload level chunkSize)
+      (InflateBuiltin, [BytesValue payload, IntValue _ limit]) ->
+        resultOf . fmap BytesValue <$> lift refusal (decompressRaw payload limit)
       (SignalWatchStopBuiltin, []) -> BoolValue <$> lift refusal watchForStop
       (SignalStopRequestedBuiltin, []) -> BoolValue <$> lift refusal stopRequested
       (RemoveFileBuiltin, [StrValue path]) -> effectUnit (removeFileAt (Text.unpack path))
