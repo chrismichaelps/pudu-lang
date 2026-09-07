@@ -33,6 +33,8 @@ testProtocolEvaluation = do
   intSet <- runEntry "test-fixtures/stdlib/UsesIntSet.pudu"
   bloomFilter <- runEntry "test-fixtures/stdlib/UsesBloomFilter.pudu"
   diffOps <- runEntry "test-fixtures/stdlib/UsesDiff.pudu"
+  mimeType <- runEntry "test-fixtures/stdlib/UsesMime.pudu"
+  bitVector <- runEntry "test-fixtures/stdlib/UsesBitVector.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -140,6 +142,12 @@ testProtocolEvaluation = do
     , counterexample
         "Diff Myers O(ND) line/token differences, unified diff headers and hunks, and Levenshtein metrics"
         (diffOps === Just "10")
+    , counterexample
+        "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
+        (mimeType === Just "10")
+    , counterexample
+        "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
+        (bitVector === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
