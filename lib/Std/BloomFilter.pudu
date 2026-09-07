@@ -1,0 +1,284 @@
+module Std.BloomFilter
+
+import Std.Bytes as Bytes
+import Std.List as List
+import Std.Math.Float as Float
+
+/// An immutable space-efficient probabilistic set filter.
+export type BloomFilter = {
+  words: Array[UInt64],
+  bitCapacity: Int,
+  hashCount: Int,
+  itemCount: Int
+}
+
+fn toUInt64(x: Int) -> UInt64 {
+  match convertInteger[UInt64](x) {
+    case Some(v) => v
+    case None => 0u64
+  }
+}
+
+fn toInt(x: UInt64) -> Int {
+  match convertInteger[Int](x) {
+    case Some(v) => v
+    case None => 0
+  }
+}
+
+fn floatToInt(x: Float) -> Int {
+  if x <= 0.0 { return 0 }
+  var n = x
+  var step = 1
+  var fStep = 1.0
+  while fStep * 2.0 <= n {
+    step = step * 2
+    fStep = fStep * 2.0
+  }
+  var result = 0
+  while step >= 1 {
+    if fStep <= n {
+      result = result + step
+      n = n - fStep
+    }
+    step = step / 2
+    fStep = fStep / 2.0
+  }
+  result
+}
+
+fn intToFloat(x: Int) -> Float {
+  if x == 0 { return 0.0 }
+  if x < 0 { return -intToFloat(-x) }
+  var remaining = x
+  var result = 0.0
+  var base = 1.0
+  while remaining > 0 {
+    let digit = remaining % 10
+    var d = 0.0
+    if digit == 1 { d = 1.0 }
+      else if digit == 2 { d = 2.0 }
+      else if digit == 3 { d = 3.0 }
+      else if digit == 4 { d = 4.0 }
+      else if digit == 5 { d = 5.0 }
+      else if digit == 6 { d = 6.0 }
+      else if digit == 7 { d = 7.0 }
+      else if digit == 8 { d = 8.0 }
+      else if digit == 9 { d = 9.0 }
+    result = result + d * base
+    base = base * 10.0
+    remaining = remaining / 10
+  }
+  result
+}
+
+fn popCount64(x: UInt64) -> Int {
+  var v = x
+  v = v - ((v >> 1) & 0x5555555555555555u64)
+  v = (v & 0x3333333333333333u64) + ((v >> 2) & 0x3333333333333333u64)
+  v = (v + (v >> 4)) & 0x0f0f0f0f0f0f0f0fu64
+  v = v + (v >> 8)
+  v = v + (v >> 16)
+  v = v + (v >> 32)
+  match convertInteger[Int](v & 0x7fu64) {
+    case Some(c) => c
+    case None => 0
+  }
+}
+
+fn hashPair(bytes: &Bytes) -> (UInt64, UInt64) {
+  var h1 = 14695981039346656037u64
+  var h2 = 11995408973672481977u64
+  let len = bytes.length()
+  var i = 0
+  while i < len {
+    match bytes.at(i) {
+      case Some(b) => {
+        let ub = toUInt64(match convertInteger[Int](b) {
+            case Some(v) => v
+            case None => 0
+          })
+        h1 = (h1 ^ ub) &* 1099511628211u64
+        h2 = (h2 ^ (ub << 1)) &* 11400714819323198485u64
+      }
+      case None => {}
+    }
+    i = i + 1
+  }
+  h2 = h2 ^ (h2 >> 30)
+  h2 = h2 &* 13787848793156543929u64
+  h2 = h2 ^ (h2 >> 27)
+  if h2 == 0u64 { h2 = 1u64 }
+  (h1, h2)
+}
+
+/// Constructs a raw BloomFilter with specified bit capacity and hash function count.
+export fn create(numBits: Int, numHashes: Int) -> BloomFilter {
+  let m = if numBits < 64 { 64 } else { numBits }
+  let k = if numHashes < 1 { 1 } else { numHashes }
+  let numWords = (m + 63) / 64
+  var w: Array[UInt64] = []
+  var i = 0
+  while i < numWords {
+    w = w.push(0u64)
+    i = i + 1
+  }
+  BloomFilter {
+    words: w,
+    bitCapacity: m,
+    hashCount: k,
+    itemCount: 0
+  }
+}
+
+/// Constructs an optimal BloomFilter for expected items and target false-positive probability.
+export fn optimal(expectedItems: Int, falsePositiveRate: Float) -> BloomFilter {
+  let n = if expectedItems <= 0 { 1 } else { expectedItems }
+  let p = if falsePositiveRate <= 0.0 { 0.0000001 } else if falsePositiveRate >= 1.0 { 0.5 } else { falsePositiveRate }
+  let fnVal = intToFloat(n)
+  let lnP = match Float.ln(p) {
+    case Some(val) => val
+    case None => -4.60517
+  }
+  let fM = Float.ceil(-(fnVal * lnP) / 0.4804530139182014)
+  var mInt = floatToInt(fM)
+  if mInt < 64 { mInt = 64 }
+  let fK = Float.round((intToFloat(mInt) / fnVal) * 0.6931471805599453)
+  var kInt = floatToInt(fK)
+  if kInt < 1 { kInt = 1 }
+  if kInt > 30 { kInt = 30 }
+  create(mInt, kInt)
+}
+
+/// Inserts raw bytes into the filter.
+export fn insertBytes(filter: &BloomFilter, item: &Bytes) -> BloomFilter {
+  let hashes = hashPair(item)
+  let h1 = hashes[0]
+  let h2 = hashes[1]
+  let m = toUInt64(filter.bitCapacity)
+  let k = filter.hashCount
+  var newWords = filter.words
+  var i = 0
+  while i < k {
+    let uI = toUInt64(i)
+    let pos = toInt((h1 &+ uI &* h2) % m)
+    let wordIdx = pos >> 6
+    let bitPos = pos & 63
+    let mask = 1u64 << bitPos
+    let cur = newWords[wordIdx]
+    newWords = List.set(&newWords, wordIdx, cur | mask)
+    i = i + 1
+  }
+  BloomFilter {
+    words: newWords,
+    bitCapacity: filter.bitCapacity,
+    hashCount: filter.hashCount,
+    itemCount: filter.itemCount + 1
+  }
+}
+
+/// Inserts a string item into the filter.
+export fn insert(filter: &BloomFilter, item: Str) -> BloomFilter {
+  insertBytes(filter, &item.toBytes())
+}
+
+/// Tests if raw bytes may be present in the filter.
+export fn containsBytes(filter: &BloomFilter, item: &Bytes) -> Bool {
+  let hashes = hashPair(item)
+  let h1 = hashes[0]
+  let h2 = hashes[1]
+  let m = toUInt64(filter.bitCapacity)
+  let k = filter.hashCount
+  var i = 0
+  while i < k {
+    let uI = toUInt64(i)
+    let pos = toInt((h1 &+ uI &* h2) % m)
+    let wordIdx = pos >> 6
+    let bitPos = pos & 63
+    let mask = 1u64 << bitPos
+    if (filter.words[wordIdx] & mask) == 0u64 {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+/// Tests if a string item may be present in the filter.
+export fn contains(filter: &BloomFilter, item: Str) -> Bool {
+  containsBytes(filter, &item.toBytes())
+}
+
+/// Merges two compatible filters via bitwise OR.
+export fn merge(a: &BloomFilter, b: &BloomFilter) -> Option[BloomFilter] {
+  if a.bitCapacity != b.bitCapacity || a.hashCount != b.hashCount {
+    return None
+  }
+  var merged: Array[UInt64] = []
+  let len = a.words.length()
+  var i = 0
+  while i < len {
+    merged = merged.push(a.words[i] | b.words[i])
+    i = i + 1
+  }
+  Some(BloomFilter {
+      words: merged,
+      bitCapacity: a.bitCapacity,
+      hashCount: a.hashCount,
+      itemCount: a.itemCount + b.itemCount
+    })
+}
+
+/// Intersects two compatible filters via bitwise AND.
+export fn intersect(a: &BloomFilter, b: &BloomFilter) -> Option[BloomFilter] {
+  if a.bitCapacity != b.bitCapacity || a.hashCount != b.hashCount {
+    return None
+  }
+  var inter: Array[UInt64] = []
+  let len = a.words.length()
+  var i = 0
+  while i < len {
+    inter = inter.push(a.words[i] & b.words[i])
+    i = i + 1
+  }
+  let minCount = if a.itemCount < b.itemCount { a.itemCount } else { b.itemCount }
+  Some(BloomFilter {
+      words: inter,
+      bitCapacity: a.bitCapacity,
+      hashCount: a.hashCount,
+      itemCount: minCount
+    })
+}
+
+/// Total number of bits allocated.
+export fn bitCount(filter: &BloomFilter) -> Int {
+  filter.bitCapacity
+}
+
+/// Number of independent hash functions used per item.
+export fn hashCount(filter: &BloomFilter) -> Int {
+  filter.hashCount
+}
+
+/// Approximates the number of distinct items inserted.
+export fn estimatedCount(filter: &BloomFilter) -> Int {
+  var setBits = 0
+  for w in filter.words {
+    setBits = setBits + popCount64(w)
+  }
+  if setBits == 0 { return 0 }
+  let m = filter.bitCapacity
+  if setBits >= m { return filter.itemCount }
+  let fM = intToFloat(m)
+  let fK = intToFloat(filter.hashCount)
+  let fX = intToFloat(setBits)
+  let ratio = 1.0 - (fX / fM)
+  if ratio <= 0.000001 { return filter.itemCount }
+  match Float.ln(ratio) {
+    case Some(l) => {
+      let est = floatToInt(Float.round(-(fM / fK) * l))
+      if est < 0 { 0 } else { est }
+    }
+    case None => filter.itemCount
+  }
+}
