@@ -23,3 +23,32 @@ fn resolve(current: Option[Int], extra: Result[Int, Str]) -> Result[Int, Str] {
 fn hasTwo() -> Bool {
   2 in #{1, 2, 3}
 }
+
+/// A module constant holding a lookup table, which is how a fixed mapping is
+/// written rather than as a chain of comparisons.
+const LIMITS: Map[Str, Int] = mapOf([("low", 1), ("high", 9)])
+
+fn limitOf(name: Str) -> Int {
+  match LIMITS.get(name) {
+    case Some(found) => found
+    case None => 0
+  }
+}
+
+/// A parameter of higher kind, applied to its own argument.
+trait Holder[F[_]] {
+  fn held[A](self: &F[A], fallback: A) -> A
+}
+
+impl Holder[Option] for Option {
+  fn held[A](self: &Option[A], fallback: A) -> A {
+    match *self {
+      case Some(value) => value
+      case None => fallback
+    }
+  }
+}
+
+fn throughHigherKind() -> Int {
+  Some(7).held(0) + limitOf("high")
+}

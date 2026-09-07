@@ -33,14 +33,19 @@ cabal run pudu -- check path/to/Main.pudu
 ## Install
 
 ```bash
-mkdir -p "$HOME/.local/bin"
-cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
 export PATH="$HOME/.local/bin:$PATH"
-hash -r
-test "$(command -v pudu)" = "$HOME/.local/bin/pudu"
-pudu check test-fixtures/tooling/RecentLanguage.pudu
-node test/lsp-session.mjs "$(command -v pudu)"
+scripts/refresh-install.sh
 ```
+
+The script builds, installs to `$HOME/.local/bin` (pass another directory as its
+argument), and then proves that exact file with `pudu check`, a REPL probe, and a
+real LSP session. It also lists every `pudu` on `PATH` and stops if an older copy
+comes first, because a second copy is what makes a fix land in the tree and never
+reach the editor — every development build reports the same version, so nothing
+else notices.
+
+Run it again after any change to the compiler, and restart the editor's language
+server so it picks up the new executable.
 
 Development builds currently share version `0.1.0.0`, so the checks above prove the installed
 binary by behavior instead of trusting the version string.
