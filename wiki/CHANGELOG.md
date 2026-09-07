@@ -5,6 +5,37 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Tooling and pending STD boundaries
+
+LSP decodes percent-encoded UTF-8 URI paths, refuses negative/reversed protocol positions and
+clamps out-of-document/surrogate positions. REPL completion recognizes closing brackets and
+parentheses with trailing comments. Pending JWT rejects duplicate/wrong-kind registered claims
+and expires at its expiration instant. SMTP validates outbound input, closes ordinary failure
+paths, bounds replies and refuses plaintext credentials. Gzip middleware preserves responses
+until binary transport exists. Pending CLI/WebSocket/STD additions retained. No tests or reviews
+run in this continuation; production readiness remains unproven.
+
+## 2026-09-06 — Stored-block gzip codec and SMTP relay transport
+
+- [[Std Compress Gzip]] writes and reads gzip containers with stored DEFLATE blocks, CRC-32 and ISIZE checks. It does not reduce payload size or decode fixed/dynamic Huffman blocks. FHCRC is rejected. HTTP middleware is passthrough until binary response transport exists.
+- [[Std Mail Smtp]] adds plaintext relay delivery, bounded byte-buffered multiline replies and connection cleanup on ordinary result paths. Credentialed delivery is refused pending TLS. Authentication helpers format commands only.
+- Retained existing gzip and SMTP fixtures and registered them for future execution. No fixtures were run in this continuation; readiness remains unproven.
+- Updated [[Std/_MOC]], [[WEB]] and module mirrors to record these boundaries.
+
+## 2026-09-06 — 64-bit SWAR WebSocket payload unmasking optimization
+
+- [[Std Http Server Socket]]: Changed WebSocket frame payload unmasking by transitioning from $O(N)$ heap allocations and byte-by-byte software division loops to 64-bit SWAR (SIMD Within A Register) chunking over contiguous unboxed `Std.Buffer`.
+- Replicates 4-byte masking key into 32-bit and 64-bit registers: $M_{64} = M_{32} \mid (M_{32} \ll 32)$. Processes 8 bytes per iteration using native bitwise XOR (`^`), followed by 4-byte and scalar tail unmasking.
+- Replaced 12-line software division/modulo loop in `xorOf` with direct native bitwise `^`.
+- Expanded `test-fixtures/stdlib/UsesSocket.pudu` to 40 assertions covering 24-byte multi-word chunks and 14-byte mixed word/scalar tails; updated `ProtocolSpec.hs`.
+- Updated mirrored module documentation [[Std Http Server Socket]].
+
+## 2026-09-06 — RFC 7519 JSON Web Tokens (JWT) and domain-rich claims policies
+
+- [[Std App Jwt]]: RFC 7519 JSON Web Tokens implementing HS256 HMAC-SHA256 signatures, constant-time verification (`Crypto.secretsMatch`), strict algorithm enforcement, clock skew tolerance (`leewaySeconds`), and domain-rich claims policies (`expiresIn`, `hasExpired`, `isValidAt`).
+- Integrated `test-fixtures/stdlib/UsesJwt.pudu` (15 assertions) covering builders, encoding, decoding, leeway, invalid signatures, malformed tokens, expired tokens, and unverified decoding; registered in `RuntimeSpec.hs`.
+- Updated [[Std/_MOC]], [[WEB]] (Authentication row), and added mirrored module documentation [[Std App Jwt]].
+
 ## 2026-09-06 — RFC 6238 TOTP multi-factor authentication and Base32 codecs
 
 - [[Std App Totp]]: Multi-factor authentication (MFA) implementing RFC 6238 Time-Based One-Time Passwords (TOTP) and RFC 4226 dynamic truncation over HMAC-SHA256 with constant-time equality validation, clock skew windows, replay prevention, and RFC 4648 Base32 codecs.

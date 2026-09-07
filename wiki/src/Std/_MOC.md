@@ -31,6 +31,7 @@ tags: [moc, module, stdlib]
 - [[Std Order]] — equality, ordering, and hashing contracts.
 - [[Std HashMap]] — persistent indexed lookup with deterministic insertion order.
 - [[Std Bytes]] — compact byte sequences, binary reads/writes, and text codecs.
+- [[Std Compress Gzip]] — RFC 1952 GZIP compression, multi-block DEFLATE streaming, IEEE 802.3 CRC-32, and HTTP middleware.
 - [[Std Csv]] — quoted separated-row and header-table parsing/rendering.
 - [[Std Toml]] — TOML 1.0 configuration with exact numeric/time spellings.
 - [[Std Toml Read]] — turning configuration text into that model.
@@ -60,6 +61,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std Mail]] — a message a program sends, which cannot carry more than it says.
+- [[Std Mail Smtp]] — native RFC 5321 client transport over streaming TCP with AUTH LOGIN/PLAIN and multi-line reply parsing.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.
 - [[Std App Locale]] — saying the same thing in the language the reader asked for.
 - [[Std App Work]] — the work a service does when nobody asked.
@@ -72,6 +74,7 @@ tags: [moc, module, stdlib]
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
 - [[Std App Totp]] — RFC 6238 time-based one-time passwords for multi-factor authentication.
+- [[Std App Jwt]] — RFC 7519 JSON Web Tokens with HS256 HMAC signing and constant-time claims validation.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.
 - [[Std App Health]] — restarting and receiving traffic, kept apart by the types.

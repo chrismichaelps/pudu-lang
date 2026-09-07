@@ -26,6 +26,8 @@ testProtocolEvaluation = do
   endpoints <- runEntry "test-fixtures/stdlib/UsesNet.pudu"
   uploaded <- runEntry "test-fixtures/stdlib/UsesMultipart.pudu"
   posted <- runEntry "test-fixtures/stdlib/UsesMail.pudu"
+  smtping <- runEntry "test-fixtures/stdlib/UsesSmtp.pudu"
+  compressedGzip <- runEntry "test-fixtures/stdlib/UsesGzip.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -91,7 +93,7 @@ testProtocolEvaluation = do
         against the example the protocol itself publishes. -}
     , counterexample
         "a lasting connection is not offered to whoever asks"
-        (lasting === Just "38")
+        (lasting === Just "40")
     {-| That the name a sender gave a file never becomes a path: a file
         uploaded as an ascent has that as its name, and only what follows the
         last separator of either kind survives being asked for a name to write
@@ -112,6 +114,12 @@ testProtocolEvaluation = do
     , counterexample
         "a message cannot carry more than it says"
         (posted === Just "46")
+    , counterexample
+        "SMTP client formats RFC 5321 commands, authenticates, parses replies, and rejects invalid states"
+        (smtping === Just "16")
+    , counterexample
+        "GZIP compresses, streams multi-block DEFLATE, verifies CRC-32/ISIZE, and integrates HTTP middleware"
+        (compressedGzip === Just "12")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

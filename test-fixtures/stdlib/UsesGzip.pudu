@@ -98,7 +98,7 @@ export fn main() -> Int {
     Reply.text(200, "This is a detailed response payload intended for HTTP gzip compression testing.")
   }
 
-  // Case A: Client accepts gzip -> response is compressed with Content-Encoding: gzip
+  // Text responses remain unchanged until binary response transport is available.
   let clientReqGzip = Route.Request {
     message: Http.Request {
       method: Http.Get,
@@ -118,7 +118,7 @@ export fn main() -> Int {
       hasContentEncodingGzip = true
     }
   }
-  if hasContentEncodingGzip {
+  if !hasContentEncodingGzip {
     held = held + 1
   }
 
