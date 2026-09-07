@@ -142,7 +142,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Transport security? | **Ready** | [[Std Tls]]. Verification is not a parameter. |
 | Authentication? | **Ready** for password and session, **Absent** for multi-factor. | [[Std App Password]] carries the work factor it was made with, so raising it locks nobody out. [[Std App Session]] issues a new name on every change of privilege, which is the fixation defence made unforgettable rather than documented. |
 | Authorisation? | **Ready** | [[Std App Access]]. A requirement is given in the same call as the handler and there is no call that omits it, so a route needing nothing and a route somebody forgot stop being the same line. A program can list what every route requires. |
-| Secrets handling? | **Partial** | Settings can hold one; nothing marks it as one, so nothing stops it being logged. |
+| Secrets handling? | **Ready** | [[Std App Secret]]: opaque container types prevent accidental logging or trace exposure; explicit redaction (`[REDACTED]`), masked suffix display, and constant-time equality comparisons. |
 | Audit trail? | **Absent** | Not designed. |
 
 ## Everything else an organisation asks
@@ -154,7 +154,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Multi-tenancy? | **Partial** | [[Std App Access]] decides on an attribute of the principal, so a per-tenant requirement is expressible. Nothing separates tenants' data or bounds their limits. |
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
 | Background work outside a request? | **Ready** for scheduling, **Absent** for queues. | [[Std App Work]]: jobs as values, both interval kinds, no overlapping runs, and a failure recorded rather than fatal. A durable queue is still absent. |
-| Feature flags? | **Absent** | A setting can stand in for one. |
+| Feature flags? | **Ready** | [[Std App Flag]]: value-based flags supporting targeted rollouts, deterministic sticky percentage canary releases, and entity allowlists without centralized service calls. |
 | Sending mail? | **Partial** | [[Std Mail]] builds a message that refuses header injection and keeps blind copies out of the headers, and renders what goes on the wire. The transport that carries it is not written. |
 | Data protection and the right to erasure? | **Absent** | A program's own concern; nothing here helps or hinders. |
 | A package ecosystem to get any of this from? | **Absent** | Designed in [[architecture/PACKAGES]] and deliberately not half-built: a resolver and archive extractor that are partly there is where a supply chain is compromised. |

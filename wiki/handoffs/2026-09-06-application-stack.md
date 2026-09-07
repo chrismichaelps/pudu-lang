@@ -121,7 +121,16 @@ Implemented admission control, load shedding, and cascading failure protection:
 - `Std.Http.Server.Reply`: `serviceUnavailable` and `gatewayTimeout`.
 - Updated `UsesEnterpriseSsr.pudu` (49 assertions) and `RuntimeSpec.hs`.
 - Updated module mirrors `Guard.md` and `Reply.md` with resolved Grill Logs; updated `WEB.md` and `CHANGELOG.md`.
+
+## Secure secrets management and value-based feature flags
+
+Implemented secrets encapsulation and deterministic feature flag rollouts:
+- `Std.App.Secret`: Opaque credential wrapper enforcing explicit unveiling (`reveal`), automatic redaction (`redact`), masked suffix display (`redactKey`), and constant-time equality comparisons (`constantTimeEquals`).
+- `Std.App.Flag`: Value-based feature flag evaluator supporting targeted entity allowlists and deterministic sticky percentage canary releases without centralized network bottlenecks.
+- Updated `UsesEnterpriseSsr.pudu` (57 assertions) and `RuntimeSpec.hs`.
+- Added module mirrors `Secret.md` and `Flag.md` with resolved Grill Logs; updated `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
 Exact next action: Validate with full repository gates and commit to dev.
+
 
 
 

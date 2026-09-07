@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Secure secrets management and value-based feature flags
+
+- [[Std App Secret]]: Opaque credential containers enforcing explicit unveiling, automatic redaction (`[REDACTED]`), masked suffix formatting, and constant-time equality comparisons.
+- [[Std App Flag]]: Pure value-based feature flags supporting targeted entity allowlists and deterministic sticky percentage canary rollouts.
+- Updated `UsesEnterpriseSsr.pudu` integration tests to 57 assertions and registered in `RuntimeSpec.hs`.
+- Updated [[WEB]] verdicts for Secrets Handling and Feature Flags from Partial/Absent to Ready.
+
 ## 2026-09-06 — Bounded concurrency backpressure and circuit breaker middleware
 
 - [[Std Http Server Guard]]: Added `boundedConcurrency(maxInflight)` for admission backpressure and fast-shedding of excess load via status 503 Service Unavailable, and `circuitBreaker(failureThreshold, resetTimeoutSeconds)` for cascading failure isolation.

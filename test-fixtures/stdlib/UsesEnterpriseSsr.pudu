@@ -1,7 +1,10 @@
 module UsesEnterpriseSsr
 
+import Std.App.Flag {Disabled, Enabled, Percentage, Allowlist}
+import Std.App.Flag as Flag
 import Std.App.IsrCache {Fresh, Stale, Miss}
 import Std.App.IsrCache as IsrCache
+import Std.App.Secret as Secret
 import Std.Bytes as ByteSeq
 import Std.Html.Buffer as HtmlBuffer
 import Std.Html as Html
@@ -381,6 +384,30 @@ export fn main() -> Int {
   if cb1.status.code == 500 { passed = passed + 1 }
   if cb2.status.code == 500 { passed = passed + 1 }
   if cb3.status.code == 503 { passed = passed + 1 }
+
+  // 24. Secret: encapsulation, redaction, and constant-time equality
+  let sec = Secret.secret("live_secret_key_9876")
+  if Secret.reveal(&sec) == "live_secret_key_9876" { passed = passed + 1 }
+  if Secret.redact(&sec) == "[REDACTED]" { passed = passed + 1 }
+  if Secret.redactKey(&sec, 4) == "••••••••9876" { passed = passed + 1 }
+  if Secret.constantTimeEquals(&sec, &Secret.secret("live_secret_key_9876")) { passed = passed + 1 }
+  if !Secret.constantTimeEquals(&sec, &Secret.secret("wrong_token_1234")) { passed = passed + 1 }
+
+  // 25. Flag: targeted, allowlist, and percentage rollouts
+  let ctxA = Flag.context("user-42", "tenant-alpha")
+  let ctxB = Flag.context("user-99", "tenant-beta")
+
+  let fDis = Flag.flag("beta-nav", Disabled)
+  let fEna = Flag.flag("beta-nav", Enabled)
+  if !Flag.isEnabled(&fDis, &ctxA) && Flag.isEnabled(&fEna, &ctxA) { passed = passed + 1 }
+
+  let fTarget = Flag.flag("tenant-rollout", Allowlist(["tenant-alpha", "vip-user"]))
+  if Flag.isEnabled(&fTarget, &ctxA) && !Flag.isEnabled(&fTarget, &ctxB) { passed = passed + 1 }
+
+  let fCanary = Flag.flag("canary-v2", Percentage(50))
+  let sticky1 = Flag.isEnabled(&fCanary, &ctxA)
+  let sticky2 = Flag.isEnabled(&fCanary, &ctxA)
+  if sticky1 == sticky2 { passed = passed + 1 }
 
   passed
 }

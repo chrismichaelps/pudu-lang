@@ -66,6 +66,8 @@ tags: [moc, module, stdlib]
 - [[Std App Trace]] — following one piece of work across every service that touched it.
 - [[Std App Session]] — remembering who somebody is, under a name nobody else may choose.
 - [[Std App Password]] — a password kept in a form that proves it without holding it.
+- [[Std App Secret]] — secrets protected from unintended disclosure with explicit redaction.
+- [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.
