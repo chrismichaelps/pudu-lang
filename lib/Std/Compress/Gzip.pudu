@@ -3,6 +3,7 @@ module Std.Compress.Gzip
 import Std.Bytes as ByteSeq
 import Std.Http as Http
 import Std.Http.Server.Route as Route
+import Std.Math {min}
 import Std.Option as Option
 import Std.Result as Result
 
@@ -124,10 +125,10 @@ export fn decompressWithin(stream: &Bytes, maxBytes: Int) -> Result[Bytes, GzipE
   let method = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(2), 0u8)), 0)
   if method != 8 { return Err(UnsupportedCompressionMethod(method)) }
   Result.mapErr(gzipDecompress(*stream, maxBytes), fn(problem: Str) -> GzipError {
-    if problem == "decompressed output limit exceeded" { OutputLimitExceeded(maxBytes) }
-    else if problem == "truncated gzip stream" || problem == "TruncatedInput" { TruncatedStream }
-    else { CodecFailure(problem) }
-  })
+      if problem == "decompressed output limit exceeded" { OutputLimitExceeded(maxBytes) }
+        else if problem == "truncated gzip stream" || problem == "TruncatedInput" || problem.contains("premature end") || problem.contains("truncated") { TruncatedStream }
+        else { CodecFailure(problem) }
+    })
 }
 
 /// Decompresses an RFC 1952 GZIP stream and decodes the payload as UTF-8 text.
@@ -158,8 +159,8 @@ export fn middleware(cfg: &GzipConfig) -> Route.Middleware {
     for entry in varied.headers {
       let name = entry[0].toLower()
       if name != "content-length" && name != "transfer-encoding" && name != "etag"
-          && name != "content-md5" && name != "digest" && name != "content-digest"
-          && name != "repr-digest" && name != "accept-ranges" {
+        && name != "content-md5" && name != "digest" && name != "content-digest"
+        && name != "repr-digest" && name != "accept-ranges" {
         headers = headers.push(entry)
       }
     }
@@ -252,11 +253,11 @@ fn acceptsGzip(headers: &Array[(Str, Str)]) -> Bool {
           for parameter in parts.slice(1, parts.length()) {
             let pair = parameter.trim().split("=")
             if pair.length() != 2 || pair[0].trim() != "q" || seen { weight = 0 }
-            else { weight = quality(pair[1].trim()) }
+              else { weight = quality(pair[1].trim()) }
             seen = true
           }
           if coding == "gzip" { explicit = Some(min(Option.unwrapOr(explicit, 1000), weight)) }
-          else { wildcard = Some(min(Option.unwrapOr(wildcard, 1000), weight)) }
+            else { wildcard = Some(min(Option.unwrapOr(wildcard, 1000), weight)) }
         }
       }
     }
