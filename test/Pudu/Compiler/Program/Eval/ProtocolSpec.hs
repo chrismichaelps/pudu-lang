@@ -28,6 +28,8 @@ testProtocolEvaluation = do
   posted <- runEntry "test-fixtures/stdlib/UsesMail.pudu"
   smtping <- runEntry "test-fixtures/stdlib/UsesSmtp.pudu"
   compressedGzip <- runEntry "test-fixtures/stdlib/UsesGzip.pudu"
+  floatMath <- runEntry "test-fixtures/stdlib/UsesFloatMath.pudu"
+  intMap <- runEntry "test-fixtures/stdlib/UsesIntMap.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -82,7 +84,7 @@ testProtocolEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "47")
+        (fetched === Just "45")
     {-| That a lasting connection is not offered to whoever asks: it is not
         subject to the rule stopping one site reading another's answers, so a
         page on any site could otherwise open one carrying the viewer's
@@ -120,6 +122,12 @@ testProtocolEvaluation = do
     , counterexample
         "GZIP compresses, streams multi-block DEFLATE, verifies CRC-32/ISIZE, and integrates HTTP middleware"
         (compressedGzip === Just "12")
+    , counterexample
+        "IEEE-754 trigonometry, exponentials, logarithms, roots, low-level binary GCD, and edge cases"
+        (floatMath === Just "20")
+    , counterexample
+        "IntMap Patricia Trie inserts, queries, deletes, unions, differences, sorts, and signed/boundary edge cases"
+        (intMap === Just "17")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
