@@ -1,0 +1,188 @@
+module Std.SipHash
+
+import Std.Bytes as Bytes
+
+/// A 128-bit key consisting of two 64-bit unsigned words.
+export type SipKey = {
+  k0: UInt64,
+  k1: UInt64,
+}
+
+/// Constructs a 128-bit key from two 64-bit words.
+export fn key(k0: UInt64, k1: UInt64) -> SipKey {
+  SipKey{k0: k0, k1: k1}
+}
+
+fn u8ToU64(b: UInt8) -> UInt64 {
+  match convertInteger[UInt64](b) {
+    case Some(u) => u
+    case None => 0u64
+  }
+}
+
+/// Parses a 16-byte array into a 128-bit SipKey in little-endian order.
+export fn keyFromBytes(bytes: &Array[UInt8]) -> Option[SipKey] {
+  if bytes.length() != 16 {
+    return None
+  }
+  let k0 = u8ToU64(bytes[0])
+    | (u8ToU64(bytes[1]) << 8)
+    | (u8ToU64(bytes[2]) << 16)
+    | (u8ToU64(bytes[3]) << 24)
+    | (u8ToU64(bytes[4]) << 32)
+    | (u8ToU64(bytes[5]) << 40)
+    | (u8ToU64(bytes[6]) << 48)
+    | (u8ToU64(bytes[7]) << 56)
+
+  let k1 = u8ToU64(bytes[8])
+    | (u8ToU64(bytes[9]) << 8)
+    | (u8ToU64(bytes[10]) << 16)
+    | (u8ToU64(bytes[11]) << 24)
+    | (u8ToU64(bytes[12]) << 32)
+    | (u8ToU64(bytes[13]) << 40)
+    | (u8ToU64(bytes[14]) << 48)
+    | (u8ToU64(bytes[15]) << 56)
+
+  Some(SipKey{k0: k0, k1: k1})
+}
+
+fn rotL64(x: UInt64, r: Int) -> UInt64 {
+  (x << r) | (x >> (64 - r))
+}
+
+fn sipRound(s: (UInt64, UInt64, UInt64, UInt64)) -> (UInt64, UInt64, UInt64, UInt64) {
+  var v0 = s[0] &+ s[1]
+  var v1 = rotL64(s[1], 13) ^ v0
+  v0 = rotL64(v0, 32)
+  var v2 = s[2] &+ s[3]
+  var v3 = rotL64(s[3], 16) ^ v2
+
+  v0 = v0 &+ v3
+  v3 = rotL64(v3, 21) ^ v0
+  v2 = v2 &+ v1
+  v1 = rotL64(v1, 17) ^ v2
+  v2 = rotL64(v2, 32)
+
+  (v0, v1, v2, v3)
+}
+
+fn readU64Le(bytes: &Array[UInt8], offset: Int) -> UInt64 {
+  u8ToU64(bytes[offset])
+    | (u8ToU64(bytes[offset + 1]) << 8)
+    | (u8ToU64(bytes[offset + 2]) << 16)
+    | (u8ToU64(bytes[offset + 3]) << 24)
+    | (u8ToU64(bytes[offset + 4]) << 32)
+    | (u8ToU64(bytes[offset + 5]) << 40)
+    | (u8ToU64(bytes[offset + 6]) << 48)
+    | (u8ToU64(bytes[offset + 7]) << 56)
+}
+
+/// Computes the 64-bit SipHash-2-4 digest for `bytes` using key `k`.
+export fn sipHash24(k: &SipKey, bytes: &Array[UInt8]) -> UInt64 {
+  var v0 = k.k0 ^ 0x736f6d6570736575u64
+  var v1 = k.k1 ^ 0x646f72616e646f6du64
+  var v2 = k.k0 ^ 0x6c7967656e657261u64
+  var v3 = k.k1 ^ 0x7465646279746573u64
+
+  let len = bytes.length()
+  let numBlocks = len / 8
+  var i = 0
+  while i < numBlocks {
+    let m = readU64Le(bytes, i * 8)
+    v3 = v3 ^ m
+    let r1 = sipRound((v0, v1, v2, v3))
+    let r2 = sipRound(r1)
+    v0 = r2[0] ^ m
+    v1 = r2[1]
+    v2 = r2[2]
+    v3 = r2[3]
+    i = i + 1
+  }
+
+  let tailOffset = numBlocks * 8
+  let rem = len - tailOffset
+  let lenByte = match convertInteger[UInt64](len & 255) {
+    case Some(u) => u
+    case None => 0u64
+  }
+  var m = lenByte << 56
+  if rem >= 7 {
+    m = m | (u8ToU64(bytes[tailOffset + 6]) << 48)
+  }
+  if rem >= 6 {
+    m = m | (u8ToU64(bytes[tailOffset + 5]) << 40)
+  }
+  if rem >= 5 {
+    m = m | (u8ToU64(bytes[tailOffset + 4]) << 32)
+  }
+  if rem >= 4 {
+    m = m | (u8ToU64(bytes[tailOffset + 3]) << 24)
+  }
+  if rem >= 3 {
+    m = m | (u8ToU64(bytes[tailOffset + 2]) << 16)
+  }
+  if rem >= 2 {
+    m = m | (u8ToU64(bytes[tailOffset + 1]) << 8)
+  }
+  if rem >= 1 {
+    m = m | u8ToU64(bytes[tailOffset])
+  }
+
+  v3 = v3 ^ m
+  let rTail1 = sipRound((v0, v1, v2, v3))
+  let rTail2 = sipRound(rTail1)
+  v0 = rTail2[0] ^ m
+  v1 = rTail2[1]
+  v2 = rTail2[2] ^ 0xffu64
+  v3 = rTail2[3]
+
+  let rf1 = sipRound((v0, v1, v2, v3))
+  let rf2 = sipRound(rf1)
+  let rf3 = sipRound(rf2)
+  let rf4 = sipRound(rf3)
+
+  rf4[0] ^ rf4[1] ^ rf4[2] ^ rf4[3]
+}
+
+/// Computes the 64-bit SipHash-2-4 digest directly over a UTF-8 text string.
+export fn sipHash24Text(k: &SipKey, text: Str) -> UInt64 {
+  let b = text.toBytes().toArray()
+  sipHash24(k, &b)
+}
+
+/// Computes SipHash-2-4 directly over a 64-bit integer without allocating byte arrays.
+export fn sipHash24Int(k: &SipKey, value: Int) -> UInt64 {
+  var v0 = k.k0 ^ 0x736f6d6570736575u64
+  var v1 = k.k1 ^ 0x646f72616e646f6du64
+  var v2 = k.k0 ^ 0x6c7967656e657261u64
+  var v3 = k.k1 ^ 0x7465646279746573u64
+
+  let m = match convertInteger[UInt64](value) {
+    case Some(u) => u
+    case None => 0u64
+  }
+
+  v3 = v3 ^ m
+  let r1 = sipRound((v0, v1, v2, v3))
+  let r2 = sipRound(r1)
+  v0 = r2[0] ^ m
+  v1 = r2[1]
+  v2 = r2[2]
+  v3 = r2[3]
+
+  let tailM = 8u64 << 56
+  v3 = v3 ^ tailM
+  let rTail1 = sipRound((v0, v1, v2, v3))
+  let rTail2 = sipRound(rTail1)
+  v0 = rTail2[0] ^ tailM
+  v1 = rTail2[1]
+  v2 = rTail2[2] ^ 0xffu64
+  v3 = rTail2[3]
+
+  let rf1 = sipRound((v0, v1, v2, v3))
+  let rf2 = sipRound(rf1)
+  let rf3 = sipRound(rf2)
+  let rf4 = sipRound(rf3)
+
+  rf4[0] ^ rf4[1] ^ rf4[2] ^ rf4[3]
+}
