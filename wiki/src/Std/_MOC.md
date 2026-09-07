@@ -104,6 +104,8 @@ tags: [moc, module, stdlib]
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Math]] — generic total numeric algorithms.
+- [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.
+- [[Std IntMap]] — high-performance bitwise Patricia Trie integer map inspired by Haskell Data.IntMap.
 - [[Std Tree]] — a value with trees beneath it, with orders, paths, and pruning.
 - [[Std Mappable]] — a trait over the container, so one definition serves several.
 - [[Std SortedMap]] — a map ordered by the caller's comparison, with neighbour and range queries.
@@ -114,6 +116,10 @@ tags: [moc, module, stdlib]
 - [[Std MultiKeyMap]] — a two-part key with lookup by the whole key or either part.
 - [[Std LruCache]] — a bounded map that discards what has gone longest unused.
 - [[Std PrefixTrie]] — text keys held by their characters, searchable by prefix.
+- [[Std Archive Tar]] — POSIX USTAR archive streaming encoding, decoding, and entry extraction.
+- [[Std BloomFilter]] — probabilistic set membership with zero false negatives and double hashing.
+- [[Std Mime]] — MIME Media Type parsing, extension registry, and HTTP Accept negotiation.
+- [[Std Diff]] — Myers O(ND) sequence difference, Unified Diff format, and Levenshtein metric.
 
 - [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
 - [[Std App Database]] — application-owned pools and bound queries.

@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-07 — Standard Library Expansion: Core Math, IntMap, Tar, BloomFilter, Mime, and Diff
+
+- Add `Std.Math.Float`: IEEE-754 trigonometry (`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`), exponentials and logarithms (`exp`, `ln`, `log2`, `log10`, `powf`, `sqrt`, `cbrt`, `hypot`), hyperbolic functions (`sinh`, `cosh`, `tanh`), rounding/decomposition (`floor`, `ceil`, `round`, `trunc`, `fract`, `copysign`, `isNan`, `isInfinite`, `isFinite`, `lerp`), and constants (`pi`, `tau`, `e`, `ln2`, `ln10`, `sqrt2`, `epsilon`).
+- Add low-level integer math to `Std.Math`: Stein's binary GCD (`binaryGcd`), branchless power-of-two tests (`isPowerOfTwo`, `nextPowerOfTwo`), fast integer $\log_2$ (`ilog2`), and branchless extrema (`branchlessMin`, `branchlessMax`, `branchlessAbs`).
+- Add `Std.IntMap`: Fast bitwise Patricia Trie integer map inspired by Haskell's standard `Data.IntMap`, featuring $O(\min(N, W))$ lookups, insertions, deletions, set operations, and sorting.
+- Add `Std.Archive.Tar`: Standard POSIX USTAR archive streaming encoder, decoder, and file/directory entry extractor.
+- Add `Std.BloomFilter`: Probabilistic set membership with zero false negatives, mathematically optimal sizing ($m, k$), Kirsch-Mitzenmacher double-hashing, and union/intersection operations.
+- Add `Std.Mime`: RFC 2045 media type parser, parameter serializer, 60+ extension registry, and HTTP `Accept` content negotiation.
+- Add `Std.Diff`: Eugene Myers $O(ND)$ difference engine, Unified Diff (`@@ -l,s +l,s @@`) formatter with context lines, and Levenshtein edit distance metric.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], and [[Std Diff]].
+
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 
 - Require application-supplied EHLO identity in `Smtp.client(host, port, domain)`; remove the localhost default.
