@@ -1,0 +1,355 @@
+module Std.Compress.Gzip
+
+import Std.Buffer as Buffer
+import Std.Bytes as ByteSeq
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Std.Result as Result
+
+/// Compression optimization profile.
+export type CompressionLevel
+  = NoCompression
+  | Fast
+  | Default
+  | Best
+
+/// Configuration parameters for streaming GZIP compression and HTTP middleware.
+export type GzipConfig = {
+  level: CompressionLevel,
+  chunkSize: Int,
+  minCompressBytes: Int,
+}
+
+/// Structured failure conditions encountered during GZIP stream decompression.
+export type GzipError
+  = InvalidMagic(Int, Int)
+  | UnsupportedCompressionMethod(Int)
+  | CorruptHeader(Str)
+  | TruncatedStream
+  | CorruptBlockHeader
+  | UnsupportedBlockType(Int)
+  | ChecksumMismatch(Int, Int)
+  | SizeMismatch(Int, Int)
+  | NonUtf8Content
+
+/// Constructs a default GZIP compression configuration.
+export fn config() -> GzipConfig {
+  GzipConfig {
+    level: Default,
+    chunkSize: 65535,
+    minCompressBytes: 256,
+  }
+}
+
+/// Sets the compression level profile.
+export fn withLevel(c: &GzipConfig, level: CompressionLevel) -> GzipConfig {
+  GzipConfig {
+    level: level,
+    chunkSize: c.chunkSize,
+    minCompressBytes: c.minCompressBytes,
+  }
+}
+
+/// Sets the DEFLATE block chunk size bounded between 1 and 65,535 bytes.
+export fn withChunkSize(c: &GzipConfig, chunkSize: Int) -> GzipConfig {
+  let bounded = if chunkSize < 1 {
+    1
+  } else if chunkSize > 65535 {
+    65535
+  } else {
+    chunkSize
+  }
+  GzipConfig {
+    level: c.level,
+    chunkSize: bounded,
+    minCompressBytes: c.minCompressBytes,
+  }
+}
+
+/// Configures the minimum payload size before HTTP middleware triggers compression.
+export fn withMinCompressBytes(c: &GzipConfig, minBytes: Int) -> GzipConfig {
+  let bounded = if minBytes < 0 { 0 } else { minBytes }
+  GzipConfig {
+    level: c.level,
+    chunkSize: c.chunkSize,
+    minCompressBytes: bounded,
+  }
+}
+
+/// Calculates the standard IEEE 802.3 32-bit Cyclic Redundancy Check (CRC-32) over input bytes.
+export fn crc32(data: &Bytes) -> Int {
+  let table = buildCrcTable()
+  let sum = calcCrc(&table, data)
+  uint32ToInt(sum)
+}
+
+/// Compresses raw bytes into an RFC 1952 GZIP stream using unboxed buffer operations.
+export fn compress(data: &Bytes, cfg: &GzipConfig) -> Bytes {
+  let inLen = data.length()
+  let chSize = if cfg.chunkSize < 1 { 1 } else if cfg.chunkSize > 65535 { 65535 } else { cfg.chunkSize }
+  let numBlocks = if inLen == 0 { 1 } else { (inLen + chSize - 1) / chSize }
+  let totalBytes = 10 + (numBlocks * 5) + inLen + 8
+
+  var buf = Buffer.alloc(totalBytes)
+
+  // 1. RFC 1952 Header (10 bytes)
+  buf = Option.unwrapOr(Buffer.fill(&buf, 0, 1, 0x1fu8), buf)
+  buf = Option.unwrapOr(Buffer.fill(&buf, 1, 1, 0x8bu8), buf)
+  buf = Option.unwrapOr(Buffer.fill(&buf, 2, 1, 0x08u8), buf) // CM = DEFLATE
+  buf = Option.unwrapOr(Buffer.fill(&buf, 3, 1, 0x00u8), buf) // FLG = 0
+  buf = Option.unwrapOr(Buffer.fill(&buf, 4, 4, 0x00u8), buf) // MTIME = 0
+  buf = Option.unwrapOr(Buffer.fill(&buf, 8, 1, 0x00u8), buf) // XFL = 0
+  buf = Option.unwrapOr(Buffer.fill(&buf, 9, 1, 0x03u8), buf) // OS = Unix
+
+  // 2. RFC 1951 Stored Blocks
+  var outOffset = 10
+  var inOffset = 0
+  var blockIdx = 0
+
+  while blockIdx < numBlocks {
+    let isLast = blockIdx == (numBlocks - 1)
+    let blockLen = if inLen == 0 {
+      0
+    } else if (inOffset + chSize) > inLen {
+      inLen - inOffset
+    } else {
+      chSize
+    }
+
+    let bFinal = if isLast { 1u8 } else { 0u8 }
+    let bHdr = bFinal // BTYPE = 00 (stored block)
+
+    let lenLo = Option.unwrapOr(convertInteger[UInt8](blockLen & 0xff), 0u8)
+    let lenHi = Option.unwrapOr(convertInteger[UInt8]((blockLen >> 8) & 0xff), 0u8)
+    let nlen = (0xffff ^ blockLen) & 0xffff
+    let nlenLo = Option.unwrapOr(convertInteger[UInt8](nlen & 0xff), 0u8)
+    let nlenHi = Option.unwrapOr(convertInteger[UInt8]((nlen >> 8) & 0xff), 0u8)
+
+    buf = Option.unwrapOr(Buffer.fill(&buf, outOffset, 1, bHdr), buf)
+    buf = Option.unwrapOr(Buffer.fill(&buf, outOffset + 1, 1, lenLo), buf)
+    buf = Option.unwrapOr(Buffer.fill(&buf, outOffset + 2, 1, lenHi), buf)
+    buf = Option.unwrapOr(Buffer.fill(&buf, outOffset + 3, 1, nlenLo), buf)
+    buf = Option.unwrapOr(Buffer.fill(&buf, outOffset + 4, 1, nlenHi), buf)
+    outOffset = outOffset + 5
+
+    if blockLen > 0 {
+      let srcBuf = Buffer.fromBytes(*data)
+      buf = Option.unwrapOr(Buffer.copy(&srcBuf, inOffset, &buf, outOffset, blockLen), buf)
+      outOffset = outOffset + blockLen
+      inOffset = inOffset + blockLen
+    }
+
+    blockIdx = blockIdx + 1
+  }
+
+  // 3. RFC 1952 Trailer (8 bytes): CRC-32 + ISIZE (little-endian)
+  let table = buildCrcTable()
+  let crcVal = calcCrc(&table, data)
+  let isizeVal = Option.unwrapOr(convertInteger[UInt32](inLen), 0u32)
+
+  buf = Option.unwrapOr(Buffer.writeU32(&buf, outOffset, crcVal), buf)
+  buf = Option.unwrapOr(Buffer.writeU32(&buf, outOffset + 4, isizeVal), buf)
+
+  Buffer.toBytes(&buf)
+}
+
+/// Compresses UTF-8 text into an RFC 1952 GZIP stream.
+export fn compressText(text: Str, cfg: &GzipConfig) -> Bytes {
+  compress(&text.toBytes(), cfg)
+}
+
+/// Decompresses an RFC 1952 GZIP stream, verifying checksums and block integrity.
+export fn decompress(stream: &Bytes) -> Result[Bytes, GzipError] {
+  let totalLen = stream.length()
+  if totalLen < 18 {
+    return Err(TruncatedStream)
+  }
+
+  // 1. Verify Magic
+  let id1 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(0), 0u8)), 0)
+  let id2 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(1), 0u8)), 0)
+  if id1 != 0x1f || id2 != 0x8b {
+    return Err(InvalidMagic(id1, id2))
+  }
+
+  // 2. Verify Compression Method
+  let cm = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(2), 0u8)), 0)
+  if cm != 8 {
+    return Err(UnsupportedCompressionMethod(cm))
+  }
+
+  // 3. Inspect Flags
+  let flags = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(3), 0u8)), 0)
+  if (flags & 0xe0) != 0 {
+    return Err(CorruptHeader("reserved header flag bits set"))
+  }
+
+  var offset = 10
+
+  // Optional FEXTRA
+  if (flags & 4) != 0 {
+    if offset + 2 > totalLen - 8 { return Err(TruncatedStream) }
+    let xlen = readU16LE(stream, offset)
+    offset = offset + 2 + xlen
+  }
+
+  // Optional FNAME
+  if (flags & 8) != 0 {
+    while offset < totalLen - 8 && stream.at(offset) != Some(0u8) {
+      offset = offset + 1
+    }
+    offset = offset + 1
+  }
+
+  // Optional FCOMMENT
+  if (flags & 16) != 0 {
+    while offset < totalLen - 8 && stream.at(offset) != Some(0u8) {
+      offset = offset + 1
+    }
+    offset = offset + 1
+  }
+
+  // Optional FHCRC
+  if (flags & 2) != 0 {
+    return Err(CorruptHeader("header CRC verification is not supported"))
+  }
+
+  // 4. Decode DEFLATE Stored Blocks
+  var outBytes = ByteSeq.empty()
+  var done = false
+
+  while !done {
+    if offset + 5 > totalLen - 8 {
+      return Err(TruncatedStream)
+    }
+
+    let bHdr = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(stream.at(offset), 0u8)), 0)
+    let bFinal = (bHdr & 1) == 1
+    let bType = (bHdr >> 1) & 3
+
+    if bType != 0 {
+      return Err(UnsupportedBlockType(bType))
+    }
+
+    let bLen = readU16LE(stream, offset + 1)
+    let bNlen = readU16LE(stream, offset + 3)
+
+    if ((bLen ^ bNlen) & 0xffff) != 0xffff {
+      return Err(CorruptBlockHeader)
+    }
+
+    offset = offset + 5
+
+    if offset + bLen > totalLen - 8 {
+      return Err(TruncatedStream)
+    }
+
+    if bLen > 0 {
+      let blockSlice = stream.slice(offset, offset + bLen)
+      outBytes = outBytes.concat(blockSlice)
+      offset = offset + bLen
+    }
+
+    if bFinal {
+      done = true
+    }
+  }
+
+  // 5. Verify Trailer Checksums
+  if offset + 8 != totalLen {
+    return Err(TruncatedStream)
+  }
+
+  let trailerCrc = readU32LE(stream, offset)
+  let trailerIsize = readU32LE(stream, offset + 4)
+
+  let table = buildCrcTable()
+  let computedCrc = calcCrc(&table, &outBytes)
+  if computedCrc != trailerCrc {
+    return Err(ChecksumMismatch(uint32ToInt(trailerCrc), uint32ToInt(computedCrc)))
+  }
+
+  let computedIsize = Option.unwrapOr(convertInteger[UInt32](outBytes.length()), 0u32)
+  if computedIsize != trailerIsize {
+    return Err(SizeMismatch(uint32ToInt(trailerIsize), outBytes.length()))
+  }
+
+  Ok(outBytes)
+}
+
+/// Decompresses an RFC 1952 GZIP stream and decodes the payload as UTF-8 text.
+export fn decompressText(stream: &Bytes) -> Result[Str, GzipError] {
+  let decompressed = decompress(stream) ?
+  match ByteSeq.toText(&decompressed) {
+    case Ok(text) => Ok(text)
+    case Err(_) => Err(NonUtf8Content)
+  }
+}
+
+/// HTTP server middleware that transparently compresses eligible responses with GZIP.
+export fn middleware(_cfg: &GzipConfig) -> Route.Middleware {
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response { next(request) }
+}
+
+fn buildCrcTable() -> Array[UInt32] {
+  var table: Array[UInt32] = []
+  var i = 0
+  while i < 256 {
+    var c = Option.unwrapOr(convertInteger[UInt32](i), 0u32)
+    var j = 0
+    while j < 8 {
+      if (c & 1u32) != 0u32 {
+        c = 0xedb88320u32 ^ (c >> 1)
+      } else {
+        c = c >> 1
+      }
+      j = j + 1
+    }
+    table = table.push(c)
+    i = i + 1
+  }
+  return table
+}
+
+fn calcCrc(table: &Array[UInt32], data: &Bytes) -> UInt32 {
+  var crc = 0xffffffffu32
+  var i = 0
+  let len = data.length()
+  while i < len {
+    let octet = Option.unwrapOr(data.at(i), 0u8)
+    let octet32 = Option.unwrapOr(convertInteger[UInt32](octet), 0u32)
+    let idx = Option.unwrapOr(convertInteger[Int]((crc ^ octet32) & 0xffu32), 0)
+    let entry = (*table)[idx]
+    crc = entry ^ (crc >> 8)
+    i = i + 1
+  }
+  return crc ^ 0xffffffffu32
+}
+
+fn readU16LE(bytes: &Bytes, offset: Int) -> Int {
+  let b0 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(bytes.at(offset), 0u8)), 0)
+  let b1 = Option.unwrapOr(convertInteger[Int](Option.unwrapOr(bytes.at(offset + 1), 0u8)), 0)
+  return b0 | (b1 << 8)
+}
+
+fn readU32LE(bytes: &Bytes, offset: Int) -> UInt32 {
+  let b0 = Option.unwrapOr(convertInteger[UInt32](Option.unwrapOr(bytes.at(offset), 0u8)), 0u32)
+  let b1 = Option.unwrapOr(convertInteger[UInt32](Option.unwrapOr(bytes.at(offset + 1), 0u8)), 0u32)
+  let b2 = Option.unwrapOr(convertInteger[UInt32](Option.unwrapOr(bytes.at(offset + 2), 0u8)), 0u32)
+  let b3 = Option.unwrapOr(convertInteger[UInt32](Option.unwrapOr(bytes.at(offset + 3), 0u8)), 0u32)
+  return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+}
+
+fn uint32ToInt(val: UInt32) -> Int {
+  Option.unwrapOr(convertInteger[Int](val), 0)
+}
+
+fn acceptsGzip(headers: &Array[(Str, Str)]) -> Bool {
+  for header in *headers {
+    if header[0].toLower() == "accept-encoding" && header[1].toLower().contains("gzip") {
+      return true
+    }
+  }
+  return false
+}

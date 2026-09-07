@@ -1,0 +1,150 @@
+module UsesGzip
+
+import Std.Bytes as ByteSeq
+import Std.Compress.Gzip as Gzip
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Result as Result
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Builder pattern and configuration
+  let defCfg = Gzip.config()
+  let customCfg = Gzip.withMinCompressBytes(&Gzip.withChunkSize(&Gzip.withLevel(&defCfg, Gzip.Fast), 1024), 64)
+
+  if customCfg.chunkSize == 1024 && customCfg.minCompressBytes == 64 {
+    held = held + 1
+  }
+
+  // 2. IEEE 802.3 CRC-32 standard test vector ("123456789" -> 0xcbf43926)
+  let vectorData = "123456789".toBytes()
+  let computedCrc = Gzip.crc32(&vectorData)
+  if computedCrc == 3421780262 {
+    held = held + 1
+  }
+
+  // 3. Roundtrip compression and decompression (standard text)
+  let testPhrase = "Pudu provides low-level systems programming close to hardware with extreme safety."
+  let compressedStream = Gzip.compressText(testPhrase, &defCfg)
+
+  // Verify GZIP 10-byte header: ID1=0x1F, ID2=0x8B, CM=8
+  if compressedStream.at(0) == Some(0x1fu8) && compressedStream.at(1) == Some(0x8bu8) && compressedStream.at(2) == Some(0x08u8) {
+    held = held + 1
+  }
+
+  let decompressedResult = Gzip.decompressText(&compressedStream)
+  if decompressedResult == Ok(testPhrase) {
+    held = held + 1
+  }
+
+  // 4. Empty payload roundtrip
+  let emptyStream = Gzip.compressText("", &defCfg)
+  let decompressedEmpty = Gzip.decompressText(&emptyStream)
+  if decompressedEmpty == Ok("") {
+    held = held + 1
+  }
+
+  // 5. Multi-block DEFLATE streaming (chunk size 16 bytes forcing multiple blocks)
+  let streamingCfg = Gzip.withChunkSize(&defCfg, 16)
+  let multiBlockStream = Gzip.compressText(testPhrase, &streamingCfg)
+  let decompressedMulti = Gzip.decompressText(&multiBlockStream)
+  if decompressedMulti == Ok(testPhrase) {
+    held = held + 1
+  }
+
+  // 6. Error handling: Invalid magic rejection
+  let corruptedMagic = ByteSeq.concat(&bytesOf([0x00u8, 0x00u8]), &compressedStream.drop(2))
+  match Gzip.decompress(&corruptedMagic) {
+    case Err(Gzip.InvalidMagic(_, _)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 7. Error handling: Unsupported compression method
+  let corruptedMethod = ByteSeq.concat(&compressedStream.take(2), &ByteSeq.concat(&bytesOf([0x01u8]), &compressedStream.drop(3)))
+  match Gzip.decompress(&corruptedMethod) {
+    case Err(Gzip.UnsupportedCompressionMethod(1)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 8. Error handling: Truncated stream
+  let truncatedStream = compressedStream.take(compressedStream.length() - 4)
+  match Gzip.decompress(&truncatedStream) {
+    case Err(Gzip.TruncatedStream) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 9. Error handling: Checksum mismatch upon corrupted data byte
+  let corruptDataIndex = 16
+  let corruptOctet = match compressedStream.at(corruptDataIndex) {
+    case Some(b) => b ^ 0xffu8
+    case None => 0u8
+  }
+  let corruptedPayload = ByteSeq.concat(
+      &compressedStream.take(corruptDataIndex),
+      &ByteSeq.concat(&bytesOf([corruptOctet]), &compressedStream.drop(corruptDataIndex + 1))
+  )
+  match Gzip.decompress(&corruptedPayload) {
+    case Err(Gzip.ChecksumMismatch(_, _)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 10. HTTP Middleware integration
+  let mwConfig = Gzip.withMinCompressBytes(&defCfg, 32)
+  let gzipMw = Gzip.middleware(&mwConfig)
+
+  let handler: Route.Handler = fn(_req: Route.Request) -> Http.Response {
+    Reply.text(200, "This is a detailed response payload intended for HTTP gzip compression testing.")
+  }
+
+  // Case A: Client accepts gzip -> response is compressed with Content-Encoding: gzip
+  let clientReqGzip = Route.Request {
+    message: Http.Request {
+      method: Http.Get,
+      target: "/api/data",
+      headers: [("accept-encoding", "gzip, deflate, br")],
+      body: "",
+    },
+    path: "/api/data",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "127.0.0.1:45000",
+  }
+  let respGzip = gzipMw(clientReqGzip, handler)
+  var hasContentEncodingGzip = false
+  for h in respGzip.headers {
+    if h[0].toLower() == "content-encoding" && h[1] == "gzip" {
+      hasContentEncodingGzip = true
+    }
+  }
+  if hasContentEncodingGzip {
+    held = held + 1
+  }
+
+  // Case B: Client does NOT accept gzip -> response is untouched
+  let clientReqPlain = Route.Request {
+    message: Http.Request {
+      method: Http.Get,
+      target: "/api/data",
+      headers: [("accept-encoding", "identity")],
+      body: "",
+    },
+    path: "/api/data",
+    params: mapOf([]),
+    query: mapOf([]),
+    peer: "127.0.0.1:45001",
+  }
+  let respPlain = gzipMw(clientReqPlain, handler)
+  var hasPlainEncoding = false
+  for h in respPlain.headers {
+    if h[0].toLower() == "content-encoding" {
+      hasPlainEncoding = true
+    }
+  }
+  if !hasPlainEncoding {
+    held = held + 1
+  }
+
+  held
+}
