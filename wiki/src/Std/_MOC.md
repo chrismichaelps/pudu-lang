@@ -18,6 +18,7 @@ tags: [moc, module, stdlib]
 - [[Std Html Compose]] — fluent content composition with reusable view functions.
 
 - [[Std BitSet]] — sparse UInt64 membership and block-wise set algebra.
+- [[Std BitVector]] — dense 64-bit word packed bit-vector, SIMD bitwise algebra, and hardware scans.
 - [[Std Buffer]] — contiguous byte buffer for unboxed scalar manipulation.
 - [[Std FlatMap]] — ultra-fast flat hash table with 1-byte control metadata.
 - [[Std Column]] — vectorized columnar database storage and SIMD aggregations.

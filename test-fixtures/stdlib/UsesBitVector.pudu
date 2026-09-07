@@ -1,0 +1,150 @@
+module UsesBitVector
+
+import Std.BitVector as BitVector
+
+fn setBit(vec: BitVector, idx: Int, val: Bool) -> BitVector {
+  match BitVector.set(&vec, idx, val) {
+    case Some(u) => u
+    case None => vec
+  }
+}
+
+fn flipBit(vec: BitVector, idx: Int) -> BitVector {
+  match BitVector.flip(&vec, idx) {
+    case Some(u) => u
+    case None => vec
+  }
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Creation of all-zeros vector
+  let vZero = BitVector.create(100, false)
+  if BitVector.length(&vZero) == 100
+    && BitVector.isZero(&vZero)
+    && !BitVector.isOnes(&vZero)
+    && BitVector.popCount(&vZero) == 0
+    && BitVector.countZeros(&vZero) == 100 {
+    held = held + 1
+  }
+
+  // 2. Creation of all-ones vector with trailing-word masking
+  let vOnes = BitVector.create(100, true)
+  if BitVector.length(&vOnes) == 100
+    && BitVector.isOnes(&vOnes)
+    && !BitVector.isZero(&vOnes)
+    && BitVector.popCount(&vOnes) == 100
+    && BitVector.countZeros(&vOnes) == 0 {
+    held = held + 1
+  }
+
+  // 3. get, set across word boundaries (bits 0, 63, 64, 99)
+  var v = BitVector.create(100, false)
+  v = setBit(v, 0, true)
+  v = setBit(v, 63, true)
+  v = setBit(v, 64, true)
+  v = setBit(v, 99, true)
+  if BitVector.popCount(&v) == 4
+    && BitVector.get(&v, 0) == Some(true)
+    && BitVector.get(&v, 63) == Some(true)
+    && BitVector.get(&v, 64) == Some(true)
+    && BitVector.get(&v, 99) == Some(true)
+    && BitVector.get(&v, 1) == Some(false)
+    && BitVector.get(&v, 62) == Some(false)
+    && BitVector.get(&v, 65) == Some(false)
+    && BitVector.get(&v, 98) == Some(false) {
+    held = held + 1
+  }
+
+  // 4. Out of bounds handling
+  let oobLow = BitVector.get(&v, -1)
+  let oobHigh = BitVector.get(&v, 100)
+  let setOob = BitVector.set(&v, 100, true)
+  let flipOob = BitVector.flip(&v, -5)
+  if oobLow == None && oobHigh == None && setOob == None && flipOob == None {
+    held = held + 1
+  }
+
+  // 5. flip operation
+  let vf1 = flipBit(v, 50)
+  let b50 = BitVector.get(&vf1, 50)
+  let vf2 = flipBit(vf1, 50)
+  let b50Back = BitVector.get(&vf2, 50)
+  if b50 == Some(true) && b50Back == Some(false) && BitVector.popCount(&vf2) == 4 {
+    held = held + 1
+  }
+
+  // 6. Word-parallel bitwise AND, OR, XOR spanning 3 words (150 bits)
+  var va = BitVector.create(150, false)
+  va = setBit(va, 10, true)
+  va = setBit(va, 70, true)
+
+  var vb = BitVector.create(150, false)
+  vb = setBit(vb, 70, true)
+  vb = setBit(vb, 140, true)
+
+  let vAnd = match BitVector.bitAnd(&va, &vb) {
+    case Some(res) => res
+    case None => BitVector.create(0, false)
+  }
+  let vOr = match BitVector.bitOr(&va, &vb) {
+    case Some(res) => res
+    case None => BitVector.create(0, false)
+  }
+  let vXor = match BitVector.bitXor(&va, &vb) {
+    case Some(res) => res
+    case None => BitVector.create(0, false)
+  }
+
+  if BitVector.popCount(&vAnd) == 1 && BitVector.get(&vAnd, 70) == Some(true)
+    && BitVector.popCount(&vOr) == 3
+    && BitVector.get(&vOr, 10) == Some(true) && BitVector.get(&vOr, 70) == Some(true) && BitVector.get(&vOr, 140) == Some(true)
+    && BitVector.popCount(&vXor) == 2
+    && BitVector.get(&vXor, 10) == Some(true) && BitVector.get(&vXor, 140) == Some(true) && BitVector.get(&vXor, 70) == Some(false) {
+    held = held + 1
+  }
+
+  // 7. Parallel bitwise NOT with partial-word boundary mask
+  let vPartial = BitVector.create(70, false)
+  let vInverted = BitVector.bitNot(&vPartial)
+  if BitVector.length(&vInverted) == 70
+    && BitVector.isOnes(&vInverted)
+    && BitVector.popCount(&vInverted) == 70
+    && BitVector.get(&vInverted, 69) == Some(true) {
+    held = held + 1
+  }
+
+  // 8. findFirstSet with ctz hardware scan
+  var vScan = BitVector.create(200, false)
+  let emptyScan = BitVector.findFirstSet(&vScan)
+  vScan = setBit(vScan, 125, true)
+  vScan = setBit(vScan, 45, true)
+  let firstScan = BitVector.findFirstSet(&vScan)
+  if emptyScan == None && firstScan == Some(45) {
+    held = held + 1
+  }
+
+  // 9. findFirstZero scan
+  var vAllOnes = BitVector.create(100, true)
+  let noneZero = BitVector.findFirstZero(&vAllOnes)
+  vAllOnes = setBit(vAllOnes, 37, false)
+  let foundZero = BitVector.findFirstZero(&vAllOnes)
+  if noneZero == None && foundZero == Some(37) {
+    held = held + 1
+  }
+
+  // 10. fromBits and toBits round-trip & dimension mismatch refusal
+  let boolsIn = [true, false, true, true, false, false, true]
+  let vFromB = BitVector.fromBits(&boolsIn)
+  let boolsOut = BitVector.toBits(&vFromB)
+  let vDiffLen = BitVector.create(50, false)
+  let badAnd = BitVector.bitAnd(&vFromB, &vDiffLen)
+  if boolsOut.length() == 7
+    && boolsOut[0] && !boolsOut[1] && boolsOut[2] && boolsOut[3] && !boolsOut[4] && !boolsOut[5] && boolsOut[6]
+    && badAnd == None {
+    held = held + 1
+  }
+
+  held
+}

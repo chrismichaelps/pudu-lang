@@ -15,7 +15,8 @@ tags: [changelog]
 - Add `Std.BloomFilter`: Probabilistic set membership with zero false negatives, mathematically optimal sizing ($m, k$), Kirsch-Mitzenmacher double-hashing, and union/intersection operations.
 - Add `Std.Mime`: RFC 2045 media type parser, parameter serializer, 60+ extension registry, and HTTP `Accept` content negotiation.
 - Add `Std.Diff`: Eugene Myers $O(ND)$ difference engine, Unified Diff (`@@ -l,s +l,s @@`) formatter with context lines, and Levenshtein edit distance metric.
-- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], and [[Std Diff]].
+- Add `Std.BitVector`: Dense 64-bit word packed bit-vector with word-parallel bitwise operations (AND, OR, XOR, NOT), popcount, and trailing-zero scan acceleration.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], and [[Std Diff]].
 
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 
