@@ -1,0 +1,363 @@
+module Std.Diff
+
+import Std.List as List
+
+/// Elementary edit script operation.
+export type DiffOp[T]
+  = Keep(T)
+  | Insert(T)
+  | Delete(T)
+
+/// Grouped unified diff hunk.
+export type DiffHunk = {
+  oldStart: Int,
+  oldCount: Int,
+  newStart: Int,
+  newCount: Int,
+  lines: Array[Str]
+}
+
+fn min3(a: Int, b: Int, c: Int) -> Int {
+  var m = a
+  if b < m { m = b }
+  if c < m { m = c }
+  m
+}
+
+fn intToFloat(x: Int) -> Float {
+  if x == 0 { return 0.0 }
+  if x < 0 { return -intToFloat(-x) }
+  var remaining = x
+  var result = 0.0
+  var base = 1.0
+  while remaining > 0 {
+    let digit = remaining % 10
+    var d = 0.0
+    if digit == 1 { d = 1.0 }
+      else if digit == 2 { d = 2.0 }
+      else if digit == 3 { d = 3.0 }
+      else if digit == 4 { d = 4.0 }
+      else if digit == 5 { d = 5.0 }
+      else if digit == 6 { d = 6.0 }
+      else if digit == 7 { d = 7.0 }
+      else if digit == 8 { d = 8.0 }
+      else if digit == 9 { d = 9.0 }
+    result = result + d * base
+    base = base * 10.0
+    remaining = remaining / 10
+  }
+  result
+}
+
+/// Splits text into lines, handling LF and CRLF line endings.
+fn splitLines(text: Str) -> Array[Str] {
+  if text.isEmpty() { return [] }
+  var lines: Array[Str] = []
+  var start = 0
+  let len = text.length()
+  var i = 0
+  while i < len {
+    let ch = text.charAt(i)
+    if ch == '\n' {
+      var lineEnd = i
+      if lineEnd > start && text.charAt(lineEnd - 1) == '\r' {
+        lineEnd = lineEnd - 1
+      }
+      lines = lines.push(text.slice(start, lineEnd))
+      start = i + 1
+    }
+    i = i + 1
+  }
+  if start < len {
+    var end = len
+    if end > start && text.charAt(end - 1) == '\r' {
+      end = end - 1
+    }
+    lines = lines.push(text.slice(start, end))
+  }
+  lines
+}
+
+/// Computes the minimal edit script across token sequences using Myers O(ND) algorithm.
+export fn diffTokens(oldTokens: Array[Str], newTokens: Array[Str]) -> Array[DiffOp[Str]] {
+  let n = oldTokens.length()
+  let m = newTokens.length()
+  if n == 0 && m == 0 { return [] }
+  if n == 0 {
+    var insOnly: Array[DiffOp[Str]] = []
+    for t in newTokens { insOnly = insOnly.push(Insert(t)) }
+    return insOnly
+  }
+  if m == 0 {
+    var delOnly: Array[DiffOp[Str]] = []
+    for t in oldTokens { delOnly = delOnly.push(Delete(t)) }
+    return delOnly
+  }
+
+  let maxLen = n + m
+  let vSize = 2 * maxLen + 1
+  var v: Array[Int] = []
+  var initIdx = 0
+  while initIdx < vSize {
+    v = v.push(0)
+    initIdx = initIdx + 1
+  }
+  v = List.set(&v, 1 + maxLen, 0)
+
+  var traces: Array[Array[Int]] = []
+  var d = 0
+  var foundD = -1
+
+  while d <= maxLen && foundD < 0 {
+    traces = traces.push(v)
+    var k = -d
+    while k <= d && foundD < 0 {
+      let kIdx = k + maxLen
+      var x = 0
+      if k == -d || (k != d && v[k - 1 + maxLen] < v[k + 1 + maxLen]) {
+        x = v[k + 1 + maxLen]
+      } else {
+        x = v[k - 1 + maxLen] + 1
+      }
+      var y = x - k
+      while x < n && y < m && oldTokens[x] == newTokens[y] {
+        x = x + 1
+        y = y + 1
+      }
+      v = List.set(&v, kIdx, x)
+      if x >= n && y >= m {
+        foundD = d
+      }
+      k = k + 2
+    }
+    if foundD < 0 {
+      d = d + 1
+    }
+  }
+
+  if foundD < 0 { return [] }
+
+  var curX = n
+  var curY = m
+  var stepD = foundD
+  var revOps: Array[DiffOp[Str]] = []
+
+  while stepD > 0 {
+    let prevV = traces[stepD]
+    let k = curX - curY
+    var prevK = 0
+    if k == -stepD || (k != stepD && prevV[k - 1 + maxLen] < prevV[k + 1 + maxLen]) {
+      prevK = k + 1
+    } else {
+      prevK = k - 1
+    }
+    let prevX = prevV[prevK + maxLen]
+    let prevY = prevX - prevK
+
+    while curX > prevX && curY > prevY {
+      curX = curX - 1
+      curY = curY - 1
+      revOps = revOps.push(Keep(oldTokens[curX]))
+    }
+
+    if curX == prevX && curY > prevY {
+      curY = curY - 1
+      revOps = revOps.push(Insert(newTokens[curY]))
+    } else if curY == prevY && curX > prevX {
+      curX = curX - 1
+      revOps = revOps.push(Delete(oldTokens[curX]))
+    }
+
+    stepD = stepD - 1
+  }
+
+  while curX > 0 && curY > 0 {
+    curX = curX - 1
+    curY = curY - 1
+    revOps = revOps.push(Keep(oldTokens[curX]))
+  }
+
+  var ops: Array[DiffOp[Str]] = []
+  var r = revOps.length() - 1
+  while r >= 0 {
+    ops = ops.push(revOps[r])
+    r = r - 1
+  }
+  ops
+}
+
+/// Computes the minimal edit script transforming lines of oldText to newText.
+export fn diffLines(oldText: Str, newText: Str) -> Array[DiffOp[Str]] {
+  let oldLines = splitLines(oldText)
+  let newLines = splitLines(newText)
+  diffTokens(oldLines, newLines)
+}
+
+/// Formats sequence differences in standard Unified Diff format.
+export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, contextLines: Int) -> Str {
+  if oldText == newText { return "" }
+
+  let oldLines = splitLines(oldText)
+  let newLines = splitLines(newText)
+  let ops = diffTokens(oldLines, newLines)
+  if ops.length() == 0 { return "" }
+
+  let ctx = if contextLines < 0 { 3 } else { contextLines }
+
+  var editIndices: Array[Int] = []
+  var idx = 0
+  for op in ops {
+    match op {
+      case Keep(_) => {}
+      case _ => { editIndices = editIndices.push(idx) }
+    }
+    idx = idx + 1
+  }
+
+  if editIndices.length() == 0 { return "" }
+
+  var hunkRanges: Array[(Int, Int)] = []
+  var rangeStart = editIndices[0] - ctx
+  if rangeStart < 0 { rangeStart = 0 }
+  var rangeEnd = editIndices[0] + ctx + 1
+  if rangeEnd > ops.length() { rangeEnd = ops.length() }
+
+  var eIdx = 1
+  while eIdx < editIndices.length() {
+    let nextEdit = editIndices[eIdx]
+    let nextStart = nextEdit - ctx
+    if nextStart <= rangeEnd {
+      rangeEnd = nextEdit + ctx + 1
+      if rangeEnd > ops.length() { rangeEnd = ops.length() }
+    } else {
+      hunkRanges = hunkRanges.push((rangeStart, rangeEnd))
+      rangeStart = nextStart
+      if rangeStart < 0 { rangeStart = 0 }
+      rangeEnd = nextEdit + ctx + 1
+      if rangeEnd > ops.length() { rangeEnd = ops.length() }
+    }
+    eIdx = eIdx + 1
+  }
+  hunkRanges = hunkRanges.push((rangeStart, rangeEnd))
+
+  var out = "--- " + oldPath + "\n+++ " + newPath + "\n"
+
+  var oldTracker = 1
+  var newTracker = 1
+  var opPos = 0
+
+  var hIdx = 0
+  while hIdx < hunkRanges.length() {
+    let rng = hunkRanges[hIdx]
+    let hStart = rng[0]
+    let hEnd = rng[1]
+
+    while opPos < hStart {
+      match ops[opPos] {
+        case Keep(_) => {
+          oldTracker = oldTracker + 1
+          newTracker = newTracker + 1
+        }
+        case Delete(_) => { oldTracker = oldTracker + 1 }
+        case Insert(_) => { newTracker = newTracker + 1 }
+      }
+      opPos = opPos + 1
+    }
+
+    let hunkOldStart = if oldLines.length() == 0 { 0 } else { oldTracker }
+    let hunkNewStart = if newLines.length() == 0 { 0 } else { newTracker }
+    var hunkOldCount = 0
+    var hunkNewCount = 0
+    var hunkLines: Array[Str] = []
+
+    var p = hStart
+    while p < hEnd {
+      match ops[p] {
+        case Keep(l) => {
+          hunkOldCount = hunkOldCount + 1
+          hunkNewCount = hunkNewCount + 1
+          hunkLines = hunkLines.push(" " + l)
+          oldTracker = oldTracker + 1
+          newTracker = newTracker + 1
+        }
+        case Delete(l) => {
+          hunkOldCount = hunkOldCount + 1
+          hunkLines = hunkLines.push("-" + l)
+          oldTracker = oldTracker + 1
+        }
+        case Insert(l) => {
+          hunkNewCount = hunkNewCount + 1
+          hunkLines = hunkLines.push("+" + l)
+          newTracker = newTracker + 1
+        }
+      }
+      p = p + 1
+    }
+    opPos = hEnd
+
+    out = out + "@@ -" + show(hunkOldStart) + "," + show(hunkOldCount)
+      + " +" + show(hunkNewStart) + "," + show(hunkNewCount) + " @@\n"
+    for hl in hunkLines {
+      out = out + hl + "\n"
+    }
+
+    hIdx = hIdx + 1
+  }
+
+  out
+}
+
+/// Computes the minimum number of edits to transform s1 into s2.
+export fn levenshtein(s1: Str, s2: Str) -> Int {
+  let len1 = s1.length()
+  let len2 = s2.length()
+  if len1 == 0 { return len2 }
+  if len2 == 0 { return len1 }
+
+  var v0: Array[Int] = []
+  var j = 0
+  while j <= len2 {
+    v0 = v0.push(j)
+    j = j + 1
+  }
+
+  var v1: Array[Int] = []
+  var k = 0
+  while k <= len2 {
+    v1 = v1.push(0)
+    k = k + 1
+  }
+
+  var i = 0
+  while i < len1 {
+    v1 = List.set(&v1, 0, i + 1)
+    let c1 = s1.charAt(i)
+    var jIdx = 0
+    while jIdx < len2 {
+      let c2 = s2.charAt(jIdx)
+      let cost = if c1 == c2 { 0 } else { 1 }
+      let insertion = v1[jIdx] + 1
+      let deletion = v0[jIdx + 1] + 1
+      let substitution = v0[jIdx] + cost
+      v1 = List.set(&v1, jIdx + 1, min3(insertion, deletion, substitution))
+      jIdx = jIdx + 1
+    }
+    v0 = v1
+    i = i + 1
+  }
+
+  v0[len2]
+}
+
+/// Normalized similarity score from 0.0 (disjoint) to 1.0 (identical).
+export fn similarity(s1: Str, s2: Str) -> Float {
+  if s1 == s2 { return 1.0 }
+  let len1 = s1.length()
+  let len2 = s2.length()
+  let maxLen = if len1 > len2 { len1 } else { len2 }
+  if maxLen == 0 { return 1.0 }
+  let dist = levenshtein(s1, s2)
+  let fDist = intToFloat(dist)
+  let fMax = intToFloat(maxLen)
+  1.0 - (fDist / fMax)
+}

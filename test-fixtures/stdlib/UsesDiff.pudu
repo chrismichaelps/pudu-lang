@@ -1,0 +1,113 @@
+module UsesDiff
+
+import Std.Diff as Diff
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Identical texts yield all Keeps and empty unified diff
+  let sameText = "first\nsecond\nthird"
+  let sameOps = Diff.diffLines(sameText, sameText)
+  let sameUnified = Diff.unifiedDiff("a/file.txt", "b/file.txt", sameText, sameText, 3)
+  if sameOps.length() == 3 && sameUnified == "" {
+    held = held + 1
+  }
+
+  // 2. Pure insertion (from empty to non-empty)
+  let insOps = Diff.diffLines("", "alpha")
+  if insOps.length() == 1 {
+    match insOps[0] {
+      case Diff.Insert(txt) => if txt == "alpha" { held = held + 1 }
+      case _ => {}
+    }
+  }
+
+  // 3. Pure deletion (from non-empty to empty)
+  let delOps = Diff.diffLines("omega", "")
+  if delOps.length() == 1 {
+    match delOps[0] {
+      case Diff.Delete(txt) => if txt == "omega" { held = held + 1 }
+      case _ => {}
+    }
+  }
+
+  // 4. Substitution edit script: Keep, Delete, Insert, Keep
+  let old3 = "apple\nbanana\ncherry"
+  let new3 = "apple\nblueberry\ncherry"
+  let ops3 = Diff.diffLines(old3, new3)
+  if ops3.length() == 4 {
+    var valid = true
+    match ops3[0] {
+      case Diff.Keep(l) => if l != "apple" { valid = false }
+      case _ => { valid = false }
+    }
+    match ops3[1] {
+      case Diff.Delete(l) => if l != "banana" { valid = false }
+      case _ => { valid = false }
+    }
+    match ops3[2] {
+      case Diff.Insert(l) => if l != "blueberry" { valid = false }
+      case _ => { valid = false }
+    }
+    match ops3[3] {
+      case Diff.Keep(l) => if l != "cherry" { valid = false }
+      case _ => { valid = false }
+    }
+    if valid { held = held + 1 }
+  }
+
+  // 5. Unified diff format headers and lines
+  let uDiff = Diff.unifiedDiff("a/fruit.txt", "b/fruit.txt", old3, new3, 1)
+  if uDiff.contains("--- a/fruit.txt\n+++ b/fruit.txt\n")
+    && uDiff.contains("@@ -1,3 +1,3 @@\n")
+    && uDiff.contains(" apple\n-banana\n+blueberry\n cherry\n") {
+    held = held + 1
+  }
+
+  // 6. Token differencing
+  let tokA = ["func", "add", "(", "a", ")"]
+  let tokB = ["func", "add", "(", "a", ",", "b", ")"]
+  let tokOps = Diff.diffTokens(tokA, tokB)
+  if tokOps.length() == 7 {
+    // func, add, (, a, +, +, )
+    held = held + 1
+  }
+
+  // 7. CRLF normalization in diffLines
+  let crlfOld = "line1\r\nline2\r\nline3"
+  let crlfNew = "line1\nline2_mod\nline3"
+  let crlfOps = Diff.diffLines(crlfOld, crlfNew)
+  if crlfOps.length() == 4 {
+    held = held + 1
+  }
+
+  // 8. Levenshtein edit distance
+  let distKitten = Diff.levenshtein("kitten", "sitting")
+  let distSame = Diff.levenshtein("pudu", "pudu")
+  let distEmpty = Diff.levenshtein("", "testing")
+  let distDelAll = Diff.levenshtein("delete", "")
+  if distKitten == 3 && distSame == 0 && distEmpty == 7 && distDelAll == 6 {
+    held = held + 1
+  }
+
+  // 9. Similarity metric bounds
+  let simIdentical = Diff.similarity("same", "same")
+  let simDisjoint = Diff.similarity("abc", "xyz")
+  let simKitten = Diff.similarity("kitten", "sitting")
+  if simIdentical == 1.0
+    && simDisjoint == 0.0
+    && simKitten > 0.57 && simKitten < 0.58 {
+    held = held + 1
+  }
+
+  // 10. Multi-hunk separated diff
+  let multOld = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj"
+  let multNew = "a\nb_mod\nc\nd\ne\nf\ng\nh\ni_mod\nj"
+  let multDiff = Diff.unifiedDiff("a/orig.txt", "b/mod.txt", multOld, multNew, 1)
+  if multDiff.contains("@@ -1,3 +1,3 @@\n")
+    && multDiff.contains("@@ -8,3 +8,3 @@\n") {
+    held = held + 1
+  }
+
+  held
+}
