@@ -1,0 +1,125 @@
+module UsesSmtp
+
+import Std.Mail as Mail
+import Std.Mail.Smtp as Smtp
+import Std.Result as Result
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Client configuration and builders
+  let defaultClient = Smtp.client("smtp.example.com", 587)
+  let configuredClient = Smtp.withDomain(&defaultClient, "my-app.internal")
+  let withAuthClient = Smtp.withAuth(&configuredClient, "mailer-bot", "secret-password-123")
+  let withTimeoutClient = Smtp.withTimeout(&withAuthClient, 5000)
+
+  if withTimeoutClient.host == "smtp.example.com" && withTimeoutClient.port == 587 {
+    held = held + 1
+  }
+  if withTimeoutClient.domain == "my-app.internal" && withTimeoutClient.timeoutMs == 5000 {
+    held = held + 1
+  }
+
+  // 2. Command formatting
+  if Smtp.ehloCommand("mail.example.org") == "EHLO mail.example.org\r\n" {
+    held = held + 1
+  }
+  if Smtp.mailFromCommand("sender@example.org") == "MAIL FROM:<sender@example.org>\r\n" {
+    held = held + 1
+  }
+  if Smtp.rcptToCommand("receiver@example.org") == "RCPT TO:<receiver@example.org>\r\n" {
+    held = held + 1
+  }
+  if Smtp.dataCommand() == "DATA\r\n" {
+    held = held + 1
+  }
+  if Smtp.quitCommand() == "QUIT\r\n" {
+    held = held + 1
+  }
+
+  // 3. Authentication payload encoding
+  let userB64 = Smtp.authLoginUsername("user")
+  let passB64 = Smtp.authLoginPassword("pass")
+  if userB64 == "dXNlcg==\r\n" {
+    held = held + 1
+  }
+  if passB64 == "cGFzcw==\r\n" {
+    held = held + 1
+  }
+
+  let plainAuthPayload = Smtp.authPlainPayload("alice", "secret")
+  if plainAuthPayload.startsWith("AUTH PLAIN ") && plainAuthPayload.endsWith("\r\n") {
+    held = held + 1
+  }
+
+  // 4. Single-line reply parsing
+  let greetingRaw = "220 smtp.example.com ESMTP Postfix\r\n"
+  let parsedGreeting = Smtp.parseReply(greetingRaw)
+  match parsedGreeting {
+    case Ok(r) => {
+      if r.code == 220 && r.lines.length() == 1 && r.lines[0] == "smtp.example.com ESMTP Postfix" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 5. Multi-line reply parsing (EHLO capabilities)
+  let ehloRaw = "250-smtp.example.com\r\n250-PIPELINING\r\n250-SIZE 10240000\r\n250 8BITMIME\r\n"
+  let parsedEhlo = Smtp.parseReply(ehloRaw)
+  match parsedEhlo {
+    case Ok(r) => {
+      if r.code == 250 && r.lines.length() == 4 && r.lines[1] == "PIPELINING" && r.lines[3] == "8BITMIME" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 6. Intermediate and error reply parsing
+  let dataPrompt = Smtp.parseReply("354 Start mail input; end with <CRLF>.<CRLF>\r\n")
+  match dataPrompt {
+    case Ok(r) => {
+      if r.code == 354 { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  let mailboxError = Smtp.parseReply("550 5.1.1 <nonexistent@example.com>: Recipient address rejected\r\n")
+  match mailboxError {
+    case Ok(r) => {
+      if r.code == 550 && r.lines[0].contains("Recipient address rejected") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 7. Malformed reply rejection
+  let malformedReply = Smtp.parseReply("bad\r\n")
+  match malformedReply {
+    case Err(Smtp.HandshakeFailed(_, _)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 8. Connection failure handling
+  let deadHostClient = Smtp.withTimeout(&Smtp.client("127.0.0.1", 1), 50)
+  let sender = Result.unwrapOr(Mail.address("outbound@example.com"), Mail.Address{written: ""})
+  let rcpt = Result.unwrapOr(Mail.address("inbound@example.com"), Mail.Address{written: ""})
+  let testMsg = Result.unwrapOr(Mail.message(&sender, &rcpt, "Status update", "Everything is working."), Mail.Message {
+      from: sender,
+      to: [rcpt],
+      copies: [],
+      blindCopies: [],
+      subject: "",
+      body: "",
+    })
+
+  let deliveryResult = Smtp.deliver(&deadHostClient, &testMsg)
+  match deliveryResult {
+    case Err(Smtp.ConnectionFailed(_)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  held
+}

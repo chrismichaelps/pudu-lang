@@ -1,0 +1,337 @@
+module Std.Mail.Smtp
+
+import Std.Bytes as ByteSeq
+import Std.Mail as Mail
+import Std.Net as Net
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text.Parse as Parse
+
+/// Authentication mechanism variants supported by the SMTP transport.
+export type SmtpAuth
+  = Login(Str, Str)
+  | Plain(Str, Str)
+
+/// Configuration parameters for connecting to an SMTP submission or relay host.
+export type SmtpClient = {
+  host: Str,
+  port: Int,
+  domain: Str,
+  credentials: Option[SmtpAuth],
+  timeoutMs: Int,
+}
+
+/// A parsed RFC 5321 server reply containing a status code and message lines.
+export type SmtpReply = {
+  code: Int,
+  lines: Array[Str],
+}
+
+/// Structured failure conditions encountered during SMTP transmission.
+export type SmtpError
+  = ConnectionFailed(Str)
+  | HandshakeFailed(Int, Str)
+  | AuthFailed(Int, Str)
+  | RecipientRejected(Str, Int, Str)
+  | DataRejected(Int, Str)
+  | CommandFailed(Str, Int, Str)
+  | TimedOut
+  | EmptyEnvelope
+
+/// Initializes default client configuration targeting host and port.
+export fn client(host: Str, port: Int) -> SmtpClient {
+  SmtpClient {
+    host: host,
+    port: port,
+    domain: "localhost",
+    credentials: None,
+    timeoutMs: 10000,
+  }
+}
+
+/// Configures the client identification domain sent in the `EHLO` command.
+export fn withDomain(c: &SmtpClient, domain: Str) -> SmtpClient {
+  SmtpClient {
+    host: c.host,
+    port: c.port,
+    domain: domain,
+    credentials: c.credentials,
+    timeoutMs: c.timeoutMs,
+  }
+}
+
+/// Configures standard `AUTH LOGIN` credentials.
+export fn withAuth(c: &SmtpClient, user: Str, pass: Str) -> SmtpClient {
+  SmtpClient {
+    host: c.host,
+    port: c.port,
+    domain: c.domain,
+    credentials: Some(Login(user, pass)),
+    timeoutMs: c.timeoutMs,
+  }
+}
+
+/// Configures `AUTH PLAIN` credentials.
+export fn withPlainAuth(c: &SmtpClient, user: Str, pass: Str) -> SmtpClient {
+  SmtpClient {
+    host: c.host,
+    port: c.port,
+    domain: c.domain,
+    credentials: Some(Plain(user, pass)),
+    timeoutMs: c.timeoutMs,
+  }
+}
+
+/// Configures socket operation timeout in milliseconds.
+export fn withTimeout(c: &SmtpClient, timeoutMs: Int) -> SmtpClient {
+  SmtpClient {
+    host: c.host,
+    port: c.port,
+    domain: c.domain,
+    credentials: c.credentials,
+    timeoutMs: timeoutMs,
+  }
+}
+
+/// Generates the canonical `EHLO` command line.
+export fn ehloCommand(domain: Str) -> Str {
+  "EHLO " + domain + "\r\n"
+}
+
+/// Generates the canonical `MAIL FROM` envelope command.
+export fn mailFromCommand(sender: Str) -> Str {
+  "MAIL FROM:<" + sender + ">\r\n"
+}
+
+/// Generates the canonical `RCPT TO` recipient command.
+export fn rcptToCommand(recipient: Str) -> Str {
+  "RCPT TO:<" + recipient + ">\r\n"
+}
+
+/// Generates the canonical `DATA` command.
+export fn dataCommand() -> Str {
+  "DATA\r\n"
+}
+
+/// Generates the canonical `QUIT` command.
+export fn quitCommand() -> Str {
+  "QUIT\r\n"
+}
+
+/// Formats the username challenge response for `AUTH LOGIN`.
+export fn authLoginUsername(user: Str) -> Str {
+  ByteSeq.encodeBase64(&user.toBytes()) + "\r\n"
+}
+
+/// Formats the password challenge response for `AUTH LOGIN`.
+export fn authLoginPassword(pass: Str) -> Str {
+  ByteSeq.encodeBase64(&pass.toBytes()) + "\r\n"
+}
+
+/// Formats the single-line payload for `AUTH PLAIN`.
+export fn authPlainPayload(user: Str, pass: Str) -> Str {
+  let raw = "\u{0000}" + user + "\u{0000}" + pass
+  "AUTH PLAIN " + ByteSeq.encodeBase64(&raw.toBytes()) + "\r\n"
+}
+
+/// Parses an RFC 5321 server response string into a structured status code and message lines.
+export fn parseReply(raw: Str) -> Result[SmtpReply, SmtpError] {
+  if !raw.endsWith("\r\n") { return Err(HandshakeFailed(0, "incomplete reply line")) }
+  let source = raw.take(raw.length() - 2).split("\r\n")
+  var lines: Array[Str] = []
+  var code = 0
+  var index = 0
+  for line in source {
+    if line.length() < 3 || line.toBytes().length() > 510 {
+      return Err(HandshakeFailed(0, "invalid reply line length"))
+    }
+    if line.contains("\r") || line.contains("\n") { return Err(HandshakeFailed(0, "invalid reply line ending")) }
+    let digits = line.take(3)
+    for digit in digits.chars() {
+      if digit < '0' || digit > '9' { return Err(HandshakeFailed(0, "invalid reply status")) }
+    }
+    let parsed = match Parse.run(Parse.integer(), digits) {
+      case Ok(value) => value
+      case Err(_) => { return Err(HandshakeFailed(0, "invalid reply status")) }
+    }
+    if parsed < 200 || parsed > 599 { return Err(HandshakeFailed(0, "invalid reply status")) }
+    if index == 0 { code = parsed }
+    if parsed != code { return Err(HandshakeFailed(0, "inconsistent multiline status")) }
+    let final = index == source.length() - 1
+    if line.length() == 3 {
+      if !final { return Err(HandshakeFailed(0, "reply ended before continuation")) }
+      lines = lines.push("")
+    } else {
+      let separator = line.slice(3, 4)
+      if final && separator != " " { return Err(HandshakeFailed(0, "unterminated multiline reply")) }
+      if !final && separator != "-" { return Err(HandshakeFailed(0, "unexpected reply after final line")) }
+      lines = lines.push(line.drop(4))
+    }
+    index = index + 1
+  }
+  Ok(SmtpReply{code: code, lines: lines})
+}
+
+/// Delivers a message to the target SMTP relay and returns the count of accepted envelope recipients.
+export fn deliver(c: &SmtpClient, msg: &Mail.Message) -> Result[Int, SmtpError] {
+  let _valid = Result.mapErr(Mail.sendable(msg), fn(problem: Mail.MailError) -> SmtpError { ConnectionFailed(Mail.explain(&problem)) }) ?
+  if c.timeoutMs < 1 { return Err(ConnectionFailed("timeout must be positive")) }
+  if c.domain.isEmpty() { return Err(ConnectionFailed("EHLO domain is empty")) }
+  for character in c.domain.chars() {
+    if character.code() <= 32 || character.code() == 127 { return Err(ConnectionFailed("invalid EHLO domain")) }
+  }
+  if let Some(_) = c.credentials { return Err(ConnectionFailed("credentials require a TLS transport; plaintext authentication is refused")) }
+
+  let recipients = Mail.envelope(msg)
+  if recipients.isEmpty() {
+    return Err(EmptyEnvelope)
+  }
+
+  let conn = match Net.connectWithin(c.host, c.port, c.timeoutMs) {
+    case Ok(connection) => connection
+    case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
+  }
+
+  let outcome = deliverConnected(c, msg, &conn)
+  let closed = Net.close(&conn)
+  if let Err(problem) = outcome { return Err(problem) }
+  if let Err(problem) = closed { return Err(ConnectionFailed(explainNet(&problem))) }
+  outcome
+}
+
+fn deliverConnected(c: &SmtpClient, msg: &Mail.Message, conn: &Net.Connection) -> Result[Int, SmtpError] {
+  let recipients = Mail.envelope(msg)
+  let greeting = readReply(conn, c.timeoutMs) ?
+  if greeting.code != 220 {
+    return Err(HandshakeFailed(greeting.code, summaryReply(&greeting)))
+  }
+
+  let ehloReply = execCommand(conn, ehloCommand(c.domain), c.timeoutMs) ?
+  if ehloReply.code != 250 {
+    return Err(CommandFailed("EHLO", ehloReply.code, summaryReply(&ehloReply)))
+  }
+
+  match c.credentials {
+    case Some(auth) => {
+      let _authOk = executeAuth(conn, &auth, c.timeoutMs) ?
+    }
+    case None => {}
+  }
+
+  let mailReply = execCommand(conn, mailFromCommand(msg.from.written), c.timeoutMs) ?
+  if mailReply.code != 250 {
+    return Err(CommandFailed("MAIL FROM", mailReply.code, summaryReply(&mailReply)))
+  }
+
+  var accepted = 0
+  for rcpt in recipients {
+    let rcptReply = execCommand(conn, rcptToCommand(rcpt.written), c.timeoutMs) ?
+    if rcptReply.code != 250 && rcptReply.code != 251 {
+        return Err(RecipientRejected(rcpt.written, rcptReply.code, summaryReply(&rcptReply)))
+    }
+    accepted = accepted + 1
+  }
+
+  let dataReply = execCommand(conn, dataCommand(), c.timeoutMs) ?
+  if dataReply.code != 354 {
+    return Err(DataRejected(dataReply.code, summaryReply(&dataReply)))
+  }
+
+  let payload = Mail.render(msg) + "\r\n.\r\n"
+  let sendReply = execCommand(conn, payload, c.timeoutMs) ?
+  if sendReply.code != 250 {
+    return Err(DataRejected(sendReply.code, summaryReply(&sendReply)))
+  }
+
+  let _quitReply = execCommand(conn, quitCommand(), c.timeoutMs)
+
+  Ok(accepted)
+}
+
+fn executeAuth(conn: &Net.Connection, auth: &SmtpAuth, timeoutMs: Int) -> Result[Bool, SmtpError] {
+  match auth {
+    case Login(user, pass) => {
+      let authStart = execCommand(conn, "AUTH LOGIN\r\n", timeoutMs) ?
+      if authStart.code != 334 {
+        return Err(AuthFailed(authStart.code, summaryReply(&authStart)))
+      }
+
+      let userReply = execCommand(conn, authLoginUsername(user), timeoutMs) ?
+      if userReply.code != 334 {
+        return Err(AuthFailed(userReply.code, summaryReply(&userReply)))
+      }
+
+      let passReply = execCommand(conn, authLoginPassword(pass), timeoutMs) ?
+      if passReply.code != 235 {
+        return Err(AuthFailed(passReply.code, summaryReply(&passReply)))
+      }
+      Ok(true)
+    }
+    case Plain(user, pass) => {
+      let plainReply = execCommand(conn, authPlainPayload(user, pass), timeoutMs) ?
+      if plainReply.code != 235 {
+        return Err(AuthFailed(plainReply.code, summaryReply(&plainReply)))
+      }
+      Ok(true)
+    }
+  }
+}
+
+fn execCommand(conn: &Net.Connection, cmd: Str, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
+  match Net.sendTextWithin(conn, cmd, timeoutMs) {
+    case Ok(_) => {}
+    case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
+  }
+  readReply(conn, timeoutMs)
+}
+
+fn readReply(conn: &Net.Connection, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
+  let expires = clock() + timeoutMs
+  var buffer = ByteSeq.empty()
+  loop {
+    let remaining = expires - clock()
+    if remaining <= 0 { return Err(TimedOut) }
+    let capacity = 65536 - buffer.length()
+    if capacity <= 0 { return Err(HandshakeFailed(0, "reply exceeds 65536 bytes")) }
+    let maybeChunk = match Net.receiveWithin(conn, capacity, remaining) {
+      case Ok(c) => c
+      case Err(Net.NetOperationTimedOut) => { return Err(TimedOut) }
+      case Err(err) => { return Err(ConnectionFailed(explainNet(&err))) }
+    }
+    let chunk = match maybeChunk {
+      case Some(bytes) => bytes
+      case None => { return Err(ConnectionFailed("connection closed by mail server")) }
+    }
+    if chunk.isEmpty() { return Err(ConnectionFailed("empty reply read")) }
+    buffer = buffer.concat(chunk)
+    if buffer.endsWith("\r\n".toBytes()) {
+      let text = match ByteSeq.toText(&buffer) {
+        case Ok(value) => value
+        case Err(_) => { return Err(ConnectionFailed("mail server returned non-utf8 data")) }
+      }
+      let lines = text.take(text.length() - 2).split("\r\n")
+      let last = lines[lines.length() - 1]
+      if last.length() <= 3 || last.slice(3, 4) != "-" { return parseReply(text) }
+    }
+  }
+}
+
+fn summaryReply(reply: &SmtpReply) -> Str {
+  if reply.lines.isEmpty() {
+    show(reply.code)
+  } else {
+    reply.lines.join("; ")
+  }
+}
+
+fn explainNet(err: &Net.NetError) -> Str {
+  match err {
+    case Net.Refused(msg) => "connection refused: " + msg
+    case Net.Unresolved(msg) => "unresolved host: " + msg
+    case Net.Closed => "connection closed"
+    case Net.AddressInUse(port) => "address in use: " + show(port)
+    case Net.NetOperationTimedOut => "operation timed out"
+    case Net.NotText => "data is not text"
+    case Net.Other(msg) => msg
+  }
+}
