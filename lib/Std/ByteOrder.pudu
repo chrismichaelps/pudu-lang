@@ -1,0 +1,199 @@
+module Std.ByteOrder
+
+fn u8ToU16(b: UInt8) -> UInt16 {
+  match convertInteger[UInt16](b) {
+    case Some(u) => u
+    case None => 0u16
+  }
+}
+
+fn u8ToU32(b: UInt8) -> UInt32 {
+  match convertInteger[UInt32](b) {
+    case Some(u) => u
+    case None => 0u32
+  }
+}
+
+fn u8ToU64(b: UInt8) -> UInt64 {
+  match convertInteger[UInt64](b) {
+    case Some(u) => u
+    case None => 0u64
+  }
+}
+
+fn u16ToU8(v: UInt16) -> UInt8 {
+  match convertInteger[UInt8](v & 0xffu16) {
+    case Some(b) => b
+    case None => 0u8
+  }
+}
+
+fn u32ToU8(v: UInt32) -> UInt8 {
+  match convertInteger[UInt8](v & 0xffu32) {
+    case Some(b) => b
+    case None => 0u8
+  }
+}
+
+fn u64ToU8(v: UInt64) -> UInt8 {
+  match convertInteger[UInt8](v & 0xffu64) {
+    case Some(b) => b
+    case None => 0u8
+  }
+}
+
+/// Reverses the bytes of a 16-bit unsigned integer.
+export fn bswap16(v: UInt16) -> UInt16 {
+  (v << 8) | (v >> 8)
+}
+
+/// Reverses the bytes of a 32-bit unsigned integer.
+export fn bswap32(v: UInt32) -> UInt32 {
+  let step1 = ((v & 0x00ff00ffu32) << 8) | ((v >> 8) & 0x00ff00ffu32)
+  (step1 << 16) | (step1 >> 16)
+}
+
+/// Reverses the bytes of a 64-bit unsigned integer.
+export fn bswap64(v: UInt64) -> UInt64 {
+  var x = ((v & 0x00ff00ff00ff00ffu64) << 8) | ((v >> 8) & 0x00ff00ff00ff00ffu64)
+  x = ((x & 0x0000ffff0000ffffu64) << 16) | ((x >> 16) & 0x0000ffff0000ffffu64)
+  (x << 32) | (x >> 32)
+}
+
+/// Converts a 16-bit host integer to network byte order (Big-Endian).
+export fn htons(hostShort: UInt16) -> UInt16 {
+  bswap16(hostShort)
+}
+
+/// Converts a 16-bit network byte order integer to host byte order.
+export fn ntohs(netShort: UInt16) -> UInt16 {
+  bswap16(netShort)
+}
+
+/// Converts a 32-bit host integer to network byte order (Big-Endian).
+export fn htonl(hostLong: UInt32) -> UInt32 {
+  bswap32(hostLong)
+}
+
+/// Converts a 32-bit network byte order integer to host byte order.
+export fn ntohl(netLong: UInt32) -> UInt32 {
+  bswap32(netLong)
+}
+
+/// Reads a 16-bit big-endian unsigned integer from `bytes` at `offset`.
+export fn readU16BE(bytes: &Array[UInt8], offset: Int) -> Option[UInt16] {
+  if offset < 0 || (offset + 2) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU16(bytes[offset])
+  let b1 = u8ToU16(bytes[offset + 1])
+  Some((b0 << 8) | b1)
+}
+
+/// Reads a 16-bit little-endian unsigned integer from `bytes` at `offset`.
+export fn readU16LE(bytes: &Array[UInt8], offset: Int) -> Option[UInt16] {
+  if offset < 0 || (offset + 2) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU16(bytes[offset])
+  let b1 = u8ToU16(bytes[offset + 1])
+  Some(b0 | (b1 << 8))
+}
+
+/// Reads a 32-bit big-endian unsigned integer from `bytes` at `offset`.
+export fn readU32BE(bytes: &Array[UInt8], offset: Int) -> Option[UInt32] {
+  if offset < 0 || (offset + 4) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU32(bytes[offset])
+  let b1 = u8ToU32(bytes[offset + 1])
+  let b2 = u8ToU32(bytes[offset + 2])
+  let b3 = u8ToU32(bytes[offset + 3])
+  Some((b0 << 24) | (b1 << 16) | (b2 << 8) | b3)
+}
+
+/// Reads a 32-bit little-endian unsigned integer from `bytes` at `offset`.
+export fn readU32LE(bytes: &Array[UInt8], offset: Int) -> Option[UInt32] {
+  if offset < 0 || (offset + 4) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU32(bytes[offset])
+  let b1 = u8ToU32(bytes[offset + 1])
+  let b2 = u8ToU32(bytes[offset + 2])
+  let b3 = u8ToU32(bytes[offset + 3])
+  Some(b0 | (b1 << 8) | (b2 << 16) | (b3 << 24))
+}
+
+/// Reads a 64-bit big-endian unsigned integer from `bytes` at `offset`.
+export fn readU64BE(bytes: &Array[UInt8], offset: Int) -> Option[UInt64] {
+  if offset < 0 || (offset + 8) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU64(bytes[offset])
+  let b1 = u8ToU64(bytes[offset + 1])
+  let b2 = u8ToU64(bytes[offset + 2])
+  let b3 = u8ToU64(bytes[offset + 3])
+  let b4 = u8ToU64(bytes[offset + 4])
+  let b5 = u8ToU64(bytes[offset + 5])
+  let b6 = u8ToU64(bytes[offset + 6])
+  let b7 = u8ToU64(bytes[offset + 7])
+  Some(
+    (b0 << 56) | (b1 << 48) | (b2 << 40) | (b3 << 32)
+      | (b4 << 24) | (b5 << 16) | (b6 << 8) | b7
+  )
+}
+
+/// Reads a 64-bit little-endian unsigned integer from `bytes` at `offset`.
+export fn readU64LE(bytes: &Array[UInt8], offset: Int) -> Option[UInt64] {
+  if offset < 0 || (offset + 8) > bytes.length() {
+    return None
+  }
+  let b0 = u8ToU64(bytes[offset])
+  let b1 = u8ToU64(bytes[offset + 1])
+  let b2 = u8ToU64(bytes[offset + 2])
+  let b3 = u8ToU64(bytes[offset + 3])
+  let b4 = u8ToU64(bytes[offset + 4])
+  let b5 = u8ToU64(bytes[offset + 5])
+  let b6 = u8ToU64(bytes[offset + 6])
+  let b7 = u8ToU64(bytes[offset + 7])
+  Some(
+    b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+      | (b4 << 32) | (b5 << 40) | (b6 << 48) | (b7 << 56)
+  )
+}
+
+/// Serializes a 16-bit word into 2 big-endian bytes.
+export fn writeU16BE(v: UInt16) -> Array[UInt8] {
+  [u16ToU8(v >> 8), u16ToU8(v)]
+}
+
+/// Serializes a 16-bit word into 2 little-endian bytes.
+export fn writeU16LE(v: UInt16) -> Array[UInt8] {
+  [u16ToU8(v), u16ToU8(v >> 8)]
+}
+
+/// Serializes a 32-bit word into 4 big-endian bytes.
+export fn writeU32BE(v: UInt32) -> Array[UInt8] {
+  [u32ToU8(v >> 24), u32ToU8(v >> 16), u32ToU8(v >> 8), u32ToU8(v)]
+}
+
+/// Serializes a 32-bit word into 4 little-endian bytes.
+export fn writeU32LE(v: UInt32) -> Array[UInt8] {
+  [u32ToU8(v), u32ToU8(v >> 8), u32ToU8(v >> 16), u32ToU8(v >> 24)]
+}
+
+/// Serializes a 64-bit word into 8 big-endian bytes.
+export fn writeU64BE(v: UInt64) -> Array[UInt8] {
+  [
+    u64ToU8(v >> 56), u64ToU8(v >> 48), u64ToU8(v >> 40), u64ToU8(v >> 32),
+    u64ToU8(v >> 24), u64ToU8(v >> 16), u64ToU8(v >> 8), u64ToU8(v)
+  ]
+}
+
+/// Serializes a 64-bit word into 8 little-endian bytes.
+export fn writeU64LE(v: UInt64) -> Array[UInt8] {
+  [
+    u64ToU8(v), u64ToU8(v >> 8), u64ToU8(v >> 16), u64ToU8(v >> 24),
+    u64ToU8(v >> 32), u64ToU8(v >> 40), u64ToU8(v >> 48), u64ToU8(v >> 56)
+  ]
+}
