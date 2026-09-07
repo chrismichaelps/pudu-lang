@@ -1,0 +1,158 @@
+module UsesVarint
+
+import Std.Varint as Varint
+
+fn assert(cond: Bool, held: &mut Int) {
+  if cond {
+      *held = *held + 1
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Single-byte unsigned LEB128
+  let enc0 = Varint.encodeUleb128(0u64)
+  let dec0 = Varint.decodeUleb128(&enc0, 0)
+  let enc127 = Varint.encodeUleb128(127u64)
+  let dec127 = Varint.decodeUleb128(&enc127, 0)
+  let len0 = Varint.encodedLengthUleb128(0u64)
+  let len127 = Varint.encodedLengthUleb128(127u64)
+
+  if enc0.length() == 1
+    && enc0[0] == 0u8
+    && len0 == 1
+    && dec0 == Some(Varint.VarintDecodeResult{value: 0u64, bytesRead: 1})
+    && enc127.length() == 1
+    && enc127[0] == 127u8
+    && len127 == 1
+    && dec127 == Some(Varint.VarintDecodeResult{value: 127u64, bytesRead: 1}) {
+    held = held + 1
+  }
+
+  // 2. Multi-byte unsigned LEB128 canonical value 624485
+  let val624485 = 624485u64
+  let enc624485 = Varint.encodeUleb128(val624485)
+  let dec624485 = Varint.decodeUleb128(&enc624485, 0)
+  let len624485 = Varint.encodedLengthUleb128(val624485)
+  if enc624485.length() == 3
+    && enc624485[0] == 0xe5u8
+    && enc624485[1] == 0x8eu8
+    && enc624485[2] == 0x26u8
+    && len624485 == 3
+    && dec624485 == Some(Varint.VarintDecodeResult{value: 624485u64, bytesRead: 3}) {
+    held = held + 1
+  }
+
+  // 3. Power-of-two transition boundaries
+  let enc128 = Varint.encodeUleb128(128u64)
+  let dec128 = Varint.decodeUleb128(&enc128, 0)
+  let enc16384 = Varint.encodeUleb128(16384u64)
+  let dec16384 = Varint.decodeUleb128(&enc16384, 0)
+  if enc128.length() == 2
+    && enc128[0] == 0x80u8
+    && enc128[1] == 0x01u8
+    && dec128 == Some(Varint.VarintDecodeResult{value: 128u64, bytesRead: 2})
+    && enc16384.length() == 3
+    && dec16384 == Some(Varint.VarintDecodeResult{value: 16384u64, bytesRead: 3}) {
+    held = held + 1
+  }
+
+  // 4. Maximum 64-bit integer encoding
+  let maxU64 = ~0u64
+  let encMax = Varint.encodeUleb128(maxU64)
+  let decMax = Varint.decodeUleb128(&encMax, 0)
+  let lenMax = Varint.encodedLengthUleb128(maxU64)
+  if encMax.length() == 10
+    && lenMax == 10
+    && decMax == Some(Varint.VarintDecodeResult{value: maxU64, bytesRead: 10}) {
+    held = held + 1
+  }
+
+  // 5. Incomplete buffer detection
+  let truncated: Array[UInt8] = [0x80u8]
+  let decTrunc = Varint.decodeUleb128(&truncated, 0)
+  if decTrunc == None {
+    held = held + 1
+  }
+
+  // 6. Offset decoding and bounds checks
+  let padded: Array[UInt8] = [0x12u8, 0x34u8, 0xe5u8, 0x8eu8, 0x26u8, 0x99u8]
+  let decOffset = Varint.decodeUleb128(&padded, 2)
+  let decOobNeg = Varint.decodeUleb128(&padded, -1)
+  let decOobPast = Varint.decodeUleb128(&padded, 6)
+  if decOffset == Some(Varint.VarintDecodeResult{value: 624485u64, bytesRead: 3})
+    && decOobNeg == None
+    && decOobPast == None {
+    held = held + 1
+  }
+
+  // 7. Non-negative ZigZag mapping
+  let zz0 = Varint.toZigZag(0)
+  let zz1 = Varint.toZigZag(1)
+  let zz2 = Varint.toZigZag(2)
+  let zz100 = Varint.toZigZag(100)
+  if zz0 == 0u64
+    && Varint.fromZigZag(zz0) == 0
+    && zz1 == 2u64
+    && Varint.fromZigZag(zz1) == 1
+    && zz2 == 4u64
+    && Varint.fromZigZag(zz2) == 2
+    && zz100 == 200u64
+    && Varint.fromZigZag(zz100) == 100 {
+    held = held + 1
+  }
+
+  // 8. Negative ZigZag mapping
+  let zzNeg1 = Varint.toZigZag(-1)
+  let zzNeg2 = Varint.toZigZag(-2)
+  let zzNeg100 = Varint.toZigZag(-100)
+  if zzNeg1 == 1u64
+    && Varint.fromZigZag(zzNeg1) == -1
+    && zzNeg2 == 3u64
+    && Varint.fromZigZag(zzNeg2) == -2
+    && zzNeg100 == 199u64
+    && Varint.fromZigZag(zzNeg100) == -100 {
+    held = held + 1
+  }
+
+  // 9. Signed SLEB128 encoding and decoding for small integers
+  let encS0 = Varint.encodeSleb128(0)
+  let encSNeg1 = Varint.encodeSleb128(-1)
+  let encS1 = Varint.encodeSleb128(1)
+  let encSNeg64 = Varint.encodeSleb128(-64)
+
+  let decS0 = Varint.decodeSleb128(&encS0, 0)
+  let decSNeg1 = Varint.decodeSleb128(&encSNeg1, 0)
+  let decS1 = Varint.decodeSleb128(&encS1, 0)
+  let decSNeg64 = Varint.decodeSleb128(&encSNeg64, 0)
+
+  if encS0.length() == 1
+    && encSNeg1.length() == 1
+    && encSNeg1[0] == 0x01u8
+    && encS1.length() == 1
+    && encS1[0] == 0x02u8
+    && encSNeg64.length() == 1
+    && encSNeg64[0] == 0x7fu8
+    && decS0 == Some(Varint.SignedVarintDecodeResult{value: 0, bytesRead: 1})
+    && decSNeg1 == Some(Varint.SignedVarintDecodeResult{value: -1, bytesRead: 1})
+    && decS1 == Some(Varint.SignedVarintDecodeResult{value: 1, bytesRead: 1})
+    && decSNeg64 == Some(Varint.SignedVarintDecodeResult{value: -64, bytesRead: 1}) {
+    held = held + 1
+  }
+
+  // 10. Large signed integer roundtrip
+  let largePos = 1234567890
+  let largeNeg = -1234567890
+  let encLargePos = Varint.encodeSleb128(largePos)
+  let encLargeNeg = Varint.encodeSleb128(largeNeg)
+  let decLargePos = Varint.decodeSleb128(&encLargePos, 0)
+  let decLargeNeg = Varint.decodeSleb128(&encLargeNeg, 0)
+
+  if decLargePos == Some(Varint.SignedVarintDecodeResult{value: largePos, bytesRead: encLargePos.length()})
+    && decLargeNeg == Some(Varint.SignedVarintDecodeResult{value: largeNeg, bytesRead: encLargeNeg.length()}) {
+    held = held + 1
+  }
+
+  held
+}
