@@ -125,6 +125,9 @@ tags: [moc, module, stdlib]
 - [[Std FenwickTree]] — Binary Indexed Tree for prefix sums, point updates, and binary lifting search.
 - [[Std RingBuffer]] — bounded power-of-two circular FIFO buffer with branchless bitmask wrapping.
 - [[Std Varint]] — variable-length integer encoding (ULEB128 and signed ZigZag SLEB128).
+- [[Std DisjointSet]] — flat-array Union-Find with iterative path halving and union-by-rank.
+- [[Std Murmur3]] — hardware-oriented non-cryptographic hash function with word rotations and bit avalanche.
+- [[Std RateLimiter]] — fixed-point integer token bucket traffic shaper with burst allowance.
 
 - [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
 - [[Std App Database]] — application-owned pools and bound queries.

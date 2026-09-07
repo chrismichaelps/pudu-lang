@@ -19,7 +19,10 @@ tags: [changelog]
 - Add `Std.FenwickTree`: Low-level Binary Indexed Tree for $O(\log n)$ prefix sums, point updates, range sum queries, and $O(\log n)$ binary lifting search.
 - Add `Std.RingBuffer`: Bounded power-of-two circular FIFO buffer with branchless bitmask wrapping (`& (capacity - 1)`) and flat senior API.
 - Add `Std.Varint`: Variable-length integer encoding (ULEB128 and signed ZigZag SLEB128) for compact binary protocols.
-- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], and [[Std Varint]].
+- Add `Std.DisjointSet`: Low-level flat array Union-Find with iterative path halving and union-by-rank.
+- Add `Std.Murmur3`: Hardware-oriented non-cryptographic hash function implementing Austin Appleby's MurmurHash3 with 32-bit rotations and avalanche bit mixing.
+- Add `Std.RateLimiter`: 64-bit fixed-point integer token bucket rate limiter with smooth replenishment and burst capacity.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], and [[Std RateLimiter]].
 
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 
