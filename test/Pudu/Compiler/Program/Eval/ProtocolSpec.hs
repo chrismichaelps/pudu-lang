@@ -38,6 +38,9 @@ testProtocolEvaluation = do
   fenwickTree <- runEntry "test-fixtures/stdlib/UsesFenwickTree.pudu"
   ringBuffer <- runEntry "test-fixtures/stdlib/UsesRingBuffer.pudu"
   varintCodec <- runEntry "test-fixtures/stdlib/UsesVarint.pudu"
+  disjointSet <- runEntry "test-fixtures/stdlib/UsesDisjointSet.pudu"
+  murmur3Hash <- runEntry "test-fixtures/stdlib/UsesMurmur3.pudu"
+  rateLimiter <- runEntry "test-fixtures/stdlib/UsesRateLimiter.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -160,6 +163,15 @@ testProtocolEvaluation = do
     , counterexample
         "Varint ULEB128 and signed ZigZag SLEB128 variable-length integer encoding and decoding"
         (varintCodec === Just "10")
+    , counterexample
+        "DisjointSet flat array Union-Find with iterative path halving and union-by-rank"
+        (disjointSet === Just "10")
+    , counterexample
+        "Murmur3 hardware-oriented 32-bit hash with word rotations and bit avalanche"
+        (murmur3Hash === Just "10")
+    , counterexample
+        "RateLimiter 64-bit fixed-point integer token bucket traffic shaper"
+        (rateLimiter === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
