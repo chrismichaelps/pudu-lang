@@ -3,10 +3,10 @@ module Std.Mail.Smtp
 import Std.Bytes as ByteSeq
 import Std.Mail as Mail
 import Std.Net as Net
-import Std.Tls as Tls
 import Std.Option as Option
 import Std.Result as Result
 import Std.Text.Parse as Parse
+import Std.Tls as Tls
 
 /// Authentication mechanism variants supported by the SMTP transport.
 export type SmtpAuth
@@ -301,7 +301,7 @@ fn deliverConnected(c: &SmtpClient, msg: &Mail.Message, conn: &Transport, capabi
   for rcpt in recipients {
     let rcptReply = execCommand(conn, rcptToCommand(rcpt.written), c.timeoutMs) ?
     if rcptReply.code != 250 && rcptReply.code != 251 {
-        return Err(RecipientRejected(rcpt.written, rcptReply.code, summaryReply(&rcptReply)))
+      return Err(RecipientRejected(rcpt.written, rcptReply.code, summaryReply(&rcptReply)))
     }
     accepted = accepted + 1
   }

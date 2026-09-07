@@ -1,7 +1,7 @@
 module Std.Http.Message
 
-import Std.Http as Http
 import Std.Bytes as ByteSeq
+import Std.Http as Http
 import Std.Text as Text
 
 /// What stopped a message from being read.
@@ -230,7 +230,7 @@ export fn renderResponseBytes(value: &Http.Response) -> Bytes {
 export fn respondBytes(code: Int, mediaType: Str, payload: &Bytes) -> Http.Response {
   Http.Response{status: Http.status(code),
     headers: [("content-type", mediaType), ("content-length", show(payload.length()))],
-    body: "", binaryBody: Some(*payload)}
+    body: "", binaryBody: Some(*payload) }
 }
 
 /// Remove chunk framing in octets, refusing truncated or malformed data.
