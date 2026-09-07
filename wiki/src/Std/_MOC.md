@@ -122,6 +122,9 @@ tags: [moc, module, stdlib]
 - [[Std BloomFilter]] — probabilistic set membership with zero false negatives and double hashing.
 - [[Std Mime]] — MIME Media Type parsing, extension registry, and HTTP Accept negotiation.
 - [[Std Diff]] — Myers O(ND) sequence difference, Unified Diff format, and Levenshtein metric.
+- [[Std FenwickTree]] — Binary Indexed Tree for prefix sums, point updates, and binary lifting search.
+- [[Std RingBuffer]] — bounded power-of-two circular FIFO buffer with branchless bitmask wrapping.
+- [[Std Varint]] — variable-length integer encoding (ULEB128 and signed ZigZag SLEB128).
 
 - [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
 - [[Std App Database]] — application-owned pools and bound queries.

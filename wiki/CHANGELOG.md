@@ -16,7 +16,10 @@ tags: [changelog]
 - Add `Std.Mime`: RFC 2045 media type parser, parameter serializer, 60+ extension registry, and HTTP `Accept` content negotiation.
 - Add `Std.Diff`: Eugene Myers $O(ND)$ difference engine, Unified Diff (`@@ -l,s +l,s @@`) formatter with context lines, and Levenshtein edit distance metric.
 - Add `Std.BitVector`: Dense 64-bit word packed bit-vector with word-parallel bitwise operations (AND, OR, XOR, NOT), popcount, and trailing-zero scan acceleration.
-- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], and [[Std Diff]].
+- Add `Std.FenwickTree`: Low-level Binary Indexed Tree for $O(\log n)$ prefix sums, point updates, range sum queries, and $O(\log n)$ binary lifting search.
+- Add `Std.RingBuffer`: Bounded power-of-two circular FIFO buffer with branchless bitmask wrapping (`& (capacity - 1)`) and flat senior API.
+- Add `Std.Varint`: Variable-length integer encoding (ULEB128 and signed ZigZag SLEB128) for compact binary protocols.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], and [[Std Varint]].
 
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 
