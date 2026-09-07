@@ -35,6 +35,9 @@ testProtocolEvaluation = do
   diffOps <- runEntry "test-fixtures/stdlib/UsesDiff.pudu"
   mimeType <- runEntry "test-fixtures/stdlib/UsesMime.pudu"
   bitVector <- runEntry "test-fixtures/stdlib/UsesBitVector.pudu"
+  fenwickTree <- runEntry "test-fixtures/stdlib/UsesFenwickTree.pudu"
+  ringBuffer <- runEntry "test-fixtures/stdlib/UsesRingBuffer.pudu"
+  varintCodec <- runEntry "test-fixtures/stdlib/UsesVarint.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -148,6 +151,15 @@ testProtocolEvaluation = do
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")
+    , counterexample
+        "FenwickTree O(log n) prefix sums, point updates, range sum queries, and binary lifting search"
+        (fenwickTree === Just "10")
+    , counterexample
+        "RingBuffer power-of-two bounded circular FIFO queue with branchless bitmask wrapping"
+        (ringBuffer === Just "10")
+    , counterexample
+        "Varint ULEB128 and signed ZigZag SLEB128 variable-length integer encoding and decoding"
+        (varintCodec === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
