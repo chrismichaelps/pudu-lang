@@ -2,11 +2,19 @@
 module Main (main) where
 
 import Control.Monad (unless, when)
+import Data.List (sort, sortOn)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
-import Data.List (sortOn)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
+import System.Directory
+  ( createDirectoryIfMissing
+  , doesDirectoryExist
+  , doesFileExist
+  , getCurrentDirectory
+  , listDirectory
+  )
+import System.FilePath ((</>), takeExtension, takeFileName)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
@@ -52,6 +60,9 @@ main = do
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
+    ("test" : paths) -> testPaths style paths
+    ("init" : path : _) -> initProject (Just path)
+    ("init" : []) -> initProject Nothing
     ("lsp" : _) -> runServer
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
@@ -287,6 +298,202 @@ searchPaths query paths
         matches -> mapM_ (mapM_ TextIO.putStrLn . renderEntryLines . matchEntry) matches
       if failed then exitFailure else exitSuccess
 
+{-| Run every named test file, or discover them under standard directories.
+
+    Each test file is compiled and evaluated as a standalone program. A test
+    whose `main` returns an `Int` reports that many held assertions. A test
+    whose evaluation produces diagnostics is a failure regardless of the value,
+    because a program that panics during an assertion pass is not a passing
+    program.
+
+    The runner prints one line per file as it goes — the number held if it
+    passed, or the reason it did not — and a summary line at the end. Exit
+    status is 0 when every file passed, 1 otherwise. -}
+testPaths :: RenderStyle -> [FilePath] -> IO ()
+testPaths style paths = do
+  files <- discoverTestFiles paths
+  when (null files) $ do
+    hPutStrLn stderr "pudu test: no test files found"
+    exitFailure
+  results <- mapM (runTestFile style) (sort files)
+  let passed = length (filter fst results)
+      total  = length results
+      assertions = sum (map snd results)
+  TextIO.putStrLn ""
+  TextIO.putStrLn (testSummaryLine passed total assertions)
+  if passed == total then exitSuccess else exitFailure
+
+{-| Resolve the file list for `pudu test`.
+
+    Explicit paths name files directly. When no paths are given, the runner
+    searches `test/`, `tests/`, and `test-fixtures/` — the three directories a
+    Pudu project might use — and collects every `.pudu` file it finds
+    recursively. -}
+discoverTestFiles :: [FilePath] -> IO [FilePath]
+discoverTestFiles explicit
+  | not (null explicit) = pure explicit
+  | otherwise = concat <$> mapM collectPuduFiles standardTestDirs
+
+standardTestDirs :: [FilePath]
+standardTestDirs = ["test", "tests", "test-fixtures"]
+
+collectPuduFiles :: FilePath -> IO [FilePath]
+collectPuduFiles root = do
+  exists <- doesDirectoryExist root
+  if exists then walk root else pure []
+ where
+  walk dir = do
+    entries <- listDirectory dir
+    let fullPaths = map (dir </>) entries
+    (files, dirs) <- partitionPaths fullPaths
+    let puduFiles = filter isPuduFile files
+    nested <- concat <$> mapM walk dirs
+    pure (puduFiles <> nested)
+
+partitionPaths :: [FilePath] -> IO ([FilePath], [FilePath])
+partitionPaths = go [] []
+ where
+  go files dirs remaining = case remaining of
+    []     -> pure (files, dirs)
+    p : ps -> do
+      isDir <- doesDirectoryExist p
+      if isDir
+        then go files (p : dirs) ps
+        else go (p : files) dirs ps
+
+isPuduFile :: FilePath -> Bool
+isPuduFile path = takeExtension path == ".pudu"
+
+{-| Compile and evaluate one test file, printing progress as it goes.
+
+    A test passes when it compiles without errors, evaluates to an `IntValue`,
+    and produces no runtime diagnostics. The integer is the assertion count. -}
+runTestFile :: RenderStyle -> FilePath -> IO (Bool, Int)
+runTestFile style path = do
+  program <- compileProgram path
+  let diagnostics = programDiagnostics program
+  unless (null diagnostics) $
+    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+  if hasErrors diagnostics
+    then do
+      TextIO.putStrLn (testFileLine path "FAIL" "compilation errors")
+      pure (False, 0)
+    else case rootCompileResult program >>= compileModule of
+      Nothing -> do
+        TextIO.putStrLn (testFileLine path "FAIL" "no module produced")
+        pure (False, 0)
+      Just parsed -> do
+        outcome <-
+          evaluateProgramEntry
+            (programIntegerKinds program)
+            (programDependencies program)
+            entryPointName
+            parsed
+        mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
+        classifyOutcome path outcome
+
+classifyOutcome :: FilePath -> EvalOutcome -> IO (Bool, Int)
+classifyOutcome path outcome
+  | not (null (outcomeDiagnostics outcome)) = do
+      TextIO.putStrLn (testFileLine path "FAIL" "runtime diagnostics")
+      pure (False, 0)
+  | otherwise = case outcomeValue outcome of
+      Just (IntValue _ n) -> do
+        let count = fromInteger n
+        TextIO.putStrLn (testFileLine path "PASS" (show count <> " held"))
+        pure (True, count)
+      Just _ -> do
+        TextIO.putStrLn (testFileLine path "PASS" "non-integer result")
+        pure (True, 0)
+      Nothing -> do
+        TextIO.putStrLn (testFileLine path "FAIL" "no value returned")
+        pure (False, 0)
+
+testFileLine :: FilePath -> String -> String -> Text
+testFileLine path status detail =
+  Text.pack ("  " <> status <> "  " <> takeFileName path <> "  " <> detail)
+
+testSummaryLine :: Int -> Int -> Int -> Text
+testSummaryLine passed total assertions =
+  Text.pack
+    ( show passed <> "/" <> show total <> " suites passed, "
+      <> show assertions <> " assertions held"
+    )
+
+{-| Scaffold a canonical Pudu project.
+
+    Creates `pudu.toml`, `src/Main.pudu`, `test/`, and `.gitignore` under the
+    target directory. If `pudu.toml` already exists the command refuses to
+    proceed, because overwriting a manifest is never what a user meant by
+    "init". -}
+initProject :: Maybe FilePath -> IO ()
+initProject target = do
+  root <- resolveInitRoot target
+  let manifest = root </> "pudu.toml"
+  alreadyExists <- doesFileExist manifest
+  when alreadyExists $ do
+    hPutStrLn stderr ("pudu init: " <> manifest <> " already exists")
+    exitFailure
+  createDirectoryIfMissing True (root </> "src")
+  createDirectoryIfMissing True (root </> "test")
+  let projectName = takeFileName root
+  writeFileIfAbsent manifest (manifestTemplate projectName)
+  writeFileIfAbsent (root </> "src" </> "Main.pudu") mainTemplate
+  writeFileIfAbsent (root </> ".gitignore") gitignoreTemplate
+  TextIO.putStrLn (Text.pack ("initialized " <> root))
+
+resolveInitRoot :: Maybe FilePath -> IO FilePath
+resolveInitRoot target = case target of
+  Just path -> do
+    createDirectoryIfMissing True path
+    pure path
+  Nothing -> getCurrentDirectory
+
+writeFileIfAbsent :: FilePath -> Text -> IO ()
+writeFileIfAbsent path contents = do
+  exists <- doesFileExist path
+  unless exists (TextIO.writeFile path contents)
+
+manifestTemplate :: String -> Text
+manifestTemplate name = Text.unlines
+  [ "[package]"
+  , "name = \"" <> tomlName (Text.pack name) <> "\""
+  , "version = \"0.1.0\""
+  , "language = \">=" <> versionText <> "\""
+  , "source = \"src\""
+  ]
+
+tomlName :: Text -> Text
+tomlName = Text.concatMap escape
+ where
+  escape '\\' = "\\\\"
+  escape '"' = "\\\""
+  escape '\n' = "\\n"
+  escape '\r' = "\\r"
+  escape '\t' = "\\t"
+  escape c | fromEnum c < 32 || fromEnum c == 127 = "_"
+           | otherwise = Text.singleton c
+
+mainTemplate :: Text
+mainTemplate = Text.unlines
+  [ "module Main"
+  , ""
+  , "export fn main() -> Int {"
+  , "  0"
+  , "}"
+  ]
+
+gitignoreTemplate :: Text
+gitignoreTemplate = Text.unlines
+  [ "# Build artifacts"
+  , ".pudu/"
+  , "*.o"
+  , ""
+  , "# Editor and OS"
+  , ".DS_Store"
+  , "*.swp"
+  ]
+
 {-| Build one index over every named program, reporting each program's
     diagnostics to stderr so they cannot corrupt the index on stdout. -}
 indexPaths :: [FilePath] -> IO (DocIndex, Bool)
@@ -337,6 +544,8 @@ usage =
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu test [path]...  discover and execute test fixtures"
+    , "  pudu init [path]     initialize a canonical project with pudu.toml"
     , "  pudu explain <file>  run a program and report what running it cost"
     , "  pudu lsp             speak the language server protocol over stdio"
     , "  pudu fmt <file>...   rewrite files in the one committed style"

@@ -28,6 +28,8 @@ pudu                 start the puduci interactive session
 pudu repl [file]     start puduci, optionally loading a file
 pudu check <file>... compile files and report diagnostics
 pudu run <file>      compile a program and run its main function
+pudu test [path]...  discover and execute test fixtures, reporting assertion summaries
+pudu init [path]     scaffold a canonical pudu.toml package manifest and project layout
 pudu doc <file>...   describe every name a program declares
 pudu doc --json ...  the same index, for an editor or a search server
 pudu doc --html ...  emit a self-contained searchable documentation page
@@ -74,6 +76,9 @@ pudu help            print usage
 - Exit status is the contract for scripts: zero when no error-severity diagnostic was produced, non-zero otherwise. Warnings alone do not fail.
 - Missing, unreadable, or non-file roots flow through [[Compiler Program]] as structured `E2014` diagnostics and produce a non-zero status; the CLI does not race a separate existence probe against the authoritative read. Unknown commands remain stderr usage failures.
 
+- `pudu test` discovers `.pudu` test files under `test/`, `tests/`, or the paths provided on the command line. It compiles and evaluates each file, tallying assertions and failures. It reports a clean test suite summary and exits with code 0 on all pass, or code 1 on any failure.
+- `pudu init` initializes a new project directory with a canonical `pudu.toml` adhering to [[architecture/PACKAGES]], creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore`. If `pudu.toml` already exists, it safely refuses to overwrite it.
+
 ### Linkage
 
 - **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Diagnostic Render]], [[Doc Site]], [[Pudu REPL]], [[Source]].
@@ -81,16 +86,19 @@ pudu help            print usage
 
 ## Algorithm
 
-Read arguments, detect the render style once, dispatch to the session or the checker, and exit with the status the results imply.
+Read arguments, detect the render style once, dispatch to the session, checker, runner, test discovery runner, or initializer, and exit with the status the results imply.
 
 ## Negative Logic (Prohibited Paths)
 
 - No compilation logic, no configuration files, no environment-driven behaviour beyond `NO_COLOR`, and no output that a script cannot interpret from the exit status.
 - No direct dependency-path construction; [[Compiler Program]] owns source-root and module-name policy.
+- `pudu init` must never overwrite an existing `pudu.toml`.
 
 ## Edge Cases
 
 - `pudu check` with no files is a usage error rather than a silent success.
+- `pudu test` with no matching test files reports that zero test suites were discovered and exits with an informative message.
+- `pudu init` on an existing package reports that `pudu.toml` already exists and refuses modification.
 - `pudu doc --html` with no files is the same explicit usage error as the other documentation
   formats; an intentionally empty site can still be rendered by the pure [[Doc Site]] interface.
 - A path may exist and still be unreadable; `check` trusts the loader's diagnostic result, so this cannot become a zero-error summary.
@@ -112,7 +120,20 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
   _Rationale:_ the shell may resolve an older executable from another directory first, so the
   documented refresh names `~/.local/bin` and allows overwrite explicitly. _Rejected:_ installing
   successfully somewhere and assuming the editor found that copy.
+- **Q:** How should `pudu test` discover test fixtures when no paths are passed?
+  **A:** Search standard directory paths `test/`, `tests/`, and `test-fixtures/` for `.pudu` files, or allow specific test file targets.
+  _Rationale:_ Standardizes project discovery without requiring rigid test manifests.
+- **Q:** How are assertion counts and outcomes communicated by `pudu test`?
+  **A:** Each test file is evaluated via `evaluateProgramEntry`. An integer exit code represents the count of assertions held. A panic, exception, or runtime error is treated as a test failure. The CLI prints individual test progress, passed assertion counts, total elapsed count, and exits with 0 on all tests passing, or non-zero if any test failed.
+- **Q:** What does `pudu init` generate?
+  **A:** It creates a canonical `pudu.toml` (with package name, version "0.1.0", language version, source directory "src"), creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore` if absent. It never overwrites an existing `pudu.toml`.
+  _Rationale:_ Protects existing project configurations while providing immediate onboarding.
 
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Pudu REPL]] · [[Diagnostic Render]] · [[Compiler Pipeline]] · [[Tooling]]
+
+## Manifest string escaping
+
+Project initialization escapes backslash, quotes and ASCII controls in the directory-derived
+TOML name. Existing files remain preserved. This is code-only delivery with readiness unproven.
