@@ -53,3 +53,9 @@ Direct structural recursion over the shape being read or written; no caching and
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Language Server]] · [[Tooling]]
+
+## Position clamping
+
+Offsets clamp negative lines to the start and lines beyond the document to EOF. UTF-16
+positions inside a surrogate pair clamp before that scalar, rather than splitting or moving
+beyond it. Resolved Grill Log: malformed direct positions must not produce offsets past EOF.

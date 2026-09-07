@@ -138,3 +138,8 @@ caught.
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[Tooling]] · [[Pudu CLI]] · [[Doc]]
+
+## Boundary completion
+
+Percent-encoded URI bytes now decode together as UTF-8; malformed UTF-8 retains the original path rather than corrupting it.
+Resolved Grill Log: reject unsupported transport/representation behavior rather than emit corrupted output or silently weaken validation. No tests or reviews run.

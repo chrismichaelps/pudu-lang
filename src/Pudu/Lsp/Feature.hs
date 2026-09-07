@@ -34,7 +34,10 @@ import Pudu.Source (Span, spanEnd, spanStart, unOffset)
     would land one position early and grow worse with every astral scalar on the
     line, so the conversion is done here, once, at the edge. -}
 offsetAt :: Text -> Position -> Int
-offsetAt content position = lineStart + withinLine
+offsetAt content position
+  | positionLine position < 0 = 0
+  | positionLine position >= length lines' = Text.length content
+  | otherwise = min (Text.length content) (lineStart + withinLine)
  where
   lines' = Text.splitOn "\n" content
   before = take (positionLine position) lines'
@@ -52,7 +55,9 @@ scalarsForUnits wanted = go 0 0
     | units >= wanted = scalars
     | otherwise = case Text.uncons rest of
         Nothing -> scalars
-        Just (scalar, remaining) -> go (scalars + 1) (units + utf16Width scalar) remaining
+        Just (scalar, remaining)
+          | units + utf16Width scalar > wanted -> scalars
+          | otherwise -> go (scalars + 1) (units + utf16Width scalar) remaining
 
 utf16Width :: Char -> Int
 utf16Width scalar = if fromEnum scalar > 0xFFFF then 2 else 1

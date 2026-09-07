@@ -14,6 +14,8 @@ module Pudu.Lsp.Server
 import Control.Exception (SomeException, displayException, evaluate, try)
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import qualified Data.ByteString as ByteString
+import qualified Data.Text.Encoding as Encoding
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -143,16 +145,17 @@ pathOf uri = maybe uri decodeUri (Text.stripPrefix "file://" uri)
 
 {-| Turn `%20` and friends back into the scalars they stand for. -}
 decodeUri :: Text -> Text
-decodeUri = go Text.empty
+decodeUri input = either (const input) id (Encoding.decodeUtf8' (ByteString.pack (go input)))
  where
-  go accumulated rest = case Text.uncons rest of
-    Nothing -> accumulated
+  go rest = case Text.uncons rest of
+    Nothing -> []
     Just ('%', remaining)
       | Text.length hex == 2, Just value <- hexValue hex ->
-          go (Text.snoc accumulated (toEnum value)) (Text.drop 2 remaining)
+          fromIntegral value : go (Text.drop 2 remaining)
      where
       hex = Text.take 2 remaining
-    Just (scalar, remaining) -> go (Text.snoc accumulated scalar) remaining
+    Just (scalar, remaining) -> ByteString.unpack (Encoding.encodeUtf8 (Text.singleton scalar)) <> go remaining
+
   hexValue hex = case Text.foldl' step (Just 0) hex of
     Just value -> Just value
     Nothing -> Nothing

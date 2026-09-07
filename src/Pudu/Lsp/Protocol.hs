@@ -71,13 +71,13 @@ positionOf :: Json -> Maybe Position
 positionOf value = do
   line <- lookupField "line" value >>= integerOf
   character <- lookupField "character" value >>= integerOf
-  pure (Position line character)
+  if line < 0 || character < 0 then Nothing else pure (Position line character)
 
 rangeOf :: Json -> Maybe Range
 rangeOf value = do
   startPos <- lookupField "start" value >>= positionOf
   endPos <- lookupField "end" value >>= positionOf
-  pure (Range startPos endPos)
+  if endPos < startPos then Nothing else pure (Range startPos endPos)
 
 {-| Read one message, or nothing when the input ends.
 

@@ -42,12 +42,21 @@ continueEntry accumulated = do
       | otherwise -> do
           let extended = accumulated <> "\n" <> next
           complete <- liftIO (isComplete extended)
-          if complete && closesBlock next then pure extended else continueEntry extended
+          closed <- liftIO (closesBlock next)
+          if complete && closed then pure extended else continueEntry extended
 
 {-| A line whose last token is `}` finishes a braced construct, so the reader
     does not have to add a blank line after every function or match. -}
-closesBlock :: Text -> Bool
-closesBlock line = Text.isSuffixOf "}" (Text.stripEnd line)
+closesBlock :: Text -> IO Bool
+closesBlock line = do
+  source <- newSource (SourceName "<interactive>") line
+  let LexResult{lexTokens} = lexSource source
+      significant = filter (\token -> tokenKind token /= EndOfFile) lexTokens
+  pure $ case reverse significant of
+    token : _ -> case tokenKind token of
+      Symbol symbol -> symbolText symbol `elem` ["}", ")", "]"]
+      _ -> False
+    [] -> False
 
 readEntry :: Text -> InputT IO (Maybe Text)
 readEntry shown = fmap Text.pack <$> getInputLine (Text.unpack shown)

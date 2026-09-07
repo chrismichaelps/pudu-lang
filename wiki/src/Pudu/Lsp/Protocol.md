@@ -61,3 +61,8 @@ Reading is framing first and content second, and the two fail differently. A bod
 ## Referenced by
 
 [[src/Pudu/Lsp/_MOC]] · [[Language Server]] · [[Tooling]]
+
+## Boundary completion
+
+Reject negative positions and reversed ranges at protocol decoding.
+Resolved Grill Log: reject unsupported transport/representation behavior rather than emit corrupted output or silently weaken validation. No tests or reviews run.

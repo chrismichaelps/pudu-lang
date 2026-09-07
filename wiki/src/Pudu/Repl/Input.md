@@ -60,3 +60,8 @@ remain or the last line invites one. Stop at a balancing `}` or a blank line.
 ## Referenced by
 
 [[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[grammar/pudu]]
+
+## Boundary completion
+
+Continuation completion recognizes closing parentheses and brackets as well as braces through lexer tokens, including trailing comments.
+Resolved Grill Log: reject unsupported transport/representation behavior rather than emit corrupted output or silently weaken validation. No tests or reviews run.
