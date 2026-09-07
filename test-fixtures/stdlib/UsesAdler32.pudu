@@ -1,0 +1,95 @@
+module UsesAdler32
+
+import Std.Adler32 as Adler32
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Empty buffer checksum is 1
+  let cEmpty = Adler32.checksum(&[])
+  if cEmpty == 1u32 {
+    held = held + 1
+  }
+
+  // 2. Single byte checksum
+  let cA = Adler32.checksumText("a")
+  if cA == 6422626u32 {
+    held = held + 1
+  }
+
+  // 3. RFC 1950 canonical test vector: "Wikipedia" == 0x11E60398 (300286872)
+  let cWiki = Adler32.checksumText("Wikipedia")
+  if cWiki == 300286872u32 {
+    held = held + 1
+  }
+
+  // 4. Incremental update matches whole checksum
+  let cPart1 = Adler32.checksumText("Wiki")
+  let bytesPart2 = "pedia".toBytes().toArray()
+  let cFull = Adler32.update(cPart1, &bytesPart2)
+  if cFull == cWiki {
+    held = held + 1
+  }
+
+  // 5. Rolling hash O(1) step: "abcd" -> "bcde"
+  let cAbcd = Adler32.checksumText("abcd")
+  let cBcde = Adler32.checksumText("bcde")
+  let rolled1 = Adler32.roll(cAbcd, 97u8, 101u8, 4) // drop 'a' (97), add 'e' (101)
+  if rolled1 == cBcde {
+    held = held + 1
+  }
+
+  // 6. Second rolling step: "bcde" -> "cdef"
+  let cCdef = Adler32.checksumText("cdef")
+  let rolled2 = Adler32.roll(cBcde, 98u8, 102u8, 4) // drop 'b' (98), add 'f' (102)
+  if rolled2 == cCdef {
+    held = held + 1
+  }
+
+  // 7. Combine two checksums
+  let partA = Adler32.checksumText("Hello, ")
+  let partB = Adler32.checksumText("world!")
+  let lenB = "world!".toBytes().toArray().length()
+  let combined = Adler32.combine(partA, partB, lenB)
+  let directFull = Adler32.checksumText("Hello, world!")
+  if combined == directFull {
+    held = held + 1
+  }
+
+  // 8. Large payload crossing 5552-byte accumulation boundary
+  var big: Array[UInt8] = []
+  var i = 0
+  while i < 6000 {
+    let b = match convertInteger[UInt8](i % 251) {
+      case Some(v) => v
+      case None => 0u8
+    }
+    big = big.push(b)
+    i = i + 1
+  }
+  let cBig1 = Adler32.checksum(&big)
+  let cBig2 = Adler32.checksum(&big)
+  if cBig1 == cBig2 && cBig1 != 0u32 && cBig1 != 1u32 {
+    held = held + 1
+  }
+
+  // 9. Text vs Byte array equivalence
+  let phrase = "Close to the hardware Adler-32"
+  let bPhrase = phrase.toBytes().toArray()
+  let cFromBytes = Adler32.checksum(&bPhrase)
+  let cFromText = Adler32.checksumText(phrase)
+  if cFromBytes == cFromText {
+    held = held + 1
+  }
+
+  // 10. Order sensitivity (non-commutative)
+  let cAB = Adler32.checksumText("ab")
+  let cBA = Adler32.checksumText("ba")
+  let c123 = Adler32.checksumText("12345")
+  let c543 = Adler32.checksumText("54321")
+  if cAB != cBA && c123 != c543 {
+    held = held + 1
+  }
+
+  held
+}
