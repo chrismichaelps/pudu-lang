@@ -81,7 +81,7 @@ export fn jsonValue(code: Int, content: Json.Json) -> Http.Response {
 
 /// Reuse server-rendered output and its UTF-8 length without rendering again.
 export fn rendered(code: Int, content: Ssr.Rendered) -> Http.Response {
-  Http.Response{
+  Http.Response {
     status: Http.status(code),
     headers: [("content-type", "text/html; charset=utf-8"), ("content-length", show(content.byteLength))],
     body: content.body

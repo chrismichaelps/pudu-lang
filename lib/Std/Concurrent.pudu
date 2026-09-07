@@ -95,19 +95,19 @@ export fn parallelBounded(actions: &Array[fn() -> ()], workers: Int) -> Result[(
   var index = 0
   while index < count {
     let started = start(fn() -> () {
-      var going = true
-      while going {
-        match Sync.increment(&cursor, 1) {
-          case Err(problem) => {
-            let _recorded = Sync.set(&claimingFailure, Some(show(problem)))
-            going = false
-          }
-          case Ok(next) => {
-            if next > work.length() { going = false } else { (work[next - 1])() }
+        var going = true
+        while going {
+          match Sync.increment(&cursor, 1) {
+            case Err(problem) => {
+              let _recorded = Sync.set(&claimingFailure, Some(show(problem)))
+              going = false
+            }
+            case Ok(next) => {
+              if next > work.length() { going = false } else { (work[next - 1])() }
+            }
           }
         }
-      }
-    })
+      })
     match started {
       case Ok(worker) => { tasks = tasks.push(worker) }
       case Err(problem) => {

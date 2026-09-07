@@ -5,8 +5,8 @@ import Std.App.Config as Config
 import Std.App.Database as Database
 import Std.Db.Driver as Driver
 import Std.Db.Row as Row
-import Std.Html as Html
 import Std.Html.Compose as Page
+import Std.Html as Html
 import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
@@ -77,9 +77,9 @@ fn create(database: &Database.Database, request: Route.Request, sql: Str) -> Htt
 
 export fn main() -> Result[Int, Str] {
   let settings = Result.mapErr(Config.discover(&[
-    ("database.url", "sqlite:notes.db"), ("server.host", "127.0.0.1"),
-    ("server.port", "8080"), ("server.connections", "0")
-  ], "app.toml"), fn(problem: Config.ConfigError) -> Str { Config.explain(&problem) }) ?
+        ("database.url", "sqlite:notes.db"), ("server.host", "127.0.0.1"),
+        ("server.port", "8080"), ("server.connections", "0")
+      ], "app.toml"), fn(problem: Config.ConfigError) -> Str { Config.explain(&problem) }) ?
   let database = Result.mapErr(Database.fromConfig(&settings, "database.url", 4), describe) ?
   let insertSql = match database.driver.placeholders {
     case Driver.DollarNumber => "INSERT INTO pudu_notes (title, body) VALUES ($1, $2)"
@@ -87,17 +87,17 @@ export fn main() -> Result[Int, Str] {
     case Driver.Named => { return Err("this example requires dollar-number or question-mark placeholders") }
   }
   let routes = Route.routing(&[
-    Route.get("/", fn(_request: Route.Request) -> Http.Response { page(&database) }),
-    Route.get("/api/notes", fn(_request: Route.Request) -> Http.Response { listing(&database) }),
-    Route.post("/api/notes", fn(request: Route.Request) -> Http.Response { create(&database, request, insertSql) })
-  ])
+      Route.get("/", fn(_request: Route.Request) -> Http.Response { page(&database) }),
+      Route.get("/api/notes", fn(_request: Route.Request) -> Http.Response { listing(&database) }),
+      Route.post("/api/notes", fn(request: Route.Request) -> Http.Response { create(&database, request, insertSql) })
+    ])
   let connected = App.using(&App.over("notes", &settings, &routes), Database.stage(&database, "database"))
   let application = App.using(&connected, App.stage("schema",
-    fn() -> Result[(), Str] {
-      let _created = Result.mapErr(Database.execute(&database,
-        "CREATE TABLE IF NOT EXISTS pudu_notes (title VARCHAR(200) PRIMARY KEY, body TEXT NOT NULL)"), describe) ?
-      Ok(())
-    }, fn() -> Result[(), Str] { Ok(()) }))
+      fn() -> Result[(), Str] {
+        let _created = Result.mapErr(Database.execute(&database,
+            "CREATE TABLE IF NOT EXISTS pudu_notes (title VARCHAR(200) PRIMARY KEY, body TEXT NOT NULL)"), describe) ?
+        Ok(())
+      }, fn() -> Result[(), Str] { Ok(()) }))
   Result.mapErr(App.run(&application), fn(problem: App.AppError) -> Str { App.explain(&problem) })
 }
 

@@ -62,11 +62,11 @@ export fn documentIn(language: Str, title: Str, body: Content) -> Html.Html {
 
 fn shell(attributes: &Array[(Str, Str)], title: Str, body: Content) -> Html.Html {
   Html.html(attributes, &[
-    Html.head(&[
-      Html.meta(&[("charset", "utf-8")]),
-      Html.meta(&[("name", "viewport"), ("content", "width=device-width, initial-scale=1")]),
-      Html.title(title)
-    ]),
-    Html.body(&[], &body.nodes)
-  ])
+      Html.head(&[
+          Html.meta(&[("charset", "utf-8")]),
+          Html.meta(&[("name", "viewport"), ("content", "width=device-width, initial-scale=1")]),
+          Html.title(title)
+        ]),
+      Html.body(&[], &body.nodes)
+    ])
 }

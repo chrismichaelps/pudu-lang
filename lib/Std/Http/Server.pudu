@@ -1,8 +1,8 @@
 module Std.Http.Server
 
 import Std.Bytes as ByteSeq
-import Std.Concurrent as Concurrent
 import Std.Channel as Channel
+import Std.Concurrent as Concurrent
 import Std.Http as Http
 import Std.Http.Message as Message
 import Std.Http.Safe as Safe
@@ -275,23 +275,23 @@ export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, Ser
   let workerCount = if target.workers < 1 { 1 } else { target.workers }
   while index < workerCount {
     let started = Concurrent.start(fn() -> () {
-      let handle = handlerOf(&serving)
-      var receiving = true
-      while receiving {
-        match Channel.receive(&queue) {
-          case Ok(Some(connection)) => {
-            var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
-            while keeping {
-              keeping = serveWith(&serving, &connection, handle)
-                && !Result.unwrapOr(Sync.get(&stopping), true)
+        let handle = handlerOf(&serving)
+        var receiving = true
+        while receiving {
+          match Channel.receive(&queue) {
+            case Ok(Some(connection)) => {
+              var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
+              while keeping {
+                keeping = serveWith(&serving, &connection, handle)
+                  && !Result.unwrapOr(Sync.get(&stopping), true)
+              }
+              let _closed = Net.close(&connection)
             }
-            let _closed = Net.close(&connection)
+            case Ok(None) => { receiving = false }
+            case Err(_) => { receiving = false }
           }
-          case Ok(None) => { receiving = false }
-          case Err(_) => { receiving = false }
         }
-      }
-    })
+      })
     match started {
       case Ok(worker) => { workers = workers.push(worker) }
       case Err(problem) => {
@@ -393,5 +393,5 @@ export fn withWriteDeadline(base: &Server, millis: Int) -> Server {
 /// Bound both active connection consumers and queued accepted connections.
 export fn withWorkers(base: &Server, count: Int, capacity: Int) -> Server {
   Server{..*base, workers: if count < 1 { 1 } else { count },
-    queueCapacity: if capacity < 1 { 1 } else { capacity }}
+    queueCapacity: if capacity < 1 { 1 } else { capacity } }
 }
