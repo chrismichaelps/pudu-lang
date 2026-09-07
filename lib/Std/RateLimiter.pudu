@@ -1,0 +1,123 @@
+module Std.RateLimiter
+
+/// Fixed-point token bucket rate limiter with 64-bit integer arithmetic.
+export type RateLimiter = {
+  ratePerSec: Int,
+  burstCapacity: Int,
+  tokensScaled: UInt64,
+  lastMicros: UInt64,
+}
+
+/// Result of an acquisition attempt containing the updated limiter and success status.
+export type AcquireResult = {
+  limiter: RateLimiter,
+  acquired: Bool,
+}
+
+const SCALE: UInt64 = 65536u64
+
+fn toUInt64(v: Int) -> UInt64 {
+  match convertInteger[UInt64](v) {
+    case Some(u) => u
+    case None => 0u64
+  }
+}
+
+fn toInt(u: UInt64) -> Int {
+  match convertInteger[Int](u) {
+    case Some(v) => v
+    case None => 0
+  }
+}
+
+/// Creates a rate limiter with a refill rate of `ratePerSec` and capacity `burstCapacity`.
+export fn create(ratePerSec: Int, burstCapacity: Int) -> RateLimiter {
+  let rate = if ratePerSec > 1 { ratePerSec } else { 1 }
+  let burst = if burstCapacity > 1 { burstCapacity } else { 1 }
+  let burstScaled = toUInt64(burst) &* SCALE
+  RateLimiter {
+    ratePerSec: rate,
+    burstCapacity: burst,
+    tokensScaled: burstScaled,
+    lastMicros: 0u64,
+  }
+}
+
+fn replenish(rl: &RateLimiter, currentMicros: UInt64) -> RateLimiter {
+  if currentMicros <= rl.lastMicros {
+    return *rl
+  }
+  let deltaMicros = currentMicros - rl.lastMicros
+  let burstU64 = toUInt64(rl.burstCapacity)
+  let burstScaled = burstU64 &* SCALE
+  let rateU64 = toUInt64(rl.ratePerSec)
+  let maxDeltaMicros = (burstU64 &* 1000000u64) / rateU64
+
+  let effectiveDelta = if deltaMicros > maxDeltaMicros {
+    maxDeltaMicros
+  } else {
+    deltaMicros
+  }
+
+  let rateScaledPerSec = rateU64 &* SCALE
+  let tokensToAddScaled = (effectiveDelta &* rateScaledPerSec) / 1000000u64
+  let accumulated = rl.tokensScaled &+ tokensToAddScaled
+  let capped = if accumulated > burstScaled {
+    burstScaled
+  } else {
+    accumulated
+  }
+
+  RateLimiter {
+    ratePerSec: rl.ratePerSec,
+    burstCapacity: rl.burstCapacity,
+    tokensScaled: capped,
+    lastMicros: currentMicros,
+  }
+}
+
+/// Returns the number of whole tokens currently available.
+export fn availableTokens(rl: &RateLimiter, currentMicros: UInt64) -> Int {
+  let replenished = replenish(rl, currentMicros)
+  toInt(replenished.tokensScaled / SCALE)
+}
+
+/// Attempts to acquire `tokens` at `currentMicros`.
+export fn tryAcquire(rl: &RateLimiter, tokens: Int, currentMicros: UInt64) -> AcquireResult {
+  let replenished = replenish(rl, currentMicros)
+  if tokens <= 0 {
+    return AcquireResult {
+      limiter: replenished,
+      acquired: true,
+    }
+  }
+  let costScaled = toUInt64(tokens) &* SCALE
+  if replenished.tokensScaled >= costScaled {
+    let remainingScaled = replenished.tokensScaled - costScaled
+    AcquireResult {
+      limiter: RateLimiter {
+        ratePerSec: replenished.ratePerSec,
+        burstCapacity: replenished.burstCapacity,
+        tokensScaled: remainingScaled,
+        lastMicros: replenished.lastMicros,
+      },
+      acquired: true,
+    }
+  } else {
+    AcquireResult {
+      limiter: replenished,
+      acquired: false,
+    }
+  }
+}
+
+/// Resets tokens to maximum burst capacity at the given timestamp.
+export fn reset(rl: &RateLimiter, currentMicros: UInt64) -> RateLimiter {
+  let burstScaled = toUInt64(rl.burstCapacity) &* SCALE
+  RateLimiter {
+    ratePerSec: rl.ratePerSec,
+    burstCapacity: rl.burstCapacity,
+    tokensScaled: burstScaled,
+    lastMicros: currentMicros,
+  }
+}
