@@ -1,0 +1,149 @@
+module Std.RadixSort
+
+import Std.List as List
+
+fn fillZeros256() -> Array[Int] {
+  var arr: Array[Int] = []
+  var i = 0
+  while i < 256 {
+    arr = arr.push(0)
+    i = i + 1
+  }
+  arr
+}
+
+fn fillZerosU64(count: Int) -> Array[UInt64] {
+  var arr: Array[UInt64] = []
+  var i = 0
+  while i < count {
+    arr = arr.push(0u64)
+    i = i + 1
+  }
+  arr
+}
+
+fn radixPass(current: &Array[UInt64], shift: Int, isSignedMsb: Bool) -> Array[UInt64] {
+  let len = current.length()
+  if len <= 1 {
+    return *current
+  }
+  var counts = fillZeros256()
+  var i = 0
+  while i < len {
+    var b = match convertInteger[Int]((current[i] >> shift) & 0xffu64) {
+      case Some(v) => v
+      case None => 0
+    }
+    if isSignedMsb {
+      b = b ^ 0x80
+    }
+    counts = List.set(&counts, b, counts[b] + 1)
+    i = i + 1
+  }
+
+  var offsets = fillZeros256()
+  var sum = 0
+  var bIdx = 0
+  while bIdx < 256 {
+    offsets = List.set(&offsets, bIdx, sum)
+    sum = sum + counts[bIdx]
+    bIdx = bIdx + 1
+  }
+
+  var output = fillZerosU64(len)
+  i = 0
+  while i < len {
+    let val = current[i]
+    var b = match convertInteger[Int]((val >> shift) & 0xffu64) {
+      case Some(v) => v
+      case None => 0
+    }
+    if isSignedMsb {
+      b = b ^ 0x80
+    }
+    let pos = offsets[b]
+    output = List.set(&output, pos, val)
+    offsets = List.set(&offsets, b, pos + 1)
+    i = i + 1
+  }
+  output
+}
+
+/// Sorts an array of 64-bit unsigned integers in linear O(N) time using 8-pass LSD radix sort.
+export fn sortU64(values: &Array[UInt64]) -> Array[UInt64] {
+  let len = values.length()
+  if len <= 1 {
+    return *values
+  }
+  var cur = *values
+  var p = 0
+  while p < 8 {
+    let shift = p * 8
+    cur = radixPass(&cur, shift, false)
+    p = p + 1
+  }
+  cur
+}
+
+fn intToBits(v: Int) -> UInt64 {
+  if v >= 0 {
+    match convertInteger[UInt64](v) {
+      case Some(u) => u
+      case None => 0u64
+    }
+  } else {
+    let posMinus1 = -(v + 1)
+    let u = match convertInteger[UInt64](posMinus1) {
+      case Some(val) => val
+      case None => 0u64
+    }
+    ~u
+  }
+}
+
+fn bitsToInt(u: UInt64) -> Int {
+  let isNeg = (u & 0x8000000000000000u64) != 0u64
+  if isNeg {
+    let inverted = ~u
+    let posMinus1 = match convertInteger[Int](inverted) {
+      case Some(val) => val
+      case None => 0
+    }
+    (-posMinus1) - 1
+  } else {
+    match convertInteger[Int](u) {
+      case Some(val) => val
+      case None => 0
+    }
+  }
+}
+
+/// Sorts an array of 64-bit signed integers in linear O(N) time with sign-bit handling on the MSB pass.
+export fn sortInt(values: &Array[Int]) -> Array[Int] {
+  let len = values.length()
+  if len <= 1 {
+    return *values
+  }
+  var u64Arr: Array[UInt64] = []
+  var i = 0
+  while i < len {
+    u64Arr = u64Arr.push(intToBits(values[i]))
+    i = i + 1
+  }
+
+  var p = 0
+  while p < 8 {
+    let shift = p * 8
+    let isMsb = p == 7
+    u64Arr = radixPass(&u64Arr, shift, isMsb)
+    p = p + 1
+  }
+
+  var out: Array[Int] = []
+  i = 0
+  while i < len {
+    out = out.push(bitsToInt(u64Arr[i]))
+    i = i + 1
+  }
+  out
+}

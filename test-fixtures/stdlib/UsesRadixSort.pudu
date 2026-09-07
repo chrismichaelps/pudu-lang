@@ -1,0 +1,113 @@
+module UsesRadixSort
+
+import Std.RadixSort as RadixSort
+
+fn isSortedInt(arr: &Array[Int]) -> Bool {
+  let len = arr.length()
+  if len <= 1 {
+    return true
+  }
+  var i = 0
+  while i < (len - 1) {
+    if arr[i] > arr[i + 1] {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Empty and single-element arrays
+  let emptySorted = RadixSort.sortInt(&[])
+  let singleSorted = RadixSort.sortInt(&[42])
+  if emptySorted.length() == 0 && singleSorted == [42] {
+    held = held + 1
+  }
+
+  // 2. Positive signed integers sorting
+  let posRaw = [5, 2, 9, 1, 5, 6]
+  let posSorted = RadixSort.sortInt(&posRaw)
+  if posSorted == [1, 2, 5, 5, 6, 9] {
+    held = held + 1
+  }
+
+  // 3. Negative signed integers sorting
+  let negRaw = [-3, -10, -1, -5]
+  let negSorted = RadixSort.sortInt(&negRaw)
+  if negSorted == [-10, -5, -3, -1] {
+    held = held + 1
+  }
+
+  // 4. Mixed positive and negative integers
+  let mixedRaw = [10, -5, 0, 3, -20, 100, -1]
+  let mixedSorted = RadixSort.sortInt(&mixedRaw)
+  if mixedSorted == [-20, -5, -1, 0, 3, 10, 100] {
+    held = held + 1
+  }
+
+  // 5. Extreme 64-bit boundaries (minBound, maxBound, -1, 0, 1)
+  let minInt = -9223372036854775808
+  let maxInt = 9223372036854775807
+  let boundsRaw = [maxInt, minInt, 0, -1, 1]
+  let boundsSorted = RadixSort.sortInt(&boundsRaw)
+  if boundsSorted[0] == minInt
+    && boundsSorted[1] == -1
+    && boundsSorted[2] == 0
+    && boundsSorted[3] == 1
+    && boundsSorted[4] == maxInt {
+    held = held + 1
+  }
+
+  // 6. Already sorted array remains unchanged
+  let alreadySorted = [1, 2, 3, 4, 5, 6, 7, 8]
+  let sortedAgain = RadixSort.sortInt(&alreadySorted)
+  if sortedAgain == alreadySorted {
+    held = held + 1
+  }
+
+  // 7. Reverse sorted array
+  let revRaw = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+  let revSorted = RadixSort.sortInt(&revRaw)
+  if revSorted == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+    held = held + 1
+  }
+
+  // 8. Unsigned sortU64
+  let maxU64 = ~0u64
+  let uRaw: Array[UInt64] = [100u64, 5u64, 0u64, maxU64, 1000u64]
+  let uSorted = RadixSort.sortU64(&uRaw)
+  if uSorted.length() == 5
+    && uSorted[0] == 0u64
+    && uSorted[1] == 5u64
+    && uSorted[2] == 100u64
+    && uSorted[3] == 1000u64
+    && uSorted[4] == maxU64 {
+    held = held + 1
+  }
+
+  // 9. Repeated elements
+  let dupRaw = [7, 7, 7, 2, 2, 9, 9]
+  let dupSorted = RadixSort.sortInt(&dupRaw)
+  if dupSorted == [2, 2, 7, 7, 7, 9, 9] {
+    held = held + 1
+  }
+
+  // 10. Large sequence (40 elements) verified strictly monotonic
+  var lcg: Int = 123456789
+  var large: Array[Int] = []
+  var i = 0
+  while i < 40 {
+    lcg = (lcg &* 1103515245) &+ 12345
+    large = large.push(lcg)
+    i = i + 1
+  }
+  let largeSorted = RadixSort.sortInt(&large)
+  if largeSorted.length() == 40 && isSortedInt(&largeSorted) {
+    held = held + 1
+  }
+
+  held
+}
