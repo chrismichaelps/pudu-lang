@@ -30,6 +30,9 @@ testProtocolEvaluation = do
   compressedGzip <- runEntry "test-fixtures/stdlib/UsesGzip.pudu"
   floatMath <- runEntry "test-fixtures/stdlib/UsesFloatMath.pudu"
   intMap <- runEntry "test-fixtures/stdlib/UsesIntMap.pudu"
+  intSet <- runEntry "test-fixtures/stdlib/UsesIntSet.pudu"
+  bloomFilter <- runEntry "test-fixtures/stdlib/UsesBloomFilter.pudu"
+  diffOps <- runEntry "test-fixtures/stdlib/UsesDiff.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -128,6 +131,15 @@ testProtocolEvaluation = do
     , counterexample
         "IntMap Patricia Trie inserts, queries, deletes, unions, differences, sorts, and signed/boundary edge cases"
         (intMap === Just "17")
+    , counterexample
+        "IntSet Patricia Trie inserts, deletes, unions, intersections, differences, subsets, splits, and signed edge cases"
+        (intSet === Just "20")
+    , counterexample
+        "BloomFilter creates, optimally sizes, guarantees zero false negatives, merges, intersects, and estimates count"
+        (bloomFilter === Just "10")
+    , counterexample
+        "Diff Myers O(ND) line/token differences, unified diff headers and hunks, and Levenshtein metrics"
+        (diffOps === Just "10")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
