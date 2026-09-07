@@ -1,0 +1,146 @@
+module UsesOtlp
+
+import Std.App.Otlp {NothingToSend}
+import Std.App.Otlp as Otlp
+import Std.App.Trace as Trace
+import Std.Json as Json
+import Std.Option as Option
+
+/// A finished span of the shape a request produces: recorded, named, with a
+/// note on it and an ending.
+fn finishedSpan(name: Str) -> Trace.Span {
+  let held = Trace.starting(true)
+  let opened = Trace.span(&held, name, 1757000000000)
+  let noted = Trace.noting(&opened, "http.method", "GET")
+  Trace.finished(&noted, 1757000000125)
+}
+
+fn documentOf(spans: &Array[Trace.Span]) -> Json.Json {
+  Otlp.document(&Otlp.exporter("checkout"), spans)
+}
+
+/// A value reached by a path through the document, so a check reads as the
+/// shape it is asserting rather than as six lookups.
+fn at(document: &Json.Json, path: &Array[Str]) -> Json.Json {
+  var current = *document
+  var index = 0
+  while index < path.length() {
+    let step = path[index]
+    current = match Json.field(&current, step) {
+      case Some(found) => found
+      case None => Json.Null
+    }
+    index = index + 1
+  }
+  current
+}
+
+fn firstOf(value: &Json.Json) -> Json.Json {
+  match Json.at(value, 0) {
+    case Some(found) => found
+    case None => Json.Null
+  }
+}
+
+fn textAt(document: &Json.Json, path: &Array[Str]) -> Str {
+  Option.unwrapOr(Json.asText(&at(document, path)), "")
+}
+
+fn main() -> Int {
+  var held = 0
+  let spans = [finishedSpan("GET /checkout")]
+  let document = documentOf(&spans)
+
+  // 1. The document has the one envelope every collector reads
+  let resourceSpans = firstOf(&at(&document, &["resourceSpans"]))
+  if !Json.isNull(&resourceSpans) {
+    held = held + 1
+  }
+
+  // 2. The service names itself, or a collector files it under unknown
+  let attributes = firstOf(&at(&resourceSpans, &["resource", "attributes"]))
+  if textAt(&attributes, &["key"]) == "service.name"
+    && textAt(&attributes, &["value", "stringValue"]) == "checkout" {
+    held = held + 1
+  }
+
+  // 3. The scope says what produced the spans
+  let scopeSpans = firstOf(&at(&resourceSpans, &["scopeSpans"]))
+  if textAt(&scopeSpans, &["scope", "name"]) == "Std.App.Trace" {
+    held = held + 1
+  }
+
+  // 4. The span carries the identifiers a trace is stitched together by
+  let span = firstOf(&at(&scopeSpans, &["spans"]))
+  if textAt(&span, &["traceId"]).length() == 32 && textAt(&span, &["spanId"]).length() == 16 {
+    held = held + 1
+  }
+
+  // 5. And its name
+  if textAt(&span, &["name"]) == "GET /checkout" {
+    held = held + 1
+  }
+
+  // 6. Times are nanoseconds, and carried as text: a binary float loses the
+  //    last digits of a nanosecond timestamp, and those digits are the duration
+  if textAt(&span, &["startTimeUnixNano"]) == "1757000000000000000"
+    && textAt(&span, &["endTimeUnixNano"]) == "1757000000125000000" {
+    held = held + 1
+  }
+
+  // 7. What was noted on the span travels with it
+  let noted = firstOf(&at(&span, &["attributes"]))
+  if textAt(&noted, &["key"]) == "http.method"
+    && textAt(&noted, &["value", "stringValue"]) == "GET" {
+    held = held + 1
+  }
+
+  // 8. The document is JSON that reads back as the document
+  match Json.decode(Otlp.render(&Otlp.exporter("checkout"), &spans)) {
+    case Ok(again) => {
+      if textAt(&firstOf(&at(&firstOf(&at(&again, &["resourceSpans"])), &["scopeSpans"])), &["scope", "name"])
+        == "Std.App.Trace" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // 9. A span that has not finished is left out rather than sent with an
+  //    ending it does not have, which would be read as a measurement
+  let opened = Trace.span(&Trace.starting(true), "still going", 1757000000000)
+  if Otlp.exportable(&[opened]).length() == 0 {
+    held = held + 1
+  }
+
+  // 10. A span the trace decided not to record is left out too
+  let unrecorded = Trace.finished(&Trace.span(&Trace.starting(false), "not sampled", 1), 2)
+  if Otlp.exportable(&[unrecorded]).length() == 0 {
+    held = held + 1
+  }
+
+  // 11. And a finished, recorded one is kept
+  if Otlp.exportable(&spans).length() == 1 {
+    held = held + 1
+  }
+
+  // 12. Sending nothing is refused rather than sent as an empty document
+  match Otlp.send(&Otlp.exporter("checkout"), &[]) {
+    case Err(NothingToSend) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // 13. Headers a collector needs can be carried on every export
+  let keyed = Otlp.carrying(&Otlp.exporter("checkout"), "x-api-key", "secret")
+  if keyed.headers.length() == 1 && keyed.headers[0][0] == "x-api-key" {
+    held = held + 1
+  }
+
+  // 14. And the endpoint has a default worth having: the one the specification
+  //     names, so a collector run with its own defaults needs no configuration
+  if Otlp.exporter("checkout").endpoint == "http://localhost:4318/v1/traces" {
+    held = held + 1
+  }
+
+  held
+}

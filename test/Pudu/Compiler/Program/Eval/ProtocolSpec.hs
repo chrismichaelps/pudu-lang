@@ -58,6 +58,7 @@ testProtocolEvaluation = do
   zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
   clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
+  exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -304,6 +305,15 @@ testProtocolEvaluation = do
     , counterexample
         "a started program streams, honours a deadline, is stopped, and pipes into another"
         (childProcesses === Just "13")
+    {-| The document is checked against the shape a collector requires rather
+        than against itself, because a round trip through one writer and its
+        own reader agrees however wrong both are. Two of these are about what
+        is *not* sent: a span with no ending, which would be read as a
+        measurement nothing measured, and a span the trace decided not to
+        record. -}
+    , counterexample
+        "finished spans render as the document a collector reads, and unfinished ones do not"
+        (exportedSpans === Just "14")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

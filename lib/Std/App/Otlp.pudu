@@ -1,0 +1,220 @@
+module Std.App.Otlp
+
+import Std.App.Trace as Trace
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Json as Json
+import Std.Result as Result
+
+/// Where finished spans are sent, and what to call the service that made them.
+///
+/// A trace is only worth recording if somebody can read it, and nothing in
+/// `Std.App.Trace` sends one anywhere: it decides what a span is and how a
+/// trace travels between services, which is the hard half, and leaves the
+/// spans in the program that made them.
+///
+/// This is the other half. Spans are sent to a collector in the format every
+/// collector accepts, so what receives them is a choice made in a
+/// configuration file rather than in the program: an OpenTelemetry collector,
+/// or anything that has agreed to look like one.
+///
+/// JSON over HTTP rather than protocol buffers over gRPC. Both are defined by
+/// the same specification and every collector reads both; the difference is
+/// that one of them can be read by a person looking at a request, which
+/// matters far more while a service is being wired up than the bytes it saves
+/// afterwards.
+export type Exporter = {
+  /// The collector's endpoint, ending in the path it expects.
+  endpoint: Str,
+  /// What this service is called wherever the traces are read.
+  service: Str,
+  /// Headers every export carries — an API key, a tenant, a route.
+  headers: Array[(Str, Str)],
+  /// How long one export may take before it is abandoned.
+  deadlineMillis: Int
+}
+
+/// Why an export did not arrive.
+export type ExportError
+  = Unreachable(Str)
+/// The collector answered, and what it said was not acceptance.
+  | Refused(Int, Str)
+  | NothingToSend
+
+/// An exporter pointed at a collector running beside the service.
+///
+/// The default endpoint is the one the specification names, so a collector run
+/// with its own defaults needs nothing said about it here.
+export fn exporter(service: Str) -> Exporter {
+  Exporter {
+    endpoint: "http://localhost:4318/v1/traces",
+    service: service,
+    headers: [],
+    deadlineMillis: 5000
+  }
+}
+
+export fn sendingTo(base: &Exporter, endpoint: Str) -> Exporter {
+  Exporter{..*base, endpoint: endpoint}
+}
+
+export fn carrying(base: &Exporter, name: Str, value: Str) -> Exporter {
+  Exporter{..*base, headers: base.headers.push((name, value))}
+}
+
+export fn within(base: &Exporter, millis: Int) -> Exporter {
+  Exporter{..*base, deadlineMillis: millis}
+}
+
+/// The document a collector is sent.
+///
+/// Built and answered rather than only sent, because the first thing anyone
+/// debugging a trace pipeline wants is to see exactly what was going to be
+/// sent — and because a service that writes its spans to a file instead of a
+/// collector needs the same document.
+export fn document(base: &Exporter, spans: &Array[Trace.Span]) -> Json.Json {
+  Json.object(
+      &[
+      (
+        "resourceSpans",
+        Json.list(&[Json.object(&[("resource", resourceOf(base)), ("scopeSpans", scopeSpansOf(spans))])])
+      )
+    ]
+  )
+}
+
+/// The document as the text that goes on the wire.
+export fn render(base: &Exporter, spans: &Array[Trace.Span]) -> Str {
+  Json.encode(&document(base, spans))
+}
+
+/// Send finished spans to the collector.
+///
+/// Spans that have not finished are left out rather than sent with an ending
+/// they do not have: a span whose end is guessed is worse than a span that is
+/// missing, because it will be read as a measurement.
+///
+/// Answers how many were sent, so a caller can tell an export that carried
+/// nothing from one that carried everything.
+export fn send(base: &Exporter, spans: &Array[Trace.Span]) -> Result[Int, ExportError] {
+  let sendable = exportable(spans)
+  if sendable.length() == 0 {
+    return Err(NothingToSend)
+  }
+  let request = Http.Request {
+    method: Http.Post,
+    target: base.endpoint,
+    headers: [("content-type", "application/json")] + base.headers,
+    body: render(base, &sendable)
+  }
+  let limits = Client.within(&Client.limits(), base.deadlineMillis)
+  let answer = Result.mapErr(Client.send(&request, &limits), unreachable) ?
+  if answer.status.code >= 200 && answer.status.code < 300 {
+    Ok(sendable.length())
+  } else {
+    Err(Refused(answer.status.code, answer.status.reason))
+  }
+}
+
+fn unreachable(problem: Client.ClientError) -> ExportError {
+  Unreachable(Client.explain(&problem))
+}
+
+/// The spans that have finished, which are the ones worth sending.
+export fn exportable(spans: &Array[Trace.Span]) -> Array[Trace.Span] {
+  var kept: Array[Trace.Span] = []
+  var index = 0
+  while index < spans.length() {
+    let held = spans[index]
+    if Trace.complete(&held) && Trace.isRecorded(&held.trace) {
+      kept = kept.push(held)
+    }
+    index = index + 1
+  }
+  kept
+}
+
+/// What a collector is told about the thing that produced these spans.
+///
+/// `service.name` is the one attribute every collector expects, and a trace
+/// arriving without it is filed under whatever the collector calls unknown.
+fn resourceOf(base: &Exporter) -> Json.Json {
+  Json.object(&[("attributes", Json.list(&[attribute("service.name", base.service)]))])
+}
+
+fn scopeSpansOf(spans: &Array[Trace.Span]) -> Json.Json {
+  Json.list(
+      &[
+      Json.object(
+          &[
+          ("scope", Json.object(&[("name", Json.Text("Std.App.Trace"))])),
+          ("spans", Json.list(&spanArray(spans)))
+        ]
+      )
+    ]
+  )
+}
+
+fn spanArray(spans: &Array[Trace.Span]) -> Array[Json.Json] {
+  var built: Array[Json.Json] = []
+  var index = 0
+  while index < spans.length() {
+    built = built.push(spanOf(&spans[index]))
+    index = index + 1
+  }
+  built
+}
+
+/// One span, in the shape the format names.
+///
+/// Times are nanoseconds since the epoch, and are carried as text because they
+/// do not fit in the number a JSON reader will give back: a binary float loses
+/// the last digits of a nanosecond timestamp, and the last digits are the
+/// duration. The format says text for exactly this reason.
+fn spanOf(held: &Trace.Span) -> Json.Json {
+  Json.object(
+      &[
+      ("traceId", Json.Text(Trace.workOf(&held.trace))),
+      ("spanId", Json.Text(Trace.stepOf(&held.trace))),
+      ("name", Json.Text(held.name)),
+      ("kind", Json.Number(1)),
+      ("startTimeUnixNano", Json.Text(nanosecondsOf(held.began))),
+      ("endTimeUnixNano", Json.Text(nanosecondsOf(held.ended))),
+      ("attributes", Json.list(&attributesOf(held)))
+    ]
+  )
+}
+
+/// What was noted on a span, and only that.
+///
+/// `Trace.fieldsOf` puts the trace, the span, the name and the duration in
+/// front of the notes, which is right for a log line where they are the only
+/// place those appear. Here they are already fields of the span itself, and
+/// repeating them as attributes would show every span's name twice and its
+/// duration as a number nothing computed.
+fn attributesOf(held: &Trace.Span) -> Array[Json.Json] {
+  let notes = held.notes
+  var built: Array[Json.Json] = []
+  var index = 0
+  while index < notes.length() {
+    built = built.push(attribute(notes[index][0], notes[index][1]))
+    index = index + 1
+  }
+  built
+}
+
+fn attribute(name: Str, value: Str) -> Json.Json {
+  Json.object(&[("key", Json.Text(name)), ("value", Json.object(&[("stringValue", Json.Text(value))]))])
+}
+
+/// A moment in milliseconds, as the nanoseconds the format counts in.
+fn nanosecondsOf(millis: Int) -> Str { display(millis) + "000000" }
+
+/// Why an export failed, written for a person to read.
+export fn explain(reason: &ExportError) -> Str {
+  match *reason {
+    case Unreachable(cause) => "the collector could not be reached: " + cause
+    case Refused(code, said) => "the collector answered " + display(code) + " " + said
+    case NothingToSend => "no finished, recorded span was given"
+  }
+}
