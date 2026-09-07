@@ -57,6 +57,7 @@ testProtocolEvaluation = do
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
   zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
   clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
+  childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -293,6 +294,16 @@ testProtocolEvaluation = do
     , counterexample
         "a retry backs off, spreads out, and refuses to repeat what must not be repeated"
         (clientRetries === Just "14")
+    {-| Two of these fail on an implementation that looks right. A deadline
+        checked after reading the program's output waits for the program
+        first, so the deadline bounds nothing; and a deadline waited on
+        without reading stops any program that writes more than its pipe
+        holds. The 120 KB case and the overrun case are each other's control.
+        The pipeline through `yes` is the third: a first program that never
+        ends on its own is only read from if both are running at once. -}
+    , counterexample
+        "a started program streams, honours a deadline, is stopped, and pipes into another"
+        (childProcesses === Just "13")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated

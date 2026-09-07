@@ -11,6 +11,16 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode, withHelp)
 import Pudu.Eval.Compress (compressGzip, compressRaw, decompressGzip, decompressRaw)
+import Pudu.Eval.Child
+  ( closeChildInput
+  , writeChildChunk
+  , readChildChunk
+  , readChildErrorChunk
+  , startChild
+  , stopChild
+  , waitChild
+  , waitChildWithin
+  )
 import Pudu.Eval.Clock
 import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
@@ -69,6 +79,7 @@ import Pudu.Eval.Env
   ( effectsAdmitted
   , currentConcurrentStore
   , currentHandleStore
+  , currentChildStore
   , currentSocketStore
   , currentTlsStore
   , performEffect
@@ -119,6 +130,14 @@ effectBuiltins =
   , ParseTimeBuiltin
   , ZoneOffsetBuiltin
   , RunBuiltin
+  , SpawnBuiltin
+  , ChildReadBuiltin
+  , ChildReadErrorBuiltin
+  , ChildWriteBuiltin
+  , ChildCloseInputBuiltin
+  , ChildWaitBuiltin
+  , ChildWaitWithinBuiltin
+  , ChildStopBuiltin
   , OpenReaderBuiltin
   , OpenWriterBuiltin
   , OpenAppenderBuiltin
@@ -363,6 +382,33 @@ callEffect spanValue builtin arguments = do
       (RunBuiltin, [StrValue program, ArrayValue given, StrValue standardInput]) -> do
         outcome <- lift refusal (runProcess (Text.unpack program) (textsOf given) standardInput)
         pure (eitherOf (processValue <$> outcome))
+      (SpawnBuiltin, [StrValue program, ArrayValue given]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (startChild children (Text.unpack program) (textsOf given))
+      (ChildReadBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalBytesValue
+          <$> lift refusal (readChildChunk children (fromInteger token) (fromInteger wanted))
+      (ChildReadErrorBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalBytesValue
+          <$> lift refusal (readChildErrorChunk children (fromInteger token) (fromInteger wanted))
+      (ChildWriteBuiltin, [IntValue _ token, BytesValue payload]) -> do
+        children <- currentChildStore
+        effectUnit (writeChildChunk children (fromInteger token) payload)
+      (ChildCloseInputBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        effectUnit (closeChildInput children (fromInteger token))
+      (ChildWaitBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (waitChild children (fromInteger token))
+      (ChildWaitWithinBuiltin, [IntValue _ token, IntValue _ millis]) -> do
+        children <- currentChildStore
+        resultOf . fmap optionalIntValue
+          <$> lift refusal (waitChildWithin children (fromInteger token) (fromInteger millis))
+      (ChildStopBuiltin, [IntValue _ token]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue <$> lift refusal (stopChild children (fromInteger token))
       (ExitBuiltin, [IntValue _ code]) -> do
         _ <- lift refusal (exitWith code)
         pure UnitValue
@@ -381,6 +427,13 @@ callEffect spanValue builtin arguments = do
   textArray = ArrayValue . Seq.fromList . map StrValue
   pairArray pairs =
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
+  intValue = intOf . toInteger
+  optionalBytesValue found = case found of
+    Just bytes -> VariantValue "Some" [BytesValue bytes]
+    Nothing -> VariantValue "None" []
+  optionalIntValue found = case found of
+    Just value -> VariantValue "Some" [intValue value]
+    Nothing -> VariantValue "None" []
   optionalText found = case found of
     Just text -> VariantValue "Some" [StrValue text]
     Nothing -> VariantValue "None" []

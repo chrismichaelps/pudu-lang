@@ -1,5 +1,9 @@
 module Std.Process
 
+import Std.Concurrent as Concurrent
+import Std.Result as Result
+import Std.Sync as Sync
+
 /// What a program left behind when it finished.
 export type Finished = { status: Int, output: Str, errors: Str }
 
@@ -69,3 +73,262 @@ export fn isSuccess(value: &Finished) -> Bool { value.status == 0 }
 /// The output with trailing whitespace removed, which is what a program that
 /// wrote one line meant to say.
 export fn trimmedOutput(value: &Finished) -> Str { value.output.trim() }
+
+/// A program that was started and has not been waited for.
+///
+/// `run` above starts a program, waits for it, and answers everything it
+/// wrote. That is right for a step in a script and wrong for three things a
+/// tool has to do: show output while it is still being produced, feed one
+/// program's output into another's input, and stop a program that is taking
+/// too long. Each needs the program to be something the language holds rather
+/// than a call that has already returned.
+///
+/// A started program is named by a token rather than carried as a value,
+/// because a running program is not a value that may be copied: two copies
+/// each believing they owned its output would each read half of it.
+export type Started = { token: Int }
+
+/// How many bytes a read asks for at once.
+///
+/// Large enough that reading a program's whole output does not cost a call
+/// per line, small enough that a caller watching output sees it while it is
+/// still being produced rather than in one piece at the end.
+export fn chunkSize() -> Int { 65536 }
+
+/// Start a program and answer without waiting for it.
+export fn start(program: Str, arguments: &Array[Str]) -> Result[Started, Str] {
+  let token = spawnProgram(program, *arguments) ?
+  Ok(Started{token: token})
+}
+
+/// Read what a program has written since the last read.
+///
+/// `None` means its output has ended, which for a child means it has stopped
+/// writing — usually because it has finished. An empty run of bytes is not
+/// used for that, because a caller could not tell it from a pause.
+export fn read(running: &Started) -> Result[Option[Bytes], Str] {
+  childReadChunk(running.token, chunkSize())
+}
+
+/// The same for what a program wrote to its error stream.
+///
+/// Kept apart from its output rather than merged, because a caller reading
+/// output as data — a pipeline, a parser — must not find a warning in the
+/// middle of it.
+export fn readErrors(running: &Started) -> Result[Option[Bytes], Str] {
+  childReadErrorChunk(running.token, chunkSize())
+}
+
+/// Write to a program's input.
+export fn write(running: &Started, payload: &Bytes) -> Result[(), Str] {
+  childWriteChunk(running.token, *payload)
+}
+
+/// Write text to a program's input.
+export fn writeText(running: &Started, text: Str) -> Result[(), Str] {
+  childWriteChunk(running.token, text.toBytes())
+}
+
+/// Tell a program there is no more input.
+///
+/// Not an optimisation: a program reading until its input ends waits forever
+/// if nothing closes it, so this is the difference between a pipeline that
+/// finishes and one that hangs.
+export fn closeInput(running: &Started) -> Result[(), Str] {
+  childCloseInput(running.token)
+}
+
+/// Wait for a program to finish, and answer the status it left.
+export fn wait(running: &Started) -> Result[Int, Str] {
+  childWait(running.token)
+}
+
+/// Wait a bounded time, answering nothing if the program is still running.
+///
+/// What a caller does about a program that is taking too long — wait again,
+/// read more of its output, stop it — is the caller's decision, so this
+/// reports rather than decides.
+export fn waitWithin(running: &Started, millis: Int) -> Result[Option[Int], Str] {
+  childWaitWithin(running.token, millis)
+}
+
+/// Stop a program, and wait until it is actually gone.
+///
+/// Waiting is what makes this an answer rather than a request: a caller that
+/// stopped a program and moved on would leave it being cleaned up at some
+/// later moment, and anything checking it had stopped would be right only
+/// sometimes.
+export fn stop(running: &Started) -> Result[Int, Str] {
+  childStop(running.token)
+}
+
+/// How one of a program's streams is read: a call answering the next piece, or
+/// nothing once the stream has ended.
+///
+/// A program has two streams read exactly alike, so the walk over one is
+/// written once and given the stream to walk. Naming the shape rather than
+/// repeating the loop is also what keeps the two from drifting apart — which
+/// is how an error stream ends up without a fix its output stream got.
+///
+/// Not exported: `Std.Io` already gives a `Reader` to the reader of a file,
+/// and two of them in one program would be a name that means whichever was
+/// imported second.
+type Chunks = fn(&Started) -> Result[Option[Bytes], Str]
+
+/// A run of bytes as text, and nothing when it is not text.
+///
+/// A program's output is text far more often than not, and a run of bytes that
+/// is not decides nothing here: it is dropped rather than allowed to fail a
+/// read that has already succeeded.
+fn textOrNothing(piece: &Bytes) -> Str {
+  match piece.toText() {
+    case Some(text) => text
+    case None => ""
+  }
+}
+
+/// Everything a stream carries, read until it ends, failing if a read does.
+fn collect(running: &Started, next: Chunks) -> Result[Str, Str] {
+  var collected = ""
+  var reading = true
+  while reading {
+    match next(running) ? {
+      case Some(piece) => { collected = collected + textOrNothing(&piece) }
+      case None => { reading = false }
+    }
+  }
+  Ok(collected)
+}
+
+/// Everything a program writes, read until it stops writing.
+///
+/// The form to reach for when the output is wanted whole but the program is
+/// long-running enough that starting it and waiting would hold its pipe until
+/// it filled.
+export fn drain(running: &Started) -> Result[Str, Str] {
+  collect(running, read)
+}
+
+/// Run a program, and stop it if it takes longer than it is allowed.
+///
+/// The bounded form of `run`. A program that ran out of time is answered as
+/// `None` rather than as a failure, because taking too long is a fact about
+/// the program rather than about being unable to start it — and a caller
+/// often wants what it managed to write before it was stopped.
+export fn within(
+  program: Str,
+  arguments: &Array[Str],
+  millis: Int
+) -> Result[Option[Finished], Str] {
+  let running = start(program, arguments) ?
+  let _closed = closeInput(&running)
+
+  // Read while waiting, not before it. Reading first would wait for the
+  // program's output to end, which for most programs means waiting for the
+  // program — and the deadline would then be checked after the very thing it
+  // was meant to bound. Waiting first without reading is the other way round:
+  // a program writing more than its pipe holds stops until someone reads, so
+  // it would appear to overrun on nothing but the size of its output.
+  let held = running
+  let gathered = Sync.cell("")
+  let reader = Concurrent.start(fn() -> () {
+      match drain(&held) {
+        case Ok(text) => { let _kept = Sync.set(&gathered, text) }
+        case Err(_) => {}
+      }
+    })
+
+  match waitWithin(&running, millis) ? {
+    case None => {
+      // Stopping ends its output, which is what lets the reader finish.
+      let _stopped = stop(&running)
+      let _joined = joined(&reader)
+      Ok(None)
+    }
+    case Some(left) => {
+      let _joined = joined(&reader)
+      let written = Result.unwrapOr(Sync.get(&gathered), "")
+      let errors = readAllErrors(&running)
+      Ok(Some(Finished{status: left, output: written, errors: errors}))
+    }
+  }
+}
+
+/// Wait for a reader that may never have started.
+///
+/// A thread that could not be started is not a thread to wait for, and is not
+/// worth failing the whole call over: the program still ran, and what it wrote
+/// is simply missing.
+fn joined(reader: &Result[Concurrent.Task, Concurrent.ConcurrentError]) -> Bool {
+  match *reader {
+    case Ok(worker) => Result.isOk(&Concurrent.join(&worker))
+    case Err(_) => false
+  }
+}
+
+/// Move every piece one program writes into another's input.
+///
+/// Ends when the first program's output ends, which is what tells the second
+/// there is no more coming.
+fn forward(from: &Started, into: &Started) -> Result[(), Str] {
+  var moving = true
+  while moving {
+    match read(from) ? {
+      case Some(piece) => { let _written = write(into, &piece) ? }
+      case None => { moving = false }
+    }
+  }
+  Ok(())
+}
+
+/// Feed one program's output into another's input, and answer what comes out.
+///
+/// The shape a shell writes with a vertical bar, and it is written here
+/// because doing it by hand goes wrong in two ways that look like the program
+/// hanging rather than like a mistake.
+///
+/// **Both run at once.** Reading the first program to its end before starting
+/// the second would hold everything it wrote in memory, which is the whole
+/// thing a pipeline exists to avoid — and for a first program that never ends
+/// on its own, the second would never start at all. So a thread moves bytes
+/// across while both are running, and neither waits for the other to finish.
+///
+/// **Each input is closed.** A program reading until its input ends waits
+/// forever if nothing closes it: the first program's at once because nothing
+/// is feeding it, and the second's when the first has stopped writing.
+export fn pipe(
+  first: Str,
+  firstArguments: &Array[Str],
+  second: Str,
+  secondArguments: &Array[Str]
+) -> Result[Finished, Str] {
+  let upstream = start(first, firstArguments) ?
+  let downstream = start(second, secondArguments) ?
+  let _closedUpstream = closeInput(&upstream)
+
+  let from = upstream
+  let into = downstream
+  let _pump = Concurrent.start(fn() -> () {
+      let _moved = forward(&from, &into)
+      let _closed = closeInput(&into)
+    })
+
+  let written = drain(&downstream) ?
+  let left = wait(&downstream) ?
+  let _upstreamStatus = wait(&upstream)
+  let errors = readAllErrors(&downstream)
+  Ok(Finished{status: left, output: written, errors: errors})
+}
+
+/// Whatever a program wrote to its error stream, read until it stops.
+///
+/// Answers text rather than a result because it is read after the fact, once
+/// the status has already decided whether anything went wrong. A read that
+/// fails here therefore ends the collection rather than replacing a status a
+/// caller is about to act on with a failure about a stream.
+fn readAllErrors(running: &Started) -> Str {
+  match collect(running, readErrors) {
+    case Ok(text) => text
+    case Err(_) => ""
+  }
+}

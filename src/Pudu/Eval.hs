@@ -38,6 +38,7 @@ import Pudu.Eval.Env
   )
 import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
 import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
+import Pudu.Eval.Child (closeChildStore, newChildStore)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
 import Pudu.Foreign.Ownership (closeForeignStore, newForeignStore, takeForeignDiagnostics)
@@ -109,11 +110,12 @@ runWithEffects effects (Evaluator action) =
 withRuntime :: (Env -> IO EvalOutcome) -> IO EvalOutcome
 withRuntime action =
   bracket newHandleStore closeHandleStore $ \handles ->
-    bracket newSocketStore closeSocketStore $ \sockets ->
+    bracket newChildStore closeChildStore $ \children ->
+     bracket newSocketStore closeSocketStore $ \sockets ->
       bracket newTlsStore closeTlsStore $ \secured ->
         bracket newForeignStore closeForeignStore $ \foreignStore -> do
           outcome <- bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
-            action (emptyEnv handles sockets secured concurrent foreignStore)
+            action (emptyEnv handles children sockets secured concurrent foreignStore)
           closeForeignStore foreignStore
           problems <- takeForeignDiagnostics foreignStore
           pure outcome{outcomeDiagnostics = outcomeDiagnostics outcome <> problems}

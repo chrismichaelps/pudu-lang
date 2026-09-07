@@ -65,6 +65,8 @@ effectValueNames =
   [ "print", "printError", "printPart", "printErrorPart", "readLine"
   , "readFile", "writeFile", "appendFile", "fileExists", "removeFile"
   , "signalWatchStop", "signalStopRequested"
+  , "spawnProgram", "childReadChunk", "childReadErrorChunk", "childWriteChunk"
+  , "childCloseInput", "childWait", "childWaitWithin", "childStop"
   , "listDirectory", "createDirectory"
   , "openReader", "openWriter", "openAppender"
   , "readChunk", "writeChunk", "flushWriter", "closeHandle"

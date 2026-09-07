@@ -26,6 +26,14 @@ data Builtin
   | AppendFileBuiltin
   | FileExistsBuiltin
   | Sha512Builtin
+  | SpawnBuiltin
+  | ChildReadBuiltin
+  | ChildReadErrorBuiltin
+  | ChildWriteBuiltin
+  | ChildCloseInputBuiltin
+  | ChildWaitBuiltin
+  | ChildWaitWithinBuiltin
+  | ChildStopBuiltin
   | DeflateBuiltin
   | InflateBuiltin
   | VerifyRsaBuiltin
@@ -182,6 +190,14 @@ builtinName value = case value of
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
   Sha512Builtin -> "sha512Of"
+  SpawnBuiltin -> "spawnProgram"
+  ChildReadBuiltin -> "childReadChunk"
+  ChildReadErrorBuiltin -> "childReadErrorChunk"
+  ChildWriteBuiltin -> "childWriteChunk"
+  ChildCloseInputBuiltin -> "childCloseInput"
+  ChildWaitBuiltin -> "childWait"
+  ChildWaitWithinBuiltin -> "childWaitWithin"
+  ChildStopBuiltin -> "childStop"
   DeflateBuiltin -> "deflateRaw"
   InflateBuiltin -> "inflateRaw"
   VerifyRsaBuiltin -> "verifyRsaSha256"
