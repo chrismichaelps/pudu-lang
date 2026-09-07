@@ -1,0 +1,141 @@
+module UsesRingBuffer
+
+import Std.RingBuffer as RingBuffer
+
+fn pushItem(rb: RingBuffer, item: Int) -> RingBuffer {
+  match RingBuffer.push(&rb, item) {
+    case Some(updated) => updated
+    case None => rb
+  }
+}
+
+fn popItem(rb: RingBuffer) -> (RingBuffer, Option[Int]) {
+  match RingBuffer.pop(&rb) {
+    case Some(res) => (res.buffer, Some(res.item))
+    case None => (rb, None)
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Power-of-two capacity rounding and initial state
+  let rb3 = RingBuffer.create(3)
+  let rb5 = RingBuffer.create(5)
+  let rb10 = RingBuffer.create(10)
+  if RingBuffer.capacity(&rb3) == 4
+    && RingBuffer.capacity(&rb5) == 8
+    && RingBuffer.capacity(&rb10) == 16
+    && RingBuffer.size(&rb5) == 0
+    && RingBuffer.isEmpty(&rb5)
+    && !RingBuffer.isFull(&rb5) {
+    held = held + 1
+  }
+
+  // 2. Sequential pushing and peek
+  var rb = RingBuffer.create(8)
+  rb = pushItem(rb, 10)
+  rb = pushItem(rb, 20)
+  rb = pushItem(rb, 30)
+  rb = pushItem(rb, 40)
+  if RingBuffer.size(&rb) == 4
+    && RingBuffer.peek(&rb) == Some(10)
+    && !RingBuffer.isEmpty(&rb)
+    && !RingBuffer.isFull(&rb) {
+    held = held + 1
+  }
+
+  // 3. FIFO popping
+  let pop1 = popItem(rb)
+  rb = pop1[0]
+  let item1 = pop1[1]
+
+  let pop2 = popItem(rb)
+  rb = pop2[0]
+  let item2 = pop2[1]
+
+  if item1 == Some(10) && item2 == Some(20) && RingBuffer.size(&rb) == 2 && RingBuffer.peek(&rb) == Some(30) {
+    held = held + 1
+  }
+
+  // 4. Wrap-around index behavior across circular boundary
+  rb = pushItem(rb, 50)
+  rb = pushItem(rb, 60)
+  rb = pushItem(rb, 70)
+  rb = pushItem(rb, 80)
+  rb = pushItem(rb, 90)
+  rb = pushItem(rb, 100)
+  if RingBuffer.size(&rb) == 8 && RingBuffer.isFull(&rb) {
+    held = held + 1
+  }
+
+  // 5. Saturation: push on full buffer returns None
+  let pushOob = RingBuffer.push(&rb, 999)
+  if pushOob == None && RingBuffer.size(&rb) == 8 {
+    held = held + 1
+  }
+
+  // 6. Materialize circular contents in FIFO order via toArray
+  let arr = RingBuffer.toArray(&rb)
+  if arr.length() == 8
+    && arr[0] == 30
+    && arr[1] == 40
+    && arr[2] == 50
+    && arr[3] == 60
+    && arr[4] == 70
+    && arr[5] == 80
+    && arr[6] == 90
+    && arr[7] == 100 {
+    held = held + 1
+  }
+
+  // 7. Drain buffer completely
+  var drainCount = 0
+  var drainOk = true
+  while !RingBuffer.isEmpty(&rb) {
+    let p = popItem(rb)
+    rb = p[0]
+    drainCount = drainCount + 1
+  }
+  if drainCount == 8 && RingBuffer.isEmpty(&rb) && RingBuffer.size(&rb) == 0 {
+    held = held + 1
+  }
+
+  // 8. Empty buffer queries return None
+  let emptyPop = RingBuffer.pop(&rb)
+  let emptyPeek = RingBuffer.peek(&rb)
+  if emptyPop == None && emptyPeek == None {
+    held = held + 1
+  }
+
+  // 9. Clear buffer resets pointers
+  var rbClear = RingBuffer.create(8)
+  rbClear = pushItem(rbClear, 1)
+  rbClear = pushItem(rbClear, 2)
+  rbClear = pushItem(rbClear, 3)
+  rbClear = RingBuffer.clear(&rbClear)
+  if RingBuffer.isEmpty(&rbClear)
+    && RingBuffer.size(&rbClear) == 0
+    && RingBuffer.peek(&rbClear) == None {
+    held = held + 1
+  }
+
+  // 10. Streaming FIFO pipeline maintains strict order
+  var streamRb = RingBuffer.create(4)
+  var streamOk = true
+  var i = 0
+  while i < 20 {
+    streamRb = pushItem(streamRb, i)
+    let sp = popItem(streamRb)
+    streamRb = sp[0]
+    if sp[1] != Some(i) {
+      streamOk = false
+    }
+    i = i + 1
+  }
+  if streamOk && RingBuffer.isEmpty(&streamRb) {
+    held = held + 1
+  }
+
+  held
+}
