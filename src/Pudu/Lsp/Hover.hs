@@ -29,7 +29,7 @@ hoverAt value offset = case foreignNameAt value offset of
               ]
           )
         ]
-    Nothing -> case entryAt (analysisIndex value) offset of
+    Nothing -> case entryAt (analysisFileIndex value) offset of
       Nothing -> JsonNull
       Just entry -> hoverEntry (Just (docSpan entry)) value entry
 
@@ -37,7 +37,7 @@ foreignNameAt :: Analysis -> Int -> Maybe DocEntry
 foreignNameAt value offset = do
   resolution <- analysisResolution value
   symbol <- symbolAt resolution offset
-  entry <- entryForSymbol (analysisIndex value) symbol
+  entry <- entryForSymbol (analysisFileIndex value) symbol
   case docKind entry of
     DocForeign _ -> Just entry
     _ -> Nothing

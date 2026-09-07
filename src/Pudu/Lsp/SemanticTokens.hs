@@ -98,7 +98,7 @@ classifyIdentifier value content sp name =
     Just symbol ->
       let isDecl = maybe False (\s -> spanStart s == spanStart sp) (Sym.symbolSpan symbol)
           mods = if isDecl then 1 else 0
-       in case entryForSymbol (analysisIndex value) symbol of
+       in case entryForSymbol (analysisFileIndex value) symbol of
             Just entry -> case docKind entry of
               DocFunction -> spanTuple content sp 2 mods
               DocMethod _ -> spanTuple content sp 3 mods

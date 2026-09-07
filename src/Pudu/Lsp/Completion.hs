@@ -20,8 +20,8 @@ completionAt documents parameters = case documentOf documents parameters of
   Just value -> case located documents parameters of
     Just (_, offset) -> case memberMethods value offset of
       names@(_ : _) -> JsonArray (map methodItem names)
-      [] -> JsonArray (generalCompletions (analysisIndex value))
-    Nothing -> completionItems (analysisIndex value)
+      [] -> JsonArray (generalCompletions (analysisProgramIndex value))
+    Nothing -> completionItems (analysisProgramIndex value)
 
 generalCompletions :: DocIndex -> [Json]
 generalCompletions index =
@@ -56,7 +56,7 @@ memberMethods value offset = case receiverEnd (analysisText value) offset of
     Nothing -> []
     Just typeValue ->
       let owner = ownerNameOf typeValue
-       in sort (nub (methodsOfType typeValue <> implMethodsFor (analysisIndex value) owner))
+       in sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) owner))
 
 implMethodsFor :: DocIndex -> Text -> [Text]
 implMethodsFor index owner

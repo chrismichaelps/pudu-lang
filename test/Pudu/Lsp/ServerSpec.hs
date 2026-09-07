@@ -3,12 +3,14 @@ module Pudu.Lsp.ServerSpec (serverProperties) where
 
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
 import Pudu.Lsp.Feature (offsetAt, positionAt, wordAt)
 import Pudu.Lsp.Json (Json (..), lookupField, parse, textOf)
 import Pudu.Lsp.Protocol (Message (..), Position (..), frame)
 import Pudu.Lsp.Server
   ( Documents
   , analyse
+  , analyseIn
   , answer
   , emptyDocuments
   , rememberAnalysis
@@ -31,6 +33,7 @@ serverProperties =
   , ("completion offers every documented name", testCompletion)
   , ("foreign handles and asserted signatures reach every editor feature", testForeignTooling)
   , ("foreign provenance follows symbol identity through shadowing", testForeignShadowing)
+  , ("a cursor is answered from the file it is in, not from an imported module", testImportedDocumentation)
   , ("formatting replaces the document in one edit", testFormatting)
   , ("an unknown request is refused rather than ignored", testUnknownRequest)
   , ("a notification is never answered", testNotificationSilence)
@@ -343,6 +346,33 @@ testForeignShadowing = do
     , counterexample "definition resolves to the parameter, not the foreign declaration"
         (definitionCharacter === Just (JsonNumber 10))
     ]
+
+{-| A span is an offset into one file, so a declaration of an imported module
+    says nothing about where a cursor in this file is.
+
+    The fixture is built so the imported declaration's span both covers the
+    cursor and is narrower than the declaration the cursor is really in, which
+    is what an index spanning several files makes possible. -}
+testImportedDocumentation :: IO Property
+testImportedDocumentation = do
+  content <- TextIO.readFile "test-fixtures/lsphover/Root.pudu"
+  analysed <- analyseIn "test-fixtures/lsphover" uri content
+  let documents = rememberAnalysis uri analysed emptyDocuments
+      shown = request "textDocument/hover" (atPosition 5 11) documents
+      hoverBody = shown >>= lookupField "contents" >>= lookupField "value" >>= textOf
+      listed = request "textDocument/documentSymbol" wholeDocument documents
+  pure $ conjoin
+    [ counterexample "hover answers about the declaration under the cursor"
+        (property (maybe False (Text.isInfixOf "Documentation belonging to Root.") hoverBody))
+    , counterexample "and never about a declaration of another module"
+        (property (maybe True (not . Text.isInfixOf "Helper") hoverBody))
+    , counterexample "the outline lists what this file declares and nothing else"
+        (fmap outlineNames listed === Just ["rootOnly"])
+    ]
+ where
+  outlineNames value = case value of
+    JsonArray members -> [name | member <- members, Just name <- [lookupField "name" member >>= textOf]]
+    _ -> []
 
 {-| One edit rather than a computed minimal set: the formatter only moves
     whitespace, so replacing everything cannot change the program. -}

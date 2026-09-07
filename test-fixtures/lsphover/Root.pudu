@@ -1,0 +1,6 @@
+module Root
+
+import Helper as Helper
+
+/// Documentation belonging to Root.
+export fn rootOnly(value: Int) -> Int { value + value + value + value }

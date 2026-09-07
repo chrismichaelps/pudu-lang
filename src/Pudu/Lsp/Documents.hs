@@ -31,7 +31,20 @@ data Analysis = Analysis
   { analysisText :: !Text
   , analysisSource :: !Source
   , analysisDiagnostics :: ![Diagnostic]
-  , analysisIndex :: !DocIndex
+  {-| The documented names of this file alone.
+
+      A `DocEntry` carries a span, and a span is an offset into the file it was
+      read from. Anything that starts from a cursor — hover, the outline, the
+      classification of a token — must ask this index, because an offset means
+      nothing in any other module's file and would match a declaration the
+      reader is nowhere near. -}
+  , analysisFileIndex :: !DocIndex
+  {-| The documented names of the whole program, dependencies included.
+
+      Answers keyed by name rather than by position — what may be completed
+      here, what the call being written expects — belong to this one: an
+      imported function is as callable as a local one. -}
+  , analysisProgramIndex :: !DocIndex
   , analysisResolution :: !(Maybe Resolution)
   {-| What the checker said each expression is, by span.
 

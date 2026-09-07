@@ -14,7 +14,7 @@ workspaceSymbolsAt docs query =
       matches =
         [ symbolInfo uri (analysisText analysis) entry
         | (uri, analysis) <- allDocuments docs
-        , entry <- indexEntries (analysisIndex analysis)
+        , entry <- indexEntries (analysisFileIndex analysis)
         , Text.null q || q `Text.isInfixOf` Text.toLower (docName entry)
         ]
    in JsonArray matches

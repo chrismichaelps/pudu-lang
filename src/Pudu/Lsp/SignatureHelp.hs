@@ -14,7 +14,7 @@ signatureHelpAt value offset =
   case findCallContext (analysisText value) offset of
     Nothing -> JsonNull
     Just (callee, commaCount) ->
-      case findDocEntry (analysisIndex value) callee of
+      case findDocEntry (analysisProgramIndex value) callee of
         Nothing -> JsonNull
         Just entry -> case docSignature entry of
           Nothing -> JsonNull

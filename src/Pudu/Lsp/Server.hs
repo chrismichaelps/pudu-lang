@@ -14,6 +14,7 @@ module Pudu.Lsp.Server
 import Control.Exception (SomeException, displayException, evaluate, try)
 import Control.Monad (unless)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
 import Data.Text (Text)
@@ -108,7 +109,8 @@ analyseIn root uri content = do
       { analysisText = content
       , analysisSource = source
       , analysisDiagnostics = programDiagnostics program
-      , analysisIndex = programDocs program
+      , analysisFileIndex = fromMaybe mempty (rootCompileResult program >>= compileDocs)
+      , analysisProgramIndex = programDocs program
       , analysisResolution = rootCompileResult program >>= compileResolution
       , analysisTypes = rootCompileResult program >>= compileTypes
       }
@@ -444,7 +446,7 @@ inlayHint documents parameters =
 symbols :: Documents -> Json -> Json
 symbols documents parameters = case documentOf documents parameters of
   Nothing -> JsonArray []
-  Just value -> documentSymbols (analysisText value) (analysisIndex value)
+  Just value -> documentSymbols (analysisText value) (analysisFileIndex value)
 
 workspaceSymbols :: Documents -> Json -> Json
 workspaceSymbols documents parameters =
