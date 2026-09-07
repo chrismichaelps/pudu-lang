@@ -1,0 +1,111 @@
+module UsesDisjointSet
+
+import Std.DisjointSet as DisjointSet
+
+fn doUnion(ds: DisjointSet, x: Int, y: Int) -> DisjointSet {
+  match DisjointSet.union(&ds, x, y) {
+    case Some(updated) => updated
+    case None => ds
+  }
+}
+
+fn main() -> Int {
+  var held = 0
+
+  // 1. Initial forest of 10 singleton components
+  var ds = DisjointSet.create(10)
+  if DisjointSet.elementCount(&ds) == 10
+    && DisjointSet.componentCount(&ds) == 10 {
+    held = held + 1
+  }
+
+  // 2. Initial elements are their own representatives with size 1
+  let f0 = DisjointSet.find(&ds, 0)
+  ds = f0[0]
+  let r0 = f0[1]
+
+  let f9 = DisjointSet.find(&ds, 9)
+  ds = f9[0]
+  let r9 = f9[1]
+
+  let s0 = DisjointSet.componentSize(&ds, 0)
+  if r0 == Some(0) && r9 == Some(9) && s0 == Some(1) {
+    held = held + 1
+  }
+
+  // 3. Simple union of two elements
+  ds = doUnion(ds, 0, 1)
+  if DisjointSet.componentCount(&ds) == 9
+    && DisjointSet.connected(&ds, 0, 1) == Some(true)
+    && DisjointSet.connected(&ds, 0, 2) == Some(false) {
+    held = held + 1
+  }
+
+  // 4. Transitive connectivity through chains
+  ds = doUnion(ds, 1, 2)
+  if DisjointSet.componentCount(&ds) == 8
+    && DisjointSet.connected(&ds, 0, 2) == Some(true)
+    && DisjointSet.componentSize(&ds, 0) == Some(3)
+    && DisjointSet.componentSize(&ds, 2) == Some(3) {
+    held = held + 1
+  }
+
+  // 5. Separate independent components
+  ds = doUnion(ds, 3, 4)
+  ds = doUnion(ds, 5, 6)
+  if DisjointSet.componentCount(&ds) == 6
+    && DisjointSet.connected(&ds, 3, 4) == Some(true)
+    && DisjointSet.connected(&ds, 5, 6) == Some(true)
+    && DisjointSet.connected(&ds, 0, 3) == Some(false)
+    && DisjointSet.connected(&ds, 4, 5) == Some(false) {
+    held = held + 1
+  }
+
+  // 6. Merging two multi-element components
+  ds = doUnion(ds, 2, 4)
+  if DisjointSet.componentCount(&ds) == 5
+    && DisjointSet.connected(&ds, 0, 3) == Some(true)
+    && DisjointSet.connected(&ds, 1, 4) == Some(true)
+    && DisjointSet.componentSize(&ds, 3) == Some(5) {
+    held = held + 1
+  }
+
+  // 7. Idempotent union of already-connected elements
+  let prevCount = DisjointSet.componentCount(&ds)
+  ds = doUnion(ds, 0, 4)
+  if DisjointSet.componentCount(&ds) == prevCount
+    && DisjointSet.componentSize(&ds, 0) == Some(5) {
+    held = held + 1
+  }
+
+  // 8. Out of bounds queries return None safely
+  let oobFind = DisjointSet.find(&ds, -1)
+  let oobUnion = DisjointSet.union(&ds, 0, 10)
+  let oobConn = DisjointSet.connected(&ds, 0, 10)
+  let oobSize = DisjointSet.componentSize(&ds, 15)
+  if oobFind[1] == None && oobUnion == None && oobConn == None && oobSize == None {
+    held = held + 1
+  }
+
+  // 9. Path compression retains correct sizes and roots
+  let fPre = DisjointSet.find(&ds, 4)
+  ds = fPre[0]
+  let rootVal = fPre[1]
+  let sPre = DisjointSet.componentSize(&ds, 4)
+  if rootVal != None && sPre == Some(5) {
+    held = held + 1
+  }
+
+  // 10. Merge all remaining elements into a single unified component
+  ds = doUnion(ds, 0, 5)
+  ds = doUnion(ds, 0, 7)
+  ds = doUnion(ds, 0, 8)
+  ds = doUnion(ds, 0, 9)
+  if DisjointSet.componentCount(&ds) == 1
+    && DisjointSet.componentSize(&ds, 0) == Some(10)
+    && DisjointSet.connected(&ds, 7, 9) == Some(true) {
+    held = held + 1
+  }
+
+  held
+}
