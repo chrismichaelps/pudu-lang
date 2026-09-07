@@ -1,6 +1,9 @@
 module Std.Http.Server.Guard
 
+import Std.App.Audit as Audit
 import Std.App.Trace as Trace
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
 import Std.Http as Http
 import Std.Http.Safe as Safe
 import Std.Http.Server.Reply as Reply
@@ -72,33 +75,18 @@ export fn shareNothing() -> Sharing {
 
 /// A service that permits the named origins, and nothing else.
 export fn shareWith(origins: &Array[Str]) -> Sharing {
-  Sharing {
-    origins: *origins,
-    methods: ["GET", "HEAD", "POST"],
-    headers: ["content-type"],
-    credentials: false
-  }
+  Sharing{origins: *origins, methods: ["GET", "HEAD", "POST"], headers: ["content-type"], credentials: false}
 }
 
 /// The same, for a caller that also sends credentials. A wildcard is not
 /// reachable from here, which is why credentials can be permitted at all.
 export fn withCredentials(base: &Sharing) -> Sharing {
-  Sharing {
-    origins: base.origins,
-    methods: base.methods,
-    headers: base.headers,
-    credentials: true
-  }
+  Sharing{origins: base.origins, methods: base.methods, headers: base.headers, credentials: true}
 }
 
 /// The same, permitting different methods.
 export fn allowing(base: &Sharing, methods: &Array[Str]) -> Sharing {
-  Sharing {
-    origins: base.origins,
-    methods: *methods,
-    headers: base.headers,
-    credentials: base.credentials
-  }
+  Sharing{origins: base.origins, methods: *methods, headers: base.headers, credentials: base.credentials}
 }
 
 /// The protective headers, added to whatever the answer was.
@@ -449,5 +437,57 @@ export fn circuitBreaker(failureThreshold: Int, resetTimeoutSeconds: Int) -> Rou
 
       answer
     }
+  }
+}
+
+/// Request deadline middleware enforcing an execution time budget.
+///
+/// If the wrapped handler does not produce a response within `timeoutMs`,
+/// RFC 7231 status 504 Gateway Timeout is returned immediately to the client.
+export fn timeout(timeoutMs: Int) -> Route.Middleware {
+  let limit = if timeoutMs < 1 { 1 } else { timeoutMs }
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let ch: Channel.Channel[Option[Http.Response]] = Channel.channel(2)
+    let handlerTask = Concurrent.start(fn() -> () {
+        let ans = next(request)
+        let _s = Channel.send(&ch, Some(ans))
+      })
+    if let Err(_) = handlerTask {
+      return Reply.gatewayTimeout("failed to start execution task")
+    }
+    let timerTask = Concurrent.start(fn() -> () {
+        let _slept = Concurrent.sleep(limit)
+        let _s = Channel.send(&ch, None)
+      })
+    if let Err(_) = timerTask {
+      return Reply.gatewayTimeout("failed to start deadline timer")
+    }
+    match Channel.receive(&ch) {
+      case Ok(Some(Some(ans))) => ans
+      case Ok(Some(None)) => Reply.gatewayTimeout("request execution deadline exceeded")
+      case _ => Reply.gatewayTimeout("deadline execution failure")
+    }
+  }
+}
+
+/// Audit logging middleware recording security outcomes in the tamper-evident audit ledger.
+export fn audited(log: &Audit.AuditLog, action: Str) -> Route.Middleware {
+  let auditTrail = *log
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    let answer = next(request)
+    let outcome = if answer.status.code < 400 {
+      Audit.Success
+    } else if answer.status.code == 401 || answer.status.code == 403 {
+      Audit.Denied("HTTP " + show(answer.status.code))
+    } else {
+      Audit.Failure("HTTP " + show(answer.status.code))
+    }
+    var details = mapOf([])
+    if let Some(reqId) = Route.header(&request, "x-request-id") {
+      details = details.insert("requestId", reqId)
+    }
+    let principal = Option.unwrapOr(Route.header(&request, "x-user-id"), "anonymous")
+    let _ev = Audit.record(&auditTrail, action, principal, request.path, outcome, request.peer, &details)
+    answer
   }
 }

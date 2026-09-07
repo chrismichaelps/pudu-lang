@@ -30,6 +30,7 @@ export type Server = {
   bodyLimit: Int,
   readMillis: Int,
   writeMillis: Int,
+  drainMillis: Int,
   workers: Int,
   queueCapacity: Int
 }
@@ -53,7 +54,7 @@ const BODY_LIMIT: Int = 8388608
 
 /// A server over a router, with no middleware and the default limits.
 export fn server(base: &Route.Router) -> Server {
-  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000, workers: 16, queueCapacity: 64}
+  Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000, drainMillis: 10000, workers: 16, queueCapacity: 64}
 }
 
 /// A server with one more step wrapped around its handlers.
@@ -325,7 +326,20 @@ export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, Ser
     }
   }
   let closed = Channel.close(&queue)
-  let joined = Concurrent.joinAll(&workers)
+  let drainLimit = if target.drainMillis < 1 { 1 } else { target.drainMillis }
+  let drainChan: Channel.Channel[Result[(), Concurrent.ConcurrentError]] = Channel.channel(2)
+  let _joiner = Concurrent.start(fn() -> () {
+      let r = Concurrent.joinAll(&workers)
+      let _s = Channel.send(&drainChan, r)
+    })
+  let _timer = Concurrent.start(fn() -> () {
+      let _slept = Concurrent.sleep(drainLimit)
+      let _s = Channel.send(&drainChan, Err(Concurrent.Other("drain deadline exceeded")))
+    })
+  let joined = match Channel.receive(&drainChan) {
+    case Ok(Some(outcome)) => outcome
+    case _ => Err(Concurrent.Other("drain wait failed"))
+  }
   if let Some(problem) = failure { return Err(problem) }
   if let Err(problem) = closed { return Err(Other("queue close failed: " + show(problem))) }
   if let Err(problem) = joined { return Err(Other("worker failed: " + show(problem))) }
@@ -394,4 +408,9 @@ export fn withWriteDeadline(base: &Server, millis: Int) -> Server {
 export fn withWorkers(base: &Server, count: Int, capacity: Int) -> Server {
   Server{..*base, workers: if count < 1 { 1 } else { count },
     queueCapacity: if capacity < 1 { 1 } else { capacity } }
+}
+
+/// Bound the maximum duration allowed to drain in-flight worker connections during shutdown.
+export fn withDrainDeadline(base: &Server, millis: Int) -> Server {
+  Server{..*base, drainMillis: if millis < 1 { 1 } else { millis }}
 }

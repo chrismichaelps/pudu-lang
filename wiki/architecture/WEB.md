@@ -96,7 +96,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Concurrent connections per process? | **Partial** | Each connection is served on its own worker, so one slow request does not block others. The number of workers is unbounded, which is itself a limit. |
 | Is there backpressure? | **Ready** | [[Std Http Server Guard]]: `boundedConcurrency` middleware bounds concurrent in-flight requests and fast-sheds excess load with RFC 7231 status 503 Service Unavailable and `Retry-After: 1`. |
 | Are request sizes bounded? | **Ready** | Head and body limits are enforced before anything is buffered. |
-| Is there a deadline on a request? | **Absent** | A handler that does not finish is not interrupted. Named in [[architecture/STDLIB]] as owed. |
+| Is there a deadline on a request? | **Ready** | [[Std Http Server Guard]]: `timeout(timeoutMs)` middleware bounds handler execution time, racing against an asynchronous deadline timer and returning RFC 7231 status 504 Gateway Timeout if exceeded. |
 | Rate limiting? | **Ready** | [[Std Http Server Guard]]: `rateLimited` middleware enforces moving-window peer request limits and emits RFC 6585 429 Too Many Requests with Retry-After. |
 | Caching, and a content network in front? | **Ready** | [[Std App Cache]] holds in-process answers; [[Std App IsrCache]] provides zero-copy tag-based ISR; [[Std Http Server Reply]] `conditional` and `withEtag` evaluate `If-None-Match` to emit 304 Not Modified without body retransmission. |
 
@@ -124,7 +124,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | Configuration per environment? | **Ready** | Profiles select a section; the machine's own settings are never profiled away. |
 | Does startup order have to be guessed? | **Ready** | No. It is a list. Stop is the reverse. |
 | Does a failed start leave things running? | **Ready** | No. It unwinds what came up. |
-| Graceful shutdown? | **Partial** | Stages stop in reverse and the listener closes; connections in flight are joined. Draining with a deadline is not there. |
+| Graceful shutdown? | **Ready** | Stages stop in reverse, the listener closes, keep-alive loop terminates, and in-flight workers are drained with a configurable deadline (`server.drainMillis`). |
 | Zero-downtime deploy? | **Absent** | Needs draining and, for live screens, a story for connections that survive a restart. |
 
 ## Security
@@ -143,7 +143,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 | Authentication? | **Ready** for password and session, **Absent** for multi-factor. | [[Std App Password]] carries the work factor it was made with, so raising it locks nobody out. [[Std App Session]] issues a new name on every change of privilege, which is the fixation defence made unforgettable rather than documented. |
 | Authorisation? | **Ready** | [[Std App Access]]. A requirement is given in the same call as the handler and there is no call that omits it, so a route needing nothing and a route somebody forgot stop being the same line. A program can list what every route requires. |
 | Secrets handling? | **Ready** | [[Std App Secret]]: opaque container types prevent accidental logging or trace exposure; explicit redaction (`[REDACTED]`), masked suffix display, and constant-time equality comparisons. |
-| Audit trail? | **Absent** | Not designed. |
+| Audit trail? | **Ready** | [[Std App Audit]]: structured append-only audit trail with tamper-evident cryptographic hash chaining (SHA-256), outcome classification, secrets redaction, and SIEM NDJSON export. |
 
 ## Everything else an organisation asks
 

@@ -129,7 +129,19 @@ Implemented secrets encapsulation and deterministic feature flag rollouts:
 - `Std.App.Flag`: Value-based feature flag evaluator supporting targeted entity allowlists and deterministic sticky percentage canary releases without centralized network bottlenecks.
 - Updated `UsesEnterpriseSsr.pudu` (57 assertions) and `RuntimeSpec.hs`.
 - Added module mirrors `Secret.md` and `Flag.md` with resolved Grill Logs; updated `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
-Exact next action: Validate with full repository gates and commit to dev.
+
+## Tamper-evident audit trails, request execution deadlines, and server draining
+
+Implemented enterprise security compliance and execution resilience:
+- `Std.App.Audit`: Structured append-only audit trail logging with SHA-256 cryptographic hash chaining, outcome classification (`Success`, `Failure`, `Denied`), automatic credential redaction, and SIEM NDJSON export.
+- `Std.Http.Server.Guard.timeout`: Request execution deadline middleware bounding handler execution duration via asynchronous racing, returning RFC 7231 status 504 Gateway Timeout if exceeded.
+- `Std.Http.Server.Guard.audited`: Route auditing middleware recording HTTP requests and mapping statuses to typed audit outcomes.
+- `Std.Http.Server`: Added `drainMillis` and `withDrainDeadline(base, millis)` bounding in-flight connection draining upon shutdown to prevent hanging processes.
+- `Std.App`: Configurable and validated `server.drainMillis` setting applied to HTTP server instances.
+- Updated `UsesEnterpriseSsr.pudu` (68 assertions) and `RuntimeSpec.hs`.
+- Added module mirror `Audit.md` with resolved Grill Log; updated `Guard.md`, `Server.md`, `App.md`, `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
+- Validated via `bash test/gates.sh` (all 7 gates passed cleanly).
+Exact next action: Commit and push changes to dev refs #193.
 
 
 

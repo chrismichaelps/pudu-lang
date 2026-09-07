@@ -73,7 +73,8 @@ const DEFAULT_SETTINGS: Array[(Str, Str)] = [
   ("server.readMillis", "30000"),
   ("server.writeMillis", "30000"),
   ("server.workers", "16"),
-  ("server.queueCapacity", "64")
+  ("server.queueCapacity", "64"),
+  ("server.drainMillis", "10000")
 ]
 
 /// A name and a router, and a service is running.
@@ -308,6 +309,8 @@ export fn run(target: &App) -> Result[Int, AppError] {
   if writeMillis < 1 || writeMillis > 86400000 { return Err(Configuration("server.writeMillis must be in 1..86400000")) }
   let readMillis = serverNumber(&target.config, "server.readMillis", 30000) ?
   if readMillis < 1 || readMillis > 86400000 { return Err(Configuration("server.readMillis must be in 1..86400000")) }
+  let drainMillis = serverNumber(&target.config, "server.drainMillis", 10000) ?
+  if drainMillis < 1 || drainMillis > 86400000 { return Err(Configuration("server.drainMillis must be in 1..86400000")) }
   let headBytes = serverNumber(&target.config, "server.headBytes", 65536) ?
   let bodyBytes = serverNumber(&target.config, "server.bodyBytes", 8388608) ?
   if host.trim().isEmpty() { return Err(Configuration("server.host must not be empty")) }
@@ -320,6 +323,7 @@ export fn run(target: &App) -> Result[Int, AppError] {
   var listening = Server.withLimits(&Server.server(&target.router), headBytes, bodyBytes)
   listening = Server.withReadDeadline(&listening, readMillis)
   listening = Server.withWriteDeadline(&listening, writeMillis)
+  listening = Server.withDrainDeadline(&listening, drainMillis)
   listening = Server.withWorkers(&listening, workers, queueCapacity)
   for step in target.steps { listening = Server.using(&listening, step) }
   let served = Server.listenAndServe(&listening, host, port, limit)

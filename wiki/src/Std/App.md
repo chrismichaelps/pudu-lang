@@ -153,3 +153,12 @@ stop flag between keep-alive requests. Handler abort/cancellation cleanup and bo
 shutdown remain unresolved; a handler that never returns can still hold one worker indefinitely.
 Resolved Grill Log: fixed workers bound tasks and retained handles; do not describe the connection
 accept count as concurrency. Do not discard worker-start or join errors. No tests or reviews run.
+
+## Configurable server draining deadline
+
+`server.drainMillis` defaults to 10000 and is validated in `1..86400000` before application startup.
+Configures `Server.withDrainDeadline` on the underlying HTTP server, ensuring in-flight requests are
+allowed a bounded draining window before server shutdown terminates.
+
+Resolved Grill Log:
+- **Q:** Should draining be unlimited if `server.drainMillis` is omitted? **A:** No; defaulting to 10000ms prevents hanging processes during orchestrator rolling updates.

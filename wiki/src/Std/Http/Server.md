@@ -77,3 +77,14 @@ Each worker composes its middleware handler once before receiving connections, t
 handler into the internal request-serving function. Public serveConnection still composes a
 handler for standalone use. Middleware invocation order and request-local results are unchanged.
 Resolved Grill Log: reuse the immutable handler closure, never a response or request value.
+
+## Graceful draining deadline
+
+`Server.drainMillis` defaults to 10000ms and is configured via `withDrainDeadline(base: &Server, millis: Int) -> Server`.
+When `Server.run` or `Server.listenAndServe` is asked to stop, the listener is closed and the incoming queue finishes.
+In-flight worker draining is bound by `drainMillis`: worker tasks are joined concurrently against an asynchronous
+deadline timer. If in-flight requests do not drain within `drainMillis`, `Server.run` aborts waiting and reports
+`Err(Other("worker draining deadline exceeded"))` rather than blocking indefinitely.
+
+Resolved Grill Log:
+- **Q:** Why bound worker joining with a deadline? **A:** If a slow client or long-running request hangs, unbounded joining causes deployment orchestrators (Kubernetes / systemd) to SIGKILL the process abruptly, corrupting unclosed streams. A draining deadline allows in-flight requests a graceful completion window before forcing termination.

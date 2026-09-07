@@ -68,6 +68,7 @@ tags: [moc, module, stdlib]
 - [[Std App Password]] — a password kept in a form that proves it without holding it.
 - [[Std App Secret]] — secrets protected from unintended disclosure with explicit redaction.
 - [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
+- [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.

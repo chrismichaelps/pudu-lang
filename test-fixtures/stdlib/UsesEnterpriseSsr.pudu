@@ -1,11 +1,14 @@
 module UsesEnterpriseSsr
 
+import Std.App.Audit as Audit
+import Std.App.Audit {Success, Failure, Denied}
 import Std.App.Flag {Disabled, Enabled, Percentage, Allowlist}
 import Std.App.Flag as Flag
 import Std.App.IsrCache {Fresh, Stale, Miss}
 import Std.App.IsrCache as IsrCache
 import Std.App.Secret as Secret
 import Std.Bytes as ByteSeq
+import Std.Concurrent as Concurrent
 import Std.Html.Buffer as HtmlBuffer
 import Std.Html as Html
 import Std.Html.Media {Critical, Standard, Low}
@@ -19,6 +22,7 @@ import Std.Http.Server.Resilience as Resilience
 import Std.Http.Server.Resilience {SaveDataActive, ConstrainedCellular, FastBroadband}
 import Std.Http.Server.Route as Route
 import Std.Http.Server.Security as Security
+import Std.Http.Server as Server
 import Std.Option as Option
 import Std.Result as Result
 import Std.Ui.Island as Island
@@ -408,6 +412,57 @@ export fn main() -> Int {
   let sticky1 = Flag.isEnabled(&fCanary, &ctxA)
   let sticky2 = Flag.isEnabled(&fCanary, &ctxA)
   if sticky1 == sticky2 { passed = passed + 1 }
+
+  // 26. Audit: ledger, cryptographic chaining, and secrets redaction
+  let auditTrail = Audit.auditLog()
+  if Audit.count(&auditTrail) == 0 && Audit.headHash(&auditTrail) == Audit.GENESIS_HASH {
+    passed = passed + 1
+  }
+
+  var auditMeta = mapOf([])
+  auditMeta = auditMeta.insert("password", "super-secret-pwd")
+  auditMeta = auditMeta.insert("tenant", "acme-corp")
+  let ev1 = Audit.record(&auditTrail, "user.login", "usr-42", "/login", Success, "10.0.0.1", &auditMeta)
+  if ev1.prevHash == Audit.GENESIS_HASH && ev1.hash != Audit.GENESIS_HASH { passed = passed + 1 }
+  if Option.unwrapOr(ev1.details.get("password"), "") == "[REDACTED]"
+    && Option.unwrapOr(ev1.details.get("tenant"), "") == "acme-corp" {
+    passed = passed + 1
+  }
+
+  let ev2 = Audit.record(&auditTrail, "admin.elevate", "usr-42", "/admin", Denied("insufficient_role"), "10.0.0.1", &mapOf([]))
+  if ev2.prevHash == ev1.hash { passed = passed + 1 }
+  if Audit.verifyIntegrity(&auditTrail) { passed = passed + 1 }
+
+  let ev1Json = Audit.renderJson(&ev1)
+  if ev1Json.contains("\"action\":\"user.login\"") && ev1Json.contains("\"[REDACTED]\"") && ev1Json.contains("\"outcome\":\"SUCCESS\"") {
+    passed = passed + 1
+  }
+
+  let ndjson = Audit.renderNdjson(&auditTrail)
+  if ndjson.contains(ev1.hash) && ndjson.contains(ev2.hash) { passed = passed + 1 }
+
+  // 27. Guard: timeout middleware
+  let fastHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response { Reply.text(200, "fast-ok") }
+  let slowDeadlineHandler: Route.Handler = fn(_req: Route.Request) -> Http.Response {
+    let _slept = Concurrent.sleep(200)
+    Reply.text(200, "slow-ok")
+  }
+  let timeoutLimiter = Guard.timeout(50)
+  let fastResp = timeoutLimiter(matchReq, fastHandler)
+  if fastResp.status.code == 200 && fastResp.body == "fast-ok" { passed = passed + 1 }
+
+  let slowResp = timeoutLimiter(matchReq, slowDeadlineHandler)
+  if slowResp.status.code == 504 && slowResp.body.contains("deadline exceeded") { passed = passed + 1 }
+
+  // 28. Guard: audited middleware
+  let auditMiddleware = Guard.audited(&auditTrail, "api.call")
+  let auditedResp = auditMiddleware(matchReq, fastHandler)
+  if auditedResp.status.code == 200 && Audit.count(&auditTrail) == 3 { passed = passed + 1 }
+
+  // 29. Server: withDrainDeadline configuration
+  let testRouter = Route.router()
+  let srv = Server.withDrainDeadline(&Server.server(&testRouter), 7500)
+  if srv.drainMillis == 7500 { passed = passed + 1 }
 
   passed
 }

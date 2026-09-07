@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Tamper-evident audit trails, request execution deadlines, and server draining
+
+- [[Std App Audit]]: Structured append-only audit trail logging with SHA-256 cryptographic hash chaining, outcome classification (`Success`, `Failure`, `Denied`), automatic credential redaction, and SIEM NDJSON export.
+- [[Std Http Server Guard]]: Added `timeout(timeoutMs)` middleware bounding handler execution duration via asynchronous racing, returning RFC 7231 status 504 Gateway Timeout if exceeded; added `audited(log, action)` middleware recording HTTP route requests into the tamper-evident audit ledger.
+- [[Std Http Server]]: Added `drainMillis` and `withDrainDeadline(base, millis)` bounding in-flight connection draining upon shutdown to prevent hanging processes.
+- [[Std App]]: Configurable and validated `server.drainMillis` setting applied to HTTP server instances.
+- Updated `UsesEnterpriseSsr.pudu` to 68 assertions and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] verdicts for Request Deadlines, Graceful Shutdown, and Audit Trail to Ready.
+
 ## 2026-09-06 — Secure secrets management and value-based feature flags
 
 - [[Std App Secret]]: Opaque credential containers enforcing explicit unveiling, automatic redaction (`[REDACTED]`), masked suffix formatting, and constant-time equality comparisons.

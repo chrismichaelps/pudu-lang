@@ -90,8 +90,29 @@ Grill Log:
   and retry policies to redistribute traffic.
 - **Q:** What errors trip the circuit breaker? **A:** Only server error statuses ($\ge 500$). Client
   errors ($4xx$) do not trip the breaker.
+## Request execution deadline middleware
+
+`timeout(timeoutMs: Int) -> Route.Middleware` bounds request handler execution time.
+Races handler execution against an asynchronous deadline timer using a bounded synchronization
+channel. If the wrapped handler fails to produce a response within `timeoutMs`, the middleware
+aborts waiting and returns RFC 7231 status 504 Gateway Timeout (`Reply.gatewayTimeout("request execution deadline exceeded")`).
+
+Grill Log:
+- **Q:** Why race via a channel rather than polling? **A:** Polling burns CPU cycles and introduces latency jitter. Racing on a bounded channel with `Concurrent.sleep` wakes the receiver immediately when either the response arrives or the timer expires.
+- **Q:** What happens to the slow handler task after timeout? **A:** The channel has capacity 2, so the slow worker can deliver its finished result without deadlocking, and exits cleanly.
+
+## Audit logging middleware
+
+`audited(log: &Audit.AuditLog, action: Str) -> Route.Middleware` connects HTTP routes to the
+tamper-evident security audit trail in [[Std App Audit]].
+Constructs an audit event capturing request method, path, peer IP, and `X-Request-Id`. Maps HTTP
+response status codes to audit outcomes: statuses `< 400` map to `Outcome.Success`, `401` and `403`
+map to `Outcome.Denied`, and statuses $\ge 500$ map to `Outcome.Failure`.
+
+Grill Log:
+- **Q:** Should the request body be logged in the audit trail? **A:** No. Request bodies frequently contain passwords, session tokens, or personal identifiers. The audit trail captures principal identity, resource target, and outcome, leaving body inspection to dedicated data-loss prevention layers.
 
 ## Referenced by
-[[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Server Reply]]
+[[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std App Audit]] · [[Std Http Safe]] · [[Std Http Server]] · [[Std Http Server Route]] · [[Std Http Server Reply]]
 
 
