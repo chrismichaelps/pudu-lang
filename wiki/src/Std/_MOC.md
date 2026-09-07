@@ -128,6 +128,9 @@ tags: [moc, module, stdlib]
 - [[Std DisjointSet]] — flat-array Union-Find with iterative path halving and union-by-rank.
 - [[Std Murmur3]] — hardware-oriented non-cryptographic hash function with word rotations and bit avalanche.
 - [[Std RateLimiter]] — fixed-point integer token bucket traffic shaper with burst allowance.
+- [[Std Hex]] — low-level Base16 hexadecimal encoder, decoder, and validator.
+- [[Std Adler32]] — RFC 1950 Adler-32 unrolled checksum and rolling stream hash.
+- [[Std RadixSort]] — linear-time O(N) hardware radix sort for 64-bit integers.
 
 - [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
 - [[Std App Database]] — application-owned pools and bound queries.

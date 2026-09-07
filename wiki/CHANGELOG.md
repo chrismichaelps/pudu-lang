@@ -22,7 +22,10 @@ tags: [changelog]
 - Add `Std.DisjointSet`: Low-level flat array Union-Find with iterative path halving and union-by-rank.
 - Add `Std.Murmur3`: Hardware-oriented non-cryptographic hash function implementing Austin Appleby's MurmurHash3 with 32-bit rotations and avalanche bit mixing.
 - Add `Std.RateLimiter`: 64-bit fixed-point integer token bucket rate limiter with smooth replenishment and burst capacity.
-- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], and [[Std RateLimiter]].
+- Add `Std.Hex`: Low-level Base16 hexadecimal encoder, decoder, validator, and prefix handler.
+- Add `Std.Adler32`: RFC 1950 Adler-32 unrolled checksum with 5552-byte blocks and $O(1)$ rolling hash.
+- Add `Std.RadixSort`: Linear-time $O(N)$ non-comparative hardware radix sort for 64-bit unsigned and signed integers.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], [[Std RateLimiter]], [[Std Hex]], [[Std Adler32]], and [[Std RadixSort]].
 
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 
