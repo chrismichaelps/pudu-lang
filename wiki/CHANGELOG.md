@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-06 — Multi-tenant isolation, noisy-neighbor bounding, and admission quotas
+
+- [[Std App Tenant]]: Synchronized multi-tenant registry, resource quota definitions (`Free`, `Standard`, `Enterprise`), data isolation keying (`scopedKey`), per-tenant admission backpressure (noisy-neighbor protection), moving-window rate limiting, and instant account suspension.
+- `Std.App.Tenant.guard`: HTTP middleware enforcing tenant resolution, concurrency bounds, and account status with RFC 7231 status 503 and RFC 6585 status 429 backpressure.
+- Updated `UsesEnterpriseSsr.pudu` to 77 assertions and registered in `RuntimeSpec.hs`.
+- Upgraded [[WEB]] Multi-tenancy verdict from Partial to Ready.
+
 ## 2026-09-06 — Tamper-evident audit trails, request execution deadlines, and server draining
 
 - [[Std App Audit]]: Structured append-only audit trail logging with SHA-256 cryptographic hash chaining, outcome classification (`Success`, `Failure`, `Denied`), automatic credential redaction, and SIEM NDJSON export.

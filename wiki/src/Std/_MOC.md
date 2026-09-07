@@ -70,6 +70,7 @@ tags: [moc, module, stdlib]
 - [[Std App Flag]] — value-based feature flags with percentage and allowlist targeting.
 - [[Std App Audit]] — tamper-evident structured security audit logging with SHA-256 hash chaining.
 - [[Std App Access]] — a route that decided nothing cannot be written.
+- [[Std App Tenant]] — multi-tenant isolation, noisy-neighbor mitigation, and quota admission control.
 - [[Std App Metrics]] — what a program reports about itself, with bounded label cardinality.
 - [[Std App Bind]] — what a request carries, as a typed value or a refusal.
 - [[Std App Health]] — restarting and receiving traffic, kept apart by the types.

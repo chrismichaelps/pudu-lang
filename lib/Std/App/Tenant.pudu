@@ -1,0 +1,232 @@
+module Std.App.Tenant
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// Service tier determining default resource quotas.
+export type Tier
+  = Free
+  | Standard
+  | Enterprise
+
+/// Resource bounds allocated to a tenant.
+export type Quota = {
+  maxInflight: Int,
+  maxRequestsPerMinute: Int,
+  maxPayloadBytes: Int
+}
+
+/// A registered tenant with identity, tier, and resource bounds.
+export type Tenant = {
+  id: Str,
+  name: Str,
+  tier: Tier,
+  quota: Quota,
+  active: Bool
+}
+
+/// Dynamic runtime state tracking concurrent and rate metrics for a tenant.
+export type TenantState = {
+  inflight: Int,
+  windowStart: Int,
+  requestCount: Int
+}
+
+/// A thread-safe synchronized tenant store coordinating tenant bounds and admission.
+export type TenantRegistry = {
+  lock: Sync.Mutex,
+  tenants: Sync.Cell[Map[Str, Tenant]],
+  states: Sync.Cell[Map[Str, TenantState]]
+}
+
+/// The result of an admission check for a tenant request.
+export type Admission
+  = Admitted(Tenant)
+  | UnknownTenant
+  | Suspended(Tenant)
+  | RateExceeded(Tenant, Int)
+  | ConcurrencyExceeded(Tenant)
+  | PayloadTooLarge(Tenant)
+
+/// Standard quota for free-tier accounts: tight concurrency and rate bounds.
+export fn freeQuota() -> Quota {
+  Quota{maxInflight: 2, maxRequestsPerMinute: 60, maxPayloadBytes: 1048576}
+}
+
+/// Standard quota for standard-tier accounts.
+export fn standardQuota() -> Quota {
+  Quota{maxInflight: 10, maxRequestsPerMinute: 600, maxPayloadBytes: 10485760}
+}
+
+/// Standard quota for enterprise-tier accounts.
+export fn enterpriseQuota() -> Quota {
+  Quota{maxInflight: 50, maxRequestsPerMinute: 6000, maxPayloadBytes: 52428800}
+}
+
+/// Construct a tenant with default active status.
+export fn tenant(id: Str, name: Str, tier: Tier, quota: Quota) -> Tenant {
+  Tenant{id: id, name: name, tier: tier, quota: quota, active: true}
+}
+
+/// Initialize an empty synchronized tenant registry.
+export fn registry() -> TenantRegistry {
+  TenantRegistry {
+    lock: Sync.mutex(),
+    tenants: Sync.cell(mapOf([])),
+    states: Sync.cell(mapOf([]))
+  }
+}
+
+/// Register a new tenant or update an existing tenant's specification.
+export fn register(reg: &TenantRegistry, t: Tenant) -> () {
+  let _s = Sync.withLock(&reg.lock, fn() -> () {
+      let currentTenants = Result.unwrapOr(Sync.get(&reg.tenants), mapOf([]))
+      let _t = Sync.set(&reg.tenants, currentTenants.insert(t.id, t))
+      let currentStates = Result.unwrapOr(Sync.get(&reg.states), mapOf([]))
+      if !currentStates.containsKey(t.id) {
+        let now = clock() / 1000
+        let initial = TenantState{inflight: 0, windowStart: now, requestCount: 0}
+        let _st = Sync.set(&reg.states, currentStates.insert(t.id, initial))
+      }
+    })
+}
+
+/// Look up a tenant by ID.
+export fn get(reg: &TenantRegistry, tenantId: Str) -> Option[Tenant] {
+  let held = Result.unwrapOr(Sync.get(&reg.tenants), mapOf([]))
+  held.get(tenantId)
+}
+
+/// Dynamically update resource quotas for a tenant.
+export fn setQuota(reg: &TenantRegistry, tenantId: Str, quota: Quota) -> Bool {
+  let updated = Sync.withLock(&reg.lock, fn() -> Bool {
+      let currentTenants = Result.unwrapOr(Sync.get(&reg.tenants), mapOf([]))
+      match currentTenants.get(tenantId) {
+        case None => false
+        case Some(t) => {
+          let updatedTenant = Tenant{..t, quota: quota}
+          let _t = Sync.set(&reg.tenants, currentTenants.insert(tenantId, updatedTenant))
+          true
+        }
+      }
+    })
+  Result.unwrapOr(updated, false)
+}
+
+/// Enable or suspend a tenant account.
+export fn setActive(reg: &TenantRegistry, tenantId: Str, active: Bool) -> Bool {
+  let updated = Sync.withLock(&reg.lock, fn() -> Bool {
+      let currentTenants = Result.unwrapOr(Sync.get(&reg.tenants), mapOf([]))
+      match currentTenants.get(tenantId) {
+        case None => false
+        case Some(t) => {
+          let updatedTenant = Tenant{..t, active: active}
+          let _t = Sync.set(&reg.tenants, currentTenants.insert(tenantId, updatedTenant))
+          true
+        }
+      }
+    })
+  Result.unwrapOr(updated, false)
+}
+
+/// Atomically check admission bounds for an incoming tenant request.
+export fn admit(reg: &TenantRegistry, tenantId: Str, payloadLength: Int) -> Admission {
+  let check = Sync.withLock(&reg.lock, fn() -> Admission {
+      let currentTenants = Result.unwrapOr(Sync.get(&reg.tenants), mapOf([]))
+      match currentTenants.get(tenantId) {
+        case None => UnknownTenant
+        case Some(t) => {
+          if !t.active {
+            Suspended(t)
+          } else if payloadLength > t.quota.maxPayloadBytes {
+            PayloadTooLarge(t)
+          } else {
+            let now = clock() / 1000
+            let currentStates = Result.unwrapOr(Sync.get(&reg.states), mapOf([]))
+            let st = Option.unwrapOr(
+              currentStates.get(tenantId),
+              TenantState{inflight: 0, windowStart: now, requestCount: 0}
+            )
+
+            // Evaluate moving 60-second rate limit window.
+            var winStart = st.windowStart
+            var reqCount = st.requestCount
+            if now - winStart >= 60 {
+              winStart = now
+              reqCount = 0
+            }
+
+            if reqCount >= t.quota.maxRequestsPerMinute {
+              var retry = 60 - (now - winStart)
+              if retry <= 0 { retry = 1 }
+              RateExceeded(t, retry)
+            } else if st.inflight >= t.quota.maxInflight {
+              ConcurrencyExceeded(t)
+            } else {
+              let updatedState = TenantState {
+                inflight: st.inflight + 1,
+                windowStart: winStart,
+                requestCount: reqCount + 1
+              }
+              let _s = Sync.set(&reg.states, currentStates.insert(tenantId, updatedState))
+              Admitted(t)
+            }
+          }
+        }
+      }
+    })
+  Result.unwrapOr(check, UnknownTenant)
+}
+
+/// Atomically release a concurrent in-flight request slot for a tenant.
+export fn release(reg: &TenantRegistry, tenantId: Str) -> () {
+  let _s = Sync.withLock(&reg.lock, fn() -> () {
+      let currentStates = Result.unwrapOr(Sync.get(&reg.states), mapOf([]))
+      if let Some(st) = currentStates.get(tenantId) {
+        let newInflight = if st.inflight > 0 { st.inflight - 1 } else { 0 }
+        let updatedState = TenantState{..st, inflight: newInflight}
+        let _s2 = Sync.set(&reg.states, currentStates.insert(tenantId, updatedState))
+      }
+    })
+}
+
+/// Construct a tenant-scoped resource key preventing cross-tenant data collisions.
+export fn scopedKey(tenantId: Str, resourceKey: Str) -> Str {
+  "tenant:" + tenantId + ":" + resourceKey
+}
+
+/// Tenant resolver extracting tenant identifier from an HTTP header.
+export fn resolveFromHeader(headerName: Str) -> fn(&Route.Request) -> Option[Str] {
+  let key = headerName.toLower()
+  fn(req: &Route.Request) -> Option[Str] { Route.header(req, key) }
+}
+
+/// HTTP middleware enforcing tenant admission, concurrency bounds, and account status.
+export fn guard(reg: &TenantRegistry, resolve: fn(&Route.Request) -> Option[Str]) -> Route.Middleware {
+  let tenantReg = *reg
+  fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+    match resolve(&request) {
+      case None => Reply.text(401, "missing or invalid tenant identifier")
+      case Some(tid) => {
+        let bodyBytes = request.message.body.toBytes().length()
+        match admit(&tenantReg, tid, bodyBytes) {
+          case UnknownTenant => Reply.text(401, "unknown tenant identifier")
+          case Suspended(_) => Reply.text(403, "tenant account is suspended")
+          case PayloadTooLarge(_) => Reply.text(413, "payload exceeds tenant quota limit")
+          case RateExceeded(_, retryAfter) => Reply.tooManyRequests(retryAfter)
+          case ConcurrencyExceeded(_) => Reply.serviceUnavailable(1)
+          case Admitted(admittedTenant) => {
+            let answer = next(request)
+            release(&tenantReg, admittedTenant.id)
+            answer
+          }
+        }
+      }
+    }
+  }
+}

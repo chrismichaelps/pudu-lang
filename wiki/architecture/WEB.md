@@ -151,7 +151,7 @@ redirects and file paths validated, and failures that tell a caller nothing but 
 |---|---|---|
 | More than one language on the page? | **Partial** | [[Std App Locale]]: negotiation by weight, catalogues with reportable gaps, and the plural forms each language actually has. Formatting numbers and dates by locale is still absent — [[Std Fmt]] shapes values without one. |
 | Accessible markup? | **Partial** | Any attribute can be written, and an image requires its description at the call. Nothing checks the rest. |
-| Multi-tenancy? | **Partial** | [[Std App Access]] decides on an attribute of the principal, so a per-tenant requirement is expressible. Nothing separates tenants' data or bounds their limits. |
+| Multi-tenancy? | **Ready** | [[Std App Tenant]]: tenant registry, data isolation keying (`scopedKey`), per-tenant admission backpressure (noisy-neighbor protection), rate limiting, payload bounding, and account suspension middleware. |
 | File uploads? | **Ready** | [[Std Http Multipart]], reachable from the request that carried the form. Bounded while reading, and the name a sender gave a file never becomes a path — a name safe to write is a separate call a program has to ask for. |
 | Background work outside a request? | **Ready** for scheduling, **Absent** for queues. | [[Std App Work]]: jobs as values, both interval kinds, no overlapping runs, and a failure recorded rather than fatal. A durable queue is still absent. |
 | Feature flags? | **Ready** | [[Std App Flag]]: value-based flags supporting targeted rollouts, deterministic sticky percentage canary releases, and entity allowlists without centralized service calls. |

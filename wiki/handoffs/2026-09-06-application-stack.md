@@ -140,6 +140,14 @@ Implemented enterprise security compliance and execution resilience:
 - `Std.App`: Configurable and validated `server.drainMillis` setting applied to HTTP server instances.
 - Updated `UsesEnterpriseSsr.pudu` (68 assertions) and `RuntimeSpec.hs`.
 - Added module mirror `Audit.md` with resolved Grill Log; updated `Guard.md`, `Server.md`, `App.md`, `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
+
+## Multi-tenant isolation, noisy-neighbor bounding, and admission quotas
+
+Implemented SaaS multi-tenancy isolation and resource bounds:
+- `Std.App.Tenant`: Synchronized multi-tenant registry, resource quota definitions (`Free`, `Standard`, `Enterprise`), data isolation keying (`scopedKey`), per-tenant admission backpressure (noisy-neighbor protection), moving-window rate limiting, and instant account suspension.
+- `Std.App.Tenant.guard`: HTTP middleware enforcing tenant resolution, concurrency bounds, and account status with RFC 7231 status 503 and RFC 6585 status 429 backpressure.
+- Updated `UsesEnterpriseSsr.pudu` (77 assertions) and `RuntimeSpec.hs`.
+- Added module mirror `Tenant.md` with resolved Grill Log; updated `Std/_MOC.md`, `WEB.md`, and `CHANGELOG.md`.
 - Validated via `bash test/gates.sh` (all 7 gates passed cleanly).
 Exact next action: Commit and push changes to dev refs #193.
 
