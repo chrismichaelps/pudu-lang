@@ -1,0 +1,138 @@
+module UsesJwt
+
+import Std.App.Jwt as Jwt
+import Std.Bytes as ByteSeq
+
+export fn main() -> Int {
+  var held = 0
+
+  let secret = "super-secret-enterprise-signing-key-1234567890".toBytes()
+  let wrongSecret = "completely-different-wrong-secret-key-0987654321".toBytes()
+
+  let baseClaims = Jwt.claims()
+  let configuredClaims = Jwt.withSubject(&baseClaims, "user-42")
+  let withIss = Jwt.withIssuer(&configuredClaims, "auth.example.com")
+  let withAud = Jwt.withAudience(&withIss, "api.example.com")
+  let withExp = Jwt.withExpiresAt(&withAud, 1700001000)
+  let withNbf = Jwt.withNotBefore(&withExp, 1700000000)
+  let withIat = Jwt.withIssuedAt(&withNbf, 1700000000)
+  let withJti = Jwt.withTokenId(&withIat, "token-uuid-999")
+  let fullClaims = Jwt.withClaim(&withJti, "role", "admin")
+
+  // Assertion 1: Claims builder and getters
+  if Jwt.getClaim(&fullClaims, "sub") == Some("user-42") && Jwt.getClaim(&fullClaims, "role") == Some("admin") {
+    held = held + 1
+  }
+
+  // Assertion 2: Encoding produces a three-segment dot-delimited token
+  let token = Jwt.encode(&fullClaims, &secret)
+  let parts = token.split(".")
+  if parts.length() == 3 && parts[0].length() > 0 && parts[1].length() > 0 && parts[2].length() > 0 {
+    held = held + 1
+  }
+
+  // Assertion 3: Decoding valid token with correct secret succeeds
+  let rule = Jwt.validation()
+  let validatedRule = Jwt.requireIssuer(&rule, "auth.example.com")
+  let fullRule = Jwt.requireAudience(&validatedRule, "api.example.com")
+
+  let decoded = Jwt.decode(token, &secret, &fullRule, 1700000500)
+  match decoded {
+    case Ok(c) => {
+      if c.subject == Some("user-42") && c.tokenId == Some("token-uuid-999") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Assertion 4: Decoding with wrong secret fails with InvalidSignature
+  let badSigDecoded = Jwt.decode(token, &wrongSecret, &fullRule, 1700000500)
+  match badSigDecoded {
+    case Err(Jwt.InvalidSignature) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 5: Malformed token fails with MalformedToken
+  let malformedDecoded = Jwt.decode("invalid.token", &secret, &fullRule, 1700000500)
+  match malformedDecoded {
+    case Err(Jwt.MalformedToken) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 6: Expired token fails with ExpiredToken
+  let expiredDecoded = Jwt.decode(token, &secret, &fullRule, 1700001001)
+  match expiredDecoded {
+    case Err(Jwt.ExpiredToken) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 7: Premature token fails with TokenNotYetValid
+  let prematureDecoded = Jwt.decode(token, &secret, &fullRule, 1699999999)
+  match prematureDecoded {
+    case Err(Jwt.TokenNotYetValid) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 8: Leeway tolerates clock drift
+  let leewayRule = Jwt.withLeeway(&fullRule, 10)
+  let leewayDecoded = Jwt.decode(token, &secret, &leewayRule, 1700001005)
+  match leewayDecoded {
+    case Ok(c) => {
+      if c.subject == Some("user-42") { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Assertion 9: Issuer mismatch fails with IssuerMismatch
+  let wrongIssRule = Jwt.requireIssuer(&fullRule, "other.example.com")
+  let issMismatch = Jwt.decode(token, &secret, &wrongIssRule, 1700000500)
+  match issMismatch {
+    case Err(Jwt.IssuerMismatch) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 10: Audience mismatch fails with AudienceMismatch
+  let wrongAudRule = Jwt.requireAudience(&fullRule, "other-api.example.com")
+  let audMismatch = Jwt.decode(token, &secret, &wrongAudRule, 1700000500)
+  match audMismatch {
+    case Err(Jwt.AudienceMismatch) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // Assertion 11: decodeUnverified extracts claims without signature check
+  let unverified = Jwt.decodeUnverified(token)
+  match unverified {
+    case Ok(c) => {
+      if c.subject == Some("user-42") && Jwt.getClaim(&c, "role") == Some("admin") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Assertion 12: Custom claim mutation and retrieval
+  let updatedClaims = Jwt.withClaim(&fullClaims, "role", "superadmin")
+  if Jwt.getClaim(&updatedClaims, "role") == Some("superadmin") {
+    held = held + 1
+  }
+
+  // Assertion 13: expiresIn computes future expiration timestamp
+  let relClaims = Jwt.expiresIn(&baseClaims, 3600, 1700000000)
+  if relClaims.expiresAt == Some(1700003600) {
+    held = held + 1
+  }
+
+  // Assertion 14: hasExpired detects expired and active tokens correctly
+  if Jwt.hasExpired(&relClaims, 1700003601, 0) && !Jwt.hasExpired(&relClaims, 1700003599, 0) {
+    held = held + 1
+  }
+
+  // Assertion 15: isValidAt checks both bounds
+  let boundedClaims = Jwt.withNotBefore(&relClaims, 1700000000)
+  if Jwt.isValidAt(&boundedClaims, 1700001000, 0) && !Jwt.isValidAt(&boundedClaims, 1699999999, 0) {
+    held = held + 1
+  }
+
+  held
+}

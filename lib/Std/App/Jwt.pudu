@@ -1,0 +1,455 @@
+module Std.App.Jwt
+
+import Std.Bytes as ByteSeq
+import Std.Crypto as Crypto
+import Std.Json as Json
+import Std.Result as Result
+
+/// Standard claims contained within an RFC 7519 JSON Web Token.
+export type JwtClaims = {
+  subject: Option[Str],
+  issuer: Option[Str],
+  audience: Option[Str],
+  expiresAt: Option[Int],
+  notBefore: Option[Int],
+  issuedAt: Option[Int],
+  tokenId: Option[Str],
+  custom: Array[(Str, Str)],
+}
+
+/// Validation parameters applied during JWT signature and claims checking.
+export type JwtValidation = {
+  expectedIssuer: Option[Str],
+  expectedAudience: Option[Str],
+  leewaySeconds: Int,
+}
+
+/// Structured failure conditions encountered while decoding or validating a JWT.
+export type JwtError
+  = MalformedToken
+  | InvalidSignature
+  | UnsupportedAlgorithm
+  | ExpiredToken
+  | TokenNotYetValid
+  | IssuerMismatch
+  | AudienceMismatch
+  | InvalidClaimsJson
+
+/// Constructs an empty set of JWT claims.
+export fn claims() -> JwtClaims {
+  JwtClaims {
+    subject: None,
+    issuer: None,
+    audience: None,
+    expiresAt: None,
+    notBefore: None,
+    issuedAt: None,
+    tokenId: None,
+    custom: [],
+  }
+}
+
+/// Sets the `sub` (Subject) claim.
+export fn withSubject(c: &JwtClaims, sub: Str) -> JwtClaims {
+  JwtClaims {
+    subject: Some(sub),
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `iss` (Issuer) claim.
+export fn withIssuer(c: &JwtClaims, iss: Str) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: Some(iss),
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `aud` (Audience) claim.
+export fn withAudience(c: &JwtClaims, aud: Str) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: Some(aud),
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `exp` (Expiration Time) claim in epoch seconds.
+export fn withExpiresAt(c: &JwtClaims, exp: Int) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: Some(exp),
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `nbf` (Not Before) claim in epoch seconds.
+export fn withNotBefore(c: &JwtClaims, nbf: Int) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: Some(nbf),
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `iat` (Issued At) claim in epoch seconds.
+export fn withIssuedAt(c: &JwtClaims, iat: Int) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: Some(iat),
+    tokenId: c.tokenId,
+    custom: c.custom,
+  }
+}
+
+/// Sets the `jti` (JWT ID) claim.
+export fn withTokenId(c: &JwtClaims, jti: Str) -> JwtClaims {
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: Some(jti),
+    custom: c.custom,
+  }
+}
+
+/// Adds or updates a custom key-value claim in the payload.
+export fn withClaim(c: &JwtClaims, key: Str, value: Str) -> JwtClaims {
+  var updated: Array[(Str, Str)] = []
+  for pair in c.custom {
+    if pair[0] != key {
+      updated = updated.push(pair)
+    }
+  }
+  updated = updated.push((key, value))
+  JwtClaims {
+    subject: c.subject,
+    issuer: c.issuer,
+    audience: c.audience,
+    expiresAt: c.expiresAt,
+    notBefore: c.notBefore,
+    issuedAt: c.issuedAt,
+    tokenId: c.tokenId,
+    custom: updated,
+  }
+}
+
+/// Retrieves a claim by name from registered or custom claims.
+export fn getClaim(c: &JwtClaims, key: Str) -> Option[Str] {
+  if key == "sub" { return c.subject }
+  if key == "iss" { return c.issuer }
+  if key == "aud" { return c.audience }
+  if key == "jti" { return c.tokenId }
+  for pair in c.custom {
+    if pair[0] == key {
+      return Some(pair[1])
+    }
+  }
+  None
+}
+
+/// Sets the `exp` claim relative to a reference timestamp.
+export fn expiresIn(c: &JwtClaims, durationSeconds: Int, nowSeconds: Int) -> JwtClaims {
+  withExpiresAt(c, nowSeconds + durationSeconds)
+}
+
+/// Checks whether claims indicate the token has expired relative to a timestamp and leeway.
+export fn hasExpired(c: &JwtClaims, nowSeconds: Int, leewaySeconds: Int) -> Bool {
+  match c.expiresAt {
+    case Some(exp) => nowSeconds >= exp + leewaySeconds
+    case None => false
+  }
+}
+
+/// Checks whether claims are active and valid (neither premature nor expired).
+export fn isValidAt(c: &JwtClaims, nowSeconds: Int, leewaySeconds: Int) -> Bool {
+  if hasExpired(c, nowSeconds, leewaySeconds) { return false }
+  match c.notBefore {
+    case Some(nbf) => nowSeconds + leewaySeconds >= nbf
+    case None => true
+  }
+}
+
+/// Constructs default validation rules with zero leeway and no mandatory issuer or audience.
+export fn validation() -> JwtValidation {
+  JwtValidation {
+    expectedIssuer: None,
+    expectedAudience: None,
+    leewaySeconds: 0,
+  }
+}
+
+/// Configures mandatory issuer verification.
+export fn requireIssuer(v: &JwtValidation, iss: Str) -> JwtValidation {
+  JwtValidation {
+    expectedIssuer: Some(iss),
+    expectedAudience: v.expectedAudience,
+    leewaySeconds: v.leewaySeconds,
+  }
+}
+
+/// Configures mandatory audience verification.
+export fn requireAudience(v: &JwtValidation, aud: Str) -> JwtValidation {
+  JwtValidation {
+    expectedIssuer: v.expectedIssuer,
+    expectedAudience: Some(aud),
+    leewaySeconds: v.leewaySeconds,
+  }
+}
+
+/// Configures clock skew tolerance in seconds.
+export fn withLeeway(v: &JwtValidation, seconds: Int) -> JwtValidation {
+  JwtValidation {
+    expectedIssuer: v.expectedIssuer,
+    expectedAudience: v.expectedAudience,
+    leewaySeconds: seconds,
+  }
+}
+
+/// Serializes and signs claims into an RFC 7519 HS256 compact JSON Web Token.
+export fn encode(claimsPayload: &JwtClaims, secret: &Bytes) -> Str {
+  let header = Json.object(&[("alg", Json.Text("HS256")), ("typ", Json.Text("JWT"))])
+  let headerB64 = ByteSeq.encodeBase64Url(&Json.encode(&header).toBytes())
+
+  var entries: Array[(Str, Json.Json)] = []
+  entries = appendTextClaim(entries, "sub", claimsPayload.subject)
+  entries = appendTextClaim(entries, "iss", claimsPayload.issuer)
+  entries = appendTextClaim(entries, "aud", claimsPayload.audience)
+  entries = appendIntClaim(entries, "exp", claimsPayload.expiresAt)
+  entries = appendIntClaim(entries, "nbf", claimsPayload.notBefore)
+  entries = appendIntClaim(entries, "iat", claimsPayload.issuedAt)
+  entries = appendTextClaim(entries, "jti", claimsPayload.tokenId)
+  for pair in claimsPayload.custom {
+    if isCustomKey(pair[0]) { entries = entries.push((pair[0], Json.Text(pair[1]))) }
+  }
+
+  let payload = Json.object(&entries)
+  let payloadB64 = ByteSeq.encodeBase64Url(&Json.encode(&payload).toBytes())
+
+  let signingInput = headerB64 + "." + payloadB64
+  let signatureBytes = hmacSha256Of(*secret, signingInput.toBytes())
+  let signatureB64 = ByteSeq.encodeBase64Url(&signatureBytes)
+
+  signingInput + "." + signatureB64
+}
+
+/// Decodes and cryptographically verifies an RFC 7519 compact JWT against secret and validation rules.
+export fn decode(token: Str, secret: &Bytes, rule: &JwtValidation, nowSeconds: Int) -> Result[JwtClaims, JwtError] {
+  if token.length() > 65536 || rule.leewaySeconds < 0 { return Err(MalformedToken) }
+  let parts = token.split(".")
+  if parts.length() != 3 {
+    return Err(MalformedToken)
+  }
+
+  let headerB64 = parts[0]
+  let payloadB64 = parts[1]
+  let signatureB64 = parts[2]
+
+  let _sigVerified = verifySignature(headerB64, payloadB64, signatureB64, secret) ?
+  let _hdrVerified = verifyHeader(headerB64) ?
+
+  let parsedClaims = decodePayloadClaims(payloadB64) ?
+  match checkBounds(&parsedClaims, rule, nowSeconds) {
+    case Some(err) => { return Err(err) }
+    case None => {}
+  }
+
+  Ok(parsedClaims)
+}
+
+/// Decodes claims without cryptographic signature verification.
+export fn decodeUnverified(token: Str) -> Result[JwtClaims, JwtError] {
+  let parts = token.split(".")
+  if parts.length() != 3 {
+    return Err(MalformedToken)
+  }
+  decodePayloadClaims(parts[1])
+}
+
+fn asMalformed[T](_err: T) -> JwtError {
+  MalformedToken
+}
+
+fn asInvalidClaims[T](_err: T) -> JwtError {
+  InvalidClaimsJson
+}
+
+fn verifySignature(headerB64: Str, payloadB64: Str, signatureB64: Str, secret: &Bytes) -> Result[Bool, JwtError] {
+  let signingInput = headerB64 + "." + payloadB64
+  let expectedSigBytes = hmacSha256Of(*secret, signingInput.toBytes())
+  let expectedSigB64 = ByteSeq.encodeBase64Url(&expectedSigBytes)
+  if !Crypto.secretsMatch(signatureB64, expectedSigB64) {
+    return Err(InvalidSignature)
+  }
+  Ok(true)
+}
+
+fn verifyHeader(headerB64: Str) -> Result[Bool, JwtError] {
+  let headerJson = parseJsonSegment(headerB64) ?
+  let fields = match Json.asObject(&headerJson) {
+    case Some(entries) => entries
+    case None => { return Err(MalformedToken) }
+  }
+  var seen: Set[Str] = setOf([])
+  for field in fields {
+    if seen.contains(field[0]) { return Err(MalformedToken) }
+    seen = seen.insert(field[0])
+    if field[0] == "crit" || field[0] == "b64" { return Err(UnsupportedAlgorithm) }
+  }
+  if fieldText(&headerJson, "alg") != Some("HS256") {
+    return Err(UnsupportedAlgorithm)
+  }
+  Ok(true)
+}
+
+fn decodePayloadClaims(payloadB64: Str) -> Result[JwtClaims, JwtError] {
+  let payloadJson = parseJsonSegment(payloadB64) ?
+  let subject = fieldText(&payloadJson, "sub")
+  let issuer = fieldText(&payloadJson, "iss")
+  let audience = fieldText(&payloadJson, "aud")
+  let expiresAt = fieldInt(&payloadJson, "exp")
+  let notBefore = fieldInt(&payloadJson, "nbf")
+  let issuedAt = fieldInt(&payloadJson, "iat")
+  let tokenId = fieldText(&payloadJson, "jti")
+
+  var customEntries: Array[(Str, Str)] = []
+  let entries = match Json.asObject(&payloadJson) {
+    case Some(items) => items
+    case None => { return Err(InvalidClaimsJson) }
+  }
+
+  var seen: Set[Str] = setOf([])
+  for entry in entries {
+    let key = entry[0]
+    if seen.contains(key) { return Err(InvalidClaimsJson) }
+    seen = seen.insert(key)
+    if key == "exp" || key == "nbf" || key == "iat" {
+      if let None = Json.asInt(&entry[1]) { return Err(InvalidClaimsJson) }
+    }
+    if key == "sub" || key == "iss" || key == "aud" || key == "jti" {
+      if let None = Json.asText(&entry[1]) { return Err(InvalidClaimsJson) }
+    }
+    if isCustomKey(key) {
+      match Json.asText(&entry[1]) {
+        case Some(val) => { customEntries = customEntries.push((key, val)) }
+        case None => {}
+      }
+    }
+  }
+
+  Ok(JwtClaims {
+      subject: subject,
+      issuer: issuer,
+      audience: audience,
+      expiresAt: expiresAt,
+      notBefore: notBefore,
+      issuedAt: issuedAt,
+      tokenId: tokenId,
+      custom: customEntries,
+    })
+}
+
+fn parseJsonSegment(segmentB64: Str) -> Result[Json.Json, JwtError] {
+  if segmentB64.isEmpty() { return Err(MalformedToken) }
+  let bytes = Result.mapErr(ByteSeq.decodeBase64Url(segmentB64), asMalformed) ?
+  if ByteSeq.encodeBase64Url(&bytes) != segmentB64 { return Err(MalformedToken) }
+  let text = Result.mapErr(ByteSeq.toText(&bytes), asMalformed) ?
+  Result.mapErr(Json.decode(text), asInvalidClaims)
+}
+
+fn checkBounds(c: &JwtClaims, rule: &JwtValidation, nowSeconds: Int) -> Option[JwtError] {
+  if hasExpired(c, nowSeconds, rule.leewaySeconds) {
+    return Some(ExpiredToken)
+  }
+
+  match c.notBefore {
+    case Some(nbf) => {
+      if nowSeconds + rule.leewaySeconds < nbf {
+        return Some(TokenNotYetValid)
+      }
+    }
+    case None => {}
+  }
+
+  match rule.expectedIssuer {
+    case Some(expected) => {
+      if c.issuer != Some(expected) {
+        return Some(IssuerMismatch)
+      }
+    }
+    case None => {}
+  }
+
+  match rule.expectedAudience {
+    case Some(expected) => {
+      if c.audience != Some(expected) {
+        return Some(AudienceMismatch)
+      }
+    }
+    case None => {}
+  }
+
+  None
+}
+
+fn fieldText(json: &Json.Json, key: Str) -> Option[Str] {
+  let f = Json.field(json, key) ?
+  Json.asText(&f)
+}
+
+fn fieldInt(json: &Json.Json, key: Str) -> Option[Int] {
+  let f = Json.field(json, key) ?
+  Json.asInt(&f)
+}
+
+fn isCustomKey(key: Str) -> Bool {
+  key != "sub" && key != "iss" && key != "aud" && key != "exp" && key != "nbf" && key != "iat" && key != "jti"
+}
+
+fn appendTextClaim(entries: Array[(Str, Json.Json)], key: Str, value: Option[Str]) -> Array[(Str, Json.Json)] {
+  match value {
+    case Some(text) => entries.push((key, Json.Text(text)))
+    case None => entries
+  }
+}
+
+fn appendIntClaim(entries: Array[(Str, Json.Json)], key: Str, value: Option[Int]) -> Array[(Str, Json.Json)] {
+  match value {
+    case Some(num) => entries.push((key, Json.Number(num)))
+    case None => entries
+  }
+}
