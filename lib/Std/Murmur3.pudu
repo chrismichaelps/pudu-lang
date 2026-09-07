@@ -1,0 +1,123 @@
+module Std.Murmur3
+
+import Std.Bytes as Bytes
+
+/// Rotates a 32-bit unsigned integer left by `r` bits.
+export fn rotL32(x: UInt32, r: Int) -> UInt32 {
+  let rMask = r & 31
+  if rMask == 0 {
+    x
+  } else {
+    (x << rMask) | (x >> (32 - rMask))
+  }
+}
+
+fn step32(h: UInt32, k: UInt32) -> UInt32 {
+  let c1 = 0xcc9e2d51u32
+  let c2 = 0x1b873593u32
+  var k1 = k &* c1
+  k1 = rotL32(k1, 15)
+  k1 = k1 &* c2
+  var h1 = h ^ k1
+  h1 = rotL32(h1, 13)
+  (h1 &* 5u32) &+ 0xe6546b64u32
+}
+
+/// Finalization mix avalanche stage for 32-bit integers.
+export fn fmix32(h: UInt32) -> UInt32 {
+  var v = h
+  v = v ^ (v >> 16)
+  v = v &* 0x85ebca6bu32
+  v = v ^ (v >> 13)
+  v = v &* 0xc2b2ae35u32
+  v ^ (v >> 16)
+}
+
+/// Finalization mix avalanche stage for 64-bit integers.
+export fn fmix64(k: UInt64) -> UInt64 {
+  var v = k
+  v = v ^ (v >> 33)
+  v = v &* 0xff51afd7ed558ccdu64
+  v = v ^ (v >> 33)
+  v = v &* 0xc4ceb9fe1a85ec53u64
+  v ^ (v >> 33)
+}
+
+fn u8ToU32(b: UInt8) -> UInt32 {
+  match convertInteger[UInt32](b) {
+    case Some(u) => u
+    case None => 0u32
+  }
+}
+
+fn readU32Le(bytes: &Array[UInt8], offset: Int) -> UInt32 {
+  let b0 = u8ToU32(bytes[offset])
+  let b1 = u8ToU32(bytes[offset + 1])
+  let b2 = u8ToU32(bytes[offset + 2])
+  let b3 = u8ToU32(bytes[offset + 3])
+  b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+}
+
+/// Computes the 32-bit MurmurHash3 digest over a byte array with a given `seed`.
+export fn hash32(bytes: &Array[UInt8], seed: UInt32) -> UInt32 {
+  let len = bytes.length()
+  var h = seed
+  let numBlocks = len / 4
+  var i = 0
+  while i < numBlocks {
+    let k = readU32Le(bytes, i * 4)
+    h = step32(h, k)
+    i = i + 1
+  }
+  let tailOffset = numBlocks * 4
+  let rem = len - tailOffset
+  var k1 = 0u32
+  if rem == 3 {
+    k1 = k1 ^ (u8ToU32(bytes[tailOffset + 2]) << 16)
+  }
+  if rem >= 2 {
+    k1 = k1 ^ (u8ToU32(bytes[tailOffset + 1]) << 8)
+  }
+  if rem >= 1 {
+    k1 = k1 ^ u8ToU32(bytes[tailOffset])
+    let c1 = 0xcc9e2d51u32
+    let c2 = 0x1b873593u32
+    k1 = k1 &* c1
+    k1 = rotL32(k1, 15)
+    k1 = k1 &* c2
+    h = h ^ k1
+  }
+  let lenU32 = match convertInteger[UInt32](len) {
+    case Some(u) => u
+    case None => 0u32
+  }
+  h = h ^ lenU32
+  fmix32(h)
+}
+
+/// Computes the 32-bit MurmurHash3 digest directly over a UTF-8 string.
+export fn hash32Text(text: Str, seed: UInt32) -> UInt32 {
+  let b = text.toBytes().toArray()
+  hash32(&b, seed)
+}
+
+/// Computes the 32-bit MurmurHash3 digest directly from a 64-bit integer without byte allocations.
+export fn hash32Int(value: Int, seed: UInt32) -> UInt32 {
+  let u = match convertInteger[UInt64](value) {
+    case Some(v) => v
+    case None => 0u64
+  }
+  let w0 = match convertInteger[UInt32](u & 0xffffffffu64) {
+    case Some(v) => v
+    case None => 0u32
+  }
+  let w1 = match convertInteger[UInt32]((u >> 32) & 0xffffffffu64) {
+    case Some(v) => v
+    case None => 0u32
+  }
+  var h = seed
+  h = step32(h, w0)
+  h = step32(h, w1)
+  h = h ^ 8u32
+  fmix32(h)
+}
