@@ -1,0 +1,111 @@
+module UsesMime
+
+import Std.Mime as Mime
+
+export fn main() -> Int {
+  var held = 0
+
+  // 1. Parse valid media type with parameters
+  let parsedOpt = Mime.parse("application/json; charset=utf-8; version=2")
+  match parsedOpt {
+    case Some(m) => {
+      if m.primaryType == "application"
+        && m.subType == "json"
+        && Mime.parameter(&m, "charset") == Some("utf-8")
+        && Mime.parameter(&m, "version") == Some("2")
+        && Mime.parameter(&m, "absent") == None {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 2. Parse quoted parameter values and case-insensitivity
+  let quotedOpt = Mime.parse("TEXT/HTML; BOUNDARY=\"---123---\"")
+  match quotedOpt {
+    case Some(m) => {
+      if m.primaryType == "text"
+        && m.subType == "html"
+        && Mime.parameter(&m, "boundary") == Some("---123---") {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 3. Format canonical serialization
+  match parsedOpt {
+    case Some(m) => {
+      let wire = Mime.format(&m)
+      if wire.contains("application/json")
+        && wire.contains("charset=utf-8")
+        && wire.contains("version=2") {
+        held = held + 1
+      }
+    }
+    case None => {}
+  }
+
+  // 4. Parse invalid media types
+  let bad1 = Mime.parse("")
+  let bad2 = Mime.parse("plain_text_no_slash")
+  let bad3 = Mime.parse("/only_sub")
+  let bad4 = Mime.parse("only_prim/")
+  if bad1 == None && bad2 == None && bad3 == None && bad4 == None {
+    held = held + 1
+  }
+
+  // 5. fromExtension mappings and fallback
+  let extHtml = Mime.fromExtension("html")
+  let extDotPng = Mime.fromExtension(".PNG")
+  let extWasm = Mime.fromExtension("wasm")
+  let extUnknown = Mime.fromExtension("xyz123_unknown")
+  if extHtml == "text/html"
+    && extDotPng == "image/png"
+    && extWasm == "application/wasm"
+    && extUnknown == "application/octet-stream" {
+    held = held + 1
+  }
+
+  // 6. toExtension reverse mappings
+  let toExtJson = Mime.toExtension("application/json")
+  let toExtCssWithParam = Mime.toExtension("text/css; charset=utf-8")
+  let toExtUnknown = Mime.toExtension("nonexistent/fake_media_type")
+  if toExtJson == Some("json")
+    && toExtCssWithParam == Some("css")
+    && toExtUnknown == None {
+    held = held + 1
+  }
+
+  // 7. matches wildcard and exact checks
+  let mWildcard = Mime.matches("*/*", "application/json")
+  let mPrefix = Mime.matches("image/*", "image/png")
+  let mPrefixFail = Mime.matches("image/*", "text/html")
+  let mExactWithParam = Mime.matches("text/plain", "text/plain; charset=utf-8")
+  if mWildcard && mPrefix && !mPrefixFail && mExactWithParam {
+    held = held + 1
+  }
+
+  // 8. Content negotiation simple first-match
+  let avail1 = ["text/plain", "application/json"]
+  let chosen1 = Mime.negotiate("application/json, text/plain", avail1)
+  if chosen1 == Some("application/json") {
+    held = held + 1
+  }
+
+  // 9. Content negotiation with RFC 7231 quality values
+  let avail2 = ["text/html", "application/json", "image/png"]
+  let chosen2 = Mime.negotiate("text/html;q=0.5, application/json;q=0.9, */*;q=0.1", avail2)
+  if chosen2 == Some("application/json") {
+    held = held + 1
+  }
+
+  // 10. Content negotiation wildcard fallback
+  let avail3 = ["video/mp4", "image/webp"]
+  let chosen3 = Mime.negotiate("application/xml;q=0.9, */*;q=0.8", avail3)
+  if chosen3 == Some("video/mp4") {
+    held = held + 1
+  }
+
+  held
+}

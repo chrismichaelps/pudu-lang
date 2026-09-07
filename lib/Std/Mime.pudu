@@ -1,0 +1,322 @@
+module Std.Mime
+
+import Std.List as List
+
+/// Structured representation of a MIME Media Type.
+export type MediaType = {
+  primaryType: Str,
+  subType: Str,
+  parameters: Array[(Str, Str)]
+}
+
+fn toLower(s: Str) -> Str {
+  var out = ""
+  var i = 0
+  let len = s.length()
+  while i < len {
+    let ch = s.charAt(i)
+    if ch >= 'A' && ch <= 'Z' {
+      let code = ch.code() + 32
+      match charFromCode(code) {
+        case Some(c) => { out = out + c.toText() }
+        case None => { out = out + ch.toText() }
+      }
+    } else {
+      out = out + ch.toText()
+    }
+    i = i + 1
+  }
+  out
+}
+
+fn trim(s: Str) -> Str {
+  let len = s.length()
+  if len == 0 { return "" }
+  var start = 0
+  var running = true
+  while start < len && running {
+    let ch = s.charAt(start)
+    if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
+      start = start + 1
+    } else {
+      running = false
+    }
+  }
+  var end = len
+  running = true
+  while end > start && running {
+    let ch = s.charAt(end - 1)
+    if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
+      end = end - 1
+    } else {
+      running = false
+    }
+  }
+  s.slice(start, end)
+}
+
+fn splitBy(s: Str, delimiter: Char) -> Array[Str] {
+  var out: Array[Str] = []
+  var start = 0
+  let len = s.length()
+  var i = 0
+  while i < len {
+    if s.charAt(i) == delimiter {
+      out = out.push(s.slice(start, i))
+      start = i + 1
+    }
+    i = i + 1
+  }
+  out.push(s.slice(start, len))
+}
+
+/// Parses a MIME media type string into a structured MediaType.
+export fn parse(input: Str) -> Option[MediaType] {
+  let cleaned = trim(input)
+  if cleaned.isEmpty() { return None }
+  let parts = splitBy(cleaned, ';')
+  let mainType = trim(parts[0])
+  let slashIdx = mainType.indexOf("/")
+  if slashIdx <= 0 || slashIdx >= mainType.length() - 1 { return None }
+
+  let prim = toLower(trim(mainType.slice(0, slashIdx)))
+  let sub = toLower(trim(mainType.slice(slashIdx + 1, mainType.length())))
+  if prim.isEmpty() || sub.isEmpty() { return None }
+
+  var params: Array[(Str, Str)] = []
+  var pIdx = 1
+  while pIdx < parts.length() {
+    let seg = trim(parts[pIdx])
+    if !seg.isEmpty() {
+      let eqIdx = seg.indexOf("=")
+      if eqIdx > 0 {
+        let k = toLower(trim(seg.slice(0, eqIdx)))
+        var v = trim(seg.slice(eqIdx + 1, seg.length()))
+        if v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"") {
+          v = v.slice(1, v.length() - 1)
+        }
+        params = params.push((k, v))
+      }
+    }
+    pIdx = pIdx + 1
+  }
+
+  Some(MediaType{primaryType: prim, subType: sub, parameters: params})
+}
+
+/// Serializes a MediaType to its canonical wire format.
+export fn format(media: &MediaType) -> Str {
+  var out = media.primaryType + "/" + media.subType
+  for param in media.parameters {
+    out = out + "; " + param[0] + "=" + param[1]
+  }
+  out
+}
+
+/// Extracts a named parameter value from a MediaType.
+export fn parameter(media: &MediaType, name: Str) -> Option[Str] {
+  let target = toLower(trim(name))
+  for param in media.parameters {
+    if param[0] == target {
+      return Some(param[1])
+    }
+  }
+  None
+}
+
+/// Maps a file extension to its canonical MIME media type.
+export fn fromExtension(ext: Str) -> Str {
+  var clean = toLower(trim(ext))
+  if clean.startsWith(".") {
+    clean = clean.slice(1, clean.length())
+  }
+  if clean == "html" || clean == "htm" { return "text/html" }
+  if clean == "css" { return "text/css" }
+  if clean == "js" || clean == "mjs" { return "text/javascript" }
+  if clean == "json" { return "application/json" }
+  if clean == "xml" { return "application/xml" }
+  if clean == "txt" || clean == "text" { return "text/plain" }
+  if clean == "csv" { return "text/csv" }
+  if clean == "md" || clean == "markdown" { return "text/markdown" }
+  if clean == "yaml" || clean == "yml" { return "application/yaml" }
+  if clean == "toml" { return "application/toml" }
+  if clean == "wasm" { return "application/wasm" }
+  if clean == "png" { return "image/png" }
+  if clean == "jpg" || clean == "jpeg" { return "image/jpeg" }
+  if clean == "gif" { return "image/gif" }
+  if clean == "webp" { return "image/webp" }
+  if clean == "avif" { return "image/avif" }
+  if clean == "svg" { return "image/svg+xml" }
+  if clean == "ico" { return "image/x-icon" }
+  if clean == "bmp" { return "image/bmp" }
+  if clean == "tiff" || clean == "tif" { return "image/tiff" }
+  if clean == "mp3" { return "audio/mpeg" }
+  if clean == "wav" { return "audio/wav" }
+  if clean == "ogg" { return "audio/ogg" }
+  if clean == "flac" { return "audio/flac" }
+  if clean == "mp4" { return "video/mp4" }
+  if clean == "webm" { return "video/webm" }
+  if clean == "mov" { return "video/quicktime" }
+  if clean == "mkv" { return "video/x-matroska" }
+  if clean == "woff2" { return "font/woff2" }
+  if clean == "woff" { return "font/woff" }
+  if clean == "ttf" { return "font/ttf" }
+  if clean == "otf" { return "font/otf" }
+  if clean == "pdf" { return "application/pdf" }
+  if clean == "zip" { return "application/zip" }
+  if clean == "gz" || clean == "gzip" { return "application/gzip" }
+  if clean == "tar" { return "application/x-tar" }
+  if clean == "7z" { return "application/x-7z-compressed" }
+  if clean == "rar" { return "application/vnd.rar" }
+  if clean == "doc" { return "application/msword" }
+  if clean == "docx" { return "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }
+  if clean == "xls" { return "application/vnd.ms-excel" }
+  if clean == "xlsx" { return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+  if clean == "ppt" { return "application/vnd.ms-powerpoint" }
+  if clean == "pptx" { return "application/vnd.openxmlformats-officedocument.presentationml.presentation" }
+  "application/octet-stream"
+}
+
+/// Maps a canonical MIME media type to its primary file extension.
+export fn toExtension(mime: Str) -> Option[Str] {
+  let clean = toLower(trim(mime))
+  let base = match clean.indexOf(";") {
+    case -1 => clean
+    case idx => clean.slice(0, idx)
+  }
+  if base == "text/html" { return Some("html") }
+  if base == "text/css" { return Some("css") }
+  if base == "text/javascript" { return Some("js") }
+  if base == "application/json" { return Some("json") }
+  if base == "application/xml" { return Some("xml") }
+  if base == "text/plain" { return Some("txt") }
+  if base == "text/csv" { return Some("csv") }
+  if base == "text/markdown" { return Some("md") }
+  if base == "application/yaml" { return Some("yaml") }
+  if base == "application/toml" { return Some("toml") }
+  if base == "application/wasm" { return Some("wasm") }
+  if base == "image/png" { return Some("png") }
+  if base == "image/jpeg" { return Some("jpg") }
+  if base == "image/gif" { return Some("gif") }
+  if base == "image/webp" { return Some("webp") }
+  if base == "image/avif" { return Some("avif") }
+  if base == "image/svg+xml" { return Some("svg") }
+  if base == "image/x-icon" { return Some("ico") }
+  if base == "audio/mpeg" { return Some("mp3") }
+  if base == "audio/wav" { return Some("wav") }
+  if base == "video/mp4" { return Some("mp4") }
+  if base == "video/webm" { return Some("webm") }
+  if base == "font/woff2" { return Some("woff2") }
+  if base == "font/woff" { return Some("woff") }
+  if base == "application/pdf" { return Some("pdf") }
+  if base == "application/zip" { return Some("zip") }
+  if base == "application/gzip" { return Some("gz") }
+  if base == "application/x-tar" { return Some("tar") }
+  if base == "application/octet-stream" { return Some("bin") }
+  None
+}
+
+/// Tests if a target media type satisfies a pattern (e.g. */* or type/*).
+export fn matches(pattern: Str, target: Str) -> Bool {
+  let p = toLower(trim(pattern))
+  let t = toLower(trim(target))
+  if p == "*/*" || p == "*" { return true }
+  let baseT = match t.indexOf(";") {
+    case -1 => t
+    case idx => t.slice(0, idx)
+  }
+  let baseP = match p.indexOf(";") {
+    case -1 => p
+    case idx => p.slice(0, idx)
+  }
+  if baseP == "*/*" { return true }
+  if baseP == baseT { return true }
+  if baseP.endsWith("/*") {
+    let pPrefix = baseP.slice(0, baseP.length() - 2)
+    let tSlash = baseT.indexOf("/")
+    if tSlash > 0 {
+      let tPrefix = baseT.slice(0, tSlash)
+      return pPrefix == tPrefix
+    }
+  }
+  false
+}
+
+fn parseQuality(item: Str) -> (Str, Int) {
+  let parts = splitBy(item, ';')
+  let pat = trim(parts[0])
+  var q = 1000
+  var i = 1
+  while i < parts.length() {
+    let seg = trim(parts[i])
+    if seg.startsWith("q=") || seg.startsWith("Q=") {
+      let rawQ = trim(seg.slice(2, seg.length()))
+      if rawQ == "1" || rawQ == "1.0" || rawQ == "1.00" || rawQ == "1.000" {
+        q = 1000
+      } else if rawQ.startsWith("0.") {
+        let decStr = rawQ.slice(2, rawQ.length())
+        var num = 0
+        var dIdx = 0
+        var multiplier = 100
+        while dIdx < decStr.length() && dIdx < 3 {
+          let code = decStr.charAt(dIdx).code() - '0'.code()
+          if code >= 0 && code <= 9 {
+            num = num + code * multiplier
+          }
+          multiplier = multiplier / 10
+          dIdx = dIdx + 1
+        }
+        q = num
+      } else if rawQ == "0" {
+        q = 0
+      }
+    }
+    i = i + 1
+  }
+  (pat, q)
+}
+
+/// Negotiates the best matching media type from available candidates using an RFC 7231 Accept header.
+export fn negotiate(acceptHeader: Str, available: Array[Str]) -> Option[Str] {
+  if acceptHeader.isEmpty() || available.length() == 0 { return None }
+  let rawOffers = splitBy(acceptHeader, ',')
+  var offers: Array[(Str, Int)] = []
+  for ro in rawOffers {
+    let trimmed = trim(ro)
+    if !trimmed.isEmpty() {
+      offers = offers.push(parseQuality(trimmed))
+    }
+  }
+  if offers.length() == 0 { return None }
+
+  // Sort offers by q descending
+  var sortedOffers = offers
+  var i = 0
+  while i < sortedOffers.length() {
+    var maxIdx = i
+    var j = i + 1
+    while j < sortedOffers.length() {
+      if sortedOffers[j][1] > sortedOffers[maxIdx][1] {
+        maxIdx = j
+      }
+      j = j + 1
+    }
+    if maxIdx != i {
+      let tmp = sortedOffers[i]
+      sortedOffers = List.set(&sortedOffers, i, sortedOffers[maxIdx])
+      sortedOffers = List.set(&sortedOffers, maxIdx, tmp)
+    }
+    i = i + 1
+  }
+
+  for offer in sortedOffers {
+    if offer[1] > 0 {
+      for cand in available {
+        if matches(offer[0], cand) {
+          return Some(cand)
+        }
+      }
+    }
+  }
+  None
+}
