@@ -1,0 +1,186 @@
+module Std.FenwickTree
+
+import Std.List as List
+
+/// A low-level Binary Indexed Tree for O(log n) prefix sums and point updates.
+export type FenwickTree = {
+  tree: Array[Int],
+  size: Int,
+}
+
+fn fillZeros(count: Int) -> Array[Int] {
+  var arr: Array[Int] = []
+  var i = 0
+  while i < count {
+    arr = arr.push(0)
+    i = i + 1
+  }
+  arr
+}
+
+/// Allocates a zero-initialized Fenwick tree for sequence length `elementCount`.
+export fn create(elementCount: Int) -> FenwickTree {
+  let treeSize = if elementCount > 0 { elementCount + 1 } else { 1 }
+  let tree = fillZeros(treeSize)
+  let actualSize = if elementCount > 0 { elementCount } else { 0 }
+  FenwickTree {
+    tree: tree,
+    size: actualSize,
+  }
+}
+
+/// Builds a Fenwick tree in strict O(n) linear time from an array of initial values.
+export fn fromArray(values: &Array[Int]) -> FenwickTree {
+  let n = values.length()
+  let treeSize = n + 1
+  var tree = fillZeros(treeSize)
+  var i = 0
+  while i < n {
+    let idx = i + 1
+    let val = values[i]
+    tree = List.set(&tree, idx, val)
+    i = i + 1
+  }
+  i = 1
+  while i <= n {
+    let parent = i &+ (i & (0 &- i))
+    if parent <= n {
+      let childVal = tree[i]
+      let parentVal = tree[parent]
+      let sum = parentVal &+ childVal
+      tree = List.set(&tree, parent, sum)
+    }
+    i = i + 1
+  }
+  FenwickTree {
+    tree: tree,
+    size: n,
+  }
+}
+
+/// Returns the number of elements in the tree.
+export fn size(ft: &FenwickTree) -> Int {
+  ft.size
+}
+
+/// Adds `delta` to the 1-based element at `index` in O(log n) time.
+export fn add(ft: &FenwickTree, index: Int, delta: Int) -> Option[FenwickTree] {
+  if index < 1 || index > ft.size {
+    return None
+  }
+  var tree = ft.tree
+  var i = index
+  while i <= ft.size {
+    let current = tree[i]
+    let updated = current &+ delta
+    tree = List.set(&tree, i, updated)
+    i = i &+ (i & (0 &- i))
+  }
+  Some(FenwickTree {
+      tree: tree,
+      size: ft.size,
+    })
+}
+
+/// Computes the prefix sum up to 1-based `index` in O(log n) time.
+export fn prefixSum(ft: &FenwickTree, index: Int) -> Option[Int] {
+  if index < 0 || index > ft.size {
+    return None
+  }
+  if index == 0 {
+    return Some(0)
+  }
+  var sum = 0
+  var i = index
+  while i > 0 {
+    sum = sum &+ ft.tree[i]
+    i = i &- (i & (0 &- i))
+  }
+  Some(sum)
+}
+
+/// Computes the range sum [left, right] inclusive in O(log n) time.
+export fn rangeSum(ft: &FenwickTree, left: Int, right: Int) -> Option[Int] {
+  if left < 1 || left > right || right > ft.size {
+    return None
+  }
+  let sumR = match prefixSum(ft, right) {
+    case Some(s) => s
+    case None => 0
+  }
+  let sumL = match prefixSum(ft, left - 1) {
+    case Some(s) => s
+    case None => 0
+  }
+  Some(sumR &- sumL)
+}
+
+/// Retrieves the single value at 1-based `index` in O(log n) time.
+export fn get(ft: &FenwickTree, index: Int) -> Option[Int] {
+  if index < 1 || index > ft.size {
+    return None
+  }
+  rangeSum(ft, index, index)
+}
+
+/// Sets the 1-based element at `index` to `value`.
+export fn set(ft: &FenwickTree, index: Int, value: Int) -> Option[FenwickTree] {
+  if index < 1 || index > ft.size {
+    return None
+  }
+  let current = match get(ft, index) {
+    case Some(c) => c
+    case None => 0
+  }
+  let delta = value &- current
+  add(ft, index, delta)
+}
+
+/// Finds the smallest 1-based index whose prefix sum is >= `targetSum` in O(log n) time.
+export fn findPrefix(ft: &FenwickTree, targetSum: Int) -> Option[Int] {
+  let totalSum = match prefixSum(ft, ft.size) {
+    case Some(s) => s
+    case None => 0
+  }
+  if ft.size == 0 || totalSum < targetSum {
+    return None
+  }
+  if targetSum <= 0 {
+    return Some(1)
+  }
+  var step = 1
+  while (step &* 2) <= ft.size {
+    step = step &* 2
+  }
+  var idx = 0
+  var rem = targetSum
+  while step > 0 {
+    let nextIdx = idx + step
+    if nextIdx <= ft.size && ft.tree[nextIdx] < rem {
+      idx = nextIdx
+      rem = rem &- ft.tree[idx]
+    }
+    step = step / 2
+  }
+  let candidate = idx + 1
+  if candidate <= ft.size {
+    Some(candidate)
+  } else {
+    None
+  }
+}
+
+/// Materializes the tree values into a standard 0-indexed array.
+export fn toArray(ft: &FenwickTree) -> Array[Int] {
+  var out: Array[Int] = []
+  var i = 1
+  while i <= ft.size {
+    let val = match get(ft, i) {
+      case Some(v) => v
+      case None => 0
+    }
+    out = out.push(val)
+    i = i + 1
+  }
+  out
+}
