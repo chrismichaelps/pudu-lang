@@ -25,7 +25,10 @@ tags: [changelog]
 - Add `Std.Hex`: Low-level Base16 hexadecimal encoder, decoder, validator, and prefix handler.
 - Add `Std.Adler32`: RFC 1950 Adler-32 unrolled checksum with 5552-byte blocks and $O(1)$ rolling hash.
 - Add `Std.RadixSort`: Linear-time $O(N)$ non-comparative hardware radix sort for 64-bit unsigned and signed integers.
-- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], [[Std RateLimiter]], [[Std Hex]], [[Std Adler32]], and [[Std RadixSort]].
+- Add `Std.ByteOrder`: Low-level register byte swapping (`bswap16`, `bswap32`, `bswap64`), endian binary codecs (`readU16BE`, `readU32LE`, `writeU64BE`), and network byte order converters (`htons`, `htonl`).
+- Add `Std.SipHash`: Cryptographically strong 64-bit SipHash-2-4 keyed PRF / hash function with ARX rounds for HashDoS protection.
+- Add `Std.IntervalTree`: Augmented 1D interval tree for fast $O(\log n + k)$ stabbing queries and overlap detection with subtree `maxEnd` bounds pruning.
+- Updated [[Std/_MOC]], [[Std Math]], and created module mirrors [[Std Math Float]], [[Std IntMap]], [[Std IntSet]], [[Std BitVector]], [[Std Archive Tar]], [[Std BloomFilter]], [[Std Mime]], [[Std Diff]], [[Std FenwickTree]], [[Std RingBuffer]], [[Std Varint]], [[Std DisjointSet]], [[Std Murmur3]], [[Std RateLimiter]], [[Std Hex]], [[Std Adler32]], [[Std RadixSort]], [[Std ByteOrder]], [[Std SipHash]], and [[Std IntervalTree]].
 
 ## 2026-09-07 — Verified SMTP transports and binary gzip responses
 

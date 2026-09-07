@@ -131,6 +131,9 @@ tags: [moc, module, stdlib]
 - [[Std Hex]] — low-level Base16 hexadecimal encoder, decoder, and validator.
 - [[Std Adler32]] — RFC 1950 Adler-32 unrolled checksum and rolling stream hash.
 - [[Std RadixSort]] — linear-time O(N) hardware radix sort for 64-bit integers.
+- [[Std ByteOrder]] — hardware byte-swapping and big/little-endian binary codecs.
+- [[Std SipHash]] — keyed SipHash-2-4 hash function for HashDoS collision protection.
+- [[Std IntervalTree]] — augmented 1D interval tree for stabbing and overlap queries.
 
 - [[Std Db ConnectionString]] — explicit PostgreSQL URI settings and socket/pool opening.
 - [[Std App Database]] — application-owned pools and bound queries.
