@@ -298,19 +298,17 @@ installImportAliases = mapM_ (installOne . locatedValue)
       Just value -> bind item value
       Nothing -> pure ()
 
-  {-| Rebinding by prefix needs the whole environment, because an alias covers
-      every name the module published and the importer never enumerates them. -}
   republish path prefix = Evaluator $ \env -> pure $
-    let published =
-          [ (prefix <> Text.drop (Text.length path + 1) name, value)
-          | frame <- envFrames env
-          , (name, value) <- Map.toList frame
-          , Text.isPrefixOf (path <> ".") name
-          ]
+    let qualified = path <> "."
+        select frame =
+          Map.mapKeysMonotonic (\name -> prefix <> Text.drop (Text.length qualified) name)
+            (Map.takeWhileAntitone (Text.isPrefixOf qualified) (snd (Map.split qualified frame)))
+        published = Map.unions (map select (envFrames env))
      in case envFrames env of
           current : rest ->
-            Done () env{envFrames = Map.union (Map.fromList published) current : rest}
-          [] -> Done () env{envFrames = [Map.fromList published]}
+            Done () env{envFrames = Map.union published current : rest}
+          [] -> Done () env{envFrames = [published]}
+
 
 
 {-| Run with the world available and the work counted where a counter is given.
