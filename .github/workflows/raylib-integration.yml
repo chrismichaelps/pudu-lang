@@ -6,14 +6,14 @@ on:
     branches: [dev]
     paths:
       - ".github/workflows/raylib-integration.yml"
-      - "cbits/pudu_ffi.c"
-      - "pudu.cabal"
-      - "src/Pudu/Eval/Foreign.hs"
-      - "src/Pudu/Eval/Install.hs"
-      - "src/Pudu/Foreign/**"
-      - "src/Pudu/Frontend/Parser/Declaration/Foreign.hs"
-      - "src/Pudu/Frontend/Syntax/Tree.hs"
-      - "src/Pudu/Type/Check/Foreign.hs"
+      - "packages/pudu/*/cbits/pudu_ffi.c"
+      - "packages/pudu/*/pudu.cabal"
+      - "packages/pudu/*/src/Pudu/Eval/Foreign.hs"
+      - "packages/pudu/*/src/Pudu/Eval/Install.hs"
+      - "packages/pudu/*/src/Pudu/Foreign/**"
+      - "packages/pudu/*/src/Pudu/Frontend/Parser/Declaration/Foreign.hs"
+      - "packages/pudu/*/src/Pudu/Frontend/Syntax/Tree.hs"
+      - "packages/pudu/*/src/Pudu/Type/Check/Foreign.hs"
       - "test-fixtures/integration/UsesRaylib.pudu"
   schedule:
     - cron: "41 6 * * 1"

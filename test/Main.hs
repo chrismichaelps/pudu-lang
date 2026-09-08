@@ -1,6 +1,7 @@
 module Main (main) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
+import System.Directory (doesDirectoryExist, setCurrentDirectory)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.DecimalLiteralSpec (decimalProperties)
@@ -48,6 +49,8 @@ import Test.QuickCheck (Gen, Property, chooseInt, conjoin, counterexample, eleme
   isSuccess, listOf, property, quickCheckResult, resize, withMaxSuccess, (===))
 main :: IO ()
 main = do
+  sharedFixtures <- doesDirectoryExist "../../../test-fixtures"
+  when sharedFixtures (setCurrentDirectory "../../..")
   {-| A name reaches the log before the test it names runs.
 
       Piped output is block-buffered by default, so a suite that stops

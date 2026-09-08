@@ -19,10 +19,13 @@ def main():
     parser.add_argument("module", nargs="?")
     parser.add_argument("name", nargs="?")
     parser.add_argument("--binary")
-    parser.add_argument("--package", default="packages/pudu/current")
+    parser.add_argument("--package")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    package = (root / args.package).resolve()
+    selected = re.search(r"^packages:\s*(\S+)", (root / "cabal.project").read_text(), re.MULTILINE)
+    if args.package is None and selected is None:
+        parser.error("no selected package in cabal.project")
+    package = (root / (args.package or selected[1])).resolve()
     match = re.search(r"^version:\s*(\S+)", (package / "pudu.cabal").read_text(), re.MULTILINE)
     if match is None:
         parser.error("package version is missing")

@@ -12,7 +12,25 @@ copyright:          (c) 2026 Chris M. Perez Santiago
 homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
-extra-source-files: test-fixtures/program29/*.pudu
+data-files:         lib/Std/*.pudu
+                    lib/Std/App/*.pudu
+                    lib/Std/Archive/*.pudu
+                    lib/Std/Bytes/*.pudu
+                    lib/Std/Compress/*.pudu
+                    lib/Std/Db/*.pudu
+                    lib/Std/Db/Query/*.pudu
+                    lib/Std/Html/*.pudu
+                    lib/Std/Http/*.pudu
+                    lib/Std/Http/Server/*.pudu
+                    lib/Std/Mail/*.pudu
+                    lib/Std/Math/*.pudu
+                    lib/Std/Net/*.pudu
+                    lib/Std/Test/*.pudu
+                    lib/Std/Text/*.pudu
+                    lib/Std/Time/*.pudu
+                    lib/Std/Time/Format/*.pudu
+                    lib/Std/Toml/*.pudu
+                    lib/Std/Ui/*.pudu
 
 source-repository head
   type:             git
@@ -251,7 +269,7 @@ executable pudu
 test-suite pudu-test
   import:           warnings
   type:             exitcode-stdio-1.0
-  hs-source-dirs:   test
+  hs-source-dirs:   ../../../test
   main-is:          Main.hs
   ghc-options:      -threaded -rtsopts
   cxx-sources:      cbits/pudu_ffi_cpp_fixture.cpp

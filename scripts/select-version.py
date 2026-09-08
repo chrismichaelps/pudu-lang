@@ -18,24 +18,22 @@ def main():
     for name in names:
         if not (package / name).exists():
             parser.error(f"package is missing {name}")
-        if not (root / name).is_symlink():
-            parser.error(f"refusing to replace non-link path: {name}")
     manifest = (package / "pudu.cabal").read_text()
     version = re.search(r"^version:\s*([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\s*$", manifest, re.MULTILINE)
     if version is None or f"v{version[1]}.{version[2]}" != args.series:
         parser.error("package version does not match its series directory")
-    current = root / "packages/pudu/current"
-    if not current.is_symlink():
-        parser.error("refusing to replace a non-link current package")
-    temporary = root / "packages/pudu/.current.selecting"
+    project = root / "cabal.project"
+    contents, count = re.subn(r"^packages:.*$", f"packages: {relative.as_posix()}",
+                              project.read_text(), count=1, flags=re.MULTILINE)
+    if count != 1:
+        parser.error("cabal.project must contain a packages field")
+    temporary = project.with_suffix(".selecting")
+    with temporary.open("x") as stream:
+        stream.write(contents)
     try:
-        temporary.symlink_to(args.series, target_is_directory=True)
-    except FileExistsError:
-        parser.error("another selection is pending: .current.selecting")
-    try:
-        os.replace(temporary, current)
+        os.replace(temporary, project)
     finally:
-        if temporary.is_symlink():
+        if temporary.exists():
             temporary.unlink()
     print(f"selected {args.series}")
 

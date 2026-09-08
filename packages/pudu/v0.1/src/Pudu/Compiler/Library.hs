@@ -9,6 +9,8 @@ import Control.Exception (IOException, try)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
+import Data.Version (versionBranch)
+import qualified Paths_pudu as Package
 import Pudu.Compiler.Manifest (projectSearchRoots)
 import Pudu.Frontend.Syntax.Name (ModuleName (..))
 import System.Directory (doesDirectoryExist, getCurrentDirectory)
@@ -41,7 +43,8 @@ libraryRoots = do
   configured <- lookupEnv "PUDU_LIB"
   installed <- installedRoot
   development <- developmentRoot
-  existing (catMaybes [configured, installed, development])
+  packaged <- Package.getDataFileName "lib"
+  existing (catMaybes [configured, installed, Just packaged, development])
 
 {-| The roots to search for one module: the program's own source root first,
     then whatever its manifest declares as a dependency, then the library's —
@@ -83,7 +86,10 @@ developmentRoot = do
   working <- try getCurrentDirectory :: IO (Either IOException FilePath)
   pure $ case working of
     Left _ -> Nothing
-    Right path -> Just (path </> "lib")
+    Right path -> case versionBranch Package.version of
+      major : minor : _ -> Just (path </> "packages" </> "pudu"
+        </> ("v" <> show major <> "." <> show minor) </> "lib")
+      _ -> Just (path </> "lib")
 
 existing :: [FilePath] -> IO [FilePath]
 existing = fmap catMaybes . mapM keepDirectory
