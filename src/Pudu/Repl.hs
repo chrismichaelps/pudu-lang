@@ -10,6 +10,7 @@ import Control.Exception (IOException, try)
 import Control.Monad.IO.Class (liftIO)
 import Data.Int (Int64)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
+import Pudu.Version (versionText)
 import Data.Text (Text)
 import GHC.Clock (getMonotonicTime)
 import qualified GHC.Conc as Conc
@@ -103,8 +104,6 @@ data ReplContext = ReplContext
 banner :: Text
 banner = "puduci, version " <> versionText <> ": the Pudu interactive session  :? for help"
 
-versionText :: Text
-versionText = "0.1.0.0"
 
 runRepl :: ReplOptions -> IO ()
 runRepl options = do

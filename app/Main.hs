@@ -4,6 +4,7 @@ module Main (main) where
 import Control.Monad (unless, when)
 import Data.List (sort, sortOn)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
+import Pudu.Version (versionText, languageConstraint)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
@@ -574,7 +575,7 @@ manifestTemplate name = Text.unlines
   [ "[package]"
   , "name = \"" <> tomlName (Text.pack name) <> "\""
   , "version = \"0.1.0\""
-  , "language = \">=" <> versionText <> "\""
+  , "language = \"" <> languageConstraint <> "\""
   , "source = \"src\""
   , ""
   , "# A dependency is a directory of modules already on this machine: a"
@@ -689,5 +690,3 @@ usage =
 versionLine :: Text
 versionLine = "pudu " <> versionText
 
-versionText :: Text
-versionText = "0.1.0.0"

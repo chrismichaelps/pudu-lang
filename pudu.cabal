@@ -1,6 +1,6 @@
 cabal-version:      3.12
 name:               pudu
-version:            0.1.0.0
+version:            0.1.0
 synopsis:           Pudu language compiler and tools
 description:        A statically typed native systems language compiler with explicit safety and performance semantics.
 category:           Language
@@ -33,7 +33,10 @@ common warnings
 library
   import:           warnings
   hs-source-dirs:   src
+  autogen-modules:   Paths_pudu
+  other-modules:     Paths_pudu
   exposed-modules:
+    Pudu.Version
     Pudu.Bundle
     Pudu.Compiler
     Pudu.Compiler.Library

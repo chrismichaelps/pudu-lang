@@ -17,6 +17,7 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Maybe (fromMaybe)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text.Encoding as Encoding
+import Pudu.Version (versionText)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -351,7 +352,7 @@ serverCapabilities =
           ]
       )
     , ( "serverInfo"
-      , JsonObject [("name", JsonText "pudu"), ("version", JsonText "0.1.0.0")]
+      , JsonObject [("name", JsonText "pudu"), ("version", JsonText versionText)]
       )
     ]
 
