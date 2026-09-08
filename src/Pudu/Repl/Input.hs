@@ -1,15 +1,27 @@
 {-| @Program.Repl.Input — decides when an entry at the prompt is finished -}
 module Pudu.Repl.Input
   ( continuationPrompt
+  , isComplete
+  , isTriviaOnly
   , readContinuation
   , readEntry
   ) where
 
 import Control.Monad.IO.Class (liftIO)
+import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
-import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
+import Pudu.Frontend.Token
+  ( Keyword (..)
+  , Token (..)
+  , TokenKind (..)
+  , TriviaKind (DocComment)
+  , symbolText
+  , tokenLeadingTrivia
+  , triviaKind
+  )
 import Pudu.Source (SourceName (SourceName), newSource)
 import System.Console.Haskeline
   ( InputT
@@ -43,7 +55,8 @@ continueEntry accumulated = do
           let extended = accumulated <> "\n" <> next
           complete <- liftIO (isComplete extended)
           closed <- liftIO (closesBlock next)
-          if complete && closed then pure extended else continueEntry extended
+          broken <- liftIO (hasTerminalError extended)
+          if broken || (complete && closed) then pure extended else continueEntry extended
 
 {-| A line whose last token is `}` finishes a braced construct, so the reader
     does not have to add a blank line after every function or match. -}
@@ -67,13 +80,35 @@ readEntry shown = fmap Text.pack <$> getInputLine (Text.unpack shown)
 isComplete :: Text -> IO Bool
 isComplete text = do
   source <- newSource (SourceName "<interactive>") text
-  let LexResult{lexTokens} = lexSource source
+  let LexResult{lexTokens, lexDiagnostics} = lexSource source
       significant = filter (\token -> tokenKind token /= EndOfFile) lexTokens
-  pure
-    ( not (null significant)
-        && openDepth significant <= 0
-        && not (awaitsOperand significant)
-    )
+      hasDoc = any (any ((== DocComment) . triviaKind) . tokenLeadingTrivia) lexTokens
+      hasUnclosedBlock = any ((== "E0003") . diagnosticCodeText . diagnosticCode) lexDiagnostics
+      hasOtherError = any ((/= "E0003") . diagnosticCodeText . diagnosticCode) lexDiagnostics
+  pure $ case delimiterState significant of
+    Left () -> True
+    Right pending
+      | hasOtherError -> True
+      | hasUnclosedBlock -> False
+      | null significant -> not hasDoc
+      | otherwise -> null pending && not (awaitsOperand significant)
+
+{-| Invalid prefixes are submitted for diagnostics instead of collecting more lines. -}
+hasTerminalError :: Text -> IO Bool
+hasTerminalError text = do
+  source <- newSource (SourceName "<interactive>") text
+  let LexResult{lexTokens, lexDiagnostics} = lexSource source
+      malformed = any ((/= "E0003") . diagnosticCodeText . diagnosticCode) lexDiagnostics
+  pure (malformed || delimiterState lexTokens == Left ())
+
+{-| Whether an entry contains only whitespace and comments, with no code. -}
+isTriviaOnly :: Text -> IO Bool
+isTriviaOnly text = do
+  source <- newSource (SourceName "<interactive>") text
+  let LexResult{lexTokens, lexDiagnostics} = lexSource source
+      significant = filter (\token -> tokenKind token /= EndOfFile) lexTokens
+      hasDoc = any (any ((== DocComment) . triviaKind) . tokenLeadingTrivia) lexTokens
+  pure (null significant && null lexDiagnostics && not hasDoc)
 
 {-| A submission with no tokens of its own is documentation waiting for the
     declaration it documents, so the prompt keeps reading. Typing `/// ...` and
@@ -87,7 +122,7 @@ awaitsOperand tokens = case reverse tokens of
   [] -> False
   final : _ -> case tokenKind final of
     Symbol symbol -> symbolText symbol `elem` continuationSymbols
-    Keyword keyword -> keyword `elem` [KwElse, KwIn, KwWhere, KwAs, KwReturn, KwMatch, KwWhile, KwFor, KwIf]
+    Keyword keyword -> keyword `elem` [KwElse, KwIn, KwWhere, KwAs, KwMatch, KwWhile, KwFor, KwIf]
     _ -> False
 
 continuationSymbols :: [Text]
@@ -95,13 +130,22 @@ continuationSymbols =
   [ "=", "=>", "->", ",", "|", "+", "-", "*", "/", "%", "&", "&&", "||"
   , "==", "!=", "<", "<=", ">", ">=", "..", "..=", ":", "."
   , "&+", "&-", "&*", "+|", "-|", "*|", "!"
+  , "<<", ">>", "^"
   ]
 
-openDepth :: [Token] -> Int
-openDepth = foldl step 0
+{-| Keep the expected closer on a strict stack. A mismatched closer is terminal
+    input, leaving the parser to report the actual diagnostic. -}
+delimiterState :: [Token] -> Either () [Text]
+delimiterState = foldl' step (Right [])
  where
-  step total token = case tokenKind token of
-    Symbol symbol
-      | symbolText symbol `elem` ["(", "[", "{"] -> total + 1
-      | symbolText symbol `elem` [")", "]", "}"] -> max 0 (total - 1)
-    _ -> total
+  step failed@(Left ()) _ = failed
+  step (Right pending) token = case tokenKind token of
+    Symbol symbol -> case symbolText symbol of
+      "(" -> Right (")" : pending)
+      "[" -> Right ("]" : pending)
+      "{" -> Right ("}" : pending)
+      closer | closer `elem` [")", "]", "}"] -> case pending of
+        expected : rest | expected == closer -> Right rest
+        _ -> Left ()
+      _ -> Right pending
+    _ -> Right pending

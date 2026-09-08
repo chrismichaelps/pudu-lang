@@ -4,9 +4,11 @@
     changes anything, which is what lets them be a module rather than part of
     the loop: inspecting a session cannot alter it. -}
 module Pudu.Repl.Answer
-  ( emptyAs
+  ( browseModule
+  , emptyAs
   , performLoad
   , prompt
+  , renderReplValue
   , reportEntry
   , showAst
   , showHelp
@@ -16,11 +18,16 @@ module Pudu.Repl.Answer
   ) where
 
 import Control.Monad (unless)
+import Data.Foldable (toList)
 import Data.IORef (IORef, readIORef)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic (hasErrors)
+import Pudu.Compiler.Program (compileProgramSource, programDiagnostics, programDocs)
+import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..), renderEntry)
 import Pudu.Repl.Options (ReplOptions (..), ReplSettings (..))
 import Pudu.Diagnostic.Render
   (defaultRenderConfig
@@ -29,7 +36,7 @@ import Pudu.Diagnostic.Render
   , renderSummary
   )
 import Pudu.Eval.Render (renderValue, valueKind)
-import Pudu.Eval.Value (Value)
+import Pudu.Eval.Value (OrdValue (..), Value (..))
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser.Declaration.Block (parseBlock)
 import Pudu.Frontend.Parser.State (runParser)
@@ -44,15 +51,16 @@ import Pudu.Repl.Session
   ( EntryResult (..)
   , Session (..)
   , inspectContext
-  , contextSummary
   , emptySession
   , inspectEntryType
+  , inspectSession
   , loadModule
+  , sessionDeclaredNames
   , sessionExports
   )
 import Pudu.Source (SourceName (SourceName), newSource)
 import Pudu.Type (renderType)
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, getCurrentDirectory)
 
 showAst :: ReplOptions -> Text -> IO ()
 showAst options text
@@ -86,10 +94,12 @@ showState settingsRef session topic = case topic of
   "settings" -> do
     settings <- readIORef settingsRef
     pure
-      [ "+t (show types)  " <> onOff (settingShowTypes settings)
-      , "+s (show timing) " <> onOff (settingShowTiming settings)
+      [ "+t (show types)     " <> onOff (settingShowTypes settings)
+      , "+s (show timing)    " <> onOff (settingShowTiming settings)
+      , "+trunc (truncate)   " <> onOff (settingTruncate settings)
       ]
-  "bindings" -> pure (emptyAs "no bindings" (contextSummary session))
+  "bindings" ->
+    pure (emptyAs "no bindings" (map (("bind    " <>) . summarizeLine) (sessionStatements session)))
   "declarations" -> do
     (_, parsed, _) <- inspectContext session
     pure (emptyAs "no declarations" (foldMap declarationSummary parsed))
@@ -99,6 +109,10 @@ showState settingsRef session topic = case topic of
   _ -> pure ["usage: :show bindings|declarations|imports|settings"]
  where
   onOff wanted = if wanted then "on" else "off"
+  summarizeLine value = case Text.lines value of
+    [single] -> single
+    found : _ -> found <> " ..."
+    [] -> value
 
 showTokens :: Text -> IO ()
 showTokens text
@@ -110,9 +124,7 @@ showTokens text
  where
   isEnd token = tokenKind token == EndOfFile
 
-{-| Ask the compiler for an entry's type without entering the evaluator. A
-    command that inspects code must not run it or replay effects accumulated in
-    the session. -}
+{-| Ask the compiler for an entry's type without entering the evaluator. -}
 showType :: ReplOptions -> Session -> Text -> IO ()
 showType options session expression
   | Text.null (Text.strip expression) = TextIO.putStrLn "usage: :type <expression>"
@@ -136,11 +148,114 @@ reportEntry options settings result = do
   case resultValue result of
     Just value
       | resultAccepted result ->
-          TextIO.putStrLn $
-            if settingShowTypes settings
-              then renderValue value <> " :: " <> entryTypeText result value
-              else renderValue value
+          let rendered = renderReplValue (settingTruncate settings) value
+           in TextIO.putStrLn $
+                if settingShowTypes settings
+                  then rendered <> " :: " <> entryTypeText result value
+                  else rendered
     _ -> pure ()
+
+{-| Render a runtime value with optional bound truncation. -}
+renderReplValue :: Bool -> Value -> Text
+renderReplValue truncateEnabled value
+  | not truncateEnabled = renderValue value
+  | otherwise = case value of
+      ArrayValue members
+        | length members > 50 ->
+            let shown = take 50 (toList members)
+                more = length members - 50
+             in "[" <> Text.intercalate ", " (map renderValue shown)
+                  <> ", ... (+" <> Text.pack (show more) <> " more)]"
+      SetValue members
+        | Set.size members > 50 ->
+            let shown = take 50 (Set.toAscList members)
+                more = Set.size members - 50
+             in "#{" <> Text.intercalate ", " (map (renderValue . unOrdValue) shown)
+                  <> ", ... (+" <> Text.pack (show more) <> " more)}"
+      MapValue entries
+        | Map.size entries > 50 ->
+            let shown = take 50 (Map.toAscList entries)
+                more = Map.size entries - 50
+             in "{" <> Text.intercalate ", " [renderValue (unOrdValue k) <> ": " <> renderValue v | (k, v) <- shown]
+                  <> ", ... (+" <> Text.pack (show more) <> " more)}"
+      StrValue text
+        | Text.length text > 500 ->
+            "\"" <> Text.take 500 text <> "... (truncated " <> Text.pack (show (Text.length text)) <> " chars)\""
+      _ -> renderValue value
+
+{-| Browse the active session context or an importable module. -}
+browseModule :: ReplOptions -> Session -> Maybe Text -> IO ()
+browseModule options session maybeMod = case maybeMod of
+  Nothing -> browseSessionContext options session
+  Just raw
+    | Text.null (Text.strip raw) -> browseSessionContext options session
+    | otherwise -> browseExternalModule options session (Text.strip raw)
+
+browseSessionContext :: ReplOptions -> Session -> IO ()
+browseSessionContext options session = do
+  (resolution, diagnostics) <- inspectSession session
+  unless (null diagnostics) (reportContext options diagnostics)
+  case resolution of
+    Nothing -> TextIO.putStrLn "nothing to browse"
+    Just found -> case sessionExports found of
+      [] -> case sessionDeclaredNames found of
+        [] -> TextIO.putStrLn "the session context declares nothing"
+        declared -> do
+          TextIO.putStrLn "nothing is exported; the context declares:"
+          mapM_ TextIO.putStrLn declared
+      names -> mapM_ TextIO.putStrLn names
+
+browseExternalModule :: ReplOptions -> Session -> Text -> IO ()
+browseExternalModule options _ modName = do
+  root <- getCurrentDirectory
+  let probeSource = "module BrowseProbe\nimport " <> modName <> "\n"
+  probe <- newSource (SourceName "<browse>") probeSource
+  program <- compileProgramSource root probe
+  let diagnostics = programDiagnostics program
+  if hasErrors diagnostics
+    then do
+      TextIO.putStrLn ("cannot browse module '" <> modName <> "'")
+      let config = defaultRenderConfig (replStyle options)
+      TextIO.putStrLn (renderDiagnosticsWith config probe diagnostics)
+    else do
+      let docIdx = programDocs program
+          entries = filter (\e -> docModule e == modName) (indexEntries docIdx)
+          allEntries = if null entries
+            then filter (\e -> docModule e /= "BrowseProbe") (indexEntries docIdx)
+            else entries
+      if null allEntries
+        then TextIO.putStrLn ("module '" <> modName <> "' has no exported declarations")
+        else renderCategorizedModule modName allEntries
+
+renderCategorizedModule :: Text -> [DocEntry] -> IO ()
+renderCategorizedModule modName entries = do
+  TextIO.putStrLn ("-- Module " <> modName <> " --")
+  renderGroup "Constants" [e | e <- entries, docKind e == DocConstant]
+  renderGroup "Types" [e | e <- entries, docKind e == DocType]
+  renderGroup "Traits" [e | e <- entries, docKind e == DocTrait]
+  renderGroup "Functions" [e | e <- entries, isFuncKind (docKind e)]
+  renderGroup "Foreign" [e | e <- entries, isForeignKind (docKind e)]
+ where
+  isFuncKind DocFunction = True
+  isFuncKind (DocTraitMethod _) = True
+  isFuncKind (DocMethod _) = True
+  isFuncKind _ = False
+
+  isForeignKind (DocForeign _) = True
+  isForeignKind _ = False
+
+  renderGroup _ [] = pure ()
+  renderGroup title items = do
+    TextIO.putStrLn ("\n-- " <> title <> " --")
+    mapM_ printEntry items
+
+  printEntry entry = do
+    TextIO.putStrLn (renderEntry entry)
+    mapM_ (\doc -> TextIO.putStrLn ("  /// " <> doc)) (docComment entry)
+
+reportContext :: ReplOptions -> [Diagnostic] -> IO ()
+reportContext _ diagnostics =
+  TextIO.putStrLn ("session context has " <> renderSummary diagnostics)
 
 {-| With `:set +t` the prompt reports the checked type when the checker
     produced one and the value's own kind when it did not, so the answer is

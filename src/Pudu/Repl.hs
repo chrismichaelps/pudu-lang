@@ -6,18 +6,17 @@ module Pudu.Repl
   , runRepl
   ) where
 
-import Control.Monad (unless, when)
+import Control.Exception (IOException, try)
+import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
+import Data.Int (Int64)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
 import Data.Text (Text)
 import GHC.Clock (getMonotonicTime)
+import qualified GHC.Conc as Conc
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
-import Pudu.Diagnostic (Diagnostic)
-import Pudu.Diagnostic.Render
-  (renderSummary
-  )
-import Pudu.Repl.Input (continuationPrompt, readContinuation, readEntry)
+import Pudu.Repl.Input (continuationPrompt, isTriviaOnly, readContinuation, readEntry)
 import Pudu.Repl.Options
   ( ReplOptions (..)
   , ReplSettings (..)
@@ -25,7 +24,8 @@ import Pudu.Repl.Options
   , defaultReplSettings
   )
 import Pudu.Repl.Answer
-  ( emptyAs
+  ( browseModule
+  , emptyAs
   , performLoad
   , prompt
   , reportEntry
@@ -60,15 +60,16 @@ import Pudu.Repl.Session
   , inspectSession
   , contextSummary
   , emptySession
-  , sessionDeclaredNames
   , sessionVisibleNames
-  , sessionExports
   , submitEntry
   , typeOfEntry
   )
 import Data.List (sort)
 import Pudu.Type (Type (..))
 import Pudu.Type.Value (nominalName)
+import System.Environment (lookupEnv)
+import System.Process (callProcess)
+import Text.Printf (printf)
 import System.Console.Haskeline
   ( Completion (..)
   , CompletionFunc
@@ -219,8 +220,10 @@ loop context session =
             Just next -> continueWith context next
         SourceEntry text -> do
           whole <- readContinuation text
-          next <- runSource context session whole
-          continueWith context next
+          trivia <- liftIO (isTriviaOnly whole)
+          if trivia then loop context session else do
+            next <- runSource context session whole
+            continueWith context next
 
 {-| Ctrl-C abandons the line being typed and returns to the prompt with the
     session untouched, so an interrupt costs a line rather than a session. -}
@@ -255,7 +258,11 @@ runCommand context session command = case command of
   Reload -> case sessionLoaded session of
     Nothing -> say "no file is loaded" >> pure (Just session)
     Just loaded -> Just <$> liftIO (performLoad options session (loadedPath loaded))
-  Browse -> liftIO (browseSession options session) >> pure (Just session)
+  Browse maybeMod -> liftIO (browseModule options session maybeMod) >> pure (Just session)
+  Edit maybePath -> do
+    let path = resolveEditPath session maybePath
+    newSession <- liftIO (performEdit options session path)
+    pure (Just newSession)
   ShowContext -> do
     let entries = contextSummary session
     if null entries
@@ -269,9 +276,10 @@ runCommand context session command = case command of
   EndBlock -> do
     say "no multi-line block is open"
     pure (Just session)
-  ShowInfo name -> describe describeName name
-  ShowKind name -> describe describeKindLines name
-  ShowInstances name -> describe (\moduleValue wanted -> emptyAs ("no instances for '" <> wanted <> "'") (describeInstances moduleValue wanted)) name
+  ShowInfo name -> describe "info" describeName name
+  ShowKind name -> describe "kind" describeKindLines name
+  ShowInstances name ->
+    describe "instances" (\moduleValue wanted -> emptyAs ("no instances for '" <> wanted <> "'") (describeInstances moduleValue wanted)) name
   ShowSetting flag -> adjust flag True
   ClearSetting flag -> adjust flag False
   ShowState topic -> do
@@ -310,9 +318,9 @@ runCommand context session command = case command of
  where
   options = contextOptions context
 
-  describe render name
+  describe cmdName render name
     | Text.null (Text.strip name) = do
-        say "usage: :info <name>"
+        say ("usage: :" <> cmdName <> " <name>")
         pure (Just session)
     | otherwise = do
         (_, parsed, _) <- liftIO (inspectContext session)
@@ -330,7 +338,7 @@ runCommand context session command = case command of
     case settingFor key of
       Nothing -> do
         say ("unknown setting '" <> key <> "'")
-        say "known settings: +t (show types), +s (show timing)"
+        say "known settings: +t (show types), +s (show timing), +trunc (truncate collections)"
         pure (Just session)
       Just update -> do
         liftIO (modifyIORef' (contextSettings context) (update wanted))
@@ -347,18 +355,59 @@ settingFor :: Text -> Maybe (Bool -> ReplSettings -> ReplSettings)
 settingFor key = case Text.dropWhile (== '+') key of
   "t" -> Just (\wanted settings -> settings{settingShowTypes = wanted})
   "s" -> Just (\wanted settings -> settings{settingShowTiming = wanted})
+  "trunc" -> Just (\wanted settings -> settings{settingTruncate = wanted})
   _ -> Nothing
 
 runSource :: ReplContext -> Session -> Text -> InputT IO Session
 runSource context session text = do
+  liftIO (Conc.setAllocationCounter maxBound)
   started <- liftIO getMonotonicTime
   result <- liftIO (submitEntry session text)
   settings <- liftIO (readIORef (contextSettings context))
   liftIO (reportEntry (contextOptions context) settings result)
   finished <- liftIO getMonotonicTime
+  allocEnd <- liftIO Conc.getAllocationCounter
+  let allocated = maxBound - allocEnd
   when (settingShowTiming settings) $
-    say ("(" <> Text.pack (show (finished - started)) <> " secs)")
+    say (formatMetrics (finished - started) allocated)
   pure (resultSession result)
+
+formatMetrics :: Double -> Int64 -> Text
+formatMetrics dt bytes =
+  "[time: " <> formatTime dt <> " | heap: " <> formatBytes bytes <> "]"
+ where
+  formatTime t
+    | t < 0.001 = Text.pack (printf "%.1f µs" (t * 1e6))
+    | t < 1.0 = Text.pack (printf "%.2f ms" (t * 1e3))
+    | otherwise = Text.pack (printf "%.3f s" t)
+
+  formatBytes b
+    | b < 1024 = Text.pack (show b) <> " B"
+    | b < 1024 * 1024 = Text.pack (show (b `div` 1024)) <> " KB"
+    | otherwise = Text.pack (printf "%.2f MB" (fromIntegral b / (1024 * 1024 :: Double)))
+
+resolveEditPath :: Session -> Maybe Text -> FilePath
+resolveEditPath session maybePath = case maybePath of
+  Just p | not (Text.null (Text.strip p)) -> Text.unpack (Text.strip p)
+  _ -> case sessionLoaded session of
+    Just loaded -> loadedPath loaded
+    Nothing -> "scratch.pudu"
+
+performEdit :: ReplOptions -> Session -> FilePath -> IO Session
+performEdit options session path = do
+  visual <- lookupEnv "VISUAL"
+  editor <- lookupEnv "EDITOR"
+  let prog = case visual of
+        Just v | not (null v) -> v
+        _ -> case editor of
+          Just e | not (null e) -> e
+          _ -> "nano"
+  result <- try (callProcess prog [path]) :: IO (Either IOException ())
+  case result of
+    Left err -> do
+      TextIO.putStrLn ("editor error (" <> Text.pack prog <> "): " <> Text.pack (show err))
+      pure session
+    Right () -> performLoad options session path
 
 readBlock :: ReplContext -> Session -> InputT IO Session
 readBlock context session = collect []
@@ -372,22 +421,9 @@ readBlock context session = collect []
         | otherwise -> collect (raw : gathered)
   finish gathered
     | null gathered = pure session
-    | otherwise = runSource context session (Text.intercalate "\n" (reverse gathered))
-
-browseSession :: ReplOptions -> Session -> IO ()
-browseSession options session = do
-  (resolution, diagnostics) <- inspectSession session
-  unless (null diagnostics) (reportContext options diagnostics)
-  case resolution of
-    Nothing -> TextIO.putStrLn "nothing to browse"
-    Just found -> case sessionExports found of
-      [] -> case sessionDeclaredNames found of
-        [] -> TextIO.putStrLn "the session context declares nothing"
-        declared -> do
-          TextIO.putStrLn "nothing is exported; the context declares:"
-          mapM_ TextIO.putStrLn declared
-      names -> mapM_ TextIO.putStrLn names
-
-reportContext :: ReplOptions -> [Diagnostic] -> IO ()
-reportContext _ diagnostics =
-  TextIO.putStrLn ("session context has " <> renderSummary diagnostics)
+    | otherwise = do
+        let combined = Text.intercalate "\n" (reverse gathered)
+        trivia <- liftIO (isTriviaOnly combined)
+        if trivia
+          then pure session
+          else runSource context session combined

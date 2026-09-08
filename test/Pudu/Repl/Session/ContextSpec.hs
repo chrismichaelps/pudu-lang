@@ -3,6 +3,7 @@ module Pudu.Repl.Session.ContextSpec
   ( contextProperties
   , testDescribe
   , testHigherKindedInspection
+  , testHotRedefinition
   , testInspection
   , testInteractiveImports
   , testKinds
@@ -20,7 +21,8 @@ import Pudu.Repl.Describe
   , describeName
   )
 import Pudu.Repl.Session
-  ( EntryResult (..)
+  ( EntryKind (..)
+  , EntryResult (..)
   , contextSummary
   , emptySession
   , inspectContext
@@ -38,6 +40,7 @@ contextProperties =
   , ("kinds report declared arity", testKinds)
   , ("inspection preserves higher-kinded parameter arity", testHigherKindedInspection)
   , ("an imported module is reachable at the prompt", testInteractiveImports)
+  , ("redefined bindings and declarations replace in place without collision", testHotRedefinition)
   ]
 
 testInteractiveImports :: IO Property
@@ -66,11 +69,24 @@ testPersistence = do
   second <- submit (resultSession first) "fn twice(n: Int) -> Int { n * 2 }"
   third <- submit (resultSession second) "twice(base)"
   expressionForgotten <- submit (resultSession third) "base"
+  mutVar <- submit emptySession "var counter = 0"
+  mutAssign1 <- submit (resultSession mutVar) "counter = counter + 1"
+  mutVal1 <- submit (resultSession mutAssign1) "counter"
+  mutAssign2 <- submit (resultSession mutVal1) "counter = counter + 10"
+  mutVal2 <- submit (resultSession mutAssign2) "counter"
   pure $ conjoin
     [ counterexample "the binding is used by a later entry" (valueOf third === "20")
     , counterexample "an expression adds nothing to the context"
         (length (contextSummary (resultSession third)) === 2)
     , valueOf expressionForgotten === "10"
+    , counterexample "assignment statement kind is StatementEntry"
+        (resultKind mutAssign1 === StatementEntry)
+    , counterexample "assignment produces no value output"
+        (valueOf mutAssign1 === "none")
+    , counterexample "variable mutation persists across entries"
+        (valueOf mutVal1 === "1")
+    , counterexample "subsequent mutation accumulates correctly"
+        (valueOf mutVal2 === "11")
     ]
 
 testRejection :: IO Property
@@ -78,12 +94,22 @@ testRejection = do
   accepted <- submit emptySession "let kept = 1"
   rejected <- submit (resultSession accepted) "let broken = missing"
   after <- submit (resultSession rejected) "kept"
+  letTyped <- submit emptySession "let target = 1"
+  rejectedTypeMismatch <- submit (resultSession letTyped) "target = \"mismatch\""
+  afterMismatch <- submit (resultSession rejectedTypeMismatch) "target"
+  rejectedUndeclared <- submit emptySession "missing_var = 10"
   pure $ conjoin
     [ counterexample "the failed entry is not accepted" (property (not (resultAccepted rejected)))
     , codesOf rejected === ["E2010"]
     , counterexample "the session is unchanged"
         (contextSummary (resultSession rejected) === contextSummary (resultSession accepted))
     , counterexample "earlier work still evaluates" (valueOf after === "1")
+    , counterexample "assignment with type mismatch is rejected"
+        (property (not (resultAccepted rejectedTypeMismatch)))
+    , counterexample "assignment error leaves target binding unchanged"
+        (valueOf afterMismatch === "1")
+    , counterexample "assignment to undeclared variable is rejected"
+        (property (not (resultAccepted rejectedUndeclared)))
     ]
 
 testInspection :: IO Property
@@ -190,3 +216,22 @@ testHigherKindedInspection = do
             "an ordinary parameter carries no holes"
             (any (Text.isInfixOf "Pair[A, B]") (describeName moduleValue "Pair") === True)
         ]
+
+testHotRedefinition :: IO Property
+testHotRedefinition = do
+  fn1 <- submit emptySession "fn add(a: Int, b: Int) -> Int { a + b }"
+  res1 <- submit (resultSession fn1) "add(2, 3)"
+  fn2 <- submit (resultSession res1) "fn add(a: Int, b: Int) -> Int { a + b + 10 }"
+  res2 <- submit (resultSession fn2) "add(2, 3)"
+  let1 <- submit (resultSession res2) "let x = 10"
+  let2 <- submit (resultSession let1) "let x = 42"
+  resX <- submit (resultSession let2) "x"
+  pure $ conjoin
+    [ counterexample "initial function evaluates" (valueOf res1 === "5")
+    , counterexample "redefined function replaces in place and evaluates" (valueOf res2 === "15")
+    , counterexample "context only has one add declaration"
+        (length (filter (Text.isInfixOf "add") (contextSummary (resultSession fn2))) === 1)
+    , counterexample "redefined let binding replaces in place and evaluates" (valueOf resX === "42")
+    , counterexample "context only has one x binding"
+        (length (filter (Text.isInfixOf "x") (contextSummary (resultSession let2))) === 1)
+    ]

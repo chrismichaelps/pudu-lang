@@ -29,8 +29,14 @@ defaultReplOptions = ReplOptions{replStyle = PlainStyle, replInitialLoad = Nothi
 data ReplSettings = ReplSettings
   { settingShowTypes :: !Bool
   , settingShowTiming :: !Bool
+  , settingTruncate :: !Bool
   }
   deriving stock (Eq, Show)
 
 defaultReplSettings :: ReplSettings
-defaultReplSettings = ReplSettings{settingShowTypes = False, settingShowTiming = False}
+defaultReplSettings =
+  ReplSettings
+    { settingShowTypes = False
+    , settingShowTiming = False
+    , settingTruncate = True
+    }

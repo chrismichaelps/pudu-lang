@@ -252,3 +252,23 @@ output-limit and binary HTTP paths before declaring readiness.
 
 
 User corrected the implicit localhost EHLO identity. Smtp.client now requires host, port and domain; application configuration supplies all three. Existing call sites migrated, with no fixture execution.
+
+
+## 2026-09-08 REPL continuation scope
+
+Role transition: Tooling Implementer owns Repl.Input completion and Repl.Session redefinition identity.
+Preserve existing pending REPL/compiler changes. Correct token-based interaction boundaries before
+publishing focused changes. No tests, reviews, measurements or claim of superiority over GHCi.
+
+
+## REPL publication boundary
+
+Pending REPL commands, completion, rendering, settings and dependency support are retained with
+new input/redefinition fixes. Token-based identity avoids comment/string heuristics; only simple
+single-line bindings are replaced, preserving destructuring and multi-entry source groups.
+Comment-only source bypasses evaluation. Diagnostic offsets count actual group separators.
+No tests, builds, reviews or measurements executed in this continuation. Existing pending fixture
+changes are preserved for later authorized execution. This does not establish release readiness.
+Exact next action: design persistent evaluator state and resource lifetime for the REPL so accepted
+statements no longer replay their effects on subsequent entries. This is the main remaining REPL
+architecture gap, not a performance guarantee supplied by these commits.

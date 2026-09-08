@@ -293,6 +293,12 @@ testOperators = do
   unaryNeg <- submit emptySession "-42"
   unaryNot <- submit emptySession "!false"
   rangeExpr <- submit emptySession "1..4"
+  orphanedShift <- submit emptySession "<< 100"
+  varSetup <- submit emptySession "var counter = 10"
+  gluedShift <- submit (resultSession varSetup) "<< 100"
+  counterPreserved <- submit (resultSession gluedShift) "counter"
+  orphanedPlus <- submit (resultSession varSetup) "+ 5"
+  orphanedDot <- submit (resultSession varSetup) ".length()"
   pure $ conjoin
     [ counterexample "&& short-circuits without evaluating the right" (valueOf andShort === "false")
     , counterexample "|| short-circuits without evaluating the right" (valueOf orShort === "true")
@@ -304,6 +310,11 @@ testOperators = do
     , counterexample "unary negation works" (valueOf unaryNeg === "-42")
     , counterexample "unary not works" (valueOf unaryNot === "true")
     , counterexample "range produces a tuple" (valueOf rangeExpr === "(1, 2, 3)")
+    , counterexample "orphaned shift in empty session emits E1040" (codesOf orphanedShift === ["E1040"])
+    , counterexample "orphaned shift after statement emits E1040 and does not glue" (codesOf gluedShift === ["E1040"])
+    , counterexample "counter remains 10 and was not mutated by rejected operator" (valueOf counterPreserved === "10")
+    , counterexample "orphaned plus emits E1040" (codesOf orphanedPlus === ["E1040"])
+    , counterexample "orphaned dot emits E1040" (codesOf orphanedDot === ["E1040"])
     ]
 
 testMatch :: IO Property

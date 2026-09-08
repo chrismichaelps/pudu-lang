@@ -4,12 +4,15 @@ module Pudu.Repl.Session.CommandSpec
   , testClassification
   , testCommandParsing
   , testCompletion
+  , testDocLookup
   , testMemberCompletion
+  , testTriviaOnly
   ) where
 
 import qualified Data.Text as Text
 import Test.QuickCheck (Property, conjoin, counterexample, property, (===))
 
+import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..), entriesFor)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Repl.Command (Command (..), Entry (..), parseEntry)
 import Pudu.Repl.Complete
@@ -18,6 +21,7 @@ import Pudu.Repl.Complete
   , memberContext
   , wantsFilename
   )
+import Pudu.Repl.Input (isComplete, isTriviaOnly)
 import Pudu.Repl.Session
   ( EntryKind (..)
   , EntryResult (..)
@@ -34,6 +38,8 @@ commandProperties =
   , ("submissions are classified by their leading token", testClassification)
   , ("completion offers commands paths and session names", testCompletion)
   , ("completion offers what the value before the dot carries", testMemberCompletion)
+  , ("trivia and comments are identified for multiline prompt blocks", testTriviaOnly)
+  , ("entriesFor matches unqualified and qualified module names", testDocLookup)
   ]
 
 testCommandParsing :: IO Property
@@ -45,6 +51,11 @@ testCommandParsing =
     , parseEntry ":help" === CommandEntry Help
     , parseEntry ":load demo.pudu" === CommandEntry (Load "demo.pudu")
     , parseEntry ":l demo.pudu" === CommandEntry (Load "demo.pudu")
+    , parseEntry ":browse" === CommandEntry (Browse Nothing)
+    , parseEntry ":browse Std.Math" === CommandEntry (Browse (Just "Std.Math"))
+    , parseEntry ":b Std.Math" === CommandEntry (Browse (Just "Std.Math"))
+    , parseEntry ":edit main.pudu" === CommandEntry (Edit (Just "main.pudu"))
+    , parseEntry ":e" === CommandEntry (Edit Nothing)
     , parseEntry ":t 1 + 2" === CommandEntry (ShowType "1 + 2")
     , parseEntry ":{" === CommandEntry BeginBlock
     , parseEntry ":}" === CommandEntry EndBlock
@@ -56,6 +67,12 @@ testCommandParsing =
         (parseEntry ":nope" === CommandEntry (Unknown "nope"))
     , parseEntry "1 + 2" === SourceEntry "1 + 2"
     , parseEntry "   " === BlankEntry
+    , counterexample "line comments parse as BlankEntry"
+        (parseEntry "// a comment" === BlankEntry)
+    , counterexample "closed block comments parse as BlankEntry"
+        (parseEntry "/* a comment */" === BlankEntry)
+    , counterexample "doc comments remain SourceEntry to attach to declarations"
+        (parseEntry "/// a doc comment" === SourceEntry "/// a doc comment")
     ]
 
 testClassification :: IO Property
@@ -68,11 +85,22 @@ testClassification = do
   blockLiteral <- submit emptySession "fn(x: Int) -> Int { x }"
   asyncLiteral <- submit emptySession "async fn(x: Int) -> Int => x"
   asyncDeclaration <- submit emptySession "async fn run() -> Int { 1 }"
+  assignment <- submit emptySession "counter = 1"
+  completeExpr <- isComplete "1 + 2"
+  incompleteAdd <- isComplete "1 +"
+  incompleteShift <- isComplete "1 <<"
+  incompleteXor <- isComplete "1 ^"
+  completeComment <- isComplete "// a line comment"
+  completeBlock <- isComplete "/* a block comment */"
+  incompleteBlock <- isComplete "/* an unclosed block comment"
+  incompleteDoc <- isComplete "/// a doc comment"
   pure $ conjoin
     [ resultKind expression === ExpressionEntry
     , resultKind binding === StatementEntry
     , resultKind declaration === DeclarationEntry
     , resultKind importEntry === ImportEntry
+    , counterexample "top-level assignments are classified as StatementEntry"
+        (resultKind assignment === StatementEntry)
     , counterexample "an expression reports its value" (valueOf expression === "3")
     , counterexample "a binding reports no value" (valueOf binding === "none")
     , counterexample "a function written as a value is an expression"
@@ -85,6 +113,14 @@ testClassification = do
         (resultKind asyncDeclaration === DeclarationEntry)
     , counterexample "a function written as a value type checks"
         (null (resultDiagnostics literal) === True)
+    , counterexample "completed expression completes" (property completeExpr)
+    , counterexample "trailing plus continues" (property (not incompleteAdd))
+    , counterexample "trailing shift continues" (property (not incompleteShift))
+    , counterexample "trailing xor continues" (property (not incompleteXor))
+    , counterexample "line comment is immediately complete" (property completeComment)
+    , counterexample "closed block comment is immediately complete" (property completeBlock)
+    , counterexample "unclosed block comment continues" (property (not incompleteBlock))
+    , counterexample "doc comment awaits declaration" (property (not incompleteDoc))
     ]
 
 testCompletion :: IO Property
@@ -110,10 +146,20 @@ testCompletion = do
         (completionsFor source Text.empty "zzz" === [])
     , counterexample "a filename is wanted after :load"
         (property (wantsFilename ":load "))
+    , counterexample "a filename is wanted after :edit"
+        (property (wantsFilename ":edit "))
     , counterexample "a filename is not wanted before the space"
         (property (not (wantsFilename ":load")))
     , counterexample "a filename is not wanted for other commands"
         (property (not (wantsFilename ":type ")))
+    , counterexample "show topics complete after :show"
+        (completionsFor empty ":show " "b" === ["bindings"])
+    , counterexample "setting flags complete after :set"
+        (completionsFor empty ":set " "+t" === ["+t", "+trunc"])
+    , counterexample "modules complete after :browse"
+        (completionsFor empty ":browse " "Std.M" === ["Std.Math", "Std.Math.Float", "Std.Mime"])
+    , counterexample "standard library modules complete"
+        (completionsFor empty ":browse " "Std.J" === ["Std.Json"])
     ]
 
 testMemberCompletion :: IO Property
@@ -149,4 +195,47 @@ testMemberCompletion = do
         (("toUpper" `elem` builtinMethodNamesFor "Array") === False)
     , counterexample "a type with no built-in methods offers none"
         (builtinMethodNamesFor "Int" === [])
+    ]
+
+testTriviaOnly :: IO Property
+testTriviaOnly = do
+  lineCommentTrivia <- isTriviaOnly "// just a comment"
+  blockCommentTrivia <- isTriviaOnly "/* multi\nline\ncomment */"
+  whitespaceTrivia <- isTriviaOnly "   \n\t  "
+  codeNotTrivia <- isTriviaOnly "let x = 1"
+  exprNotTrivia <- isTriviaOnly "1 + 2"
+  unclosedCommentNotTrivia <- isTriviaOnly "/* unclosed comment"
+  pure $ conjoin
+    [ counterexample "line comments are trivia only"
+        (property lineCommentTrivia)
+    , counterexample "block comments are trivia only"
+        (property blockCommentTrivia)
+    , counterexample "whitespace is trivia only"
+        (property whitespaceTrivia)
+    , counterexample "statements are not trivia only"
+        (property (not codeNotTrivia))
+    , counterexample "expressions are not trivia only"
+        (property (not exprNotTrivia))
+    , counterexample "unclosed comments are not trivia only"
+        (property (not unclosedCommentNotTrivia))
+    ]
+
+testDocLookup :: IO Property
+testDocLookup = do
+  let entry = DocEntry
+        { docName = "abs"
+        , docModule = "Std.Math"
+        , docKind = DocFunction
+        , docSignature = Nothing
+        , docComment = ["Absolute value."]
+        , docSpan = (0, 0)
+        }
+      index = DocIndex [entry]
+  pure $ conjoin
+    [ counterexample "unqualified lookup matches"
+        (map docName (entriesFor "abs" index) === ["abs"])
+    , counterexample "qualified lookup matches"
+        (map docName (entriesFor "Std.Math.abs" index) === ["abs"])
+    , counterexample "non-matching lookup returns empty"
+        (entriesFor "Std.Text.abs" index === [])
     ]

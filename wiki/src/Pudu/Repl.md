@@ -52,6 +52,8 @@ runRepl :: ReplOptions -> IO ()
 - Every command is a colon command; everything else is program text. Abbreviations resolve to the first command they prefix, so `:q`, `:l`, and `:t` stay stable as commands are added.
 - IO stays in this module. Compilation, evaluation, and session state live in [[Repl Session]], which is why the session's behaviour is testable without a terminal.
 - An entry that is still open keeps reading. Continuation ends at a closing `}` that balances the entry or at a blank line; the blank line is what lets a form whose next line begins with `|`, `.`, or `?` be entered without a lookahead the prompt cannot perform. `:{` and `:}` bracket a block explicitly.
+- Multiline blocks (`:{ ... :}`) consisting solely of whitespace or comments exit cleanly without
+  compiling or evaluating synthetic unit expressions, preventing unintended `()` printing.
 - Diagnostics are reported against the line the reader typed, never against the generated preamble, using [[Diagnostic Render]]'s interactive configuration.
 - Colour is a caller decision passed in from the entry point; the session never inspects the terminal itself.
 - The line reader provides editing, history, and completion. History is kept in `.puduci_history` in the reader's home directory, and Tab completion is answered by [[Repl Complete]] from a snapshot of the session's names refreshed after each accepted entry.
@@ -88,6 +90,8 @@ Print the banner, optionally load a file, then loop: read a line, continue it wh
 
 - End of input at the prompt or inside a continuation leaves cleanly rather than hanging or discarding the session without a word.
 - `:load` on a file with errors reports them and keeps the previous context, so a broken edit never empties a working session.
+- `:edit` launches `$VISUAL` or `$EDITOR` on the loaded file or target path, and automatically reloads on successful exit.
+- Inspection commands without arguments (`:info`, `:kind`, `:instances`, `:type`, `:tokens`, `:ast`, `:doc`, `:search`) report their own contextual usage rather than falling back to generic placeholders.
 - An unknown command names itself and points at `:?`.
 
 ## Depth
@@ -104,6 +108,9 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
   _Rationale:_ effects and runtime failures occur before the value can be
   discarded, which makes a question about code change the program it is
   inspecting. _Rejected:_ ordinary submission with hidden output.
+- **Q:** Why integrate external editor dispatch and allocation profiling into [[Pudu REPL]]? **A:** The main loop coordinates terminal IO, host process execution for `$EDITOR`, and signal traps. _Rationale:_ keeping process execution and allocation metrics at the IO boundary keeps [[Repl Session]] and [[Repl Answer]] pure, testable, and isolated. _Rejected:_ executing processes inside pure session state.
+- **Q:** Why must inspection commands report command-specific usage messages? **A:** Commands like `:kind` and `:instances` have distinct semantics from `:info`. _Rationale:_ accurate error usage prevents confusion about argument requirements. _Rejected:_ generic usage reporting.
+- **Q:** How should `readBlock` handle comment-only multiline entries? **A:** It delegates to `isTriviaOnly` and exits cleanly without evaluating. _Rationale:_ multiline comment blocks (`:{ ... :}`) should not print `()`, maintaining consistency with single-line comments. _Rejected:_ submitting trivia-only buffers to the compiler.
 
 ## Variants
 
@@ -112,3 +119,10 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 ## Referenced by
 
 [[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]] · [[2026-09-01-higher-kinded-repl-inspection]]
+
+
+## Interactive boundary completion
+
+Ordinary source submissions, like explicit multiline blocks, use isTriviaOnly after continuation. Pure comments return to the same prompt without evaluation or completion recompilation; documentation comments remain source.
+
+Resolved Grill Log: lexer tokens own syntax identity; do not infer it from textual word splitting. Existing source and compiler diagnostics remain authoritative. No tests or reviews run.

@@ -6,15 +6,16 @@ module Pudu.Repl.Session
   , Session (..)
   , classifyEntry
   , contextSummary
-  , inspectSession
+  , emptySession
   , inspectContext
   , inspectDocs
   , inspectEntryType
-  , emptySession
+  , inspectSession
+  , invalidEntryStart
   , loadModule
   , sessionDeclaredNames
-  , sessionVisibleNames
   , sessionExports
+  , sessionVisibleNames
   , submitEntry
   , typeOfEntry
   ) where
@@ -30,28 +31,32 @@ import Pudu.Compiler.Program
   , rootCompileResult
   )
 import System.Directory (getCurrentDirectory)
-import Pudu.Diagnostic (Diagnostic, hasErrors)
+import Pudu.Diagnostic
+  ( Diagnostic
+  , Severity (Error)
+  , diagnostic
+  , hasErrors
+  , mkDiagnosticCode
+  , withHelp
+  )
 import Pudu.Doc (DocIndex)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
+import Pudu.Frontend.Parser.Expression.Recovery (prefixDiagnostic, reservedKeywordGuidance)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree (Module (..))
 import qualified Pudu.Frontend.Token as Token
-import Pudu.Frontend.Token (Keyword (..), Token (..), TokenKind (..), symbolText)
+import Pudu.Frontend.Token (Keyword (..), SymbolKind (..), Token (..), TokenKind (..), symbolText)
 import Pudu.Semantic (Resolution (..), Symbol (..), boundSymbolNames, moduleSymbolNames)
 import Pudu.Type (Type, TypeInfo, widestWithin)
 import Pudu.Source (Source, SourceName (SourceName), newSource, spanEnd, unOffset)
 
 {-| @Repl.Session.Loaded — a file compiled as the session context -}
 data LoadedModule = LoadedModule
-  { loadedPath :: !FilePath
-  , loadedText :: !Text
-  , loadedPrefix :: !Text
-  , loadedRest :: !Text
-  }
-  deriving stock (Eq, Show)
+  { loadedPath :: !FilePath, loadedText :: !Text, loadedPrefix :: !Text, loadedRest :: !Text
+  } deriving stock (Eq, Show)
 
 {-| @Repl.Session.State — everything the session remembers between entries.
     Entries are kept as source text and recompiled together, which is what makes
@@ -63,15 +68,10 @@ data Session = Session
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
   , sessionDependencies :: ![(Text, Module)]
-  }
-  deriving stock (Eq, Show)
+  } deriving stock (Eq, Show)
 
 {-| @Repl.Session.EntryKind — how one submission is placed in the buffer -}
-data EntryKind
-  = ImportEntry
-  | DeclarationEntry
-  | StatementEntry
-  | ExpressionEntry
+data EntryKind = ImportEntry | DeclarationEntry | StatementEntry | ExpressionEntry
   deriving stock (Eq, Show)
 
 {-| @Repl.Session.Result — the compiled outcome of one submission -}
@@ -88,15 +88,7 @@ data EntryResult = EntryResult
   }
 
 emptySession :: Session
-emptySession =
-  Session
-    { sessionImports = []
-    , sessionDeclarations = []
-    , sessionStatements = []
-    , sessionLoaded = Nothing
-    , sessionContext = emptyCompileContext
-    , sessionDependencies = []
-    }
+emptySession = Session [] [] [] Nothing emptyCompileContext []
 
 {-| Classify a submission by its leading token. `import` and the declaration
     keywords place text at module scope; `let`, `var`, and the jump and loop
@@ -110,23 +102,27 @@ classifyEntry tokens = case afterLabel (dropWhile isEndOfFile tokens) of
   token : rest -> case tokenKind token of
     Keyword KwImport -> ImportEntry
     Keyword KwUnsafe -> if declaresFunction rest then DeclarationEntry else ExpressionEntry
-    {-| `fn` declares a function and also opens one written as a value, and the
-        name is the only thing that separates them: `fn double(n: Int)` declares,
-        `fn(n: Int)` is a literal. Classified as a declaration, a literal typed
-        at the prompt was read as a declaration missing its name and answered
-        `E1001: expected identifier` — for an entry that names nothing because
-        it is not naming anything.
-
-        The same holds after `async`, which additionally opens a scope: `async
-        with scope { .. }` is an expression however it ends. -}
+    {-| fn and async only declare when followed by an identifier; otherwise expression. -}
     Keyword KwFn | not (namesFunction rest) -> ExpressionEntry
     Keyword KwAsync | not (asyncDeclares rest) -> ExpressionEntry
     Keyword keyword | isDeclarationKeyword keyword -> DeclarationEntry
     Keyword keyword | isStatementKeyword keyword -> StatementEntry
-    _ -> ExpressionEntry
+    _ -> if isTopLevelAssignment tokens then StatementEntry else ExpressionEntry
   [] -> ExpressionEntry
  where
   isEndOfFile token = tokenKind token == EndOfFile
+
+{-| Check for an assignment operator at bracket depth 0 outside sub-expressions. -}
+isTopLevelAssignment :: [Token] -> Bool
+isTopLevelAssignment = go (0 :: Int)
+ where
+  go depth (token : rest) = case tokenKind token of
+    Token.Symbol symbol
+      | symbolText symbol `elem` ["(", "[", "{"] -> go (depth + 1) rest
+      | symbolText symbol `elem` [")", "]", "}"] -> go (max 0 (depth - 1)) rest
+      | symbolText symbol == "=" -> depth == 0 || go depth rest
+    _ -> go depth rest
+  go _ [] = False
 
 {-| Skip a leading `@name` so what follows is classified on its own terms. -}
 afterLabel :: [Token] -> [Token]
@@ -179,16 +175,39 @@ isStatementKeyword :: Keyword -> Bool
 isStatementKeyword keyword =
   keyword `elem` [KwLet, KwVar, KwReturn, KwBreak, KwContinue, KwWhile, KwFor, KwLoop]
 
-{-| The type of an expression, worked out without running it.
+{-| Detect an entry whose leading token is not a valid start for any Pudu
+    construct (e.g. an orphaned binary operator like `<< 100` or `.foo`),
+    preventing it from gluing onto preceding statements in the session buffer. -}
+invalidEntryStart :: [Token] -> Maybe Diagnostic
+invalidEntryStart tokens = case dropWhile isEndOfFile tokens of
+  token : _ -> case tokenKind token of
+    Keyword kw
+      | isDeclarationKeyword kw || isStatementKeyword kw -> Nothing
+      | kw `elem` [KwImport, KwIf, KwMatch, KwTrue, KwFalse, KwNull] -> Nothing
+      | Just guidance <- reservedKeywordGuidance kw ->
+          mkDiag "E1041" (tokenSpan token) "reserved keyword in expression position" (Just guidance)
+      | otherwise ->
+          let (msg, help) = prefixDiagnostic token
+           in mkDiag "E1040" (tokenSpan token) msg help
+    Token.Symbol symbol
+      | symbol `elem` validPrefixSymbols -> Nothing
+      | otherwise ->
+          let (msg, help) = prefixDiagnostic token
+           in mkDiag "E1040" (tokenSpan token) msg help
+    _ -> Nothing
+  [] -> Nothing
+ where
+  isEndOfFile t = tokenKind t == EndOfFile
+  validPrefixSymbols =
+    [ SymLeftParen, SymLeftBracket, SymLeftBrace, SymHash, SymAt
+    , SymBang, SymMinus, SymAmpersand, SymStar, SymTilde
+    ]
+  mkDiag codeText spanVal msg help = do
+    code <- mkDiagnosticCode codeText
+    diag <- diagnostic code Error spanVal msg
+    pure (maybe diag (`withHelp` diag) help)
 
-    Completion asks this to know what a receiver is before offering what it
-    carries. It must not go through `submitEntry`, which evaluates: a reader
-    pressing tab after `removeFile("notes")` has asked what methods a result
-    has, not for the file to be removed. Nothing here reaches the evaluator, so
-    nothing can happen that the reader did not ask for.
-
-    The session is left exactly as it was, whatever the expression turns out to
-    be. -}
+{-| The type of an expression, worked out without running it. -}
 typeOfEntry :: Session -> Text -> IO (Maybe Type)
 typeOfEntry session entry
   | Text.null (Text.strip entry) = pure Nothing
@@ -204,18 +223,21 @@ inspectEntryType :: Session -> Text -> IO (Source, Int, [Diagnostic], Maybe Type
 inspectEntryType session entry = do
   probe <- newSource interactiveName entry
   let LexResult{lexTokens} = lexSource probe
-      kind = classifyEntry lexTokens
-      candidate = extend session kind entry
-      (buffer, firstLine) = renderBuffer session kind entry
-      entryStart = bufferOffsetOf session kind
-  source <- newSource interactiveName buffer
-  (result, _) <- compileBuffer session candidate source
-  let diagnostics = compileDiagnostics result
-      found =
-        if kind == ExpressionEntry && not (hasErrors diagnostics)
-          then compileTypes result >>= entryType entryStart (Text.length entry)
-          else Nothing
-  pure (source, firstLine, diagnostics, found)
+  case invalidEntryStart lexTokens of
+    Just diag -> pure (probe, 1, [diag], Nothing)
+    Nothing -> do
+      let kind = classifyEntry lexTokens
+          candidate = extend session kind entry
+          (buffer, firstLine) = renderBuffer candidate kind entry
+          entryStart = bufferOffsetOf candidate kind entry
+      source <- newSource interactiveName buffer
+      (result, _) <- compileBuffer session candidate source
+      let diagnostics = compileDiagnostics result
+          found =
+            if kind == ExpressionEntry && not (hasErrors diagnostics)
+              then compileTypes result >>= entryType entryStart (Text.length entry)
+              else Nothing
+      pure (source, firstLine, diagnostics, found)
 
 {-| Compile one submission against the current session. The session advances
     only when the entry is accepted, so a failed entry can never corrupt the
@@ -225,34 +247,35 @@ submitEntry session entry = do
   probe <- newSource interactiveName entry
   let LexResult{lexTokens} = lexSource probe
       kind = classifyEntry lexTokens
-      candidate = extend session kind entry
-      (buffer, firstLine) = renderBuffer session kind entry
-      entryStart = bufferOffsetOf session kind
-  source <- newSource interactiveName buffer
-  (result, dependencies) <- compileBuffer session candidate source
-  let compiled = compileDiagnostics result
-      staticallyValid = not (hasErrors compiled)
-  evaluation <-
-    if staticallyValid then evaluateFor dependencies result else pure Nothing
-  let runtime = maybe [] outcomeDiagnostics evaluation
-      diagnostics = compiled <> runtime
-      accepted = staticallyValid && not (hasErrors runtime)
-  pure
-    EntryResult
-      { resultSession = if accepted then commit session candidate kind else session
-      , resultKind = kind
-      , resultSource = source
-      , resultFirstLine = firstLine
-      , resultDiagnostics = diagnostics
-      , resultResolution = compileResolution result
-      , resultValue =
-          if accepted && kind == ExpressionEntry then evaluation >>= outcomeValue else Nothing
-      , resultType =
-          if kind == ExpressionEntry
+  case invalidEntryStart lexTokens of
+    Just diag -> pure EntryResult
+      { resultSession = session, resultKind = kind, resultSource = probe, resultFirstLine = 1
+      , resultDiagnostics = [diag], resultResolution = Nothing, resultValue = Nothing
+      , resultType = Nothing, resultAccepted = False
+      }
+    Nothing -> do
+      candidate <- extend session kind entry
+      let (buffer, firstLine) = renderBuffer candidate kind entry
+          entryStart = bufferOffsetOf candidate kind entry
+      source <- newSource interactiveName buffer
+      (result, dependencies) <- compileBuffer session candidate source
+      let compiled = compileDiagnostics result
+          staticallyValid = not (hasErrors compiled)
+      evaluation <-
+        if staticallyValid then evaluateFor dependencies result else pure Nothing
+      let runtime = maybe [] outcomeDiagnostics evaluation
+          diagnostics = compiled <> runtime
+          accepted = staticallyValid && not (hasErrors runtime)
+      pure EntryResult
+        { resultSession = if accepted then commit session candidate kind else session
+        , resultKind = kind, resultSource = source, resultFirstLine = firstLine
+        , resultDiagnostics = diagnostics, resultResolution = compileResolution result
+        , resultValue = if accepted && kind == ExpressionEntry then evaluation >>= outcomeValue else Nothing
+        , resultType = if kind == ExpressionEntry
             then compileTypes result >>= entryType entryStart (Text.length entry)
             else Nothing
-      , resultAccepted = accepted
-      }
+        , resultAccepted = accepted
+        }
 
 {-| The type of the submission itself: the widest expression the checker typed
     inside the entry's own region of the buffer. -}
@@ -260,9 +283,9 @@ entryType :: Int -> Int -> TypeInfo -> Maybe Type
 entryType start width info = widestWithin start (start + width) info
 
 {-| Where the submission starts in the assembled buffer, in scalars. -}
-bufferOffsetOf :: Session -> EntryKind -> Int
-bufferOffsetOf session kind =
-  let (buffer, firstLine) = renderBuffer session kind Text.empty
+bufferOffsetOf :: Session -> EntryKind -> Text -> Int
+bufferOffsetOf session kind entry =
+  let (buffer, firstLine) = renderBuffer session kind entry
       before = take (firstLine - 1) (Text.lines buffer)
    in sum (map ((+ 1) . Text.length) before)
 
@@ -287,15 +310,8 @@ evaluateFor dependencies result = case compileModule result of
         parsed
 
 {-| Compile the assembled buffer, and say what it must be linked against.
-
-    A session with no imports compiles against its own context, which is what
-    `:load` established and what every plain expression needs. A session that
-    has imported something is compiled as a *program*: its imports are ordinary
-    imports and have to reach the same files on disk a compiled program's would.
-
-    Without that second path the session resolved an import loosely enough to
-    type-check and then had nothing to link, so `Std.Math.factorial` was a name
-    the checker knew and the evaluator did not. -}
+    A session with no imports compiles against its own context; one with
+    imports compiles as a program linked against resolved dependencies. -}
 compileBuffer :: Session -> Session -> Source -> IO (CompileResult, [(Text, Module)])
 compileBuffer session candidate source
   | null (sessionImports candidate) = do
@@ -314,34 +330,24 @@ compileBuffer session candidate source
             , programDependencies program
             )
 
-{-| Compile the session exactly as it stands, with no new entry. `:browse` and
-    `:context` use this so inspection cannot alter what the session holds. -}
-{-| The session's own documentation index.
-
-    It is produced by the same compile the session would run, so `:doc` and
-    `:search` describe exactly the code in front of the reader — including
-    entries typed at the prompt a moment earlier, which no pre-built index
-    could know about. -}
+{-| The session's own documentation index. -}
 inspectDocs :: Session -> IO (Maybe DocIndex)
 inspectDocs session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
-  compileDocs <$> runCompileWith (sessionContext session) source
+  compileDocs . fst <$> compileBuffer session session source
 
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
 inspectSession session = do
   (resolution, _, diagnostics) <- inspectContext session
   pure (resolution, diagnostics)
 
-{-| Compile the session as it stands and return its resolution, its parsed
-    module, and its diagnostics. Commands that describe the session read the
-    module directly, which keeps them answering from the same text the session
-    would compile rather than from a second record that could drift. -}
+{-| Compile the session as it stands and return its resolution, module, and diagnostics. -}
 inspectContext :: Session -> IO (Maybe Resolution, Maybe Module, [Diagnostic])
 inspectContext session = do
   let (buffer, _) = renderBuffer session StatementEntry Text.empty
   source <- newSource interactiveName buffer
-  result <- runCompileWith (sessionContext session) source
+  (result, _) <- compileBuffer session session source
   pure (compileResolution result, compileModule result, compileDiagnostics result)
 
 interactiveName :: SourceName
@@ -354,12 +360,65 @@ commit previous candidate kind = case kind of
   ExpressionEntry -> previous
   _ -> candidate
 
-extend :: Session -> EntryKind -> Text -> Session
+extend :: Session -> EntryKind -> Text -> IO Session
 extend session kind entry = case kind of
-  ImportEntry -> session{sessionImports = sessionImports session <> [entry]}
-  DeclarationEntry -> session{sessionDeclarations = sessionDeclarations session <> [entry]}
-  StatementEntry -> session{sessionStatements = sessionStatements session <> [entry]}
-  ExpressionEntry -> session
+  ImportEntry -> pure session{sessionImports = sessionImports session <> [entry]}
+  DeclarationEntry -> do
+    entries <- replaceOrAppend kind entry (sessionDeclarations session)
+    pure session{sessionDeclarations = entries}
+  StatementEntry -> do
+    entries <- replaceOrAppend kind entry (sessionStatements session)
+    pure session{sessionStatements = entries}
+  ExpressionEntry -> pure session
+
+{-| Select replacement using real tokens; comments and identifier spelling are
+    owned by the lexer rather than a second textual approximation. -}
+replaceOrAppend :: EntryKind -> Text -> [Text] -> IO [Text]
+replaceOrAppend kind newEntry existing = do
+  wanted <- extractEntryName kind newEntry
+  case wanted of
+    Nothing -> pure (existing <> [newEntry])
+    Just name -> do
+      names <- mapM (extractEntryName kind) existing
+      pure $ if Just name `elem` names
+        then zipWith (\old found -> if found == Just name then newEntry else old) existing names
+        else existing <> [newEntry]
+
+extractEntryName :: EntryKind -> Text -> IO (Maybe Text)
+extractEntryName kind text = do
+  source <- newSource interactiveName text
+  let LexResult{lexTokens, lexDiagnostics} = lexSource source
+      tokens = filter ((/= EndOfFile) . tokenKind) lexTokens
+  pure $ if hasErrors lexDiagnostics then Nothing else case kind of
+    DeclarationEntry -> if declarationCount tokens == 1 then declaration tokens else Nothing
+    StatementEntry -> if length (Text.lines text) == 1 then binding tokens else Nothing
+    _ -> Nothing
+ where
+  declarationCount = countAt (0 :: Int) (0 :: Int)
+  countAt _ total [] = total
+  countAt depth total (token : rest) = case tokenKind token of
+    Token.Symbol symbol
+      | symbolText symbol `elem` ["(", "[", "{"] -> countAt (depth + 1) total rest
+      | symbolText symbol `elem` [")", "]", "}"] -> countAt (max 0 (depth - 1)) total rest
+    Keyword keyword | depth == 0 && keyword `elem` [KwFn, KwConst, KwType, KwTrait, KwMacro] ->
+      countAt depth (total + 1) rest
+    _ -> countAt depth total rest
+  declaration (token : rest) = case tokenKind token of
+    Keyword keyword | keyword `elem` [KwExport, KwAsync, KwComptime] -> declaration rest
+    Keyword KwUnsafe -> declaration (afterCapabilities rest)
+    Keyword keyword | keyword `elem` [KwFn, KwConst, KwType, KwTrait, KwMacro] -> named rest
+    _ -> Nothing
+  declaration [] = Nothing
+  binding (token : rest) = case tokenKind token of
+    Keyword keyword | keyword `elem` [KwLet, KwVar] -> case rest of
+      nameToken : marker : _ | isSymbolKind "=" (tokenKind marker) || isSymbolKind ":" (tokenKind marker) -> named [nameToken]
+      _ -> Nothing
+    _ -> Nothing
+  binding [] = Nothing
+  named (token : _) = case tokenKind token of
+    Identifier name -> Just name
+    _ -> Nothing
+  named [] = Nothing
 
 {-| Assemble the buffer that is actually compiled, and report the line the
     submission starts on so diagnostics are reported against what the reader
@@ -373,35 +432,28 @@ renderBuffer :: Session -> EntryKind -> Text -> (Text, Int)
 renderBuffer session kind entry = (Text.unlines whole, countLines before + 1)
  where
   header = maybe defaultHeader loadedPrefix (sessionLoaded session)
-  {-| The loaded file's text is one element among lines that `Text.unlines`
-      will join, and it carries the newline every file ends with. Left there, it
-      becomes a second one — a blank line that the assembled buffer has and that
-      counting the elements' lines does not, so every offset after it was short
-      by one. Nothing about the *text* was wrong, which is why the buffer
-      compiled and ran correctly while `:type` reported the runtime shape of
-      whatever the misplaced window happened to land on: `"hello"` came back as
-      `string` rather than `Str` for the whole session once a file was loaded. -}
   loadedBody = maybe [] (pure . Text.dropWhileEnd (== '\n') . loadedRest) (sessionLoaded session)
-  imports = sessionImports session <> [entry | kind == ImportEntry]
-  declarations = sessionDeclarations session <> [entry | kind == DeclarationEntry]
-  statements = sessionStatements session <> [entry | inFunction kind]
+  imports = sessionImports session
+  declarations = sessionDeclarations session
+  statements = sessionStatements session <> [entry | kind == ExpressionEntry]
   opening = "fn " <> sessionFunction <> "() {"
   whole =
     [header] <> imports <> loadedBody <> declarations <> [opening] <> statements <> ["}"]
   before = case kind of
-    ImportEntry -> [header] <> sessionImports session
+    ImportEntry -> [header] <> beforeEntry imports
     DeclarationEntry ->
-      [header] <> imports <> loadedBody <> sessionDeclarations session
-    _ ->
+      [header] <> imports <> loadedBody <> beforeEntry declarations
+    StatementEntry ->
+      [header] <> imports <> loadedBody <> declarations <> [opening] <> beforeEntry (sessionStatements session)
+    ExpressionEntry ->
       [header] <> imports <> loadedBody <> declarations <> [opening] <> sessionStatements session
 
-{-| Statements and expressions both live inside the synthetic function; only a
-    statement is remembered afterwards. -}
-inFunction :: EntryKind -> Bool
-inFunction kind = kind == StatementEntry || kind == ExpressionEntry
+  beforeEntry entries = case reverse entries of
+    final : rest | final == entry -> reverse rest
+    _ -> takeWhile (/= entry) entries
 
 countLines :: [Text] -> Int
-countLines = length . concatMap Text.lines
+countLines = sum . map ((+ 1) . Text.count "\n")
 
 defaultHeader :: Text
 defaultHeader = "module Repl.Session"
@@ -421,15 +473,7 @@ loadModule path text = do
     Nothing -> pure (id, diagnostics, resolution)
     Just parsed -> do
       let cut = importCut parsed
-          prefix = Text.take cut text
-          rest = Text.drop cut text
-          loaded =
-            LoadedModule
-              { loadedPath = path
-              , loadedText = text
-              , loadedPrefix = prefix
-              , loadedRest = rest
-              }
+          loaded = LoadedModule path text (Text.take cut text) (Text.drop cut text)
       pure
         ( \session ->
             session
@@ -448,19 +492,17 @@ importCut parsed =
     [] -> unOffset (spanEnd (locatedSpan (moduleName parsed)))
 
 sessionExports :: Resolution -> [Text]
-sessionExports resolution = map symbolName (resolutionExports resolution)
+sessionExports = map symbolName . resolutionExports
 
 {-| Names the session context declares, with the synthetic entry function
     filtered out: it is an assembly detail, not something the reader wrote. -}
 sessionDeclaredNames :: Resolution -> [Text]
-sessionDeclaredNames resolution =
-  filter (/= sessionFunction) (moduleSymbolNames resolution)
+sessionDeclaredNames = filter (/= sessionFunction) . moduleSymbolNames
 
 {-| Every name the reader can type at the prompt, including the locals their
     `let` and `var` entries bound. -}
 sessionVisibleNames :: Resolution -> [Text]
-sessionVisibleNames resolution =
-  filter (/= sessionFunction) (boundSymbolNames resolution)
+sessionVisibleNames = filter (/= sessionFunction) . boundSymbolNames
 
 {-| Summarize the context one line per entry. A multi-line entry shows its
     first line with an ellipsis rather than replaying its whole body. -}

@@ -5,6 +5,45 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-08 — REPL input and redefinition boundaries
+
+- Track delimiter kinds and submit irreparable input promptly for diagnostics. Continue open comments after code; accept bare return without waiting for an operand.
+- Preserve source between block comments and ignore ordinary comment-only submissions through lexical classification.
+- Use token identities for redefinition and preserve multiline binding groups. Correct source positions for repeated entries and empty/trailing-newline groups.
+- Preserve pending REPL enhancements. No builds, tests, reviews or measurements ran. Session evaluation still replays accumulated statements; incremental runtime state is not implemented.
+
+## 2026-09-07 — Pudu REPL Qualified Docs, Bindings Isolation, and Multiline Trivia Hardening
+
+- Resolved qualified name documentation lookup in `Pudu.Doc`: `entriesFor` now matches both unqualified names (`docName entry == name`) and fully-qualified module paths (`docModule entry <> "." <> docName entry == name`), enabling `:doc Std.Math.min` as well as `:doc min`.
+- Resolved `:show bindings` isolation in `Pudu.Repl.Answer`: `:show bindings` now displays only statement bindings (`sessionStatements session`) with `bind    ` prefix, isolating variable assignments from `:show declarations` (functions/types) and `:show imports`.
+- Resolved multiline trivia-only block execution in `Pudu.Repl` and `Pudu.Repl.Input`: added `isTriviaOnly` to check whether an entry contains solely whitespace and comments with no significant tokens and no errors. Multiline blocks (`:{ ... :}`) of comments now exit cleanly back to the prompt without evaluating a synthetic unit expression or printing `()`.
+- Expanded standard library module tab completion in `Pudu.Repl.Complete`: `stdModuleNames` now covers 30+ core standard library namespaces (`Std.Math`, `Std.Json`, `Std.Text`, `Std.Http`, `Std.Db`, `Std.Random`, `Std.Regex`, `Std.Io`, `Std.Time`, `Std.Test`, etc.) for `:browse Std.<Tab>`.
+- Updated mirrored documentation in `wiki/src/Pudu/Doc.md`, `wiki/src/Pudu/Repl/Answer.md`, `wiki/src/Pudu/Repl/Input.md`, `wiki/src/Pudu/Repl/Complete.md`, and `wiki/src/Pudu/Repl.md` with resolved Grill Logs.
+
+## 2026-09-07 — Pudu REPL (puduci) Prompt Operator Isolation and Validation Hardening
+
+- Resolved prompt entry accidental line gluing in `Pudu.Repl.Session`: added `invalidEntryStart` to validate leading tokens of prompt submissions before candidate buffer assembly. An orphaned binary operator (`<<`, `+`, `*`, `&&`, etc.) or non-prefix symbol/keyword submitted at the prompt is now diagnosed immediately with `E1040` (`binary operator '<op>' requires a left-hand expression`) at `<interactive>:1:1` without assembling or executing against prior statements, preventing the entry from erroneously fusing onto preceding statement lines in `sessionStatements`.
+- Exported `prefixDiagnostic` from `Pudu.Frontend.Parser.Expression.Recovery`, sharing canonical intent-aware operator diagnostics between parser recovery and prompt validation.
+
+## 2026-09-07 — Pudu REPL (puduci) Bug Fixes, Mutable Persistence, and Continuation Hardening
+
+- Resolved comment prompt continuation lockup in `Pudu.Repl.Command` and `Pudu.Repl.Input`: standalone line comments (`//`) and closed single-line block comments (`/* ... */`) now parse as `BlankEntry`, immediately redisplaying the prompt rather than locking into multiline continuation mode (`puduci| `). `isComplete` distinguishes non-doc trivia from doc comments (`///`) and unclosed block comments (`/* ...`), completing immediately on line comments.
+- Resolved mutable variable assignment persistence bug in `Pudu.Repl.Session`: top-level assignments (`=`) at bracket depth 0 are now classified as `StatementEntry` via `isTopLevelAssignment`. Assignments (`counter = counter + 1`, `arr[0] = 42`) are committed to `sessionStatements` and replay chronologically during subsequent evaluations, correctly preserving variable mutations at the interactive prompt.
+- Added missing binary continuation symbols to `Pudu.Repl.Input`: bitwise shift operators (`<<`, `>>`) and bitwise XOR (`^`) at the end of lines now trigger continuation mode, aligning REPL multiline continuation with Pudu grammar.
+- Polished contextual command diagnostics in `Pudu.Repl`: `:kind` and `:instances` with missing arguments now report command-specific usage messages (`usage: :kind <name>`, `usage: :instances <name>`) rather than hardcoded `:info`, and unknown setting errors list `+trunc (truncate collections)`.
+- Resolved import compilation in static inspection in `Pudu.Repl.Session`: `inspectDocs` and `inspectContext` now route through `compileBuffer`, resolving external and standard library module dependencies when session imports are active.
+- Exported `isComplete` from `Pudu.Repl.Input` and added comprehensive property test coverage for comment parsing, multiline continuation, mutable variable assignment persistence, and assignment rejection on type mismatch. All 70 test suites pass with 200 QuickCheck runs each.
+- Updated mirrored wiki documentation under `wiki/src/Pudu/Repl/Command.md`, `wiki/src/Pudu/Repl/Input.md`, `wiki/src/Pudu/Repl/Session.md`, and `wiki/src/Pudu/Repl.md` with resolved Grill Logs.
+
+- Replaced robotic `= help: start with a literal, name...` error messages in `Pudu.Frontend.Parser.Expression.Recovery` with intent-aware diagnostics distinguishing binary operators without left operands, unexpected colons in expression position (`type annotations belong on bindings ('let name: Type = value')`), and control keywords.
+- Added live hot redefinition with safe atomic rollback in `Pudu.Repl.Session`: functions and `let`/`var` statements can be redefined interactively in-place, eliminating duplicate declaration collisions (`E2001`). If a candidate entry fails syntax, type checking, or runtime validation, it is rejected and rolls back to the prior clean session state.
+- Added doc-rich, categorized module browsing via `:browse [module]` in `Pudu.Repl.Answer` and `Pudu.Repl`: inspecting a module (e.g. `:browse Std.Math`) categorizes exports into Constants, Types, Traits, Functions, and Foreign symbols with their full type signatures, trait constraints, and indented doc comments.
+- Added interactive micro-profiling dashboard via `:set +s` / `:unset +s` in `Pudu.Repl`: measures execution time with auto-scaled units (`µs`, `ms`, `s`) and memory delta via `GHC.Conc.getAllocationCounter` (`B`, `KB`, `MB`), reporting formatted metrics `[time: 142.3 µs | heap: 48 KB]`.
+- Added bounded value rendering via `renderReplValue` and `:set +trunc` / `:unset +trunc` (default enabled) in `Pudu.Repl.Answer`: truncates arrays, maps, and sets beyond 50 elements and strings beyond 500 characters, preventing terminal freezes from giant data structures.
+- Added external editor integration via `:edit [file]` (`:e`) in `Pudu.Repl`: launches `$VISUAL` / `$EDITOR` (default `nano`) and automatically reloads the file upon exit.
+- Enhanced contextual tab completion in `Pudu.Repl.Complete`: `:load` and `:edit` trigger filename completions; `:show` offers topic completions (`bindings`, `declarations`, `imports`, `settings`); `:set` and `:unset` offer flags (`+t`, `+s`, `+trunc`); `:browse` offers standard library and session module names.
+- Updated module wiki mirrors `wiki/src/Pudu/Frontend/Parser/Expression/Recovery.md`, `wiki/src/Pudu/Repl/Command.md`, `wiki/src/Pudu/Repl/Options.md`, `wiki/src/Pudu/Repl/Answer.md`, `wiki/src/Pudu/Repl/Session.md`, `wiki/src/Pudu/Repl/Complete.md`, `wiki/src/Pudu/Repl.md`, and created `wiki/src/Pudu/Eval/Verify.md`. All property test suites pass with 200 QuickCheck runs each.
+
 ## 2026-09-07 — Low-Level HTTP Pipeline and Parser Optimization
 
 - Configure `TCP_NODELAY` (`Net.NoDelay = 1`) on accepted and connected sockets in `Pudu.Eval.Socket`, eliminating Nagle's algorithm delay and loopback delayed-ACK latency floors (saving 1–2 ms per request).

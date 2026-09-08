@@ -17,7 +17,8 @@ data Command
   | Load !Text
   | Reload
   | Reset
-  | Browse
+  | Browse !(Maybe Text)
+  | Edit !(Maybe Text)
   | ShowType !Text
   | ShowTokens !Text
   | ShowAst !Text
@@ -48,12 +49,16 @@ data Entry
 parseEntry :: Text -> Entry
 parseEntry raw
   | Text.null trimmed = BlankEntry
+  | isCommentLine trimmed = BlankEntry
   | trimmed == ":{" = CommandEntry BeginBlock
   | trimmed == ":}" = CommandEntry EndBlock
   | Text.isPrefixOf ":" trimmed = CommandEntry (parseCommand (Text.drop 1 trimmed))
   | otherwise = SourceEntry raw
  where
   trimmed = Text.strip raw
+  isCommentLine text =
+    Text.isPrefixOf "//" text && not (Text.isPrefixOf "///" text)
+      && not (Text.any (\c -> c == '\n' || c == '\r') text)
 
 parseCommand :: Text -> Command
 parseCommand body = case resolveName name of
@@ -70,7 +75,8 @@ build canonical argument = case canonical of
   "load" -> Load argument
   "reload" -> Reload
   "reset" -> Reset
-  "browse" -> Browse
+  "browse" -> Browse (if Text.null argument then Nothing else Just argument)
+  "edit" -> Edit (if Text.null argument then Nothing else Just argument)
   "type" -> ShowType argument
   "tokens" -> ShowTokens argument
   "ast" -> ShowAst argument
@@ -103,7 +109,7 @@ commandNames =
   [ "quit", "help", "load", "reload", "reset"
   , "type", "info", "kind", "instances"
   , "doc", "search"
-  , "tokens", "ast", "browse", "context", "show", "set", "unset"
+  , "tokens", "ast", "browse", "context", "edit", "show", "set", "unset"
   ]
 
 commandHelp :: [(Text, Text)]
@@ -113,7 +119,8 @@ commandHelp =
   , (":load <file>", "compile a file and use it as the session context")
   , (":reload", "recompile the loaded file")
   , (":reset", "forget every binding and declaration entered here")
-  , (":browse", "list what the session context exports")
+  , (":browse [module]", "list what a module or the session exports")
+  , (":edit [file]", "open an editor and reload on exit")
   , (":context", "show the declarations and bindings currently in scope")
   , (":type <expr>", "report the type of an expression")
   , (":info <name>", "show how a name is declared and what implements it")
@@ -121,7 +128,8 @@ commandHelp =
   , (":instances <type>", "list the traits implemented for a type")
   , (":set +t", "print the type after each result; :unset +t stops")
   , (":set +s", "print how long each entry took; :unset +s stops")
-  , (":show <topic>", "bindings, imports, declarations, or settings")
+  , (":set +trunc", "truncate large collections; :unset +trunc shows full")
+  , (":show <topic>", "bindings, declarations, imports, or settings")
   , (":doc <name>", "show a name's documentation and inferred type")
   , (":search <query>", "find a name, or a type such as Array[a] -> a")
   , (":tokens <text>", "show the token stream for one line")

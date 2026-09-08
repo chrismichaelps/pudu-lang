@@ -22,6 +22,8 @@ Answer a colon command on screen.
 ## Interface
 
 ```haskell
+browseModule :: ReplOptions -> Session -> Maybe Text -> IO ()
+renderReplValue :: Bool -> Value -> Text
 showHelp   :: IO ()
 showState  :: IORef ReplSettings -> Session -> Text -> IO [Text]
 showType   :: ReplOptions -> Session -> Text -> IO ()
@@ -38,9 +40,18 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
   loop — inspecting a session cannot alter it, and a command that reported
   something while quietly advancing the session would be the worst kind of
   surprise.
+- `browseModule` renders module exports grouped by category (Constants, Types, Traits, Functions)
+  with documentation summaries when a module name is provided, falling back to local session
+  context declarations when no argument is passed.
+- `renderReplValue` formats values safely: when truncation is enabled, collections beyond 50 elements
+  and strings beyond 500 characters display structured previews with item counts rather than
+  flooding the terminal.
 - `showState` takes the settings it reads rather than the whole loop context.
   Taking the context would have made this module import the loop and the loop
   import this, for one `IORef`.
+- `:show bindings` displays only statement bindings (`sessionStatements session`) with `bind    `
+  prefix, isolating variable assignments from `:show declarations` (functions, types, traits)
+  and `:show imports`. Full context is inspected via `:context`.
 - `:type` is a compiler question. It uses [[Repl Session]]'s type probe and
   never enters the evaluator: a valid expression reports its static type, an
   invalid expression reports the compiler diagnostics against the submitted
@@ -70,6 +81,11 @@ reportEntry :: ReplOptions -> ReplSettings -> EntryResult -> IO ()
   program ill-typed, and hiding the type turns successful inspection into a
   diagnostic-only command. _Rejected:_ treating a non-empty diagnostic list as
   failure.
+- **Q:** Why group `:browse` exports with doc comments? **A:** Presenting categorized
+  constants, types, traits, and functions with short doc summaries gives immediate discovery
+  without requiring separate `:doc` lookups for each name. _Rationale:_ interactive productivity. _Rejected:_ raw flat name dumps.
+- **Q:** Why format `:set +s` timing with auto-scaling units and heap allocation tracking? **A:** Raw scientific floats like `1.247e-3 secs` are difficult to scan. Scaled units (`µs`, `ms`, `s`) and heap allocation metrics provide immediate profiling insights. _Rationale:_ human-centered interactive metrics. _Rejected:_ unformatted floating point seconds.
+- **Q:** Should `:show bindings` display declarations or imports? **A:** No. _Rationale:_ `:show bindings` is specifically intended for inspecting active variable bindings; `:show declarations` and `:show imports` separately inspect declared symbols and imported modules, while `:context` displays all three together. _Rejected:_ conflating `:show bindings` with `:context`.
 
 ## Referenced by
 

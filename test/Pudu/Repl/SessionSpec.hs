@@ -19,6 +19,7 @@ import Pudu.Repl.Session.ContextSpec
   ( contextProperties
   , testDescribe
   , testHigherKindedInspection
+  , testHotRedefinition
   , testInspection
   , testInteractiveImports
   , testKinds
@@ -46,6 +47,7 @@ replProperties =
   , ("submissions are classified by their leading token", testClassification)
   , ("bindings and declarations persist across entries", testPersistence)
   , ("a rejected entry leaves the session unchanged", testRejection)
+  , ("redefined bindings and declarations replace in place without collision", testHotRedefinition)
   , ("diagnostics are reported against the typed line", testInteractiveLocation)
   , ("inspection reports the session context without changing it", testInspection)
   , ("describing a name reports how the session declared it", testDescribe)

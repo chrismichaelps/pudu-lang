@@ -33,11 +33,79 @@ data CompletionSource = CompletionSource
 completionsFor :: CompletionSource -> Text -> Text -> [Text]
 completionsFor source before word
   | isCommandPosition before word = map (":" <>) (matching (Text.drop 1 word) commandNames)
+  | wantsShowTopic before = matching word showTopics
+  | wantsSettingFlag before = matching word settingFlags
+  | wantsBrowseModule before = matching word (stdModuleNames <> sourceSessionNames source)
   | otherwise = matching word (namePool source)
 
 isCommandPosition :: Text -> Text -> Bool
 isCommandPosition before word =
   Text.null (Text.strip before) && Text.isPrefixOf ":" word
+
+wantsShowTopic :: Text -> Bool
+wantsShowTopic before = case Text.words (Text.strip before) of
+  [cmd] -> cmd `elem` [":show", ":s"] && Text.isSuffixOf " " before
+  _ -> False
+
+showTopics :: [Text]
+showTopics = ["bindings", "declarations", "imports", "settings"]
+
+wantsSettingFlag :: Text -> Bool
+wantsSettingFlag before = case Text.words (Text.strip before) of
+  [cmd] -> cmd `elem` [":set", ":unset"] && Text.isSuffixOf " " before
+  _ -> False
+
+settingFlags :: [Text]
+settingFlags = ["+t", "+s", "+trunc"]
+
+wantsBrowseModule :: Text -> Bool
+wantsBrowseModule before = case Text.words (Text.strip before) of
+  [cmd] -> cmd `elem` [":browse", ":b"] && Text.isSuffixOf " " before
+  _ -> False
+
+stdModuleNames :: [Text]
+stdModuleNames =
+  [ "Std.BitSet"
+  , "Std.BitVector"
+  , "Std.BloomFilter"
+  , "Std.Buffer"
+  , "Std.Bytes"
+  , "Std.Crypto"
+  , "Std.Crypto.Crc32"
+  , "Std.Db"
+  , "Std.Diff"
+  , "Std.Env"
+  , "Std.FlatMap"
+  , "Std.Hash"
+  , "Std.HashMap"
+  , "Std.Html"
+  , "Std.Http"
+  , "Std.Http.Client"
+  , "Std.Http.Safe"
+  , "Std.Http.Server"
+  , "Std.IntMap"
+  , "Std.IntSet"
+  , "Std.Io"
+  , "Std.Iter"
+  , "Std.Json"
+  , "Std.List"
+  , "Std.Log"
+  , "Std.Math"
+  , "Std.Math.Float"
+  , "Std.Mime"
+  , "Std.Net"
+  , "Std.Option"
+  , "Std.Path"
+  , "Std.Process"
+  , "Std.Random"
+  , "Std.Regex"
+  , "Std.Result"
+  , "Std.Set"
+  , "Std.Test"
+  , "Std.Text"
+  , "Std.Time"
+  , "Std.Uuid"
+  ]
 
 {-| Where the cursor is completing a member of something, and what that
     something is.
@@ -45,13 +113,7 @@ isCommandPosition before word =
     Returns the text of the receiver and the part of the member name already
     typed. `[1, 2].` gives `("[1, 2]", "")` and `"hello".le` gives
     `("\"hello\"", "le")`, so the caller can ask what the receiver is and offer
-    the methods that type carries.
-
-    A word made only of name characters and dots — `Std.Text.trimEnd` — is a
-    path rather than a member access, and is left to the name pool. The two are
-    told apart by whether anything precedes the dot in the word itself: a
-    receiver that ends in `]`, `)`, or a quote is not part of the word, because
-    those are not name characters. -}
+    the methods that type carries. -}
 memberContext :: Text -> Text -> Maybe (Text, Text)
 memberContext before word
   | Text.isPrefixOf "." word = case Text.strip before of
@@ -63,11 +125,13 @@ memberContext before word
     complete and a space has been typed. -}
 wantsFilename :: Text -> Bool
 wantsFilename before = case Text.words (Text.strip before) of
-  command : _ -> Text.isPrefixOf ":" command && isLoadCommand (Text.drop 1 command)
+  command : _ -> Text.isPrefixOf ":" command && isFileCommand (Text.drop 1 command)
   [] -> False
  where
-  isLoadCommand typed =
-    not (Text.null typed) && Text.isPrefixOf typed "load" && Text.isSuffixOf " " before
+  isFileCommand typed =
+    not (Text.null typed)
+      && (Text.isPrefixOf typed "load" || Text.isPrefixOf typed "edit")
+      && Text.isSuffixOf " " before
 
 matching :: Text -> [Text] -> [Text]
 matching word candidates = sort (nub (filter (Text.isPrefixOf word) candidates))

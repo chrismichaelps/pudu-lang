@@ -23,6 +23,8 @@ Decide when an entry typed at the prompt is finished, and read the rest of one t
 
 ```haskell
 continuationPrompt :: Text
+isComplete         :: Text -> IO Bool
+isTriviaOnly       :: Text -> IO Bool
 readEntry          :: Text -> InputT IO (Maybe Text)
 readContinuation   :: Text -> InputT IO Text
 ```
@@ -38,18 +40,25 @@ readContinuation   :: Text -> InputT IO Text
   so the reader says so by pressing return.
 - The continuation prompt differs from the first, so a reader can see at a glance that the session is
   still waiting rather than wondering whether their entry was accepted.
-- A line ending on a binary operator awaiting its right operand also continues, matching
-  [[grammar/pudu]]'s own continuation rule rather than inventing a second one for the prompt.
+- A line ending on a binary operator awaiting its right operand also continues, including bitwise shifts
+  (`<<`, `>>`) and bitwise XOR (`^`), matching [[grammar/pudu]]'s own continuation rule rather than
+  inventing a second one for the prompt.
+- Submissions consisting solely of trivia (such as line comments or whitespace) are immediately complete,
+  preventing continuation prompt lockup; only doc comments (`///`) and unclosed block comments (`/*`) continue.
+- `isTriviaOnly` verifies whether an entry contains solely whitespace and non-doc comments without
+  significant tokens or lexical diagnostics, allowing multiline block submissions (`:{ ... :}`) of comments
+  to exit cleanly without triggering synthetic expression evaluation or printing `()`.
 
 ### Linkage
 
-- **Requires:** [[Lexer]], [[Token]], [[Source Text]].
+- **Requires:** [[Lexer]], [[Token]], [[Source Text]], [[Diagnostic]].
 - **Consumed by:** [[Pudu REPL]].
 
 ## Algorithm
 
-Lex the entry so far, count unbalanced openers over real tokens, and read another line while any
-remain or the last line invites one. Stop at a balancing `}` or a blank line.
+Lex the entry so far, count unbalanced openers over real tokens, check for trailing binary continuation
+operators (`+`, `-`, `<<`, `>>`, `^`, etc.), and read another line while any remain or the last line invites one.
+Stop at a balancing `}` or a blank line.
 
 ## Negative Logic (Prohibited Paths)
 
@@ -57,11 +66,26 @@ remain or the last line invites one. Stop at a balancing `}` or a blank line.
   read, not while.
 - No brace counting over raw text.
 
+## Grill Log
+
+- **Q:** When does a trivia-only submission complete? **A:** Immediately, unless it carries a doc comment (`DocComment`) or an unclosed block comment (`E0003`). _Rationale:_ typing ordinary comments or blank lines must return control to the prompt rather than waiting indefinitely in continuation mode. _Rejected:_ requiring non-empty significant tokens for all completions.
+- **Q:** Why include `<<`, `>>`, and `^` in continuation symbols? **A:** Bitwise shift and XOR are binary expressions with right operands; splitting them across lines is valid grammar and should seamlessly continue. _Rationale:_ language consistency across all binary expression operators. _Rejected:_ forcing shift expressions onto single lines.
+- **Q:** How should multiline comment-only blocks (`:{ ... :}`) be evaluated? **A:** They should not evaluate or print `()`. _Rationale:_ typing comments within a multiline block is visual note-taking or staging; evaluating empty/comment blocks as an implicit unit expression `()` clutters the REPL session. _Rejected:_ printing `()` on comment blocks.
+
 ## Referenced by
 
 [[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[grammar/pudu]]
 
-## Boundary completion
 
-Continuation completion recognizes closing parentheses and brackets as well as braces through lexer tokens, including trailing comments.
-Resolved Grill Log: reject unsupported transport/representation behavior rather than emit corrupted output or silently weaken validation. No tests or reviews run.
+
+## Delimiter and lexical completion
+
+Completion tracks delimiter kinds, not only depth. An unexpected or mismatched closer finishes
+input immediately so the compiler can diagnose it; additional lines cannot repair that prefix.
+An unfinished block comment keeps collecting input even after code tokens. Other lexical errors
+finish immediately for diagnostics. Bare return is complete because its expression is optional.
+Continuation reading also submits an irreparable delimiter/lexical error without requiring a blank
+line. isTriviaOnly excludes documentation comments to preserve their attachment to declarations.
+
+Resolved Grill Log: do not wait forever for an invalid prefix, and do not treat code followed by
+an open comment as complete. No tests, builds or reviews are run.
