@@ -1,0 +1,50 @@
+name: package
+
+on:
+  workflow_dispatch:
+    inputs:
+      series:
+        description: Package series
+        required: true
+        default: v0.1
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}-${{ inputs.series }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PACKAGE_SERIES: ${{ inputs.series }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.14.1
+          cabal-version: 3.16.1.0
+      - name: Select package
+        run: python3 scripts/select-version.py "$PACKAGE_SERIES"
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libffi-dev zlib1g-dev libgmp-dev
+      - run: cabal update
+      - name: Build executable
+        run: cabal build exe:pudu --disable-tests --enable-optimization=2
+      - name: Assemble archive
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          python3 scripts/package-binary.py \
+            --binary "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
+            --target linux-amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-${{ inputs.series }}-linux-amd64-${{ github.sha }}
+          path: dist/packages/*
+          if-no-files-found: error
+          retention-days: 14
