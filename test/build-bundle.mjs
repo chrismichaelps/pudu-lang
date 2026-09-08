@@ -9,7 +9,7 @@
 // Usage: node test/build-bundle.mjs [path-to-pudu]
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, copyFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -119,6 +119,17 @@ if (run(guarded) !== "Bundled true") {
 }
 if (existsSync(guarded + ".pending")) {
   failures.push("a failed build left its partial file behind");
+}
+
+// A bundle is the size of the compiler, so a run that leaves two behind costs
+// a developer a gigabyte every few times they run the gates. Removed whatever
+// the outcome, since a failing run leaks just as much as a passing one.
+for (const scratch of [directory, join(elsewhere, "..")]) {
+  try {
+    rmSync(scratch, { recursive: true, force: true });
+  } catch {
+    // A directory that could not be removed is not a reason to fail the run.
+  }
 }
 
 if (failures.length > 0) {

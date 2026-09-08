@@ -13,7 +13,7 @@
 // Usage: node test/scaffold.mjs <path-to-pudu>
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -85,6 +85,14 @@ try {
 }
 if (!broke.includes("FAIL")) {
   failures.push(`a broken suite did not report FAIL: ${JSON.stringify(broke.slice(0, 160))}`);
+}
+
+// The project built a bundle, which is the size of the compiler. Removed
+// whatever the outcome: a failing run leaks as much as a passing one.
+try {
+  rmSync(join(project, ".."), { recursive: true, force: true });
+} catch {
+  // A directory that could not be removed is not a reason to fail the run.
 }
 
 if (failures.length > 0) {
