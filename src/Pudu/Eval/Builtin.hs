@@ -127,8 +127,8 @@ callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
 callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
   (Sha512Builtin, [BytesValue message]) -> pure (BytesValue (sha512 message))
-  (VerifyRsaBuiltin, [BytesValue modulus, BytesValue exponent, BytesValue message, BytesValue signature]) ->
-    pure (BoolValue (verifyRsaSha256 modulus exponent message signature))
+  (VerifyRsaBuiltin, [BytesValue modulus, BytesValue power, BytesValue message, BytesValue signature]) ->
+    pure (BoolValue (verifyRsaSha256 modulus power message signature))
   (VerifyEcdsaBuiltin, [BytesValue x, BytesValue y, BytesValue message, BytesValue signature]) ->
     pure (BoolValue (verifyEcdsaP256Sha256 x y message signature))
   (SealBuiltin, [BytesValue key, BytesValue nonce, BytesValue message, BytesValue associated]) ->

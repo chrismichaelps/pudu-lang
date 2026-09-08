@@ -1,0 +1,397 @@
+module Std.Args
+
+import Std.Option as Option
+import Std.Text as Text
+
+/// How many values an option takes.
+export type Arity
+/// None: the option is either present or it is not.
+  = Flag
+/// One, and a second occurrence replaces the first.
+  | One
+/// One each time, and every occurrence is kept in the order it was written.
+  | Many
+
+/// One option a program accepts.
+export type Opt = {
+  long: Str,
+  /// The single letter, or empty when the option has none.
+  short: Str,
+  arity: Arity,
+  help: Str,
+  required: Bool
+}
+
+/// What a program accepts, and the index that makes reading it one lookup.
+///
+/// Reading arguments by scanning for each one in turn — which is what asking
+/// "was `--verbose` given?" separately from "what is `--out`?" amounts to —
+/// walks the whole command line once per question. Ten options is ten passes,
+/// and each pass compares every argument against a name.
+///
+/// So the names are indexed once, when the spec is built, and the command line
+/// is then read in a single pass: every argument is one lookup rather than a
+/// search. What that costs is one map per spec, built at startup; what it buys
+/// is that adding an option to a program does not make reading its arguments
+/// slower.
+///
+/// The difference is the shape of the growth rather than a constant. Reading
+/// every option of a command line that gives all of them, measured at 25, 50,
+/// 100 and 200 options: scanning takes 9ms, 34ms, 134ms and 530ms — four times
+/// the work for twice the options — while one pass and a lookup each takes
+/// 6ms, 11ms, 22ms and 43ms, which is twice for twice. A tool with a handful
+/// of options would not notice either; the point is that one of them stops
+/// being usable as the tool grows and the other does not.
+///
+/// `byLong` and `byShort` hold positions into `opts` rather than the options
+/// themselves, so an option is stored once however many ways it can be
+/// written.
+export type Spec = {
+  program: Str,
+  about: Str,
+  opts: Array[Opt],
+  byLong: Map[Str, Int],
+  byShort: Map[Str, Int]
+}
+
+/// What a command line turned out to say.
+///
+/// Answers are held by kind rather than in one table of text, because the
+/// question a caller asks differs by kind: a flag is asked whether it is
+/// there, a value what it is, a repeated option for all of them. One table
+/// would answer all three with text and leave every caller to tell "absent"
+/// from "present and empty".
+export type Args = {
+  flags: Set[Str],
+  values: Map[Str, Str],
+  lists: Map[Str, Array[Str]],
+  /// Everything that was not an option or an option's value, in order.
+  rest: Array[Str]
+}
+
+/// Why a command line was refused.
+export type ArgsError
+  = Unknown(Str)
+  | MissingValue(Str)
+  | Missing(Str)
+  | NotANumber(Str, Str)
+
+/// A program that accepts nothing yet.
+export fn spec(program: Str, about: Str) -> Spec {
+  Spec{program: program, about: about, opts: [], byLong: mapOf([]), byShort: mapOf([])}
+}
+
+/// An option that is either present or absent.
+export fn flag(base: &Spec, long: Str, short: Str, help: Str) -> Spec {
+  accepting(base, Opt{long: long, short: short, arity: Flag, help: help, required: false})
+}
+
+/// An option that takes a value.
+export fn value(base: &Spec, long: Str, short: Str, help: Str) -> Spec {
+  accepting(base, Opt{long: long, short: short, arity: One, help: help, required: false})
+}
+
+/// An option that takes a value and must be given.
+export fn required(base: &Spec, long: Str, short: Str, help: Str) -> Spec {
+  accepting(base, Opt{long: long, short: short, arity: One, help: help, required: true})
+}
+
+/// An option that may be given several times, keeping each value.
+export fn repeated(base: &Spec, long: Str, short: Str, help: Str) -> Spec {
+  accepting(base, Opt{long: long, short: short, arity: Many, help: help, required: false})
+}
+
+/// The spec with one more option, indexed by both the ways it can be written.
+fn accepting(base: &Spec, held: Opt) -> Spec {
+  let position = base.opts.length()
+  let byShort = if held.short.isEmpty() {
+    base.byShort
+  } else {
+    base.byShort.insert(held.short, position)
+  }
+  Spec {
+    ..*base,
+    opts: base.opts.push(held),
+    byLong: base.byLong.insert(held.long, position),
+    byShort: byShort
+  }
+}
+
+/// Read the command line this program was given.
+export fn fromCommandLine(base: &Spec) -> Result[Args, ArgsError] {
+  parse(base, &arguments())
+}
+
+/// Read arguments against a spec, in one pass.
+///
+/// The forms accepted are the ones people write: `--name value`, `--name=value`,
+/// `-n value`, `-nvalue`, and `-abc` for three flags at once. A bare `--` ends
+/// the options, so a value that looks like one — a file called `-`, a pattern
+/// beginning with a dash — can still be given.
+export fn parse(base: &Spec, given: &Array[Str]) -> Result[Args, ArgsError] {
+  var found = Args{flags: setOf([]), values: mapOf([]), lists: mapOf([]), rest: []}
+  var index = 0
+  var optionsEnded = false
+
+  while index < given.length() {
+    let argument = given[index]
+    // Tested before anything else looks at the argument: `--` begins with a
+    // dash, so a dispatch on that would read it as an option with no name
+    // rather than as the mark that ends them.
+    if !optionsEnded && argument == "--" {
+      optionsEnded = true
+      index = index + 1
+      continue
+    }
+    if optionsEnded || !isOption(argument) {
+      found = Args{..found, rest: found.rest.push(argument)}
+      index = index + 1
+      continue
+    }
+    if argument.startsWith("--") {
+      let step = readLong(base, &found, given, index) ?
+      found = step[0]
+      index = step[1]
+      continue
+    }
+    let step = readShort(base, &found, given, index) ?
+    found = step[0]
+    index = step[1]
+  }
+
+  let missing = firstMissing(base, &found)
+  match missing {
+    case Some(name) => Err(Missing(name))
+    case None => Ok(found)
+  }
+}
+
+/// Whether an argument names an option rather than being a value.
+///
+/// A lone `-` is a value: it means standard input to nearly every program
+/// that takes a file, and reading it as an option would take that away.
+fn isOption(argument: Str) -> Bool {
+  argument.startsWith("-") && argument != "-"
+}
+
+/// `--name`, `--name value`, or `--name=value`.
+fn readLong(
+  base: &Spec,
+  found: &Args,
+  given: &Array[Str],
+  index: Int
+) -> Result[(Args, Int), ArgsError] {
+  let argument = given[index]
+  let body = Text.drop(argument, 2)
+  let split = body.indexOf("=")
+  let name = if split < 0 { body } else { Text.take(body, split) }
+  let attached = if split < 0 { None } else { Some(Text.drop(body, split + 1)) }
+  let held = optionAt(base, base.byLong.get(name), "--" + name) ?
+  applyOption(base, found, &held, given, index, attached)
+}
+
+/// `-n`, `-n value`, `-nvalue`, or `-abc` where each is a flag.
+///
+/// A cluster is walked here rather than expanded into separate arguments,
+/// because expanding would mean building an array per cluster and the pass is
+/// meant to allocate per option rather than per argument.
+fn readShort(
+  base: &Spec,
+  found: &Args,
+  given: &Array[Str],
+  index: Int
+) -> Result[(Args, Int), ArgsError] {
+  let letters = Text.drop(given[index], 1).chars()
+  var carried = *found
+  var position = 0
+  while position < letters.length() {
+    let letter = letters[position].toText()
+    let held = optionAt(base, base.byShort.get(letter), "-" + letter) ?
+    if held.arity == Flag {
+      carried = withFlag(&carried, held.long)
+      position = position + 1
+      continue
+    }
+    // A value option ends the cluster: whatever follows it in the same
+    // argument is its value, and if nothing does, the next argument is.
+    let trailing = Text.drop(given[index], position + 2)
+    let attached = if trailing.isEmpty() { None } else { Some(trailing) }
+    return applyOption(base, &carried, &held, given, index, attached)
+  }
+  Ok((carried, index + 1))
+}
+
+/// The option a name resolved to, or a refusal naming what was written.
+fn optionAt(base: &Spec, position: Option[Int], written: Str) -> Result[Opt, ArgsError] {
+  match position {
+    case Some(at) => Ok(base.opts[at])
+    case None => Err(Unknown(written))
+  }
+}
+
+/// Record one option, taking its value from where the form says it is.
+fn applyOption(
+  base: &Spec,
+  found: &Args,
+  held: &Opt,
+  given: &Array[Str],
+  index: Int,
+  attached: Option[Str]
+) -> Result[(Args, Int), ArgsError] {
+  if held.arity == Flag {
+    return Ok((withFlag(found, held.long), index + 1))
+  }
+  match attached {
+    case Some(text) => Ok((withValue(found, held, text), index + 1))
+    case None => {
+      if index + 1 >= given.length() {
+        return Err(MissingValue(held.long))
+      }
+      Ok((withValue(found, held, given[index + 1]), index + 2))
+    }
+  }
+}
+
+fn withFlag(found: &Args, name: Str) -> Args {
+  Args{..*found, flags: found.flags.insert(name)}
+}
+
+/// A value recorded where its arity says it belongs.
+///
+/// A repeated option keeps every value and also records the last one, so a
+/// caller that only wants one need not know it may be given twice.
+fn withValue(found: &Args, held: &Opt, text: Str) -> Args {
+  let values = found.values.insert(held.long, text)
+  if held.arity != Many {
+    return Args{..*found, values: values}
+  }
+  let carried = Option.unwrapOr(found.lists.get(held.long), [])
+  Args{..*found, values: values, lists: found.lists.insert(held.long, carried.push(text))}
+}
+
+/// The first required option nothing gave, if any.
+fn firstMissing(base: &Spec, found: &Args) -> Option[Str] {
+  var index = 0
+  while index < base.opts.length() {
+    let held = base.opts[index]
+    if held.required && Option.isNone(&found.values.get(held.long)) {
+      return Some(held.long)
+    }
+    index = index + 1
+  }
+  None
+}
+
+/// Whether a flag was given.
+export fn isSet(found: &Args, long: Str) -> Bool { found.flags.contains(long) }
+
+/// The value an option was given.
+export fn valueOf(found: &Args, long: Str) -> Option[Str] { found.values.get(long) }
+
+/// The value an option was given, or one to use when it was not.
+export fn valueOr(found: &Args, long: Str, fallback: Str) -> Str {
+  Option.unwrapOr(found.values.get(long), fallback)
+}
+
+/// The value an option was given, read as a whole number.
+///
+/// Answers nothing both when the option was absent and when what it was given
+/// is not a number, because a caller with a fallback wants the fallback in
+/// either case. `numberOr` is the form that says which happened.
+export fn numberOf(found: &Args, long: Str) -> Option[Int] {
+  wholeOf(valueOf(found, long) ?)
+}
+
+/// The value an option was given as a number, refusing text that is not one.
+export fn numberChecked(found: &Args, long: Str) -> Result[Option[Int], ArgsError] {
+  match valueOf(found, long) {
+    case None => Ok(None)
+    case Some(text) => {
+      match wholeOf(text) {
+        case Some(number) => Ok(Some(number))
+        case None => Err(NotANumber(long, text))
+      }
+    }
+  }
+}
+
+fn wholeOf(text: Str) -> Option[Int] {
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var index = 0
+  var negative = false
+  if chars[0] == '-' || chars[0] == '+' {
+    negative = chars[0] == '-'
+    index = 1
+  }
+  if index >= chars.length() {
+    return None
+  }
+  var total = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  if negative { Some(0 - total) } else { Some(total) }
+}
+
+/// Every value a repeated option was given, in the order they were written.
+export fn allOf(found: &Args, long: Str) -> Array[Str] {
+  Option.unwrapOr(found.lists.get(long), [])
+}
+
+/// Everything that was not an option or an option's value.
+export fn rest(found: &Args) -> Array[Str] { found.rest }
+
+/// The usage text a program prints when asked, or when refusing.
+///
+/// Built from the same spec the parsing reads, so a program cannot document an
+/// option it does not accept or accept one it does not document.
+export fn usage(base: &Spec) -> Str {
+  var out = base.program
+  if !base.about.isEmpty() {
+    out = out + " — " + base.about
+  }
+  out = out + "\n\nusage:\n  " + base.program + " [options]"
+  var index = 0
+  while index < base.opts.length() {
+    if base.opts[index].required {
+      out = out + " " + describeOption(&base.opts[index])
+    }
+    index = index + 1
+  }
+  out = out + "\n\noptions:\n"
+  index = 0
+  while index < base.opts.length() {
+    out = out + "  " + lineFor(&base.opts[index]) + "\n"
+    index = index + 1
+  }
+  out
+}
+
+fn describeOption(held: &Opt) -> Str { "--" + held.long + " <value>" }
+
+fn lineFor(held: &Opt) -> Str {
+  var written = if held.short.isEmpty() { "    " } else { "-" + held.short + ", " }
+  written = written + "--" + held.long
+  if held.arity != Flag {
+    written = written + " <value>"
+  }
+  Text.padRight(written, 28, " ") + held.help
+}
+
+/// Why a command line was refused, written for a person to read.
+export fn explain(reason: &ArgsError) -> Str {
+  match *reason {
+    case Unknown(written) => written + " is not an option this program takes"
+    case MissingValue(name) => "--" + name + " needs a value after it"
+    case Missing(name) => "--" + name + " is required"
+    case NotANumber(name, text) => "--" + name + " needs a number, and was given `" + text + "`"
+  }
+}

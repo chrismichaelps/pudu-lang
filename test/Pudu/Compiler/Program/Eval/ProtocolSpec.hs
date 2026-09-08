@@ -59,6 +59,7 @@ testProtocolEvaluation = do
   clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
+  commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -314,6 +315,15 @@ testProtocolEvaluation = do
     , counterexample
         "finished spans render as the document a collector reads, and unfinished ones do not"
         (exportedSpans === Just "14")
+    {-| Every form a person actually writes, because a reader that handles
+        `--name value` and not `--name=value` is wrong for half of them. Two
+        carry their own trap: `--` begins with a dash, so a reader dispatching
+        on that reads the mark that ends the options as an option; and a lone
+        `-` means standard input to nearly every program that takes a file, so
+        reading it as an option takes that away. -}
+    , counterexample
+        "a command line's long, short, joined, clustered, and ended forms all read"
+        (commandLines === Just "20")
     {-| A configuration file, in the shapes the format actually holds: every
         base a whole number is written in, a fractional one kept as its text
         rather than rounded into a binary float, sections and repeated
