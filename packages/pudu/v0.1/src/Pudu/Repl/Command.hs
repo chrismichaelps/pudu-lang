@@ -57,7 +57,11 @@ parseEntry raw
  where
   trimmed = Text.strip raw
   isCommentLine text =
-    Text.isPrefixOf "//" text && not (Text.isPrefixOf "///" text)
+    (Text.isPrefixOf "//" text && not (Text.isPrefixOf "///" text)
+      && not (Text.any (\c -> c == '\n' || c == '\r') text))
+    || isClosedBlockComment text
+  isClosedBlockComment text =
+    Text.isPrefixOf "/*" text && Text.isSuffixOf "*/" text
       && not (Text.any (\c -> c == '\n' || c == '\r') text)
 
 parseCommand :: Text -> Command
