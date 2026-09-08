@@ -2,6 +2,7 @@
 module Main (main) where
 
 import Control.Monad (unless, when)
+import Control.Exception (IOException, try)
 import Data.List (sort, sortOn)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText, languageConstraint)
@@ -10,14 +11,18 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import System.Directory
-  ( createDirectoryIfMissing
+  ( canonicalizePath
+  , doesPathExist
+  , pathIsSymbolicLink
+  , createDirectoryIfMissing
   , doesDirectoryExist
   , doesFileExist
   , getCurrentDirectory
   , getTemporaryDirectory
   , listDirectory
   )
-import System.FilePath ((</>), takeBaseName, takeExtension, takeFileName)
+import System.FilePath ((</>), takeBaseName, takeExtension, takeFileName, dropTrailingPathSeparator)
+import System.IO.Error (isDoesNotExistError)
 import Pudu.Bundle (Bundle (..), attachedBundle, bundleOf, materialise, writeBundled)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
@@ -146,8 +151,9 @@ runCommand = do
       hPutStrLn stderr "pudu build: no file given"
       exitFailure
     ("test" : paths) -> testPaths style paths
-    ("init" : path : _) -> initProject (Just path)
-    ("init" : []) -> initProject Nothing
+    ["init", path] -> initProject (Just path)
+    ["init"] -> initProject Nothing
+    ("init" : _) -> hPutStrLn stderr "usage: pudu init [directory]" >> exitFailure
     ("lsp" : _) -> runServer
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
@@ -539,39 +545,61 @@ testSummaryLine passed total assertions =
       <> show assertions <> " assertions held"
     )
 
-{-| Scaffold a canonical Pudu project.
-
-    Creates `pudu.toml`, `src/Main.pudu`, `test/`, and `.gitignore` under the
-    target directory. If `pudu.toml` already exists the command refuses to
-    proceed, because overwriting a manifest is never what a user meant by
-    "init". -}
 initProject :: Maybe FilePath -> IO ()
 initProject target = do
+  result <- try (createProject target) :: IO (Either IOException ())
+  case result of
+    Left problem -> hPutStrLn stderr ("pudu init: " <> show problem) >> exitFailure
+    Right () -> pure ()
+
+createProject :: Maybe FilePath -> IO ()
+createProject target = do
   root <- resolveInitRoot target
   let manifest = root </> "pudu.toml"
-  alreadyExists <- doesFileExist manifest
-  when alreadyExists $ do
-    hPutStrLn stderr ("pudu init: " <> manifest <> " already exists")
-    exitFailure
-  createDirectoryIfMissing True (root </> "src")
-  createDirectoryIfMissing True (root </> "test")
-  let projectName = takeFileName root
-  writeFileIfAbsent manifest (manifestTemplate projectName)
-  writeFileIfAbsent (root </> "src" </> "Main.pudu") mainTemplate
-  writeFileIfAbsent (root </> ".gitignore") gitignoreTemplate
+      sourceDirectory = root </> "src"
+      entry = sourceDirectory </> "Main.pudu"
+      ignore = root </> ".gitignore"
+      projectName = takeFileName (dropTrailingPathSeparator root)
+  when (null projectName || projectName == "/") $
+    ioError (userError "choose a named project directory")
+  mapM_ requireAbsent [manifest, entry]
+  sourceExists <- doesPathExist sourceDirectory
+  sourceLinked <- isLinked sourceDirectory
+  sourceIsDirectory <- doesDirectoryExist sourceDirectory
+  when (sourceLinked || (sourceExists && not sourceIsDirectory)) $
+    ioError (userError "src must be a real directory")
+  ignoreExists <- doesPathExist ignore
+  ignoreLinked <- isLinked ignore
+  ignoreIsFile <- doesFileExist ignore
+  when (ignoreLinked || (ignoreExists && not ignoreIsFile)) $
+    ioError (userError ".gitignore must be a regular file")
+  createDirectoryIfMissing True sourceDirectory
+  TextIO.writeFile entry mainTemplate
+  unless ignoreExists (TextIO.writeFile ignore gitignoreTemplate)
+  TextIO.writeFile manifest (manifestTemplate projectName)
   TextIO.putStrLn (Text.pack ("initialized " <> root))
 
-resolveInitRoot :: Maybe FilePath -> IO FilePath
-resolveInitRoot target = case target of
-  Just path -> do
-    createDirectoryIfMissing True path
-    pure path
-  Nothing -> getCurrentDirectory
+requireAbsent :: FilePath -> IO ()
+requireAbsent path = do
+  exists <- doesPathExist path
+  linked <- isLinked path
+  when (exists || linked) (ioError (userError (path <> " already exists")))
 
-writeFileIfAbsent :: FilePath -> Text -> IO ()
-writeFileIfAbsent path contents = do
-  exists <- doesFileExist path
-  unless exists (TextIO.writeFile path contents)
+isLinked :: FilePath -> IO Bool
+isLinked path = do
+  result <- try (pathIsSymbolicLink path) :: IO (Either IOException Bool)
+  case result of
+    Right linked -> pure linked
+    Left problem
+      | isDoesNotExistError problem -> pure False
+      | otherwise -> ioError problem
+
+resolveInitRoot :: Maybe FilePath -> IO FilePath
+resolveInitRoot target = do
+  path <- maybe getCurrentDirectory pure target
+  when (null path) (ioError (userError "project directory cannot be empty"))
+  createDirectoryIfMissing True path
+  canonicalizePath path
 
 manifestTemplate :: String -> Text
 manifestTemplate name = Text.unlines
@@ -581,14 +609,6 @@ manifestTemplate name = Text.unlines
   , "language = \"" <> languageConstraint <> "\""
   , "source = \"src\""
   , ""
-  , "# A dependency is a directory of modules already on this machine: a"
-  , "# checkout beside this one, a directory shared across a repository, or"
-  , "# code vendored into it. Paths are relative to this file. Nothing here"
-  , "# reaches the network."
-  , "#"
-  , "# [dependencies]"
-  , "# shared = \"../shared\""
-  , "# billing = { path = \"vendor/billing\" }"
   ]
 
 tomlName :: Text -> Text
@@ -613,11 +633,9 @@ mainTemplate = Text.unlines
 
 gitignoreTemplate :: Text
 gitignoreTemplate = Text.unlines
-  [ "# Build artifacts"
-  , ".pudu/"
+  [ ".pudu/"
   , "*.o"
   , ""
-  , "# Editor and OS"
   , ".DS_Store"
   , "*.swp"
   ]
