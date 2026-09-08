@@ -1,5 +1,6 @@
 module Std.App
 
+import Std.App.Stage as Lifecycle
 import Std.App.Config as Config
 import Std.App.Health as Health
 import Std.App.Metrics as Metrics
@@ -18,7 +19,7 @@ import Std.Sync as Sync
 /// knows how to open a pool is the thing that knows how to close it, and
 /// separating them into two lists is how the halves come to disagree about
 /// what exists.
-export type Stage = { name: Str, start: fn() -> Result[(), Str], stop: fn() -> Result[(), Str] }
+export type Stage = Lifecycle.Stage
 
 /// The program: what it is called, what it was told, what it serves, what has
 /// to be running before it serves it, and what is wrapped around every handler.
@@ -192,12 +193,12 @@ export fn stage(
   opening: fn() -> Result[(), Str],
   closing: fn() -> Result[(), Str]
 ) -> Stage {
-  Stage{name: name, start: opening, stop: closing}
+  Lifecycle.create(name, opening, closing)
 }
 
 /// A stage that has something to start and nothing to undo.
 export fn once(name: Str, opening: fn() -> Result[(), Str]) -> Stage {
-  Stage{name: name, start: opening, stop: fn() -> Result[(), Str] { Ok(()) }}
+  Lifecycle.create(name, opening, fn() -> Result[(), Str] { Ok(()) })
 }
 
 /// What the application is called.

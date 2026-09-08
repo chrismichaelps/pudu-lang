@@ -15,7 +15,9 @@ import Pudu.Frontend.Lexer (LexResult (..), lexSource)
 import Pudu.Frontend.Parser (ParseResult (..), parseModule)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
-import Pudu.Frontend.Syntax (Module, ModuleName)
+import Pudu.Frontend.Syntax (ModuleName)
+import Pudu.Frontend.Syntax.Located (Located (..))
+import Pudu.Frontend.Syntax.Tree (Declaration (..), Module (..) )
 import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateModule)
@@ -136,8 +138,14 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
     Folding runs only on a module that typed, so an initializer whose meaning
     was never established is not evaluated for a second opinion. -}
 foldConstants :: Map Span Text -> Module -> IO [Diagnostic]
-foldConstants integerKinds parsed =
-  outcomeDiagnostics <$> evaluateModule integerKinds parsed
+foldConstants integerKinds parsed
+  | any hasInitializer (moduleDeclarations parsed) =
+      outcomeDiagnostics <$> evaluateModule integerKinds parsed
+  | otherwise = pure []
+ where
+  hasInitializer (Located _ declaration) = case declaration of
+    BindingDeclaration {} -> True
+    _ -> False
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}

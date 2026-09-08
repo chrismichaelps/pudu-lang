@@ -1,6 +1,6 @@
 module Std.App.Database
 
-import Std.App as App
+import Std.App.Stage as Lifecycle
 import Std.App.Config as Config
 import Std.Db.Driver as Driver
 import Std.Db.Postgres as Postgres
@@ -53,9 +53,9 @@ export fn fromConfigWith(driver: Driver.Driver, settings: &Config.Config, key: S
 }
 
 /// Add before stages that need the database; stage order determines dependency order.
-export fn stage(database: &Database, name: Str) -> App.Stage {
+export fn stage(database: &Database, name: Str) -> Lifecycle.Stage {
   let resource = *database
-  App.stage(name,
+  Lifecycle.create(name,
     fn() -> Result[(), Str] { Result.mapErr(start(&resource), describe) },
     fn() -> Result[(), Str] { Result.mapErr(stop(&resource), describe) })
 }

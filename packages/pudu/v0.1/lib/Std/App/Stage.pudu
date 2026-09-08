@@ -1,0 +1,11 @@
+module Std.App.Stage
+
+export type Stage = { name: Str, start: fn() -> Result[(), Str], stop: fn() -> Result[(), Str] }
+
+export fn create(
+  name: Str,
+  opening: fn() -> Result[(), Str],
+  closing: fn() -> Result[(), Str]
+) -> Stage {
+  Stage{name: name, start: opening, stop: closing}
+}
