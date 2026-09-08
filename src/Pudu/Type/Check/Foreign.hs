@@ -360,18 +360,34 @@ checkOwnership declared function result = case (result, foreignReleasedBy functi
         Just (HandleCrossing handle) -> checkReleaseShape spanValue handle release
         _ -> pure ()
 
-{-| A release is deliberately one exact shape: the handle it frees, then unit.
+{-| A release takes exactly the handle it frees, and answers nothing a caller
+    can act on.
 
-    More parameters would leave the runtime unable to identify one atomic
-    ownership transfer, and a result would suggest that release failure is
-    recoverable after the library may already have destroyed the resource. -}
+    One parameter, because more would leave the runtime unable to identify one
+    atomic ownership transfer.
+
+    The result is where this used to say unit and nothing else, and that made
+    the rule unusable against the libraries it exists for. Releasing is the one
+    operation C libraries conventionally report a status from — `sqlite3_close`
+    and `sqlite3_finalize` answer `int`, `gzclose` and `fclose` answer `int` —
+    so a boundary admitting only `void` cannot bind them directly, and every
+    such library needs a C shim written for it whose only work is to discard a
+    number.
+
+    So a scalar result is admitted and discarded. The reasoning that produced
+    the original rule is kept whole, because it was about the *caller*: nothing
+    is handed back, so release failure still cannot be treated as recoverable
+    after the library may already have destroyed the resource.
+
+    A handle result stays refused. That is not a status but the library handing
+    something else back, and nobody would claim it. -}
 checkReleaseShape :: Span -> Text -> ForeignFunction -> Checker ()
 checkReleaseShape spanValue handle release =
   unless (parameterMatches && resultMatches && foreignReleasedBy release == Nothing) $
     report "E3067" spanValue
       (locatedValue (foreignName release) <> " does not release one " <> handle)
       (Just ("declare it as fn " <> locatedValue (foreignName release) <> "(value: "
-        <> handle <> ") -> ()"))
+        <> handle <> ") -> (), or -> a number the library reports its status with"))
  where
   parameterMatches = case foreignParameters release of
     [Located _ parameter]
@@ -380,8 +396,11 @@ checkReleaseShape spanValue handle release =
             crossingFor (Set.singleton handle) Map.empty written == Just (HandleCrossing handle)
           Nothing -> False
     _ -> False
-  resultMatches =
-    crossingFor (Set.singleton handle) Map.empty (foreignResult release) == Just NothingCrossing
+  resultMatches = case crossingFor (Set.singleton handle) Map.empty (foreignResult release) of
+    Just NothingCrossing -> True
+    Just (SignedCrossing _) -> True
+    Just (UnsignedCrossing _) -> True
+    _ -> False
 
 isHandle :: Maybe Crossing -> Bool
 isHandle crossing = case crossing of

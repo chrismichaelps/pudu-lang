@@ -63,6 +63,11 @@ jobs:
       # is under test is that the built file needs nothing from around it.
       - name: Verify a built program runs with nothing installed
         run: node test/build-bundle.mjs "$(cabal list-bin pudu)"
+      # Against libraries nobody here wrote, in the shapes their own headers
+      # declare. Every other foreign fixture calls a shim from `cbits`, which
+      # can be given whatever signature the boundary happens to admit.
+      - name: Verify the foreign boundary reaches third-party libraries
+        run: node test/foreign-third-party.mjs "$(cabal list-bin pudu)"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs

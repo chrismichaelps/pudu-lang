@@ -217,8 +217,16 @@ testForeignHandles = do
         (releasingBorrowed === ["E7022"])
     , counterexample "so nothing was destroyed across either program"
         (afterBorrowed - beforeBorrowed === 0)
-    , counterexample "a release must take its matching handle and return unit"
-        (badRelease === ["E3067"])
+    {-| A release answering a number is admitted, because in C that is what
+        releasing looks like — `sqlite3_close` and `fclose` both answer one —
+        and refusing it meant no such library could be bound without a shim
+        whose only work was to discard the number. What that costs is that a
+        reader answering a number can be named as a release and the shapes
+        cannot be told apart; C offers nothing that would tell them apart, and
+        the value is discarded either way. A release answering a handle stays
+        refused, since that is the library returning a resource nobody claims. -}
+    , counterexample "a release must take its matching handle and hand nothing back"
+        (badRelease === ["E3067", "E3066"])
     , counterexample "nominal handles cannot cross as another declared handle"
         (wrongHandle === ["E3001"])
     , counterexample "an empty native symbol is refused at its declaration"
