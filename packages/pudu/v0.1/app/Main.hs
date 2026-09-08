@@ -35,7 +35,9 @@ import Pudu.Eval.Value (Value (..))
 import Pudu.Doc (DocIndex, indexEntries, renderEntryLines)
 import Pudu.Format (FormatResult (..), formatSource)
 import Pudu.Lsp.Server (runServer)
-import Pudu.Doc.Json (encodeIndex)
+import Pudu.Doc.Json (encodeIndex, escapeJson)
+import Pudu.Semantic (Resolution (..), Symbol (..))
+import Pudu.Frontend.Syntax.Name (moduleNameText)
 import Pudu.Doc.Search (Match (..), searchText)
 import Pudu.Doc.Site (renderSite)
 import Pudu.Diagnostic (Diagnostic, diagnosticSpan, hasErrors)
@@ -150,6 +152,7 @@ runCommand = do
     ("fmt" : "--check" : paths) -> formatPaths CheckOnly paths
     ("fmt" : "--stdout" : paths) -> formatPaths ToStdout paths
     ("fmt" : paths) -> formatPaths InPlace paths
+    ("api" : "--json" : paths) -> apiPaths paths
     ("doc" : "--json" : paths) -> documentPaths JsonOutput paths
     ("doc" : "--html" : paths) -> documentPaths HtmlOutput paths
     ("doc" : paths) -> documentPaths TextOutput paths
@@ -683,6 +686,7 @@ usage =
     , "  pudu doc --html ...  emit a self-contained searchable documentation page"
     , "  pudu search <query> <file>...  find a name, or a type shape such as"
     , "                       'Array[a] -> a'"
+    , "  pudu api --json <file>...  emit public API identities"
     , "  pudu version         print the version"
     , "  pudu help            print this message"
     ]
@@ -690,3 +694,22 @@ usage =
 versionLine :: Text
 versionLine = "pudu " <> versionText
 
+
+apiPaths :: [FilePath] -> IO ()
+apiPaths [] = hPutStrLn stderr "pudu api --json: no files given" >> exitFailure
+apiPaths paths = do
+  programs <- mapM compileProgram paths
+  if any (hasErrors . programDiagnostics) programs
+    then hPutStrLn stderr "pudu api: compilation failed; no API index emitted" >> exitFailure
+    else do
+      let entries =
+            [ "{\"module\":\"" <> escapeJson (moduleNameText name)
+                <> "\",\"name\":\"" <> escapeJson (symbolName symbol) <> "\"}"
+            | program <- programs
+            , Just name <- [programRoot program]
+            , Just compiled <- [rootCompileResult program]
+            , Just resolution <- [compileResolution compiled]
+            , symbol <- resolutionExports resolution
+            ]
+      TextIO.putStrLn ("{\"version\":\"" <> versionText <> "\",\"exports\":["
+        <> Text.intercalate "," entries <> "]}")
