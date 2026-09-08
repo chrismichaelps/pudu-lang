@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Compiler/Library.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Compiler/Library.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Compiler]]"
@@ -42,9 +42,9 @@ searchRoots :: FilePath -> ModuleName -> IO [FilePath]
   did not mean.
 - There is no network step, no cache, and no version resolution. A Pudu program's dependencies are
   its own files plus the compiler it is built with, and that is the whole answer.
-- A checkout's `lib/` is a search root, so the compiler under development uses the standard library
-  under development. Without it every change to `Std` would need an install step before it could be
-  tested.
+- Library roots query `PUDU_LIB`, Cabal installed data files (`Package.getDataFileName "lib"`),
+  versioned package development paths (`packages/pudu/v<major>.<minor>/lib`), and root `lib/`.
+  The compiler under development uses the local standard library without an extra install step.
 
 ### Linkage
 

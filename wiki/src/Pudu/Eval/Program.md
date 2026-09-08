@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Eval/Program.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Eval/Program.hs"
 fidelity: Active
 domain: "[[Execution Result]]"
 subsystem: "[[Runtime]]"
@@ -26,6 +26,7 @@ evaluateEntryPoint     :: Map Span Text -> Text -> Module -> IO EvalOutcome
 evaluateProgramEntry   :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO EvalOutcome
 evaluateProgramTallied :: Map Span Text -> [(Text, Module)] -> Text -> Module -> IO (EvalOutcome, Int)
 evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
+evaluateInteractiveBlock :: Bool -> Map Span Text -> [(Text, Module)] -> Module -> Located Block -> Evaluator Value
 ```
 
 ### Governance
@@ -53,7 +54,7 @@ evaluateModule         :: Map Span Text -> Module -> IO EvalOutcome
 ### Linkage
 
 - **Requires:** [[Evaluator]], [[Eval Env]], [[Eval Install]], [[Eval Value]].
-- **Consumed by:** [[Compiler Pipeline]], [[Repl Session]], [[Tooling]].
+- **Consumed by:** [[Compiler Pipeline]], [[Repl Session]], [[Repl Evaluation]], [[Tooling]].
 
 ## Algorithm
 
@@ -94,3 +95,12 @@ find.
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Compiler Pipeline]]
+
+## Interactive linkage
+
+`evaluateInteractiveBlock` rebuilds module frames around a retained local frame,
+resets method/variant registries, merges checked integer-kind maps to preserve
+captured closure spans, links dependencies and runs only the supplied new block.
+Resolved Grill Log: declaration evaluation remains separate from local statement
+execution; callers must check compatibility before retaining values across source
+changes. Module constants may be folded again; prior local effects never replay.

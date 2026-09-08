@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Eval/Context.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Eval/Context.hs"
 fidelity: Active
 tags: [module, runtime, lifecycle]
 aliases: [Eval Context]
@@ -10,20 +10,23 @@ aliases: [Eval Context]
 ## Purpose and interface
 
 Provide a scoped, serialized evaluation context that retains accepted Env values between actions.
-withEvaluationContext :: (EvaluationContext -> IO a) -> IO (a, [Diagnostic]) owns the lifetime.
+
+### Signatures
+
+```haskell
+data ContextError = ContextClosed
+newtype EvaluationContext
+withEvaluationContext :: (EvaluationContext -> IO a) -> IO (a, [Diagnostic])
 evaluateInContext :: EvaluationContext -> Evaluator Value -> IO (Either ContextError EvalOutcome)
-executes only the supplied action, with effects available, and retains Env after normal completion
-or return. A runtime abort preserves the previous binding frames. ContextClosed is explicit after
-scope exit. No replay occurs inside this API.
+evaluateInContextAndCommit :: EvaluationContext -> Evaluator Value -> (EvalOutcome -> IO ()) -> IO (Either ContextError EvalOutcome)
+evaluateBlockInContext :: EvaluationContext -> Located Block -> IO (Either ContextError EvalOutcome)
+```
 
-Resolved Grill Log: MVar serializes state transitions; asynchronous exceptions restore the prior
-state lock and propagate. Previous binding frames can be retained, but external IO and mutations
-to synchronized resources are not rolled back on failure. Allocated resources remain owned by the
-context until it closes. Context invalidation happens before resource teardown. A callback must
-join work using its context before returning; scope exit waits for an active action.
-
-This is the evaluator foundation; interactive source retention and type-safe redefinition still
-need to be integrated before the REPL can stop replaying earlier submissions.
+`withEvaluationContext` owns the lifetime of an `EvaluationContext`.
+`evaluateInContext` executes only the supplied action, with effects available, and retains `Env` after normal completion or return.
+`evaluateInContextAndCommit` accepts a nonblocking publication callback executed synchronously during state replacement.
+`evaluateBlockInContext` accepts an already admitted `Located Block` and executes it in the retained frame without creating a disposable enclosing frame.
+A runtime abort preserves the previous binding frames. `ContextClosed` is explicit after scope exit. No replay occurs inside this API.
 
 ## Dependencies and consumers
 
@@ -40,4 +43,12 @@ No builds, tests, reviews or measurements run. No release-readiness claim.
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Repl Session]]
 
 
-`evaluateBlockInContext` accepts an already admitted Located Block and executes it in the retained frame. It uses the same statement evaluator as ordinary blocks, without creating a disposable enclosing frame. The caller must install declarations and checked integer kinds before execution. This API does not parse or type-check source itself.
+
+## Atomic publication
+
+`evaluateInContextAndCommit` accepts a nonblocking publication callback. Evaluation
+is interruptible; outcome publication and retained environment replacement occur
+under masking in the same serialized action. The shell publishes its accepted
+source snapshot there, so interruption cannot restore stale source after runtime
+acceptance. Resolved Grill Log: the callback only writes an IORef and must not
+throw or perform interruptible IO. External effects remain nontransactional.

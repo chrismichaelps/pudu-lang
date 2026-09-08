@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Repl/Session.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Repl/Session.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -31,6 +31,7 @@ data Session = Session
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
   , sessionDependencies :: ![(Text, Module)]
+  , sessionRetainedTypes :: !(Maybe TypeInfo)
   }
 data EntryKind = ImportEntry | DeclarationEntry | StatementEntry | ExpressionEntry
 data EntryResult
@@ -38,6 +39,7 @@ emptySession :: Session
 classifyEntry :: [Token] -> EntryKind
 invalidEntryStart :: [Token] -> Maybe Diagnostic
 submitEntry :: Session -> Text -> IO EntryResult
+submitEntryInContext :: EvaluationContext -> (Session -> IO ()) -> Session -> Text -> IO EntryResult
 inspectEntryType :: Session -> Text -> IO (Source, Int, [Diagnostic], Maybe Type)
 typeOfEntry :: Session -> Text -> IO (Maybe Type)
 inspectSession :: Session -> IO (Maybe Resolution, [Diagnostic])
@@ -85,7 +87,7 @@ sessionExports :: Resolution -> [Text]
 
 ### Linkage
 
-- **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]], [[Parser Expression Recovery]].
+- **Requires:** [[Compiler Pipeline]], [[Compiler Program]], [[Evaluator]], [[Lexer Facade]], [[Token]], [[Syntax Tree]], [[Name Resolution]], [[Source]], [[Parser Expression Recovery]], [[Repl Evaluation]], [[Eval Context]].
 - **Consumed by:** [[Pudu REPL]].
 
 ## Algorithm
@@ -141,7 +143,7 @@ DEPTH 0.70 (MEDIUM). It hides classification, buffer assembly, line mapping, acc
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Compiler Pipeline]] · [[Evaluator]] · [[2026-08-31-static-repl-inspection]]
+[[src/Pudu/Repl/_MOC]] · [[Pudu REPL]] · [[Repl Evaluation]] · [[Compiler Pipeline]] · [[Evaluator]] · [[2026-08-31-static-repl-inspection]]
 
 
 
@@ -160,3 +162,20 @@ the candidate. Inspection shares the same token-based replacement path as submis
 Resolved Grill Log: the lexer-backed extension operation returns `IO Session`; no
 consumer may pass that action where a concrete session is required. Inspection still
 stops at compilation and never evaluates user code.
+
+## Persistent submission contract
+
+`submitEntryInContext` shares compilation and reporting with `submitEntry`, but
+appends statement source instead of replacing earlier executed bindings. It retains
+a TypeInfo snapshot and dependency syntax for compatibility checks. Declarations
+and imports must be established before local statements; subsequent changes require
+`:reset` or `:load`. Earlier inferred expression types must remain identical, and
+changed dependency syntax is rejected before runtime entry. This conservative rule
+may reject harmless inference changes; it does not silently reinterpret live values.
+
+Only AST nodes fully contained in the new submission execute. Previous statement
+source remains available for type and ownership checking. Expression entries are
+retained in persistent sessions as statements after execution, preserving ownership
+and control-flow history without replay. The ordinary one-shot API retains its
+existing behavior. Resolved Grill Log: runtime state and accepted source are published
+together through the context callback. Failed external effects cannot be undone.

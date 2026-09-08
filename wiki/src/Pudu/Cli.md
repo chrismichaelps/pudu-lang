@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/app/Main.hs"
+path: "@root/packages/pudu/v0.1/app/Main.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -137,3 +137,12 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 
 Project initialization escapes backslash, quotes and ASCII controls in the directory-derived
 TOML name. Existing files remain preserved. This is code-only delivery with readiness unproven.
+
+## Initialization path validation and bundle isolation
+
+`pudu init` normalizes and validates target directory paths, preventing accidental target escapes. It populates `package.language` with the canonical minor-bounded constraint from `Pudu.Version`. Bundled binary execution (`runBundled`) extracts attached modules into an isolated per-process temporary directory using `withSystemTempDirectory "pudu-bundle"`, and reliably restores environment modifications via `bracket`.
+
+### Resolved Grill Log
+
+- **Q:** Cache unpacked bundle modules across runs? **A:** No; isolated temporary directories prevent stale cache poisoning and concurrent collision between different bundle versions.
+- **Q:** Hardcode project template language constraint? **A:** No; derive it directly from the active Cabal compiler version via `languageConstraint`.

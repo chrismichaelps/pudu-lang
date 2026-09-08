@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/pudu.cabal"
+path: "@root/packages/pudu/v0.1/pudu.cabal"
 fidelity: Active
 tags: [module, build]
 aliases: [Pudu Cabal Manifest]
@@ -91,3 +91,17 @@ Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot 
 ## Evaluation lifecycle modules
 
 Register Pudu.Eval.Runtime and Pudu.Eval.Context. Resolved Grill Log: one-shot and persistent evaluation share the same resource owner, with no new package dependency.
+
+## REPL execution adapter
+
+Register Pudu.Repl.Evaluation. Resolved Grill Log: checked entry selection and
+compatibility guards live outside the terminal loop and source assembly module.
+
+## Version enforcement and bundle execution
+
+Register Pudu.Version in library exposed-modules for Cabal-derived package versioning. Add temporary >=1.3 && <1.4 dependency to the pudu executable component for isolated bundle module extraction.
+
+### Resolved Grill Log
+
+- **Q:** Hardcode version numbers across tools? **A:** No; derive the language version and constraints directly from Cabal metadata via Pudu.Version.
+- **Q:** Reuse a global bundle cache directory across runs? **A:** No; withSystemTempDirectory ensures isolated per-process extraction without collisions or left-behind artifacts.

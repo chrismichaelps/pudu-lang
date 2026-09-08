@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-08 — Persistent REPL execution, version enforcement, and packaging pipeline
+
+- Persistent REPL execution: integrated `Pudu.Repl.Evaluation` and `Pudu.Eval.Context` into `puduci` loop. Previously executed statements and environment frames are retained; each submission compiles candidate source, validates type and dependency compatibility against prior retained types, and executes only the new entry statements or expressions via `evaluateInteractiveBlock` without replaying earlier code or duplicating side effects.
+- Masked publication: accepted runtime state and source snapshots commit together under mask in the context callback, ensuring atomic updates and safe interrupt recovery.
+- REPL comment blank entries: classified single-line closed block comments (`/* ... */`) as `BlankEntry` in `Pudu.Repl.Command`, immediately returning to prompt without parse errors or multiline continuation lockups.
+- Cabal-derived version enforcement: introduced `Pudu.Version` as the single source of truth for version numbers and minor-version bounds (`languageConstraint`), deriving from `Paths_pudu`.
+- Project language constraints: enforced `package.language` constraints declared in `pudu.toml` during program compilation (`Compiler.Program` and `Compiler.Manifest`), diagnosing incompatibilities with `E2090`.
+- Workspace isolation and packaging: restructured repository workspace to isolate `packages/pudu/v0.1/`, decoupled packaging scripts (`build-package.py`, `package-binary.py`, `api-lifecycle.py`, `select-version.py`), and added manual packaging CI workflow (`.github/workflows/package.yml`).
+- Bundle extraction isolation: isolated module extraction in `runBundled` to a per-process system temporary directory (`withSystemTempDirectory`), validated module names against path traversal, and safely restored environment variables using `bracket`.
+
 ## 2026-09-08 — Scoped persistent evaluator context
 
 - Separate resource ownership into Eval.Runtime and reuse it in the existing one-shot runner.

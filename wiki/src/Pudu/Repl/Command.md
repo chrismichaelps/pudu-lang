@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Repl/Command.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Repl/Command.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -105,6 +105,6 @@ DEPTH 0.35 (SHALLOW by intent). It is a vocabulary and a parser for it; deepenin
 
 ## Interactive boundary completion
 
-Command parsing recognizes only a single physical non-doc line comment as blank. Block comments and multiline input are passed intact to the lexical trivia classifier. Prefix/suffix comment matching must not discard intervening program text.
+Command parsing recognizes single-line non-doc line comments (`//`) and closed single-line block comments (`/* ... */`) as blank entries. Unclosed block comments and multiline input are passed intact to the lexical trivia classifier. Prefix/suffix comment matching must not discard intervening program text.
 
-Resolved Grill Log: lexer tokens own syntax identity; do not infer it from textual word splitting. Existing source and compiler diagnostics remain authoritative. No tests or reviews run.
+Resolved Grill Log: lexer tokens own syntax identity; do not infer it from textual word splitting. Existing source and compiler diagnostics remain authoritative. Closed block comment recognition preserves interactive prompt usability without evaluating trivia. No tests or reviews run.

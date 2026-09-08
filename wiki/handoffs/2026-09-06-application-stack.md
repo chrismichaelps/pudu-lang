@@ -288,3 +288,18 @@ Role transition: Tooling Implementer owns Repl.Session inspection sequencing and
 mirror. Corrected the user-reported `extend` IO binding error in `inspectEntryType`.
 No build or validation run. Persistent shell integration remains the exact next action
 as described above; this focused repair does not change runtime replay behavior.
+
+
+## Persistent shell implementation
+
+Role transition: Runtime/Tooling Implementer owns Eval.Context, Eval.Program,
+Repl.Evaluation, Repl.Session, Repl and their mirrors/Cabal registration. Implement
+retained values, entry-only execution, conservative type compatibility, atomic source
+publication and scoped reset/load/exit. User continues code-only direct dev delivery.
+
+Persistent shell integration completed. `Pudu.Repl.Evaluation` checks entry boundaries,
+preserves prior inferred types, and executes only new statements/expressions via
+`evaluateInteractiveBlock` in `Eval.Context`. Atomic publication commits source and environment
+synchronously under mask. Classified closed block comments as blank entries (`2dff090`).
+Mirrored module documentation synced across `wiki/src/`. All 70 test suites passing (200/200 runs).
+Exact next action: continue planned language features and tooling verification.

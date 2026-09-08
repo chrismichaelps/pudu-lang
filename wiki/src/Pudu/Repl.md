@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Repl.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Repl.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -73,7 +73,7 @@ runRepl :: ReplOptions -> IO ()
 
 ### Linkage
 
-- **Requires:** [[Repl Session]], [[Repl Answer]], [[Repl Command]], [[Repl Complete]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]].
+- **Requires:** [[Repl Session]], [[Repl Answer]], [[Repl Command]], [[Repl Complete]], [[Repl Outline]], [[Diagnostic Render]], [[Eval Value]], [[Lexer Facade]], [[Parser Block]], [[Parser State]], [[Eval Context]], [[Pudu Version]].
 - **Consumed by:** the `pudu` executable.
 
 ## Algorithm
@@ -118,7 +118,7 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 
 ## Referenced by
 
-[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]] · [[2026-09-01-higher-kinded-repl-inspection]]
+[[src/Pudu/Repl/_MOC]] · [[Repl Session]] · [[Repl Evaluation]] · [[Repl Command]] · [[Diagnostic Render]] · [[Evaluator]] · [[Eval Context]] · [[Tooling]] · [[2026-08-31-static-repl-inspection]] · [[2026-09-01-higher-kinded-repl-inspection]]
 
 
 ## Interactive boundary completion
@@ -126,3 +126,13 @@ DEPTH 0.72 (MEDIUM). One entry point hides prompting, continuation, command disp
 Ordinary source submissions, like explicit multiline blocks, use isTriviaOnly after continuation. Pure comments return to the same prompt without evaluation or completion recompilation; documentation comments remain source.
 
 Resolved Grill Log: lexer tokens own syntax identity; do not infer it from textual word splitting. Existing source and compiler diagnostics remain authoritative. No tests or reviews run.
+
+## Persistent shell lifetime
+
+Each prompt session owns one Eval.Context. Successful reset/load/reload/edit returns
+to the lifetime owner, closes its resources, and starts a fresh scope. Failed loads
+retain the active scope. EOF and quit close resources. Accepted source is published
+from the evaluator commit callback; interrupt recovery reads that latest snapshot.
+Timing/allocation collection runs only when +s is enabled.
+Resolved Grill Log: shell restart retains settings, completion references and history
+configuration while replacing evaluator ownership. No thread-global resource state.

@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/src/Pudu/Compiler/Program.hs"
+path: "@root/packages/pudu/v0.1/src/Pudu/Compiler/Program.hs"
 fidelity: Active
 domain: "[[Pudu Program]]"
 subsystem: "[[Tooling]]"
@@ -57,10 +57,11 @@ rootCompileResult :: ProgramResult -> Maybe CompileResult
 - Diagnostics retain their original source identities and are stable-sorted once across the program.
 - Sources are retained as source snapshots so CLI rendering quotes the snapshot that owns each diagnostic, including failures before a root module name exists; the admitted pure compile context is retained so a REPL load can check later entries against the same interfaces.
 - `compileProgram` is the shared filesystem boundary for `pudu check` and [[Repl Session]] loading; the pure single-source [[Compiler Pipeline]] remains available for isolated tools and tests.
+- Manifest validation verifies project `pudu.toml` constraints via `manifestVersionDiagnostics`. If `package.language` is incompatible with the compiler's version, `E2090` is reported without compiling modules.
 
 ### Linkage
 
-- **Requires:** [[Compiler Pipeline]], [[Semantic Interface]], [[Type Interface]], [[Parser]], [[Source]], [[Diagnostic Model]], [[Syntax Tree]], [[grammar/pudu]].
+- **Requires:** [[Compiler Pipeline]], [[Semantic Interface]], [[Type Interface]], [[Parser]], [[Source]], [[Diagnostic Model]], [[Syntax Tree]], [[Pudu Version]], [[grammar/pudu]].
 - **Consumed by:** [[Pudu CLI]], [[Repl Session]], focused graph tests, and later build/package tooling.
 
 ## Algorithm
