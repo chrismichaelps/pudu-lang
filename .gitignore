@@ -30,3 +30,5 @@ editors/vscode/package-lock.json
 
 # The scratch database the database example leaves behind.
 examples/db/orders.db
+
+dist/packages/
