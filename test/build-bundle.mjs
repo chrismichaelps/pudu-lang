@@ -83,6 +83,44 @@ if (!version.startsWith("pudu ")) {
   failures.push(`the compiler no longer answers version: ${JSON.stringify(version)}`);
 }
 
+// A build that cannot be written must say so and change nothing. The write is
+// the size of the compiler, so it is the step most likely to fail for reasons
+// the program has nothing to do with — and a partial one left at the target
+// would be a file the right name and shape to look built, discovered only by
+// whoever runs it.
+const refused = join(directory, "missing-directory", "app");
+let refusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", refused], { stdio: "pipe" });
+  failures.push("a build into a directory that does not exist was not refused");
+} catch (problem) {
+  refusal = String(problem.stderr ?? "");
+}
+if (!refusal.includes("could not write")) {
+  failures.push(`a refused build did not say it could not write: ${JSON.stringify(refusal.slice(0, 120))}`);
+}
+if (refusal.includes("CallStack") || refusal.includes("ghc-internal")) {
+  failures.push("a refused build reported the failure as a crash rather than as a message");
+}
+
+// The target a failed build was aimed at keeps what it held. Aimed at the
+// program built a moment ago, that program must still run afterwards.
+const guarded = join(directory, "guarded");
+copyFileSync(built, guarded);
+try {
+  execFileSync(executable, ["build", join(directory, "NotThere.pudu"), "-o", guarded], {
+    stdio: "pipe"
+  });
+} catch {
+  // Expected: the program named does not exist.
+}
+if (run(guarded) !== "Bundled true") {
+  failures.push("a failed build left the program that was already there unrunnable");
+}
+if (existsSync(guarded + ".pending")) {
+  failures.push("a failed build left its partial file behind");
+}
+
 if (failures.length > 0) {
   console.error("build-bundle: a built program must run with nothing installed.\n");
   for (const failure of failures) console.error("  " + failure + "\n");

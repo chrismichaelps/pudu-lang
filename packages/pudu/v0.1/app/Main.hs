@@ -22,7 +22,7 @@ import System.Directory
   , listDirectory
   )
 import System.FilePath ((</>), takeBaseName, takeExtension, takeFileName, dropTrailingPathSeparator)
-import System.IO.Error (isDoesNotExistError)
+import System.IO.Error (isDoesNotExistError, isFullError, isPermissionError)
 import Pudu.Bundle (Bundle (..), attachedBundle, bundleOf, materialise, writeBundled)
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
@@ -277,13 +277,34 @@ buildProgram style path target = do
         exitFailure
       Just entry -> do
         let bundle = bundleOf entry (programNamedSources program)
-        writeBundled target bundle
-        TextIO.putStrLn
-          ( Text.pack target
-              <> " ("
-              <> Text.pack (show (length (bundleModules bundle)))
-              <> " modules)"
-          )
+        -- A build writes a file the size of the compiler, so the write is the
+        -- step most likely to fail for a reason that has nothing to do with
+        -- the program: a full disk, a directory that is not there, a path
+        -- that may not be written to. Said plainly, because a reader who has
+        -- just been told their program compiled needs to know it was the
+        -- writing that stopped and where.
+        written <- try (writeBundled target bundle) :: IO (Either IOException ())
+        case written of
+          Left problem -> do
+            hPutStrLn stderr ("pudu build: could not write " <> target)
+            hPutStrLn stderr ("  " <> describeWriteFailure problem)
+            exitFailure
+          Right () ->
+            TextIO.putStrLn
+              ( Text.pack target
+                  <> " ("
+                  <> Text.pack (show (length (bundleModules bundle)))
+                  <> " modules)"
+              )
+
+{-| Why a build could not be written, in the terms of the thing that stopped
+    it rather than the terms of the call that failed. -}
+describeWriteFailure :: IOException -> String
+describeWriteFailure problem
+  | isFullError problem = "there is no space left on the device"
+  | isPermissionError problem = "permission was refused"
+  | isDoesNotExistError problem = "the directory it would go in does not exist"
+  | otherwise = show problem
 
 {-| What to call the built file when nobody said. -}
 defaultTargetName :: FilePath -> FilePath
@@ -423,14 +444,25 @@ testPaths style paths = do
 
 {-| Resolve the file list for `pudu test`.
 
-    Explicit paths name files directly. When no paths are given, the runner
-    searches `test/`, `tests/`, and `test-fixtures/` — the three directories a
-    Pudu project might use — and collects every `.pudu` file it finds
-    recursively. -}
+    A path that names a directory is walked, and one that names a file is
+    taken as it stands. Naming a directory is what a reader does when they
+    mean "the tests in here", and reading it as a file to compile answers a
+    reasonable request with a compilation error about a directory.
+
+    When no path is given the runner looks in `test`, `tests`, and
+    `test-fixtures` — the three a project might use — and collects every
+    `.pudu` file beneath them. -}
 discoverTestFiles :: [FilePath] -> IO [FilePath]
 discoverTestFiles explicit
-  | not (null explicit) = pure explicit
+  | not (null explicit) = concat <$> mapM fileOrDirectory explicit
   | otherwise = concat <$> mapM collectPuduFiles standardTestDirs
+
+{-| The `.pudu` files a path stands for: those beneath it when it is a
+    directory, and the path itself when it is not. -}
+fileOrDirectory :: FilePath -> IO [FilePath]
+fileOrDirectory path = do
+  isDirectory <- doesDirectoryExist path
+  if isDirectory then collectPuduFiles path else pure [path]
 
 standardTestDirs :: [FilePath]
 standardTestDirs = ["test", "tests", "test-fixtures"]

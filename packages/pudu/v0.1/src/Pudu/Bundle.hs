@@ -34,7 +34,7 @@ module Pudu.Bundle
   , materialise
   ) where
 
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, onException, try)
 import Control.Monad (forM_, unless)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
@@ -52,12 +52,23 @@ import System.Directory
   ( createDirectoryIfMissing
   , doesFileExist
   , getPermissions
+  , removeFile
+  , renamePath
   , setOwnerExecutable
   , setPermissions
   )
 import System.Environment (getExecutablePath)
 import System.FilePath (joinPath, takeDirectory, (</>))
-import System.IO (IOMode (ReadMode), SeekMode (AbsoluteSeek), hFileSize, hSeek, withBinaryFile)
+import System.IO
+  ( IOMode (ReadMode, WriteMode)
+  , SeekMode (AbsoluteSeek)
+  , hClose
+  , hFileSize
+  , hFlush
+  , hSeek
+  , openBinaryFile
+  , withBinaryFile
+  )
 
 {-| A program's modules, and which of them to start. -}
 data Bundle = Bundle
@@ -139,7 +150,25 @@ decode raw = do
 utf8 :: Text -> ByteString.ByteString
 utf8 = Encoding.encodeUtf8
 
-{-| Write a copy of the running compiler with a program attached to it. -}
+{-| Write a copy of the running compiler with a program attached to it.
+
+    Written beside the target and moved onto it once whole, rather than
+    written where it is going. A bundle is the compiler's own size, so the
+    write is long enough to fail partway through — a full disk, a lost
+    network mount, an interrupt — and a write straight to the target would
+    leave those bytes there: a file the right name and shape to look built,
+    which fails only when someone runs it. Where the target already held a
+    working program, that program is gone.
+
+    Moving a finished file onto the target closes both. A move within a
+    directory either happened or did not, so the target holds the previous
+    program or the new one and never half of either, and a reader that opened
+    the old one keeps reading it. Failing before the move leaves the target
+    untouched and takes the partial file with it.
+
+    The temporary sits in the target's own directory because a move is only
+    indivisible within one filesystem: written to a temporary directory
+    elsewhere it would be a copy, which is the thing being avoided. -}
 writeBundled :: FilePath -> Bundle -> IO ()
 writeBundled target bundle = do
   self <- getExecutablePath
@@ -147,9 +176,27 @@ writeBundled target bundle = do
   let body = encode bundle
       size = Text.pack (show (ByteString.length body))
       padded = Text.replicate (lengthWidth - Text.length size) "0" <> size
-  ByteString.writeFile target (ByteString.concat [compiler, body, utf8 padded, marker])
-  permissions <- getPermissions target
-  setPermissions target (setOwnerExecutable True permissions)
+      whole = ByteString.concat [compiler, body, utf8 padded, marker]
+      pending = target <> ".pending"
+  writeWhole pending whole `onException` discard pending
+  permissions <- getPermissions pending
+  setPermissions pending (setOwnerExecutable True permissions)
+  renamePath pending target `onException` discard pending
+
+{-| Write bytes to a path and make sure the handle let go of all of them. -}
+writeWhole :: FilePath -> ByteString.ByteString -> IO ()
+writeWhole path payload = do
+  handle <- openBinaryFile path WriteMode
+  ByteString.hPut handle payload
+  hFlush handle
+  hClose handle
+
+{-| Remove a file that should not be left behind, and say nothing if it is
+    already gone. -}
+discard :: FilePath -> IO ()
+discard path = do
+  removed <- try (removeFile path) :: IO (Either IOException ())
+  pure (either (const ()) id removed)
 
 {-| The bundle attached to the running executable, if there is one. -}
 attachedBundle :: IO (Maybe Bundle)
