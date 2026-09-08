@@ -263,5 +263,9 @@ export fn main() -> Int {
     case None => failures = failures + 1
   }
 
-  failures
+  // A suite answers what held, so a run that verified everything is
+  // distinguishable from one that stopped verifying. The count of claims is
+  // stated rather than derived, so a claim added without a line here shows up
+  // as a disagreement rather than passing quietly.
+  if failures == 0 { 87 } else { 0 - failures }
 }

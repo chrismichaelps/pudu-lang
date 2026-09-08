@@ -522,22 +522,47 @@ runTestFile style path = do
         mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
         classifyOutcome path outcome
 
+{-| What a suite's answer says about it.
+
+    A suite answers how many of its checks held. That number alone cannot
+    carry a verdict, because a suite where two of five held answers two, and
+    so does a suite of two that passed — so a suite that stops asserting
+    halfway looks exactly like a shorter one. The sign carries it instead: a
+    suite that had checks fail answers the negative of how many, which no
+    passing suite can answer. `Std.Test.done` writes that, and names the
+    checks that did not hold on its way out.
+
+    Answering nothing at all is a failure rather than an empty pass. A suite
+    that holds nothing asserted nothing, and reporting that as passing is how
+    a file that stopped testing goes unnoticed for a year. -}
 classifyOutcome :: FilePath -> EvalOutcome -> IO (Bool, Int)
 classifyOutcome path outcome
   | not (null (outcomeDiagnostics outcome)) = do
       TextIO.putStrLn (testFileLine path "FAIL" "runtime diagnostics")
       pure (False, 0)
   | otherwise = case outcomeValue outcome of
-      Just (IntValue _ n) -> do
-        let count = fromInteger n
-        TextIO.putStrLn (testFileLine path "PASS" (show count <> " held"))
-        pure (True, count)
+      Just (IntValue _ n)
+        | n < 0 -> do
+            let failed = fromInteger (negate n)
+            TextIO.putStrLn (testFileLine path "FAIL" (plural failed "check" <> " did not hold"))
+            pure (False, 0)
+        | n == 0 -> do
+            TextIO.putStrLn (testFileLine path "FAIL" "held nothing")
+            pure (False, 0)
+        | otherwise -> do
+            let count = fromInteger n
+            TextIO.putStrLn (testFileLine path "PASS" (show count <> " held"))
+            pure (True, count)
       Just _ -> do
         TextIO.putStrLn (testFileLine path "PASS" "non-integer result")
         pure (True, 0)
       Nothing -> do
         TextIO.putStrLn (testFileLine path "FAIL" "no value returned")
         pure (False, 0)
+
+{-| A count and the word for it, with the ending the count calls for. -}
+plural :: Int -> String -> String
+plural count word = show count <> " " <> word <> (if count == 1 then "" else "s")
 
 testFileLine :: FilePath -> String -> String -> Text
 testFileLine path status detail =

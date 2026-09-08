@@ -340,7 +340,7 @@ testProtocolEvaluation = do
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"
-        (jsonStrings === Just "0")
+        (jsonStrings === Just "16")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"

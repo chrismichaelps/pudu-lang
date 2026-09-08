@@ -26,7 +26,7 @@ testDataEvaluation = do
   pure $ conjoin
     [ counterexample
         "a sequence that cannot be empty, a queue with two ends, a heap, and a graph"
-        (structures === Just "0")
+        (structures === Just "87")
     {-| The three ordered maps, including the cases easiest to get wrong: a
         boundary landing exactly on an entry, a key that is absent, an empty
         structure, and a re-insertion that must not move anything. Each check

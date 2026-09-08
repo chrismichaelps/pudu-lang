@@ -27,28 +27,30 @@ fn scalarText(code: Int) -> Str {
 }
 
 export fn main() -> Int {
-  if !decodesTo("\"plain\"", "plain") { return 1 }
-  if !decodesTo("\"\\\"\\\\\\/\"", "\"\\/") { return 2 }
-  if !decodesTo("\"\\b\\f\\n\\r\\t\"", scalarText(8) + scalarText(12) + "\n\r\t") { return 3 }
-  if !decodesTo("\"\\u0041\"", "A") { return 4 }
-  if !decodesTo("\"\\uD83D\\uDE00\"", scalarText(128512)) { return 5 }
+  if !decodesTo("\"plain\"", "plain") { return 0 - 1 }
+  if !decodesTo("\"\\\"\\\\\\/\"", "\"\\/") { return 0 - 1 }
+  if !decodesTo("\"\\b\\f\\n\\r\\t\"", scalarText(8) + scalarText(12) + "\n\r\t") { return 0 - 1 }
+  if !decodesTo("\"\\u0041\"", "A") { return 0 - 1 }
+  if !decodesTo("\"\\uD83D\\uDE00\"", scalarText(128512)) { return 0 - 1 }
 
-  let Ok(controlValue) = Json.decode("\"\\b\\f\\n\\r\\t\"") else { return 6 }
-  if Json.encode(&controlValue) != "\"\\b\\f\\n\\r\\t\"" { return 7 }
+  let Ok(controlValue) = Json.decode("\"\\b\\f\\n\\r\\t\"") else { return 0 - 1 }
+  if Json.encode(&controlValue) != "\"\\b\\f\\n\\r\\t\"" { return 0 - 1 }
   if !decodesTo(Json.encode(&controlValue), scalarText(8) + scalarText(12) + "\n\r\t") {
     return 8
   }
 
   let zero = Json.Text(scalarText(0))
-  if Json.encode(&zero) != "\"\\u0000\"" { return 9 }
-  if !rejects("\"" + scalarText(0) + "\"") { return 10 }
+  if Json.encode(&zero) != "\"\\u0000\"" { return 0 - 1 }
+  if !rejects("\"" + scalarText(0) + "\"") { return 0 - 1 }
 
-  if !rejectsAt("\"\\q\"", 2) { return 11 }
-  if !rejectsAt("\"\\u12xz\"", 2) { return 12 }
-  if !rejectsAt("\"\\uDE00\"", 2) { return 13 }
-  if !rejectsAt("\"\\uD83Dplain\"", 2) { return 14 }
-  if !rejectsAt("\"\\uD83D\\u0041\"", 8) { return 15 }
-  if !rejects("\"\\u12") { return 16 }
-  if !rejects("\"plain") { return 17 }
-  0
+  if !rejectsAt("\"\\q\"", 2) { return 0 - 1 }
+  if !rejectsAt("\"\\u12xz\"", 2) { return 0 - 1 }
+  if !rejectsAt("\"\\uDE00\"", 2) { return 0 - 1 }
+  if !rejectsAt("\"\\uD83Dplain\"", 2) { return 0 - 1 }
+  if !rejectsAt("\"\\uD83D\\u0041\"", 8) { return 0 - 1 }
+  if !rejects("\"\\u12") { return 0 - 1 }
+  if !rejects("\"plain") { return 0 - 1 }
+  // A suite answers what held. Every claim above stops the run when it does
+  // not, so reaching here means all of them did.
+  16
 }
