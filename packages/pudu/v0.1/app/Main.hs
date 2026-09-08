@@ -2,7 +2,7 @@
 module Main (main) where
 
 import Control.Monad (unless, when)
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, bracket, try)
 import Data.List (sort, sortOn)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText, languageConstraint)
@@ -123,14 +123,12 @@ hashText = Text.foldl' (\accumulated scalar -> accumulated * 33 + fromEnum scala
 
 {-| Run an action with one environment variable set, restoring it afterwards. -}
 withEnvironment :: String -> String -> IO a -> IO a
-withEnvironment name value action = do
-  previous <- lookupEnv name
-  setEnv name value
-  outcome <- action
-  case previous of
+withEnvironment name value action =
+  bracket (lookupEnv name) restore (\_ -> setEnv name value >> action)
+ where
+  restore previous = case previous of
     Just held -> setEnv name held
     Nothing -> unsetEnv name
-  pure outcome
 
 runCommand :: IO ()
 runCommand = do

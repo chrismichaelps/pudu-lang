@@ -39,6 +39,8 @@ import Control.Monad (forM_, unless)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
 import Data.List (sortOn)
+import Data.Char (isAlpha, isAlphaNum)
+import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -184,6 +186,18 @@ readTrailer self = withBinaryFile self ReadMode $ \handle -> do
     checked by a different rule than the program it was built from. -}
 materialise :: FilePath -> Bundle -> IO FilePath
 materialise root bundle = do
+  let names = map fst (bundleModules bundle)
+      validName name = all validSegment (Text.splitOn "." name)
+      validSegment segment = case Text.uncons segment of
+        Just (first, rest) -> (isAlpha first || first == '_')
+          && Text.all (\character -> isAlphaNum character || character == '_') rest
+        Nothing -> False
+  unless (validName (bundleEntry bundle) && all validName names) $
+    ioError (userError "bundle contains an invalid module name")
+  unless (Set.size (Set.fromList names) == length names) $
+    ioError (userError "bundle contains duplicate module names")
+  unless (bundleEntry bundle `elem` names) $
+    ioError (userError "bundle entry module is missing")
   forM_ (bundleModules bundle) $ \(name, text) -> do
     let path = root </> pathOfName name
     createDirectoryIfMissing True (takeDirectory path)
