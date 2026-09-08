@@ -17,6 +17,7 @@ module Pudu.Repl.Session
   , sessionExports
   , sessionVisibleNames
   , submitEntry
+  , submitEntryInContext
   , typeOfEntry
   ) where
 
@@ -41,6 +42,8 @@ import Pudu.Diagnostic
   )
 import Pudu.Doc (DocIndex)
 import Pudu.Eval (EvalOutcome (..))
+import Pudu.Eval.Context (EvaluationContext)
+import Pudu.Repl.Evaluation (declarationUpdateAllowed, evaluateEntry, retainedTypes)
 import Pudu.Eval.Program (evaluateProgramEntry)
 import Pudu.Eval.Value (Value)
 import Pudu.Frontend.Lexer (LexResult (..), lexSource)
@@ -68,6 +71,7 @@ data Session = Session
   , sessionLoaded :: !(Maybe LoadedModule)
   , sessionContext :: !CompileContext
   , sessionDependencies :: ![(Text, Module)]
+  , sessionRetainedTypes :: !(Maybe TypeInfo)
   } deriving stock (Eq, Show)
 
 {-| @Repl.Session.EntryKind — how one submission is placed in the buffer -}
@@ -88,7 +92,7 @@ data EntryResult = EntryResult
   }
 
 emptySession :: Session
-emptySession = Session [] [] [] Nothing emptyCompileContext []
+emptySession = Session [] [] [] Nothing emptyCompileContext [] Nothing
 
 {-| Classify a submission by its leading token. `import` and the declaration
     keywords place text at module scope; `let`, `var`, and the jump and loop
@@ -243,7 +247,17 @@ inspectEntryType session entry = do
     only when the entry is accepted, so a failed entry can never corrupt the
     context that already worked. -}
 submitEntry :: Session -> Text -> IO EntryResult
-submitEntry session entry = do
+submitEntry = submitEntryUsing Nothing (const (pure ()))
+
+{-| The publication callback must only store the supplied snapshot without
+    throwing or blocking; the runtime invokes it inside its masked commit. -}
+submitEntryInContext
+  :: EvaluationContext -> (Session -> IO ()) -> Session -> Text -> IO EntryResult
+submitEntryInContext context = submitEntryUsing (Just context)
+
+submitEntryUsing
+  :: Maybe EvaluationContext -> (Session -> IO ()) -> Session -> Text -> IO EntryResult
+submitEntryUsing runtimeContext publish session entry = do
   probe <- newSource interactiveName entry
   let LexResult{lexTokens} = lexSource probe
       kind = classifyEntry lexTokens
@@ -254,20 +268,39 @@ submitEntry session entry = do
       , resultType = Nothing, resultAccepted = False
       }
     Nothing -> do
-      candidate <- extend session kind entry
+      candidate <- case (runtimeContext, kind) of
+        (Just _, StatementEntry) -> pure session{sessionStatements = sessionStatements session <> [entry]}
+        _ -> extend session kind entry
       let (buffer, firstLine) = renderBuffer candidate kind entry
           entryStart = bufferOffsetOf candidate kind entry
       source <- newSource interactiveName buffer
       (result, dependencies) <- compileBuffer session candidate source
       let compiled = compileDiagnostics result
           staticallyValid = not (hasErrors compiled)
-      evaluation <-
-        if staticallyValid then evaluateFor dependencies result else pure Nothing
+          acceptedSession = case runtimeContext of
+            Nothing -> commit session candidate kind
+            Just _ -> candidate
+              { sessionStatements = sessionStatements candidate <> [entry | kind == ExpressionEntry]
+              , sessionRetainedTypes = retainedTypes result
+              , sessionDependencies = dependencies
+              }
+          publishOutcome outcome = publish $
+            if hasErrors (outcomeDiagnostics outcome) then session else acceptedSession
+          contextCompatible = null (sessionStatements session)
+            || (kind /= ImportEntry
+                && (kind /= DeclarationEntry || declarationUpdateAllowed entryStart (Text.length entry) result)
+                && show (sessionDependencies session) == show dependencies)
+      evaluation <- if not staticallyValid then pure Nothing else case runtimeContext of
+        Nothing -> evaluateFor dependencies result
+        Just context -> evaluateEntry context (sessionRetainedTypes session) contextCompatible
+          (kind == StatementEntry || kind == ExpressionEntry) (kind /= DeclarationEntry && not (null (sessionStatements session))) entryStart (Text.length entry) dependencies result publishOutcome
       let runtime = maybe [] outcomeDiagnostics evaluation
           diagnostics = compiled <> runtime
-          accepted = staticallyValid && not (hasErrors runtime)
+          accepted = staticallyValid && not (hasErrors runtime) && case evaluation of
+            Just _ -> True
+            Nothing -> False
       pure EntryResult
-        { resultSession = if accepted then commit session candidate kind else session
+        { resultSession = if accepted then acceptedSession else session
         , resultKind = kind, resultSource = source, resultFirstLine = firstLine
         , resultDiagnostics = diagnostics, resultResolution = compileResolution result
         , resultValue = if accepted && kind == ExpressionEntry then evaluation >>= outcomeValue else Nothing

@@ -160,6 +160,7 @@ library
     Pudu.Repl.Complete
     Pudu.Repl.Outline
     Pudu.Repl.Session
+    Pudu.Repl.Evaluation
     Pudu.Semantic
     Pudu.Semantic.Interface
     Pudu.Type

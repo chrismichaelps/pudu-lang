@@ -7,7 +7,6 @@ module Pudu.Repl
   ) where
 
 import Control.Exception (IOException, try)
-import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Int (Int64)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef, writeIORef)
@@ -43,6 +42,8 @@ import Pudu.Repl.Complete
   , memberContext
   , wantsFilename
   )
+import Pudu.Eval.Context (EvaluationContext, withEvaluationContext)
+import Pudu.Diagnostic (diagnosticMessage)
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Doc (entriesFor, renderEntryLinesWith)
 import Pudu.Doc.Search (Match (..), searchText)
@@ -61,7 +62,7 @@ import Pudu.Repl.Session
   , contextSummary
   , emptySession
   , sessionVisibleNames
-  , submitEntry
+  , submitEntryInContext
   , typeOfEntry
   )
 import Data.List (sort)
@@ -95,6 +96,7 @@ data ReplContext = ReplContext
   {-| The session as completion sees it, so asking what a receiver is uses the
       declarations the reader has actually made. -}
   , contextCurrent :: !(IORef Session)
+  , contextRuntime :: !EvaluationContext
   }
 
 
@@ -116,14 +118,23 @@ runRepl options = do
   chosen <- newIORef defaultReplSettings
   current <- newIORef session
   settings <- sessionSettings visible current
-  let context =
-        ReplContext
-          { contextOptions = options
-          , contextVisible = visible
-          , contextSettings = chosen
-          , contextCurrent = current
-          }
-  runInputT settings (withInterrupt (loop context session))
+  let runSession active = do
+        writeIORef current active
+        writeIORef visible =<< nameSourceFor active
+        (next, problems) <- withEvaluationContext $ \runtime -> do
+          let context = ReplContext
+                { contextOptions = options
+                , contextVisible = visible
+                , contextSettings = chosen
+                , contextCurrent = current
+                , contextRuntime = runtime
+                }
+          runInputT settings (withInterrupt (loop context active))
+        mapM_ (TextIO.putStrLn . ("cleanup: " <>) . diagnosticMessage) problems
+        case next of
+          Nothing -> pure ()
+          Just replacement -> runSession replacement
+  runSession session
 
 {-| History lives beside the reader's other tool history, and completion is
     session-aware. -}
@@ -205,19 +216,22 @@ nameSourceFor session = do
   (resolution, _) <- inspectSession session
   pure CompletionSource{sourceSessionNames = maybe [] sessionVisibleNames resolution}
 
-loop :: ReplContext -> Session -> InputT IO ()
+loop :: ReplContext -> Session -> InputT IO (Maybe Session)
 loop context session =
   handleInterrupt (interrupted context session) $ do
     line <- readEntry prompt
     case line of
-      Nothing -> say "Leaving puduci."
+      Nothing -> say "Leaving puduci." >> pure Nothing
       Just raw -> case parseEntry raw of
         BlankEntry -> loop context session
+        CommandEntry Reset -> say "session cleared" >> pure (Just emptySession)
         CommandEntry command -> do
           outcome <- runCommand context session command
           case outcome of
-            Nothing -> say "Leaving puduci."
-            Just next -> continueWith context next
+            Nothing -> say "Leaving puduci." >> pure Nothing
+            Just next
+              | replacesContext command && next /= session -> pure (Just next)
+              | otherwise -> continueWith context next
         SourceEntry text -> do
           whole <- readContinuation text
           trivia <- liftIO (isTriviaOnly whole)
@@ -227,12 +241,20 @@ loop context session =
 
 {-| Ctrl-C abandons the line being typed and returns to the prompt with the
     session untouched, so an interrupt costs a line rather than a session. -}
-interrupted :: ReplContext -> Session -> InputT IO ()
-interrupted context session = do
+interrupted :: ReplContext -> Session -> InputT IO (Maybe Session)
+interrupted context _ = do
   say "interrupted"
-  loop context session
+  current <- liftIO (readIORef (contextCurrent context))
+  continueWith context current
 
-continueWith :: ReplContext -> Session -> InputT IO ()
+replacesContext :: Command -> Bool
+replacesContext command = case command of
+  Load _ -> True
+  Reload -> True
+  Edit _ -> True
+  _ -> False
+
+continueWith :: ReplContext -> Session -> InputT IO (Maybe Session)
 continueWith context session = do
   liftIO (writeIORef (contextVisible context) =<< nameSourceFor session)
   {-| Completion asks the session what a receiver is, so it has to be the
@@ -360,16 +382,19 @@ settingFor key = case Text.dropWhile (== '+') key of
 
 runSource :: ReplContext -> Session -> Text -> InputT IO Session
 runSource context session text = do
-  liftIO (Conc.setAllocationCounter maxBound)
-  started <- liftIO getMonotonicTime
-  result <- liftIO (submitEntry session text)
   settings <- liftIO (readIORef (contextSettings context))
+  started <- if settingShowTiming settings
+    then liftIO (Conc.setAllocationCounter maxBound >> Just <$> getMonotonicTime)
+    else pure Nothing
+  result <- liftIO (submitEntryInContext (contextRuntime context)
+    (writeIORef (contextCurrent context)) session text)
   liftIO (reportEntry (contextOptions context) settings result)
-  finished <- liftIO getMonotonicTime
-  allocEnd <- liftIO Conc.getAllocationCounter
-  let allocated = maxBound - allocEnd
-  when (settingShowTiming settings) $
-    say (formatMetrics (finished - started) allocated)
+  case started of
+    Nothing -> pure ()
+    Just beginning -> do
+      finished <- liftIO getMonotonicTime
+      allocEnd <- liftIO Conc.getAllocationCounter
+      say (formatMetrics (finished - beginning) (maxBound - allocEnd))
   pure (resultSession result)
 
 formatMetrics :: Double -> Int64 -> Text

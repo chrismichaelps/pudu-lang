@@ -4,11 +4,12 @@ module Pudu.Eval.Context
   , EvaluationContext
   , evaluateBlockInContext
   , evaluateInContext
+  , evaluateInContextAndCommit
   , withEvaluationContext
   ) where
 
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
-import Control.Exception (finally)
+import Control.Concurrent.MVar (MVar, modifyMVarMasked, modifyMVar_, newMVar)
+import Control.Exception (finally, mask)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval (EvalOutcome, evaluateBlockInFrame, outcomeOf)
 import Pudu.Frontend.Syntax.Located (Located)
@@ -35,16 +36,25 @@ withEvaluationContext action = withRuntimeEnv $ \initial -> do
     be undone and their resources stay owned until the context exits. -}
 evaluateInContext
   :: EvaluationContext -> Evaluator Value -> IO (Either ContextError EvalOutcome)
-evaluateInContext (EvaluationContext state) (Evaluator action) =
-  modifyMVar state $ \current -> case current of
+evaluateInContext context action = evaluateInContextAndCommit context action (const (pure ()))
+
+{-| Publication must be nonblocking and exception-free, such as an IORef write.
+    It shares the masked state commit while evaluation remains interruptible. -}
+evaluateInContextAndCommit
+  :: EvaluationContext -> Evaluator Value -> (EvalOutcome -> IO ())
+  -> IO (Either ContextError EvalOutcome)
+evaluateInContextAndCommit (EvaluationContext state) (Evaluator action) publish =
+  mask $ \restore -> modifyMVarMasked state $ \current -> case current of
     Nothing -> pure (Nothing, Left ContextClosed)
     Just previous -> do
-      result <- action previous
+      result <- restore (action previous)
       let retained = case result of
             Done _ next -> next
             Unwound _ next -> next
             Aborted _ -> previous
-      pure (Just retained, Right (outcomeOf result))
+          outcome = outcomeOf result
+      publish outcome
+      pure (Just retained, Right outcome)
 
 {-| Execute an admitted top-level block without discarding the bindings it adds. -}
 evaluateBlockInContext

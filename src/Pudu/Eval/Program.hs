@@ -11,10 +11,12 @@
 module Pudu.Eval.Program
   ( evaluateEntryPoint
   , evaluateModule
+  , evaluateInteractiveBlock
   , evaluateProgramEntry
   , evaluateProgramTallied
   ) where
 
+import Control.Monad (unless)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -28,6 +30,7 @@ import Pudu.Eval.Env
   , Eval (..)
   , Evaluator (..)
   , bind
+  , abortAt
   , lookupName
   )
 import Pudu.Eval.Install (loadDeclarations)
@@ -38,7 +41,8 @@ import Pudu.Eval.Value
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Name (moduleNameText, moduleQualifier)
 import Pudu.Frontend.Syntax.Tree
-  ( Import (..)
+  ( Block
+  , Import (..)
   , Function (..)
   , Module (..)
   )
@@ -49,6 +53,7 @@ import Pudu.Eval
   , awaitTask
   , callClosure
   , evaluate
+  , evaluateBlockInFrame
   , runCounted
   , runWithEffects
   , scopeTo
@@ -129,6 +134,34 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
       _ -> pure UnitValue
   collected <- readIORef counters
   pure (outcome, collected)
+
+{-| Rebuild declarations below the live local frame without replaying its source.
+    Captured values keep their old scopes and literal-kind entries. -}
+evaluateInteractiveBlock
+  :: Bool -> Map.Map Span Text -> [(Text, Module)] -> Module -> Located Block -> Evaluator Value
+evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue block = do
+  Evaluator $ \env -> pure (Done () env
+    { envIntegerKinds = Map.union integerKinds (envIntegerKinds env) })
+  unless reuseDeclarations $ do
+    locals <- currentFrame
+    Evaluator $ \env -> pure (Done () env
+      { envFrames = [Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
+    linkDependencies dependencies
+    pushFrame Map.empty
+    installImportAliases (moduleImports moduleValue)
+    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    scopeRootDeclarations
+    pushFrame locals
+  let Evaluator execute = evaluateBlockInFrame block
+  Evaluator $ \env -> do
+    result <- execute env
+    case result of
+      Unwound _ _ ->
+        let Evaluator reject = abortAt (Just (locatedSpan block)) "E7001"
+              "an interactive entry must finish without returning, breaking or continuing its outer frame"
+              (Just "put early-return control flow inside a named function")
+         in reject env
+      _ -> pure result
 
 {-| Evaluate a module for its constants alone, with no access to the world.
 
