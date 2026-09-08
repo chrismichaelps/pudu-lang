@@ -73,6 +73,7 @@ testForeignHandles = do
   releasingBorrowed <- runtimeCodes "test-fixtures/stdlib/RejectsReleasingBorrowedHandle.pudu"
   afterBorrowed <- cppDeleteCount
   badRelease <- codes "test-fixtures/stdlib/RejectsForeignReleaseShape.pudu"
+  bytesSlot <- codes "test-fixtures/stdlib/RejectsForeignBytesSlot.pudu"
   wrongHandle <- codes "test-fixtures/stdlib/RejectsForeignWrongHandle.pudu"
   emptySymbol <- codes "test-fixtures/stdlib/RejectsEmptyForeignSymbol.pudu"
   qualifiedHandle <- codes "test-fixtures/foreignqualified/Root.pudu"
@@ -227,6 +228,13 @@ testForeignHandles = do
         refused, since that is the library returning a resource nobody claims. -}
     , counterexample "a release must take its matching handle and hand nothing back"
         (badRelease === ["E3067", "E3066"])
+    {-| The direction a run of bytes crosses is the whole of its contract:
+        lent, read-only, for the length of the call. A slot is the other
+        direction, so admitting one would let a library write into storage the
+        language holds as unchanging — and nothing downstream would notice,
+        which is what makes it worth a refusal rather than a caveat. -}
+    , counterexample "a run of bytes cannot be a slot the library writes into"
+        (bytesSlot === ["E3074"])
     , counterexample "nominal handles cannot cross as another declared handle"
         (wrongHandle === ["E3001"])
     , counterexample "an empty native symbol is refused at its declaration"

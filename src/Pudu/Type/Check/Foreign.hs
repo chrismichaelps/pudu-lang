@@ -226,6 +226,27 @@ checkParameter layouts handles declared (Located spanValue parameter) =
             (Just "() describes a function returning no value; it is not an argument value")
         crossing -> do
           refuseUncrossable layouts written crossing
+          {-| A run of bytes crosses one way: lent to the library, read-only,
+              for the length of the call. A slot is the other direction — the
+              library writes into what the slot names — and the two cannot be
+              the same thing.
+
+              Admitting it would hand a library the address of storage the
+              language holds as unchanging, and let it write there. Nothing
+              downstream would notice: the value would go on being read as the
+              one it was, and the length would still be the length it had.
+
+              A run the library writes into is a real shape and a different
+              contract: storage the caller owns and a length the library is
+              told. It is refused here until a declaration can say both. -}
+          when (foreignParameterOut parameter && crossing == Just BytesCrossing) $
+            report "E3074" (maybe spanValue locatedSpan (foreignParameterType parameter))
+              "a foreign slot cannot be Bytes"
+              ( Just
+                  ( "a run of bytes crosses lent and read-only; a run the library writes "
+                      <> "into needs storage the caller owns and a length it is told"
+                  )
+              )
           checkSlotOwnership declared spanValue parameter crossing
 
 {-| What ownership a slot must carry, and what an ordinary parameter may not.

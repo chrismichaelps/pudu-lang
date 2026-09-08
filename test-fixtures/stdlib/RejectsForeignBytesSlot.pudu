@@ -1,0 +1,11 @@
+module RejectsForeignBytesSlot
+
+foreign "c" {
+  // A run of bytes crosses lent and read-only. A slot is the other direction,
+  // so admitting one would hand a library the address of storage the language
+  // holds as unchanging and let it write there — and nothing downstream would
+  // notice, because the value would go on being read as the one it was.
+  fn writingInto symbol "pudu_ffi_cpp_box_read" (out into: Bytes, size: Int32) -> Int32
+}
+
+export fn main() -> Int { 0 }
