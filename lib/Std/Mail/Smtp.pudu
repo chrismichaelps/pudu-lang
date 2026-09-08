@@ -352,8 +352,12 @@ fn executeAuth(conn: &Transport, auth: &SmtpAuth, timeoutMs: Int) -> Result[Bool
 }
 
 fn execCommand(conn: &Transport, cmd: Str, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {
+  if timeoutMs <= 0 { return Err(TimedOut) }
+  let expires = clock() + timeoutMs
   sendText(conn, cmd, timeoutMs) ?
-  readReply(conn, timeoutMs)
+  let remaining = expires - clock()
+  if remaining <= 0 { return Err(TimedOut) }
+  readReply(conn, remaining)
 }
 
 fn readReply(conn: &Transport, timeoutMs: Int) -> Result[SmtpReply, SmtpError] {

@@ -5,6 +5,10 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-08 — SMTP command budget
+
+SMTP writes and reply reads now share one command deadline. No tests or measurements run.
+
 ## 2026-09-08 — REPL input and redefinition boundaries
 
 - Track delimiter kinds and submit irreparable input promptly for diagnostics. Continue open comments after code; accept bare return without waiting for an operand.

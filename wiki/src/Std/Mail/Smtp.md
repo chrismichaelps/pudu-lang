@@ -74,3 +74,11 @@ No builds, tests, reviews, measurements or live SMTP deliveries ran; readiness r
 Resolved Grill Log: require the EHLO identity at construction; do not silently guess a deployment hostname. The constructor now takes three arguments.
 
 Existing constructor migration: [[src/test-fixtures/stdlib/UsesSmtp]].
+
+
+## Command deadline
+
+Each SMTP command spends one timeout budget across its write and reply, rather than renewing the
+budget after a slow write. An exhausted budget returns TimedOut before another network operation.
+The full transaction still contains multiple command budgets; this is not a transaction deadline.
+Resolved Grill Log: partial write time must count toward the command's stated wait. Code-only change.
