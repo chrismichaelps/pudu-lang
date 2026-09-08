@@ -68,6 +68,11 @@ jobs:
       # can be given whatever signature the boundary happens to admit.
       - name: Verify the foreign boundary reaches third-party libraries
         run: node test/foreign-third-party.mjs "$(cabal list-bin pudu)"
+      # A service that answers, measured end to end. The figures are not
+      # asserted — a shared runner's are not comparable between runs — but a
+      # service that stopped answering at all is a failure worth catching here.
+      - name: Verify a service answers over a socket
+        run: node bench/request.mjs "$(cabal list-bin pudu)" --requests 40
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
