@@ -130,6 +130,30 @@ static int32_t column_type(struct statement *s, int32_t index) { return s->datab
 static int64_t column_integer(struct statement *s, int32_t index) { return s->database->api.integer(s->native, index); }
 static double column_real(struct statement *s, int32_t index) { return s->database->api.real(s->native, index); }
 
+static int32_t column_ascii(struct statement *s, int32_t index, int32_t mode, const char **out) {
+  *out = NULL;
+  if (index < 0 || index >= s->database->api.columns(s->native)) return 25;
+  if (mode != 1 && mode != 2) return 21;
+  const unsigned char *data;
+  size_t size;
+  if (mode == 2) {
+    data = (const unsigned char *)s->database->api.name(s->native, index);
+    if (!data) return 7;
+    size = strlen((const char *)data);
+  } else {
+    data = s->database->api.text(s->native, index);
+    int count = s->database->api.bytes(s->native, index);
+    if (count < 0 || (!data && count != 0)) return 7;
+    if (!data && s->database->api.errcode(s->database->native) == 7) return 7;
+    size = (size_t)count;
+  }
+  for (size_t i = 0; i < size; ++i) {
+    if (data[i] == 0 || data[i] >= 128) return -5;
+  }
+  *out = data ? (const char *)data : "";
+  return 0;
+}
+
 /* mode 0 reads blob bytes, 1 UTF-8 text bytes, 2 the column's name. */
 static int32_t column_hex(struct statement *s, int32_t index, int32_t mode, const char **out) {
   *out = NULL;
@@ -171,7 +195,7 @@ void *pudu_sqlite_symbol(const char *name) {
   SYMBOL("bind_bytes", bind_bytes); SYMBOL("step", step);
   SYMBOL("columns", columns); SYMBOL("column_type", column_type);
   SYMBOL("column_integer", column_integer); SYMBOL("column_real", column_real);
-  SYMBOL("column_hex", column_hex);
+  SYMBOL("column_hex", column_hex); SYMBOL("column_ascii", column_ascii);
 #undef SYMBOL
   return NULL;
 }

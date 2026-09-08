@@ -23,6 +23,7 @@ foreign "pudu_sqlite" {
   fn columnType symbol "column_type" (statement: StatementHandle, index: Int32) -> Int32
   fn columnInteger symbol "column_integer" (statement: StatementHandle, index: Int32) -> Int64
   fn columnReal symbol "column_real" (statement: StatementHandle, index: Int32) -> Float64
+  fn columnAscii symbol "column_ascii" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
   fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
 }
 
@@ -186,8 +187,7 @@ fn collect(statement: StatementHandle) -> Result[Driver.Rows, Driver.Error] {
     var names: Array[Driver.Column] = []
     var index = 0i32
     while index < count {
-      let bytes = readBytes(statement, index, 2i32) ?
-      let name = Result.mapErr(ByteSeq.toText(&bytes), badText) ?
+      let name = readText(statement, index, 2i32) ?
       names = names.push(Driver.Column{name: name, nativeType: None})
       index = index + 1i32
     }
@@ -215,10 +215,24 @@ fn readValue(statement: StatementHandle, index: Int32) -> Result[Driver.Value, D
     if kind == 2i32 { return Ok(RealValue(columnReal(statement, index))) }
     if kind == 4i32 { return Ok(BytesValue(readBytes(statement, index, 0i32) ?)) }
     if kind == 3i32 {
-      let bytes = readBytes(statement, index, 1i32) ?
-      return Ok(TextValue(Result.mapErr(ByteSeq.toText(&bytes), badText) ?))
+      return Ok(TextValue(readText(statement, index, 1i32) ?))
     }
     Err(problem("protocol", "unknown SQLite storage class"))
+  }
+}
+
+fn readText(statement: StatementHandle, index: Int32, mode: Int32) -> Result[Str, Driver.Error] {
+  unsafe(foreign) {
+    let direct = columnAscii(statement, index, mode)
+    if direct[0] == 0i32 {
+      return match direct[1] {
+        case None => Err(problem("protocol", "SQLite text was not returned"))
+        case Some(text) => Ok(text)
+      }
+    }
+    if direct[0] != -5i32 { return Err(statusError(direct[0])) }
+    let bytes = readBytes(statement, index, mode) ?
+    Result.mapErr(ByteSeq.toText(&bytes), badText)
   }
 }
 
