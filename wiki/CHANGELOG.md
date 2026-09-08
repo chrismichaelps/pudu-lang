@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-07 — Low-Level HTTP Pipeline and Parser Optimization
+
+- Configure `TCP_NODELAY` (`Net.NoDelay = 1`) on accepted and connected sockets in `Pudu.Eval.Socket`, eliminating Nagle's algorithm delay and loopback delayed-ACK latency floors (saving 1–2 ms per request).
+- Optimize `Std.Http.Message`: remove the $O(N)$ intermediate line array push loop in `headLines`, prune line slicing allocations, extract header keys and values directly via `take` and `drop` without $O(L)$ Unicode length traversals, and export zero-reallocation `parseHead`.
+- Optimize `Std.Http.Safe`: introduce single-pass `framing` to inspect `Content-Length` and `Transfer-Encoding` simultaneously without repeated lowercasing scans.
+- Optimize `Std.Http.Server`: consume `Message.parseHead` directly without delimiter reconstruction, cache `Net.peerOf(connection)` per connection to eliminate repeated `getpeername()` system calls across keep-alive requests, and early-exit on `Connection: close`.
+- Updated module mirrors `wiki/src/Pudu/Eval/Socket.md`, `wiki/src/Std/Http/Message.md`, `wiki/src/Std/Http/Safe.md`, and `wiki/src/Std/Http/Server.md`.
+
 ## 2026-09-07 — Standard Library Expansion: Core Math, IntMap, Tar, BloomFilter, Mime, and Diff
 
 - Add `Std.Math.Float`: IEEE-754 trigonometry (`sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`), exponentials and logarithms (`exp`, `ln`, `log2`, `log10`, `powf`, `sqrt`, `cbrt`, `hypot`), hyperbolic functions (`sinh`, `cosh`, `tanh`), rounding/decomposition (`floor`, `ceil`, `round`, `trunc`, `fract`, `copysign`, `isNan`, `isInfinite`, `isFinite`, `lerp`), and constants (`pi`, `tau`, `e`, `ln2`, `ln10`, `sqrt2`, `epsilon`).

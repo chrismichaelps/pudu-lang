@@ -95,3 +95,10 @@ Resolved Grill Log:
 Socket output uses renderResponseBytes and Net.sendWithin. Framing is regenerated from actual payload bytes, removing user Transfer-Encoding and Content-Length. HEAD emits no body but retains selected representation length; 1xx, 204, 205, and 304 emit no payload under status-specific framing rules.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## High-performance request pipeline and keep-alive caching
+
+`readRequest` uses `Message.parseHead` directly on the delimited head string, avoiding re-concatenating and re-scanning `\r\n\r\n`. In persistent keep-alive connections (`serveWith`), `Net.peerOf(connection)` is cached per connection rather than invoking the `getpeername()` system call on every request.
+
+Resolved Grill Log: the server read loop must not reconstruct delimiters that the byte transport already split; peer identity is static for the lifetime of a connection and must not incur repeated OS context switches.
+

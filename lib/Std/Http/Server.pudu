@@ -98,25 +98,22 @@ fn readRequest(
   connection: &Net.Connection,
   headLimit: Int,
   bodyLimit: Int,
-  readMillis: Int
+  readMillis: Int,
+  peer: Str
 ) -> Result[Route.Request, Http.Response] {
   let expires = clock() + readMillis
   let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
   let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
   let head = Result.unwrapOr(ByteSeq.toText(&pair[0]), "")
-  let parsed = Message.parseRequest(head + "\r\n\r\n")
+  let parsed = Message.parseHead(head)
   if let Err(problem) = parsed { return Err(badRequest(Message.explain(&problem))) }
   let message = Result.unwrapOr(parsed, emptyRequest())
-  // How long a body is coming is asked of one place, which refuses a message
-  // that says it two ways. A message framed both by a length and by a chunked
-  // encoding is not an ambiguity to resolve: it is built to be read
-  // differently by two things in a chain, and a precedence rule here is what
-  // lets them disagree.
-  let framing = Safe.bodyLength(&message.headers)
+  let framing = Safe.framing(&message.headers)
   if let Err(problem) = framing { return Err(badRequest(Safe.explain(&problem))) }
-  let needed = Result.unwrapOr(framing, 0)
-  if Safe.isChunked(&message.headers) {
+  let framingPair = Result.unwrapOr(framing, (0, false))
+  let needed = framingPair[0]
+  if framingPair[1] {
     return Err(badRequest("this server does not read a chunked body"))
   }
   if needed > bodyLimit { return Err(tooLarge()) }
@@ -139,7 +136,7 @@ fn readRequest(
       path: Route.pathOf(whole.target),
       params: mapOf([]),
       query: Route.queryOf(whole.target),
-      peer: Result.unwrapOr(Net.peerOf(connection), "")
+      peer: peer
     }
   )
 }
@@ -152,11 +149,12 @@ fn readRequest(
 /// The response always states its own length, so the client knows where the
 /// body ends without the connection closing to tell it.
 export fn serveConnection(target: &Server, connection: &Net.Connection) -> Bool {
-  serveWith(target, connection, handlerOf(target))
+  let peer = Result.unwrapOr(Net.peerOf(connection), "")
+  serveWith(target, connection, handlerOf(target), peer)
 }
 
-fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler) -> Bool {
-  let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis)
+fn serveWith(target: &Server, connection: &Net.Connection, handle: Route.Handler, peer: Str) -> Bool {
+  let read = readRequest(connection, target.headLimit, target.bodyLimit, target.readMillis, peer)
   if let Err(refusal) = read {
     let _sent = sendResponse(connection, &withLength(&closing(&refusal)), target.writeMillis)
     false
@@ -193,13 +191,12 @@ fn sendResponse(connection: &Net.Connection, answer: &Http.Response, millis: Int
 /// The protocol's later versions keep it open unless the request says
 /// otherwise, which is the default assumed here.
 fn wantsKeepAlive(message: &Http.Request) -> Bool {
-  var keeping = true
   for entry in message.headers {
     if entry[0].toLower() == "connection" {
-      if entry[1].trim().toLower() == "close" { keeping = false }
+      if entry[1].trim().toLower() == "close" { return false }
     }
   }
-  keeping
+  true
 }
 
 fn closing(answer: &Http.Response) -> Http.Response {
@@ -326,9 +323,10 @@ export fn run(target: &Server, running: &Running, limit: Int) -> Result[Int, Ser
         while receiving {
           match Channel.receive(&queue) {
             case Ok(Some(connection)) => {
+              let peer = Result.unwrapOr(Net.peerOf(&connection), "")
               var keeping = !Result.unwrapOr(Sync.get(&stopping), true)
               while keeping {
-                keeping = serveWith(&serving, &connection, handle)
+                keeping = serveWith(&serving, &connection, handle, peer)
                   && !Result.unwrapOr(Sync.get(&stopping), true)
               }
               let _closed = Net.close(&connection)

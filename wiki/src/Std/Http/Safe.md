@@ -58,5 +58,13 @@ fetch is a way to reach what only the server can reach.
   _Rationale:_ a service that genuinely must reach an internal host exists, and a refusal it cannot
   lift would be worked around outside this module, where nothing checks anything. _Rejected:_ an
   absolute prohibition.
+
+## Single-pass framing header inspection
+
+`bodyLength` and `isChunked` inspect headers in a consolidated traversal, avoiding repeated lowercasing passes across all header names.
+
+Resolved Grill Log: framing validation must not multiply string allocations by scanning the header list independently for every property; one traversal extracts Content-Length and Transfer-Encoding simultaneously.
+
 ## Referenced by
 [[src/Std/_MOC]] · [[ADR-0017 What the Web Layer Refuses]] · [[Std Http Server Guard]] · [[Std Http Server]] · [[Std Http Message]]
+

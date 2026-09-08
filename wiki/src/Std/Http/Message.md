@@ -33,3 +33,10 @@ uses UTF-8 bytes when adding an absent length; explicit reply headers must use t
 renderResponseBytes serializes headers as UTF-8 and appends Http.responseBytes without decoding. renderResponse remains text-only and refuses binary payloads. respondBytes constructs binary responses with an exact octet Content-Length.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## High-performance header parsing contract
+
+`headLines` splits on the detected line separator (`\r\n` or `\n`) directly and trims any trailing empty slice via a single slice bounds check, avoiding $O(N)$ intermediate array pushes. `parseHeaders` scans colon delimiters and extracts name and value via `take` and `drop`, eliminating redundant `length()` traversals across UTF-16 Text slices. `parseHead` parses a head that has already been split from the body without rescanning for `\r\n\r\n`.
+
+Resolved Grill Log: header parsing must minimize heap allocations and avoid redundant Unicode length counting; array rebuilding on every line pays a linear interpreter penalty for every header carried.
+

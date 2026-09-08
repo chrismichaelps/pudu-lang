@@ -39,3 +39,10 @@ the peer may already have received a prefix, so no later operation can safely re
 takeSocket atomically removes a plain socket token for exclusive transfer into TLS. The caller owns cleanup after transfer; old tokens cannot initiate further operations. Callers must not race upgrade with in-flight plain operations.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+## Low-latency TCP socket configuration
+
+TCP endpoints accepted via `acceptOn` and dialed via `connectToWithin` configure `TCP_NODELAY` (`Net.NoDelay = 1`) by default. This disables Nagle's algorithm, preventing the operating system TCP stack from withholding partial frames while waiting for delayed ACKs (the 1–2 ms latency penalty on loopback and interactive RPC/HTTP request-response exchanges). Non-TCP endpoints (such as Unix domain sockets) safely ignore options that do not apply to their address family.
+
+Resolved Grill Log: interactive network protocols require immediate packet dispatch; buffering small response heads behind delayed ACKs degrades latency by orders of magnitude without improving loopback throughput.
+

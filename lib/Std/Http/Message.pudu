@@ -31,6 +31,21 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
   }
 }
 
+/// A request read from text where the head has already been separated from the body.
+export fn parseHead(head: Str) -> Result[Http.Request, MessageError] {
+  let lines = headLines(head)
+  if lines.length() == 0 { Err(NoRequestLine) } else {
+    let parts = parseRequestLine(lines[0]) ?
+    let headers = parseHeaders(&lines) ?
+    Ok(Http.Request {
+        method: Http.methodFrom(parts[0]),
+        target: parts[1],
+        headers: headers,
+        body: ""
+      })
+  }
+}
+
 /// A response read from the text a connection carried.
 export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   let split = splitHead(source)
@@ -144,85 +159,67 @@ fn splitHead(source: Str) -> (Str, Str) {
 }
 
 /// The head in lines, with carriage returns removed and blanks dropped.
-/// The lines of a head, split on the separator it actually uses.
-///
-/// Which separator a message uses is asked once, of the whole head, rather
-/// than answered again for every line. The shape this replaced split on the
-/// newline and then rebuilt each line without its return — a scan and an
-/// allocation per line, which a message carrying sixteen headers paid sixteen
-/// times over.
-///
-/// A message written by hand with bare newlines is still read, because the
-/// question is asked of the head rather than assumed. One mixing both is not,
-/// and no message written by anything writes both.
+/// Slices directly on the separator without an intermediate allocation loop.
 fn headLines(head: Str) -> Array[Str] {
   let separator = if head.contains("\r\n") { "\r\n" } else { "\n" }
-  var out = []
-  for line in head.split(separator) {
-    if !line.isEmpty() { out = out.push(line) }
+  let raw = head.split(separator)
+  let count = raw.length()
+  if count == 0 { raw } else {
+    if raw[count - 1].isEmpty() { raw.slice(0, count - 1) } else { raw }
   }
-  out
 }
 
 /// A request line read into its method, target, and version.
 fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
-  let parts = splitSpaces(line)
-  if parts.length() < 2 { Err(BadRequestLine(line)) } else {
-    Ok((parts[0], parts[1], if parts.length() > 2 { parts[2] } else { "HTTP/1.1" }))
+  let s1 = line.indexOf(" ")
+  if s1 < 0 { return Err(BadRequestLine(line)) }
+  let method = line.take(s1)
+  let rest = line.drop(s1 + 1).trim()
+  let s2 = rest.indexOf(" ")
+  if s2 < 0 {
+    Ok((method, rest, "HTTP/1.1"))
+  } else {
+    Ok((method, rest.take(s2), rest.drop(s2 + 1).trim()))
   }
 }
 
 /// A status line read into the status it names.
 fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
-  let parts = splitSpaces(line)
-  if parts.length() < 2 { Err(BadStatusLine(line)) } else {
-    match Text.countOf(parts[1]) {
-      case Some(code) => {
-        var reason = ""
-        var index = 2
-        while index < parts.length() {
-          if index > 2 { reason = reason + " " }
-          reason = reason + parts[index]
-          index = index + 1
-        }
-        Ok(Http.Status {
-            code: code,
-            reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
-          })
-      }
-      case None => Err(BadStatusLine(line))
+  let s1 = line.indexOf(" ")
+  if s1 < 0 { return Err(BadStatusLine(line)) }
+  let rest = line.drop(s1 + 1).trim()
+  let s2 = rest.indexOf(" ")
+  let codeStr = if s2 < 0 { rest } else { rest.take(s2) }
+  match Text.countOf(codeStr) {
+    case Some(code) => {
+      let reason = if s2 < 0 { "" } else { rest.drop(s2 + 1).trim() }
+      Ok(Http.Status {
+          code: code,
+          reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
+        })
     }
+    case None => Err(BadStatusLine(line))
   }
 }
 
 /// Header lines read into pairs, with names kept as written.
-/// The headers of a head whose first line has already been read.
-///
-/// Given every line rather than a copy without the first, because taking that
-/// copy walks and rebuilds the whole array to drop one element, and skipping
-/// an index costs nothing.
 fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
-  var out = []
+  var out: Array[(Str, Str)] = []
   var index = 1
-  while index < lines.length() {
+  let count = lines.length()
+  while index < count {
     let line = lines[index]
-    let colon = line.indexOf(":")
-    if colon < 0 { return Err(BadHeader(line)) }
-    out = out.push((
-        line.slice(0, colon).trim(),
-        line.slice(colon + 1, line.length()).trim()
-      ))
+    if !line.isEmpty() {
+      let colon = line.indexOf(":")
+      if colon < 0 { return Err(BadHeader(line)) }
+      out = out.push((
+          line.take(colon).trim(),
+          line.drop(colon + 1).trim()
+        ))
+    }
     index = index + 1
   }
   Ok(out)
-}
-
-fn splitSpaces(line: Str) -> Array[Str] {
-  var out = []
-  for piece in line.split(" ") {
-    if !piece.isEmpty() { out = out.push(piece) }
-  }
-  out
 }
 
 fn min(left: Int, right: Int) -> Int { if left < right { left } else { right } }

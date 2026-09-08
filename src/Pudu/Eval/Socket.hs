@@ -106,7 +106,9 @@ acceptOn store token = withSocket store token $ \socket -> do
   attempted <- try (Net.accept socket) :: IO (Either SomeException (Net.Socket, Net.SockAddr))
   case attempted of
     Left problem -> pure (IoFailed (Text.pack (show problem)))
-    Right (connection, _) -> IoDone <$> remember store connection
+    Right (connection, _) -> do
+      _ <- try (Net.setSocketOption connection Net.NoDelay 1) :: IO (Either SomeException ())
+      IoDone <$> remember store connection
 
 {-| Open a connection to somewhere else. -}
 connectTo :: SocketStore -> Text -> Int -> IO (IoOutcome Int)
@@ -125,7 +127,11 @@ connectToWithin store host port millis = do
           <$> bracketOnError
             (Net.openSocket address)
             Net.close
-            (\socket -> Net.connect socket (Net.addrAddress address) >> pure socket)
+            ( \socket -> do
+                _ <- try (Net.setSocketOption socket Net.NoDelay 1) :: IO (Either SomeException ())
+                Net.connect socket (Net.addrAddress address)
+                pure socket
+            )
   case attempted of
     Left problem -> pure (IoFailed (Text.pack (show problem)))
     Right Nothing -> pure (IoFailed timeoutMessage)
