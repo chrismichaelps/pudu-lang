@@ -1,6 +1,7 @@
 {-| @Program.Compiler.Library.Module — locates the shipped standard library -}
 module Pudu.Compiler.Library
   ( isStandardModule
+  , candidateRoots
   , libraryRoots
   , searchRoots
   ) where
@@ -39,12 +40,57 @@ standardRoot = "Std"
     program's dependencies are its own files plus the compiler it is built with,
     and that is the whole answer. -}
 libraryRoots :: IO [FilePath]
-libraryRoots = do
+libraryRoots = existing =<< candidateRoots
+
+{-| Every place the library might be, in the order it is looked for.
+
+    Kept apart from the search so a failure can say what was tried. A reader
+    told only that a standard module could not be read has to guess at an
+    installation they did not perform; told the four paths that were looked
+    in, they can see which one their library is actually at. -}
+candidateRoots :: IO [FilePath]
+candidateRoots = do
   configured <- lookupEnv "PUDU_LIB"
   installed <- installedRoot
+  beside <- besideExecutable
   development <- developmentRoot
   packaged <- Package.getDataFileName "lib"
-  existing (catMaybes [configured, installed, Just packaged, development])
+  pure (catMaybes [configured, installed] <> beside <> [packaged] <> catMaybes [development])
+
+{-| The library found by walking up from the executable itself.
+
+    Where the compiler is answers where its library is; where the person
+    running it happens to be standing does not. Looking upward from the
+    executable is what makes a compiler work the same from any directory,
+    which is the difference between a language a person can use on their own
+    project and one that only works from the directory it was built in.
+
+    Both shapes are looked for at every level: `lib/pudu` beside a `bin`, which
+    is how an installed one is laid out, and the versioned path inside a
+    checkout, which is how one under development is. -}
+besideExecutable :: IO [FilePath]
+besideExecutable = do
+  executable <- try getExecutablePath :: IO (Either IOException FilePath)
+  pure $ case executable of
+    Left _ -> []
+    Right path -> concatMap shapes (ancestors (takeDirectory path))
+ where
+  shapes directory =
+    (directory </> "lib" </> "pudu")
+      : case versionBranch Package.version of
+        major : minor : _ ->
+          [ directory </> "packages" </> "pudu"
+              </> ("v" <> show major <> "." <> show minor)
+              </> "lib"
+          ]
+        _ -> []
+
+{-| A directory and the directories above it, nearest first, stopping at the
+    root rather than walking forever. -}
+ancestors :: FilePath -> [FilePath]
+ancestors directory =
+  let above = takeDirectory directory
+   in directory : if above == directory then [] else ancestors above
 
 {-| The roots to search for one module: the program's own source root first,
     then whatever its manifest declares as a dependency, then the library's —

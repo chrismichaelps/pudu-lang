@@ -588,24 +588,36 @@ createProject target = do
   let manifest = root </> "pudu.toml"
       sourceDirectory = root </> "src"
       entry = sourceDirectory </> "Main.pudu"
+      testDirectory = root </> "test"
+      suite = testDirectory </> "MainTest.pudu"
       ignore = root </> ".gitignore"
+      readme = root </> "README.md"
       projectName = takeFileName (dropTrailingPathSeparator root)
   when (null projectName || projectName == "/") $
     ioError (userError "choose a named project directory")
-  mapM_ requireAbsent [manifest, entry]
+  mapM_ requireAbsent [manifest, entry, suite]
   sourceExists <- doesPathExist sourceDirectory
   sourceLinked <- isLinked sourceDirectory
   sourceIsDirectory <- doesDirectoryExist sourceDirectory
   when (sourceLinked || (sourceExists && not sourceIsDirectory)) $
     ioError (userError "src must be a real directory")
+  testExists <- doesPathExist testDirectory
+  testLinked <- isLinked testDirectory
+  testIsDirectory <- doesDirectoryExist testDirectory
+  when (testLinked || (testExists && not testIsDirectory)) $
+    ioError (userError "test must be a real directory")
+  readmeExists <- doesPathExist readme
   ignoreExists <- doesPathExist ignore
   ignoreLinked <- isLinked ignore
   ignoreIsFile <- doesFileExist ignore
   when (ignoreLinked || (ignoreExists && not ignoreIsFile)) $
     ioError (userError ".gitignore must be a regular file")
   createDirectoryIfMissing True sourceDirectory
+  createDirectoryIfMissing True testDirectory
   TextIO.writeFile entry mainTemplate
+  TextIO.writeFile suite testTemplate
   unless ignoreExists (TextIO.writeFile ignore gitignoreTemplate)
+  unless readmeExists (TextIO.writeFile readme (readmeTemplate projectName))
   TextIO.writeFile manifest (manifestTemplate projectName)
   TextIO.putStrLn (Text.pack ("initialized " <> root))
 
@@ -639,6 +651,11 @@ manifestTemplate name = Text.unlines
   , "language = \"" <> languageConstraint <> "\""
   , "source = \"src\""
   , ""
+  , "# A suite under test/ has its own root, so the code it is testing has to"
+  , "# be named as somewhere else the project's modules live."
+  , "[dependencies]"
+  , "src = \"src\""
+  , ""
   ]
 
 tomlName :: Text -> Text
@@ -652,13 +669,65 @@ tomlName = Text.concatMap escape
   escape c | fromEnum c < 32 || fromEnum c == 127 = "_"
            | otherwise = Text.singleton c
 
+{-| The program a new project starts from.
+
+    It answers rather than doing nothing, because the first thing anybody does
+    with a new project is run it, and a program that prints nothing and leaves
+    with zero has told them nothing about whether any of this works. It also
+    holds one function worth testing, so the test the project starts with has
+    something real to check rather than checking that arithmetic works. -}
 mainTemplate :: Text
 mainTemplate = Text.unlines
   [ "module Main"
   , ""
-  , "export fn main() -> Int {"
-  , "  0"
+  , "import Std.Io as Io"
+  , ""
+  , "/// A greeting for somebody, or for the world when nobody was named."
+  , "export fn greeting(name: Str) -> Str {"
+  , "  if name.isEmpty() { \"Hello, world.\" } else { \"Hello, \" + name + \".\" }"
   , "}"
+  , ""
+  , "export fn main() -> Int {"
+  , "  match Io.writeLine(greeting(\"\")) {"
+  , "    case Ok(_) => 0"
+  , "    case Err(_) => 1"
+  , "  }"
+  , "}"
+  ]
+
+{-| The suite a new project starts from.
+
+    A project begins with a test that can fail. `pudu test` reads how many
+    checks held, so a suite says so with `Std.Test.report`, and a check that
+    does not hold names what it wanted beside what it found. -}
+testTemplate :: Text
+testTemplate = Text.unlines
+  [ "module MainTest"
+  , ""
+  , "import Std.Test as Test"
+  , "import Main"
+  , ""
+  , "fn main() -> Int {"
+  , "  let checks = Test.suite(\"greeting\", &["
+  , "      Test.equals(\"names somebody given a name\", &Main.greeting(\"Ada\"), &\"Hello, Ada.\"),"
+  , "      Test.equals(\"greets the world given nobody\", &Main.greeting(\"\"), &\"Hello, world.\")"
+  , "    ])"
+  , "  Test.report(&Test.run(&checks))"
+  , "}"
+  ]
+
+{-| What the project says about itself. -}
+readmeTemplate :: String -> Text
+readmeTemplate name = Text.unlines
+  [ "# " <> Text.pack name
+  , ""
+  , "```bash"
+  , "pudu run src/Main.pudu     # run it"
+  , "pudu test                  # run the suites under test/"
+  , "pudu check src/Main.pudu   # compile and report, without running"
+  , "pudu fmt src/Main.pudu     # rewrite in the one committed style"
+  , "pudu build src/Main.pudu   # one file that runs anywhere the compiler runs"
+  , "```"
   ]
 
 gitignoreTemplate :: Text

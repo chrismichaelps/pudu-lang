@@ -75,6 +75,11 @@ jobs:
       # service that stopped answering at all is a failure worth catching here.
       - name: Verify a service answers over a socket
         run: node bench/request.mjs "$(cabal list-bin pudu)" --requests 40
+      # Everything a new project's own README tells somebody to run, run in a
+      # project made outside this checkout — where the standard library is not
+      # sitting beside the compiler's sources.
+      - name: Verify a new project works from the moment it is made
+        run: node test/scaffold.mjs "$(cabal list-bin pudu)"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
