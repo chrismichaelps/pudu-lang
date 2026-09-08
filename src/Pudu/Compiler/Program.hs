@@ -25,6 +25,7 @@ import Pudu.Compiler
   , compileFrontendWith
   , runFrontend
   )
+import Pudu.Compiler.Manifest (manifestVersionDiagnostics)
 import Pudu.Compiler.Library (isStandardModule, searchRoots)
 import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
@@ -160,10 +161,11 @@ compileProgramSource sourceRoot rootSource = do
 discoverFrom :: FilePath -> Source -> FrontendResult -> Module -> IO ProgramResult
 discoverFrom sourceRoot rootSource rootFrontend rootModule = do
   let rootName = locatedValue (moduleName rootModule)
+  manifestProblems <- manifestVersionDiagnostics sourceRoot
   discovered <- discover sourceRoot
     (Map.singleton rootName rootFrontend)
     (Map.singleton rootName rootSource)
-    []
+    manifestProblems
     (importsOf rootModule)
   finish rootName discovered
 

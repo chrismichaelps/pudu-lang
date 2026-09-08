@@ -20,6 +20,7 @@ module Pudu.Compiler.Manifest
   ( Manifest (..)
   , Dependency (..)
   , readManifest
+  , manifestVersionDiagnostics
   , findManifestRoot
   , manifestSearchRoots
   , projectSearchRoots
@@ -27,7 +28,10 @@ module Pudu.Compiler.Manifest
 
 import Control.Exception (IOException, try)
 import Data.Char (isSpace)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, maybeToList)
+import Pudu.Version (acceptsLanguage, versionText)
+import Pudu.Diagnostic (Diagnostic, Severity (Error), diagnostic, mkDiagnosticCode)
+import Pudu.Source (SourceName (..), emptySpan, newSource)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -43,13 +47,14 @@ data Dependency = Dependency
 
 data Manifest = Manifest
   { manifestName :: !(Maybe Text)
+  , manifestLanguage :: !(Maybe Text)
   , manifestSource :: !(Maybe FilePath)
   , manifestDependencies :: ![Dependency]
   }
   deriving stock (Eq, Show)
 
 emptyManifest :: Manifest
-emptyManifest = Manifest Nothing Nothing []
+emptyManifest = Manifest Nothing Nothing Nothing []
 
 {-| Read `pudu.toml` from a project root, answering an empty manifest when
     there is none.
@@ -148,6 +153,8 @@ parseManifest contents = go (Text.lines contents) "" emptyManifest
               Just (key, value)
                 | section == "package" && key == "name" ->
                     go rest section manifest{manifestName = Just (unquote value)}
+                | section == "package" && key == "language" ->
+                    go rest section manifest{manifestLanguage = Just (unquote value)}
                 | section == "package" && key == "source" ->
                     go rest section manifest{manifestSource = Just (Text.unpack (unquote value))}
                 | section == "dependencies" ->
@@ -197,3 +204,27 @@ unquote value = case Text.stripPrefix "\"" value >>= Text.stripSuffix "\"" of
   Nothing -> case Text.stripPrefix "'" value >>= Text.stripSuffix "'" of
     Just inner -> inner
     Nothing -> value
+
+manifestVersionDiagnostics :: FilePath -> IO [Diagnostic]
+manifestVersionDiagnostics sourceRoot = do
+  found <- findManifestRoot sourceRoot
+  case found of
+    Nothing -> pure []
+    Just root -> do
+      let path = root </> "pudu.toml"
+      loaded <- try (TextIO.readFile path) :: IO (Either IOException Text)
+      case loaded of
+        Left problem -> report path Text.empty ("cannot read project manifest: " <> Text.pack (show problem))
+        Right contents -> case manifestLanguage (parseManifest contents) of
+          Nothing -> pure []
+          Just constraint -> case acceptsLanguage constraint of
+            Left problem -> report path contents ("invalid package.language: " <> problem)
+            Right True -> pure []
+            Right False -> report path contents
+              ("package.language requires " <> constraint <> "; this compiler is " <> versionText)
+ where
+  report path contents message = do
+    source <- newSource (SourceName (Text.pack path)) contents
+    pure (maybeToList $ do
+      code <- mkDiagnosticCode "E2090"
+      diagnostic code Error (emptySpan source) message)
