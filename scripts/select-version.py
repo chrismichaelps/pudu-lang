@@ -3,6 +3,7 @@ import argparse
 from pathlib import Path
 import re
 import os
+from package_info import load_package
 
 
 def main():
@@ -13,14 +14,11 @@ def main():
         parser.error("series must have the form v0.1")
     root = Path(__file__).resolve().parent.parent
     relative = Path("packages/pudu") / args.series
-    package = root / relative
-    names = ("src", "app", "cbits", "lib", "pudu.cabal")
-    for name in names:
-        if not (package / name).exists():
-            parser.error(f"package is missing {name}")
-    manifest = (package / "pudu.cabal").read_text()
-    version = re.search(r"^version:\s*([0-9]+)\.([0-9]+)(?:\.[0-9]+)*\s*$", manifest, re.MULTILINE)
-    if version is None or f"v{version[1]}.{version[2]}" != args.series:
+    try:
+        _, version, _ = load_package(root, relative)
+    except (OSError, ValueError, KeyError) as problem:
+        parser.error(str(problem))
+    if "v" + ".".join(version.split(".")[:2]) != args.series:
         parser.error("package version does not match its series directory")
     project = root / "cabal.project"
     contents, count = re.subn(r"^packages:.*$", f"packages: {relative.as_posix()}",

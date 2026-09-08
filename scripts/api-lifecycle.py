@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from package_info import load_package
 
 
 def version(text):
@@ -22,14 +23,10 @@ def main():
     parser.add_argument("--package")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    selected = re.search(r"^packages:\s*(\S+)", (root / "cabal.project").read_text(), re.MULTILINE)
-    if args.package is None and selected is None:
-        parser.error("no selected package in cabal.project")
-    package = (root / (args.package or selected[1])).resolve()
-    match = re.search(r"^version:\s*(\S+)", (package / "pudu.cabal").read_text(), re.MULTILINE)
-    if match is None:
-        parser.error("package version is missing")
-    current_text = match[1]
+    try:
+        package, current_text, configuration = load_package(root, args.package)
+    except (OSError, ValueError, KeyError) as problem:
+        parser.error(str(problem))
     current = version(current_text)
     policy_path = root / "api-lifecycle.json"
     policy = json.loads(policy_path.read_text())

@@ -32,3 +32,4 @@ editors/vscode/package-lock.json
 examples/db/orders.db
 
 dist/packages/
+scripts/__pycache__/

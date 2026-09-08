@@ -33,14 +33,13 @@ jobs:
       - name: Install native build dependencies
         run: sudo apt-get update && sudo apt-get install -y libffi-dev zlib1g-dev libgmp-dev
       - run: cabal update
-      - name: Build executable
-        run: cabal build exe:pudu --disable-tests --enable-optimization=2
       - name: Assemble archive
         shell: bash
         run: |
           export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          binary="$(python3 scripts/build-package.py)"
           python3 scripts/package-binary.py \
-            --binary "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
+            --binary "$binary" \
             --target linux-amd64
       - uses: actions/upload-artifact@v4
         with:

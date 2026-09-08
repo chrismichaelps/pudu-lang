@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "backend": "haskell",
+  "versionSource": {
+    "file": "pudu.cabal",
+    "format": "cabal"
+  },
+  "build": [
+    "cabal",
+    "build",
+    "exe:pudu",
+    "--disable-tests",
+    "--enable-optimization=2"
+  ],
+  "locateBinary": [
+    "cabal",
+    "list-bin",
+    "exe:pudu",
+    "--disable-tests",
+    "--enable-optimization=2"
+  ]
+}

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from package_info import load_package
 import sys
 import tarfile
 import tempfile
@@ -23,15 +24,10 @@ def main():
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)+", args.target):
         parser.error("target must be a platform identifier such as linux-amd64")
     root = Path(__file__).resolve().parent.parent
-    selected = re.search(r"^packages:\s*(\S+)", (root / "cabal.project").read_text(), re.MULTILINE)
-    if args.package is None and selected is None:
-        parser.error("no selected package")
-    package = (root / (args.package or selected[1])).resolve()
-    match = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$",
-                      (package / "pudu.cabal").read_text(), re.MULTILINE)
-    if match is None:
-        parser.error("package must declare a three-component version")
-    version = match[1]
+    try:
+        package, version, configuration = load_package(root, args.package)
+    except (OSError, ValueError, KeyError) as problem:
+        parser.error(str(problem))
     binary = Path(args.binary).resolve(strict=True)
     if not binary.is_file():
         parser.error("binary is not a regular file")
@@ -68,6 +64,7 @@ def main():
             shutil.copyfile(source, target)
         shutil.copyfile(package / "LICENSE", stage / "LICENSE")
         metadata = {"name": "pudu", "version": version, "target": args.target,
+                    "backend": configuration["backend"],
                     "executable": executable.relative_to(stage).as_posix(),
                     "standardLibrary": "lib/pudu", "systemLibrariesBundled": False}
         (stage / "package.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
