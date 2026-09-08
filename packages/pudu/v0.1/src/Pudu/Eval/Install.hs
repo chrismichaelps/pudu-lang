@@ -2,6 +2,8 @@
 module Pudu.Eval.Install
   ( Evaluate
   , loadDeclarations
+  , loadModuleDeclarations
+  , installBuiltinConstructors
   , lastSegmentOf
   , targetNameOf
   ) where
@@ -61,6 +63,10 @@ type Evaluate = Located Expression -> Evaluator Value
 loadDeclarations :: Evaluate -> [Located Declaration] -> Evaluator ()
 loadDeclarations evaluateWith declarations = do
   installBuiltinConstructors
+  loadModuleDeclarations evaluateWith declarations
+
+loadModuleDeclarations :: Evaluate -> [Located Declaration] -> Evaluator ()
+loadModuleDeclarations evaluateWith declarations = do
   let traits = traitTable declarations
       layouts = recordLayouts declarations
   mapM_ (installDeclaration traits layouts) declarations

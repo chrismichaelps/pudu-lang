@@ -33,7 +33,7 @@ import Pudu.Eval.Env
   , abortAt
   , lookupName
   )
-import Pudu.Eval.Install (loadDeclarations)
+import Pudu.Eval.Install (installBuiltinConstructors, loadDeclarations, loadModuleDeclarations)
 import Pudu.Eval.Value
   ( Closure (..)
   , Value (..)
@@ -107,12 +107,13 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
   counters <- newIORef Map.empty
   outcome <- runCounted (Just counters) $ do
     withIntegerKinds integerKinds
-    linkDependencies dependencies
+    builtins <- linkDependencies dependencies
+    pushFrame builtins
     {-| The root gets a frame of its own so its declarations shadow every
         dependency's rather than sharing a frame with the last one linked. -}
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
-    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     {-| The root's own functions are given its environment, exactly as a
         dependency's are.
 
@@ -146,10 +147,11 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     locals <- currentFrame
     Evaluator $ \env -> pure (Done () env
       { envFrames = [Map.empty], envMethods = Map.empty, envVariantOwners = Map.empty })
-    linkDependencies dependencies
+    builtins <- linkDependencies dependencies
+    pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
-    loadDeclarations evaluate (moduleDeclarations moduleValue)
+    loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     scopeRootDeclarations
     pushFrame locals
   let Evaluator execute = evaluateBlockInFrame block
@@ -241,13 +243,19 @@ scopeRootDeclarations = do
   let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
   replaceFrame scoped
 
-linkDependencies :: [(Text, Module)] -> Evaluator ()
-linkDependencies = mapM_ linkOne
+linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
+linkDependencies dependencies = do
+  pushFrame Map.empty
+  installBuiltinConstructors
+  builtins <- currentFrame
+  mapM_ (linkOne builtins) dependencies
+  pure builtins
  where
-  linkOne (path, dependency) = do
+  linkOne builtins (path, dependency) = do
+    pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports dependency)
-    loadDeclarations evaluate (moduleDeclarations dependency)
+    loadModuleDeclarations evaluate (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
