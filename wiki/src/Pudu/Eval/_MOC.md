@@ -36,6 +36,7 @@ tags: [moc, module]
 - [[Eval Match]] — total pattern matching against values.
 - [[Eval Operator]] — unary, binary, member, index, and `?` semantics.
 - [[Eval Array]] — Array[T] runtime values, indexing, iteration, and 42 accessor methods.
+- [[Eval Verify]] — runtime verification and integrity assertion preflight.
 
 Dependency direction: Builtin Definition → Value → Env → Operator/Match/Array → Dispatch → Evaluator. No evaluator module imports a parser or resolver module other than [[Syntax Tree]].
 

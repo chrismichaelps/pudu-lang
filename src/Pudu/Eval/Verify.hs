@@ -41,11 +41,11 @@ verifyRsaSha256
   -> ByteString.ByteString
   -> ByteString.ByteString
   -> Bool
-verifyRsaSha256 modulus exponent message signature
-  | ByteString.null modulus || ByteString.null exponent = False
+verifyRsaSha256 modulus pubExp message signature
+  | ByteString.null modulus || ByteString.null pubExp = False
   | otherwise =
       let n = Number.os2ip modulus
-          e = Number.os2ip exponent
+          e = Number.os2ip pubExp
           key = Rsa.PublicKey{Rsa.public_size = ByteString.length modulus, Rsa.public_n = n, Rsa.public_e = e}
        in n > 0 && e > 0 && Pkcs15.verify (Just Algorithms.SHA256) key message signature
 
