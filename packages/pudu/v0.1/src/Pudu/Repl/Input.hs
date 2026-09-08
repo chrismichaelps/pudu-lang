@@ -8,7 +8,6 @@ module Pudu.Repl.Input
   ) where
 
 import Control.Monad.IO.Class (liftIO)
-import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Diagnostic (diagnosticCode, diagnosticCodeText)

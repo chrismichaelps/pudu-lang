@@ -71,6 +71,7 @@ Stop at a balancing `}` or a blank line.
 - **Q:** When does a trivia-only submission complete? **A:** Immediately, unless it carries a doc comment (`DocComment`) or an unclosed block comment (`E0003`). _Rationale:_ typing ordinary comments or blank lines must return control to the prompt rather than waiting indefinitely in continuation mode. _Rejected:_ requiring non-empty significant tokens for all completions.
 - **Q:** Why include `<<`, `>>`, and `^` in continuation symbols? **A:** Bitwise shift and XOR are binary expressions with right operands; splitting them across lines is valid grammar and should seamlessly continue. _Rationale:_ language consistency across all binary expression operators. _Rejected:_ forcing shift expressions onto single lines.
 - **Q:** How should multiline comment-only blocks (`:{ ... :}`) be evaluated? **A:** They should not evaluate or print `()`. _Rationale:_ typing comments within a multiline block is visual note-taking or staging; evaluating empty/comment blocks as an implicit unit expression `()` clutters the REPL session. _Rejected:_ printing `()` on comment blocks.
+- **Q:** Why remove explicit `Data.List (foldl')` import? **A:** `foldl'` is re-exported by modern GHC `Prelude` (GHC 9.10+ / 9.14+); importing it redundantly triggers GHC-66111 `[-Wunused-imports]` build failure under `-Werror`. _Rationale:_ zero-warning compatibility with CI compiler toolchains. _Rejected:_ CPP conditional import wrappers when `Prelude` standard exports cover it.
 
 ## Referenced by
 

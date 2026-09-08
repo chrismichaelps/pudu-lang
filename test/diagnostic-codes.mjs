@@ -13,15 +13,18 @@
 //
 // Usage: node test/diagnostic-codes.mjs [src-directory]
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
-const root = process.argv[2] ?? "src";
+const root = process.argv[2] ?? (existsSync("packages/pudu/v0.1/src") ? "packages/pudu/v0.1/src" : "src");
 
 const shared = new Map([
+  ["E0003", "an unclosed block comment, raised by the trivia scanner and checked during REPL completion"],
   ["E1001", "the generic wrong-token report, raised wherever a parser expects something"],
   ["E1032", "a function body is missing, from a declaration and from a literal"],
+  ["E1040", "an unexpected token in expression position, from expression recovery and early REPL entry validation"],
+  ["E1041", "a reserved keyword in expression position, from expression recovery and early REPL entry validation"],
   ["E1044", "an unknown unsafe capability, from a declaration and from an expression"],
   ["E2010", "an unresolved value name, from resolution and from its context"],
   ["E3010", "a name others can see must state its type: a binding where declarations are checked, a function or parameter where signatures are"],

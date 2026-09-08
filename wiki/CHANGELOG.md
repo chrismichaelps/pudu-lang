@@ -14,6 +14,7 @@ tags: [changelog]
 - Project language constraints: enforced `package.language` constraints declared in `pudu.toml` during program compilation (`Compiler.Program` and `Compiler.Manifest`), diagnosing incompatibilities with `E2090`.
 - Workspace isolation and packaging: restructured repository workspace to isolate `packages/pudu/v0.1/`, decoupled packaging scripts (`build-package.py`, `package-binary.py`, `api-lifecycle.py`, `select-version.py`), and added manual packaging CI workflow (`.github/workflows/package.yml`).
 - Bundle extraction isolation: isolated module extraction in `runBundled` to a per-process system temporary directory (`withSystemTempDirectory`), validated module names against path traversal, and safely restored environment variables using `bracket`.
+- CI compiler warning fix & script indentation: removed redundant `import Data.List (foldl')` in `Pudu.Repl.Input` for GHC 9.14 compatibility under `-Werror` in GitHub Actions, and reformatted all Python utility scripts in `scripts/` (`api-lifecycle.py`, `build-package.py`, `package-binary.py`, `package_info.py`, `select-version.py`) to strictly 2-space indentation with zero tabs.
 
 ## 2026-09-08 — Scoped persistent evaluator context
 
