@@ -304,7 +304,11 @@ docLines raw
     once — a method on two implementations, for instance — and reporting only
     the first would hide the ambiguity a reader is asking about. -}
 entriesFor :: Text -> DocIndex -> [DocEntry]
-entriesFor name = filter ((== name) . docName) . indexEntries
+entriesFor name = filter matches . indexEntries
+ where
+  matches entry =
+    docName entry == name
+      || (docModule entry <> "." <> docName entry) == name
 
 kindLabel :: DocKind -> Text
 kindLabel kind = case kind of

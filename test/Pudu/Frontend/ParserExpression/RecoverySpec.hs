@@ -38,6 +38,8 @@ testRecovery = do
   malformedElse <- parse "if true {} else 1"
   delimited <- parse "(a +)"
   emptyHole <- parse "\"{}\""
+  colonInExpr <- parse ": BigInt"
+  shiftWithoutLeft <- parse "<< 100"
   pure $ conjoin
     [ codes missing === ["E1040"]
     , codes invalid === ["E1040"]
@@ -45,6 +47,10 @@ testRecovery = do
     , diagnosticOffsets malformedElse === [16]
     , codes delimited === ["E1040"]
     , resultKind delimited === EndOfFile
+    , counterexample "colon in expression suggests binding type annotation"
+        (helps colonInExpr === ["type annotations belong on bindings ('let name: Type = value')"])
+    , counterexample "binary operator without left operand explains binary expectation"
+        (helps shiftWithoutLeft === ["binary operators connect two expressions; provide a left-hand operand or check preceding syntax"])
     , counterexample "the parser adds nothing to an invalid string"
         (codes emptyHole === [])
     ]

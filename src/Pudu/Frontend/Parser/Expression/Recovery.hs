@@ -9,6 +9,7 @@ module Pudu.Frontend.Parser.Expression.Recovery
   , labelWithoutLoop
   , mergedOrLeft
   , parseCapabilityAnnotation
+  , prefixDiagnostic
   , reportAmbiguousLineBreak
   , reservedKeywordGuidance
   , reservedPrefix
@@ -37,6 +38,7 @@ import Pudu.Frontend.Token
   , SymbolKind (..)
   , Token (..)
   , TokenKind (..)
+  , keywordText
   , symbolText
   )
 import Pudu.Source (Span, mergeSpans)
@@ -123,13 +125,46 @@ invalidPrefix token = do
   case tokenKind token of
     Invalid _ -> pure ()
     _ ->
-      emitParseError "E1040" (tokenSpan token) "expected expression"
-        (Just "start with a literal, name, (, {, if, or unary operator")
+      let (msg, help) = prefixDiagnostic token
+       in emitParseError "E1040" (tokenSpan token) msg help
   case tokenKind token of
     EndOfFile -> pure ()
     kind | isRecoveryBoundary kind -> pure ()
     _ -> advanceToken >> pure ()
   pure (Located (tokenSpan token) InvalidExpression)
+
+prefixDiagnostic :: Token -> (Text, Maybe Text)
+prefixDiagnostic token = case tokenKind token of
+  Symbol symbol
+    | symbolText symbol `elem` binaryOperatorSymbols ->
+        ( "binary operator '" <> symbolText symbol <> "' requires a left-hand expression"
+        , Just "binary operators connect two expressions; provide a left-hand operand or check preceding syntax"
+        )
+    | symbolText symbol == ":" ->
+        ( "unexpected ':' in expression position"
+        , Just "type annotations belong on bindings ('let name: Type = value')"
+        )
+    | otherwise ->
+        ( "unexpected '" <> symbolText symbol <> "' in expression position"
+        , Nothing
+        )
+  Identifier ident ->
+    ( "unexpected identifier '" <> ident <> "' in expression position"
+    , Nothing
+    )
+  Keyword kw ->
+    ( "unexpected keyword '" <> keywordText kw <> "' in expression position"
+    , Nothing
+    )
+  _ -> ("expected expression", Nothing)
+
+binaryOperatorSymbols :: [Text]
+binaryOperatorSymbols =
+  [ "<<", ">>", "+", "-", "*", "/", "%", "&", "|", "^"
+  , "&&", "||", "==", "!=", "<", "<=", ">", ">="
+  , "..", "..=", "=", "+=", "-=", "*=", "/="
+  , "&+", "&-", "&*", "+|", "-|", "*|"
+  ]
 
 {-| Reserved keywords that appear in expression position — typically because the
     REPL submits them as entries — produce a targeted diagnostic instead of the

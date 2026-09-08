@@ -65,6 +65,9 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 - A foreign block contributes its opaque handle declarations as types and its functions as foreign
   functions. The latter retain the library name so hover can state that their signature is asserted
   rather than proved, including at a call site.
+- `entriesFor` matches declarations by unqualified name (`docName entry == name`) or fully-qualified
+  module path (`docModule entry <> "." <> docName entry == name`), enabling `:doc Std.Math.factorial`
+  as well as `:doc factorial`.
 
 ### Linkage
 
@@ -111,6 +114,11 @@ DEPTH 0.60 (MEDIUM). It joins three producers without owning any of their logic.
 - **Q:** Should a failed module produce no index? **A:** No. _Rationale:_ it inverts the need — a
   reader consults documentation most when the code is not working. _Rejected:_ gating on
   `hasErrors`.
+- **Q:** Should `entriesFor` support qualified module paths (`Std.Math.abs`)? **A:** Yes.
+  _Rationale:_ in interactive sessions or multi-module projects, readers frequently look up
+  documentation using qualified names (`:doc Std.Math.min`). Matching both unqualified and
+  qualified names avoids false 'not in scope' errors while preserving unqualified lookup.
+  _Rejected:_ requiring callers to strip module prefixes before querying.
 
 ## Referenced by
 

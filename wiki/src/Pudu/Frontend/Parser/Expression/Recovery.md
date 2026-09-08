@@ -27,6 +27,7 @@ data AmbiguityRecovery = PreserveStatement | RecoverOwner
 
 parseCapabilityAnnotation :: Parser [Located Capability]
 invalidPrefix             :: Token -> Parser (Located Expression)
+prefixDiagnostic          :: Token -> (Text, Maybe Text)
 labelWithoutLoop          :: Token -> Parser (Located Expression)
 reservedPrefix            :: Token -> Text -> Parser (Located Expression)
 reservedKeywordGuidance   :: Keyword -> Maybe Text
@@ -53,6 +54,11 @@ mergedOrLeft              :: Span -> Span -> Span
 - A reserved keyword in expression position gets a message naming the canonical form — `enum` and
   `struct` point to `type`, `task` and `spawn` point to `async` and `scope`, `mut` points to `var`.
   A generic "expected expression" would be true and useless.
+- When an unexpected binary operator appears in expression position without a left operand,
+  diagnostics state directly that the operator requires a left-hand operand rather than dumping
+  mechanical grammar First-sets (`start with a literal, name...`).
+- When a colon appears after an expression inside parentheses (e.g. `(1: Type)`), diagnostics
+  advise that type annotations belong on bindings (`let name: Type = value`).
 - An absent capability list is not an empty one. Writing no parentheses grants every capability;
   writing `()` grants none. The two cannot share a representation, so the parser distinguishes them
   rather than normalising.
@@ -72,7 +78,7 @@ mergedOrLeft              :: Span -> Span -> Span
 ### Linkage
 
 - **Requires:** [[Parser State]], [[Syntax Tree]], [[Token]], [[Source Text]].
-- **Consumed by:** [[Parser Expression]].
+- **Consumed by:** [[Parser Expression]], [[Repl Session]].
 
 ## Algorithm
 
@@ -85,6 +91,7 @@ module.
 - No expression, block, or pattern parsing — this module is what those fall back to, and depending
   on them would make the fallback part of the cycle it exists outside of.
 - No unbounded consumption. Every loop stops at EOF, at a line boundary, or at an exhausted budget.
+- No mechanical dumping of grammar First-sets in diagnostics.
 
 ## Grill Log
 
@@ -97,7 +104,12 @@ module.
   construct that is still being parsed. _Rationale:_ consuming a closing delimiter during recovery
   leaves its opener unmatched and turns one error into two. _Rejected:_ consuming to the next
   statement.
+- **Q:** Why replace generic grammar dumps with intent-aware diagnostics? **A:** Reciting internal
+  First-sets (`start with a literal, name...`) is unhelpful when a developer typed a binary operator
+  or tried inline type ascriptions. _Rationale:_ context-sensitive messages (`binary operator '<<' requires a left-hand expression`) point directly to the syntactic intent. _Rejected:_ keeping the generic First-set dump.
+- **Q:** Why export prefixDiagnostic? **A:** The REPL session needs to diagnose orphaned leading operators before assembling candidate buffers, preventing them from accidentally fusing with prior statement lines. _Rationale:_ share the single canonical intent-aware diagnostic between parser recovery and prompt validation. _Rejected:_ duplicating prefix diagnostic strings in Repl.Session.
 
 ## Referenced by
 
-[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Expression]] · [[grammar/pudu]]
+[[src/Pudu/Frontend/Parser/_MOC]] · [[Parser Expression]] · [[Repl Session]] · [[grammar/pudu]]
+
