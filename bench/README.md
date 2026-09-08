@@ -21,6 +21,27 @@ at x3.60 that a careful measure put at x2.27. Figures below a noise floor carry
 no ratio at all, and a program that failed to compile is reported rather than
 timed, because a program that does not run is not a fast one.
 
+## 1b. What one request costs
+
+```bash
+node bench/request.mjs "$(cabal list-bin exe:pudu)"
+```
+
+Starts the service in `bench/service`, issues requests over a real socket, and
+reports both what one request costs and what the server gets through when
+several are waiting. Both, because neither follows from the other: this is what
+found the runtime using one core no matter how many workers a server started,
+where latency was already right and throughput was a third of what the machine
+could do.
+
+Three routes, because the cost divides between three things and one figure for
+all of them says nothing about which to improve: a fixed reply is the floor —
+socket, request parse, router, reply — and the other two add an encoded
+document and a rendered page on top of it.
+
+Measure with an optimised build. The development build is several times slower,
+so an absolute figure taken from it is not one to quote.
+
 ## 2. Which function spends it
 
 ```bash

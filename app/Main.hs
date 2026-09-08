@@ -3,6 +3,7 @@ module Main (main) where
 
 import Control.Monad (unless, when)
 import Data.List (sort, sortOn)
+import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
@@ -51,10 +52,29 @@ import System.IO (hIsTerminalDevice, hPutStrLn, stderr, stdout)
 
 main :: IO ()
 main = do
+  useEveryCore
   carried <- attachedBundle
   case carried of
     Just bundle -> runBundled bundle
     Nothing -> runCommand
+
+{-| Give the runtime the cores the machine has.
+
+    A threaded build still runs Haskell on one capability unless it is told
+    otherwise, and nothing about a server says so: `Std.Http.Server` starts
+    sixteen workers, and all sixteen shared one core. Measured over
+    `bench/request.mjs`, saying this raised a fixed reply from 473 to 1417
+    requests a second and a rendered page from 325 to 970.
+
+    Set here rather than linked in, both because a reader can see it and
+    because it can be conditional: a capability count other than one was asked
+    for on the command line, and an explicit choice is not overridden. A
+    compile is no slower in wall time for it — what the extra cores do there is
+    collect garbage. -}
+useEveryCore :: IO ()
+useEveryCore = do
+  chosen <- getNumCapabilities
+  when (chosen <= 1) (setNumCapabilities =<< getNumProcessors)
 
 {-| Run the program attached to this executable.
 

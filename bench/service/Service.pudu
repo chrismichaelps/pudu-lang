@@ -1,0 +1,130 @@
+module Service
+
+import Std.Concurrent as Concurrent
+import Std.Env as Env
+import Std.Html as Html
+import Std.Http as Http
+import Std.Http.Server as Server
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+
+/// A service of the shape whose speed anybody actually asks about.
+///
+/// Three routes, because the cost of a request divides between three things
+/// and one figure for all of them says nothing about which to improve:
+///
+///   - `/plain` answers a fixed string. That is the floor: the socket, the
+///     parse of the request, the router, and the reply, with no work of the
+///     program's own inside it.
+///   - `/json` builds a small document and encodes it, which is what an API
+///     endpoint does between the router and the reply.
+///   - `/page/:name` renders a page from a template, which is what a server
+///     rendering HTML does, and it is the one that touches text hardest.
+///
+/// Written as a program rather than as a harness so it is the same code a
+/// reader would write, measured the same way.
+fn plain(request: Route.Request) -> Http.Response {
+  Reply.text(200, "ok")
+}
+
+fn document(request: Route.Request) -> Http.Response {
+  let body = Json.object(
+    &[
+      ("service", Json.Text("bench")),
+      ("ok", Json.Boolean(true)),
+      ("items", Json.list(&[Json.Number(1), Json.Number(2), Json.Number(3)])),
+      ("target", Json.Text("/json"))
+    ]
+  )
+  Reply.json(200, Json.encode(&body))
+}
+
+fn page(request: Route.Request) -> Http.Response {
+  let name = Option.unwrapOr(Route.param(&request, "name"), "world")
+  let rendered = Html.render(
+    &Html.element(
+      "html",
+      &[],
+      &[
+        Html.element("head", &[], &[Html.element("title", &[], &[Html.text("Hello " + name)])]),
+        Html.element(
+          "body",
+          &[("class", "page")],
+          &[
+            Html.element("h1", &[], &[Html.text("Hello " + name)]),
+            Html.element("p", &[], &[Html.text("This page was rendered for " + name + ".")]),
+            Html.element(
+              "ul",
+              &[],
+              &[
+                Html.element("li", &[], &[Html.text("one")]),
+                Html.element("li", &[], &[Html.text("two")]),
+                Html.element("li", &[], &[Html.text("three")])
+              ]
+            )
+          ]
+        )
+      ]
+    )
+  )
+  Reply.html(200, rendered)
+}
+
+fn missing(request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }
+
+fn say(line: Str) -> () {
+  match Io.writeLine(line) {
+    case Ok(_) => {}
+    case Err(_) => {}
+  }
+}
+
+/// Serve until the harness has asked for everything it means to ask for.
+///
+/// The count comes from the command line so the harness decides how many
+/// requests a run measures, and the port is printed once the listener is up so
+/// the harness never guesses at readiness.
+fn main() -> Int {
+  let requested = Option.unwrapOr(numberOf(Env.at(1)), 2000)
+  let routed = Route.withFallback(
+    &Route.routing(
+      &[Route.get("/plain", plain), Route.get("/json", document), Route.get("/page/:name", page)]
+    ),
+    missing
+  )
+  match Server.start("127.0.0.1", 0) {
+    case Err(_) => {
+      say("could not listen")
+      1
+    }
+    case Ok(live) => {
+      say("port " + display(Server.portOf(&live)))
+      let listening = Server.server(&routed)
+      let _served = Server.run(&listening, &live, requested)
+      let _stopped = Server.stop(&live)
+      0
+    }
+  }
+}
+
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}
