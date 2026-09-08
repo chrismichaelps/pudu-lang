@@ -1,0 +1,339 @@
+cabal-version:      3.12
+name:               pudu
+version:            0.1.0
+synopsis:           Pudu language compiler and tools
+description:        A statically typed native systems language compiler with explicit safety and performance semantics.
+category:           Language
+maintainer:         chrismichaelps
+license:            Apache-2.0 WITH LLVM-exception
+license-file:       LICENSE
+author:             Chris M. Perez Santiago
+copyright:          (c) 2026 Chris M. Perez Santiago
+homepage:           https://github.com/chrismichaelps/pudu-lang
+bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
+build-type:         Simple
+extra-source-files: test-fixtures/program29/*.pudu
+
+source-repository head
+  type:             git
+  location:         https://github.com/chrismichaelps/pudu-lang.git
+
+common warnings
+  default-language: GHC2024
+  default-extensions:
+    NamedFieldPuns
+    OverloadedStrings
+    StrictData
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  autogen-modules:   Paths_pudu
+  other-modules:     Paths_pudu
+  exposed-modules:
+    Pudu.Version
+    Pudu.Bundle
+    Pudu.Compiler
+    Pudu.Compiler.Library
+    Pudu.Compiler.Manifest
+    Pudu.Compiler.Program
+    Pudu.Diagnostic
+    Pudu.Diagnostic.Render
+    Pudu.Eval
+    Pudu.Eval.Array
+    Pudu.Eval.Builtin
+    Pudu.Eval.Builtin.Definition
+    Pudu.Eval.Builtin.Array
+    Pudu.Eval.Builtin.String
+    Pudu.Eval.Builtin.Collection
+    Pudu.Eval.Builtin.Numeric
+    Pudu.Eval.Bytes
+    Pudu.Eval.Call
+    Pudu.Eval.Call.Path
+    Pudu.Eval.Clock
+    Pudu.Eval.Concurrent
+    Pudu.Eval.Effect
+    Pudu.Eval.Aead
+    Pudu.Eval.Child
+    Pudu.Eval.Verify
+    Pudu.Eval.Signal
+    Pudu.Eval.Entropy
+    Pudu.Eval.Install
+    Pudu.Eval.Env
+    Pudu.Eval.Foreign
+    Pudu.Eval.Foreign.Argument
+    Pudu.Eval.Foreign.Resource
+    Pudu.Eval.Foreign.Result
+    Pudu.Eval.Method
+    Pudu.Eval.Handle
+    Pudu.Eval.Hash
+    Pudu.Eval.HashMap
+    Pudu.Eval.Io
+    Pudu.Eval.Keyed
+    Pudu.Eval.Match
+    Pudu.Eval.Loop
+    Pudu.Eval.Operator
+    Pudu.Eval.Operator.Access
+    Pudu.Eval.Runtime
+    Pudu.Eval.Context
+    Pudu.Eval.Program
+    Pudu.Eval.Socket
+    Pudu.Eval.Compress
+    Pudu.Eval.Tls
+    Pudu.Eval.Order
+    Pudu.Eval.Render
+    Pudu.Eval.Value
+    Pudu.Frontend.Expand
+    Pudu.Frontend.Expand.Substitute
+    Pudu.Frontend.Lexer
+    Pudu.Frontend.Lexer.Cursor
+    Pudu.Frontend.Lexer.Identifier
+    Pudu.Frontend.Lexer.Number
+    Pudu.Frontend.Lexer.Quoted
+    Pudu.Frontend.Lexer.Symbol
+    Pudu.Frontend.Lexer.Trivia
+    Pudu.Frontend.Parser
+    Pudu.Frontend.Parser.Name
+    Pudu.Frontend.Parser.Pattern
+    Pudu.Frontend.Parser.Capability
+    Pudu.Frontend.Parser.Declaration
+    Pudu.Frontend.Parser.Declaration.Binding
+    Pudu.Frontend.Parser.Declaration.Block
+    Pudu.Foreign.Call
+    Pudu.Foreign.Call.Library
+    Pudu.Foreign.Crossing
+    Pudu.Foreign.Ownership
+    Pudu.Frontend.Parser.Declaration.Foreign
+    Pudu.Frontend.Parser.Declaration.Function
+    Pudu.Frontend.Parser.Declaration.Generic
+    Pudu.Frontend.Parser.Declaration.Trait
+    Pudu.Frontend.Parser.Declaration.Type
+    Pudu.Frontend.Parser.Declaration.Import
+    Pudu.Frontend.Parser.Declaration.Macro
+    Pudu.Frontend.Parser.Expression
+    Pudu.Frontend.Parser.Expression.Aggregate
+    Pudu.Frontend.Parser.Expression.Control
+    Pudu.Frontend.Parser.Expression.Postfix
+    Pudu.Frontend.Parser.Expression.Recovery
+    Pudu.Frontend.Parser.State
+    Pudu.Frontend.Parser.Type
+    Pudu.Frontend.Syntax
+    Pudu.Frontend.Syntax.Located
+    Pudu.Frontend.Syntax.Name
+    Pudu.Frontend.Syntax.Tree
+    Pudu.Frontend.Token
+    Pudu.DecimalLiteral
+    Pudu.FloatLiteral
+    Pudu.Format
+    Pudu.Format.Spacing
+    Pudu.Lsp.Feature
+    Pudu.Lsp.Hover
+    Pudu.Lsp.Json
+    Pudu.Lsp.Documents
+    Pudu.Lsp.Definition
+    Pudu.Lsp.Protocol
+    Pudu.Lsp.Server
+    Pudu.Lsp.References
+    Pudu.Lsp.Rename
+    Pudu.Lsp.Highlight
+    Pudu.Lsp.SemanticTokens
+    Pudu.Lsp.SignatureHelp
+    Pudu.Lsp.InlayHints
+    Pudu.Lsp.WorkspaceSymbols
+    Pudu.Lsp.CodeAction
+    Pudu.Lsp.Completion
+    Pudu.IntegerLiteral
+    Pudu.Doc
+    Pudu.Doc.Json
+    Pudu.Doc.Query
+    Pudu.Doc.Search
+    Pudu.Doc.Signature
+    Pudu.Doc.Site
+    Pudu.Repl
+    Pudu.Repl.Answer
+    Pudu.Repl.Options
+    Pudu.Repl.Command
+    Pudu.Repl.Input
+    Pudu.Repl.Describe
+    Pudu.Repl.Complete
+    Pudu.Repl.Outline
+    Pudu.Repl.Session
+    Pudu.Repl.Evaluation
+    Pudu.Semantic
+    Pudu.Semantic.Interface
+    Pudu.Type
+    Pudu.Type.Check
+    Pudu.Type.Check.Foreign
+    Pudu.Type.Check.Import
+    Pudu.Type.Check.Call
+    Pudu.Type.Check.Collection
+    Pudu.Type.Check.Coherence
+    Pudu.Type.Check.Iteration
+    Pudu.Type.Check.Safety
+    Pudu.Type.Check.Method
+    Pudu.Type.Check.Pattern
+    Pudu.Type.Check.Expression
+    Pudu.Type.Check.Expression.Control
+    Pudu.Type.Check.Prelude
+    Pudu.Type.Check.Record
+    Pudu.Type.Check.Propagation
+    Pudu.Type.Check.Rule
+    Pudu.Type.Check.Signature
+    Pudu.Type.Check.Statement
+    Pudu.Type.Env
+    Pudu.Type.Exhaust
+    Pudu.Type.Formation
+    Pudu.Type.Marker
+    Pudu.Type.Interface
+    Pudu.Type.Unify
+    Pudu.Type.Value
+    Pudu.Semantic.Prelude
+    Pudu.Semantic.Resolve
+    Pudu.Semantic.Resolve.Context
+    Pudu.Semantic.Scope
+    Pudu.Semantic.Symbol
+    Pudu.Source
+    Pudu.Runtime.Word
+    Pudu.Eval.WordMap
+    Pudu.Runtime.Collection
+    Pudu.Runtime.Buffer
+    Pudu.Eval.Buffer
+    Pudu.Runtime.SwissTable
+    Pudu.Eval.SwissTable
+    Pudu.Runtime.Column
+    Pudu.Runtime.Column.Index
+    Pudu.Eval.Column
+
+  c-sources:        cbits/pudu_ffi.c
+                   cbits/pudu_sqlite.c
+  extra-libraries:  ffi
+  build-depends:
+    base >=4.20 && <4.23,
+    bytestring >=0.11 && <0.13,
+    containers >=0.6 && <0.9,
+    directory >=1.3 && <1.4,
+    entropy >=0.4.1 && <0.5,
+    filepath >=1.4 && <1.6,
+    haskeline >=0.8 && <0.9,
+    network >=3.1 && <3.3,
+    tls >=1.9 && <2.2,
+    zlib >=0.7.1 && <0.8,
+    crypton-x509-system >=1.6 && <1.7,
+    crypton >=0.34 && <2,
+    memory >=0.18 && <0.19,
+    data-default-class >=0.1 && <0.3,
+    stm >=2.5 && <2.6,
+    process >=1.6 && <1.7,
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15
+  if !os(windows)
+    build-depends:  unix >=2.8 && <2.9
+    cpp-options:    -DPUDU_POSIX_SIGNALS
+
+executable pudu
+  import:           warnings
+  hs-source-dirs:   app
+  main-is:          Main.hs
+  ghc-options:      -threaded -rtsopts
+  build-depends:
+    base >=4.20 && <4.23,
+    containers >=0.6 && <0.8,
+    directory >=1.3 && <1.4,
+    filepath >=1.4 && <1.6,
+    pudu,
+    text >=2.1 && <2.2
+
+test-suite pudu-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  ghc-options:      -threaded -rtsopts
+  cxx-sources:      cbits/pudu_ffi_cpp_fixture.cpp
+  cxx-options:      -std=c++11
+  if os(darwin)
+    ghc-options:    -optl-Wl,-export_dynamic
+  else
+    ghc-options:    -optl-Wl,--export-dynamic
+  other-modules:
+    Pudu.DecimalLiteralSpec
+    Pudu.DiagnosticSpec
+    Pudu.FormatSpec
+    Pudu.Lsp.JsonSpec
+    Pudu.Lsp.ServerSpec
+    Pudu.Diagnostic.RenderSpec
+    Pudu.Compiler.ProgramSpec
+    Pudu.Compiler.Program.Common
+    Pudu.Compiler.Program.GraphSpec
+    Pudu.Compiler.Program.TypeBoundarySpec
+    Pudu.Compiler.Program.ForeignSpec
+    Pudu.Compiler.Program.StdlibSpec
+    Pudu.Compiler.Program.EvalSpec
+    Pudu.Compiler.Program.Eval.DataSpec
+    Pudu.Compiler.Program.Eval.ProtocolSpec
+    Pudu.Compiler.Program.Eval.ServiceSpec
+    Pudu.Compiler.Program.Eval.RuntimeSpec
+    Pudu.Foreign.SlotSpec
+    Pudu.Foreign.OwnershipSpec
+    Pudu.Eval.Foreign.ResultSpec
+    Pudu.Frontend.Lexer.CursorSpec
+    Pudu.Frontend.ExpandSpec
+    Pudu.Frontend.LexerSpec
+    Pudu.Frontend.Lexer.NumberSymbolSpec
+    Pudu.Frontend.Lexer.QuotedSpec
+    Pudu.Frontend.Lexer.ScannerSpec
+    Pudu.Frontend.ParserStateNameSpec
+    Pudu.Frontend.ParserImportSpec
+    Pudu.Frontend.ParserBindingSpec
+    Pudu.Frontend.ParserBlockSpec
+    Pudu.Frontend.ParserFunctionSpec
+    Pudu.Frontend.ParserModuleSpec
+    Pudu.Frontend.ParserPatternSpec
+    Pudu.Frontend.ParserTypeDeclarationSpec
+    Pudu.Frontend.ParserExpressionSpec
+    Pudu.Frontend.ParserExpression.Common
+    Pudu.Frontend.ParserExpression.PrecedenceSpec
+    Pudu.Frontend.ParserExpression.PrimarySpec
+    Pudu.Frontend.ParserExpression.ControlSpec
+    Pudu.Frontend.ParserExpression.RecoverySpec
+    Pudu.Frontend.ParserTypeSpec
+    Pudu.Frontend.SyntaxSpec
+    Pudu.Frontend.TokenSpec
+    Pudu.EvalSpec
+    Pudu.Eval.Common
+    Pudu.Eval.ArithmeticSpec
+    Pudu.Eval.BindingFlowSpec
+    Pudu.Eval.DataSpec
+    Pudu.Eval.FunctionClosureSpec
+    Pudu.Eval.SystemSpec
+    Pudu.DocSpec
+    Pudu.Repl.AnswerSpec
+    Pudu.Repl.SessionSpec
+    Pudu.Repl.Session.Common
+    Pudu.Repl.Session.CommandSpec
+    Pudu.Repl.Session.ContextSpec
+    Pudu.Repl.Session.EvaluationSpec
+    Pudu.Semantic.ResolveSpec
+    Pudu.Type.CheckSpec
+    Pudu.Type.Check.Common
+    Pudu.Type.Check.PrimitiveSpec
+    Pudu.Type.Check.DataSpec
+    Pudu.Type.Check.ControlFlowSpec
+    Pudu.Type.Check.PatternSpec
+    Pudu.Type.Check.FunctionGenericSpec
+    Pudu.Type.Check.TraitSpec
+    Pudu.Type.Check.SystemSpec
+    Pudu.Type.Check.ImportSpec
+    Pudu.Type.InterfaceSpec
+  build-depends:
+    base >=4.20 && <4.23,
+    containers >=0.7 && <0.8,
+    directory >=1.3 && <1.4,
+    pudu,
+    QuickCheck >=2.15 && <2.17,
+    text >=2.1 && <2.2
