@@ -76,6 +76,8 @@ library
     Pudu.Eval.Loop
     Pudu.Eval.Operator
     Pudu.Eval.Operator.Access
+    Pudu.Eval.Runtime
+    Pudu.Eval.Context
     Pudu.Eval.Program
     Pudu.Eval.Socket
     Pudu.Eval.Compress

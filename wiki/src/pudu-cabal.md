@@ -86,3 +86,8 @@ Registers [[Pudu/Runtime/Column]] and [[Pudu/Eval/Column]] in `pudu.cabal` libra
 Registers Pudu.Eval.Compress and pins zlib >=0.7.1 && <0.8. The adapter uses the documented incremental API of zlib 0.7.1.0.
 
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
+
+
+## Evaluation lifecycle modules
+
+Register Pudu.Eval.Runtime and Pudu.Eval.Context. Resolved Grill Log: one-shot and persistent evaluation share the same resource owner, with no new package dependency.

@@ -6,13 +6,14 @@ module Pudu.Eval
   , awaitTask
   , callClosure
   , evaluate
+  , evaluateBlockInFrame
+  , outcomeOf
   , runCounted
   , runWithEffects
   , scopeTo
   ) where
 
 import Data.List.NonEmpty (NonEmpty (..))
-import Control.Exception (bracket)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -27,7 +28,6 @@ import Pudu.Eval.Env
   , Evaluator (..)
   , abortAt
   , bind
-  , emptyEnv
   , expectBool
   , lookupName
   , unwind
@@ -36,12 +36,7 @@ import Pudu.Eval.Env
   , withFrame
   , withNewFrame
   )
-import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
-import Pudu.Eval.Tls (closeTlsStore, newTlsStore)
-import Pudu.Eval.Child (closeChildStore, newChildStore)
-import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
-import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
-import Pudu.Foreign.Ownership (closeForeignStore, newForeignStore, takeForeignDiagnostics)
+import Pudu.Eval.Runtime (withRuntimeEnv)
 import Pudu.Eval.Loop
   ( LoopNeeds (..)
   , evaluateFor
@@ -108,17 +103,9 @@ runWithEffects effects (Evaluator action) =
     child cannot race teardown while finishing an effect. Independent evaluations own disjoint
     stores and therefore cannot invalidate one another's tokens. -}
 withRuntime :: (Env -> IO EvalOutcome) -> IO EvalOutcome
-withRuntime action =
-  bracket newHandleStore closeHandleStore $ \handles ->
-    bracket newChildStore closeChildStore $ \children ->
-     bracket newSocketStore closeSocketStore $ \sockets ->
-      bracket newTlsStore closeTlsStore $ \secured ->
-        bracket newForeignStore closeForeignStore $ \foreignStore -> do
-          outcome <- bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
-            action (emptyEnv handles children sockets secured concurrent foreignStore)
-          closeForeignStore foreignStore
-          problems <- takeForeignDiagnostics foreignStore
-          pure outcome{outcomeDiagnostics = outcomeDiagnostics outcome <> problems}
+withRuntime action = do
+  (outcome, problems) <- withRuntimeEnv action
+  pure outcome{outcomeDiagnostics = outcomeDiagnostics outcome <> problems}
 
 {-| What a finished evaluation answers with. A control transfer that reached the
     top is the value it carried; only an abort has nothing to answer. -}
@@ -131,7 +118,12 @@ outcomeOf outcome = case outcome of
   Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
 
 evaluateBlock :: Located Block -> Evaluator Value
-evaluateBlock (Located _ block) = withNewFrame $ do
+evaluateBlock block = withNewFrame (evaluateBlockInFrame block)
+
+{-| Interactive top-level bindings use the frame their context retains. Nested
+    lexical blocks still enter through evaluateBlock and keep normal scoping. -}
+evaluateBlockInFrame :: Located Block -> Evaluator Value
+evaluateBlockInFrame (Located _ block) = do
   mapM_ evaluateStatement (blockStatements block)
   case blockResult block of
     Nothing -> pure UnitValue

@@ -180,3 +180,11 @@ primary diagnostic. Exceptional host termination may have no outcome to carry di
 ## Referenced by
 
 [[src/Pudu/Eval/_MOC]] · [[Pudu REPL]] · [[Syntax Tree]] · [[Diagnostic Model]] · [[Semantics]]
+
+
+## Scoped resource ownership
+
+The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanup diagnostics into the outcome. [[Eval Context]] layers sequential accepted-state retention over the same lifecycle for interactive consumers. Resolved Grill Log: resource scope can outlive a command without escaping its owning callback.
+
+
+`evaluateBlockInFrame` executes statements and a block result in the current frame; ordinary lexical blocks retain `withNewFrame` behavior. `outcomeOf` supplies shared result conversion to context execution. Resolved Grill Log: persistent top-level binding execution must not silently pop the frame at the end of each block.

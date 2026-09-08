@@ -5,6 +5,9 @@ tags: [moc, module]
 
 # Evaluator Module Map
 
+- [[Eval Runtime]] — scoped resource ownership shared by evaluation modes.
+- [[Eval Context]] — serialized accepted-state retention across evaluator actions.
+
 - [[Eval Foreign Result]] — exact non-owning result conversion and shape failures.
 
 - [[Eval Foreign Resource]] — destructor preflight, failed output cleanup, and cleanup diagnostics.

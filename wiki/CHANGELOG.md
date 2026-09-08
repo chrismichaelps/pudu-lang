@@ -5,6 +5,13 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-08 — Scoped persistent evaluator context
+
+- Separate resource ownership into Eval.Runtime and reuse it in the existing one-shot runner.
+- Add a serialized evaluation context that retains accepted frames across actions and reports ContextClosed after scope exit.
+- Add current-frame block execution for persistent top-level bindings while preserving nested lexical scoping.
+- Stop child processes and workers before closing their transports. No tests, builds, reviews or measurements run. The REPL source/type commit path is not yet connected to this context.
+
 ## 2026-09-08 — SMTP command budget
 
 SMTP writes and reply reads now share one command deadline. No tests or measurements run.

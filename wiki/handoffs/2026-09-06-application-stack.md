@@ -272,3 +272,11 @@ changes are preserved for later authorized execution. This does not establish re
 Exact next action: design persistent evaluator state and resource lifetime for the REPL so accepted
 statements no longer replay their effects on subsequent entries. This is the main remaining REPL
 architecture gap, not a performance guarantee supplied by these commits.
+
+
+## Runtime lifetime separation
+
+Role transition: Runtime Implementer owns Eval.Runtime, Eval.Context, one-shot runner delegation, Cabal registration and mirrors. This provides a scoped sequential execution API without replay; REPL source/type commit integration remains separate.
+
+
+Persistent evaluator foundation is implemented as Eval.Context, including top-level block execution and scoped resource cleanup. The ordinary runner delegates to the shared lifetime owner. REPL source compilation remains unchanged and still replays statements. Exact next action: connect checked REPL entry blocks to Eval.Context while preserving binding-type compatibility during redefinition and closing the context on reset/load/exit. No validation performed.
