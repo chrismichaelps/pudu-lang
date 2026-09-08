@@ -10,6 +10,32 @@ This page is an implementation roadmap, not an expansion of accepted syntax or a
 standard-library primitives exist. [[ADR-0019-getting-a-value-back-out-of-a-library]] and
 [[ADR-0020-handing-a-library-a-run-of-bytes]] retain their accepted contracts.
 
+## What binds today, measured against libraries nobody here wrote
+
+Every other foreign fixture calls a shim built from this repository's own `cbits`, which proves the
+bridge and proves nothing about the shapes real libraries use: a shim can be given whatever
+signature the boundary happens to admit. `test/foreign-third-party.mjs` binds libraries that are
+simply on the machine, in the shapes their own headers declare.
+
+| Library | Shape it needs | Result |
+|---|---|---|
+| **sqlite3** | handle returned through a caller-provided slot (`int sqlite3_open(const char*, sqlite3**)`), release answering `int` | Opens `:memory:`, creates a table, prepares, steps, reads a column, releases |
+| **zlib** | a run of bytes the library only reads, with its length beside it | `crc32("hello")` answers the published `0x3610A686`; an empty run and a run holding a nought both answer correctly |
+| **libcurl** | owned handle returned directly, release answering `void`, text results | Initialises a handle, reads `curl_version`, reads `curl_easy_strerror` |
+
+Two rules had to change for these to bind without a shim, and both are recorded where they are
+enforced:
+
+- **A release may answer a status.** `sqlite3_close`, `sqlite3_finalize`, `fclose` and `gzclose` all
+  answer `int`; a boundary admitting only `void` binds none of them directly. The value is
+  discarded, so the reasoning that produced the original rule is kept whole — nothing is handed
+  back, and release failure still cannot be treated as recoverable. A release answering a *handle*
+  stays refused. The cost is that a reader answering a number can be named as a release and the
+  shapes cannot be told apart; C offers nothing that would tell them apart.
+- **A run of bytes cannot be a slot.** `Bytes` crosses lent and read-only; a slot is the other
+  direction. Admitting one would hand a library the address of storage the language holds as
+  unchanging and let it write there, and nothing downstream would notice.
+
 ## Delivery order
 
 | Order | Deliverable | Required boundary |
