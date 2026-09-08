@@ -21,7 +21,7 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoRequestLine) } else {
     let parts = parseRequestLine(lines[0]) ?
-    let headers = parseHeaders(&lines.slice(1, lines.length())) ?
+    let headers = parseHeaders(&lines) ?
     Ok(Http.Request {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
@@ -37,7 +37,7 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
   let lines = headLines(split[0])
   if lines.length() == 0 { Err(NoStatusLine) } else {
     let status = parseStatusLine(lines[0]) ?
-    let headers = parseHeaders(&lines.slice(1, lines.length())) ?
+    let headers = parseHeaders(&lines) ?
     Ok(Http.Response{binaryBody: None, status: status, headers: headers, body: split[1]})
   }
 }
@@ -144,11 +144,22 @@ fn splitHead(source: Str) -> (Str, Str) {
 }
 
 /// The head in lines, with carriage returns removed and blanks dropped.
+/// The lines of a head, split on the separator it actually uses.
+///
+/// Which separator a message uses is asked once, of the whole head, rather
+/// than answered again for every line. The shape this replaced split on the
+/// newline and then rebuilt each line without its return — a scan and an
+/// allocation per line, which a message carrying sixteen headers paid sixteen
+/// times over.
+///
+/// A message written by hand with bare newlines is still read, because the
+/// question is asked of the head rather than assumed. One mixing both is not,
+/// and no message written by anything writes both.
 fn headLines(head: Str) -> Array[Str] {
+  let separator = if head.contains("\r\n") { "\r\n" } else { "\n" }
   var out = []
-  for line in head.split("\n") {
-    let trimmed = line.replace("\r", "")
-    if !trimmed.isEmpty() { out = out.push(trimmed) }
+  for line in head.split(separator) {
+    if !line.isEmpty() { out = out.push(line) }
   }
   out
 }
@@ -185,15 +196,23 @@ fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
 }
 
 /// Header lines read into pairs, with names kept as written.
+/// The headers of a head whose first line has already been read.
+///
+/// Given every line rather than a copy without the first, because taking that
+/// copy walks and rebuilds the whole array to drop one element, and skipping
+/// an index costs nothing.
 fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
   var out = []
-  for line in lines {
+  var index = 1
+  while index < lines.length() {
+    let line = lines[index]
     let colon = line.indexOf(":")
     if colon < 0 { return Err(BadHeader(line)) }
     out = out.push((
         line.slice(0, colon).trim(),
         line.slice(colon + 1, line.length()).trim()
       ))
+    index = index + 1
   }
   Ok(out)
 }
