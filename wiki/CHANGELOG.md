@@ -1031,3 +1031,9 @@ map construction. No tests, builds, reviews or measurements run, as requested.
 ## Referenced by
 
 [[00-INDEX]] · [[FMCF Workflow]]
+
+## 2026-09-08 REPL inspection candidate fix
+
+[[Repl Session]] now sequences token-based session extension in IO in the type
+inspection path, correcting the reported `IO Session` versus `Session` build error.
+No builds, tests, reviews or measurements run.

@@ -227,8 +227,8 @@ inspectEntryType session entry = do
     Just diag -> pure (probe, 1, [diag], Nothing)
     Nothing -> do
       let kind = classifyEntry lexTokens
-          candidate = extend session kind entry
-          (buffer, firstLine) = renderBuffer candidate kind entry
+      candidate <- extend session kind entry
+      let (buffer, firstLine) = renderBuffer candidate kind entry
           entryStart = bufferOffsetOf candidate kind entry
       source <- newSource interactiveName buffer
       (result, _) <- compileBuffer session candidate source

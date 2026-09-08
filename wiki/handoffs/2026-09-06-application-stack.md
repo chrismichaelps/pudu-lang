@@ -280,3 +280,11 @@ Role transition: Runtime Implementer owns Eval.Runtime, Eval.Context, one-shot r
 
 
 Persistent evaluator foundation is implemented as Eval.Context, including top-level block execution and scoped resource cleanup. The ordinary runner delegates to the shared lifetime owner. REPL source compilation remains unchanged and still replays statements. Exact next action: connect checked REPL entry blocks to Eval.Context while preserving binding-type compatibility during redefinition and closing the context on reset/load/exit. No validation performed.
+
+
+## Inspection compilation unblock
+
+Role transition: Tooling Implementer owns Repl.Session inspection sequencing and its
+mirror. Corrected the user-reported `extend` IO binding error in `inspectEntryType`.
+No build or validation run. Persistent shell integration remains the exact next action
+as described above; this focused repair does not change runtime replay behavior.

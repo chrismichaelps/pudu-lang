@@ -152,3 +152,11 @@ Redefinition identity is extracted from lexer tokens, retaining Unicode identifi
 Resolved Grill Log: lexer tokens own syntax identity; do not infer it from textual word splitting. Existing source and compiler diagnostics remain authoritative. No tests or reviews run.
 
 Source mapping counts each assembled group separator, including empty groups and trailing newlines. An appended identical statement maps to its final occurrence rather than an earlier copy. Resolved Grill Log: diagnostic offsets follow actual assembled text.
+
+## Inspection candidate sequencing
+
+`inspectEntryType` binds the result of `extend` in IO before rendering or compiling
+the candidate. Inspection shares the same token-based replacement path as submission.
+Resolved Grill Log: the lexer-backed extension operation returns `IO Session`; no
+consumer may pass that action where a concrete session is required. Inspection still
+stops at compilation and never evaluates user code.
