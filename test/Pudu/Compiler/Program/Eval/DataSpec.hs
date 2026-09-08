@@ -23,8 +23,17 @@ testDataEvaluation = do
   flatMaps <- runEntry "test-fixtures/stdlib/UsesFlatMap.pudu"
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
+  dbRows <- runEntry "test-fixtures/stdlib/UsesDbRow.pudu"
   pure $ conjoin
-    [ counterexample
+    [ {-| Reading a result set, checked hardest where a database hurts: a
+          column that is not there, a row past the end, a null where a value
+          was wanted, and a value of the wrong kind. Answering any of those
+          with a default rather than an error is how a report goes quietly
+          wrong. -}
+      counterexample
+        "reading columns, rows, nulls and mistyped values out of a result set"
+        (dbRows === Just "25")
+    , counterexample
         "a sequence that cannot be empty, a queue with two ends, a heap, and a graph"
         (structures === Just "87")
     {-| The three ordered maps, including the cases easiest to get wrong: a

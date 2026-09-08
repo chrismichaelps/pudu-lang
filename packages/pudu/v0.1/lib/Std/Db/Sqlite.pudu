@@ -131,11 +131,14 @@ fn perform(database: DatabaseHandle, sql: Str, values: &Array[Driver.Value]) -> 
       case None => { return Err(problem("protocol", "SQLite prepare produced no statement")) }
       case Some(held) => held
     }
-    let bound = bind(statement, values)
-    let outcome = match bound {
-      case Err(reason) => Err(reason)
-      case Ok(_) => collect(statement)
-    }
+    // The statement is finalized whichever way binding went, so the outcome is
+    // held and answered after: leaving early on a failed bind would leak the
+    // statement for the life of the connection, which is why this is written
+    // as one expression rather than as a question mark.
+    let outcome = Result.andThen(
+      bind(statement, values),
+      fn(_bound: ()) -> Result[Driver.Rows, Driver.Error] { collect(statement) }
+    )
     finalize(statement)
     outcome
   }
@@ -243,5 +246,5 @@ fn statusError(code: Int32) -> Driver.Error {
   Driver.Error{driver: "sqlite", category: "operation", code: Some(show(code)), message: message}
 }
 fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
-fn synchronization(problem: Sync.SyncError) -> Driver.Error { Driver.error("sqlite", "synchronization", show(problem)) }
+fn synchronization(reason: Sync.SyncError) -> Driver.Error { Driver.error("sqlite", "synchronization", show(reason)) }
 fn badText(_problem: ByteSeq.BytesError) -> Driver.Error { Driver.error("sqlite", "decode", "SQLite returned invalid text or byte encoding") }

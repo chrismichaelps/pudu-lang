@@ -187,11 +187,11 @@ export fn textValuesOf(held: &Statement) -> Array[Option[Str]] {
   for value in held.values {
     written = written.push(match value {
         case NullValue => None
-        case TextValue(text) => Some(text)
+        case TextValue(content) => Some(content)
         case IntegerValue(number) => Some(show(number))
         case RealValue(number) => Some(show(number))
         case DecimalValue(number) => Some(show(number))
-        case BooleanValue(flag) => Some(if flag { "true" } else { "false" })
+        case BooleanValue(truth) => Some(if truth { "true" } else { "false" })
         case BytesValue(_) => None
       })
   }

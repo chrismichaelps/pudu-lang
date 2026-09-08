@@ -12,6 +12,8 @@ testProtocolEvaluation = do
   formats <- runEntry "test-fixtures/stdlib/UsesFormats.pudu"
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
+  htmlServer <- runEntry "test-fixtures/stdlib/UsesHtmlServer.pudu"
+  appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
   shaping <- runEntry "test-fixtures/stdlib/UsesFmt.pudu"
@@ -341,6 +343,20 @@ testProtocolEvaluation = do
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"
         (jsonStrings === Just "16")
+    {-| Rendering a page from a plan prepared once and filled per request,
+        including the case that is not a rendering fault but a way into the
+        page: text carrying markup must arrive as the characters it is made
+        of. -}
+    , counterexample
+        "a page rendered from a prepared plan, its holes, its limit, and its escaping"
+        (htmlServer === Just "18")
+    {-| Preparing a database refuses what it can already see is wrong: a scheme
+        nobody bundled, a pool that cannot hold a connection, a setting a
+        deployment forgot. A program told at start-up can stop; the same
+        program told at its first query, under load, cannot. -}
+    , counterexample
+        "a database prepared, and the connection strings and pool sizes it refuses"
+        (appDatabase === Just "17")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"

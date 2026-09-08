@@ -1,0 +1,92 @@
+module UsesAppDatabase
+
+import Std.App.Config as Config
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Result as Result
+
+/// What preparing a database promises before anything is connected.
+///
+/// Nothing here opens a socket. Preparing is deliberately separate from
+/// connecting — a connection is opened when the stage starts — and that
+/// separation is only worth having if preparing refuses what it can already
+/// see is wrong. A program told at start-up that its connection string names
+/// no driver it has can say so and stop; the same program told at the first
+/// query, under load, cannot.
+///
+/// So what is checked is the refusals: a connection string naming nothing, a
+/// scheme nobody bundled, a pool that cannot hold a connection, and a setting
+/// that is missing where a deployment would have forgotten it.
+fn settings(pairs: Array[(Str, Str)]) -> Config.Config {
+  Config.declaring(&pairs)
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // The bundled connectors are the two the library ships with, and they are
+  // named rather than counted, since a count says nothing about which.
+  let bundled = Database.bundledDrivers()
+  if bundled.length() == 2 { held = held + 1 }
+
+  var names: Array[Str] = []
+  for driver in bundled { names = names.push(driver.name) }
+  if names.contains("postgres") || names.contains("postgresql") { held = held + 1 }
+  if names.contains("sqlite") { held = held + 1 }
+
+  // A connection string a bundled connector recognises is prepared.
+  if Result.isOk(&Database.create("sqlite::memory:", 1)) { held = held + 1 }
+
+  // A scheme nobody bundled is refused here rather than at the first query.
+  if Result.isErr(&Database.create("mysql://localhost/app", 4)) { held = held + 1 }
+
+  // Text that is not a connection string at all is refused.
+  if Result.isErr(&Database.create("", 4)) { held = held + 1 }
+  if Result.isErr(&Database.create("not-a-uri", 4)) { held = held + 1 }
+
+  // A pool that cannot hold a connection is a mistake in the asking. Accepting
+  // it would build a database that can never answer, and say so only when
+  // something first tried to use it.
+  if Result.isErr(&Database.create("sqlite::memory:", 0)) { held = held + 1 }
+  if Result.isErr(&Database.create("sqlite::memory:", 0 - 1)) { held = held + 1 }
+
+  // A refusal says which connector refused and why, because a deployment that
+  // fails at start-up is read by somebody who was not there when it was
+  // written.
+  match Database.create("mysql://localhost/app", 4) {
+    case Ok(_) => {}
+    case Err(problem) => {
+      if !problem.message.isEmpty() { held = held + 1 }
+      if !problem.category.isEmpty() { held = held + 1 }
+    }
+  }
+
+  match Database.create("sqlite::memory:", 0) {
+    case Ok(_) => {}
+    case Err(problem) => {
+      if problem.category == "configuration" { held = held + 1 }
+      if problem.driver == "sqlite" { held = held + 1 }
+    }
+  }
+
+  // A setting that is there is used, and one that is missing is refused rather
+  // than defaulted. A database that quietly falls back to a local one is how a
+  // deployment writes to the wrong place.
+  let configured = settings([("DATABASE_URL", "sqlite::memory:")])
+  if Result.isOk(&Database.fromConfig(&configured, "DATABASE_URL", 2)) { held = held + 1 }
+  if Result.isErr(&Database.fromConfig(&configured, "OTHER_URL", 2)) { held = held + 1 }
+
+  // A setting that is present but says nothing is missing, not empty: a blank
+  // connection string names no database.
+  let blank = settings([("DATABASE_URL", "")])
+  if Result.isErr(&Database.fromConfig(&blank, "DATABASE_URL", 2)) { held = held + 1 }
+
+  // A prepared database becomes a stage the application starts in order, and
+  // the stage carries the name it was given so a failure names it.
+  if let Ok(prepared) = Database.create("sqlite::memory:", 1) {
+    let step = Database.stage(&prepared, "store")
+    if step.name == "store" { held = held + 1 }
+  }
+
+  held
+}

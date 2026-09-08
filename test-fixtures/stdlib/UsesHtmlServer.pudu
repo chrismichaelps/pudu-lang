@@ -1,0 +1,105 @@
+module UsesHtmlServer
+
+import Std.Html.Compose as Compose
+import Std.Html as Html
+import Std.Html.Ssr as Ssr
+import Std.Map as Map
+import Std.Result as Result
+
+/// What rendering a page on the server promises.
+///
+/// A plan is prepared once and filled many times, which is the whole reason
+/// the module exists: the fixed parts of a page are rendered when it is
+/// prepared, and a request pays only for the holes. So what is checked here is
+/// that the two halves agree — that a plan filled with values says exactly
+/// what the same markup written out in one piece would say.
+///
+/// Checked hardest at the edges a page meets under load: a hole nobody filled,
+/// a page longer than the caller will accept, and text that must not be
+/// allowed to become markup. The last is the one that matters most, because
+/// getting it wrong is not a rendering fault but a way into the page.
+fn plan() -> Ssr.Plan {
+  Ssr.prepare(
+      &[
+      Ssr.Fixed(Html.element("h1", &[], &[Html.text("Orders")])),
+      Ssr.Slot("body"),
+      Ssr.Fixed(Html.element("footer", &[], &[Html.text("end")]))
+    ]
+  )
+}
+
+fn filled(name: Str, view: Html.Html) -> Map[Str, Html.Html] {
+  Map.insert(&mapOf([]), name, view)
+}
+
+export fn main() -> Int {
+  var held = 0
+  let prepared = plan()
+
+  // A filled plan says what the same page written in one piece says.
+  let body = Html.element("p", &[], &[Html.text("two orders")])
+  let rendered = Result.unwrapOr(Ssr.render(&prepared, &filled("body", body)), "")
+  if rendered == "<h1>Orders</h1><p>two orders</p><footer>end</footer>" { held = held + 1 }
+
+  // The fixed parts survive a hole filled with nothing at all.
+  let bare = Result.unwrapOr(Ssr.render(&prepared, &filled("body", Html.text(""))), "")
+  if bare == "<h1>Orders</h1><footer>end</footer>" { held = held + 1 }
+
+  // A hole nobody filled is refused rather than rendered as a gap. A page
+  // missing a section is a page that lies about what it shows.
+  if Result.isErr(&Ssr.render(&prepared, &mapOf([]))) { held = held + 1 }
+
+  // A value offered for a hole that does not exist changes nothing.
+  let spare = Map.insert(&filled("body", body), "nowhere", Html.text("x"))
+  if Result.unwrapOr(Ssr.render(&prepared, &spare), "") == rendered { held = held + 1 }
+
+  // Text is text wherever it is put. A value carrying markup must arrive as
+  // the characters it is made of, because a page that renders what a visitor
+  // typed is a page that runs what a visitor typed.
+  let hostile = Html.text("<script>alert(1)</script>")
+  let escaped = Result.unwrapOr(Ssr.render(&prepared, &filled("body", hostile)), "")
+  if escaped.contains("&lt;script&gt;") { held = held + 1 }
+  if !escaped.contains("<script>") { held = held + 1 }
+
+  // The pieces are the page, in order, so a caller may write them out as they
+  // are produced rather than holding the whole page in memory.
+  let pieces = Result.unwrapOr(Ssr.chunks(&prepared, &filled("body", body)), [])
+  if pieces.length() > 0 { held = held + 1 }
+  if pieces.join("") == rendered { held = held + 1 }
+
+  // A finished page states its own length, and states it in bytes rather than
+  // characters, because that is what a response header has to say.
+  let finished = Ssr.finish(&prepared, &filled("body", body))
+  if Result.isOk(&finished) { held = held + 1 }
+  if let Ok(whole) = finished {
+    if whole.body == rendered { held = held + 1 }
+    if whole.byteLength == rendered.toBytes().length() { held = held + 1 }
+  }
+
+  // A page over the caller's limit is refused rather than cut. Half a page is
+  // not a smaller page, it is a broken one.
+  if Result.isErr(&Ssr.renderWithin(&prepared, &filled("body", body), 4)) { held = held + 1 }
+  if Result.isOk(&Ssr.renderWithin(&prepared, &filled("body", body), 4096)) { held = held + 1 }
+
+  // A limit that cannot be met by any page is refused as a mistake in the
+  // asking rather than answered with an empty page.
+  if Result.isErr(&Ssr.renderWithin(&prepared, &filled("body", body), 0 - 1)) { held = held + 1 }
+
+  // A document is a whole page: a root, a head carrying the title, and the
+  // body it was given.
+  let page = Html.render(
+      &Compose.document("Orders", Compose.content().paragraph("one line"))
+  )
+  if page.contains("<title>Orders</title>") { held = held + 1 }
+  if page.contains("one line") { held = held + 1 }
+  if page.startsWith("<!DOCTYPE html>") || page.startsWith("<html") { held = held + 1 }
+
+  // A document says what language it is in when it is told, because a reader
+  // whose browser reads pages aloud depends on it.
+  let spoken = Html.render(
+      &Compose.documentIn("fr", "Commandes", Compose.content().paragraph("une ligne"))
+  )
+  if spoken.contains("fr") { held = held + 1 }
+
+  held
+}
