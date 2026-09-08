@@ -217,33 +217,36 @@ newtype Checker a = Checker (CheckerState -> (a, CheckerState))
 
 instance Functor Checker where
   fmap transform (Checker action) =
-    Checker $ \state -> let (value, next) = action state in (transform value, next)
+    Checker $ \state -> case action state of
+      (value, next) -> next `seq` (transform value, next)
 
 instance Applicative Checker where
-  pure value = Checker $ \state -> (value, state)
+  pure value = Checker $ \state -> state `seq` (value, state)
   Checker leftAction <*> Checker rightAction =
-    Checker $ \state ->
-      let (transform, afterLeft) = leftAction state
-          (value, afterRight) = rightAction afterLeft
-       in (transform value, afterRight)
+    Checker $ \state -> case leftAction state of
+      (transform, afterLeft) -> afterLeft `seq` case rightAction afterLeft of
+        (value, afterRight) -> afterRight `seq` (transform value, afterRight)
 
 instance Monad Checker where
   Checker action >>= continue =
-    Checker $ \state ->
-      let (value, next) = action state
-          Checker continued = continue value
-       in continued next
+    Checker $ \state -> case action state of
+      (value, next) -> next `seq` case continue value of
+        Checker continued -> continued next
 
 runChecker :: Checker a -> CheckerProducts
-runChecker (Checker action) =
-  let (_, finalState) = action initialState
-   in CheckerProducts
-        { producedTypes =
-            reverse (map (fmap (resolveFinal (stateSubstitution finalState))) (stateTypes finalState))
-        , producedSchemes = finalSchemes finalState
-        , producedDiagnostics = sortDiagnostics (reverse (stateDiagnosticsRev finalState))
-        , producedIntegerKinds = reverse (stateIntegerKinds finalState)
-        }
+runChecker (Checker action) = case action initialState of
+  (_, CheckerState
+    { stateSubstitution = substitution
+    , stateTypes = types
+    , stateFrames = frames
+    , stateDiagnosticsRev = diagnostics
+    , stateIntegerKinds = kinds
+    }) -> CheckerProducts
+      { producedTypes = reverse (map (fmap (resolveFinal substitution)) types)
+      , producedSchemes = finalSchemes substitution frames
+      , producedDiagnostics = sortDiagnostics (reverse diagnostics)
+      , producedIntegerKinds = reverse kinds
+      }
 
 {-| The module frame as inference left it, with every variable resolved.
 
@@ -251,13 +254,13 @@ runChecker (Checker action) =
     so an unannotated declaration still has the signature the compiler gave
     it, and an annotated one is reported exactly as the compiler understood
     it rather than as it was spelled. -}
-finalSchemes :: CheckerState -> [(Text, Scheme)]
-finalSchemes state = case reverse (stateFrames state) of
+finalSchemes :: Map TypeVar Type -> [Map Text Scheme] -> [(Text, Scheme)]
+finalSchemes substitution frames = case reverse frames of
   [] -> []
   moduleFrame : _ -> map resolveScheme (Map.toList moduleFrame)
  where
   resolveScheme (name, scheme) =
-    (name, scheme{schemeType = resolveFinal (stateSubstitution state) (schemeType scheme)})
+    (name, scheme{schemeType = resolveFinal substitution (schemeType scheme)})
 
 initialState :: CheckerState
 initialState =

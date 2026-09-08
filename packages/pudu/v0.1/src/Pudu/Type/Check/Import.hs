@@ -88,10 +88,11 @@ collectImportedDeclared imported = do
 
 declareImportedTypes :: DeclaredTypes -> ImportTypes -> Checker ()
 declareImportedTypes declared imported = do
-  mapM_ (declareInterface declared (importedTraits imported) available traits defaults) interfaces
+  mapM_ (declareInterface declared (importedTraits imported) wantedValues available traits defaults) interfaces
   mapM_ bindImportedValue (Map.toList (importedValues imported))
  where
   interfaces = importedInterfaces imported
+  wantedValues = Set.fromList (Map.elems (importedValues imported))
   available = Map.fromList [(interfaceModule value, value) | value <- interfaces]
   traits = Map.unionsWith (<>) (map interfaceTraits interfaces)
   defaults = foldMap interfaceDefaults interfaces
@@ -109,12 +110,13 @@ declareImportedTypes declared imported = do
 declareInterface
   :: DeclaredTypes
   -> Set.Set NominalId
+  -> Set.Set Text
   -> Map.Map ModuleName TypeInterface
   -> Map.Map NominalId [Located Function]
   -> Set.Set (NominalId, Text)
   -> TypeInterface
   -> Checker ()
-declareInterface declared visibleTraits available traits defaults value = do
+declareInterface declared visibleTraits wantedValues available traits defaults value = do
   let declarations = interfaceDeclarations value
   mapM_ (declareOne traits) declarations
   mapM_ declareImportedBinding (interfaceBindings value)
@@ -130,7 +132,10 @@ declareInterface declared visibleTraits available traits defaults value = do
     }
 
   declareOne traitMembers (Located _ declaration) = case declaration of
-    FunctionDeclaration function -> declareFunction interfaceDeclared function >> publishValue (locatedValue (functionName function))
+    FunctionDeclaration function
+      | Set.member (moduleNameText (interfaceModule value) <> "." <> locatedValue (functionName function)) wantedValues ->
+          declareFunction interfaceDeclared function >> publishValue (locatedValue (functionName function))
+      | otherwise -> pure ()
     TypeDeclaration typeValue -> do
       declareConstructors interfaceDeclared typeValue
       case locatedValue (Tree.typeDefinition typeValue) of
@@ -161,10 +166,11 @@ declareInterface declared visibleTraits available traits defaults value = do
     maybe (pure ()) (bindName qualified) found
     inheritRestrictions name qualified
 
-  declareImportedBinding (name, syntax) = do
-    formed <- formType interfaceDeclared [] syntax
-    bindName name (monotype formed)
-    publishValue name
+  declareImportedBinding (name, syntax) =
+    when (Set.member (moduleNameText (interfaceModule value) <> "." <> name) wantedValues) $ do
+      formed <- formType interfaceDeclared [] syntax
+      bindName name (monotype formed)
+      publishValue name
 
 interfaceNames :: Map.Map ModuleName TypeInterface -> TypeInterface -> Map.Map Text NominalId
 interfaceNames available value = interfaceLocalNames value <> interfaceReferenceNames available value
