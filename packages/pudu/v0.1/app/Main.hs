@@ -3,6 +3,7 @@ module Main (main) where
 
 import Control.Monad (unless, when)
 import Control.Exception (IOException, bracket, try)
+import System.IO.Temp (withSystemTempDirectory)
 import Data.List (sort, sortOn)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText, languageConstraint)
@@ -18,7 +19,6 @@ import System.Directory
   , doesDirectoryExist
   , doesFileExist
   , getCurrentDirectory
-  , getTemporaryDirectory
   , listDirectory
   )
 import System.FilePath ((</>), takeBaseName, takeExtension, takeFileName, dropTrailingPathSeparator)
@@ -91,35 +91,10 @@ useEveryCore = do
     compiler, and a bundle that read `run` or `--help` out of them would take
     them away from it. -}
 runBundled :: Bundle -> IO ()
-runBundled bundle = do
+runBundled bundle = withSystemTempDirectory "pudu-bundle" $ \root -> do
   style <- detectStyle
-  root <- bundleCacheRoot bundle
   entry <- materialise root bundle
   withEnvironment "PUDU_LIB" root (runProgram style entry)
-
-{-| Where a bundle lays its modules out.
-
-    Under the machine's temporary directory, in a directory named for what the
-    bundle holds, so a second run of the same program finds the files already
-    there and a different program never meets them. Temporary rather than
-    permanent because these are a detail of running, not something a person
-    installed. -}
-bundleCacheRoot :: Bundle -> IO FilePath
-bundleCacheRoot bundle = do
-  base <- getTemporaryDirectory
-  let stamp = Text.unpack (bundleFingerprint bundle)
-      root = base </> ("pudu-bundle-" <> stamp)
-  createDirectoryIfMissing True root
-  pure root
-
-{-| A name for a bundle's contents, stable across runs and different for
-    different programs. -}
-bundleFingerprint :: Bundle -> Text
-bundleFingerprint bundle =
-  Text.pack (show (abs (hashText (bundleEntry bundle <> Text.concat (map snd (bundleModules bundle))))))
-
-hashText :: Text -> Int
-hashText = Text.foldl' (\accumulated scalar -> accumulated * 33 + fromEnum scalar) 5381
 
 {-| Run an action with one environment variable set, restoring it afterwards. -}
 withEnvironment :: String -> String -> IO a -> IO a
