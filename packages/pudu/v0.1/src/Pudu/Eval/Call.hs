@@ -39,6 +39,7 @@ import Pudu.Eval.Builtin
   , callSetOf
   , callShow
   , callStringMethod
+  , callStringMethodFast
   , isDecimalBuiltin
   , isHashingBuiltin
   )
@@ -130,10 +131,28 @@ evaluateCall needs spanValue callee arguments = do
         _ -> dispatchCall needs spanValue target values
     Nothing -> do
       qualified <- qualifiedCallee callee values
-      target <- case qualified of
-        Just found -> pure found
-        Nothing -> evaluateCallee needs callee
-      dispatchCall needs spanValue target values
+      case qualified of
+        Just found -> dispatchCall needs spanValue found values
+        Nothing -> case locatedValue callee of
+          MemberExpression target (Located _ member) -> do
+            receiver <- callEvaluate needs target
+            case receiver of
+              StrValue text -> case callStringMethodFast spanValue member text values of
+                Just direct -> direct
+                Nothing -> fallbackWith receiver member values
+              _ -> fallbackWith receiver member values
+          _ -> do
+            target <- evaluateCallee needs callee
+            dispatchCall needs spanValue target values
+ where
+  fallbackWith receiver member vals = do
+    owners <- receiverOwners receiver
+    method <- firstBound (\owner -> lookupName (owner <> "." <> member)) owners
+    calleeVal <- case method of
+      Just (FunctionValue closure) ->
+        pure (FunctionValue closure{closureSelf = Just receiver})
+      _ -> readMember (locatedSpan callee) receiver member
+    dispatchCall needs spanValue calleeVal vals
 
 {-| The type arguments a callee carries, and the callee under them. -}
 

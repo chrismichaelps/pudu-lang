@@ -1,16 +1,21 @@
 {-| @Program.Eval.Builtin.String — text method dispatch and scalar manipulation -}
 module Pudu.Eval.Builtin.String
   ( callStringMethod
+  , callStringMethodFast
+  , drop1Text
+  , dropText
   , indexOfText
   ) where
 
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Array as Array
+import Data.Text.Internal (Text (..))
 
 import Pudu.Eval.Bytes (bytesFromText)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
-import Pudu.Eval.Value (StringMethod (..), Value (..), intOf, stringMethodName)
+import Pudu.Eval.Value (StringMethod (..), Value (..), boolValue, intOf, stringMethodName)
 import Pudu.Source (Span)
 
 {-| Apply a built-in text method.
@@ -28,15 +33,16 @@ callStringMethod spanValue method receiver arguments = case receiver of
  where
   apply text = case (method, arguments) of
     (StringLength, []) -> pure (intOf (fromIntegral (Text.length text)))
-    (StringIsEmpty, []) -> pure (BoolValue (Text.null text))
+    (StringIsEmpty, []) -> pure (boolValue (Text.null text))
     (StringCharAt, [IntValue _ index]) -> charAt text index
     (StringIndexOf, [StrValue needle]) -> pure (intOf (indexOfText text needle))
-    (StringContains, [StrValue needle]) -> pure (BoolValue (Text.isInfixOf needle text))
-    (StringStartsWith, [StrValue needle]) -> pure (BoolValue (Text.isPrefixOf needle text))
-    (StringEndsWith, [StrValue needle]) -> pure (BoolValue (Text.isSuffixOf needle text))
+    (StringContains, [StrValue needle]) -> pure (boolValue (Text.isInfixOf needle text))
+    (StringStartsWith, [StrValue needle]) -> pure (boolValue (Text.isPrefixOf needle text))
+    (StringEndsWith, [StrValue needle]) -> pure (boolValue (Text.isSuffixOf needle text))
     (StringDrop, [IntValue _ count])
       | count < 0 -> outOfRange "a drop count cannot be negative"
-      | otherwise -> pure (StrValue (Text.drop (fromInteger count) text))
+      | count == 1 -> pure (StrValue (drop1Text text))
+      | otherwise -> pure (StrValue (dropText (fromInteger count) text))
     (StringTake, [IntValue _ count])
       | count < 0 -> outOfRange "a take count cannot be negative"
       | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
@@ -88,6 +94,74 @@ callStringMethod spanValue method receiver arguments = case receiver of
   wrongStringArity name =
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> name) Nothing
+
+{-| Low-level O(1) character drop for Text.
+    Directly inspects the underlying UTF-8 byte array to advance by the
+    exact scalar byte width without decoding character streams or copying buffers. -}
+{-# INLINE drop1Text #-}
+drop1Text :: Text -> Text
+drop1Text (Text arr off len)
+  | len <= 0 = Text arr off 0
+  | otherwise =
+      let !w = Array.unsafeIndex arr off
+          !delta
+            | w < 0x80 = 1
+            | w < 0xE0 = 2
+            | w < 0xF0 = 3
+            | otherwise = 4
+          !d = min len delta
+      in Text arr (off + d) (len - d)
+
+{-# INLINE dropText #-}
+dropText :: Int -> Text -> Text
+dropText !n !t
+  | n <= 0 = t
+  | n == 1 = drop1Text t
+  | otherwise = Text.drop n t
+
+{-| Fast direct dispatch for built-in text methods without intermediate
+    StringMethodValue closure allocation or dynamic environment queries. -}
+callStringMethodFast :: Span -> Text -> Text -> [Value] -> Maybe (Evaluator Value)
+callStringMethodFast spanValue member text arguments = case member of
+  "drop" -> Just $ case arguments of
+    [IntValue _ count]
+      | count < 0 -> abortAt (Just spanValue) "E7004" "a drop count cannot be negative" Nothing
+      | count == 1 -> pure (StrValue (drop1Text text))
+      | otherwise -> pure (StrValue (dropText (fromInteger count) text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for drop" Nothing
+  "isEmpty" -> Just $ case arguments of
+    [] -> pure (boolValue (Text.null text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for isEmpty" Nothing
+  "length" -> Just $ case arguments of
+    [] -> pure (intOf (fromIntegral (Text.length text)))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for length" Nothing
+  "charAt" -> Just $ case arguments of
+    [IntValue _ index] -> charAtFast spanValue text index
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for charAt" Nothing
+  "take" -> Just $ case arguments of
+    [IntValue _ count]
+      | count < 0 -> abortAt (Just spanValue) "E7004" "a take count cannot be negative" Nothing
+      | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for take" Nothing
+  "contains" -> Just $ case arguments of
+    [StrValue needle] -> pure (boolValue (Text.isInfixOf needle text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for contains" Nothing
+  "startsWith" -> Just $ case arguments of
+    [StrValue needle] -> pure (boolValue (Text.isPrefixOf needle text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for startsWith" Nothing
+  "endsWith" -> Just $ case arguments of
+    [StrValue needle] -> pure (boolValue (Text.isSuffixOf needle text))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for endsWith" Nothing
+  "indexOf" -> Just $ case arguments of
+    [StrValue needle] -> pure (intOf (indexOfText text needle))
+    _ -> abortAt (Just spanValue) "E7012" "wrong arguments for indexOf" Nothing
+  _ -> Nothing
+
+charAtFast :: Span -> Text -> Integer -> Evaluator Value
+charAtFast spanValue text index
+  | index < 0 || index >= fromIntegral (Text.length text) =
+      abortAt (Just spanValue) "E7004" "index out of range" Nothing
+  | otherwise = pure (CharValue (Text.index text (fromInteger index)))
 
 indexOfText :: Text -> Text -> Integer
 indexOfText text needle = case Text.breakOn needle text of

@@ -36,6 +36,7 @@ body.
 ### Governance
 
 - Data and mechanics only: nothing here decides program meaning that [[architecture/SEMANTICS]] assigns to another phase.
+- `boolValue`, `trueValue`, `falseValue`, `zeroValue`, and `oneValue` are shared constants to avoid heap-allocating boolean and small numeric results across tight loop iterations.
 - Failures are reported as `E7xxx` diagnostics through [[Eval Env]], never as host exceptions or partial values.
 - Every operation is defined for the value shapes the evaluator can produce, and says so explicitly for the shapes it cannot.
 - `FloatValue` carries [[Float Literal]]'s `FloatWidth` beside its normalized `Double` storage. The tag is semantic: equality and operators cannot erase whether the admitted value is binary32 or binary64.
@@ -90,6 +91,7 @@ The generation is runtime metadata and never crosses the native ABI or becomes a
 
 - **Q:** Erase claim identity when building a handle value? **A:** No; aliases retain the original
   generation and cannot operate on a replacement object at a reused address.
+- **Q:** Why cache boolean and small integer values in `Eval.Value`? **A:** Evaluator tight loops (such as text scanning and condition testing) evaluate millions of booleans and small integers; caching top-level constants avoids millions of redundant Gen-0 heap allocations.
 
 ## Owned and borrowed handles
 

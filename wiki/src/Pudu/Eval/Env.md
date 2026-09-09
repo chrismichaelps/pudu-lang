@@ -76,6 +76,8 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Store foreign ownership outside the environment? **A:** No. _Rationale:_ captured closures
   and child threads need the same claims, while independent evaluations need disjoint teardown.
   _Rejected:_ a global foreign-address registry.
+- **Q:** Why introduce `updateExisting` alongside `update`?
+  **A:** Updating a mutable binding previously required searching the frame hierarchy with `lookupName` to check existence and then searching again to write the new value; `updateExisting` performs the traversal and mutation in a single pass, returning a boolean indicating whether the binding was present.
 
 ## Referenced by
 

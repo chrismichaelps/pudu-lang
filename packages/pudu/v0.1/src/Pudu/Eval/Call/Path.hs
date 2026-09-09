@@ -11,6 +11,7 @@ module Pudu.Eval.Call.Path
   , typeArgumentNames
   ) where
 
+import Data.Char (isUpper)
 import Data.Foldable (toList)
 import Data.List (inits)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -47,13 +48,20 @@ qualifiedCallee (Located _ expression) values = case qualifiedParts expression o
         [] -> pure Nothing
 
 {-| A qualified callee reaches the parser as a member access on a bare name, so
-    `A.label` and a two-segment path are the same selection written twice. -}
+    `A.label` and a two-segment path are the same selection written twice.
+    Only names beginning with an uppercase letter are nominal types or traits;
+    local variables and parameters cannot qualify method resolution. -}
 qualifiedParts :: Expression -> Maybe (Text, Text)
 qualifiedParts expression = case expression of
-  NameExpression (first :| [method]) -> Just (first, method)
-  MemberExpression (Located _ (NameExpression (first :| []))) member ->
-    Just (first, locatedValue member)
+  NameExpression (first :| [method])
+    | isNominalType first -> Just (first, method)
+  MemberExpression (Located _ (NameExpression (first :| []))) member
+    | isNominalType first -> Just (first, locatedValue member)
   _ -> Nothing
+ where
+  isNominalType name = case Text.uncons name of
+    Just (c, _) -> isUpper c
+    Nothing -> False
 
 {-| Read a dotted path.
 

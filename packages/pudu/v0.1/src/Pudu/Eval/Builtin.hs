@@ -16,6 +16,7 @@ module Pudu.Eval.Builtin
   , callSetOf
   , callShow
   , callStringMethod
+  , callStringMethodFast
   , effectBuiltins
   , isDecimalBuiltin
   , isHashingBuiltin
@@ -42,7 +43,7 @@ import Pudu.Eval.Builtin.Numeric
   , callDecimal
   , isDecimalBuiltin
   )
-import Pudu.Eval.Builtin.String (callStringMethod)
+import Pudu.Eval.Builtin.String (callStringMethod, callStringMethodFast)
 import Pudu.Eval.Effect (callEffect, effectBuiltins)
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString

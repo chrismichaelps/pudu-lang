@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-08 — Low-level text scanning optimization and linear scaling
+
+- Low-level O(1) text drop: introduced `drop1Text` and `dropText` in `Pudu.Eval.Builtin.String` using `Data.Text.Array.unsafeIndex` and `Data.Text.Internal.Text` to inspect the underlying UTF-8 byte array and advance text scalars in O(1) time without stream decoding or copying.
+- Zero-closure text method dispatch: added `callStringMethodFast` in `Pudu.Eval.Builtin.String` and connected direct dispatch in `Pudu.Eval.Call` for `MemberExpression` on `StrValue`, eliminating `StringMethodValue` closure allocation, `receiverOwners` queries, and redundant trait searches.
+- Qualified callee syntax guard: updated `qualifiedParts` in `Pudu.Eval.Call.Path` to require uppercase initial characters for nominal types/traits, eliminating false trait resolution and environment searches on lowercase local variables.
+- Constant value reuse: added top-level cached `boolValue`, `trueValue`, `falseValue`, `zeroValue`, and `oneValue` in `Pudu.Eval.Value`, eliminating millions of heap allocations during tight conditional loops.
+- Single-pass assignment & lexical scoping optimization: introduced `updateExisting` in `Pudu.Eval.Env` for single-pass mutable frame assignment in `Pudu.Eval`, and bypassed empty lexical frame push/pop cycles in `evaluateBlock` when blocks introduce no binding declarations.
+- Benchmark validation: scaling benchmark `"scan text through a cursor"` at 640,000 characters dropped from 2,246ms (ratio x2.97 superlinear) to 932ms (ratio x1.84 linear), eliminating Gen-1 GC pauses (252ms -> 2.1ms) and reducing heap allocations by over 2.4 GB.
+
 ## 2026-09-08 — Persistent REPL execution, version enforcement, and packaging pipeline
 
 - Persistent REPL execution: integrated `Pudu.Repl.Evaluation` and `Pudu.Eval.Context` into `puduci` loop. Previously executed statements and environment frames are retained; each submission compiles candidate source, validates type and dependency compatibility against prior retained types, and executes only the new entry statements or expressions via `evaluateInteractiveBlock` without replaying earlier code or duplicating side effects.

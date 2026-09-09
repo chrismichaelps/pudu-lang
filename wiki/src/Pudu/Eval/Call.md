@@ -53,6 +53,9 @@ readPath       :: CallNeeds -> ...
 - Type arguments written at a call are not erased before it. Types have no
   run-time form, but the syntax the reader wrote is still here and names which
   instantiation was meant.
+- Built-in string methods on `StrValue` receivers are fast-dispatched directly in
+  `evaluateCall` via `callStringMethodFast`, bypassing `receiverOwners` queries and
+  avoiding intermediate `StringMethodValue` heap closure allocations.
 
 ### Linkage
 
@@ -85,6 +88,8 @@ constructor.
   **A:** To satisfy file length contracts (< 500 lines) and separate AST identifier/member chain traversal
   from runtime function application and task/scope evaluation. _Rationale:_ path resolution is a self-contained
   read query on the environment with no dependency on closures or task execution.
+- **Q:** Why fast-path `MemberExpression` on `StrValue` in `evaluateCall`?
+  **A:** Repeated text method calls in tight loops (such as text scanning and tokenization) incurred significant heap allocation from intermediate `StringMethodValue` closures and redundant environment trait queries, leading to GC-induced superlinear scaling pauses.
 
 ## Referenced by
 

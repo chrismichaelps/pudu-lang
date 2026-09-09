@@ -39,6 +39,7 @@ typeArgumentName :: Located TypeSyntax -> Text
 - `readPath` resolves a dotted path longest-binding-first, ensuring linked modules take precedence over shorter prefixes while cleanly walking trailing field accesses via `readMember`.
 - `pathValue` flattens member access syntax chains into dotted strings for direct environment lookup when every part is a valid identifier.
 - `qualifiedCallee` resolves method calls qualified by declaring trait or concrete type (e.g., `Trait.method(receiver)`), checking receiver owners dynamically.
+- `qualifiedParts` guards qualification to identifiers starting with an uppercase letter, ensuring local variables and parameters never trigger redundant trait/type qualification queries.
 - `typeArgumentNames` extracts written nominal type annotations from type application syntax to preserve caller-provided integer conversion targets at runtime.
 
 ### Linkage
@@ -61,6 +62,8 @@ typeArgumentName :: Located TypeSyntax -> Text
 
 - **Q:** Why extract path resolution into `Pudu.Eval.Call.Path`?
   **A:** `Pudu.Eval.Call` was 563 lines. Moving AST path navigation, longest-prefix searching, and callee qualification into a dedicated submodule leaves `Call.hs` focused on function application, scope joining, and thread invocation (< 400 lines).
+- **Q:** Why restrict `qualifiedParts` to uppercase identifiers?
+  **A:** In Pudu syntax, traits, types, and modules begin with an uppercase letter; testing lowercase identifiers for trait method resolution wastes environment lookups on every local member call.
 - **Q:** Why keep `readMember` in `Pudu.Eval.Operator` rather than here?
   **A:** `readMember` is a general property access operator used across operators, whereas `Path` specifically handles identifier chains and callee prefixes.
 

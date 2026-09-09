@@ -41,6 +41,7 @@ module Pudu.Eval.Env
   , pushFrame
   , replaceFrame
   , update
+  , updateExisting
   , withFrame
   , withNewFrame
   , unwind
@@ -290,15 +291,24 @@ bind name value =
     current : rest -> Done () env{envFrames = Map.insert name value current : rest}
 
 {-| Assignment writes the binding where it was declared rather than creating a
-    new one in the innermost frame. -}
-update :: Text -> Value -> Evaluator ()
-update name value = Evaluator $ \env -> pure (Done () env{envFrames = go (envFrames env)})
+    new one in the innermost frame. Returns True if the name was found and updated,
+    False if no frame contained the binding. -}
+updateExisting :: Text -> Value -> Evaluator Bool
+updateExisting name value = Evaluator $ \env ->
+  case go (envFrames env) of
+    Nothing -> pure (Done False env)
+    Just updatedFrames -> pure (Done True env{envFrames = updatedFrames})
  where
   go frames = case frames of
-    [] -> []
+    [] -> Nothing
     current : rest
-      | Map.member name current -> Map.insert name value current : rest
-      | otherwise -> current : go rest
+      | Map.member name current -> Just (Map.insert name value current : rest)
+      | otherwise -> (current :) <$> go rest
+
+{-| Assignment writes the binding where it was declared rather than creating a
+    new one in the innermost frame. -}
+update :: Text -> Value -> Evaluator ()
+update name value = updateExisting name value >> pure ()
 
 {-| Find a name: lexically first, then among the program's implementations.
 

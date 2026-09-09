@@ -32,7 +32,7 @@ import Pudu.Eval.Env
   , lookupName
   , unwind
   , Unwind (..)
-  , update
+  , updateExisting
   , withFrame
   , withNewFrame
   )
@@ -118,7 +118,17 @@ outcomeOf outcome = case outcome of
   Aborted stop -> EvalOutcome{outcomeValue = Nothing, outcomeDiagnostics = [stop]}
 
 evaluateBlock :: Located Block -> Evaluator Value
-evaluateBlock block = withNewFrame (evaluateBlockInFrame block)
+evaluateBlock located@(Located _ block)
+  | blockIntroducesBindings block = withNewFrame (evaluateBlockInFrame located)
+  | otherwise = evaluateBlockInFrame located
+
+blockIntroducesBindings :: Block -> Bool
+blockIntroducesBindings block = any statementIntroduces (blockStatements block)
+ where
+  statementIntroduces (Located _ statement) = case statement of
+    DeclarationStatement (Located _ BindingDeclaration{}) -> True
+    LetElseStatement{} -> True
+    _ -> False
 
 {-| Interactive top-level bindings use the frame their context retains. Nested
     lexical blocks still enter through evaluateBlock and keep normal scoping. -}
@@ -372,8 +382,8 @@ expectBoolValue spanValue value = BoolValue <$> expectBool spanValue value
 assign :: Span -> Located Expression -> Value -> Evaluator Value
 assign spanValue target value = case locatedValue target of
   NameExpression (name :| []) -> do
-    existing <- lookupName name
-    case existing of
-      Nothing -> abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
-      Just _ -> update name value >> pure UnitValue
+    found <- updateExisting name value
+    if found
+      then pure UnitValue
+      else abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
   _ -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing

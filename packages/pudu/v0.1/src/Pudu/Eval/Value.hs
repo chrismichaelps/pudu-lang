@@ -2,6 +2,11 @@
 module Pudu.Eval.Value
   ( Builtin (..)
   , intOf
+  , zeroValue
+  , oneValue
+  , boolValue
+  , trueValue
+  , falseValue
   , builtinName
   , ArrayMethod (..)
   , BytesMethod (..)
@@ -190,7 +195,27 @@ data ForeignRelease = ForeignRelease
     index, a scalar value. That is the type the language gives an unsuffixed
     literal, so a caller comparing the two never has to convert. -}
 intOf :: Integer -> Value
-intOf = IntValue defaultIntegerKind
+intOf 0 = zeroValue
+intOf 1 = oneValue
+intOf n = IntValue defaultIntegerKind n
+
+zeroValue :: Value
+zeroValue = IntValue defaultIntegerKind 0
+
+oneValue :: Value
+oneValue = IntValue defaultIntegerKind 1
+
+{-| Reusable boolean values that avoid allocating on every comparison or check. -}
+{-# INLINE boolValue #-}
+boolValue :: Bool -> Value
+boolValue True = trueValue
+boolValue False = falseValue
+
+trueValue :: Value
+trueValue = BoolValue True
+
+falseValue :: Value
+falseValue = BoolValue False
 
 {-| Tags the built-in array method so [[Evaluator]] can apply it with the right
     arity and semantics. The receiver is carried so `arr.push(x)` evaluates as
