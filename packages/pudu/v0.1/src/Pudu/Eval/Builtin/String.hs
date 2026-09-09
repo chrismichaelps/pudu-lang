@@ -42,10 +42,10 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringDrop, [IntValue _ count])
       | count < 0 -> outOfRange "a drop count cannot be negative"
       | count == 1 -> pure (StrValue (drop1Text text))
-      | otherwise -> pure (StrValue (dropText (fromInteger count) text))
+      | otherwise -> pure (StrValue (dropText (textCount text count) text))
     (StringTake, [IntValue _ count])
       | count < 0 -> outOfRange "a take count cannot be negative"
-      | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
+      | otherwise -> pure (StrValue (Text.take (textCount text count) text))
     (StringSpanOf, [StrValue accepted]) -> pure (spanLength (`Text.elem` accepted) text)
     (StringSpanNotOf, [StrValue rejected]) ->
       pure (spanLength (not . (`Text.elem` rejected)) text)
@@ -58,6 +58,9 @@ callStringMethod spanValue method receiver arguments = case receiver of
       | otherwise -> pure (StrValue (Text.replace needle replacement text))
     (StringRepeat, [IntValue _ count])
       | count < 0 -> outOfRange "a repeat count cannot be negative"
+      | count == 0 || Text.null text -> pure (StrValue Text.empty)
+      | count * textBytes text > toInteger (maxBound :: Int) ->
+          outOfRange "repeated text exceeds the runtime size limit"
       | otherwise -> pure (StrValue (Text.replicate (fromInteger count) text))
     (StringSplit, [StrValue separator])
       | Text.null separator -> pure (textArray (Text.chunksOf 1 text))
@@ -79,8 +82,8 @@ callStringMethod spanValue method receiver arguments = case receiver of
         pure
           ( StrValue
               ( Text.take
-                  (fromInteger (to - from))
-                  (Text.drop (fromInteger from) text)
+                  (textCount text (to - from))
+                  (dropText (textCount text from) text)
               )
           )
 
@@ -107,6 +110,12 @@ drop1Text (Text arr off len)
           !d = min len delta
       in Text arr (off + d) (len - d)
 
+textBytes :: Text -> Integer
+textBytes (Text _ _ byteLength) = toInteger byteLength
+
+textCount :: Text -> Integer -> Int
+textCount text count = fromInteger (min count (textBytes text))
+
 {-# INLINE dropText #-}
 dropText :: Int -> Text -> Text
 dropText !n !t
@@ -122,7 +131,7 @@ callStringMethodFast spanValue member text arguments = case member of
     [IntValue _ count]
       | count < 0 -> abortAt (Just spanValue) "E7004" "a drop count cannot be negative" Nothing
       | count == 1 -> pure (StrValue (drop1Text text))
-      | otherwise -> pure (StrValue (dropText (fromInteger count) text))
+      | otherwise -> pure (StrValue (dropText (textCount text count) text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for drop" Nothing
   "isEmpty" -> Just $ case arguments of
     [] -> pure (boolValue (Text.null text))
@@ -136,7 +145,7 @@ callStringMethodFast spanValue member text arguments = case member of
   "take" -> Just $ case arguments of
     [IntValue _ count]
       | count < 0 -> abortAt (Just spanValue) "E7004" "a take count cannot be negative" Nothing
-      | otherwise -> pure (StrValue (Text.take (fromInteger count) text))
+      | otherwise -> pure (StrValue (Text.take (textCount text count) text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for take" Nothing
   "contains" -> Just $ case arguments of
     [StrValue needle] -> pure (boolValue (Text.isInfixOf needle text))
