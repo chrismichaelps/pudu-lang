@@ -13,8 +13,6 @@ export fn island(name: Str, propsJson: Str, fallback: Html.Html) -> Html.Html {
 
 /// Builds an accessible HTML form with automatic CSRF token protection.
 ///
-/// Submits natively via standard HTTP POST if scripting is unavailable, or progressively
-/// enhances via client fetch when the micro-runtime is mounted.
 export fn serverActionForm(
   actionUrl: Str,
   csrfToken: Str,
@@ -37,23 +35,7 @@ export fn serverActionForm(
   )
 }
 
-/// Generates the self-contained micro-runtime (< 1.5 KB) authorized by the CSP nonce.
 export fn microRuntime(nonce: Str) -> Html.Html {
-  let scriptBody = "(function()\{" +
-  "document.addEventListener('submit',function(e)\{" +
-  "var f=e.target;if(f.tagName==='FORM'&&!f.dataset.native)\{" +
-  "e.preventDefault();" +
-  "var d=new FormData(f);" +
-  "fetch(f.action,\{method:'POST',body:d,headers:\{'X-Pudu-Action':'1'\}\})" +
-  ".then(function(r)\{if(r.redirected)\{window.location.href=r.url;\}else\{return r.text();\}\})" +
-  ".then(function(h)\{if(h)\{document.body.innerHTML=h;\}\});" +
-  "\}" +
-  "\});" +
-  "\})();"
-
-  Html.element(
-    "script",
-      &[("nonce", nonce)],
-      &[Html.trusted(scriptBody)]
-  )
+  let scriptBody = "(function()\{if(window.PuduIslands)return;const mounts=new Map();function report(node,error)\{node.dispatchEvent(new CustomEvent('pudu:island-error',\{detail:error,bubbles:true}));}class Island extends HTMLElement\{connectedCallback()\{this.mount();}disconnectedCallback()\{this.generation=(this.generation||0)+1;const cleanup=this.cleanup;this.cleanup=null;this.active=false;if(typeof cleanup==='function')\{try\{cleanup();}catch(error)\{report(this,error);}}}mount()\{const mount=mounts.get(this.dataset.name);if(this.active||!this.isConnected||!mount)return;let props;try\{props=JSON.parse(this.dataset.props||'\{}');}catch(error)\{report(this,error);return;}this.active=true;const generation=this.generation=(this.generation||0)+1;Promise.resolve().then(()=>\{if(this.isConnected&&this.generation===generation)return mount(this,props);}).then(cleanup=>\{if(!this.isConnected||this.generation!==generation)\{if(typeof cleanup==='function')cleanup();return;}this.cleanup=cleanup;this.dispatchEvent(new CustomEvent('pudu:island-ready',\{bubbles:true}));}).catch(error=>\{if(this.generation===generation)this.active=false;report(this,error);});}}window.PuduIslands=Object.freeze(\{register(name,mount)\{if(typeof name!=='string'||!name||typeof mount!=='function')throw new TypeError('Invalid island registration');if(mounts.has(name))throw new Error('Island already registered: '+name);mounts.set(name,mount);for(const node of document.querySelectorAll('pudu-island'))if(node.dataset.name===name)node.mount();}});if(!customElements.get('pudu-island'))customElements.define('pudu-island',Island);})();"
+  Html.element("script", &[("nonce", nonce)], &[Html.trusted(scriptBody)])
 }
