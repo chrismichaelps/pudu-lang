@@ -4,9 +4,9 @@ import Std.Concurrent as Concurrent
 import Std.Env as Env
 import Std.Html as Html
 import Std.Http as Http
-import Std.Http.Server as Server
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
 import Std.Io as Io
 import Std.Json as Json
 import Std.Option as Option
@@ -32,7 +32,7 @@ fn plain(request: Route.Request) -> Http.Response {
 
 fn document(request: Route.Request) -> Http.Response {
   let body = Json.object(
-    &[
+      &[
       ("service", Json.Text("bench")),
       ("ok", Json.Boolean(true)),
       ("items", Json.list(&[Json.Number(1), Json.Number(2), Json.Number(3)])),
@@ -45,21 +45,21 @@ fn document(request: Route.Request) -> Http.Response {
 fn page(request: Route.Request) -> Http.Response {
   let name = Option.unwrapOr(Route.param(&request, "name"), "world")
   let rendered = Html.render(
-    &Html.element(
+      &Html.element(
       "html",
-      &[],
-      &[
+        &[],
+        &[
         Html.element("head", &[], &[Html.element("title", &[], &[Html.text("Hello " + name)])]),
         Html.element(
           "body",
-          &[("class", "page")],
-          &[
+            &[("class", "page")],
+            &[
             Html.element("h1", &[], &[Html.text("Hello " + name)]),
             Html.element("p", &[], &[Html.text("This page was rendered for " + name + ".")]),
             Html.element(
               "ul",
-              &[],
-              &[
+                &[],
+                &[
                 Html.element("li", &[], &[Html.text("one")]),
                 Html.element("li", &[], &[Html.text("two")]),
                 Html.element("li", &[], &[Html.text("three")])
@@ -90,8 +90,8 @@ fn say(line: Str) -> () {
 fn main() -> Int {
   let requested = Option.unwrapOr(numberOf(Env.at(1)), 2000)
   let routed = Route.withFallback(
-    &Route.routing(
-      &[Route.get("/plain", plain), Route.get("/json", document), Route.get("/page/:name", page)]
+      &Route.routing(
+        &[Route.get("/plain", plain), Route.get("/json", document), Route.get("/page/:name", page)]
     ),
     missing
   )
