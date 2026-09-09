@@ -65,6 +65,7 @@ import Pudu.Diagnostic.Render
   )
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
+import GHC.IO.Encoding (setLocaleEncoding)
 import System.Environment (getArgs, getExecutablePath, lookupEnv, setEnv, unsetEnv)
 import System.Process
   ( ProcessHandle
@@ -81,17 +82,43 @@ import System.IO
   , hIsTerminalDevice
   , hPutStrLn
   , hSetBuffering
+  , hSetEncoding
   , stderr
   , stdout
+  , utf8
   )
 
 main :: IO ()
 main = do
+  readAndWriteUtf8
   useEveryCore
   carried <- attachedBundle
   case carried of
     Just bundle -> runBundled bundle
     Nothing -> runCommand
+
+{-| Read and write text as UTF-8, whatever the machine says its language is.
+
+    A source file is UTF-8 by definition, so what a program means cannot depend
+    on the environment of the machine compiling it. Without this it does: text
+    is decoded with the locale's encoding, and a machine with no locale set
+    decodes as ASCII — so a file carrying an em dash cannot be read at all, and
+    the failure arrives as "cannot read module", naming a file that is present
+    and readable.
+
+    That is not a hypothetical environment. A container built from a minimal
+    image has no locale, and neither does a program started with its
+    environment cleared, which is how a service is often run.
+
+    The handles are set as well as the default, because the two standard ones
+    are open before this runs and keep the encoding they were opened with —
+    leaving a diagnostic that contains an em dash unable to be printed on the
+    same machine that could not read it. -}
+readAndWriteUtf8 :: IO ()
+readAndWriteUtf8 = do
+  setLocaleEncoding utf8
+  hSetEncoding stdout utf8
+  hSetEncoding stderr utf8
 
 {-| Give the runtime the cores the machine has.
 
