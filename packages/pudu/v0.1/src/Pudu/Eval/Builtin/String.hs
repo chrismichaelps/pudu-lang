@@ -34,7 +34,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
   apply text = case (method, arguments) of
     (StringLength, []) -> pure (intOf (fromIntegral (Text.length text)))
     (StringIsEmpty, []) -> pure (boolValue (Text.null text))
-    (StringCharAt, [IntValue _ index]) -> charAt text index
+    (StringCharAt, [IntValue _ index]) -> charAtFast spanValue text index
     (StringIndexOf, [StrValue needle]) -> pure (intOf (indexOfText text needle))
     (StringContains, [StrValue needle]) -> pure (boolValue (Text.isInfixOf needle text))
     (StringStartsWith, [StrValue needle]) -> pure (boolValue (Text.isPrefixOf needle text))
@@ -71,11 +71,6 @@ callStringMethod spanValue method receiver arguments = case receiver of
   textArray = ArrayValue . Seq.fromList . map StrValue
 
   spanLength holds = intOf . fromIntegral . Text.length . Text.takeWhile holds
-
-  charAt text index
-    | index < 0 || index >= fromIntegral (Text.length text) =
-        outOfRange "index out of range"
-    | otherwise = pure (CharValue (Text.index text (fromInteger index)))
 
   slice text from to
     | from < 0 = outOfRange "a slice cannot start before the text"
@@ -158,10 +153,13 @@ callStringMethodFast spanValue member text arguments = case member of
   _ -> Nothing
 
 charAtFast :: Span -> Text -> Integer -> Evaluator Value
-charAtFast spanValue text index
-  | index < 0 || index >= fromIntegral (Text.length text) =
-      abortAt (Just spanValue) "E7004" "index out of range" Nothing
-  | otherwise = pure (CharValue (Text.index text (fromInteger index)))
+charAtFast spanValue text@(Text _ _ byteLength) index
+  | index < 0 || index >= fromIntegral byteLength = outOfRange
+  | otherwise = case Text.uncons (dropText (fromInteger index) text) of
+      Nothing -> outOfRange
+      Just (character, _) -> pure (CharValue character)
+ where
+  outOfRange = abortAt (Just spanValue) "E7004" "index out of range" Nothing
 
 indexOfText :: Text -> Text -> Integer
 indexOfText text needle = case Text.breakOn needle text of
