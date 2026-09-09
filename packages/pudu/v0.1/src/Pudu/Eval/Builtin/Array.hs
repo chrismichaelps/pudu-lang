@@ -80,17 +80,17 @@ callArrayMethod apply spanValue method receiver arguments = case method of
     [_] -> abortAt (Just spanValue) "E7001" "concat expects an array" Nothing
     _ -> wrongArity "concat" 1
   ArrayJoin -> case arguments of
-    [StrValue separator] -> case arrayToList receiver of
-      Just values -> do
-        pieces <- mapM asText values
-        pure (StrValue (Text.intercalate separator pieces))
-      Nothing -> abortAt (Just spanValue) "E7001" "not an array" Nothing
+    [StrValue separator] -> case receiver of
+      ArrayValue values -> case foldr collectText (Just []) values of
+        Just pieces -> pure (StrValue (Text.intercalate separator pieces))
+        Nothing -> abortAt (Just spanValue) "E7001" "join expects an array of text" Nothing
+      _ -> abortAt (Just spanValue) "E7001" "not an array" Nothing
     [_] -> abortAt (Just spanValue) "E7001" "join expects text" Nothing
     _ -> wrongArity "join" 1
    where
-    asText value = case value of
-      StrValue held -> pure held
-      _ -> abortAt (Just spanValue) "E7001" "join expects an array of text" Nothing
+    collectText value rest = case value of
+      StrValue held -> (held :) <$> rest
+      _ -> Nothing
   ArrayReverse -> case arguments of
     [] -> pure (arrayReverse receiver)
     _ -> wrongArity "reverse" 0
