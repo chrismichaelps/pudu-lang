@@ -263,9 +263,11 @@ executable pudu
     containers >=0.6 && <0.8,
     directory >=1.3 && <1.4,
     filepath >=1.4 && <1.6,
+    process >=1.6 && <1.7,
     pudu,
     temporary >=1.3 && <1.4,
-    text >=2.1 && <2.2
+    text >=2.1 && <2.2,
+    time >=1.12 && <1.15
 
 test-suite pudu-test
   import:           warnings
