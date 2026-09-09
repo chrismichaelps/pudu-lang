@@ -57,8 +57,23 @@ if (!existsSync(built)) {
 const elsewhere = join(mkdtempSync(join(tmpdir(), "pudu-elsewhere-")), "shipped");
 copyFileSync(built, elsewhere);
 
-const run = (path, extra = []) =>
-  execFileSync("/usr/bin/env", ["-i", path, ...extra], { stdio: "pipe" }).toString().trim();
+// A program that fails here fails by saying something, and that something is
+// the whole reason to run it. Node throws for a non-zero exit and puts the
+// output on the error as buffers, which a log renders as a wall of decimal
+// bytes — so the words the program actually printed are returned instead.
+const run = (path, extra = []) => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", path, ...extra], { stdio: "pipe" })
+      .toString()
+      .trim();
+  } catch (problem) {
+    const said = [problem.stdout, problem.stderr]
+      .map((buffer) => (buffer ? buffer.toString().trim() : ""))
+      .filter(Boolean)
+      .join("\n");
+    return said || `exited with ${problem.status ?? "no status"} and said nothing`;
+  }
+};
 
 const first = run(built);
 if (first !== "Bundled true") {
