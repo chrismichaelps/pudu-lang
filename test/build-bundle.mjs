@@ -46,10 +46,26 @@ writeFileSync(source, program);
 
 const failures = [];
 
-execFileSync(executable, ["build", source, "-o", built], { stdio: "pipe" });
+const buildSaid = execFileSync(executable, ["build", source, "-o", built], { stdio: "pipe" })
+  .toString()
+  .trim();
 
 if (!existsSync(built)) {
   console.error("build-bundle: pudu build wrote no file");
+  process.exit(1);
+}
+
+// A bundle carrying only what the author wrote is not a bundle: it would run
+// here, where the library is on the disk anyway, and fail on the machine this
+// gate exists to speak for. The build says how many modules it carried, and
+// this program imports three library modules, so anything near one means the
+// library was compiled against and then left out — a failure of the build
+// rather than of the running, and worth saying at the build.
+const carried = Number(/\((\d+) modules\)/.exec(buildSaid)?.[1] ?? 0);
+if (carried < 4) {
+  console.error(
+    `build-bundle: the build carried ${carried} modules, so the library was left out: ${JSON.stringify(buildSaid)}`
+  );
   process.exit(1);
 }
 
