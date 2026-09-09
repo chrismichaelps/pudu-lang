@@ -13,6 +13,7 @@ testProtocolEvaluation = do
   realFormats <- runEntry "test-fixtures/stdlib/UsesFormats2.pudu"
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
   htmlServer <- runEntry "test-fixtures/stdlib/UsesHtmlServer.pudu"
+  htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
@@ -350,6 +351,12 @@ testProtocolEvaluation = do
     , counterexample
         "a page rendered from a prepared plan, its holes, its limit, and its escaping"
         (htmlServer === Just "18")
+    {-| Every export of the markup builder, checked against what it renders:
+        each attribute against the attribute it sets, each tag against its own
+        opening tag, and text against the escaping that keeps it text. -}
+    , counterexample
+        "every tag and attribute renders the markup it names"
+        (htmlBuild === Just "97")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

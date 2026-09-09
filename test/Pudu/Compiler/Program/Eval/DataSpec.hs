@@ -24,8 +24,15 @@ testDataEvaluation = do
   columnVectors <- runEntry "test-fixtures/stdlib/UsesColumn.pudu"
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
   dbRows <- runEntry "test-fixtures/stdlib/UsesDbRow.pudu"
+  listAll <- runEntry "test-fixtures/stdlib/UsesListAll.pudu"
   pure $ conjoin
-    [ {-| Reading a result set, checked hardest where a database hurts: a
+    [ {-| Every export of the list module against a stated answer, naming the
+          whole result rather than its length, so a function that answers the
+          right shape with the wrong contents fails here. -}
+      counterexample
+        "every list operation answers what it says it answers"
+        (listAll === Just "90")
+    , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those
           with a default rather than an error is how a report goes quietly

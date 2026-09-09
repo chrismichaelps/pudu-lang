@@ -2,42 +2,27 @@ module Std.Html.Build
 
 import Std.Html as Html
 
-/// Markup written the way it reads.
-///
-/// `Html.element` takes a tag as text, attributes as pairs, and children as a
-/// third argument, so every element costs three brackets and two ampersands
-/// before it says anything:
-///
-/// ```
-/// Html.element("button", &[("class", "send"), ("type", "submit")], &[Html.text("Post")])
-/// ```
-///
-/// The same button here:
+/// Builds HTML by naming a tag as a function and its attributes as methods.
 ///
 /// ```
 /// button().class("send").submit().says("Post")
 /// ```
 ///
-/// What changed is not brevity for its own sake. The tag is a function, so a
-/// misspelled one is a compile error and an editor can offer the list; the
-/// attributes are methods, so the same is true of them; and the nesting that
-/// remains is the nesting of the document, not of the calls that build it.
+/// renders `<button class="send" type="submit">Post</button>`.
 ///
-/// A node is a value that is added to, and every method answers a new one, so
-/// nothing is shared and a half-built node can be kept and finished twice.
+/// A node holds a tag name, its attributes in the order they were given, and
+/// its children. Every method answers a new node, so a partly built node may
+/// be kept and finished more than once.
 export type Node = { name: Str, attributes: Array[(Str, Str)], children: Array[Html.Html] }
 
-/// What every node can be told.
+/// The attributes and content a node accepts.
 ///
-/// Attributes are named rather than spelled out with `at` wherever they are
-/// common enough that a reader would recognise the name; `at` remains for
-/// everything else, so the set here can stay small without shutting anything
-/// out.
+/// Common attributes have a method of their own; `at` sets any other.
 export trait Building {
-  /// Any attribute, for the ones without a method of their own.
+  /// Sets an attribute to a value.
   fn at(self: &Self, name: Str, value: Str) -> Self
 
-  /// An attribute with no value, like `required` or `disabled`.
+  /// Sets an attribute whose value is its own name, such as `required`.
   fn flag(self: &Self, name: Str) -> Self
 
   fn class(self: &Self, value: Str) -> Self
@@ -58,42 +43,38 @@ export trait Building {
   fn rows(self: &Self, value: Int) -> Self
   fn cols(self: &Self, value: Int) -> Self
 
-  /// The `type` attribute, which cannot be a method called `type`.
+  /// Sets the `type` attribute. Named `kind` because `type` is a keyword.
   fn kind(self: &Self, value: Str) -> Self
 
-  /// `type="submit"`, which is most of what `kind` is used for on a button.
+  /// Sets `type="submit"`.
   fn submit(self: &Self) -> Self
 
   fn required(self: &Self) -> Self
   fn disabled(self: &Self) -> Self
   fn checked(self: &Self) -> Self
 
-  /// What a screen reader should call this when the visible text will not do.
+  /// Sets `aria-label`, the name assistive software reads.
   fn label(self: &Self, value: Str) -> Self
 
-  /// A `data-` attribute, named without its prefix.
+  /// Sets a `data-` attribute. The name is given without the prefix.
   fn data(self: &Self, name: Str, value: Str) -> Self
 
-  /// Text inside the element, escaped.
-  ///
-  /// Escaped without asking, because the alternative is a page that runs what
-  /// a visitor typed. `raw` exists for the rare case that is genuinely markup,
-  /// and it is spelled differently so that reaching for it is a decision.
+  /// Appends text as a child. The text is escaped.
   fn says(self: &Self, content: Str) -> Self
 
-  /// Markup inside the element, not escaped.
+  /// Appends markup as a child without escaping it.
+  ///
+  /// Only for markup the program produced. Text that came from a request or a
+  /// database belongs in `says`.
   fn raw(self: &Self, markup: Str) -> Self
 
-  /// Children, in document order.
+  /// Appends nodes as children, in the order given.
   fn holding(self: &Self, children: Array[Node]) -> Self
 
-  /// One already-built view inside this element.
+  /// Appends an already-rendered view as a child.
   fn holds(self: &Self, view: Html.Html) -> Self
 
-  /// A child that is only there under some condition.
-  ///
-  /// Written as a method so that a conditional part of a document does not
-  /// have to break the chain into statements and a mutable array.
+  /// Appends a child only when the condition holds.
   fn when(self: &Self, condition: Bool, child: Node) -> Self
 
   /// The view this node describes.
@@ -175,12 +156,8 @@ impl Building for Node {
     if condition { self.holds(child.html()) } else { *self }
   }
 
-  /// A node with no tag is its children and nothing else.
-  ///
-  /// That is what `words` and `nothing` are, and rendering them as an element
-  /// would put `<>` in the page — a tag with an empty name, which a browser
-  /// shows as text. A branch of a document that renders nothing has to render
-  /// nothing, not an element that happens to be invisible in most places.
+  /// A node with no tag name renders as its children alone, with no element
+  /// around them. That is what `words` and `nothing` produce.
   fn html(self: &Self) -> Html.Html {
     if self.name.isEmpty() {
       Html.fragment(&self.children)
@@ -190,20 +167,19 @@ impl Building for Node {
   }
 }
 
-/// An element by name, for a tag without a function of its own.
+/// An element with the given tag name, for tags without a function here.
 export fn tag(name: Str) -> Node { Node{name: name, attributes: [], children: []} }
 
-/// Text, as a node, so it can sit in a list beside elements.
+/// Text as a node, so it can appear in a list beside elements. Escaped.
 export fn words(content: Str) -> Node {
   Node{name: "", attributes: [], children: [Html.text(content)]}
 }
 
-/// Nothing, for a branch of a document that renders no element.
+/// A node that renders nothing.
 export fn nothing() -> Node { Node{name: "", attributes: [], children: []} }
 
-// The tags. Each is the same one line, so what a reader learns from the first
-// applies to all of them: the function is the tag, and everything else is said
-// by chaining.
+// One function per tag. Each answers an empty node with that tag name;
+// attributes and children are added by the methods above.
 
 export fn html() -> Node { tag("html") }
 
@@ -329,12 +305,8 @@ export fn dialog() -> Node { tag("dialog") }
 
 export fn progress() -> Node { tag("progress") }
 
-/// A whole document, rendered.
-///
-/// The doctype is written here rather than left to the caller, because a page
-/// without one is rendered by browsers in a mode nobody wants and the mistake
-/// is invisible until a layout is subtly wrong.
+/// Renders a node as a whole document, prefixed with `<!DOCTYPE html>`.
 export fn document(root: &Node) -> Str { "<!DOCTYPE html>" + Html.render(&root.html()) }
 
-/// One node, rendered, for a fragment answered on its own.
+/// Renders a node on its own, without a doctype.
 export fn render(node: &Node) -> Str { Html.render(&node.html()) }

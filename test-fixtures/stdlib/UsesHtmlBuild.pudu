@@ -1,0 +1,186 @@
+module UsesHtmlBuild
+
+import Std.Html.Build as H
+
+/// Every export of `Std.Html.Build`, checked by what it renders.
+///
+/// Each tag is rendered on its own and compared against the markup it should
+/// produce, so a tag function naming the wrong element is caught here rather
+/// than by reading a page.
+fn rendered(node: &H.Node) -> Str { H.render(node) }
+
+/// Anything that builds accepts the same attributes, named by the trait rather
+/// than by the node type, so the trait itself is exercised.
+fn classed[T: H.Building](node: &T, name: Str) -> T { node.class(name) }
+
+export fn main() -> Int {
+  var held = 0
+
+  // Attributes appear in the order they were set.
+  let attributed = rendered(
+      &H.div()
+      .id("one")
+      .class("two")
+      .at("data-x", "3")
+      .flag("hidden")
+      .title("t")
+      .role("note")
+      .lang("en")
+      .target("_blank")
+      .label("named")
+      .data("k", "v")
+  )
+  if attributed.contains("id=\"one\"") { held = held + 1 }
+  if attributed.contains("class=\"two\"") { held = held + 1 }
+  if attributed.contains("data-x=\"3\"") { held = held + 1 }
+  if attributed.contains("hidden=\"hidden\"") { held = held + 1 }
+  if attributed.contains("title=\"t\"") { held = held + 1 }
+  if attributed.contains("role=\"note\"") { held = held + 1 }
+  if attributed.contains("lang=\"en\"") { held = held + 1 }
+  if attributed.contains("target=\"_blank\"") { held = held + 1 }
+  if attributed.contains("aria-label=\"named\"") { held = held + 1 }
+  if attributed.contains("data-k=\"v\"") { held = held + 1 }
+
+  if rendered(&classed(&H.div(), "through-the-trait")).contains("through-the-trait") {
+    held = held + 1
+  }
+
+  // The form attributes.
+  let field = rendered(
+      &H.input()
+      .name("who")
+      .value("ada")
+      .placeholder("name")
+      .kind("text")
+      .required()
+      .disabled()
+      .checked()
+  )
+  if field.contains("name=\"who\"") { held = held + 1 }
+  if field.contains("value=\"ada\"") { held = held + 1 }
+  if field.contains("placeholder=\"name\"") { held = held + 1 }
+  if field.contains("type=\"text\"") { held = held + 1 }
+  if field.contains("required=\"required\"") { held = held + 1 }
+  if field.contains("disabled=\"disabled\"") { held = held + 1 }
+  if field.contains("checked=\"checked\"") { held = held + 1 }
+
+  let posted = rendered(&H.form().method("post").action("/x"))
+  if posted.contains("method=\"post\"") && posted.contains("action=\"/x\"") { held = held + 1 }
+
+  let linked = rendered(&H.a().href("/y").rel("next"))
+  if linked.contains("href=\"/y\"") && linked.contains("rel=\"next\"") { held = held + 1 }
+
+  let pictured = rendered(&H.img().src("/p.png").alt("a picture"))
+  if pictured.contains("src=\"/p.png\"") && pictured.contains("alt=\"a picture\"") { held = held + 1 }
+
+  let box = rendered(&H.textarea().rows(4).cols(20))
+  if box.contains("rows=\"4\"") && box.contains("cols=\"20\"") { held = held + 1 }
+
+  if rendered(&H.button().submit()).contains("type=\"submit\"") { held = held + 1 }
+
+  // Content. Text is escaped and markup is not, which is the difference
+  // between the two ways of adding it.
+  if rendered(&H.p().says("<b>x</b>")).contains("&lt;b&gt;") { held = held + 1 }
+  if !rendered(&H.p().says("<b>x</b>")).contains("<b>") { held = held + 1 }
+  if rendered(&H.p().raw("<b>x</b>")).contains("<b>x</b>") { held = held + 1 }
+
+  // Children, singly and in order.
+  let nested = rendered(&H.ul().holding([H.li().says("a"), H.li().says("b")]))
+  if nested == "<ul><li>a</li><li>b</li></ul>" { held = held + 1 }
+  if rendered(&H.div().holds(H.span().says("s").html())) == "<div><span>s</span></div>" {
+    held = held + 1
+  }
+
+  // A conditional child is there or it is not.
+  if rendered(&H.div().when(true, H.em().says("y"))).contains("y") { held = held + 1 }
+  if !rendered(&H.div().when(false, H.em().says("y"))).contains("y") { held = held + 1 }
+
+  // A node with no tag renders as its children alone.
+  if rendered(&H.words("plain")) == "plain" { held = held + 1 }
+  if rendered(&H.nothing()) == "" { held = held + 1 }
+  if rendered(&H.tag("custom-thing")) == "<custom-thing></custom-thing>" { held = held + 1 }
+
+  // A whole document carries the doctype; a fragment does not.
+  if H.document(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
+  if !rendered(&H.html()).startsWith("<!DOCTYPE html>") { held = held + 1 }
+
+  // Every tag function names the element it is called after.
+  held = held + namedCorrectly()
+  held
+}
+
+/// Each tag rendered empty, compared against its own opening tag.
+///
+/// Written as a list so a tag added to the module is one line here, and a tag
+/// function that names the wrong element fails on the tag it belongs to.
+fn namedCorrectly() -> Int {
+  var held = 0
+  let cases = [
+    ("html", H.html()),
+    ("head", H.head()),
+    ("body", H.body()),
+    ("meta", H.meta()),
+    ("link", H.link()),
+    ("style", H.style()),
+    ("script", H.script()),
+    ("main", H.main()),
+    ("header", H.header()),
+    ("footer", H.footer()),
+    ("nav", H.nav()),
+    ("section", H.section()),
+    ("article", H.article()),
+    ("aside", H.aside()),
+    ("div", H.div()),
+    ("span", H.span()),
+    ("p", H.p()),
+    ("h1", H.h1()),
+    ("h2", H.h2()),
+    ("h3", H.h3()),
+    ("h4", H.h4()),
+    ("h5", H.h5()),
+    ("h6", H.h6()),
+    ("ul", H.ul()),
+    ("ol", H.ol()),
+    ("li", H.li()),
+    ("dl", H.dl()),
+    ("dt", H.dt()),
+    ("dd", H.dd()),
+    ("table", H.table()),
+    ("thead", H.thead()),
+    ("tbody", H.tbody()),
+    ("tfoot", H.tfoot()),
+    ("tr", H.tr()),
+    ("th", H.th()),
+    ("td", H.td()),
+    ("form", H.form()),
+    ("fieldset", H.fieldset()),
+    ("legend", H.legend()),
+    ("label", H.labelFor()),
+    ("input", H.input()),
+    ("textarea", H.textarea()),
+    ("select", H.select()),
+    ("option", H.option()),
+    ("button", H.button()),
+    ("a", H.a()),
+    ("img", H.img()),
+    ("figure", H.figure()),
+    ("figcaption", H.figcaption()),
+    ("br", H.br()),
+    ("hr", H.hr()),
+    ("pre", H.pre()),
+    ("code", H.code()),
+    ("blockquote", H.blockquote()),
+    ("strong", H.strong()),
+    ("em", H.em()),
+    ("small", H.small()),
+    ("time", H.time()),
+    ("details", H.details()),
+    ("summary", H.summary()),
+    ("dialog", H.dialog()),
+    ("progress", H.progress())
+  ]
+  for pair in cases {
+    if H.render(&pair[1]).startsWith("<" + pair[0]) { held = held + 1 }
+  }
+  held
+}

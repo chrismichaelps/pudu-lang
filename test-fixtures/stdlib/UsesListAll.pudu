@@ -1,0 +1,167 @@
+module UsesListAll
+
+import Std.List as List
+import Std.Option as Option
+
+/// Every export of `Std.List`, checked against a stated answer.
+///
+/// Each check names the whole result rather than a length or a single element,
+/// so a function that returns the right shape with the wrong contents fails
+/// here. Where a function answers an `Option` the empty case is checked beside
+/// the present one, since that is the case a caller is most likely to meet and
+/// least likely to try.
+const ITEMS: Array[Int] = [5, 3, 9, 1, 7, 3]
+
+fn even(value: Int) -> Bool { value % 2 == 0 }
+
+fn ascending(left: Int, right: Int) -> Bool { left < right }
+
+export fn main() -> Int {
+  var held = 0
+  let items = ITEMS
+
+  // Ends and edges.
+  if Option.unwrapOr(List.first(&items), 0) == 5 { held = held + 1 }
+  if Option.unwrapOr(List.last(&items), 0) == 3 { held = held + 1 }
+  if List.initial(&items) == [5, 3, 9, 1, 7] { held = held + 1 }
+  if List.rest(&items) == [3, 9, 1, 7, 3] { held = held + 1 }
+  if Option.unwrapOr(List.get(&items, 2), 0) == 9 { held = held + 1 }
+  if Option.isNone(&List.get(&items, 99)) { held = held + 1 }
+  if List.set(&items, 0, 8) == [8, 3, 9, 1, 7, 3] { held = held + 1 }
+  if List.modify(&items, 1, fn(n: Int) -> Int => n * 10) == [5, 30, 9, 1, 7, 3] { held = held + 1 }
+  if List.isEmpty(&[]) && !List.isEmpty(&items) { held = held + 1 }
+
+  // Taking and dropping, from each end and by a test.
+  if List.take(&items, 2) == [5, 3] { held = held + 1 }
+  if List.drop(&items, 4) == [7, 3] { held = held + 1 }
+  if List.takeEnd(&items, 2) == [7, 3] { held = held + 1 }
+  if List.dropEnd(&items, 4) == [5, 3] { held = held + 1 }
+  if List.takeWhile(&items, fn(n: Int) -> Bool => n > 2) == [5, 3, 9] { held = held + 1 }
+  if List.dropWhile(&items, fn(n: Int) -> Bool => n > 2) == [1, 7, 3] { held = held + 1 }
+  if List.dropWhileEnd(&items, fn(n: Int) -> Bool => n < 5) == [5, 3, 9, 1, 7] { held = held + 1 }
+  if List.slice(&items, 1, 4) == [3, 9, 1] { held = held + 1 }
+
+  // Splitting into two.
+  if List.splitAt(&items, 2) == ([5, 3], [9, 1, 7, 3]) { held = held + 1 }
+  if List.span(&items, fn(n: Int) -> Bool => n > 2) == ([5, 3, 9], [1, 7, 3]) { held = held + 1 }
+  if List.breakWhen(&items, fn(n: Int) -> Bool => n < 2) == ([5, 3, 9], [1, 7, 3]) { held = held + 1 }
+  if List.partition(&items, even) == ([], [5, 3, 9, 1, 7, 3]) { held = held + 1 }
+
+  // Searching.
+  if Option.unwrapOr(List.find(&items, fn(n: Int) -> Bool => n > 6), 0) == 9 { held = held + 1 }
+  if Option.isNone(&List.find(&items, even)) { held = held + 1 }
+  if List.contains(&items, 9) && List.notContains(&items, 4) { held = held + 1 }
+  if List.count(&items, 3) == 2 { held = held + 1 }
+  if List.indicesOf(&items, 3) == [1, 5] { held = held + 1 }
+  if List.findIndices(&items, fn(n: Int) -> Bool => n > 4) == [0, 2, 4] { held = held + 1 }
+  if Option.unwrapOr(List.lookup(&[("a", 1), ("b", 2)], "b"), 0) == 2 { held = held + 1 }
+  if Option.isNone(&List.lookup(&[("a", 1)], "z")) { held = held + 1 }
+
+  // Folding and scanning, from each end.
+  if List.fold(&items, fn(total: Int, n: Int) -> Int => total + n, 0) == 28 { held = held + 1 }
+  if List.foldRight(&items, fn(n: Int, total: Int) -> Int => total - n, 0) == 0 - 28 { held = held + 1 }
+  if List.scan(&[1, 2, 3], fn(total: Int, n: Int) -> Int => total + n, 0) == [0, 1, 3, 6] {
+    held = held + 1
+  }
+  if List.scanRight(&[1, 2, 3], fn(n: Int, total: Int) -> Int => total + n, 0) == [6, 5, 3, 0] {
+    held = held + 1
+  }
+  if List.mapAccum(&[1, 2, 3], fn(total: Int, n: Int) -> (Int, Int) => (total + n, total), 0)
+    == (6, [0, 1, 3]) {
+    held = held + 1
+  }
+
+  // Every and some.
+  if List.all(&items, fn(n: Int) -> Bool => n > 0) { held = held + 1 }
+  if !List.all(&items, even) { held = held + 1 }
+  if List.any(&items, fn(n: Int) -> Bool => n == 9) { held = held + 1 }
+  if !List.any(&items, even) { held = held + 1 }
+
+  // Arithmetic over the whole.
+  if Option.unwrapOr(List.product(&[2, 3, 4]), 0) == 24 { held = held + 1 }
+  if Option.isNone(&List.product[Int](&[])) { held = held + 1 }
+  if List.productOr(&[2, 3], 1) == 6 && List.productOr(&[], 1) == 1 { held = held + 1 }
+
+  // Order.
+  if List.reversed(&items) == [3, 7, 1, 9, 3, 5] { held = held + 1 }
+  if List.sortBy(&items, ascending) == [1, 3, 3, 5, 7, 9] { held = held + 1 }
+  if List.sortOn(&[(2, "b"), (1, "a")], fn(pair: (Int, Str)) -> Int => pair[0])
+    == [(1, "a"), (2, "b")] {
+    held = held + 1
+  }
+  if List.insertBy(&[1, 3, 5], 4, ascending) == [1, 3, 4, 5] { held = held + 1 }
+  if List.insertOrdered(&[1, 3, 5], 4) == [1, 3, 4, 5] { held = held + 1 }
+  if List.merge(&[1, 4], &[2, 3]) == [1, 2, 3, 4] { held = held + 1 }
+  if List.mergeBy(&[1, 4], &[2, 3], ascending) == [1, 2, 3, 4] { held = held + 1 }
+
+  // Extremes, by a comparison and by a key.
+  if Option.unwrapOr(List.minimumBy(&items, ascending), 0) == 1 { held = held + 1 }
+  if Option.unwrapOr(List.maximumBy(&items, ascending), 0) == 9 { held = held + 1 }
+  if Option.unwrapOr(List.minimumOn(&items, fn(n: Int) -> Int => 0 - n), 0) == 9 { held = held + 1 }
+  if Option.unwrapOr(List.maximumOn(&items, fn(n: Int) -> Int => 0 - n), 0) == 1 { held = held + 1 }
+  if Option.isNone(&List.minimumBy(&[], ascending)) { held = held + 1 }
+  if Option.isNone(&List.maximumOn[Int, Int](&[], fn(n: Int) -> Int => n)) { held = held + 1 }
+
+  // Grouping and runs.
+  if List.group(&[1, 1, 2, 3, 3]) == [[1, 1], [2], [3, 3]] { held = held + 1 }
+  if List.groupBy(&[1, 1, 2], fn(a: Int, b: Int) -> Bool => a == b) == [[1, 1], [2]] {
+    held = held + 1
+  }
+  if List.distinctBy(&[1, 1, 2, 1], fn(a: Int, b: Int) -> Bool => a == b) == [1, 2] {
+    held = held + 1
+  }
+  if List.chunksOf(&[1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]] { held = held + 1 }
+  if List.windows(&[1, 2, 3, 4], 2) == [[1, 2], [2, 3], [3, 4]] { held = held + 1 }
+
+  // Flattening and joining.
+  if List.flatten(&[[1, 2], [3]]) == [1, 2, 3] { held = held + 1 }
+  if List.flatMap(&[1, 2], fn(n: Int) -> Array[Int] => [n, n]) == [1, 1, 2, 2] { held = held + 1 }
+  if List.intersperse(&[1, 2, 3], 0) == [1, 0, 2, 0, 3] { held = held + 1 }
+  if List.intercalate(&[[1], [2]], &[0]) == [1, 0, 2] { held = held + 1 }
+
+  // Set-like operations, keeping order.
+  if List.union(&[1, 2], &[2, 3]) == [1, 2, 3] { held = held + 1 }
+  if List.intersection(&[1, 2, 3], &[2, 3, 4]) == [2, 3] { held = held + 1 }
+  if List.difference(&[1, 2, 3], &[2]) == [1, 3] { held = held + 1 }
+  if List.removeFirst(&[1, 2, 1], 1) == [2, 1] { held = held + 1 }
+
+  // Prefixes, suffixes and the tests that go with them.
+  if List.prefixes(&[1, 2]) == [[], [1], [1, 2]] { held = held + 1 }
+  if List.suffixes(&[1, 2]) == [[1, 2], [2], []] { held = held + 1 }
+  if List.isPrefixOf(&[1, 2], &[1, 2, 3]) { held = held + 1 }
+  if List.isSuffixOf(&[2, 3], &[1, 2, 3]) { held = held + 1 }
+  if List.isInfixOf(&[2], &[1, 2, 3]) { held = held + 1 }
+  // The part comes first, as it does for `isPrefixOf`.
+  if Option.unwrapOr(List.stripPrefix(&[1], &[1, 2, 3]), []) == [2, 3] { held = held + 1 }
+  if Option.unwrapOr(List.stripSuffix(&[3], &[1, 2, 3]), []) == [1, 2] { held = held + 1 }
+  if Option.isNone(&List.stripPrefix(&[9], &[1, 2])) { held = held + 1 }
+
+  // Pairing and unpairing.
+  if List.zip(&[1, 2], &["a", "b"]) == [(1, "a"), (2, "b")] { held = held + 1 }
+  if List.zip3(&[1], &["a"], &[true]) == [(1, "a", true)] { held = held + 1 }
+  if List.zipWith(&[1, 2], &[10, 20], fn(a: Int, b: Int) -> Int => a + b) == [11, 22] {
+    held = held + 1
+  }
+  if List.zipWith3(&[1], &[2], &[3], fn(a: Int, b: Int, c: Int) -> Int => a + b + c) == [6] {
+    held = held + 1
+  }
+  if List.unzip(&[(1, "a"), (2, "b")]) == ([1, 2], ["a", "b"]) { held = held + 1 }
+  if List.unzip3(&[(1, "a", true)]) == ([1], ["a"], [true]) { held = held + 1 }
+  if List.cartesian(&[1, 2], &["a"]) == [(1, "a"), (2, "a")] { held = held + 1 }
+  if List.transpose(&[[1, 2], [3, 4]]) == [[1, 3], [2, 4]] { held = held + 1 }
+  if List.enumerate(&["a", "b"]) == [(0, "a"), (1, "b")] { held = held + 1 }
+
+  // Building a list from nothing.
+  if List.replicate(3, 7) == [7, 7, 7] { held = held + 1 }
+  if List.range(1, 4) == [1, 2, 3] { held = held + 1 }
+  if List.iterate(3, 1, fn(n: Int) -> Int => n * 2) == [1, 2, 4] { held = held + 1 }
+  // The count is how many times the whole is repeated, not the length wanted.
+  if List.cycle(&[1, 2], 3) == [1, 2, 1, 2, 1, 2] { held = held + 1 }
+  if List.unfold(4, 1, fn(state: Int) -> Option[(Int, Int)] => Some((state, state + 1)))
+    == [1, 2, 3, 4] {
+    held = held + 1
+  }
+  if List.pick(&[10, 20, 30], &[2, 0]) == [30, 10] { held = held + 1 }
+
+  held
+}
