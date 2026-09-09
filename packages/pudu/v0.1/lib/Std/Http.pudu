@@ -875,7 +875,11 @@ fn hexPairOf(text: Str) -> Option[Int] {
   Some(total)
 }
 
-/// Exact wire payload; a binary override takes precedence over display text.
+/// The body as bytes, with a binary body taking precedence over the text one.
+///
+/// The body alone, not the status line and headers: this is what a
+/// `Content-Length` counts and what `Std.Http.Message` puts after the head it
+/// renders separately.
 export fn responseBytes(response: &Response) -> Bytes {
   match response.binaryBody {
     case Some(payload) => payload
