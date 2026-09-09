@@ -28,7 +28,6 @@ run() {
   fi
 }
 
-pudu_bin() { cabal list-bin pudu; }
 
 printf 'gates\n'
 if [ -n "${BUILD_ROOT}" ]; then
@@ -38,13 +37,23 @@ run 'no warnings, optimized' \
   cabal build all --enable-optimization=2 --ghc-options='-Werror'
 run 'full suite, optimized' \
   cabal test all --enable-optimization=2 --test-show-details=direct
+
+# `cabal list-bin` answers for the configuration it is asked about, not the one
+# that was built. Asked plainly it names the unoptimized path: right after the
+# build products are removed above that file does not exist, and on a tree that
+# has also been built unoptimized it names a binary from some earlier day, so
+# the gates below pass while testing something nobody just compiled. Resolved
+# once, with the flag the build used, and exported so the gates that run in a
+# child shell see the same answer.
+export PUDU
+PUDU=$(cabal list-bin pudu --enable-optimization=2)
 run 'every committed Pudu file is formatted' \
   bash -c 'cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name "*.pudu")'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'the language server answers a real session' \
-  bash -c 'node test/lsp-session.mjs "$(cabal list-bin pudu)"'
+  bash -c 'node test/lsp-session.mjs "$PUDU"'
 run 'the language server survives what an editor sends it' \
-  bash -c 'node test/lsp-robustness.mjs "$(cabal list-bin pudu)"'
+  bash -c 'node test/lsp-robustness.mjs "$PUDU"'
 run 'the documentation site keeps its contract' \
   bash -c 'cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs'
 

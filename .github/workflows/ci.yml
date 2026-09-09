@@ -34,8 +34,18 @@ jobs:
       - name: Verify the tree compiles with no warnings
         run: cabal build all --enable-optimization=2 --ghc-options="-Werror"
       - run: cabal build all --enable-optimization=2
+      # Every gate below runs the executable, and `cabal list-bin` answers for
+      # the configuration it is asked about rather than the one that was built.
+      # Asked without the optimization flag it names the unoptimized path: on a
+      # fresh runner that file does not exist and the gate fails for a reason
+      # that has nothing to do with the change, and on a machine that has built
+      # both it names a binary from some earlier day — which is worse, because
+      # the gates pass and the benchmark reports a figure for the wrong build.
+      # Resolved once here so no gate can disagree with what was compiled.
+      - name: Locate the executable that was built
+        run: echo "PUDU=$(cabal list-bin pudu --enable-optimization=2)" >> "$GITHUB_ENV"
       - name: Enforce scheduled API removals
-        run: python3 scripts/api-lifecycle.py check --binary "$(cabal list-bin exe:pudu)"
+        run: python3 scripts/api-lifecycle.py check --binary "$PUDU"
       # A suite that stops responding should say so and end, rather than hold
       # the runner until the job's own limit. The bound is generous against the
       # observed run so an ordinary slow day is not a failure.
@@ -53,33 +63,33 @@ jobs:
       - name: Verify every diagnostic code means one thing
         run: node test/diagnostic-codes.mjs
       - name: Verify the language server answers a real session
-        run: node test/lsp-session.mjs "$(cabal list-bin pudu)"
+        run: node test/lsp-session.mjs "$PUDU"
       - name: Verify the language server survives what an editor sends it
-        run: node test/lsp-robustness.mjs "$(cabal list-bin pudu)"
+        run: node test/lsp-robustness.mjs "$PUDU"
       # A running process is the only place this can be checked: the request
       # arrives from outside, and what is under test is what a program already
       # running does with it.
       - name: Verify a program asked to stop drains rather than being killed
-        run: node test/signal-drain.mjs "$(cabal list-bin pudu)"
+        run: node test/signal-drain.mjs "$PUDU"
       # Run with an empty environment and from another directory, because what
       # is under test is that the built file needs nothing from around it.
       - name: Verify a built program runs with nothing installed
-        run: node test/build-bundle.mjs "$(cabal list-bin pudu)"
+        run: node test/build-bundle.mjs "$PUDU"
       # Against libraries nobody here wrote, in the shapes their own headers
       # declare. Every other foreign fixture calls a shim from `cbits`, which
       # can be given whatever signature the boundary happens to admit.
       - name: Verify the foreign boundary reaches third-party libraries
-        run: node test/foreign-third-party.mjs "$(cabal list-bin pudu)"
+        run: node test/foreign-third-party.mjs "$PUDU"
       # A service that answers, measured end to end. The figures are not
       # asserted — a shared runner's are not comparable between runs — but a
       # service that stopped answering at all is a failure worth catching here.
       - name: Verify a service answers over a socket
-        run: node bench/request.mjs "$(cabal list-bin pudu)" --requests 40
+        run: node bench/request.mjs "$PUDU" --requests 40
       # Everything a new project's own README tells somebody to run, run in a
       # project made outside this checkout — where the standard library is not
       # sitting beside the compiler's sources.
       - name: Verify a new project works from the moment it is made
-        run: node test/scaffold.mjs "$(cabal list-bin pudu)"
+        run: node test/scaffold.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
