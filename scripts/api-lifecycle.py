@@ -14,6 +14,25 @@ def version(text):
   return tuple(map(int, text.split(".")))
 
 
+def exported_names(binary, package, current_text, modules):
+  paths = [package / "lib" / Path(*name.split(".")).with_suffix(".pudu") for name in sorted(modules)]
+  existing = [str(path) for path in paths if path.is_file()]
+  if not existing:
+    return set()
+  result = subprocess.run(
+    [binary, "api", "--json", *existing],
+    check=True,
+    text=True,
+    capture_output=True,
+    cwd=package,
+    env=dict(os.environ, PUDU_LIB=str(package / "lib")),
+  )
+  index = json.loads(result.stdout)
+  if index["version"] != current_text:
+    raise ValueError("API index version differs from package")
+  return {(entry["module"], entry["name"]) for entry in index["exports"]}
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("command", choices=("schedule", "check"))
@@ -42,6 +61,12 @@ def main():
     version(record["deprecatedIn"])
     if not re.fullmatch(r"Std(?:\.[A-Za-z_][A-Za-z_0-9]*)+", key[0]) or not key[1]:
       parser.error("invalid standard-library API identity")
+  if not args.binary:
+    parser.error("schedule and check require --binary")
+  binary = str(Path(args.binary).resolve())
+  reported = subprocess.run([binary, "version"], check=True, text=True, capture_output=True).stdout.strip()
+  if reported != f"pudu {current_text}":
+    parser.error("binary and selected package versions differ")
   if args.command == "schedule":
     if not args.module or not args.name:
       parser.error("schedule requires a module and exported name")
@@ -49,6 +74,8 @@ def main():
       parser.error("module must name a standard-library module")
     if (args.module, args.name) in seen:
       parser.error("API already has a removal policy")
+    if (args.module, args.name) not in exported_names(binary, package, current_text, {args.module}):
+      parser.error("cannot schedule removal of an API absent from the selected package")
     records.append({"module": args.module, "name": args.name, "deprecatedIn": current_text})
     temporary = policy_path.with_suffix(".pending")
     with temporary.open("x") as stream:
@@ -56,31 +83,9 @@ def main():
       stream.write("\n")
     os.replace(temporary, policy_path)
     return
-  if not args.binary:
-    parser.error("check requires --binary")
-  binary = str(Path(args.binary).resolve())
-  reported = subprocess.run([binary, "version"], check=True, text=True, capture_output=True).stdout.strip()
-  if reported != f"pudu {current_text}":
-    parser.error("binary and selected package versions differ")
   active = [record for record in records if current >= version(record["deprecatedIn"])]
   modules = {record["module"] for record in active}
-  paths = [package / "lib" / Path(*name.split(".")).with_suffix(".pudu") for name in sorted(modules)]
-  existing = [str(path) for path in paths if path.is_file()]
-  exports = set()
-  if existing:
-    env = dict(os.environ, PUDU_LIB=str(package / "lib"))
-    result = subprocess.run(
-      [binary, "api", "--json", *existing],
-      check=True,
-      text=True,
-      capture_output=True,
-      cwd=package,
-      env=env
-    )
-    index = json.loads(result.stdout)
-    if index["version"] != current_text:
-      parser.error("API index version differs from package")
-    exports = {(entry["module"], entry["name"]) for entry in index["exports"]}
+  exports = exported_names(binary, package, current_text, modules)
   failures = []
   for record in active:
     key = (record["module"], record["name"])
