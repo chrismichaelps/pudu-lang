@@ -1,0 +1,107 @@
+module UsesSetAll
+
+import Std.Option as Option
+import Std.Set as Set
+
+/// Every export of `Std.Set`, checked against a stated answer.
+///
+/// Members come back in order, so a whole set is compared as its array rather
+/// than by asking after each member. The empty set is asked the same questions
+/// as a full one: an empty set is a subset of everything and disjoint from
+/// everything, and those are the answers most easily got wrong.
+fn sample() -> Set[Int] { Set.fromArray(&[3, 1, 2]) }
+
+fn none() -> Set[Int] { Set.empty() }
+
+export fn main() -> Int {
+  var held = 0
+  let items = sample()
+
+  // Building. Members are ordered and duplicates collapse.
+  if Set.toArray(&items) == [1, 2, 3] { held = held + 1 }
+  if Set.toArray(&Set.fromArray(&[1, 1, 2])) == [1, 2] { held = held + 1 }
+  if Set.toArray(&Set.singleton(7)) == [7] { held = held + 1 }
+  if Set.size(&items) == 3 && Set.size(&none()) == 0 { held = held + 1 }
+  if Set.isEmpty(&none()) && !Set.isEmpty(&items) { held = held + 1 }
+
+  // Membership.
+  if Set.contains(&items, 2) && !Set.contains(&items, 9) { held = held + 1 }
+  if Set.containsAll(&items, &[1, 3]) && !Set.containsAll(&items, &[1, 9]) { held = held + 1 }
+  if Set.containsAll(&items, &[]) { held = held + 1 }
+
+  // Writing, singly and in bulk.
+  if Set.toArray(&Set.insert(&items, 4)) == [1, 2, 3, 4] { held = held + 1 }
+  if Set.toArray(&Set.insert(&items, 2)) == [1, 2, 3] { held = held + 1 }
+  if Set.toArray(&Set.remove(&items, 2)) == [1, 3] { held = held + 1 }
+  if Set.toArray(&Set.remove(&items, 9)) == [1, 2, 3] { held = held + 1 }
+  if Set.toArray(&Set.insertAll(&items, &[4, 5])) == [1, 2, 3, 4, 5] { held = held + 1 }
+  if Set.toArray(&Set.removeAll(&items, &[1, 3])) == [2] { held = held + 1 }
+  if Set.toArray(&Set.removeIf(&items, fn(n: Int) -> Bool => n > 1)) == [1] { held = held + 1 }
+
+  // Two sets together.
+  let other = Set.fromArray(&[2, 3, 4])
+  if Set.toArray(&Set.union(&items, &other)) == [1, 2, 3, 4] { held = held + 1 }
+  if Set.toArray(&Set.intersection(&items, &other)) == [2, 3] { held = held + 1 }
+  if Set.toArray(&Set.difference(&items, &other)) == [1] { held = held + 1 }
+  if Set.toArray(&Set.symmetricDifference(&items, &other)) == [1, 4] { held = held + 1 }
+  if Set.toArray(&Set.unionAll(&[items, other])) == [1, 2, 3, 4] { held = held + 1 }
+  if Set.toArray(&Set.intersectAll(&[items, other])) == [2, 3] { held = held + 1 }
+
+  // How two sets stand to one another.
+  if Set.isSubsetOf(&Set.fromArray(&[1, 2]), &items) { held = held + 1 }
+  if !Set.isSubsetOf(&items, &Set.fromArray(&[1, 2])) { held = held + 1 }
+  if Set.isSupersetOf(&items, &Set.fromArray(&[1, 2])) { held = held + 1 }
+  if Set.equals(&items, &Set.fromArray(&[3, 2, 1])) { held = held + 1 }
+  if !Set.equals(&items, &other) { held = held + 1 }
+  if Set.intersects(&items, &other) { held = held + 1 }
+  if !Set.intersects(&items, &Set.fromArray(&[9])) { held = held + 1 }
+  if Set.isDisjointFrom(&items, &Set.fromArray(&[9])) { held = held + 1 }
+  if !Set.isDisjointFrom(&items, &other) { held = held + 1 }
+  // The empty set is inside every set and shares a member with none.
+  if Set.isSubsetOf(&none(), &items) && Set.isDisjointFrom(&none(), &items) { held = held + 1 }
+
+  // Over every member.
+  if Set.toArray(&Set.filter(&items, fn(n: Int) -> Bool => n > 1)) == [2, 3] { held = held + 1 }
+  if Set.toArray(&Set.map(&items, fn(n: Int) -> Int => n * 2)) == [2, 4, 6] { held = held + 1 }
+  // Members that map together collapse, since the answer is a set.
+  if Set.toArray(&Set.map(&items, fn(_n: Int) -> Int => 0)) == [0] { held = held + 1 }
+  if Set.fold(&items, fn(total: Int, n: Int) -> Int => total + n, 0) == 6 { held = held + 1 }
+  if Set.fold(&none(), fn(total: Int, n: Int) -> Int => total + n, 0) == 0 { held = held + 1 }
+  if Set.all(&items, fn(n: Int) -> Bool => n > 0) && !Set.all(&items, fn(n: Int) -> Bool => n > 1) {
+    held = held + 1
+  }
+  if Set.any(&items, fn(n: Int) -> Bool => n == 3) && !Set.any(&items, fn(n: Int) -> Bool => n == 9) {
+    held = held + 1
+  }
+  // Every member of nothing holds; some member of nothing does not.
+  if Set.all(&none(), fn(n: Int) -> Bool => n > 99) && !Set.any(&none(), fn(n: Int) -> Bool => true) {
+    held = held + 1
+  }
+  if Set.count(&items, fn(n: Int) -> Bool => n > 1) == 2 { held = held + 1 }
+  if Option.unwrapOr(Set.find(&items, fn(n: Int) -> Bool => n > 2), 0) == 3 { held = held + 1 }
+  if Option.isNone(&Set.find(&items, fn(n: Int) -> Bool => n > 9)) { held = held + 1 }
+  let split = Set.partition(&items, fn(n: Int) -> Bool => n > 1)
+  if Set.toArray(&split[0]) == [2, 3] && Set.toArray(&split[1]) == [1] { held = held + 1 }
+
+  // Position and the ends.
+  if Option.unwrapOr(Set.at(&items, 1), 0) == 2 { held = held + 1 }
+  if Option.isNone(&Set.at(&items, 99)) { held = held + 1 }
+  if Option.unwrapOr(Set.least(&items), 0) == 1 { held = held + 1 }
+  if Option.unwrapOr(Set.greatest(&items), 0) == 3 { held = held + 1 }
+  if Option.isNone(&Set.least(&none())) && Option.isNone(&Set.greatest(&none())) { held = held + 1 }
+  if Set.toArray(&Set.removeLeast(&items)) == [2, 3] { held = held + 1 }
+  if Set.toArray(&Set.removeGreatest(&items)) == [1, 2] { held = held + 1 }
+  if Set.isEmpty(&Set.removeLeast(&none())) && Set.isEmpty(&Set.removeGreatest(&none())) {
+    held = held + 1
+  }
+
+  // Cut in two around a member, and paired with another set.
+  let sides = Set.split(&items, 2, fn(a: Int, b: Int) -> Bool => a < b)
+  if Set.toArray(&sides[0]) == [1] && Set.toArray(&sides[1]) == [3] { held = held + 1 }
+  if Set.toArray(&Set.cartesian(&Set.fromArray(&[1, 2]), &Set.fromArray(&["a"])))
+    == [(1, "a"), (2, "a")] {
+    held = held + 1
+  }
+
+  held
+}

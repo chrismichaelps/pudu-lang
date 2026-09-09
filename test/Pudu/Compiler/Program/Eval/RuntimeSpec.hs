@@ -47,6 +47,7 @@ testRuntimeEvaluation = do
   numbers <- runEntry "test-fixtures/stdlib/UsesNumberText.pudu"
   characters <- runEntry "test-fixtures/stdlib/UsesCharAll.pudu"
   textual <- runEntry "test-fixtures/stdlib/UsesTextAll.pudu"
+  optionResult <- runEntry "test-fixtures/stdlib/UsesOptionResultAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -66,6 +67,13 @@ testRuntimeEvaluation = do
     , counterexample
         "every text operation answers what it says it answers"
         (textual === Just "82")
+    {-| Every export of the option and result modules, each asked of a value
+        that is there and one that is not. These two exist for the absent
+        case, so a check that only covered the present one would be the half
+        nobody needed. -}
+    , counterexample
+        "an option and a result answer for the absent case as well as the present one"
+        (optionResult === Just "73")
     , counterexample "an aliased and a selected import both evaluate"
         (ran === Just "35")
     , counterexample "generic and text modules link together"

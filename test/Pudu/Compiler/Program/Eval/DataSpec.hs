@@ -25,6 +25,8 @@ testDataEvaluation = do
   hashed <- runEntry "test-fixtures/stdlib/UsesHashMap.pudu"
   dbRows <- runEntry "test-fixtures/stdlib/UsesDbRow.pudu"
   listAll <- runEntry "test-fixtures/stdlib/UsesListAll.pudu"
+  mapAll <- runEntry "test-fixtures/stdlib/UsesMapAll.pudu"
+  setAll <- runEntry "test-fixtures/stdlib/UsesSetAll.pudu"
   pure $ conjoin
     [ {-| Every export of the list module against a stated answer, naming the
           whole result rather than its length, so a function that answers the
@@ -32,6 +34,16 @@ testDataEvaluation = do
       counterexample
         "every list operation answers what it says it answers"
         (listAll === Just "92")
+    {-| Every export of the map and set modules against a stated answer. The
+        empty one is asked the same questions as a full one: that is where a
+        fold has nothing to fold and an extreme has no answer, and where an
+        empty set is a subset of everything and shares a member with nothing. -}
+    , counterexample
+        "every map operation answers what it says it answers"
+        (mapAll === Just "60")
+    , counterexample
+        "every set operation answers what it says it answers"
+        (setAll === Just "53")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those
