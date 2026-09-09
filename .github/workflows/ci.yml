@@ -99,6 +99,11 @@ jobs:
       # sitting beside the compiler's sources.
       - name: Verify a new project works from the moment it is made
         run: node test/scaffold.mjs "$PUDU"
+      # A module gaining an export gains no test with it, so the untested part
+      # of the library grows quietly. The floor only rises, so that growth has
+      # to be deliberate.
+      - name: Verify the fixtures still reach as much of the library
+        run: node test/api-coverage.mjs "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
