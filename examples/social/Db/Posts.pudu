@@ -1,0 +1,141 @@
+module Db.Posts
+
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Option as Option
+
+/// Posts, and the counts a feed shows beside them.
+///
+/// A post is read together with how many people approved it and how many
+/// replied, in one statement rather than one statement per post. A feed of
+/// forty posts that counted separately would run eighty-one queries to draw
+/// one page, and would draw it from eighty-one different moments.
+export type Post = {
+  id: Int,
+  author: Str,
+  body: Str,
+  written: Int,
+  approvals: Int,
+  replies: Int,
+  approvedByReader: Bool
+}
+
+export type PostError = { message: Str }
+
+/// The feed: newest first, with counts, and whether this reader approved each.
+///
+/// The reader is a parameter rather than a second query, because "did I like
+/// this" is part of what a row looks like to whoever is asking, and asking
+/// separately would mean holding a set of post identifiers in the page just to
+/// colour a button.
+export fn feed(db: &Database.Database, reader: Str, limit: Int) -> Result[Array[Post], PostError] {
+  read(
+    db,
+    withCounts("") + " ORDER BY p.written DESC, p.id DESC LIMIT ?",
+      &[Driver.TextValue(reader), Driver.IntegerValue(big(limit))]
+  )
+}
+
+/// One post, or nothing.
+export fn find(db: &Database.Database, reader: Str, id: Int) -> Result[Option[Post], PostError] {
+  let found = read(
+    db,
+    withCounts(" WHERE p.id = ?"),
+      &[Driver.TextValue(reader), Driver.IntegerValue(big(id))]
+  ) ?
+  if found.length() == 0 { Ok(None) } else { Ok(Some(found[0])) }
+}
+
+/// Write a post and answer it as the feed would show it.
+export fn add(db: &Database.Database, author: Str, body: Str, at: Int) -> Result[Post, PostError] {
+  match Database.query(
+    db,
+    "INSERT INTO post (author, body, written) VALUES (?, ?, ?)",
+      &[Driver.TextValue(author), Driver.TextValue(body), Driver.IntegerValue(big(at))]
+  ) {
+    case Err(problem) => Err(PostError{message: problem.message})
+    case Ok(_) => {
+      let recent = read(
+        db,
+        withCounts("") + " ORDER BY p.id DESC LIMIT 1",
+          &[Driver.TextValue(author)]
+      ) ?
+      if recent.length() == 0 {
+        Err(PostError{message: "the post was written and could not be read back"})
+      } else {
+        Ok(recent[0])
+      }
+    }
+  }
+}
+
+/// Remove a post, and say whether there was one to remove.
+export fn remove(db: &Database.Database, id: Int) -> Result[Bool, PostError] {
+  let existing = find(db, "", id) ?
+  match existing {
+    case None => Ok(false)
+    case Some(_) => {
+      // The children go with it. The schema says so too, but foreign keys are
+      // off by default in SQLite and a program that relies on a setting it did
+      // not make is a program that leaves orphans on somebody else's machine.
+      for statement in [
+        "DELETE FROM approval WHERE post = ?",
+        "DELETE FROM comment WHERE post = ?",
+        "DELETE FROM post WHERE id = ?"
+      ] {
+        match Database.query(db, statement, &[Driver.IntegerValue(big(id))]) {
+          case Err(problem) => {
+            return Err(PostError{message: problem.message})
+          }
+          case Ok(_) => {}
+        }
+      }
+      Ok(true)
+    }
+  }
+}
+
+/// The one statement every read here uses.
+///
+/// Written once because the counts and the reader's own approval have to be
+/// computed the same way wherever a post is read; two spellings of the same
+/// question drift, and the feed and the single post start disagreeing about
+/// how many people liked something.
+fn withCounts(narrowing: Str) -> Str {
+  "SELECT p.id, p.author, p.body, p.written,"
+    + " (SELECT COUNT(*) FROM approval a WHERE a.post = p.id) AS approvals,"
+    + " (SELECT COUNT(*) FROM comment c WHERE c.post = p.id) AS replies,"
+    + " (SELECT COUNT(*) FROM approval a WHERE a.post = p.id AND a.reader = ?) AS mine"
+    + " FROM post p"
+    + narrowing
+}
+
+fn read(db: &Database.Database, sql: Str, values: &Array[Driver.Value]) -> Result[Array[Post], PostError] {
+  match Database.query(db, sql, values) {
+    case Err(problem) => Err(PostError{message: problem.message})
+    case Ok(rows) => {
+      let mapped = Row.map(&rows, fn(found: Driver.Rows, index: Int) -> Result[Post, Row.RowError] {
+          Ok(
+            Post {
+              id: small(Row.integer(&found, index, "id") ?),
+              author: Row.text(&found, index, "author") ?,
+              body: Row.text(&found, index, "body") ?,
+              written: small(Row.integer(&found, index, "written") ?),
+              approvals: small(Row.integer(&found, index, "approvals") ?),
+              replies: small(Row.integer(&found, index, "replies") ?),
+              approvedByReader: small(Row.integer(&found, index, "mine") ?) > 0
+            }
+          )
+        })
+      match mapped {
+        case Err(_) => Err(PostError{message: "a post row could not be read"})
+        case Ok(posts) => Ok(posts)
+      }
+    }
+  }
+}
+
+fn big(value: Int) -> Int64 { Option.unwrapOr(convertInteger[Int64](value), 0i64) }
+
+fn small(value: Int64) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }

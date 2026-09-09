@@ -1,0 +1,57 @@
+module Db.Schema
+
+import Std.App.Database as Database
+
+/// What the tables are, applied once at start-up.
+///
+/// Three tables, and the shape of the third is the whole design: a like is a
+/// row naming a post and the person who liked it, with the pair unique. Storing
+/// a count on the post instead would be one number nobody can audit — two
+/// requests arriving together each read it, each add one, and one of the two
+/// likes is gone with nothing to say so. A row per like cannot lose one, and
+/// the count is asked for rather than kept.
+export type SchemaError = { message: Str }
+
+export fn apply(db: &Database.Database) -> Result[(), SchemaError] {
+  for statement in statements() {
+    match Database.execute(db, statement) {
+      case Err(problem) => {
+        return Err(SchemaError{message: problem.message})
+      }
+      case Ok(_) => {}
+    }
+  }
+  Ok(())
+}
+
+/// The statements, in the order they must run.
+///
+/// Children are declared after their parents, and each says what it belongs to
+/// with a foreign key that removes it when the parent goes. A comment on a
+/// deleted post is not a comment on anything.
+fn statements() -> Array[Str] {
+  [
+    "CREATE TABLE IF NOT EXISTS post ("
+      + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+      + " author TEXT NOT NULL,"
+      + " body TEXT NOT NULL,"
+      + " written INTEGER NOT NULL"
+      + ")",
+    "CREATE TABLE IF NOT EXISTS comment ("
+      + " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+      + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
+      + " author TEXT NOT NULL,"
+      + " body TEXT NOT NULL,"
+      + " written INTEGER NOT NULL"
+      + ")",
+    // The pair is unique, so liking twice is refused by the table rather than
+    // by a check a caller might forget. Two requests racing cannot both win.
+    "CREATE TABLE IF NOT EXISTS approval ("
+      + " post INTEGER NOT NULL REFERENCES post(id) ON DELETE CASCADE,"
+      + " reader TEXT NOT NULL,"
+      + " PRIMARY KEY (post, reader)"
+      + ")",
+    "CREATE INDEX IF NOT EXISTS comment_by_post ON comment(post)",
+    "CREATE INDEX IF NOT EXISTS approval_by_post ON approval(post)"
+  ]
+}

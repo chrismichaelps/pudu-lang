@@ -1,0 +1,78 @@
+module Service.Commands
+
+import Std.App.Database as Database
+import Db.Tasks as Tasks
+
+/// The write side: everything that changes what is true.
+///
+/// A command is a request to change something, named for what is being asked
+/// rather than for the row it will touch. `Add("milk")` is a sentence about the
+/// world; `insertInto("task", ...)` is a sentence about a table, and a program
+/// written in the second cannot be read without the schema beside it.
+///
+/// Kept apart from the read side because the two have different shapes of
+/// answer, not because separating them is a rule. A command answers whether it
+/// happened and why not; a query answers with data and cannot fail for a reason
+/// the caller could have avoided. Sharing one type between them would make
+/// every reader of a query handle refusals that a query cannot produce.
+export type Command
+  = Add(Str)
+  | Complete(Int)
+  | Reopen(Int)
+  | Remove(Int)
+
+/// What a command did, or why it did not.
+///
+/// `Rejected` is the caller's mistake and `Missing` is the world's — the first
+/// is answered to a client as a bad request and the second as a missing thing,
+/// and a handler that could not tell them apart would answer both the same way.
+export type Outcome
+  = Applied(Str)
+  | Rejected(Str)
+  | Missing(Int)
+  | Broke(Str)
+
+/// Carry out a command.
+///
+/// Validation happens here rather than at the edge, so a command arriving over
+/// HTTP and the same command issued by a test are held to the same rule. An
+/// edge that validated on its own would be a second definition of what a valid
+/// task is, and the two would drift.
+export fn apply(db: &Database.Database, request: Command) -> Outcome {
+  match request {
+    case Add(title) => add(db, title)
+    case Complete(id) => setDone(db, id, true, "completed")
+    case Reopen(id) => setDone(db, id, false, "reopened")
+    case Remove(id) => remove(db, id)
+  }
+}
+
+/// A title is trimmed before it is judged, so a title of spaces is empty
+/// rather than a task nobody can see the name of.
+fn add(db: &Database.Database, title: Str) -> Outcome {
+  let trimmed = title.trim()
+  if trimmed.isEmpty() {
+    return Rejected("a task needs a title")
+  }
+  if trimmed.length() > 200 {
+    return Rejected("a title is at most 200 characters")
+  }
+  match Tasks.add(db, trimmed) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(saved) => Applied("added " + display(saved.id))
+  }
+}
+
+fn setDone(db: &Database.Database, id: Int, done: Bool, said: Str) -> Outcome {
+  match Tasks.setDone(db, id, done) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(found) => if found { Applied(said) } else { Missing(id) }
+  }
+}
+
+fn remove(db: &Database.Database, id: Int) -> Outcome {
+  match Tasks.remove(db, id) {
+    case Err(problem) => Broke(problem.message)
+    case Ok(found) => if found { Applied("removed") } else { Missing(id) }
+  }
+}

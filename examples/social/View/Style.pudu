@@ -1,0 +1,57 @@
+module View.Style
+
+/// The stylesheet, served as its own resource.
+///
+/// Its own resource rather than a block inside every page: the pages change on
+/// every request and this does not, so a reader's browser keeps the part that
+/// has not changed instead of fetching it again with each post.
+///
+/// Written against whichever of light and dark the reader already chose. A page
+/// that picks for them is a page that is wrong half the time.
+///
+/// Every brace is written `\{`, because a brace opens an interpolation in a
+/// Pudu string. That is the cost of holding a stylesheet in source text and the
+/// reason a raw string literal is worth having.
+export fn sheet() -> Str {
+  [
+    ":root \{ color-scheme: light dark; --bg: #f6f5f2; --card: #fff; --ink: #171c1a; --soft: #6b756f; --line: #e0e3dd; --moss: #2f6b4f; --brick: #a2432a; --warm: #f0efe9; \}",
+    "@media (prefers-color-scheme: dark) \{",
+    "  :root \{ --bg: #121412; --card: #1a1d19; --ink: #e9ece5; --soft: #8b948a; --line: #292e28; --moss: #93c7a6; --brick: #e29273; --warm: #20241f; \}",
+    "\}",
+    "* \{ box-sizing: border-box; \}",
+    "body \{ margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; \}",
+    "main \{ max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; \}",
+    "header.top \{ display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; \}",
+    "header.top h1 \{ font-size: 1.75rem; letter-spacing: -0.02em; margin: 0; \}",
+    "header.top a \{ color: var(--moss); text-decoration: none; font-weight: 600; \}",
+    ".totals \{ display: flex; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 1.5rem; \}",
+    ".totals div \{ flex: 1; background: var(--card); padding: 0.75rem 0.9rem; \}",
+    ".totals .n \{ display: block; font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; \}",
+    ".totals .k \{ display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--soft); \}",
+    "form.compose \{ background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem; margin-bottom: 1.75rem; display: flex; flex-direction: column; gap: 0.6rem; \}",
+    "form.compose textarea \{ border: 0; resize: vertical; min-height: 4.5rem; background: transparent; color: var(--ink); font: inherit; \}",
+    "form.compose textarea:focus \{ outline: none; \}",
+    "form.compose .foot \{ display: flex; gap: 0.6rem; align-items: center; \}",
+    "input.who \{ flex: 1; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; \}",
+    "button.send \{ padding: 0.55rem 1.1rem; border: 0; border-radius: 8px; background: var(--moss); color: var(--card); font: inherit; font-weight: 600; cursor: pointer; \}",
+    "ul.feed \{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.85rem; \}",
+    "li.post \{ background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1rem; \}",
+    ".byline \{ display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; \}",
+    ".byline .who \{ font-weight: 650; \}",
+    ".byline .when \{ font-size: 0.8rem; color: var(--soft); \}",
+    ".said \{ margin: 0 0 0.7rem; white-space: pre-wrap; word-break: break-word; \}",
+    ".acts \{ display: flex; align-items: center; gap: 0.4rem; \}",
+    ".acts form \{ display: flex; margin: 0; \}",
+    "button.act \{ display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--line); background: var(--bg); color: var(--soft); border-radius: 999px; padding: 0.3rem 0.7rem; font: inherit; font-size: 0.85rem; cursor: pointer; \}",
+    "button.act:hover \{ border-color: var(--moss); color: var(--moss); \}",
+    "button.act.held \{ background: var(--moss); border-color: var(--moss); color: var(--card); \}",
+    "button.act.danger:hover \{ border-color: var(--brick); color: var(--brick); \}",
+    "a.act \{ display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid var(--line); background: var(--bg); color: var(--soft); border-radius: 999px; padding: 0.3rem 0.7rem; font-size: 0.85rem; text-decoration: none; \}",
+    "a.act:hover \{ border-color: var(--moss); color: var(--moss); \}",
+    "ul.replies \{ list-style: none; margin: 1rem 0 0; padding: 0 0 0 0.9rem; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 0.8rem; \}",
+    "li.reply \{ background: var(--warm); border-radius: 10px; padding: 0.6rem 0.8rem; \}",
+    "p.empty \{ color: var(--soft); text-align: center; padding: 2.5rem 0; border: 1px dashed var(--line); border-radius: 12px; \}",
+    "p.refused \{ background: var(--warm); border: 1px solid var(--brick); color: var(--brick); border-radius: 8px; padding: 0.6rem 0.8rem; margin: 0 0 1rem; \}",
+    ".approvers \{ font-size: 0.82rem; color: var(--soft); margin: 0.5rem 0 0; \}"
+  ].join("\n")
+}

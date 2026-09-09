@@ -1,0 +1,182 @@
+module View.Board
+
+import Std.Html as Html
+import Db.Tasks as Tasks
+import Service.Queries as Queries
+
+/// The page, rendered on the server.
+///
+/// Every value that came from a person goes through `Html.text`, which is what
+/// makes a task called `<script>alert(1)</script>` show up as those characters
+/// instead of running. That is not a detail of this example: a page that
+/// renders what a visitor typed is a way into the page, and the only reliable
+/// defence is that escaping is the default rather than something remembered.
+///
+/// The form posts and the server answers with a redirect, so a reload repeats
+/// the reading rather than the writing. Without it, a person who refreshes
+/// after adding a task adds it again.
+export fn page(view: &Queries.Board) -> Str {
+  Html.render(
+      &Html.element(
+      "html",
+        &[("lang", "en")],
+        &[
+        Html.element(
+          "head",
+            &[],
+            &[
+            Html.element("meta", &[("charset", "utf-8")], &[]),
+            Html.element(
+              "meta",
+                &[("name", "viewport"), ("content", "width=device-width, initial-scale=1")],
+                &[]
+            ),
+            Html.element("title", &[], &[Html.text("Tasks")]),
+            Html.element("link", &[("rel", "stylesheet"), ("href", "/style.css")], &[])
+          ]
+        ),
+        Html.element("body", &[], &[shell(view)])
+      ]
+    )
+  )
+}
+
+fn shell(view: &Queries.Board) -> Html.Html {
+  Html.element(
+    "main",
+      &[],
+      &[
+      Html.element("h1", &[], &[Html.text("Tasks")]),
+      counts(view),
+      addForm(),
+      list(view)
+    ]
+  )
+}
+
+/// The three figures, read from the view rather than counted here.
+fn counts(view: &Queries.Board) -> Html.Html {
+  Html.element(
+    "section",
+      &[("class", "counts")],
+      &[
+      figure("total", display(view.total)),
+      figure("done", display(view.done)),
+      figure("left", display(view.remaining))
+    ]
+  )
+}
+
+fn figure(name: Str, value: Str) -> Html.Html {
+  Html.element(
+    "div",
+      &[("class", "figure")],
+      &[
+      Html.element("span", &[("class", "n")], &[Html.text(value)]),
+      Html.element("span", &[("class", "k")], &[Html.text(name)])
+    ]
+  )
+}
+
+fn addForm() -> Html.Html {
+  Html.element(
+    "form",
+      &[("class", "add"), ("method", "post"), ("action", "/tasks")],
+      &[
+      Html.element(
+        "input",
+          &[
+          ("name", "title"),
+          ("placeholder", "What needs doing?"),
+          ("autocomplete", "off"),
+          ("required", "required")
+        ],
+          &[]
+      ),
+      Html.element("button", &[("type", "submit")], &[Html.text("Add")])
+    ]
+  )
+}
+
+fn list(view: &Queries.Board) -> Html.Html {
+  if view.tasks.length() == 0 {
+    return Html.element("p", &[("class", "empty")], &[Html.text("Nothing yet. Add the first one.")])
+  }
+  var items: Array[Html.Html] = []
+  for entry in view.tasks {
+    items = items.push(row(&entry))
+  }
+  Html.element("ul", &[("class", "tasks")], &items)
+}
+
+fn row(entry: &Tasks.Task) -> Html.Html {
+  Html.element(
+    "li",
+      &[("class", if entry.done { "task done" } else { "task" })],
+      &[
+      Html.element(
+        "form",
+          &[("method", "post"), ("action", "/tasks/" + display(entry.id) + "/toggle")],
+          &[
+          Html.element(
+            "button",
+              &[("class", "mark"), ("type", "submit"), ("aria-label", "toggle")],
+              &[Html.text(if entry.done { "✓" } else { "○" })]
+          )
+        ]
+      ),
+      Html.element("span", &[("class", "title")], &[Html.text(entry.title)]),
+      Html.element(
+        "form",
+          &[("method", "post"), ("action", "/tasks/" + display(entry.id) + "/delete")],
+          &[
+          Html.element(
+            "button",
+              &[("class", "remove"), ("type", "submit"), ("aria-label", "delete")],
+              &[Html.text("×")]
+          )
+        ]
+      )
+    ]
+  )
+}
+
+/// The stylesheet, served as its own resource.
+///
+/// A resource rather than a block inside the page, which is what a service
+/// does anyway: the page changes on every request and the stylesheet does not,
+/// so serving them separately lets a reader's browser keep the one that has
+/// not changed.
+///
+/// Written against whichever of light and dark the reader has already chosen,
+/// because a page that picks for them is a page that is wrong half the time.
+export fn stylesheet() -> Str {
+  [
+    ":root \{ color-scheme: light dark; --bg: #f4f5f2; --card: #fff; --ink: #1b201d; --soft: #6d776f; --line: #dde1db; --moss: #2f6b4f; --brick: #9a4023; \}",
+    "@media (prefers-color-scheme: dark) \{",
+    "  :root \{ --bg: #141713; --card: #1c201a; --ink: #e8ebe4; --soft: #8d968a; --line: #2b312a; --moss: #8fc4a2; --brick: #e0906f; \}",
+    "\}",
+    "* \{ box-sizing: border-box; \}",
+    "body \{ margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; \}",
+    "main \{ max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; \}",
+    "h1 \{ font-size: 2rem; letter-spacing: -0.02em; margin: 0 0 1.5rem; \}",
+    ".counts \{ display: flex; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 1.75rem; \}",
+    ".figure \{ flex: 1; background: var(--card); padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.15rem; \}",
+    ".figure .n \{ font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; \}",
+    ".figure .k \{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--soft); \}",
+    "form.add \{ display: flex; gap: 0.6rem; margin-bottom: 1.5rem; \}",
+    "form.add input \{ flex: 1; padding: 0.7rem 0.85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; \}",
+    "form.add input:focus \{ outline: 2px solid var(--moss); outline-offset: 1px; \}",
+    "form.add button \{ padding: 0.7rem 1.2rem; border: 0; border-radius: 8px; background: var(--moss); color: var(--card); font: inherit; font-weight: 600; cursor: pointer; \}",
+    "ul.tasks \{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; \}",
+    "li.task \{ display: flex; align-items: center; gap: 0.75rem; background: var(--card); padding: 0.7rem 0.9rem; \}",
+    "li.task form \{ display: flex; margin: 0; \}",
+    "li.task .title \{ flex: 1; word-break: break-word; \}",
+    "li.task.done .title \{ color: var(--soft); text-decoration: line-through; \}",
+    "button.mark, button.remove \{ border: 0; background: none; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0.2rem 0.35rem; border-radius: 6px; color: var(--soft); \}",
+    "button.mark \{ color: var(--moss); \}",
+    "button.remove \{ color: var(--brick); font-size: 1.35rem; \}",
+    "button.mark:hover, button.remove:hover \{ background: var(--bg); \}",
+    "p.empty \{ color: var(--soft); text-align: center; padding: 2.5rem 0; border: 1px dashed var(--line); border-radius: 10px; \}"
+  ].join("\n")
+}

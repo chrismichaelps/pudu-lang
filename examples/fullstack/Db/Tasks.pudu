@@ -1,0 +1,129 @@
+module Db.Tasks
+
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Option as Option
+import Std.Result as Result
+
+/// The one place that knows there is a database.
+///
+/// Everything above this module speaks in tasks; only this one speaks SQL.
+/// That is what makes the split above it worth having — a command handler that
+/// wrote its own SQL would be a command handler that could not be read without
+/// knowing the schema.
+export type Task = { id: Int, title: Str, done: Bool }
+
+/// Why a read or a write did not happen.
+///
+/// One shape, carrying what the database said. The layers above cannot act
+/// differently on a constraint violation than on a lost connection — both mean
+/// the request could not be answered — so distinguishing them here would be a
+/// distinction nothing reads.
+export type StoreError = { message: Str }
+
+/// The schema, applied at start-up.
+///
+/// Stated here rather than in a file beside the program, because the example
+/// runs from a single command and a reader following it should not have to
+/// find a second file to know what a row looks like.
+export fn migrate(db: &Database.Database) -> Result[(), StoreError] {
+  let made = Database.execute(
+    db,
+    "CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"
+  )
+  match made {
+    case Err(problem) => Err(StoreError{message: problem.message})
+    case Ok(_) => Ok(())
+  }
+}
+
+/// Every task, newest first.
+export fn all(db: &Database.Database) -> Result[Array[Task], StoreError] {
+  read(db, "SELECT id, title, done FROM task ORDER BY id DESC", &[])
+}
+
+/// One task, or nothing when no row carries that identifier.
+export fn find(db: &Database.Database, id: Int) -> Result[Option[Task], StoreError] {
+  let found = read(db, "SELECT id, title, done FROM task WHERE id = ?", &[Driver.IntegerValue(toInt64(id))]) ?
+  if found.length() == 0 { Ok(None) } else { Ok(Some(found[0])) }
+}
+
+/// Add a task and answer the one that was added, so a caller need not read it
+/// back to learn the identifier the database chose.
+export fn add(db: &Database.Database, title: Str) -> Result[Task, StoreError] {
+  let written = Database.query(db, "INSERT INTO task (title, done) VALUES (?, 0)", &[Driver.TextValue(title)])
+  match written {
+    case Err(problem) => Err(StoreError{message: problem.message})
+    case Ok(_) => {
+      let recent = read(db, "SELECT id, title, done FROM task ORDER BY id DESC LIMIT 1", &[]) ?
+      if recent.length() == 0 { Err(StoreError{message: "the task was written and could not be read back"}) } else {
+        Ok(recent[0])
+      }
+    }
+  }
+}
+
+/// Set whether a task is done, and say whether there was a task to set.
+export fn setDone(db: &Database.Database, id: Int, done: Bool) -> Result[Bool, StoreError] {
+  let existing = find(db, id) ?
+  match existing {
+    case None => Ok(false)
+    case Some(_) => {
+      let written = Database.query(
+        db,
+        "UPDATE task SET done = ? WHERE id = ?",
+          &[Driver.IntegerValue(if done { 1i64 } else { 0i64 }), Driver.IntegerValue(toInt64(id))]
+      )
+      match written {
+        case Err(problem) => Err(StoreError{message: problem.message})
+        case Ok(_) => Ok(true)
+      }
+    }
+  }
+}
+
+/// Remove a task, and say whether there was one to remove.
+export fn remove(db: &Database.Database, id: Int) -> Result[Bool, StoreError] {
+  let existing = find(db, id) ?
+  match existing {
+    case None => Ok(false)
+    case Some(_) => {
+      let written = Database.query(db, "DELETE FROM task WHERE id = ?", &[Driver.IntegerValue(toInt64(id))])
+      match written {
+        case Err(problem) => Err(StoreError{message: problem.message})
+        case Ok(_) => Ok(true)
+      }
+    }
+  }
+}
+
+/// Run a query and read every row as a task.
+///
+/// One place decodes a row, so a column renamed in the schema is a change in
+/// one function rather than in five.
+fn read(db: &Database.Database, sql: Str, values: &Array[Driver.Value]) -> Result[Array[Task], StoreError] {
+  match Database.query(db, sql, values) {
+    case Err(problem) => Err(StoreError{message: problem.message})
+    case Ok(rows) => {
+      let mapped = Row.map(&rows, fn(found: Driver.Rows, index: Int) -> Result[Task, Row.RowError] {
+          let id = Row.integer(&found, index, "id") ?
+          let title = Row.text(&found, index, "title") ?
+          let done = Row.integer(&found, index, "done") ?
+          Ok(Task{id: toInt(id), title: title, done: done != 0i64})
+        })
+      match mapped {
+        case Err(_) => Err(StoreError{message: "a task row could not be read"})
+        case Ok(tasks) => Ok(tasks)
+      }
+    }
+  }
+}
+
+/// An identifier as the database holds it, and as the program holds it.
+///
+/// A database counts in machine integers and this program counts in ordinary
+/// ones, so the two meet here rather than at every call site.
+fn toInt64(value: Int) -> Int64 { Option.unwrapOr(convertInteger[Int64](value), 0i64) }
+
+fn toInt(value: Int64) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }

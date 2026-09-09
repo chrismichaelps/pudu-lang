@@ -1,0 +1,145 @@
+module Main
+
+import Std.App.Database as Database
+import Std.Env as Env
+import Std.Http as Http
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Io as Io
+import Std.Option as Option
+import Api.Tasks as Api
+import Db.Tasks as Tasks
+import Service.Commands as Commands
+import Web.Tasks as Web
+
+/// A task board: a page a person uses and an API a program uses, over one
+/// database, from one command.
+///
+/// This module does one thing — it says which URL reaches which function, and
+/// nothing else. Every question about what a task is lives under `Service`,
+/// every question about how one is stored under `Db`, and every question about
+/// how one looks under `View`. A reader who wants to know what `/tasks` does
+/// reads one line here and then one file.
+///
+/// The two edges are separate because they answer differently, not because
+/// they decide differently: `Web` answers a person with a page and a redirect,
+/// `Api` answers a program with JSON and a status, and both reach the same
+/// commands underneath.
+fn main() -> Int {
+  let port = Option.unwrapOr(numberOf(Env.at(0)), 8080)
+  match Database.create("sqlite::memory:", 1) {
+    case Err(problem) => {
+      say("the database could not be prepared: " + problem.message)
+      1
+    }
+    case Ok(db) => {
+      match Database.start(&db) {
+        case Err(problem) => {
+          say("the database could not be started: " + problem.message)
+          1
+        }
+        case Ok(_) => serve(&db, port)
+      }
+    }
+  }
+}
+
+fn serve(db: &Database.Database, port: Int) -> Int {
+  match Tasks.migrate(db) {
+    case Err(problem) => {
+      say("the schema could not be applied: " + problem.message)
+      1
+    }
+    case Ok(_) => {
+      seed(db)
+      match Server.start("127.0.0.1", port) {
+        case Err(_) => {
+          say("port " + display(port) + " could not be listened on")
+          1
+        }
+        case Ok(live) => {
+          say("listening on http://127.0.0.1:" + display(Server.portOf(&live)))
+          let listening = Server.server(&routes(db))
+          let _served = Server.run(&listening, &live, 100000)
+          let _stopped = Server.stop(&live)
+          0
+        }
+      }
+    }
+  }
+}
+
+/// Every URL the service answers, in the order they are tried.
+fn routes(db: &Database.Database) -> Route.Router {
+  Route.withFallback(
+      &Route.routing(
+        &[
+        Route.get("/", fn(request: Route.Request) -> Http.Response { Web.board(db) }),
+        Route.get("/style.css", fn(request: Route.Request) -> Http.Response { Web.stylesheet() }),
+        Route.post("/tasks", fn(request: Route.Request) -> Http.Response { Web.add(db, &request) }),
+        Route.post(
+          "/tasks/:id/toggle",
+          fn(request: Route.Request) -> Http.Response { Web.toggle(db, &request) }
+        ),
+        Route.post(
+          "/tasks/:id/delete",
+          fn(request: Route.Request) -> Http.Response { Web.remove(db, &request) }
+        ),
+        Route.get("/api/tasks", fn(request: Route.Request) -> Http.Response { Api.list(db) }),
+        Route.get(
+          "/api/tasks/:id",
+          fn(request: Route.Request) -> Http.Response { Api.one(db, &request) }
+        ),
+        Route.post("/api/tasks", fn(request: Route.Request) -> Http.Response { Api.create(db, &request) }),
+        Route.post(
+          "/api/tasks/:id/complete",
+          fn(request: Route.Request) -> Http.Response { Api.complete(db, &request) }
+        ),
+        Route.post(
+          "/api/tasks/:id/reopen",
+          fn(request: Route.Request) -> Http.Response { Api.reopen(db, &request) }
+        ),
+        Route.post(
+          "/api/tasks/:id/delete",
+          fn(request: Route.Request) -> Http.Response { Api.remove(db, &request) }
+        )
+      ]
+    ),
+    fn(request: Route.Request) -> Http.Response { Web.missing() }
+  )
+}
+
+/// A few rows so the board shows something the first time it is opened.
+fn seed(db: &Database.Database) -> () {
+  let _first = Commands.apply(db, Commands.Add("Read the example's source"))
+  let _second = Commands.apply(db, Commands.Add("Add a task of your own"))
+  let _third = Commands.apply(db, Commands.Add("Mark one done"))
+  let _done = Commands.apply(db, Commands.Complete(1))
+  ()
+}
+
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}
+
+fn say(line: Str) -> () {
+  match Io.writeLine(line) {
+    case Ok(_) => {}
+    case Err(_) => {}
+  }
+}

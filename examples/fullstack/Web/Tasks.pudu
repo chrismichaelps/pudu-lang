@@ -1,0 +1,99 @@
+module Web.Tasks
+
+import Std.App.Database as Database
+import Std.Http as Http
+import Std.Http.Message as Message
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Service.Commands as Commands
+import Service.Queries as Queries
+import View.Board as Board
+
+/// The edge a person uses: forms in, pages out.
+///
+/// Every write answers with a redirect rather than with a page. That is the
+/// difference between a board somebody can reload and one that adds a second
+/// task when they do — the browser is told the result is somewhere else, so a
+/// refresh repeats the reading and never the writing.
+///
+/// Nothing here decides what a valid task is. It reads what arrived, names a
+/// command, and turns the answer into a page; the rule lives in
+/// `Service.Commands`, where the API edge reaches it too.
+export fn board(db: &Database.Database) -> Http.Response {
+  match Queries.board(db) {
+    case Err(problem) => Reply.text(500, "the board could not be read: " + problem.message)
+    case Ok(view) => Reply.html(200, Board.page(&view))
+  }
+}
+
+/// The stylesheet, as its own resource so a browser may keep it.
+export fn stylesheet() -> Http.Response {
+  Message.respond(200, "text/css; charset=utf-8", Board.stylesheet())
+}
+
+export fn add(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  let title = Option.unwrapOr(Route.fieldsOf(request).get("title"), "")
+  let _outcome = Commands.apply(db, Commands.Add(title))
+  backToBoard()
+}
+
+/// Toggling reads the task first, because the button means "the other one"
+/// rather than "done": a page rendered a moment ago may be showing a task
+/// somebody else has since completed.
+export fn toggle(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  match identifier(request) {
+    case None => Reply.text(400, "that is not an identifier")
+    case Some(id) => {
+      let wanted = match Queries.one(db, id) {
+        case Ok(Some(found)) => !found.done
+        case _ => true
+      }
+      let _outcome = Commands.apply(db, if wanted { Commands.Complete(id) } else { Commands.Reopen(id) })
+      backToBoard()
+    }
+  }
+}
+
+export fn remove(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  match identifier(request) {
+    case None => Reply.text(400, "that is not an identifier")
+    case Some(id) => {
+      let _outcome = Commands.apply(db, Commands.Remove(id))
+      backToBoard()
+    }
+  }
+}
+
+export fn missing() -> Http.Response { Reply.text(404, "nothing here") }
+
+/// The answer to a write: look at the board again.
+fn backToBoard() -> Http.Response { Message.redirect(303, "/") }
+
+fn identifier(request: &Route.Request) -> Option[Int] {
+  numberOf(Route.param(request, "id"))
+}
+
+/// A path piece read as a number, refusing anything that is not one.
+///
+/// Refused rather than coerced, because `/tasks/abc/delete` is a request that
+/// means nothing and answering it as `/tasks/0/delete` would be answering a
+/// question nobody asked.
+fn numberOf(given: Option[Str]) -> Option[Int] {
+  let text = given ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}

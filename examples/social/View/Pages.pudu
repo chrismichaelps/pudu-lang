@@ -1,0 +1,253 @@
+module View.Pages
+
+import Std.Html.Build as H
+import Db.Comments as Comments
+import Db.Posts as Posts
+import Service.Queries as Queries
+
+/// Both pages, rendered on the server.
+///
+/// Written with `Std.Html.Build`, so a tag is a function and an attribute is a
+/// method. What is left nested is the nesting of the document itself.
+///
+/// Every value that came from a person goes through `says`, which escapes it,
+/// so a post whose body is `<script>alert(1)</script>` shows those characters
+/// instead of running them. `raw` is the way to say otherwise and is spelled
+/// differently on purpose: escaping is what happens unless somebody decided.
+///
+/// Nothing here runs in a browser. Approving is a form that posts and is
+/// answered with a redirect, which is why every part of this works for a reader
+/// whose browser is not running scripts.
+export fn feed(view: &Queries.Feed, reader: Str, refused: Str) -> Str {
+  page(
+    "Chatter",
+    [header("Chatter", ""), totals(view), complaint(refused), composer(reader), posts(view, reader)]
+  )
+}
+
+export fn thread(view: &Queries.Thread, reader: Str, refused: Str) -> Str {
+  page(
+    "A post",
+    [
+      header("Chatter", "/"),
+      complaint(refused),
+      H.ul().class("feed").holding([post(&view.post, reader, true)]),
+      approvers(&view.approvedBy),
+      replyForm(view.post.id, reader),
+      replies(&view.replies, reader)
+    ]
+  )
+}
+
+export fn missing() -> Str {
+  page(
+    "Not here",
+    [header("Chatter", "/"), H.p().class("empty").says("That post is not here any more.")]
+  )
+}
+
+fn page(title: Str, body: Array[H.Node]) -> Str {
+  H.document(
+      &H.html()
+      .lang("en")
+      .holding(
+      [
+        H.head()
+          .holding(
+          [
+            H.meta().at("charset", "utf-8"),
+            H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
+            H.tag("title").says(title),
+            H.link().rel("stylesheet").href("/style.css")
+          ]
+        ),
+        H.body().holding([H.main().holding(body)])
+      ]
+    )
+  )
+}
+
+fn header(title: Str, back: Str) -> H.Node {
+  H.header()
+    .class("top")
+    .holding([H.h1().says(title)])
+    .when(!back.isEmpty(), H.a().href(back).says("← all posts"))
+}
+
+fn totals(view: &Queries.Feed) -> H.Node {
+  H.section()
+    .class("totals")
+    .holding(
+    [
+      figure(display(view.total), "posts"),
+      figure(display(view.approvals), "approvals"),
+      figure(display(view.replies), "replies")
+    ]
+  )
+}
+
+fn figure(value: Str, name: Str) -> H.Node {
+  H.div().holding([H.span().class("n").says(value), H.span().class("k").says(name)])
+}
+
+/// What was refused, said where the reader was looking when it happened.
+fn complaint(refused: Str) -> H.Node {
+  if refused.isEmpty() { H.nothing() } else { H.p().class("refused").says(refused) }
+}
+
+/// The box a post is written in.
+///
+/// The reader's name travels in the form rather than in a session, because this
+/// example has no accounts and pretending otherwise would be its one dishonest
+/// part. It is carried through every action so approving keeps saying who you
+/// are.
+fn composer(reader: Str) -> H.Node {
+  H.form()
+    .class("compose")
+    .method("post")
+    .action("/posts")
+    .holding(
+    [
+      H.textarea().name("body").placeholder("Say something").required(),
+      H.div()
+        .class("foot")
+        .holding(
+        [
+          H.input().class("who").name("author").value(reader).placeholder("your name"),
+          H.button().class("send").submit().says("Post")
+        ]
+      )
+    ]
+  )
+}
+
+fn posts(view: &Queries.Feed, reader: Str) -> H.Node {
+  if view.posts.length() == 0 {
+    return H.p().class("empty").says("Nothing said yet. Say the first thing.")
+  }
+  var items: Array[H.Node] = []
+  for entry in view.posts {
+    items = items.push(post(&entry, reader, false))
+  }
+  H.ul().class("feed").holding(items)
+}
+
+fn post(entry: &Posts.Post, reader: Str, opened: Bool) -> H.Node {
+  H.li()
+    .class("post")
+    .holding(
+    [
+      byline(entry.author, entry.written),
+      H.p().class("said").says(entry.body),
+      H.div()
+        .class("acts")
+        .holding([approveButton(entry, reader)])
+        .when(
+        !opened,
+        H.a()
+          .class("act")
+          .href("/posts/" + display(entry.id))
+          .says("💬 " + display(entry.replies))
+      )
+        .holding(
+        [action("/posts/" + display(entry.id) + "/retract", reader, "act danger", "Delete")]
+      )
+    ]
+  )
+}
+
+/// The approve button, which says what it will do rather than what it did.
+///
+/// One button and one route: a post this reader has approved posts to withdraw,
+/// and one they have not posts to approve. Two buttons would let somebody press
+/// the wrong one, and the page already knows which state it is in.
+fn approveButton(entry: &Posts.Post, reader: Str) -> H.Node {
+  let target = if entry.approvedByReader { "/withdraw" } else { "/approve" }
+  let shape = if entry.approvedByReader { "act held" } else { "act" }
+  action("/posts/" + display(entry.id) + target, reader, shape, "♥ " + display(entry.approvals))
+}
+
+/// A one-button form that carries who is pressing it.
+fn action(target: Str, reader: Str, shape: Str, said: Str) -> H.Node {
+  H.form()
+    .method("post")
+    .action(target)
+    .holding(
+    [
+      H.input().kind("hidden").name("author").value(reader),
+      H.button().class(shape).submit().says(said)
+    ]
+  )
+}
+
+fn byline(author: Str, written: Int) -> H.Node {
+  H.div()
+    .class("byline")
+    .holding([H.span().class("who").says(author), H.span().class("when").says(when(written))])
+}
+
+/// A time said the way somebody reading it would say it.
+///
+/// What matters for the shape of a page is that a moment becomes words in one
+/// place rather than everywhere a time is shown.
+fn when(written: Int) -> Str {
+  if written < 60 {
+    "just now"
+  } else if written < 3600 {
+    display(written / 60) + "m ago"
+  } else {
+    display(written / 3600) + "h ago"
+  }
+}
+
+fn approvers(names: &Array[Str]) -> H.Node {
+  if names.length() == 0 {
+    return H.nothing()
+  }
+  H.p().class("approvers").says("Approved by " + names.join(", "))
+}
+
+fn replyForm(under: Int, reader: Str) -> H.Node {
+  H.form()
+    .class("compose")
+    .method("post")
+    .action("/posts/" + display(under) + "/replies")
+    .holding(
+    [
+      H.textarea().name("body").placeholder("Reply").required(),
+      H.div()
+        .class("foot")
+        .holding(
+        [
+          H.input().class("who").name("author").value(reader).placeholder("your name"),
+          H.button().class("send").submit().says("Reply")
+        ]
+      )
+    ]
+  )
+}
+
+fn replies(found: &Array[Comments.Comment], reader: Str) -> H.Node {
+  if found.length() == 0 {
+    return H.nothing()
+  }
+  var items: Array[H.Node] = []
+  for entry in found {
+    items = items.push(
+      H.li()
+        .class("reply")
+        .holding(
+        [
+          byline(entry.author, entry.written),
+          H.p().class("said").says(entry.body),
+          H.div()
+            .class("acts")
+            .holding(
+            [action("/replies/" + display(entry.id) + "/retract", reader, "act danger", "Delete")]
+          )
+        ]
+      )
+    )
+  }
+  H.ul().class("replies").holding(items)
+}

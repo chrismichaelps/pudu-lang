@@ -1,0 +1,212 @@
+module Api.Feed
+
+import Std.App.Database as Database
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Json as Json
+import Std.Option as Option
+import Db.Comments as Comments
+import Db.Posts as Posts
+import Service.Commands as Commands
+import Service.Queries as Queries
+
+/// The edge a program uses: JSON in, JSON out.
+///
+/// It reaches the same commands and queries the pages do. That is the point of
+/// the split — the rule that a post needs a body and is at most five hundred
+/// characters is written once, in `Service.Commands`, so a client posting JSON
+/// is refused with the same words a browser form is. Two edges checking on
+/// their own would be two definitions of a valid post.
+///
+/// What happened is said in the status: a refusal the caller could have
+/// avoided is a bad request, something that is not there is a missing thing,
+/// and a database that failed is the server's fault. A client should not have
+/// to read prose to learn which.
+export fn feed(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  let reader = Option.unwrapOr(Route.queryParam(request, "reader"), "")
+  match Queries.feed(db, reader) {
+    case Err(problem) => failed(500, problem.message)
+    case Ok(view) => {
+      var items: Array[Json.Json] = []
+      for entry in view.posts {
+        items = items.push(asJson(&entry))
+      }
+      Reply.json(
+        200,
+        Json.encode(
+            &Json.object(
+              &[
+              ("posts", Json.list(&items)),
+              ("total", Json.Number(view.total)),
+              ("approvals", Json.Number(view.approvals)),
+              ("replies", Json.Number(view.replies))
+            ]
+          )
+        )
+      )
+    }
+  }
+}
+
+/// One post with everything under it.
+export fn thread(db: &Database.Database, request: &Route.Request) -> Http.Response {
+  let reader = Option.unwrapOr(Route.queryParam(request, "reader"), "")
+  match identifier(request) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) =>
+    match Queries.thread(db, reader, id) {
+      case Err(problem) => failed(500, problem.message)
+      case Ok(None) => failed(404, "no post " + display(id))
+      case Ok(Some(view)) => {
+        var said: Array[Json.Json] = []
+        for entry in view.replies {
+          said = said.push(replyJson(&entry))
+        }
+        var names: Array[Json.Json] = []
+        for name in view.approvedBy {
+          names = names.push(Json.Text(name))
+        }
+        Reply.json(
+          200,
+          Json.encode(
+              &Json.object(
+                &[
+                ("post", asJson(&view.post)),
+                ("replies", Json.list(&said)),
+                ("approvedBy", Json.list(&names))
+              ]
+            )
+          )
+        )
+      }
+    }
+  }
+}
+
+export fn publish(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let document = Route.body(request)
+  answer(
+    Commands.apply(db, Commands.Publish(fieldOf(document, "author"), fieldOf(document, "body")), clock),
+    201
+  )
+}
+
+export fn reply(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  let document = Route.body(request)
+  match identifier(request) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) =>
+    answer(
+      Commands.apply(
+        db,
+        Commands.Reply(id, fieldOf(document, "author"), fieldOf(document, "body")),
+        clock
+      ),
+      201
+    )
+  }
+}
+
+export fn approve(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  named(db, request, clock, fn(id: Int, who: Str) -> Commands.Command { Commands.Approve(id, who) })
+}
+
+export fn withdraw(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  named(db, request, clock, fn(id: Int, who: Str) -> Commands.Command { Commands.Withdraw(id, who) })
+}
+
+export fn retract(db: &Database.Database, request: &Route.Request, clock: Int) -> Http.Response {
+  match identifier(request) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) => answer(Commands.apply(db, Commands.Retract(id), clock), 200)
+  }
+}
+
+fn named(
+  db: &Database.Database,
+  request: &Route.Request,
+  clock: Int,
+  shape: fn(Int, Str) -> Commands.Command
+) -> Http.Response {
+  let who = fieldOf(Route.body(request), "reader")
+  match identifier(request) {
+    case None => failed(400, "that is not an identifier")
+    case Some(id) => answer(Commands.apply(db, shape(id, who), clock), 200)
+  }
+}
+
+/// One place turns an outcome into a status, so every endpoint answers the
+/// same kind of failure the same way.
+fn answer(outcome: Commands.Outcome, done: Int) -> Http.Response {
+  match outcome {
+    case Commands.Done(said) => Reply.json(done, Json.encode(&Json.object(&[("done", Json.Text(said))])))
+    case Commands.Refused(why) => failed(400, why)
+    case Commands.Absent(id) => failed(404, "no post " + display(id))
+    case Commands.Broke(why) => failed(500, why)
+  }
+}
+
+fn asJson(entry: &Posts.Post) -> Json.Json {
+  Json.object(
+      &[
+      ("id", Json.Number(entry.id)),
+      ("author", Json.Text(entry.author)),
+      ("body", Json.Text(entry.body)),
+      ("approvals", Json.Number(entry.approvals)),
+      ("replies", Json.Number(entry.replies)),
+      ("approvedByReader", Json.Boolean(entry.approvedByReader))
+    ]
+  )
+}
+
+fn replyJson(entry: &Comments.Comment) -> Json.Json {
+  Json.object(
+      &[
+      ("id", Json.Number(entry.id)),
+      ("post", Json.Number(entry.post)),
+      ("author", Json.Text(entry.author)),
+      ("body", Json.Text(entry.body))
+    ]
+  )
+}
+
+fn failed(code: Int, message: Str) -> Http.Response {
+  Reply.json(code, Json.encode(&Json.object(&[("error", Json.Text(message))])))
+}
+
+/// One text field out of a JSON body.
+///
+/// A body that is not JSON, or one without the field, answers the empty
+/// string, which `Service.Commands` refuses with the same words it refuses an
+/// empty form field. Deciding here that a malformed body is a different kind
+/// of failure would put a second opinion about validity at the edge.
+fn fieldOf(body: Str, name: Str) -> Str {
+  match Json.decode(body) {
+    case Err(_) => ""
+    case Ok(document) =>
+    match Json.field(&document, name) {
+      case Some(Json.Text(found)) => found
+      case _ => ""
+    }
+  }
+}
+
+fn identifier(request: &Route.Request) -> Option[Int] {
+  let text = Route.param(request, "id") ?
+  let chars = text.chars()
+  if chars.length() == 0 {
+    return None
+  }
+  var total = 0
+  var index = 0
+  while index < chars.length() {
+    let here = chars[index]
+    if here < '0' || here > '9' {
+      return None
+    }
+    total = total * 10 + (here.code() - '0'.code())
+    index = index + 1
+  }
+  Some(total)
+}

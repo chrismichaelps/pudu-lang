@@ -1,0 +1,84 @@
+module Db.Approvals
+
+import Std.App.Database as Database
+import Std.Db.Driver as Driver
+import Std.Db.Row as Row
+import Std.Option as Option
+
+/// Who approved what.
+///
+/// A row per approval rather than a number on the post. The number is the
+/// tempting shape and the wrong one: two readers approving at the same moment
+/// each read the same total, each write one more, and one approval is gone with
+/// nothing anywhere to say it happened. Rows cannot lose one, they can say who,
+/// and the count is a question asked of them.
+///
+/// Approving twice is not an error to report — it is a state to reach. Somebody
+/// who clicks twice means to approve; the second click finding it already done
+/// is not a failure, and telling them so would be answering a question they did
+/// not ask.
+export type ApprovalError = { message: Str }
+
+export fn set(db: &Database.Database, post: Int, reader: Str) -> Result[(), ApprovalError] {
+  written(
+    db,
+    "INSERT OR IGNORE INTO approval (post, reader) VALUES (?, ?)",
+      &[Driver.IntegerValue(big(post)), Driver.TextValue(reader)]
+  )
+}
+
+export fn clear(db: &Database.Database, post: Int, reader: Str) -> Result[(), ApprovalError] {
+  written(
+    db,
+    "DELETE FROM approval WHERE post = ? AND reader = ?",
+      &[Driver.IntegerValue(big(post)), Driver.TextValue(reader)]
+  )
+}
+
+/// Whether this reader has approved this post.
+export fn held(db: &Database.Database, post: Int, reader: Str) -> Result[Bool, ApprovalError] {
+  match Database.query(
+    db,
+    "SELECT COUNT(*) AS found FROM approval WHERE post = ? AND reader = ?",
+      &[Driver.IntegerValue(big(post)), Driver.TextValue(reader)]
+  ) {
+    case Err(problem) => Err(ApprovalError{message: problem.message})
+    case Ok(rows) => {
+      match Row.integer(&rows, 0, "found") {
+        case Err(_) => Err(ApprovalError{message: "the approval count could not be read"})
+        case Ok(found) => Ok(small(found) > 0)
+      }
+    }
+  }
+}
+
+/// Everyone who approved a post, in the order the rows come back.
+export fn readers(db: &Database.Database, post: Int) -> Result[Array[Str], ApprovalError] {
+  match Database.query(
+    db,
+    "SELECT reader FROM approval WHERE post = ? ORDER BY reader ASC",
+      &[Driver.IntegerValue(big(post))]
+  ) {
+    case Err(problem) => Err(ApprovalError{message: problem.message})
+    case Ok(rows) => {
+      let mapped = Row.map(&rows, fn(found: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+          Row.text(&found, index, "reader")
+        })
+      match mapped {
+        case Err(_) => Err(ApprovalError{message: "an approval row could not be read"})
+        case Ok(names) => Ok(names)
+      }
+    }
+  }
+}
+
+fn written(db: &Database.Database, sql: Str, values: &Array[Driver.Value]) -> Result[(), ApprovalError] {
+  match Database.query(db, sql, values) {
+    case Err(problem) => Err(ApprovalError{message: problem.message})
+    case Ok(_) => Ok(())
+  }
+}
+
+fn big(value: Int) -> Int64 { Option.unwrapOr(convertInteger[Int64](value), 0i64) }
+
+fn small(value: Int64) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }
