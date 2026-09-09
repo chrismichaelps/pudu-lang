@@ -10,10 +10,12 @@ import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText, languageConstraint)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
 import System.Directory
   ( canonicalizePath
+  , getFileSize
   , getModificationTime
   , doesPathExist
   , pathIsSymbolicLink
@@ -179,7 +181,7 @@ stopWatched running = do
       _ <- waitForProcess running
       pure ()
 
-settle :: FilePath -> [(FilePath, UTCTime)] -> IO [(FilePath, UTCTime)]
+settle :: FilePath -> [(FilePath, (UTCTime, Integer))] -> IO [(FilePath, (UTCTime, Integer))]
 settle root previous = do
   threadDelay 100000
   current <- sourceStamps root
@@ -209,7 +211,7 @@ changedLine [one] = takeFileName one <> " changed, starting again"
 changedLine several =
   show (length several) <> " files changed, starting again"
 
-changedNames :: [(FilePath, UTCTime)] -> [(FilePath, UTCTime)] -> [FilePath]
+changedNames :: [(FilePath, (UTCTime, Integer))] -> [(FilePath, (UTCTime, Integer))] -> [FilePath]
 changedNames before after =
   Map.keys (Map.differenceWith unchanged (Map.fromList after) (Map.fromList before))
     <> Map.keys (Map.difference (Map.fromList before) (Map.fromList after))
@@ -244,25 +246,32 @@ nearestManifest directory = do
     contents are written by tools rather than by people are skipped: watching
     `.pudu` files a build produced would restart the program in response to its
     own output. -}
-sourceStamps :: FilePath -> IO [(FilePath, UTCTime)]
-sourceStamps root = sort <$> walk root
+sourceStamps :: FilePath -> IO [(FilePath, (UTCTime, Integer))]
+sourceStamps root = sort <$> walk Set.empty root
  where
-  walk directory = do
-    entries <- try (listDirectory directory) :: IO (Either IOException [FilePath])
-    case entries of
+  walk ancestors directory = do
+    resolved <- try (canonicalizePath directory) :: IO (Either IOException FilePath)
+    case resolved of
       Left _ -> pure []
-      Right names -> concat <$> mapM (one directory) names
-  one directory name
+      Right canonical
+        | Set.member canonical ancestors -> pure []
+        | otherwise -> do
+            entries <- try (listDirectory directory) :: IO (Either IOException [FilePath])
+            case entries of
+              Left _ -> pure []
+              Right names -> concat <$> mapM (one (Set.insert canonical ancestors) directory) names
+  one ancestors directory name
     | ignored name = pure []
     | otherwise = do
         let full = directory </> name
         isDirectory <- doesDirectoryExist full
         if isDirectory
-          then walk full
+          then walk ancestors full
           else
-            if takeExtension full == ".pudu"
+            if takeExtension full == ".pudu" || name == "pudu.toml"
               then do
-                stamp <- try (getModificationTime full) :: IO (Either IOException UTCTime)
+                stamp <- try ((,) <$> getModificationTime full <*> getFileSize full)
+                  :: IO (Either IOException (UTCTime, Integer))
                 pure (either (const []) (\at -> [(full, at)]) stamp)
               else pure []
   ignored name = name `elem` [".git", ".pudu", "dist-newstyle", "node_modules", "target"]
