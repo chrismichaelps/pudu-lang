@@ -51,6 +51,7 @@ import Pudu.Type.Interface
   , interfaceDeclarations
   , interfaceDefaults
   , interfaceImports
+  , interfaceIdentities
   , interfaceModule
   , interfacePrivateDeclarations
   )
@@ -222,18 +223,6 @@ interfaceAliases declared value = Map.fromList
   ]
  where
   declarations = interfacePrivateDeclarations value <> interfaceDeclarations value
-
-interfaceIdentities :: TypeInterface -> [(Text, NominalId)]
-interfaceIdentities value = concatMap one (interfaceDeclarations value)
- where
-  owner = interfaceModule value
-  one (Located _ declaration) = case declaration of
-    TypeDeclaration typeValue -> identity (locatedValue (Tree.typeName typeValue))
-    TraitDeclaration trait -> identity (locatedValue (Tree.traitName trait))
-    ForeignDeclaration foreignValue ->
-      concatMap (identity . locatedValue) (Tree.foreignTypes foreignValue)
-    _ -> []
-  identity name = [(name, canonicalNominal owner name)]
 
 lastSegment :: Text -> Text
 lastSegment value = case reverse (Text.splitOn "." value) of

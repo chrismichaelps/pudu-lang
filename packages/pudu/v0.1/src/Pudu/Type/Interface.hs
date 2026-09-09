@@ -8,6 +8,7 @@ module Pudu.Type.Interface
   , interfaceDefaults
   , interfaceBindings
   , interfaceImports
+  , interfaceIdentities
   , interfaceModule
   , interfacePrivateDeclarations
   , interfaceSkeleton
@@ -45,6 +46,9 @@ data TypeInterface = TypeInterface
   , interfacePrivateDeclarations :: ![Located Declaration]
   , interfaceDefaults :: !(Set (NominalId, Text))
   , interfaceBindings :: ![(Text, Located TypeSyntax)]
+  , interfaceIdentities :: ![(Text, NominalId)]
+  , interfaceExportedIdentities :: ![(Text, NominalId, Bool)]
+  , interfaceExportedValues :: ![Text]
   }
   deriving stock (Eq, Show)
 
@@ -69,13 +73,21 @@ emptyImportTypes = ImportTypes [] Map.empty Map.empty Set.empty Set.empty
 interfaceSkeleton :: Module -> TypeInterface
 interfaceSkeleton value =
   TypeInterface
-    { interfaceModule = locatedValue (moduleName value)
+    { interfaceModule = owner
     , interfaceImports = moduleImports value
-    , interfaceDeclarations = mapMaybeDeclaration (moduleDeclarations value)
+    , interfaceDeclarations = declarations
     , interfacePrivateDeclarations = privateNominalShells (moduleDeclarations value)
     , interfaceDefaults = defaultMembers (locatedValue (moduleName value)) (moduleDeclarations value)
-    , interfaceBindings = exportedBindings (moduleDeclarations value)
+    , interfaceBindings = bindings
+    , interfaceIdentities = [(name, identity) | (name, identity, _) <- identities]
+    , interfaceExportedIdentities = identities
+    , interfaceExportedValues = map fst bindings <> concatMap exportedValue declarations
     }
+ where
+  owner = locatedValue (moduleName value)
+  declarations = mapMaybeDeclaration (moduleDeclarations value)
+  bindings = exportedBindings (moduleDeclarations value)
+  identities = concatMap (exportedIdentity owner) declarations
 
 mapMaybeDeclaration :: [Located Declaration] -> [Located Declaration]
 mapMaybeDeclaration = foldr keep []
@@ -186,26 +198,25 @@ importOne value found =
     {-| Only a whole-module import lends its name to what it carries. A
         selective one brings its names in unqualified, so nothing is written
         `qualifier.name` and there is no qualifier to judge against. -}
-    , importedQualifiers = if null selected then Set.singleton qualifier else Set.empty
+    , importedQualifiers = if Set.null selected then Set.singleton qualifier else Set.empty
     }
  where
-  selected = map locatedValue (importItems value)
+  selected = Set.fromList (map locatedValue (importItems value))
   qualifier = maybe (moduleQualifier (interfaceModule found)) locatedValue (importAlias value)
-  visible name = null selected || name `elem` selected
+  visible name = Set.null selected || Set.member name selected
   namesFor (name, identity, _)
-    | null selected = [(qualifier <> "." <> name, identity)]
-    | name `elem` selected = [(name, identity)]
+    | Set.null selected = [(qualifier <> "." <> name, identity)]
+    | Set.member name selected = [(name, identity)]
     | otherwise = []
 
   valuesFor name
-    | null selected = [(qualifier <> "." <> name, canonicalValue name)]
-    | name `elem` selected = [(name, canonicalValue name)]
+    | Set.null selected = [(qualifier <> "." <> name, canonicalValue name)]
+    | Set.member name selected = [(name, canonicalValue name)]
     | otherwise = []
   canonicalValue name = moduleNameText (interfaceModule found) <> "." <> name
 
-  exported = concatMap (exportedIdentity (interfaceModule found)) (interfaceDeclarations found)
-  exportedValues = map fst (interfaceBindings found)
-    <> concatMap exportedValue (interfaceDeclarations found)
+  exported = interfaceExportedIdentities found
+  exportedValues = interfaceExportedValues found
 
 exportedIdentity :: ModuleName -> Located Declaration -> [(Text, NominalId, Bool)]
 exportedIdentity owner (Located _ declaration) = case declaration of
