@@ -5,7 +5,7 @@ import Control.Monad (unless, when)
 import Control.Exception (IOException, bracket, try)
 import System.IO.Temp (withSystemTempDirectory)
 import Data.List (sort, sortOn)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText, languageConstraint)
 import Data.Text (Text)
@@ -157,7 +157,8 @@ watchProgram _style path carried = do
     if fresh == stamps
       then follow self root stamps running
       else do
-        TextIO.putStrLn (Text.pack (changedLine (changedNames stamps fresh)))
+        settled <- settle root fresh
+        TextIO.putStrLn (Text.pack (changedLine (changedNames stamps settled)))
         -- A program that has already stopped needs no stopping, and asking the
         -- operating system to end a process that has been reaped is an error
         -- on some systems rather than nothing.
@@ -168,7 +169,13 @@ watchProgram _style path carried = do
             _ <- waitForProcess running
             pure ()
         next <- startWatched self path carried
-        follow self root fresh next
+        follow self root settled next
+
+settle :: FilePath -> [(FilePath, UTCTime)] -> IO [(FilePath, UTCTime)]
+settle root previous = do
+  threadDelay 100000
+  current <- sourceStamps root
+  if current == previous then pure current else settle root current
 
 {-| How long to wait between looks.
 
@@ -196,8 +203,10 @@ changedLine several =
 
 changedNames :: [(FilePath, UTCTime)] -> [(FilePath, UTCTime)] -> [FilePath]
 changedNames before after =
-  [name | (name, stamp) <- after, lookup name before /= Just stamp]
-    <> [name | (name, _) <- before, isNothing (lookup name after)]
+  Map.keys (Map.differenceWith unchanged (Map.fromList after) (Map.fromList before))
+    <> Map.keys (Map.difference (Map.fromList before) (Map.fromList after))
+ where
+  unchanged current previous = if current == previous then Nothing else Just current
 
 {-| The directory whose sources are watched.
 
