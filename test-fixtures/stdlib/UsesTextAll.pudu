@@ -1,0 +1,157 @@
+module UsesTextAll
+
+import Std.Char as Char
+import Std.Option as Option
+import Std.Text as Text
+
+/// Every export of `Std.Text`, checked against a stated answer.
+///
+/// Text is counted in characters rather than bytes, so the checks that could
+/// tell the two apart use a string carrying a character that is more than one
+/// byte. A function that measured or cut by bytes would answer differently
+/// here and nowhere else.
+const WIDE: Str = "héllo"
+
+fn vowel(character: Char) -> Bool {
+  character == 'a' || character == 'e' || character == 'i' || character == 'o'
+    || character == 'u'
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // Emptiness and blankness are different questions.
+  if Text.isBlank("   ") && Text.isBlank("") && !Text.isBlank(" x ") { held = held + 1 }
+
+  // Finding, and not finding.
+  if Option.unwrapOr(Text.find("hello", "ll"), 0 - 1) == 2 { held = held + 1 }
+  if Option.isNone(&Text.find("hello", "z")) { held = held + 1 }
+  if Text.countOccurrences("banana", "an") == 2 { held = held + 1 }
+
+  // Ends, added and removed.
+  if Text.stripPrefix("hello", "he") == "llo" { held = held + 1 }
+  if Text.stripPrefix("hello", "z") == "hello" { held = held + 1 }
+  if Text.stripSuffix("hello", "lo") == "hel" { held = held + 1 }
+  if Text.cons('a', "bc") == "abc" { held = held + 1 }
+  if Text.snoc("ab", 'c') == "abc" { held = held + 1 }
+  if Option.unwrapOr(Text.uncons("abc"), ('z', "")) == ('a', "bc") { held = held + 1 }
+  if Option.isNone(&Text.uncons("")) { held = held + 1 }
+  if Option.unwrapOr(Text.unsnoc("abc"), ("", 'z')) == ("ab", 'c') { held = held + 1 }
+  if Option.isNone(&Text.unsnoc("")) { held = held + 1 }
+
+  // Taking and dropping, counted in characters.
+  if Text.take(WIDE, 2) == "hé" { held = held + 1 }
+  if Text.drop(WIDE, 2) == "llo" { held = held + 1 }
+  if Text.takeEnd(WIDE, 2) == "lo" { held = held + 1 }
+  if Text.dropEnd(WIDE, 3) == "hé" { held = held + 1 }
+  if Text.takeWhile("abc1", Char.isLetter) == "abc" { held = held + 1 }
+  if Text.dropWhile("abc1", Char.isLetter) == "1" { held = held + 1 }
+  if Text.dropWhileEnd("abc1", Char.isDigit) == "abc" { held = held + 1 }
+  if Text.dropAround("xxaxx", fn(c: Char) -> Bool => c == 'x') == "a" { held = held + 1 }
+
+  // Positions and single characters.
+  if Option.unwrapOr(Text.at(WIDE, 1), 'z') == 'é' { held = held + 1 }
+  if Option.isNone(&Text.at("ab", 99)) { held = held + 1 }
+  if Option.unwrapOr(Text.head("abc"), 'z') == 'a' { held = held + 1 }
+  if Option.unwrapOr(Text.last("abc"), 'z') == 'c' { held = held + 1 }
+  if Option.isNone(&Text.head("")) { held = held + 1 }
+  if Text.rest("abc") == "bc" && Text.rest("") == "" { held = held + 1 }
+  if Text.initial("abc") == "ab" && Text.initial("") == "" { held = held + 1 }
+  if Text.singleton('a') == "a" { held = held + 1 }
+
+  // Splitting into two.
+  if Text.splitAt(WIDE, 2) == ("hé", "llo") { held = held + 1 }
+  if Text.span("abc1", Char.isLetter) == ("abc", "1") { held = held + 1 }
+  if Text.breakOn("a=b", "=") == ("a", "=b") { held = held + 1 }
+  if Text.breakOnEnd("a=b=c", "=") == ("a=b=", "c") { held = held + 1 }
+  if Text.partition("a1b2", Char.isLetter) == ("ab", "12") { held = held + 1 }
+  if Text.commonPrefix("prefix-a", "prefix-b") == ("prefix-", "a", "b") { held = held + 1 }
+
+  // Splitting into many.
+  if Text.splitNonEmpty("a,,b", ",") == ["a", "b"] { held = held + 1 }
+  if Text.words("  a  b ") == ["a", "b"] { held = held + 1 }
+  if Text.toLines("a\nb") == ["a", "b"] { held = held + 1 }
+  if Text.chunksOf("abcde", 2) == ["ab", "cd", "e"] { held = held + 1 }
+  if Text.groupChars("aabc") == ["aa", "b", "c"] { held = held + 1 }
+  if Text.prefixes("ab") == ["", "a", "ab"] { held = held + 1 }
+  if Text.suffixes("ab") == ["ab", "b", ""] { held = held + 1 }
+
+  // Joining.
+  if Text.join(&["a", "b"], "-") == "a-b" { held = held + 1 }
+  if Text.fromLines(&["a", "b"]) == "a\nb" { held = held + 1 }
+  if Text.fromWords(&["a", "b"]) == "a b" { held = held + 1 }
+  if Text.fromChars(&['a', 'b']) == "ab" { held = held + 1 }
+  if Text.toChars("ab") == ['a', 'b'] { held = held + 1 }
+
+  // Padding and centring, counted in characters.
+  if Text.padLeft("7", 3, "0") == "007" { held = held + 1 }
+  if Text.padRight("7", 3, "0") == "700" { held = held + 1 }
+  if Text.center("a", 5, "-") == "--a--" { held = held + 1 }
+  if Text.padLeft("abcd", 2, "0") == "abcd" { held = held + 1 }
+
+  // Trimming from each end.
+  if Text.trimStart("  a  ") == "a  " { held = held + 1 }
+  if Text.trimEnd("  a  ") == "  a" { held = held + 1 }
+
+  // Case.
+  if Text.capitalize("hello there") == "Hello there" { held = held + 1 }
+  if Text.toTitle("hello there") == "Hello There" { held = held + 1 }
+  if Text.equalsIgnoreCase("ABC", "abc") && !Text.equalsIgnoreCase("a", "b") { held = held + 1 }
+
+  // Order.
+  if Text.compare("a", "b") < 0 && Text.compare("b", "a") > 0 { held = held + 1 }
+  if Text.compare("a", "a") == 0 { held = held + 1 }
+  if Text.before("a", "b") && !Text.before("b", "a") { held = held + 1 }
+
+  // Over each character.
+  if Text.mapChars("abc", Char.toUpper) == "ABC" { held = held + 1 }
+  if Text.filterChars("a1b2", Char.isLetter) == "ab" { held = held + 1 }
+  if Text.flatMapChars("ab", fn(c: Char) -> Str => Text.singleton(c) + "-") == "a-b-" {
+    held = held + 1
+  }
+  if Text.allChars("abc", Char.isLetter) && !Text.allChars("ab1", Char.isLetter) {
+    held = held + 1
+  }
+  if Text.anyChar("ab1", Char.isDigit) && !Text.anyChar("abc", Char.isDigit) { held = held + 1 }
+  if Text.countChars("banana", fn(c: Char) -> Bool => c == 'a') == 3 { held = held + 1 }
+  if Option.unwrapOr(Text.findIndex("abc", fn(c: Char) -> Bool => c == 'b'), 0 - 1) == 1 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Text.findChar("a1", Char.isDigit), 'z') == '1' { held = held + 1 }
+  if Option.isNone(&Text.findChar("ab", Char.isDigit)) { held = held + 1 }
+  if Text.foldChars("abc", fn(total: Int, _c: Char) -> Int => total + 1, 0) == 3 { held = held + 1 }
+  if Text.foldCharsRight("ab", fn(c: Char, acc: Str) -> Str => acc + Text.singleton(c), "") == "ba" {
+    held = held + 1
+  }
+  if Text.scanChars("ab", fn(total: Int, _c: Char) -> Int => total + 1, 0) == [0, 1, 2] {
+    held = held + 1
+  }
+  if Text.zipChars("ab", "xy") == [('a', 'x'), ('b', 'y')] { held = held + 1 }
+
+  // Building from nothing.
+  if Text.unfold(3, 'a', fn(c: Char) -> Option[(Char, Char)] => Some((c, c))) == "aaa" {
+    held = held + 1
+  }
+
+  // Numbers read out of text, and the refusal when it is not one.
+  if Option.unwrapOr(Text.wholeOf("42"), 0) == 42 { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("x")) { held = held + 1 }
+  if Option.unwrapOr(Text.countOf("7"), 0) == 7 { held = held + 1 }
+  if Option.isNone(&Text.countOf("-1")) { held = held + 1 }
+
+  // A predicate written here rather than taken from the module, so the fold
+  // and filter checks above are exercised with something of the caller's own.
+  if !vowel('z') && vowel('a') { held = held + 1 }
+
+  // Slicing answers the same for text as for an array of the same length.
+  // They disagreed: an array clamped and text refused, so `rest` of empty text
+  // stopped a program where `rest` of an empty array answered nothing.
+  let five = "abcde"
+  let items = [1, 2, 3, 4, 5]
+  if five.slice(1, 0) == "" && items.slice(1, 0) == [] { held = held + 1 }
+  if five.slice(0 - 2, 3) == "abc" && items.slice(0 - 2, 3) == [1, 2, 3] { held = held + 1 }
+  if five.slice(2, 99) == "cde" && items.slice(2, 99) == [3, 4, 5] { held = held + 1 }
+  if five.slice(1, 4) == "bcd" && items.slice(1, 4) == [2, 3, 4] { held = held + 1 }
+
+  held
+}

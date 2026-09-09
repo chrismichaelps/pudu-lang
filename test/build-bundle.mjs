@@ -9,7 +9,7 @@
 // Usage: node test/build-bundle.mjs [path-to-pudu]
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, copyFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
@@ -108,6 +108,75 @@ if (withArguments !== "Bundled true") {
   failures.push(`given compiler-looking arguments it printed ${JSON.stringify(withArguments)}`);
 }
 
+// Text is UTF-8 whatever the machine says its language is.
+//
+// A program decoded text with the locale's encoding, and a machine with no
+// locale set decodes as ASCII — so a file carrying an em dash could not be
+// read, reported as a module that was present and readable. The same applies
+// to what a program reads and writes itself, so both directions are checked
+// here, under a locale that names no encoding at all.
+const encodingDirectory = mkdtempSync(join(tmpdir(), "pudu-encoding-"));
+const roundTripped = "an em dash \u2014 and an accent \u00e9";
+writeFileSync(join(encodingDirectory, "carried.txt"), roundTripped + "\n", "utf8");
+writeFileSync(
+  join(encodingDirectory, "Encoded.pudu"),
+  `module Encoded
+
+import Std.Io as Io
+
+fn main() -> Int {
+  match readFile("carried.txt") {
+    case Err(_) => 1
+    case Ok(text) => {
+      let trimmed = text.trim()
+      match writeFile("answered.txt", trimmed) {
+        case Err(_) => 1
+        case Ok(_) =>
+          match Io.writeLine(display(trimmed.length())) {
+            case Ok(_) => 0
+            case Err(_) => 1
+          }
+      }
+    }
+  }
+}
+`
+);
+const encoded = join(encodingDirectory, "encoded");
+execFileSync(executable, ["build", join(encodingDirectory, "Encoded.pudu"), "-o", encoded], {
+  stdio: "pipe"
+});
+// `LC_ALL=C` names an encoding that cannot hold either character, which is
+// what a container built from a minimal image gives a program.
+//
+// This catches a regression where the locale decides the encoding, which is
+// how the library became unreadable once. It only catches it where the locale
+// actually decides: macOS resolves this to UTF-8 whatever the variables say,
+// so the check passes there either way and does its work on Linux.
+const counted = (() => {
+  try {
+    return execFileSync("/usr/bin/env", ["-i", "LC_ALL=C", "LANG=C", encoded], {
+      stdio: "pipe",
+      cwd: encodingDirectory
+    })
+      .toString()
+      .trim();
+  } catch (problem) {
+    return `did not run: ${String(problem.stdout ?? "")}${String(problem.stderr ?? "")}`.trim();
+  }
+})();
+if (counted !== String([...roundTripped].length)) {
+  failures.push(
+    `under a C locale it counted ${JSON.stringify(counted)} characters, wanted ${[...roundTripped].length}`
+  );
+}
+const answered = existsSync(join(encodingDirectory, "answered.txt"))
+  ? readFileSync(join(encodingDirectory, "answered.txt"), "utf8")
+  : "";
+if (answered !== roundTripped) {
+  failures.push(`under a C locale it wrote back ${JSON.stringify(answered)}`);
+}
+
 // The compiler itself must still behave as a compiler.
 const version = execFileSync(executable, ["version"], { stdio: "pipe" }).toString().trim();
 if (!version.startsWith("pudu ")) {
@@ -155,7 +224,7 @@ if (existsSync(guarded + ".pending")) {
 // A bundle is the size of the compiler, so a run that leaves two behind costs
 // a developer a gigabyte every few times they run the gates. Removed whatever
 // the outcome, since a failing run leaks just as much as a passing one.
-for (const scratch of [directory, join(elsewhere, "..")]) {
+for (const scratch of [directory, join(elsewhere, ".."), encodingDirectory]) {
   try {
     rmSync(scratch, { recursive: true, force: true });
   } catch {

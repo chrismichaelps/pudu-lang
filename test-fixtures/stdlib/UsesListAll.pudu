@@ -30,6 +30,11 @@ export fn main() -> Int {
   if List.set(&items, 0, 8) == [8, 3, 9, 1, 7, 3] { held = held + 1 }
   if List.modify(&items, 1, fn(n: Int) -> Int => n * 10) == [5, 30, 9, 1, 7, 3] { held = held + 1 }
   if List.isEmpty(&[]) && !List.isEmpty(&items) { held = held + 1 }
+  // The ends of nothing are nothing rather than a refusal, which is what the
+  // text version of these got wrong.
+  let none: Array[Int] = []
+  if List.rest(&none) == [] && List.initial(&none) == [] { held = held + 1 }
+  if Option.isNone(&List.first(&none)) && Option.isNone(&List.last(&none)) { held = held + 1 }
 
   // Taking and dropping, from each end and by a test.
   if List.take(&items, 2) == [5, 3] { held = held + 1 }

@@ -45,12 +45,28 @@ testRuntimeEvaluation = do
   callbacks <- runEntry "test-fixtures/stdlib/UsesCallbacks.pudu"
   scoped2 <- runEntry "test-fixtures/stdlib/UsesVariantScope.pudu"
   numbers <- runEntry "test-fixtures/stdlib/UsesNumberText.pudu"
+  characters <- runEntry "test-fixtures/stdlib/UsesCharAll.pudu"
+  textual <- runEntry "test-fixtures/stdlib/UsesTextAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
   pure $ conjoin
-    [ counterexample "an aliased and a selected import both evaluate"
+    [ {-| Every export of the character module, each predicate asked once of a
+          character that holds it and once of one that does not, since a
+          predicate that never refuses is not one. -}
+      counterexample
+        "every character class answers for what it holds and what it does not"
+        (characters === Just "35")
+    {-| Every export of the text module against a stated answer, measured in
+        characters rather than bytes: the checks that could tell the two apart
+        use text carrying a character that is more than one byte. The empty
+        case is checked beside the present one, which is where `rest` was
+        found to refuse rather than answer nothing. -}
+    , counterexample
+        "every text operation answers what it says it answers"
+        (textual === Just "82")
+    , counterexample "an aliased and a selected import both evaluate"
         (ran === Just "35")
     , counterexample "generic and text modules link together"
         (everything === Just "8")

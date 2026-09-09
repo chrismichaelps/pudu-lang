@@ -31,7 +31,7 @@ testDataEvaluation = do
           right shape with the wrong contents fails here. -}
       counterexample
         "every list operation answers what it says it answers"
-        (listAll === Just "90")
+        (listAll === Just "92")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those
