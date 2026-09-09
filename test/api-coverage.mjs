@@ -14,6 +14,10 @@
 // only ever called some other way, which is the right direction for a floor to
 // err in: it can ask for more coverage than exists, never less.
 //
+// It also checks that every public name carries a doc comment. An export
+// without one is a name a reader meets with nothing to read, and the only
+// moment anyone is placed to write that sentence is when the export is added.
+//
 // Usage: node test/api-coverage.mjs <path-to-pudu> [--report] [--module Std.X]
 
 import { execFileSync } from "node:child_process";
@@ -87,6 +91,24 @@ for (const path of filesUnder("test-fixtures", ".pudu")) {
   }
 }
 
+// Every public name, and whether it carries a doc comment.
+const documentation = JSON.parse(
+  execFileSync(executable, ["doc", "--json", ...library], { stdio: "pipe", maxBuffer: 128 * 1024 * 1024 })
+    .toString()
+);
+const documented = new Map();
+for (const entry of documentation.entries) {
+  const key = `${entry.module}.${entry.name}`;
+  const written = (entry.doc ?? []).join(" ").trim();
+  if (!documented.has(key) || (!documented.get(key) && written)) documented.set(key, written);
+}
+const undocumented = [];
+for (const [moduleName, names] of exported) {
+  for (const name of names) {
+    if (!documented.get(`${moduleName}.${name}`)) undocumented.push(`${moduleName}.${name}`);
+  }
+}
+
 let total = 0;
 let covered = 0;
 const gaps = [];
@@ -114,7 +136,15 @@ if (wantsReport) {
 const floor = 2052;
 const percent = total === 0 ? 100 : Math.floor((covered / total) * 100);
 
-console.log(JSON.stringify({ exports: total, covered, percent, floor }));
+console.log(JSON.stringify({ exports: total, covered, percent, floor, undocumented: undocumented.length }));
+
+if (!only && undocumented.length > 0) {
+  console.error(`\napi-coverage: ${undocumented.length} public names carry no doc comment:\n`);
+  for (const name of undocumented.slice(0, 40)) console.error("  " + name);
+  if (undocumented.length > 40) console.error(`  ... and ${undocumented.length - 40} more`);
+  console.error("");
+  process.exit(1);
+}
 
 if (!only && covered < floor) {
   console.error(

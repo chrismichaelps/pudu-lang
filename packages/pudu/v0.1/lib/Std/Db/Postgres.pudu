@@ -8,11 +8,13 @@ import Std.Db.Session as Session
 import Std.Result as Result
 import Std.Sync as Sync
 
+/// The PostgreSQL driver, for a set a program assembles itself.
 export fn driver() -> Driver.Driver {
   Driver.Driver{name: "postgresql", schemes: ["postgres", "postgresql"],
     placeholders: Driver.DollarNumber, open: connect }
 }
 
+/// Open a client on a PostgreSQL connection string.
 export fn connect(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
   let pool = Result.mapErr(ConnectionString.pool(uri, size), adaptError) ?
   Ok(Driver.Client {

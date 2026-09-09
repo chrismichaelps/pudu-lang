@@ -2,10 +2,15 @@ module Std.Html.Ssr
 
 import Std.Html as Html
 
+/// Part of a page: either fixed markup or a named hole.
 export type Piece = Fixed(Html.Html) | Slot(Str)
+/// A piece after preparing: rendered text, or the hole still to fill.
 export type Prepared = Markup(Array[Str]) | Hole(Str)
+/// A page prepared once, ready to be filled and rendered many times.
 export type Plan = { parts: Array[Prepared] }
+/// Why a prepared page could not be rendered.
 export type RenderError = MissingSlot(Str) | InvalidLimit(Int) | TooLarge(Int)
+/// A rendered page and its length in bytes.
 export type Rendered = { body: Str, byteLength: Int }
 
 /// Render static sections once; the plan never stores request-specific slots.
@@ -20,26 +25,32 @@ export fn prepare(pieces: &Array[Piece]) -> Plan {
   Plan{parts: parts}
 }
 
+/// The page as its pieces, in order, so a caller may write them as they come.
 export fn chunks(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Array[Str], RenderError] {
   assemble(plan, values, None)
 }
 
+/// The page as one piece of text.
 export fn render(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Str, RenderError] {
   let output = chunks(plan, values) ?
   Ok(output.join(""))
 }
 
+/// The page with its length in bytes, which is what a response header needs.
 export fn finish(plan: &Plan, values: &Map[Str, Html.Html]) -> Result[Rendered, RenderError] {
   Ok(completed(render(plan, values) ?))
 }
 
+/// The page, refused if it would exceed the given number of bytes.
 export fn renderWithin(plan: &Plan, values: &Map[Str, Html.Html], maxBytes: Int) -> Result[Rendered, RenderError] {
   if maxBytes < 0 { return Err(InvalidLimit(maxBytes)) }
   let output = assemble(plan, values, Some(maxBytes)) ?
   Ok(completed(output.join("")))
 }
 
+/// A view rendered with its length, without a plan.
 export fn fragment(view: &Html.Html) -> Rendered { completed(Html.render(view)) }
+/// A whole view rendered with its length, without a plan.
 export fn document(view: &Html.Html) -> Rendered { completed(Html.document(view)) }
 
 fn completed(body: Str) -> Rendered {

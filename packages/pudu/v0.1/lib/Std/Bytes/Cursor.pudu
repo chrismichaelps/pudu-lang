@@ -105,22 +105,27 @@ export fn u16Be(cursor: &Cursor) -> Result[(UInt16, Cursor), CursorError] {
   narrow16(unsigned(cursor, 2, false) ?)
 }
 
+/// The next two bytes as an unsigned number, least significant first.
 export fn u16Le(cursor: &Cursor) -> Result[(UInt16, Cursor), CursorError] {
   narrow16(unsigned(cursor, 2, true) ?)
 }
 
+/// The next four bytes as an unsigned number, most significant first.
 export fn u32Be(cursor: &Cursor) -> Result[(UInt32, Cursor), CursorError] {
   narrow32(unsigned(cursor, 4, false) ?)
 }
 
+/// The next four bytes as an unsigned number, least significant first.
 export fn u32Le(cursor: &Cursor) -> Result[(UInt32, Cursor), CursorError] {
   narrow32(unsigned(cursor, 4, true) ?)
 }
 
+/// The next eight bytes as an unsigned number, most significant first.
 export fn u64Be(cursor: &Cursor) -> Result[(UInt64, Cursor), CursorError] {
   unsigned(cursor, 8, false)
 }
 
+/// The next eight bytes as an unsigned number, least significant first.
 export fn u64Le(cursor: &Cursor) -> Result[(UInt64, Cursor), CursorError] {
   unsigned(cursor, 8, true)
 }

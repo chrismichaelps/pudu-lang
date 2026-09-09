@@ -121,69 +121,88 @@ export fn style(declarations: &Array[(Str, Str)]) -> (Str, Str) {
 /// An attribute whose presence is its meaning, written as its own name.
 export fn flag(name: Str) -> (Str, Str) { (name, name) }
 
+/// The root element, with attributes and children.
 export fn html(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("html", *attributes, *children)
 }
 
+/// The metadata section, holding the given children.
 export fn head(children: &Array[Html]) -> Html { Element("head", [], *children) }
 
+/// The rendered section, with attributes and children.
 export fn body(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("body", *attributes, *children)
 }
 
+/// The document title, from its text.
 export fn title(content: Str) -> Html { Element("title", [], [Text(content)]) }
 
+/// A metadata element, from its attributes alone.
 export fn meta(attributes: &Array[(Str, Str)]) -> Html { Element("meta", *attributes, []) }
 
+/// A relationship to another resource, from its attributes alone.
 export fn link(attributes: &Array[(Str, Str)]) -> Html { Element("link", *attributes, []) }
 
+/// A grouping with no meaning of its own.
 export fn div(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("div", *attributes, *children)
 }
 
+/// A run of inline content with no meaning of its own.
 export fn span(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("span", *attributes, *children)
 }
 
+/// A paragraph, with attributes and children.
 export fn paragraph(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("p", *attributes, *children)
 }
 
+/// A heading of the given level, from 1 to 6.
 export fn heading(level: Int, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   let bounded = if level < 1 { 1 } else { if level > 6 { 6 } else { level } }
   Element("h" + show(bounded), *attributes, *children)
 }
 
+/// A link to a destination, with attributes and children.
 export fn anchor(href: &Destination, attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("a", attributes.push(("href", href.written)), *children)
 }
 
+/// An image from a destination, with the description screen readers read.
 export fn image(src: &Destination, description: Str, attributes: &Array[(Str, Str)]) -> Html {
   Element("img", attributes.push(("src", src.written)).push(("alt", description)), [])
 }
 
+/// A list. Ordered when the first argument holds, unordered when it does not.
 export fn list(ordered: Bool, attributes: &Array[(Str, Str)], items: &Array[Html]) -> Html {
   var built: Array[Html] = []
   for item in items { built = built.push(Element("li", [], [item])) }
   Element(if ordered { "ol" } else { "ul" }, *attributes, built)
 }
 
+/// A form posting to a destination by the given method.
 export fn form(action: &Destination, method: Str, children: &Array[Html]) -> Html {
   Element("form", [("action", action.written), ("method", method)], *children)
 }
 
+/// A form control, from its attributes alone.
 export fn input(attributes: &Array[(Str, Str)]) -> Html { Element("input", *attributes, []) }
 
+/// A button, with attributes and children.
 export fn button(attributes: &Array[(Str, Str)], children: &Array[Html]) -> Html {
   Element("button", *attributes, *children)
 }
 
+/// A table, with attributes and children.
 export fn table(attributes: &Array[(Str, Str)], rows: &Array[Html]) -> Html {
   Element("table", *attributes, *rows)
 }
 
+/// One table row, holding the given cells.
 export fn row(cells: &Array[Html]) -> Html { Element("tr", [], *cells) }
 
+/// One table cell. A header cell when the first argument holds.
 export fn cell(heads: Bool, children: &Array[Html]) -> Html {
   Element(if heads { "th" } else { "td" }, [], *children)
 }

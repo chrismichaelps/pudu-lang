@@ -3,6 +3,7 @@ module Std.BitSet
 /// Sparse blocks of 64 IDs. Construct through this module to preserve block invariants.
 export type BitSet = { words: Map[UInt64, UInt64] }
 
+/// A set holding nothing.
 export fn empty() -> BitSet { BitSet{words: mapOf([])} }
 
 /// Validate block addresses and omit empty blocks.
@@ -15,6 +16,7 @@ export fn fromBlocks(words: &Map[UInt64, UInt64]) -> Result[BitSet, UInt64] {
   Ok(BitSet{words: mapOf(entries)})
 }
 
+/// The words the set is stored as, keyed by where each begins.
 export fn blocks(value: &BitSet) -> Map[UInt64, UInt64] { value.words }
 
 fn wordAt(value: &BitSet, block: UInt64) -> UInt64 {
@@ -37,28 +39,34 @@ fn store(value: &BitSet, block: UInt64, word: UInt64) -> BitSet {
     else { BitSet{words: value.words.insert(block, word)} }
 }
 
+/// Whether a number is in the set.
 export fn contains(value: &BitSet, id: UInt64) -> Bool {
   (wordAt(value, id >> 6) & mask(id)) != 0u64
 }
 
+/// The set with a number added. Adding one already there changes nothing.
 export fn insert(value: &BitSet, id: UInt64) -> BitSet {
   let block = id >> 6
   store(value, block, wordAt(value, block) | mask(id))
 }
 
+/// The set with a number taken out, if it was there.
 export fn remove(value: &BitSet, id: UInt64) -> BitSet {
   let block = id >> 6
   store(value, block, wordAt(value, block) & (~mask(id)))
 }
 
+/// A set holding one number.
 export fn singleton(id: UInt64) -> BitSet { insert(&empty(), id) }
 
+/// A set holding each of these numbers.
 export fn fromArray(ids: &Array[UInt64]) -> BitSet {
   var out = empty()
   for id in *ids { out = insert(&out, id) }
   out
 }
 
+/// Whether the set holds nothing.
 export fn isEmpty(value: &BitSet) -> Bool { value.words.isEmpty() }
 
 /// UInt128 can count even the entire UInt64 ID domain.
@@ -69,26 +77,32 @@ export fn toArray(value: &BitSet) -> Array[UInt64] {
   wordMapMembers(value.words)
 }
 
+/// Every number in either set.
 export fn union(left: &BitSet, right: &BitSet) -> BitSet {
   BitSet{words: wordMapUnion(left.words, right.words)}
 }
 
+/// Every number in both sets.
 export fn intersection(left: &BitSet, right: &BitSet) -> BitSet {
   BitSet{words: wordMapIntersection(left.words, right.words)}
 }
 
+/// Every number in the first set and not the second.
 export fn difference(left: &BitSet, right: &BitSet) -> BitSet {
   BitSet{words: wordMapDifference(left.words, right.words)}
 }
 
+/// Every number in one set but not the other.
 export fn symmetricDifference(left: &BitSet, right: &BitSet) -> BitSet {
   BitSet{words: wordMapSymmetricDifference(left.words, right.words)}
 }
 
+/// Whether every number in the first set is in the second.
 export fn isSubsetOf(left: &BitSet, right: &BitSet) -> Bool {
   wordMapIsSubsetOf(left.words, right.words)
 }
 
+/// Whether the two sets share no number.
 export fn isDisjointFrom(left: &BitSet, right: &BitSet) -> Bool {
   wordMapIsDisjointFrom(left.words, right.words)
 }

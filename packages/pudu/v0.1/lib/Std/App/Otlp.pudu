@@ -54,14 +54,17 @@ export fn exporter(service: Str) -> Exporter {
   }
 }
 
+/// The exporter, addressed to a collector.
 export fn sendingTo(base: &Exporter, endpoint: Str) -> Exporter {
   Exporter{..*base, endpoint: endpoint}
 }
 
+/// The exporter, with a header added to what it sends.
 export fn carrying(base: &Exporter, name: Str, value: Str) -> Exporter {
   Exporter{..*base, headers: base.headers.push((name, value))}
 }
 
+/// The exporter, giving up after this many milliseconds.
 export fn within(base: &Exporter, millis: Int) -> Exporter {
   Exporter{..*base, deadlineMillis: millis}
 }

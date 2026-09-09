@@ -43,6 +43,7 @@ fn asValues(row: &Array[Option[Str]]) -> Array[Driver.Value] {
   found
 }
 
+/// Describe how a value is written to a table and read back.
 export fn stored[T](
   table: Str,
   key: Str,

@@ -68,14 +68,19 @@ export fn on(method: Http.Method, pattern: Str, handler: Handler) -> Route {
   Route{method: method, pattern: pattern, handler: handler}
 }
 
+/// A route answering GET on a path.
 export fn get(pattern: Str, handler: Handler) -> Route { on(Http.Get, pattern, handler) }
 
+/// A route answering POST on a path.
 export fn post(pattern: Str, handler: Handler) -> Route { on(Http.Post, pattern, handler) }
 
+/// A route answering PUT on a path.
 export fn put(pattern: Str, handler: Handler) -> Route { on(Http.Put, pattern, handler) }
 
+/// A route answering PATCH on a path.
 export fn patch(pattern: Str, handler: Handler) -> Route { on(Http.Patch, pattern, handler) }
 
+/// A route answering DELETE on a path.
 export fn delete(pattern: Str, handler: Handler) -> Route { on(Http.Delete, pattern, handler) }
 
 /// A route for a request carrying its terms in its own body.

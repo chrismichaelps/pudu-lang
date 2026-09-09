@@ -17,6 +17,7 @@ import Std.Result as Result
 import Std.Signal as Signal
 import Std.Sync as Sync
 
+/// Why a server could not start or could not keep serving.
 export type ServerError
   = Bind(Str)
   | Accept(Str)

@@ -542,6 +542,7 @@ export fn path(value: &Yaml, dotted: Str) -> Option[Yaml] {
   Some(current)
 }
 
+/// The value as text, or nothing when it is not text.
 export fn asText(value: &Yaml) -> Option[Str] {
   match *value {
     case Text(held) => Some(held)
@@ -549,6 +550,7 @@ export fn asText(value: &Yaml) -> Option[Str] {
   }
 }
 
+/// The value as a whole number, or nothing when it is not one.
 export fn asWhole(value: &Yaml) -> Option[Int] {
   match *value {
     case Whole(held) => Some(held)
@@ -556,6 +558,7 @@ export fn asWhole(value: &Yaml) -> Option[Int] {
   }
 }
 
+/// The value as a fractional number written out, or nothing.
 export fn asFractional(value: &Yaml) -> Option[Str] {
   match *value {
     case Fractional(held) => Some(held)
@@ -563,6 +566,7 @@ export fn asFractional(value: &Yaml) -> Option[Str] {
   }
 }
 
+/// The value as a truth value, or nothing when it is not one.
 export fn asBoolean(value: &Yaml) -> Option[Bool] {
   match *value {
     case Boolean(held) => Some(held)
@@ -570,6 +574,7 @@ export fn asBoolean(value: &Yaml) -> Option[Bool] {
   }
 }
 
+/// The value as a list, or nothing when it is not one.
 export fn asList(value: &Yaml) -> Option[Array[Yaml]] {
   match *value {
     case List(items) => Some(items)
@@ -577,6 +582,7 @@ export fn asList(value: &Yaml) -> Option[Array[Yaml]] {
   }
 }
 
+/// The value as named entries, or nothing when it is not a mapping.
 export fn asMapping(value: &Yaml) -> Option[Array[(Str, Yaml)]] {
   match *value {
     case Mapping(entries) => Some(entries)

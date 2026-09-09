@@ -2,6 +2,7 @@ module Std.Db.Row
 
 import Std.Db.Driver as Driver
 
+/// Why a value could not be read out of a result set.
 export type RowError
   = MissingColumn(Str)
   | AmbiguousColumn(Str)
@@ -13,6 +14,7 @@ export type RowError
   | NoRows
   | TooManyRows(Int)
 
+/// Turns one row into a value, or says why it could not.
 export type Mapper[T] = fn(Driver.Rows, Int) -> Result[T, RowError]
 
 /// Named access refuses duplicate labels, which require aliases or indexed access.
@@ -29,6 +31,7 @@ export fn indexOf(result: &Driver.Rows, name: Str) -> Result[Int, RowError] {
   if position < 0 { Err(MissingColumn(name)) } else { Ok(position) }
 }
 
+/// The value at a row and column, both counted from zero.
 export fn at(result: &Driver.Rows, row: Int, column: Int) -> Result[Driver.Value, RowError] {
   if row < 0 || row >= result.rows.length() { return Err(MissingRow(row)) }
   if column < 0 || column >= result.columns.length() { return Err(MissingPosition(column)) }
@@ -39,6 +42,7 @@ export fn at(result: &Driver.Rows, row: Int, column: Int) -> Result[Driver.Value
   Ok(held[column])
 }
 
+/// The value in a named column of a row, whatever its kind.
 export fn value(result: &Driver.Rows, row: Int, name: Str) -> Result[Driver.Value, RowError] {
   at(result, row, indexOf(result, name) ?)
 }
@@ -58,6 +62,7 @@ fn required(result: &Driver.Rows, row: Int, name: Str) -> Result[Driver.Value, R
   }
 }
 
+/// A named column read as text. A null is an error, not an empty string.
 export fn text(result: &Driver.Rows, row: Int, name: Str) -> Result[Str, RowError] {
   match required(result, row, name) ? {
     case Driver.TextValue(held) => Ok(held)
@@ -65,6 +70,7 @@ export fn text(result: &Driver.Rows, row: Int, name: Str) -> Result[Str, RowErro
   }
 }
 
+/// A named column read as a whole number.
 export fn integer(result: &Driver.Rows, row: Int, name: Str) -> Result[Int64, RowError] {
   match required(result, row, name) ? {
     case Driver.IntegerValue(held) => Ok(held)
@@ -72,6 +78,7 @@ export fn integer(result: &Driver.Rows, row: Int, name: Str) -> Result[Int64, Ro
   }
 }
 
+/// A named column read as an exact decimal.
 export fn decimal(result: &Driver.Rows, row: Int, name: Str) -> Result[Decimal, RowError] {
   match required(result, row, name) ? {
     case Driver.DecimalValue(held) => Ok(held)
@@ -79,6 +86,7 @@ export fn decimal(result: &Driver.Rows, row: Int, name: Str) -> Result[Decimal, 
   }
 }
 
+/// A named column read as a binary floating number.
 export fn real(result: &Driver.Rows, row: Int, name: Str) -> Result[Float64, RowError] {
   match required(result, row, name) ? {
     case Driver.RealValue(held) => Ok(held)
@@ -86,6 +94,7 @@ export fn real(result: &Driver.Rows, row: Int, name: Str) -> Result[Float64, Row
   }
 }
 
+/// A named column read as a truth value.
 export fn truth(result: &Driver.Rows, row: Int, name: Str) -> Result[Bool, RowError] {
   match required(result, row, name) ? {
     case Driver.BooleanValue(held) => Ok(held)
@@ -93,6 +102,7 @@ export fn truth(result: &Driver.Rows, row: Int, name: Str) -> Result[Bool, RowEr
   }
 }
 
+/// A named column read as raw bytes.
 export fn bytes(result: &Driver.Rows, row: Int, name: Str) -> Result[Bytes, RowError] {
   match required(result, row, name) ? {
     case Driver.BytesValue(held) => Ok(held)
@@ -111,6 +121,7 @@ export fn map[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Array[T], Ro
   Ok(mapped)
 }
 
+/// The single row a query answered, or an error when it answered none or several.
 export fn one[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[T, RowError] {
   let count = result.rows.length()
   if count == 0 { return Err(NoRows) }
@@ -118,6 +129,7 @@ export fn one[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[T, RowError]
   mapper(*result, 0)
 }
 
+/// The one row a query answered, or nothing. Several rows is an error.
 export fn optional[T](result: &Driver.Rows, mapper: Mapper[T]) -> Result[Option[T], RowError] {
   let count = result.rows.length()
   if count == 0 { return Ok(None) }

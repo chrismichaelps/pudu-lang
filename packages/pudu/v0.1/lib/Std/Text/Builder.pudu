@@ -3,6 +3,7 @@ module Std.Text.Builder
 /// Persistent fragments, materialized as text only by `finish`.
 export type Builder = { chunks: Array[Str] }
 
+/// A builder holding nothing.
 export fn empty() -> Builder { Builder{chunks: []} }
 
 /// Append a fragment without copying the accumulated prefix.
@@ -16,6 +17,7 @@ export fn appendLine(builder: &Builder, text: Str) -> Builder {
   append(&content, "\n")
 }
 
+/// The builder with each of these pieces added, in order.
 export fn appendAll(builder: &Builder, pieces: &Array[Str]) -> Builder {
   var current = *builder
   for piece in *pieces { current = append(&current, piece) }
@@ -30,6 +32,7 @@ export fn concat(left: &Builder, right: &Builder) -> Builder {
 /// The number of stored fragments, not a text or byte length.
 export fn chunkCount(builder: &Builder) -> Int { builder.chunks.length() }
 
+/// Whether the builder holds nothing.
 export fn isEmpty(builder: &Builder) -> Bool {
   for chunk in builder.chunks {
     if !chunk.isEmpty() { return false }

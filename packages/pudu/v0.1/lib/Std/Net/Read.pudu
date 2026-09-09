@@ -3,6 +3,7 @@ module Std.Net.Read
 import Std.Bytes as ByteSeq
 import Std.Net as Net
 
+/// Read up to and including a separator, within a limit.
 export fn until(connection: &Net.Connection, marker: &Bytes, limit: Int, expires: Int) -> Result[(Bytes, Bytes), Net.NetError] {
   if marker.isEmpty() || limit < marker.length() { return Err(Net.Other("invalid delimiter read limit")) }
   var buffer = ByteSeq.empty()
@@ -24,6 +25,7 @@ export fn until(connection: &Net.Connection, marker: &Bytes, limit: Int, expires
   }
 }
 
+/// Read this many bytes, or fail rather than answer fewer.
 export fn exactly(connection: &Net.Connection, count: Int, expires: Int) -> Result[Bytes, Net.NetError] {
   if count < 0 { return Err(Net.Other("negative read length")) }
   var buffer = ByteSeq.empty()

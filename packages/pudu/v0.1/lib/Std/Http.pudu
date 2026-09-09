@@ -81,6 +81,7 @@ const METHODS: Map[Str, Method] = mapOf([
     ("QUERY", Query)
   ])
 
+/// The method a name stands for, or the fallback when it names none.
 export fn methodFrom(name: Str) -> Method {
   let upper = name.toUpper()
   match METHODS.get(upper) {
@@ -204,6 +205,7 @@ const REASONS: Map[Int, Str] = mapOf([
     (504, "Gateway Timeout")
   ])
 
+/// The reason phrase that goes with a status code.
 export fn reasonFor(code: Int) -> Str {
   match REASONS.get(code) {
     case Some(found) => found
@@ -315,6 +317,7 @@ const VERSIONS: Map[Str, Version] = mapOf([
     ("HTTP/3", Http3)
   ])
 
+/// The protocol version a name stands for.
 export fn versionFrom(name: Str) -> Version {
   match VERSIONS.get(name) {
     case Some(found) => found
@@ -334,45 +337,85 @@ export fn keepsAlive(value: &Version) -> Bool {
 /// Lower case throughout, because header names are compared without regard to
 /// case and one spelling is easier to compare than two.
 export fn headerAccept() -> Str { "accept" }
+/// The character sets a client will accept.
 export fn headerAcceptCharset() -> Str { "accept-charset" }
+/// The content codings a client will accept, such as gzip.
 export fn headerAcceptEncoding() -> Str { "accept-encoding" }
+/// The languages a client prefers.
 export fn headerAcceptLanguage() -> Str { "accept-language" }
+/// The range units a server accepts, or `none`.
 export fn headerAcceptRanges() -> Str { "accept-ranges" }
+/// How long a cached response has been held, in seconds.
 export fn headerAge() -> Str { "age" }
+/// The methods a resource supports.
 export fn headerAllow() -> Str { "allow" }
+/// The client's credentials for the request.
 export fn headerAuthorization() -> Str { "authorization" }
+/// How the response may be cached, and for how long.
 export fn headerCacheControl() -> Str { "cache-control" }
+/// Options for this connection only, such as `close`.
 export fn headerConnection() -> Str { "connection" }
+/// The codings applied to the body, in the order applied.
 export fn headerContentEncoding() -> Str { "content-encoding" }
+/// The languages the body is intended for.
 export fn headerContentLanguage() -> Str { "content-language" }
+/// The length of the body in bytes.
 export fn headerContentLength() -> Str { "content-length" }
+/// Where the body can be found on its own.
 export fn headerContentLocation() -> Str { "content-location" }
+/// Which part of the whole this body is.
 export fn headerContentRange() -> Str { "content-range" }
+/// The media type of the body, and its character set.
 export fn headerContentType() -> Str { "content-type" }
+/// Cookies the client is sending back.
 export fn headerCookie() -> Str { "cookie" }
+/// When the message was produced.
 export fn headerDate() -> Str { "date" }
+/// A tag identifying this version of the resource.
 export fn headerETag() -> Str { "etag" }
+/// What the client requires the server to support.
 export fn headerExpect() -> Str { "expect" }
+/// When the response stops being fresh.
 export fn headerExpires() -> Str { "expires" }
+/// The host and port the request is addressed to.
 export fn headerHost() -> Str { "host" }
+/// Act only if the resource matches one of these tags.
 export fn headerIfMatch() -> Str { "if-match" }
+/// Act only if the resource changed after this time.
 export fn headerIfModifiedSince() -> Str { "if-modified-since" }
+/// Act only if the resource matches none of these tags.
 export fn headerIfNoneMatch() -> Str { "if-none-match" }
+/// Send the range only if the resource is unchanged.
 export fn headerIfRange() -> Str { "if-range" }
+/// Act only if the resource has not changed since this time.
 export fn headerIfUnmodifiedSince() -> Str { "if-unmodified-since" }
+/// When the resource last changed.
 export fn headerLastModified() -> Str { "last-modified" }
+/// Where to go instead, or where a new resource was created.
 export fn headerLocation() -> Str { "location" }
+/// The origin the request was made from.
 export fn headerOrigin() -> Str { "origin" }
+/// Directives kept for caches that predate `cache-control`.
 export fn headerPragma() -> Str { "pragma" }
+/// The part of the resource the client is asking for.
 export fn headerRange() -> Str { "range" }
+/// The page the request was made from.
 export fn headerReferer() -> Str { "referer" }
+/// How long to wait before asking again.
 export fn headerRetryAfter() -> Str { "retry-after" }
+/// What software answered the request.
 export fn headerServer() -> Str { "server" }
+/// A cookie for the client to store and send back.
 export fn headerSetCookie() -> Str { "set-cookie" }
+/// The codings applied for transfer, such as `chunked`.
 export fn headerTransferEncoding() -> Str { "transfer-encoding" }
+/// Other protocols the sender would rather speak.
 export fn headerUpgrade() -> Str { "upgrade" }
+/// What software made the request.
 export fn headerUserAgent() -> Str { "user-agent" }
+/// Which request headers a cached response depends on.
 export fn headerVary() -> Str { "vary" }
+/// How the client should authenticate.
 export fn headerWwwAuthenticate() -> Str { "www-authenticate" }
 
 /// Whether a header may not be forwarded by a proxy, because it describes the
@@ -390,6 +433,9 @@ const HOP_BY_HOP: Set[Str] = #{
   "upgrade"
 }
 
+/// Whether a header belongs to one connection rather than to the message.
+///
+/// A proxy must not pass these on.
 export fn isHopByHop(name: Str) -> Bool { name.toLower() in HOP_BY_HOP }
 
 /// The headers a proxy may forward, with the connection's own removed.

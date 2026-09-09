@@ -145,6 +145,7 @@ const SCHEME_PORTS: Map[Str, Int] = mapOf([
     ("ftp", 21)
   ])
 
+/// The port a scheme uses when none is written.
 export fn defaultPort(scheme: Str) -> Option[Int] { SCHEME_PORTS.get(scheme) }
 
 /// Text with the characters a URL cannot carry replaced by percent escapes.

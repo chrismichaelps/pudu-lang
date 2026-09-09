@@ -10,9 +10,13 @@ export type Value
   | BooleanValue(Bool)
   | BytesValue(Bytes)
 
+/// A column in a result set: its name, and what the database calls its type.
 export type Column = { name: Str, nativeType: Option[Str] }
+/// What a statement answered: its columns, its rows, and the command that ran.
 export type Rows = { columns: Array[Column], rows: Array[Array[Value]], command: Str }
+/// Why a database call did not succeed, and which driver said so.
 export type Error = { driver: Str, category: Str, code: Option[Str], message: Str }
+/// How a driver writes the places where values go in a statement.
 export type Placeholders = DollarNumber | QuestionMark | Named
 
 /// One connection, held for the length of a transaction.
@@ -49,6 +53,7 @@ export type Driver = {
   open: fn(Str, Int) -> Result[Client, Error]
 }
 
+/// An error naming the driver, the kind of failure, and what happened.
 export fn error(driver: Str, category: Str, message: Str) -> Error {
   Error{driver: driver, category: category, code: None, message: message}
 }
@@ -75,16 +80,20 @@ export fn select(drivers: &Array[Driver], uri: Str) -> Result[Driver, Error] {
   }
 }
 
+/// Open a client for a connection string, using the first driver that knows the scheme.
 export fn connect(drivers: &Array[Driver], uri: Str, size: Int) -> Result[Client, Error] {
   let driver = select(drivers, uri) ?
   if size < 1 { return Err(error(driver.name, "configuration", "connection capacity must be positive")) }
   (driver.open)(uri, size)
 }
 
+/// Run a statement with values bound to its placeholders.
 export fn query(client: &Client, sql: Str, values: &Array[Value]) -> Result[Rows, Error] {
   (client.query)(sql, *values)
 }
+/// Run a statement that carries no values.
 export fn execute(client: &Client, sql: Str) -> Result[Rows, Error] { (client.execute)(sql) }
+/// Close a client and the connections it holds.
 export fn close(client: &Client) -> Result[(), Error] { (client.close)() }
 
 /// Run an action inside a transaction, on one connection, whichever backend
@@ -101,4 +110,5 @@ export fn ask(held: &Tx, sql: Str, values: &Array[Value]) -> Result[Rows, Error]
   (held.query)(sql, *values)
 }
 
+/// Run a statement on the connection a transaction holds.
 export fn run(held: &Tx, sql: Str) -> Result[Rows, Error] { (held.execute)(sql) }

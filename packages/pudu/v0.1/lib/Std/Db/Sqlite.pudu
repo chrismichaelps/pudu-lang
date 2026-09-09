@@ -28,6 +28,7 @@ foreign "pudu_sqlite" {
   fn columnHex symbol "column_hex" (statement: StatementHandle, index: Int32, mode: Int32, out text: Str) -> Int32
 }
 
+/// The SQLite driver, for a set a program assembles itself.
 export fn driver() -> Driver.Driver {
   Driver.Driver{name: "sqlite", schemes: ["sqlite"], placeholders: Driver.QuestionMark, open: connect}
 }

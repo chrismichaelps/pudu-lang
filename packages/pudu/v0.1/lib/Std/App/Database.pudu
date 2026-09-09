@@ -38,6 +38,7 @@ export fn withDrivers(drivers: &Array[Driver.Driver], uri: Str, size: Int) -> Re
   withDriver(Driver.select(drivers, uri) ?, uri, size)
 }
 
+/// Prepare a database from the connection string a setting names.
 export fn fromConfig(settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
   let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
       Driver.error("", "configuration", "required database connection setting is missing or empty")
@@ -45,6 +46,7 @@ export fn fromConfig(settings: &Config.Config, key: Str, size: Int) -> Result[Da
   create(uri, size)
 }
 
+/// Prepare a database from a setting, using the given driver.
 export fn fromConfigWith(driver: Driver.Driver, settings: &Config.Config, key: Str, size: Int) -> Result[Database, Driver.Error] {
   let uri = Result.mapErr(Config.require(settings, key), fn(_problem: Config.ConfigError) -> Driver.Error {
       Driver.error(driver.name, "configuration", "required database connection setting is missing or empty")
@@ -60,6 +62,7 @@ export fn stage(database: &Database, name: Str) -> Lifecycle.Stage {
     fn() -> Result[(), Str] { Result.mapErr(stop(&resource), describe) })
 }
 
+/// Open the connections. Called by the stage rather than by a caller.
 export fn start(database: &Database) -> Result[(), Driver.Error] {
   let resource = *database
   Result.mapErr(Sync.withLock(&database.lifecycle, fn() -> Result[(), Driver.Error] {
@@ -96,6 +99,7 @@ export fn query(database: &Database, sql: Str, values: &Array[Driver.Value]) -> 
   Driver.query(&client, sql, values)
 }
 
+/// Run a statement that carries no values.
 export fn execute(database: &Database, sql: Str) -> Result[Driver.Rows, Driver.Error] {
   let client = available(database) ?
   Driver.execute(&client, sql)
@@ -115,6 +119,7 @@ fn describe(problem: Driver.Error) -> Str { problem.driver + ": " + problem.cate
 /// Preserve the distinction between database execution and application row decoding.
 export type QueryError = DatabaseFailure(Driver.Error) | MappingFailure(Row.RowError)
 
+/// Every row a query answered, each read by the mapper.
 export fn queryAll[T](
   database: &Database,
   sql: Str,
@@ -125,6 +130,7 @@ export fn queryAll[T](
   Result.mapErr(Row.map(&rows, mapper), mappingFailure)
 }
 
+/// The single row a query answered, or an error when it answered none or several.
 export fn queryOne[T](
   database: &Database,
   sql: Str,
@@ -135,6 +141,7 @@ export fn queryOne[T](
   Result.mapErr(Row.one(&rows, mapper), mappingFailure)
 }
 
+/// The one row a query answered, or nothing.
 export fn queryOptional[T](
   database: &Database,
   sql: Str,

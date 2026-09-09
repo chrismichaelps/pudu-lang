@@ -204,22 +204,27 @@ export fn get(pattern: Str, requirement: Requirement, handler: Route.Handler) ->
   guarding(Http.Get, pattern, requirement, handler)
 }
 
+/// A route answering POST, allowed only when the requirement is met.
 export fn post(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
   guarding(Http.Post, pattern, requirement, handler)
 }
 
+/// A route answering PUT, allowed only when the requirement is met.
 export fn put(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
   guarding(Http.Put, pattern, requirement, handler)
 }
 
+/// A route answering PATCH, allowed only when the requirement is met.
 export fn patch(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
   guarding(Http.Patch, pattern, requirement, handler)
 }
 
+/// A route answering DELETE, allowed only when the requirement is met.
 export fn remove(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
   guarding(Http.Delete, pattern, requirement, handler)
 }
 
+/// A route answering QUERY, allowed only when the requirement is met.
 export fn query(pattern: Str, requirement: Requirement, handler: Route.Handler) -> Guarded {
   guarding(Http.Query, pattern, requirement, handler)
 }

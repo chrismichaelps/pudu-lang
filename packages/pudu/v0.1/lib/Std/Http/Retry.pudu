@@ -43,18 +43,22 @@ export fn backoff() -> Backoff {
   Backoff{attempts: 3, firstWaitMillis: 100, maxWaitMillis: 2000, jitterPercent: 50, budgetMillis: 5000}
 }
 
+/// The policy, trying at most this many times.
 export fn attempts(base: &Backoff, count: Int) -> Backoff {
   Backoff{..*base, attempts: if count < 1 { 1 } else { count }}
 }
 
+/// The policy, waiting between this many and that many milliseconds.
 export fn waiting(base: &Backoff, firstMillis: Int, maxMillis: Int) -> Backoff {
   Backoff{..*base, firstWaitMillis: firstMillis, maxWaitMillis: maxMillis}
 }
 
+/// The policy, giving up after this many milliseconds in total.
 export fn budget(base: &Backoff, millis: Int) -> Backoff {
   Backoff{..*base, budgetMillis: millis}
 }
 
+/// The policy, spreading waits by up to this many milliseconds.
 export fn jitter(base: &Backoff, percent: Int) -> Backoff {
   let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
   Backoff{..*base, jitterPercent: bounded}

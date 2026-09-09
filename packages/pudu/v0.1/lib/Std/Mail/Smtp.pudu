@@ -13,6 +13,7 @@ export type SmtpAuth
   = Login(Str, Str)
   | Plain(Str, Str)
 
+/// How a connection to the server is protected.
 export type SmtpSecurity = Plaintext | ImplicitTls | StartTlsRequired
 
 type Transport = Tcp(Net.Connection) | Secure(Tls.Secured)
@@ -225,6 +226,7 @@ export fn deliver(c: &SmtpClient, msg: &Mail.Message) -> Result[Int, SmtpError] 
   outcome
 }
 
+/// The client, connecting with the given protection.
 export fn withSecurity(c: &SmtpClient, security: SmtpSecurity) -> SmtpClient {
   SmtpClient{..*c, security: security}
 }

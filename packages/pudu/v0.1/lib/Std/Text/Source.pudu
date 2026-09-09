@@ -23,8 +23,10 @@ export fn fromText(text: Str) -> Source {
   fromBytes(&bytes)
 }
 
+/// How many bytes the text occupies.
 export fn byteLength(source: &Source) -> Int { source.bytes.length() }
 
+/// How many lines the text has.
 export fn lineCount(source: &Source) -> Int { source.starts.length() }
 
 /// Locate an absolute byte offset. A byte inside UTF-8 still has a byte column.

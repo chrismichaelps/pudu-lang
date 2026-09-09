@@ -1,7 +1,9 @@
 module Std.App.Stage
 
+/// A named part of an application's life: how it starts and how it stops.
 export type Stage = { name: Str, start: fn() -> Result[(), Str], stop: fn() -> Result[(), Str] }
 
+/// A stage from its name and the two actions.
 export fn create(
   name: Str,
   opening: fn() -> Result[(), Str],

@@ -3,8 +3,10 @@ module Std.Intern
 /// A persistent, session-local spelling table. Thread returned pools forward.
 export type Pool = { names: Array[Str], indices: Map[Str, Int] }
 
+/// A pool holding no text.
 export fn empty() -> Pool { Pool{names: [], indices: mapOf([])} }
 
+/// How many distinct pieces of text the pool holds.
 export fn size(pool: &Pool) -> Int { pool.names.length() }
 
 /// Resolve a pool-local ID, refusing negative and out-of-range values.

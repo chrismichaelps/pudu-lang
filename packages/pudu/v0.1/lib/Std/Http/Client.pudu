@@ -133,6 +133,7 @@ export fn within(base: &Limits, millis: Int) -> Limits {
   }
 }
 
+/// Request a URL, within the given limits.
 export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError] {
   send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held)
 }
@@ -368,6 +369,7 @@ fn readAnswer(received: &Bytes, held: &Limits) -> Result[Http.Response, ClientEr
   Ok(Http.Response{..response, body: Result.unwrapOr(ByteSeq.toText(&payload), ""), binaryBody: Some(payload)})
 }
 
+/// Whether a status code asks the client to go elsewhere.
 export fn isRedirect(code: Int) -> Bool {
   Set.contains(&METHOD_DROPPING, code) || Set.contains(&METHOD_KEEPING, code)
 }
@@ -414,6 +416,7 @@ fn locationOf(headers: &Array[(Str, Str)]) -> Str {
   found
 }
 
+/// An address resolved against the one it was found on.
 export fn resolved(from: Str, stated: Str) -> Str {
   if stated.startsWith("http://") || stated.startsWith("https://") {
     stated
@@ -439,6 +442,7 @@ fn portSuffix(place: &Url.Url) -> Str {
   }
 }
 
+/// Whether two URLs share a scheme, host and port.
 export fn originsMatch(left: Str, right: Str) -> Bool {
   if let Ok(first) = Url.parse(left) {
     if let Ok(second) = Url.parse(right) {
@@ -451,6 +455,7 @@ export fn originsMatch(left: Str, right: Str) -> Bool {
   }
 }
 
+/// What went wrong, in words for a person.
 export fn explain(problem: &ClientError) -> Str {
   match problem {
     case BadUrl(target) => "that is not an address: " + target

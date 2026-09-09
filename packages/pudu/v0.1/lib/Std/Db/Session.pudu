@@ -159,6 +159,7 @@ fn failedRead[T](stream: &Connection, primary: DbError) -> Result[T, DbError] {
   }
 }
 
+/// Send bytes to the server.
 export fn write(stream: &Connection, payload: &Bytes) -> Result[(), DbError] {
   live(stream) ?
   Result.mapErr(Net.send(&stream.socket, payload), fn(problem: Net.NetError) -> DbError {
@@ -428,6 +429,7 @@ fn asWire(problem: Wire.ProtocolError) -> DbError { Malformed(show(problem)) }
 
 fn asBytes(problem: ByteSeq.BytesError) -> DbError { Malformed(show(problem)) }
 
+/// A message carrying nothing, for a read that found none.
 export fn emptyMessage() -> Wire.Message {
   Wire.Message{kind: "?", payload: ByteSeq.empty()}
 }

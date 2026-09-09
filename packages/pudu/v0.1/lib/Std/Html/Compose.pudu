@@ -5,6 +5,7 @@ import Std.Html as Html
 /// An ordered, persistent sequence of typed views.
 export type Content = { nodes: Array[Html.Html] }
 
+/// Content holding nothing, to be added to.
 export fn content() -> Content { Content{nodes: []} }
 
 /// Content reads top to bottom; every adding method returns the next value.
@@ -52,10 +53,12 @@ impl Composition for Content {
   fn section(self: &Self) -> Html.Html { Html.tag("section", &self.nodes) }
 }
 
+/// A whole page with the given title and body.
 export fn document(title: Str, body: Content) -> Html.Html {
   shell(&[], title, body)
 }
 
+/// A whole page, declaring the language it is written in.
 export fn documentIn(language: Str, title: Str, body: Content) -> Html.Html {
   shell(&[("lang", language)], title, body)
 }
