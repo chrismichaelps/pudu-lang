@@ -296,6 +296,28 @@ export fn formOf(
   )
 }
 
+/// The fields an ordinary form posted.
+///
+/// A form without a file in it is sent as a query string in the body, which is
+/// what every browser does for a `<form method="post">` unless it is told
+/// otherwise. `formOf` reads the other shape — the multipart one a form uses
+/// once it carries a file — and a program that only wants a title and a
+/// checkbox should not have to reach for a parser built for uploads.
+///
+/// The body is read with the same decoder a query string is read with, because
+/// it is the same encoding: `+` is a space, `%41` is an `A`, and a field
+/// written twice keeps the last of them.
+export fn fieldsOf(request: &Request) -> Map[Str, Str] {
+  mapOf(Url.parseQuery(request.message.body))
+}
+
+/// Whether a request carried fields in the ordinary encoding.
+export fn carriesFields(request: &Request) -> Bool {
+  Option.unwrapOr(header(request, "content-type"), "")
+    .toLower()
+    .startsWith("application/x-www-form-urlencoded")
+}
+
 /// Whether a request carried a form with files in it.
 export fn carriesForm(request: &Request) -> Bool {
   Option.isSome(&Multipart.boundaryOf(Option.unwrapOr(header(request, "content-type"), "")))
