@@ -159,7 +159,22 @@ callStringMethodFast spanValue member text arguments = case member of
   "indexOf" -> Just $ case arguments of
     [StrValue needle] -> pure (intOf (indexOfText text needle))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for indexOf" Nothing
+  "spanOf" -> direct StringSpanOf
+  "spanNotOf" -> direct StringSpanNotOf
+  "slice" -> direct StringSlice
+  "trim" -> direct StringTrim
+  "toUpper" -> direct StringToUpper
+  "toLower" -> direct StringToLower
+  "replace" -> direct StringReplace
+  "repeat" -> direct StringRepeat
+  "split" -> direct StringSplit
+  "toBytes" -> direct StringToBytes
+  "chars" -> direct StringChars
+  "lines" -> direct StringLines
+  "reverse" -> direct StringReverse
   _ -> Nothing
+ where
+  direct method = Just (callStringMethod spanValue method (StrValue text) arguments)
 
 charAtFast :: Span -> Text -> Integer -> Evaluator Value
 charAtFast spanValue text@(Text _ _ byteLength) index
