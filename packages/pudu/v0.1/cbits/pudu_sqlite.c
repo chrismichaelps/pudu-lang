@@ -30,6 +30,7 @@ struct sqlite_api {
   const void *(*blob)(sqlite3_stmt *, int);
   int (*bytes)(sqlite3_stmt *, int);
   int (*errcode)(sqlite3 *);
+  int (*autocommit)(sqlite3 *);
 };
 struct database {
   void *library;
@@ -85,6 +86,7 @@ static int32_t open_database(const char *path, struct database **out) {
   LOAD(integer, "sqlite3_column_int64"); LOAD(real, "sqlite3_column_double");
   LOAD(text, "sqlite3_column_text"); LOAD(blob, "sqlite3_column_blob");
   LOAD(bytes, "sqlite3_column_bytes"); LOAD(errcode, "sqlite3_errcode");
+  LOAD(autocommit, "sqlite3_get_autocommit");
   atomic_init(&db->references, 1);
   /* READWRITE | CREATE | FULLMUTEX; URI interpretation is not requested. */
   int status = db->api.open(path, &db->native, 0x00000002 | 0x00000004 | 0x00010000, NULL);
@@ -115,6 +117,7 @@ static int32_t prepare(struct database *db, const char *sql, struct statement **
   *out = statement;
   return 0;
 }
+static int32_t autocommit(struct database *db) { return db->api.autocommit(db->native); }
 static int32_t parameter_count(struct statement *s) { return s->database->api.parameters(s->native); }
 static int32_t bind_null(struct statement *s, int32_t index) { return s->database->api.bind_null(s->native, index); }
 static int32_t bind_integer(struct statement *s, int32_t index, int64_t value) { return s->database->api.bind_int(s->native, index, value); }
@@ -189,6 +192,7 @@ static int32_t column_hex(struct statement *s, int32_t index, int32_t mode, cons
 void *pudu_sqlite_symbol(const char *name) {
 #define SYMBOL(label, function) if (strcmp(name, label) == 0) return (void *)(function)
   SYMBOL("open", open_database); SYMBOL("release", release_database);
+  SYMBOL("autocommit", autocommit);
   SYMBOL("prepare", prepare); SYMBOL("finalize", release_statement);
   SYMBOL("parameters", parameter_count); SYMBOL("bind_null", bind_null);
   SYMBOL("bind_integer", bind_integer); SYMBOL("bind_real", bind_real);

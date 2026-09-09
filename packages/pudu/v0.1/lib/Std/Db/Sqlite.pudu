@@ -13,6 +13,7 @@ foreign "pudu_sqlite" {
   fn releaseDatabase symbol "release" (database: DatabaseHandle) -> ()
   fn prepare symbol "prepare" (database: DatabaseHandle, sql: Str, out statement: owned StatementHandle by finalize) -> Int32
   fn finalize symbol "finalize" (statement: StatementHandle) -> ()
+  fn autocommit(database: DatabaseHandle) -> Int32
   fn parameters symbol "parameters" (statement: StatementHandle) -> Int32
   fn bindNull symbol "bind_null" (statement: StatementHandle, index: Int32) -> Int32
   fn bindInteger symbol "bind_integer" (statement: StatementHandle, index: Int32, value: Int64) -> Int32
@@ -74,13 +75,12 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
                   }
                   match action(inside) {
                     case Ok(rows) => {
-                      let _kept = perform(database, "COMMIT", &[]) ?
-                      Ok(rows)
+                      match perform(database, "COMMIT", &[]) {
+                        case Ok(_) => Ok(rows)
+                        case Err(reason) => recoverTransaction(database, &current, reason)
+                      }
                     }
-                    case Err(reason) => {
-                      let _undone = perform(database, "ROLLBACK", &[])
-                      Err(reason)
-                    }
+                    case Err(reason) => recoverTransaction(database, &current, reason)
                   }
                 }
               }
@@ -103,6 +103,25 @@ export fn connect(uri: Str, capacity: Int) -> Result[Driver.Client, Driver.Error
             }), synchronization) ?
       }
     })
+}
+
+fn recoverTransaction(database: DatabaseHandle, current: &Sync.Cell[Option[DatabaseHandle]], reason: Driver.Error) -> Result[Driver.Rows, Driver.Error] {
+  unsafe(foreign) {
+    if autocommit(database) != 0i32 { return Err(reason) }
+  }
+  match perform(database, "ROLLBACK", &[]) {
+    case Ok(_) => Err(reason)
+    case Err(cleanup) => {
+      let held = Result.mapErr(Sync.swap(current, None), synchronization) ?
+      if let Some(opened) = held { unsafe(foreign) { releaseDatabase(opened) } }
+      Err(Driver.Error{
+        driver: reason.driver,
+        category: "transaction",
+        code: reason.code,
+        message: reason.message + "; rollback failed and the connection was closed: " + cleanup.message
+      })
+    }
+  }
 }
 
 fn open(path: Str) -> Result[DatabaseHandle, Driver.Error] {
