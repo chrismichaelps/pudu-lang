@@ -18,9 +18,7 @@ def main():
     parser.error("version must contain three numeric components without leading zeros")
   root = Path(__file__).resolve().parent.parent
   try:
-    package, previous, configuration = load_package(root, args.package)
-    if package.parent != (root / "packages/pudu").resolve():
-      raise ValueError("versioned packages must be directly inside packages/pudu")
+    package, previous, configuration = load_package(root, args.package, allow_series_change=True)
     expected = "v" + ".".join(args.version.split(".")[:2])
     if package.name != expected:
       raise ValueError(f"version {args.version} belongs in packages/pudu/{expected}")
