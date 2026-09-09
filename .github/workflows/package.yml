@@ -8,6 +8,11 @@ on:
         required: true
         default: v0.1
         type: string
+      draft_release:
+        description: Attach packages to a draft release for an existing version tag
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,6 +35,22 @@ jobs:
           cabal-version: 3.16.1.0
       - name: Select package
         run: python3 scripts/select-version.py "$PACKAGE_SERIES"
+      - name: Require matching release tag
+        if: inputs.draft_release
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from package_info import load_package
+          _, version, _ = load_package(Path.cwd())
+          if os.environ["REF_TYPE"] != "tag" or os.environ["REF_NAME"] != "v" + version:
+              raise SystemExit("Draft releases require an existing tag matching the package version")
+          PYTHON
       - name: Install native build dependencies
         run: sudo apt-get update && sudo apt-get install -y libffi-dev zlib1g-dev libgmp-dev
       - run: cabal update
@@ -47,3 +68,35 @@ jobs:
           path: dist/packages/*
           if-no-files-found: error
           retention-days: 14
+
+  draft-release:
+    if: inputs.draft_release
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pudu-${{ inputs.series }}-linux-amd64-${{ github.sha }}
+          path: packages
+      - name: Create draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft > release-state.json; then
+            python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          if json.loads(Path("release-state.json").read_text())["isDraft"] is not True:
+              raise SystemExit("Refusing to modify a published release")
+          PYTHON
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "Pudu $RELEASE_TAG" --notes ""
+          fi
+          gh release upload "$RELEASE_TAG" packages/*
