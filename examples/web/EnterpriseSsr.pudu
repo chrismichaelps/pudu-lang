@@ -21,18 +21,31 @@ export fn renderEarlyHead(title: Str, nonce: Str) -> Result[Bytes, Str] {
 }
 
 /// Renders an interactive product counter island with server action form and zero-JS fallback.
+///
+/// Hydrated when it is scrolled to rather than when the page loads. The widget
+/// is below the fold on most screens, and a page that hydrates everything on
+/// arrival spends the reader's first second on parts they are not looking at —
+/// which is the cost islands exist to avoid, and is not avoided by drawing an
+/// island around something and hydrating it eagerly anyway.
+///
+/// The form inside works with no script at all: it posts, and the server
+/// answers. Hydration only removes the round trip.
 export fn renderProductIsland(csrfToken: Str, count: Int) -> Html.Html {
-  let staticView = Html.tag("div", &[
-      Html.tag("h3", &[Html.text("Active Inventory")]),
-      Html.tag("p", &[Html.text("Current stock level: " + show(count))])
-    ])
+  let staticView = H.div()
+    .holding([H.h3().says("Active Inventory"), H.p().says("Current stock level: " + show(count))])
+    .html()
 
   let countInput = H.input().kind("number").name("quantity").value("1").html()
   let submitBtn = H.button().submit().says("Restock").html()
   let form = Island.serverActionForm("/api/inventory/restock", csrfToken, &[countInput, submitBtn])
 
-  let islandContent = Html.tag("div", &[staticView, form])
-  Island.island("inventory-widget", "\{\"stock\":" + show(count) + "\}", islandContent)
+  let islandContent = H.div().holds(staticView).holds(form).html()
+  Island.islandWithHydration(
+    "inventory-widget",
+    "\{\"stock\":" + show(count) + "\}",
+    islandContent,
+    Island.Visible
+  )
 }
 
 /// Assembles complete streaming chunks with out-of-order Suspense and MSS coalescing.

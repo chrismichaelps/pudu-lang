@@ -165,8 +165,45 @@ export fn main() -> Int {
   let renderedForm = Html.render(&Island.serverActionForm("/api/cart", "token123", &[Html.text("Input")]))
   if renderedForm.contains("<form method=\"POST\" action=\"/api/cart\"") && renderedForm.contains("value=\"token123\"") { passed = passed + 1 }
 
+  // The runtime carries the nonce it was given and defines the element the
+  // island markup names. Checked for the definition rather than for any one
+  // line of its body, so a rewrite of how hydration works does not quietly
+  // stop testing that a runtime is emitted at all.
   let renderedRuntime = Html.render(&Island.microRuntime(nonce))
-  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"") && renderedRuntime.contains("fetch(f.action") { passed = passed + 1 }
+  if renderedRuntime.contains("<script nonce=\"" + nonce + "\"")
+    && renderedRuntime.contains("customElements.define('pudu-island'") { passed = passed + 1 }
+
+  // Braces survive the trip out of the source. Every brace in the runtime is
+  // written escaped, and one that is not stops the module compiling — but a
+  // wrongly escaped one would render a backslash into the page and leave a
+  // script that no browser can parse, which nothing else here would notice.
+  var opens = 0
+  var closes = 0
+  for character in renderedRuntime.chars() {
+    if character == '\{' { opens = opens + 1 }
+    if character == '\}' { closes = closes + 1 }
+  }
+  if opens > 0 && opens == closes { passed = passed + 1 }
+  var slashes = 0
+  for character in renderedRuntime.chars() {
+    if character == '\\' { slashes = slashes + 1 }
+  }
+  if slashes == 0 { passed = passed + 1 }
+
+  // Each way of hydrating says so in the markup, since that attribute is the
+  // whole instruction the runtime reads.
+  let eagerIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Eager)
+  )
+  let visibleIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Visible)
+  )
+  let idleIsland = Html.render(
+      &Island.islandWithHydration("cart", "\{\}", Html.text("f"), Island.Idle)
+  )
+  if eagerIsland.contains("data-hydrate=\"eager\"") { passed = passed + 1 }
+  if visibleIsland.contains("data-hydrate=\"visible\"") { passed = passed + 1 }
+  if idleIsland.contains("data-hydrate=\"idle\"") { passed = passed + 1 }
 
   // 11. Reply: withEtag and notModified
   let baseResp = Reply.text(200, "resource-body")
