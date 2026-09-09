@@ -3,12 +3,21 @@ module Std.Ui.Island
 import Std.Html as Html
 
 /// Wraps a server-rendered component in an isolated progressive island element.
+export type Hydration = Eager | Visible | Idle
+
 export fn island(name: Str, propsJson: Str, fallback: Html.Html) -> Html.Html {
-  Html.element(
-    "pudu-island",
-      &[("data-name", name), ("data-props", propsJson)],
-      &[fallback]
-  )
+  islandWithHydration(name, propsJson, fallback, Eager)
+}
+
+export fn islandWithHydration(name: Str, propsJson: Str, fallback: Html.Html, hydration: Hydration) -> Html.Html {
+  let mode = match hydration {
+    case Eager => "eager"
+    case Visible => "visible"
+    case Idle => "idle"
+  }
+  Html.element("pudu-island",
+    &[("data-name", name), ("data-props", propsJson), ("data-hydrate", mode)],
+    &[fallback])
 }
 
 /// Builds an accessible HTML form with automatic CSRF token protection.
@@ -36,6 +45,6 @@ export fn serverActionForm(
 }
 
 export fn microRuntime(nonce: Str) -> Html.Html {
-  let scriptBody = "(function()\{if(window.PuduIslands)return;const mounts=new Map();function report(node,error)\{node.dispatchEvent(new CustomEvent('pudu:island-error',\{detail:error,bubbles:true}));}class Island extends HTMLElement\{connectedCallback()\{this.mount();}disconnectedCallback()\{this.generation=(this.generation||0)+1;const cleanup=this.cleanup;this.cleanup=null;this.active=false;if(typeof cleanup==='function')\{try\{cleanup();}catch(error)\{report(this,error);}}}mount()\{const mount=mounts.get(this.dataset.name);if(this.active||!this.isConnected||!mount)return;let props;try\{props=JSON.parse(this.dataset.props||'\{}');}catch(error)\{report(this,error);return;}this.active=true;const generation=this.generation=(this.generation||0)+1;Promise.resolve().then(()=>\{if(this.isConnected&&this.generation===generation)return mount(this,props);}).then(cleanup=>\{if(!this.isConnected||this.generation!==generation)\{if(typeof cleanup==='function')cleanup();return;}this.cleanup=cleanup;this.dispatchEvent(new CustomEvent('pudu:island-ready',\{bubbles:true}));}).catch(error=>\{if(this.generation===generation)this.active=false;report(this,error);});}}window.PuduIslands=Object.freeze(\{register(name,mount)\{if(typeof name!=='string'||!name||typeof mount!=='function')throw new TypeError('Invalid island registration');if(mounts.has(name))throw new Error('Island already registered: '+name);mounts.set(name,mount);for(const node of document.querySelectorAll('pudu-island'))if(node.dataset.name===name)node.mount();}});if(!customElements.get('pudu-island'))customElements.define('pudu-island',Island);})();"
+  let scriptBody = "(function()\{if(window.PuduIslands)return;const mounts=new Map();const visible=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>\{for(const entry of entries)if(entry.isIntersecting)\{visible.unobserve(entry.target);entry.target.waiting=false;entry.target.mount();}}):null;function report(node,error)\{node.dispatchEvent(new CustomEvent('pudu:island-error',\{detail:error,bubbles:true}));}class Island extends HTMLElement\{connectedCallback()\{this.schedule();}schedule()\{if(this.active||this.waiting||!this.isConnected||!mounts.has(this.dataset.name))return;if(this.dataset.hydrate==='visible'&&visible)\{this.waiting=true;visible.observe(this);return;}if(this.dataset.hydrate==='idle')\{this.waiting=true;const run=()=>\{this.cancelScheduled=null;this.waiting=false;this.mount();};if(typeof requestIdleCallback==='function')\{const id=requestIdleCallback(run,\{timeout:2000});this.cancelScheduled=()=>cancelIdleCallback(id);}else\{const id=setTimeout(run,0);this.cancelScheduled=()=>clearTimeout(id);}return;}this.mount();}disconnectedCallback()\{if(visible)visible.unobserve(this);if(this.cancelScheduled)this.cancelScheduled();this.cancelScheduled=null;this.waiting=false;this.generation=(this.generation||0)+1;const cleanup=this.cleanup;this.cleanup=null;this.active=false;if(typeof cleanup==='function')\{try\{cleanup();}catch(error)\{report(this,error);}}}mount()\{if(visible)visible.unobserve(this);if(this.cancelScheduled)this.cancelScheduled();this.cancelScheduled=null;this.waiting=false;const mount=mounts.get(this.dataset.name);if(this.active||!this.isConnected||!mount)return;let props;try\{props=JSON.parse(this.dataset.props||'\{}');}catch(error)\{report(this,error);return;}this.active=true;const generation=this.generation=(this.generation||0)+1;Promise.resolve().then(()=>\{if(this.isConnected&&this.generation===generation)return mount(this,props);}).then(cleanup=>\{if(!this.isConnected||this.generation!==generation)\{if(typeof cleanup==='function')cleanup();return;}this.cleanup=cleanup;this.dispatchEvent(new CustomEvent('pudu:island-ready',\{bubbles:true}));}).catch(error=>\{if(this.generation===generation)this.active=false;report(this,error);});}}window.PuduIslands=Object.freeze(\{register(name,mount)\{if(typeof name!=='string'||!name||typeof mount!=='function')throw new TypeError('Invalid island registration');if(mounts.has(name))throw new Error('Island already registered: '+name);mounts.set(name,mount);for(const node of document.querySelectorAll('pudu-island'))if(node.dataset.name===name)node.schedule();}});if(!customElements.get('pudu-island'))customElements.define('pudu-island',Island);})();"
   Html.element("script", &[("nonce", nonce)], &[Html.trusted(scriptBody)])
 }
