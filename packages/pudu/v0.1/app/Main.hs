@@ -147,29 +147,37 @@ watchProgram _style path carried = do
   hSetBuffering stdout LineBuffering
   TextIO.putStrLn (Text.pack ("watching " <> root))
   stamps <- sourceStamps root
-  running <- startWatched self path carried
-  follow self root stamps running
+  follow self root stamps
  where
-  follow self root stamps running = do
+  follow self root stamps = do
+    settled <- bracket
+      (startWatched self path carried)
+      stopWatched
+      (\_ -> awaitChange root stamps)
+    follow self root settled
+
+  awaitChange root stamps = do
     threadDelay pollMicroseconds
-    stopped <- getProcessExitCode running
     fresh <- sourceStamps root
     if fresh == stamps
-      then follow self root stamps running
+      then awaitChange root stamps
       else do
         settled <- settle root fresh
-        TextIO.putStrLn (Text.pack (changedLine (changedNames stamps settled)))
-        -- A program that has already stopped needs no stopping, and asking the
-        -- operating system to end a process that has been reaped is an error
-        -- on some systems rather than nothing.
-        case stopped of
-          Just _ -> pure ()
-          Nothing -> do
-            terminateProcess running
-            _ <- waitForProcess running
-            pure ()
-        next <- startWatched self path carried
-        follow self root settled next
+        if settled == stamps
+          then awaitChange root stamps
+          else do
+            TextIO.putStrLn (Text.pack (changedLine (changedNames stamps settled)))
+            pure settled
+
+stopWatched :: ProcessHandle -> IO ()
+stopWatched running = do
+  stopped <- getProcessExitCode running
+  case stopped of
+    Just _ -> pure ()
+    Nothing -> do
+      terminateProcess running
+      _ <- waitForProcess running
+      pure ()
 
 settle :: FilePath -> [(FilePath, UTCTime)] -> IO [(FilePath, UTCTime)]
 settle root previous = do
