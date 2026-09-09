@@ -1,0 +1,13 @@
+module Root
+
+import Layered as Layered
+import Layered.Lifecycle as Lifecycle
+
+/// Both spellings name one type, so a value made through either may be used
+/// as the other.
+export fn main() -> Int {
+  let throughAlias: Layered.Stage = Layered.staged("one")
+  let throughOwner: Lifecycle.Stage = Lifecycle.create("two")
+  let carried: Layered.Stage = throughOwner
+  throughAlias.name.length() + carried.name.length()
+}

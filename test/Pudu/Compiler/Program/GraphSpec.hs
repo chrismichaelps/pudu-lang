@@ -1,6 +1,7 @@
 {-| @Test.Compiler.Program.GraphSpec — dependency graph, discovery, and interface tests -}
 module Pudu.Compiler.Program.GraphSpec
   ( graphProperties
+  , testAliasedReexport
   , testDiscoveryFailures
   , testGraphEdges
   , testImportFailures
@@ -60,6 +61,25 @@ testPathDependencies = do
     , counterexample "a dependency that is not there is reported at the import"
         (absent === ["E2014"])
     ]
+
+{-| A type re-exported under the name it already has.
+
+    An alias is recorded under its bare name as well as its qualified one, and
+    that record carried from module to module: a module writing
+    `type Stage = Other.Stage` left `Stage` in the alias table, and the module
+    declaring the real `Stage` then read its own name through that entry and
+    reported its own constructor as a different type than its own signature.
+
+    Checked as a program that compiles rather than as a diagnostic, because
+    what broke was a module disagreeing with itself — and the shape that broke
+    it is the ordinary one of moving a type into its own module and leaving the
+    old name pointing at it. -}
+testAliasedReexport :: IO Property
+testAliasedReexport = do
+  layered <- codes "test-fixtures/typealias/Root.pudu"
+  pure $ counterexample
+    "a type re-exported under its own name is still the type that declared it"
+    (layered === [])
 
 testDiscoveryFailures :: IO Property
 testDiscoveryFailures = do

@@ -15,6 +15,7 @@ import Pudu.Compiler.Program.GraphSpec
   , testImportFailures
   , testImportedMethods
   , testInterfaceEdges
+  , testAliasedReexport
   , testPathDependencies
   )
 import Pudu.Compiler.Program.StdlibSpec (testStandardLibrary)
@@ -35,6 +36,7 @@ programProperties =
   , ("program graphs preserve nominal identity and signature cycles", testGraphEdges)
   , ("program interfaces preserve ABI identity defaults and ambiguity", testInterfaceEdges)
   , ("a project reaches the code its manifest declares", testPathDependencies)
+  , ("a type re-exported under its own name stays one type", testAliasedReexport)
   , ("REPL loads retain the program interface context", testReplLoadContext)
   , ("the standard library resolves from the distribution", testStandardLibrary)
   , ("an imported module is linked into evaluation", testProgramEvaluation)

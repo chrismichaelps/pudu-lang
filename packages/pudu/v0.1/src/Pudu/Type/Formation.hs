@@ -329,9 +329,32 @@ collectDeclaredFrom initial owner declarations = do
           , declaredOwnedVariants = builtinOwnedVariants
               <> declaredOwnedVariants initial
           , declaredOwners = builtinOwners <> declaredOwners initial
-          , declaredAliases = builtinAliases <> declaredAliases initial
+          , declaredAliases =
+              Map.withoutKeys (builtinAliases <> declaredAliases initial) (locallyDeclared declarations)
           }
   foldCollect owner shells declarations
+
+{-| The bare names this module declares a type or trait under.
+
+    An alias is recorded under its own module's qualified name and under its
+    bare one, and what is collected here carries forward from module to module.
+    Without this, `Std.App` writing `type Stage = Lifecycle.Stage` leaves
+    `Stage` in the alias table, and `Std.App.Stage` — which declares the real
+    `Stage` — then reads its own name through the other module's alias and
+    reports its own constructor as a different type than its own signature.
+
+    A name a module declares means what that module declared, so an alias
+    reaching it from elsewhere under the same bare name is dropped before the
+    module is collected. The qualified spelling is untouched, so `App.Stage`
+    still stands for what `App` said it stands for. -}
+locallyDeclared :: [Located Declaration] -> Set.Set Text
+locallyDeclared = Set.fromList . concatMap named
+ where
+  named (Located _ declaration) = case declaration of
+    TypeDeclaration value -> [locatedValue (typeName value)]
+    TraitDeclaration value -> [locatedValue (traitName value)]
+    ForeignDeclaration value -> map locatedValue (foreignTypes value)
+    _ -> []
 
 addShell :: ModuleName -> Located Declaration -> DeclaredTypes -> DeclaredTypes
 addShell owner (Located _ declaration) declared = case declaration of

@@ -1,0 +1,7 @@
+module Layered.Lifecycle
+
+/// The real declaration. Another module re-exports it under the same bare
+/// name, and this one must keep reading `Stage` as what it declares here.
+export type Stage = { name: Str }
+
+export fn create(name: Str) -> Stage { Stage{name: name} }
