@@ -114,12 +114,12 @@ fn recoverTransaction(database: DatabaseHandle, current: &Sync.Cell[Option[Datab
     case Err(cleanup) => {
       let held = Result.mapErr(Sync.swap(current, None), synchronization) ?
       if let Some(opened) = held { unsafe(foreign) { releaseDatabase(opened) } }
-      Err(Driver.Error{
-        driver: reason.driver,
-        category: "transaction",
-        code: reason.code,
-        message: reason.message + "; rollback failed and the connection was closed: " + cleanup.message
-      })
+      Err(Driver.Error {
+          driver: reason.driver,
+          category: "transaction",
+          code: reason.code,
+          message: reason.message + "; rollback failed and the connection was closed: " + cleanup.message
+        })
     }
   }
 }

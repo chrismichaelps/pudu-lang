@@ -1,9 +1,9 @@
 module Std.App
 
-import Std.App.Stage as Lifecycle
 import Std.App.Config as Config
 import Std.App.Health as Health
 import Std.App.Metrics as Metrics
+import Std.App.Stage as Lifecycle
 import Std.Http as Http
 import Std.Http.Server.Guard as Guard
 import Std.Http.Server.Reply as Reply

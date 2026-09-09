@@ -1,7 +1,7 @@
 module Std.App.Database
 
-import Std.App.Stage as Lifecycle
 import Std.App.Config as Config
+import Std.App.Stage as Lifecycle
 import Std.Db.Driver as Driver
 import Std.Db.Postgres as Postgres
 import Std.Db.Row as Row
