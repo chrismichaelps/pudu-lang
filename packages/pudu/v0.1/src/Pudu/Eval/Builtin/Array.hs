@@ -20,7 +20,6 @@ import Pudu.Eval.Array
   , arrayRemove
   , arrayReverse
   , arraySlice
-  , arrayToList
   )
 import Pudu.Eval.Env (Evaluator (..), abortAt)
 import Pudu.Eval.Value (ArrayMethod (..), Value (..), intOf)
