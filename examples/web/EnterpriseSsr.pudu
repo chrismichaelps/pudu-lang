@@ -2,6 +2,7 @@ module EnterpriseSsr
 
 import Std.Bytes as ByteSeq
 import Std.Html.Buffer as HtmlBuffer
+import Std.Html.Build as H
 import Std.Html as Html
 import Std.Html.Stream as HtmlStream
 import Std.Http.Server.Resilience as Resilience
@@ -26,8 +27,8 @@ export fn renderProductIsland(csrfToken: Str, count: Int) -> Html.Html {
       Html.tag("p", &[Html.text("Current stock level: " + show(count))])
     ])
 
-  let countInput = Html.element("input", &[("type", "number"), ("name", "quantity"), ("value", "1")], &[])
-  let submitBtn = Html.element("button", &[("type", "submit")], &[Html.text("Restock")])
+  let countInput = H.input().kind("number").name("quantity").value("1").html()
+  let submitBtn = H.button().submit().says("Restock").html()
   let form = Island.serverActionForm("/api/inventory/restock", csrfToken, &[countInput, submitBtn])
 
   let islandContent = Html.tag("div", &[staticView, form])

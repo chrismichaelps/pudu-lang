@@ -1,65 +1,50 @@
 module View.Board
 
-import Std.Html as Html
+import Std.Html.Build as H
 import Db.Tasks as Tasks
 import Service.Queries as Queries
 
 /// The page, rendered on the server.
 ///
-/// Every value that came from a person goes through `Html.text`, which is what
-/// makes a task called `<script>alert(1)</script>` show up as those characters
-/// instead of running. That is not a detail of this example: a page that
-/// renders what a visitor typed is a way into the page, and the only reliable
-/// defence is that escaping is the default rather than something remembered.
+/// Written with `Std.Html.Build`, so a tag is a function and an attribute is a
+/// method; the only nesting left is the document's own.
 ///
-/// The form posts and the server answers with a redirect, so a reload repeats
-/// the reading rather than the writing. Without it, a person who refreshes
-/// after adding a task adds it again.
+/// Every value that came from a person goes through `says`, which escapes it,
+/// so a task called `<script>alert(1)</script>` shows those characters instead
+/// of running them. That is not a rendering detail: a page that renders what a
+/// visitor typed is a way into the page, and the defence that holds is the one
+/// that happens without being remembered.
+///
+/// The forms post and the server answers with a redirect, so a reload repeats
+/// the reading rather than the writing. Without it, refreshing after adding a
+/// task adds it again.
 export fn page(view: &Queries.Board) -> Str {
-  Html.render(
-      &Html.element(
-      "html",
-        &[("lang", "en")],
-        &[
-        Html.element(
-          "head",
-            &[],
-            &[
-            Html.element("meta", &[("charset", "utf-8")], &[]),
-            Html.element(
-              "meta",
-                &[("name", "viewport"), ("content", "width=device-width, initial-scale=1")],
-                &[]
-            ),
-            Html.element("title", &[], &[Html.text("Tasks")]),
-            Html.element("link", &[("rel", "stylesheet"), ("href", "/style.css")], &[])
+  H.document(
+      &H.html()
+      .lang("en")
+      .holding(
+      [
+        H.head()
+          .holding(
+          [
+            H.meta().at("charset", "utf-8"),
+            H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
+            H.tag("title").says("Tasks"),
+            H.link().rel("stylesheet").href("/style.css")
           ]
         ),
-        Html.element("body", &[], &[shell(view)])
+        H.body().holding([H.main().holding([H.h1().says("Tasks"), counts(view), addForm(), list(view)])])
       ]
     )
   )
 }
 
-fn shell(view: &Queries.Board) -> Html.Html {
-  Html.element(
-    "main",
-      &[],
-      &[
-      Html.element("h1", &[], &[Html.text("Tasks")]),
-      counts(view),
-      addForm(),
-      list(view)
-    ]
-  )
-}
-
 /// The three figures, read from the view rather than counted here.
-fn counts(view: &Queries.Board) -> Html.Html {
-  Html.element(
-    "section",
-      &[("class", "counts")],
-      &[
+fn counts(view: &Queries.Board) -> H.Node {
+  H.section()
+    .class("counts")
+    .holding(
+    [
       figure("total", display(view.total)),
       figure("done", display(view.done)),
       figure("left", display(view.remaining))
@@ -67,89 +52,56 @@ fn counts(view: &Queries.Board) -> Html.Html {
   )
 }
 
-fn figure(name: Str, value: Str) -> Html.Html {
-  Html.element(
-    "div",
-      &[("class", "figure")],
-      &[
-      Html.element("span", &[("class", "n")], &[Html.text(value)]),
-      Html.element("span", &[("class", "k")], &[Html.text(name)])
+fn figure(name: Str, value: Str) -> H.Node {
+  H.div()
+    .class("figure")
+    .holding([H.span().class("n").says(value), H.span().class("k").says(name)])
+}
+
+fn addForm() -> H.Node {
+  H.form()
+    .class("add")
+    .method("post")
+    .action("/tasks")
+    .holding(
+    [
+      H.input().name("title").placeholder("What needs doing?").at("autocomplete", "off").required(),
+      H.button().submit().says("Add")
     ]
   )
 }
 
-fn addForm() -> Html.Html {
-  Html.element(
-    "form",
-      &[("class", "add"), ("method", "post"), ("action", "/tasks")],
-      &[
-      Html.element(
-        "input",
-          &[
-          ("name", "title"),
-          ("placeholder", "What needs doing?"),
-          ("autocomplete", "off"),
-          ("required", "required")
-        ],
-          &[]
-      ),
-      Html.element("button", &[("type", "submit")], &[Html.text("Add")])
-    ]
-  )
-}
-
-fn list(view: &Queries.Board) -> Html.Html {
+fn list(view: &Queries.Board) -> H.Node {
   if view.tasks.length() == 0 {
-    return Html.element("p", &[("class", "empty")], &[Html.text("Nothing yet. Add the first one.")])
+    return H.p().class("empty").says("Nothing yet. Add the first one.")
   }
-  var items: Array[Html.Html] = []
+  var items: Array[H.Node] = []
   for entry in view.tasks {
     items = items.push(row(&entry))
   }
-  Html.element("ul", &[("class", "tasks")], &items)
+  H.ul().class("tasks").holding(items)
 }
 
-fn row(entry: &Tasks.Task) -> Html.Html {
-  Html.element(
-    "li",
-      &[("class", if entry.done { "task done" } else { "task" })],
-      &[
-      Html.element(
-        "form",
-          &[("method", "post"), ("action", "/tasks/" + display(entry.id) + "/toggle")],
-          &[
-          Html.element(
-            "button",
-              &[("class", "mark"), ("type", "submit"), ("aria-label", "toggle")],
-              &[Html.text(if entry.done { "✓" } else { "○" })]
-          )
-        ]
-      ),
-      Html.element("span", &[("class", "title")], &[Html.text(entry.title)]),
-      Html.element(
-        "form",
-          &[("method", "post"), ("action", "/tasks/" + display(entry.id) + "/delete")],
-          &[
-          Html.element(
-            "button",
-              &[("class", "remove"), ("type", "submit"), ("aria-label", "delete")],
-              &[Html.text("×")]
-          )
-        ]
-      )
+fn row(entry: &Tasks.Task) -> H.Node {
+  H.li()
+    .class(if entry.done { "task done" } else { "task" })
+    .holding(
+    [
+      button("/tasks/" + display(entry.id) + "/toggle", "mark", "toggle", if entry.done { "✓" } else { "○" }),
+      H.span().class("title").says(entry.title),
+      button("/tasks/" + display(entry.id) + "/delete", "remove", "delete", "×")
     ]
   )
 }
 
-/// The stylesheet, served as its own resource.
-///
-/// A resource rather than a block inside the page, which is what a service
-/// does anyway: the page changes on every request and the stylesheet does not,
-/// so serving them separately lets a reader's browser keep the one that has
-/// not changed.
-///
-/// Written against whichever of light and dark the reader has already chosen,
-/// because a page that picks for them is a page that is wrong half the time.
+/// A one-button form, which is what every action on this page is.
+fn button(target: Str, shape: Str, said: Str, mark: Str) -> H.Node {
+  H.form()
+    .method("post")
+    .action(target)
+    .holding([H.button().class(shape).submit().label(said).says(mark)])
+}
+
 export fn stylesheet() -> Str {
   [
     ":root \{ color-scheme: light dark; --bg: #f4f5f2; --card: #fff; --ink: #1b201d; --soft: #6d776f; --line: #dde1db; --moss: #2f6b4f; --brick: #9a4023; \}",
