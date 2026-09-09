@@ -1,0 +1,340 @@
+module Std.Html.Build
+
+import Std.Html as Html
+
+/// Markup written the way it reads.
+///
+/// `Html.element` takes a tag as text, attributes as pairs, and children as a
+/// third argument, so every element costs three brackets and two ampersands
+/// before it says anything:
+///
+/// ```
+/// Html.element("button", &[("class", "send"), ("type", "submit")], &[Html.text("Post")])
+/// ```
+///
+/// The same button here:
+///
+/// ```
+/// button().class("send").submit().says("Post")
+/// ```
+///
+/// What changed is not brevity for its own sake. The tag is a function, so a
+/// misspelled one is a compile error and an editor can offer the list; the
+/// attributes are methods, so the same is true of them; and the nesting that
+/// remains is the nesting of the document, not of the calls that build it.
+///
+/// A node is a value that is added to, and every method answers a new one, so
+/// nothing is shared and a half-built node can be kept and finished twice.
+export type Node = { name: Str, attributes: Array[(Str, Str)], children: Array[Html.Html] }
+
+/// What every node can be told.
+///
+/// Attributes are named rather than spelled out with `at` wherever they are
+/// common enough that a reader would recognise the name; `at` remains for
+/// everything else, so the set here can stay small without shutting anything
+/// out.
+export trait Building {
+  /// Any attribute, for the ones without a method of their own.
+  fn at(self: &Self, name: Str, value: Str) -> Self
+
+  /// An attribute with no value, like `required` or `disabled`.
+  fn flag(self: &Self, name: Str) -> Self
+
+  fn class(self: &Self, value: Str) -> Self
+  fn id(self: &Self, value: Str) -> Self
+  fn href(self: &Self, value: Str) -> Self
+  fn src(self: &Self, value: Str) -> Self
+  fn alt(self: &Self, value: Str) -> Self
+  fn name(self: &Self, value: Str) -> Self
+  fn value(self: &Self, value: Str) -> Self
+  fn placeholder(self: &Self, value: Str) -> Self
+  fn action(self: &Self, value: Str) -> Self
+  fn method(self: &Self, value: Str) -> Self
+  fn rel(self: &Self, value: Str) -> Self
+  fn lang(self: &Self, value: Str) -> Self
+  fn title(self: &Self, value: Str) -> Self
+  fn target(self: &Self, value: Str) -> Self
+  fn role(self: &Self, value: Str) -> Self
+  fn rows(self: &Self, value: Int) -> Self
+  fn cols(self: &Self, value: Int) -> Self
+
+  /// The `type` attribute, which cannot be a method called `type`.
+  fn kind(self: &Self, value: Str) -> Self
+
+  /// `type="submit"`, which is most of what `kind` is used for on a button.
+  fn submit(self: &Self) -> Self
+
+  fn required(self: &Self) -> Self
+  fn disabled(self: &Self) -> Self
+  fn checked(self: &Self) -> Self
+
+  /// What a screen reader should call this when the visible text will not do.
+  fn label(self: &Self, value: Str) -> Self
+
+  /// A `data-` attribute, named without its prefix.
+  fn data(self: &Self, name: Str, value: Str) -> Self
+
+  /// Text inside the element, escaped.
+  ///
+  /// Escaped without asking, because the alternative is a page that runs what
+  /// a visitor typed. `raw` exists for the rare case that is genuinely markup,
+  /// and it is spelled differently so that reaching for it is a decision.
+  fn says(self: &Self, content: Str) -> Self
+
+  /// Markup inside the element, not escaped.
+  fn raw(self: &Self, markup: Str) -> Self
+
+  /// Children, in document order.
+  fn holding(self: &Self, children: Array[Node]) -> Self
+
+  /// One already-built view inside this element.
+  fn holds(self: &Self, view: Html.Html) -> Self
+
+  /// A child that is only there under some condition.
+  ///
+  /// Written as a method so that a conditional part of a document does not
+  /// have to break the chain into statements and a mutable array.
+  fn when(self: &Self, condition: Bool, child: Node) -> Self
+
+  /// The view this node describes.
+  fn html(self: &Self) -> Html.Html
+}
+
+impl Building for Node {
+  fn at(self: &Self, name: Str, value: Str) -> Self {
+    Node{name: self.name, attributes: self.attributes.push((name, value)), children: self.children}
+  }
+
+  fn flag(self: &Self, name: Str) -> Self { self.at(name, name) }
+
+  fn class(self: &Self, value: Str) -> Self { self.at("class", value) }
+
+  fn id(self: &Self, value: Str) -> Self { self.at("id", value) }
+
+  fn href(self: &Self, value: Str) -> Self { self.at("href", value) }
+
+  fn src(self: &Self, value: Str) -> Self { self.at("src", value) }
+
+  fn alt(self: &Self, value: Str) -> Self { self.at("alt", value) }
+
+  fn name(self: &Self, value: Str) -> Self { self.at("name", value) }
+
+  fn value(self: &Self, value: Str) -> Self { self.at("value", value) }
+
+  fn placeholder(self: &Self, value: Str) -> Self { self.at("placeholder", value) }
+
+  fn action(self: &Self, value: Str) -> Self { self.at("action", value) }
+
+  fn method(self: &Self, value: Str) -> Self { self.at("method", value) }
+
+  fn rel(self: &Self, value: Str) -> Self { self.at("rel", value) }
+
+  fn lang(self: &Self, value: Str) -> Self { self.at("lang", value) }
+
+  fn title(self: &Self, value: Str) -> Self { self.at("title", value) }
+
+  fn target(self: &Self, value: Str) -> Self { self.at("target", value) }
+
+  fn role(self: &Self, value: Str) -> Self { self.at("role", value) }
+
+  fn rows(self: &Self, value: Int) -> Self { self.at("rows", show(value)) }
+
+  fn cols(self: &Self, value: Int) -> Self { self.at("cols", show(value)) }
+
+  fn kind(self: &Self, value: Str) -> Self { self.at("type", value) }
+
+  fn submit(self: &Self) -> Self { self.at("type", "submit") }
+
+  fn required(self: &Self) -> Self { self.flag("required") }
+
+  fn disabled(self: &Self) -> Self { self.flag("disabled") }
+
+  fn checked(self: &Self) -> Self { self.flag("checked") }
+
+  fn label(self: &Self, value: Str) -> Self { self.at("aria-label", value) }
+
+  fn data(self: &Self, name: Str, value: Str) -> Self { self.at("data-" + name, value) }
+
+  fn says(self: &Self, content: Str) -> Self { self.holds(Html.text(content)) }
+
+  fn raw(self: &Self, markup: Str) -> Self { self.holds(Html.trusted(markup)) }
+
+  fn holds(self: &Self, view: Html.Html) -> Self {
+    Node{name: self.name, attributes: self.attributes, children: self.children.push(view)}
+  }
+
+  fn holding(self: &Self, children: Array[Node]) -> Self {
+    var built = self.children
+    for child in children {
+      built = built.push(child.html())
+    }
+    Node{name: self.name, attributes: self.attributes, children: built}
+  }
+
+  fn when(self: &Self, condition: Bool, child: Node) -> Self {
+    if condition { self.holds(child.html()) } else { *self }
+  }
+
+  /// A node with no tag is its children and nothing else.
+  ///
+  /// That is what `words` and `nothing` are, and rendering them as an element
+  /// would put `<>` in the page — a tag with an empty name, which a browser
+  /// shows as text. A branch of a document that renders nothing has to render
+  /// nothing, not an element that happens to be invisible in most places.
+  fn html(self: &Self) -> Html.Html {
+    if self.name.isEmpty() {
+      Html.fragment(&self.children)
+    } else {
+      Html.element(self.name, &self.attributes, &self.children)
+    }
+  }
+}
+
+/// An element by name, for a tag without a function of its own.
+export fn tag(name: Str) -> Node { Node{name: name, attributes: [], children: []} }
+
+/// Text, as a node, so it can sit in a list beside elements.
+export fn words(content: Str) -> Node {
+  Node{name: "", attributes: [], children: [Html.text(content)]}
+}
+
+/// Nothing, for a branch of a document that renders no element.
+export fn nothing() -> Node { Node{name: "", attributes: [], children: []} }
+
+// The tags. Each is the same one line, so what a reader learns from the first
+// applies to all of them: the function is the tag, and everything else is said
+// by chaining.
+
+export fn html() -> Node { tag("html") }
+
+export fn head() -> Node { tag("head") }
+
+export fn body() -> Node { tag("body") }
+
+export fn meta() -> Node { tag("meta") }
+
+export fn link() -> Node { tag("link") }
+
+export fn style() -> Node { tag("style") }
+
+export fn script() -> Node { tag("script") }
+
+export fn main() -> Node { tag("main") }
+
+export fn header() -> Node { tag("header") }
+
+export fn footer() -> Node { tag("footer") }
+
+export fn nav() -> Node { tag("nav") }
+
+export fn section() -> Node { tag("section") }
+
+export fn article() -> Node { tag("article") }
+
+export fn aside() -> Node { tag("aside") }
+
+export fn div() -> Node { tag("div") }
+
+export fn span() -> Node { tag("span") }
+
+export fn p() -> Node { tag("p") }
+
+export fn h1() -> Node { tag("h1") }
+
+export fn h2() -> Node { tag("h2") }
+
+export fn h3() -> Node { tag("h3") }
+
+export fn h4() -> Node { tag("h4") }
+
+export fn h5() -> Node { tag("h5") }
+
+export fn h6() -> Node { tag("h6") }
+
+export fn ul() -> Node { tag("ul") }
+
+export fn ol() -> Node { tag("ol") }
+
+export fn li() -> Node { tag("li") }
+
+export fn dl() -> Node { tag("dl") }
+
+export fn dt() -> Node { tag("dt") }
+
+export fn dd() -> Node { tag("dd") }
+
+export fn table() -> Node { tag("table") }
+
+export fn thead() -> Node { tag("thead") }
+
+export fn tbody() -> Node { tag("tbody") }
+
+export fn tfoot() -> Node { tag("tfoot") }
+
+export fn tr() -> Node { tag("tr") }
+
+export fn th() -> Node { tag("th") }
+
+export fn td() -> Node { tag("td") }
+
+export fn form() -> Node { tag("form") }
+
+export fn fieldset() -> Node { tag("fieldset") }
+
+export fn legend() -> Node { tag("legend") }
+
+export fn labelFor() -> Node { tag("label") }
+
+export fn input() -> Node { tag("input") }
+
+export fn textarea() -> Node { tag("textarea") }
+
+export fn select() -> Node { tag("select") }
+
+export fn option() -> Node { tag("option") }
+
+export fn button() -> Node { tag("button") }
+
+export fn a() -> Node { tag("a") }
+
+export fn img() -> Node { tag("img") }
+
+export fn figure() -> Node { tag("figure") }
+
+export fn figcaption() -> Node { tag("figcaption") }
+
+export fn br() -> Node { tag("br") }
+
+export fn hr() -> Node { tag("hr") }
+
+export fn pre() -> Node { tag("pre") }
+
+export fn code() -> Node { tag("code") }
+
+export fn blockquote() -> Node { tag("blockquote") }
+
+export fn strong() -> Node { tag("strong") }
+
+export fn em() -> Node { tag("em") }
+
+export fn small() -> Node { tag("small") }
+
+export fn time() -> Node { tag("time") }
+
+export fn details() -> Node { tag("details") }
+
+export fn summary() -> Node { tag("summary") }
+
+export fn dialog() -> Node { tag("dialog") }
+
+export fn progress() -> Node { tag("progress") }
+
+/// A whole document, rendered.
+///
+/// The doctype is written here rather than left to the caller, because a page
+/// without one is rendered by browsers in a mode nobody wants and the mistake
+/// is invisible until a layout is subtly wrong.
+export fn document(root: &Node) -> Str { "<!DOCTYPE html>" + Html.render(&root.html()) }
+
+/// One node, rendered, for a fragment answered on its own.
+export fn render(node: &Node) -> Str { Html.render(&node.html()) }
