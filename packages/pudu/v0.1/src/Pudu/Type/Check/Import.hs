@@ -79,7 +79,7 @@ collectImportedDeclared imported = do
     , declaredQualifiers = importedQualifiers imported <> declaredQualifiers collected
     }
  where
-  available = Map.fromList [(interfaceModule value, value) | value <- importedInterfaces imported]
+  available = Map.fromList [(interfaceModule value, interfaceIdentities value) | value <- importedInterfaces imported]
   collectOne accumulated value =
     collectDeclaredFrom
       accumulated{declaredNames = interfaceNames available value <> declaredNames accumulated}
@@ -93,7 +93,7 @@ declareImportedTypes declared imported = do
  where
   interfaces = importedInterfaces imported
   wantedValues = Set.fromList (Map.elems (importedValues imported))
-  available = Map.fromList [(interfaceModule value, value) | value <- interfaces]
+  available = Map.fromList [(interfaceModule value, interfaceIdentities value) | value <- interfaces]
   traits = Map.unionsWith (<>) (map interfaceTraits interfaces)
   defaults = foldMap interfaceDefaults interfaces
   {-| The name this module reaches an imported value by, which an alias makes
@@ -111,7 +111,7 @@ declareInterface
   :: DeclaredTypes
   -> Set.Set NominalId
   -> Set.Set Text
-  -> Map.Map ModuleName TypeInterface
+  -> Map.Map ModuleName [(Text, NominalId)]
   -> Map.Map NominalId [Located Function]
   -> Set.Set (NominalId, Text)
   -> TypeInterface
@@ -172,7 +172,7 @@ declareInterface declared visibleTraits wantedValues available traits defaults v
       bindName name (monotype formed)
       publishValue name
 
-interfaceNames :: Map.Map ModuleName TypeInterface -> TypeInterface -> Map.Map Text NominalId
+interfaceNames :: Map.Map ModuleName [(Text, NominalId)] -> TypeInterface -> Map.Map Text NominalId
 interfaceNames available value = interfaceLocalNames value <> interfaceReferenceNames available value
 
 interfaceLocalNames :: TypeInterface -> Map.Map Text NominalId
@@ -188,19 +188,19 @@ interfaceLocalNames value = Map.fromList (concatMap one declarations)
     _ -> []
   identity name = [(name, canonicalNominal owner name)]
 
-interfaceReferenceNames :: Map.Map ModuleName TypeInterface -> TypeInterface -> Map.Map Text NominalId
+interfaceReferenceNames :: Map.Map ModuleName [(Text, NominalId)] -> TypeInterface -> Map.Map Text NominalId
 interfaceReferenceNames available value = foldMap one (interfaceImports value)
  where
   one (Located _ imported) = case Map.lookup (locatedValue (importModule imported)) available of
     Nothing -> Map.empty
-    Just dependency -> Map.fromList (concatMap (binding imported) (interfaceIdentities dependency))
+    Just dependency ->
+      let selected = Set.fromList (map locatedValue (importItems imported))
+       in Map.fromList (concatMap (binding imported selected) dependency)
 
-  binding imported (name, identity)
-    | null selected = [(qualifier imported <> "." <> name, identity)]
-    | name `elem` selected = [(name, identity)]
+  binding imported selected (name, identity)
+    | Set.null selected = [(qualifier imported <> "." <> name, identity)]
+    | Set.member name selected = [(name, identity)]
     | otherwise = []
-   where
-    selected = map locatedValue (importItems imported)
 
   qualifier imported = maybe
     (lastSegment (moduleNameText (locatedValue (importModule imported))))
