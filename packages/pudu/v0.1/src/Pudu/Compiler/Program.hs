@@ -192,7 +192,7 @@ discover sourceRoot frontends sources diagnostics pending = case pending of
         case loaded of
           Left _ ->
             discover sourceRoot frontends sources
-              (diagnostics <> missingModule requested locatedImport) rest
+              (diagnostics <> missingModule requested roots locatedImport) rest
           Right source -> do
             let frontend = runFrontend source
             case frontendModule frontend of
@@ -288,8 +288,8 @@ readSource path = do
     Left problem -> pure (Left problem)
     Right contents -> Right <$> newSource (SourceName (Text.pack path)) contents
 
-missingModule :: ModuleName -> Located Import -> [Diagnostic]
-missingModule requested locatedImport = do
+missingModule :: ModuleName -> [FilePath] -> Located Import -> [Diagnostic]
+missingModule requested roots locatedImport = do
   code <- maybe [] pure (mkDiagnosticCode "E2014")
   value <- maybe [] pure
     (diagnostic code Error (locatedSpan locatedImport)
@@ -298,11 +298,24 @@ missingModule requested locatedImport = do
  where
   {-| A missing `Std` module is almost always a misspelling of a module that
       exists, not a file the author forgot to write, so the help points at the
-      library rather than at their own source root. -}
+      library rather than at their own source root.
+
+      The directories that were searched are named, because when it is not a
+      misspelling the only useful question is where the library was looked for
+      — and a reader cannot answer that by reading their own program. A
+      standard module missing on one machine and present on another is a
+      question about paths, and this is the only place that knows them. -}
   helpText
     | isStandardModule requested =
-        "check the spelling against the standard library, or set PUDU_LIB if it is installed elsewhere"
+        "check the spelling against the standard library, or set PUDU_LIB if it is"
+          <> " installed elsewhere"
+          <> searched
     | otherwise = "create the module at its canonical source-root path, or fix the import"
+          <> searched
+
+  searched
+    | null roots = "; nothing was searched"
+    | otherwise = "; looked in " <> Text.intercalate ", " (map Text.pack roots)
 
 pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
 pathMismatch requested actual = do

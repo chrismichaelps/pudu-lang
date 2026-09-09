@@ -7,6 +7,7 @@ module Pudu.Compiler.Library
   ) where
 
 import Control.Exception (IOException, try)
+import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
@@ -137,9 +138,23 @@ developmentRoot = do
         </> ("v" <> show major <> "." <> show minor) </> "lib")
       _ -> Just (path </> "lib")
 
+{-| The directories among these that are there, each once and in the order
+    they were offered.
+
+    Two of the ways a library is looked for reach the same directory on a
+    machine where the compiler runs from its own checkout, and a repeated root
+    is a directory read twice for every module that is not in it — and a
+    diagnostic that names it twice, which reads as a fault in the compiler
+    rather than a missing file. -}
 existing :: [FilePath] -> IO [FilePath]
-existing = fmap catMaybes . mapM keepDirectory
+existing paths = distinct <$> (catMaybes <$> mapM keepDirectory paths)
  where
   keepDirectory path = do
     present <- doesDirectoryExist path
     pure (if present then Just path else Nothing)
+  distinct = go Set.empty
+   where
+    go _ [] = []
+    go seen (path : rest)
+      | Set.member path seen = go seen rest
+      | otherwise = path : go (Set.insert path seen) rest
