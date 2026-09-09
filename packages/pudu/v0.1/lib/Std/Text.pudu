@@ -129,7 +129,7 @@ export fn head(value: Str) -> Option[Char] { at(value, 0) }
 /// The last character, or `None` for empty text.
 export fn last(value: Str) -> Option[Char] { at(value, value.length() - 1) }
 
-/// Everything but the first character.
+/// Everything but the first character. Empty text answers empty text.
 export fn rest(value: Str) -> Str { value.slice(1, value.length()) }
 
 /// Everything but the last character.

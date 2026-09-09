@@ -79,15 +79,24 @@ callStringMethod spanValue method receiver arguments = case receiver of
 
   spanLength holds = intOf . fromIntegral . countPrefix holds
 
-  slice text from to
-    | from < 0 = outOfRange "a slice cannot start before the text"
-    | to < from = outOfRange "a slice cannot end before it starts"
-    | otherwise =
-        pure
+  {-| The part of the text the bounds ask for, and nothing where they ask for
+      nothing.
+
+      Bounds outside the text name the part of it that is inside, and bounds
+      that end before they start name nothing — the answers `Array.slice`
+      already gave. Text refused both instead, so the same expression over the
+      two kinds of sequence behaved differently: `List.rest` of an empty array
+      answered an empty array, and `Text.rest` of empty text stopped the
+      program. -}
+  slice text from to =
+    let size = toInteger (Text.length text)
+        start = max 0 (min from size)
+        end = max start (min to size)
+     in pure
           ( StrValue
               ( Text.take
-                  (textCount text (to - from))
-                  (dropText (textCount text from) text)
+                  (textCount text (end - start))
+                  (dropText (textCount text start) text)
               )
           )
 
