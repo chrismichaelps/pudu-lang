@@ -306,7 +306,7 @@ fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
     case Trusted(markup) => pieces.push(markup)
     case Fragment(children) => appendChildren(&children, pieces)
     case Element(name, attributes, children) => {
-      let opened = pieces.push("<" + name + renderAttributes(&attributes))
+      let opened = appendAttributes(&attributes, pieces.push("<" + name))
       if VOID_ELEMENTS.contains(name) { opened.push(" />") } else {
         appendChildren(&children, opened.push(">")).push("</" + name + ">")
       }
@@ -321,7 +321,7 @@ fn appendChildren(children: &Array[Html], pieces: Array[Str]) -> Array[Str] {
 }
 
 /// A whole document, with the declaration that says which one it is.
-export fn document(view: &Html) -> Str { "<!DOCTYPE html>\n" + render(view) }
+export fn document(view: &Html) -> Str { appendRendered(view, ["<!DOCTYPE html>\n"]).join("") }
 
 /// Text with the characters that would otherwise start markup written as
 /// themselves.
@@ -334,12 +334,12 @@ export fn escape(content: Str) -> Str { content.escapeHtml() }
 /// there. This is a backstop rather than the defence — `attribute` refuses one
 /// where a program writes it — but a backstop that drops is better than a page
 /// that runs what somebody smuggled into a record.
-fn renderAttributes(attributes: &Array[(Str, Str)]) -> Str {
-  var pieces: Array[Str] = []
+fn appendAttributes(attributes: &Array[(Str, Str)], initial: Array[Str]) -> Array[Str] {
+  var pieces = initial
   for entry in attributes {
     if !isHandler(entry[0]) {
       pieces = pieces.push(" " + entry[0] + "=\"" + escape(entry[1]) + "\"")
     }
   }
-  pieces.join("")
+  pieces
 }
