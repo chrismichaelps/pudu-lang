@@ -14,6 +14,7 @@ testProtocolEvaluation = do
   jsonStrings <- runEntry "test-fixtures/stdlib/UsesJsonStrings.pudu"
   htmlServer <- runEntry "test-fixtures/stdlib/UsesHtmlServer.pudu"
   htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
+  httpAll <- runEntry "test-fixtures/stdlib/UsesHttpAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
@@ -357,6 +358,15 @@ testProtocolEvaluation = do
     , counterexample
         "every tag and attribute renders the markup it names"
         (htmlBuild === Just "97")
+    {-| Every export of the protocol module against the wire form it stands
+        for. The header names are checked against the spelling that goes on
+        the wire, since a name answering the wrong header asks for something
+        else and nothing else would notice; the status classes are checked at
+        their boundaries, where a range written with the wrong comparison is
+        wrong and nowhere else. -}
+    , counterexample
+        "every protocol name answers the wire form it stands for"
+        (httpAll === Just "91")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

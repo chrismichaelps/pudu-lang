@@ -1,0 +1,190 @@
+module UsesHttpAll
+
+import Std.Http as Http
+import Std.Option as Option
+
+/// Every export of `Std.Http`, checked against the wire form it stands for.
+///
+/// The header names are checked against the spelling that goes on the wire
+/// rather than against each other, since the point of naming them is that a
+/// caller never writes the string. A name returning the wrong header is a
+/// request that asks for something else, which nothing else here would notice.
+///
+/// Status classes are checked at the boundaries — 199 and 200, 299 and 300 —
+/// because a range written with the wrong comparison is right everywhere
+/// except at its ends.
+fn headerNames() -> Array[(Str, Str)] {
+  [
+    (Http.headerAccept(), "accept"),
+    (Http.headerAcceptCharset(), "accept-charset"),
+    (Http.headerAcceptEncoding(), "accept-encoding"),
+    (Http.headerAcceptLanguage(), "accept-language"),
+    (Http.headerAcceptRanges(), "accept-ranges"),
+    (Http.headerAge(), "age"),
+    (Http.headerAllow(), "allow"),
+    (Http.headerAuthorization(), "authorization"),
+    (Http.headerCacheControl(), "cache-control"),
+    (Http.headerConnection(), "connection"),
+    (Http.headerContentEncoding(), "content-encoding"),
+    (Http.headerContentLanguage(), "content-language"),
+    (Http.headerContentLength(), "content-length"),
+    (Http.headerContentLocation(), "content-location"),
+    (Http.headerContentRange(), "content-range"),
+    (Http.headerContentType(), "content-type"),
+    (Http.headerCookie(), "cookie"),
+    (Http.headerDate(), "date"),
+    (Http.headerETag(), "etag"),
+    (Http.headerExpect(), "expect"),
+    (Http.headerExpires(), "expires"),
+    (Http.headerHost(), "host"),
+    (Http.headerIfMatch(), "if-match"),
+    (Http.headerIfModifiedSince(), "if-modified-since"),
+    (Http.headerIfNoneMatch(), "if-none-match"),
+    (Http.headerIfRange(), "if-range"),
+    (Http.headerIfUnmodifiedSince(), "if-unmodified-since"),
+    (Http.headerLastModified(), "last-modified"),
+    (Http.headerLocation(), "location"),
+    (Http.headerOrigin(), "origin"),
+    (Http.headerPragma(), "pragma"),
+    (Http.headerRange(), "range"),
+    (Http.headerReferer(), "referer"),
+    (Http.headerRetryAfter(), "retry-after"),
+    (Http.headerServer(), "server"),
+    (Http.headerSetCookie(), "set-cookie"),
+    (Http.headerTransferEncoding(), "transfer-encoding"),
+    (Http.headerUpgrade(), "upgrade"),
+    (Http.headerUserAgent(), "user-agent"),
+    (Http.headerVary(), "vary"),
+    (Http.headerWwwAuthenticate(), "www-authenticate")
+  ]
+}
+
+export fn main() -> Int {
+  var held = 0
+
+  // Every header name is the spelling that goes on the wire.
+  for pair in headerNames() {
+    if pair[0] == pair[1] { held = held + 1 }
+  }
+
+  // Status classes, at their boundaries.
+  if Http.isInformational(&Http.status(100)) && !Http.isInformational(&Http.status(200)) {
+    held = held + 1
+  }
+  if Http.isSuccess(&Http.status(200)) && !Http.isSuccess(&Http.status(199)) { held = held + 1 }
+  if !Http.isSuccess(&Http.status(300)) { held = held + 1 }
+  if Http.isRedirect(&Http.status(301)) && !Http.isRedirect(&Http.status(400)) { held = held + 1 }
+  if Http.isClientError(&Http.status(404)) && !Http.isClientError(&Http.status(500)) {
+    held = held + 1
+  }
+  if Http.isServerError(&Http.status(500)) && !Http.isServerError(&Http.status(499)) {
+    held = held + 1
+  }
+  if Http.isError(&Http.status(400)) && Http.isError(&Http.status(500)) { held = held + 1 }
+  if !Http.isError(&Http.status(200)) { held = held + 1 }
+  if Http.status(404).reason == "Not Found" { held = held + 1 }
+  if Http.renderStatusLine(&Http.status(404)) == "HTTP/1.1 404 Not Found" { held = held + 1 }
+
+  // Statuses that carry no body, and redirects that keep the method.
+  if !Http.allowsBody(&Http.status(204)) && Http.allowsBody(&Http.status(200)) { held = held + 1 }
+  if Http.keepsMethodOnRedirect(&Http.status(308)) { held = held + 1 }
+  if !Http.keepsMethodOnRedirect(&Http.status(302)) { held = held + 1 }
+
+  // Versions.
+  let spoken: Http.Version = Http.Http11
+  if Http.versionName(&spoken) == "HTTP/1.1" { held = held + 1 }
+  if Http.versionName(&Http.Http2) == "HTTP/2" { held = held + 1 }
+  if Http.keepsAlive(&Http.Http11) && !Http.keepsAlive(&Http.Http10) { held = held + 1 }
+
+  // A request, built up.
+  let asked = Http.withBody(
+      &Http.withHeader(&Http.request(Http.Get, "/things"), "accept", "text/html"),
+    "body"
+  )
+  if asked.target == "/things" && asked.body == "body" { held = held + 1 }
+  if Http.renderHead(&asked).startsWith("GET /things HTTP/1.1") { held = held + 1 }
+  if Option.unwrapOr(Http.header(&asked.headers, "Accept"), "") == "text/html" { held = held + 1 }
+  if Http.hasHeader(&asked.headers, "accept") && !Http.hasHeader(&asked.headers, "z") {
+    held = held + 1
+  }
+
+  // Headers, read and written.
+  let headers = [("accept", "a"), ("accept", "b"), ("content-type", "text/html; charset=utf-8")]
+  if Http.headerValues(&headers, "accept") == ["a", "b"] { held = held + 1 }
+  if Option.unwrapOr(Http.mediaType(&headers), "") == "text/html" { held = held + 1 }
+  if Option.unwrapOr(Http.header(&Http.setHeader(&headers, "accept", "c"), "accept"), "") == "c" {
+    held = held + 1
+  }
+  if Option.unwrapOr(Http.contentLength(&[("content-length", "42")]), 0) == 42 { held = held + 1 }
+  if Option.isNone(&Http.contentLength(&[])) { held = held + 1 }
+  if Http.isChunked(&[("transfer-encoding", "chunked")]) { held = held + 1 }
+  if !Http.isChunked(&[]) { held = held + 1 }
+
+  // Headers that belong to one hop are not passed on.
+  if Http.isHopByHop("connection") && !Http.isHopByHop("accept") { held = held + 1 }
+  if Http.endToEnd(&[("connection", "close"), ("accept", "a")]) == [("accept", "a")] {
+    held = held + 1
+  }
+
+  // Where a redirect points.
+  let moved = Http.Response {
+    status: Http.status(302),
+    headers: [("location", "/elsewhere")],
+    body: "",
+    binaryBody: None
+  }
+  if Option.unwrapOr(Http.redirectTarget(&moved), "") == "/elsewhere" { held = held + 1 }
+  // The body alone, which is what a `Content-Length` counts.
+  if Http.responseBytes(&moved).length() == 0 { held = held + 1 }
+  let carrying = Http.Response {
+    status: Http.status(200),
+    headers: [],
+    body: "abc",
+    binaryBody: None
+  }
+  if Http.responseBytes(&carrying).length() == 3 { held = held + 1 }
+
+  // Cookies, in and out. The types are named so a rename cannot pass unread.
+  let cookies: Array[Http.Cookie] = Http.parseCookies("a=1; b=2")
+  if cookies.length() == 2 && cookies[0].name == "a" && cookies[0].value == "1" { held = held + 1 }
+  if Http.renderCookies(&cookies) == "a=1; b=2" { held = held + 1 }
+  let baked: Http.SetCookie = Http.setCookie("session", "abc")
+  if Http.renderSetCookie(&baked).startsWith("session=abc") { held = held + 1 }
+
+  // Credentials.
+  if Http.bearerAuth("t") == "Bearer t" { held = held + 1 }
+  if Http.basicAuth("u", "p").startsWith("Basic ") { held = held + 1 }
+  // The scheme comes back lowered, since it is compared without regard to case.
+  if Option.unwrapOr(Http.parseAuth("Bearer t"), ("", "")) == ("bearer", "t") { held = held + 1 }
+  if Option.isNone(&Http.parseAuth("")) { held = held + 1 }
+  if Http.base64("a") == "YQ==" { held = held + 1 }
+
+  // What the client will accept, and what we choose from it.
+  let wanted: Array[Http.Preference] = Http.parsePreferences("text/html;q=0.8, application/json")
+  if wanted.length() == 2 { held = held + 1 }
+  if Option.unwrapOr(Http.negotiate("text/html", &["text/html", "text/plain"]), "") == "text/html" {
+    held = held + 1
+  }
+
+  // Forms, in and out.
+  // A space is a plus in a form body, which is what a form encoding is.
+  if Http.renderForm(&[("a", "1"), ("b", "x y")]) == "a=1&b=x+y" { held = held + 1 }
+  if Http.parseForm("a=1&b=2") == [("a", "1"), ("b", "2")] { held = held + 1 }
+  let posted = Http.withForm(&Http.request(Http.Post, "/f"), &[("a", "1")])
+  if posted.body == "a=1" { held = held + 1 }
+  let sent = Http.withJson(&Http.request(Http.Post, "/j"), "\{\}")
+  if Option.unwrapOr(Http.header(&sent.headers, "content-type"), "") == "application/json" {
+    held = held + 1
+  }
+
+  // Ranges.
+  let ranges: Array[Http.Range] = Http.parseRanges("bytes=0-99")
+  if ranges.length() == 1 && ranges[0].from == 0 { held = held + 1 }
+  if Option.unwrapOr(ranges[0].to, 0) == 99 { held = held + 1 }
+  if Http.renderContentRange(0, 99, 200) == "bytes 0-99/200" { held = held + 1 }
+
+  // Chunked bodies.
+  if Http.renderChunked("ab").startsWith("2\r\nab") { held = held + 1 }
+
+  held
+}
