@@ -170,6 +170,7 @@ data StringMethod
   | StringSpanOf
   | StringSpanNotOf
   | StringSlice
+  | StringEscapeHtml
   | StringTrim
   | StringToUpper
   | StringToLower
@@ -222,6 +223,7 @@ stringMethodName method = case method of
   StringSpanOf -> "spanOf"
   StringSpanNotOf -> "spanNotOf"
   StringSlice -> "slice"
+  StringEscapeHtml -> "escapeHtml"
   StringTrim -> "trim"
   StringToUpper -> "toUpper"
   StringToLower -> "toLower"

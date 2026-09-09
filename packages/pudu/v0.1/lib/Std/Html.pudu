@@ -326,40 +326,7 @@ export fn document(view: &Html) -> Str { "<!DOCTYPE html>\n" + render(view) }
 /// Text with the characters that would otherwise start markup written as
 /// themselves.
 ///
-/// The ampersand goes first: escaping it after the others would escape the
-/// escapes and every entity would arrive doubled.
-export fn escape(content: Str) -> Str {
-  if content.spanNotOf(ESCAPABLE) == content.length() {
-    content
-  } else {
-    content
-      .replace("&", "&amp;")
-      .replace("<", "&lt;")
-      .replace(">", "&gt;")
-      .replace("\"", "&quot;")
-      .replace("'", "&#39;")
-  }
-}
-
-/// The characters that cannot be written as themselves.
-///
-/// Held as one string so deciding whether text needs escaping is a single
-/// pass over it, rather than one pass per character that might have to
-/// change. Most text on a page has nothing to escape, and that case is the
-/// one worth making cheap.
-const ESCAPABLE: Str = "&<>\"'"
-
-const ESCAPES: Map[Str, Str] = mapOf([
-    ("&", "&amp;"),
-    ("<", "&lt;"),
-    (">", "&gt;"),
-    ("\"", "&quot;"),
-    ("'", "&#39;")
-  ])
-
-fn escaped(character: Str) -> Str {
-  if let Some(written) = ESCAPES.get(character) { written } else { character }
-}
+export fn escape(content: Str) -> Str { content.escapeHtml() }
 
 /// The attributes of an element, written.
 ///

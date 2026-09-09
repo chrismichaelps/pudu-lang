@@ -200,6 +200,7 @@ stringMethods =
   , ("spanOf", StringSpanOf)
   , ("spanNotOf", StringSpanNotOf)
   , ("slice", StringSlice)
+  , ("escapeHtml", StringEscapeHtml)
   , ("trim", StringTrim)
   , ("toUpper", StringToUpper)
   , ("toLower", StringToLower)

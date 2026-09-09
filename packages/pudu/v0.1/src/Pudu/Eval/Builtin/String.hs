@@ -11,6 +11,8 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as LazyText
+import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Array as Array
 import Data.Text.Internal (Text (..))
 
@@ -51,6 +53,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringSpanNotOf, [StrValue rejected]) ->
       pure (spanLength (not . characterMember rejected) text)
     (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
+    (StringEscapeHtml, []) -> pure (StrValue (escapeHtmlText text))
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
     (StringToLower, []) -> pure (StrValue (Text.toLower text))
@@ -178,6 +181,7 @@ callStringMethodFast spanValue member text arguments = case member of
   "spanOf" -> direct StringSpanOf
   "spanNotOf" -> direct StringSpanNotOf
   "slice" -> direct StringSlice
+  "escapeHtml" -> direct StringEscapeHtml
   "trim" -> direct StringTrim
   "toUpper" -> direct StringToUpper
   "toLower" -> direct StringToLower
@@ -206,3 +210,23 @@ indexOfText text needle = case Text.breakOn needle text of
   (before, rest)
     | Text.null rest, not (Text.null needle) -> -1
     | otherwise -> fromIntegral (Text.length before)
+
+escapeHtmlText :: Text -> Text
+escapeHtmlText text = case Text.break needsEscape text of
+  (_, rest) | Text.null rest -> text
+  (prefix, rest) -> LazyText.toStrict (Builder.toLazyText (Builder.fromText prefix <> escapedRest rest))
+ where
+  needsEscape character = character == '&' || character == '<' || character == '>'
+    || character == '"' || character == '\''
+  escapedRest remaining = case Text.uncons remaining of
+    Nothing -> mempty
+    Just (character, rest) ->
+      let (plain, next) = Text.break needsEscape rest
+       in entity character <> Builder.fromText plain <> escapedRest next
+  entity character = Builder.fromText $ case character of
+    '&' -> "&amp;"
+    '<' -> "&lt;"
+    '>' -> "&gt;"
+    '"' -> "&quot;"
+    '\'' -> "&#39;"
+    _ -> Text.singleton character
