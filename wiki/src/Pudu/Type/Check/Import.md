@@ -77,6 +77,7 @@ DEPTH 0.64 (MEDIUM). The module isolates canonical interface installation and ke
 - **Q:** Put this logic in the program loader? **A:** No. _Rationale:_ the loader owns files and graphs; installing checker schemes is a type-phase concern. _Rejected:_ checker mutation from [[Compiler Program]].
 - **Q:** Merge imported declarations into the local declaration list? **A:** No. _Rationale:_ that would reassign ownership and rerun coherence. _Rejected:_ a synthetic combined module.
 - **Q:** Resolve method keys from the final merged basename map? **A:** No; temporarily overlay the interface's own local names while forming it. _Rationale:_ otherwise two modules exporting the same basename overwrite each other's heads. _Rejected:_ insertion-order identity.
+- **Q:** Why consume `interfaceIdentities` from `TypeInterface`? **A:** `TypeInterface` now computes and stores canonical nominal identities during skeleton construction, so `Type.Check.Import` does not re-extract identities from AST declaration lists.
 
 ## Referenced by
 

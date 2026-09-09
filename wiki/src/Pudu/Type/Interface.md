@@ -24,12 +24,24 @@ Project a parsed module into the exported type/signature facts and implementatio
 ### Signatures
 
 ```haskell
-data TypeInterface
+data TypeInterface = TypeInterface
+  { interfaceModule :: !ModuleName
+  , interfaceImports :: ![Located ImportDeclaration]
+  , interfaceDeclarations :: ![Located Declaration]
+  , interfacePrivateDeclarations :: ![Located Declaration]
+  , interfaceDefaults :: !(Set (NominalId, Text))
+  , interfaceBindings :: ![(Text, Located TypeSyntax)]
+  , interfaceIdentities :: ![(Text, NominalId)]
+  , interfaceExportedIdentities :: ![(Text, NominalId, Bool)]
+  , interfaceExportedValues :: ![Text]
+  }
+
 data ImportTypes = ImportTypes
   { importedInterfaces :: ![TypeInterface]
   , importedNames :: !(Map Text NominalId)
   , importedValues :: !(Map Text Text)
   , importedTraits :: !(Set NominalId)
+  , importedQualifiers :: !(Set Text)
   }
 
 interfaceSkeleton :: Module -> TypeInterface
@@ -101,6 +113,7 @@ DEPTH 0.76 (DEEP). It hides export projection, body stripping, canonical identit
 - **Q:** Can private shapes be omitted entirely? **A:** Private names are not importable, but enough underlying shape may remain behind an exported alias/signature. _Rationale:_ an interface must type-check public promises without granting source-level access to hidden names. _Rejected:_ leaking private bindings; making exported aliases opaque despite transparent alias semantics.
 - **Q:** Should a consumer re-run orphan/duplicate checks on imported implementations? **A:** No. _Rationale:_ coherence belongs to the defining module; the program boundary only combines already-valid interfaces and later general overlap checks canonical heads. _Rejected:_ treating imported impls as local declarations.
 - **Q:** Can a body-free member omit an ABI annotation and be inferred again by each consumer? **A:** No; report `E3010` in the defining module and omit the incomplete member from its interface. _Rationale:_ its body is absent, so fresh consumer variables would make the signature contextual and unsound, especially across cycles. _Rejected:_ reconstructing a fresh scheme from incomplete syntax; carrying executable bodies in the static interface.
+- **Q:** Why cache `interfaceIdentities`, `interfaceExportedIdentities`, and `interfaceExportedValues` in `TypeInterface`? **A:** Re-scanning declarations for exported identities and value bindings on every import across thousands of modules created quadratic compiler overhead. Precomputing them during `interfaceSkeleton` reduces import projection to fast `Set`/`Map` lookups.
 
 ## Variants
 

@@ -28,6 +28,7 @@ pudu                 start the puduci interactive session
 pudu repl [file]     start puduci, optionally loading a file
 pudu check <file>... compile files and report diagnostics
 pudu run <file>      compile a program and run its main function
+pudu watch <file>    watch project sources and restart program on change
 pudu test [path]...  discover and execute test fixtures, reporting assertion summaries
 pudu init [path]     scaffold a canonical pudu.toml package manifest and project layout
 pudu doc <file>...   describe every name a program declares
@@ -78,6 +79,12 @@ pudu help            print usage
 
 - `pudu test` discovers `.pudu` test files under `test/`, `tests/`, or the paths provided on the command line. It compiles and evaluates each file, tallying assertions and failures. It reports a clean test suite summary and exits with code 0 on all pass, or code 1 on any failure.
 - `pudu init` initializes a new project directory with a canonical `pudu.toml` adhering to [[architecture/PACKAGES]], creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore`. If `pudu.toml` already exists, it safely refuses to overwrite it.
+- `pudu watch` watches the project root enclosing the specified file, automatically restarting the program on source changes:
+  - Scopes child process lifetime using `bracket`, ensuring that terminating or re-spawning a process terminates the running handle and reaps the exit status before launching the next iteration.
+  - Debounces rapid saves using a 100ms settling loop until both file modification times and file sizes stabilize.
+  - Traverses directory trees with symlink cycle detection via canonicalized ancestor path tracking.
+  - Monitors both `.pudu` sources and `pudu.toml` manifest files, skipping build/tool directories (`.git`, `.pudu`, `dist-newstyle`, `node_modules`, `target`).
+  - Reports changed file names using fast `Map` difference indexing.
 
 ### Linkage
 
@@ -146,3 +153,7 @@ TOML name. Existing files remain preserved. This is code-only delivery with read
 
 - **Q:** Cache unpacked bundle modules across runs? **A:** No; isolated temporary directories prevent stale cache poisoning and concurrent collision between different bundle versions.
 - **Q:** Hardcode project template language constraint? **A:** No; derive it directly from the active Cabal compiler version via `languageConstraint`.
+- **Q:** Why scope watched child processes using `bracket`? **A:** Unhandled watcher exits, signals, or rapid crashes could leave orphaned zombie background processes holding TCP ports or file locks. `bracket` guarantees `terminateProcess` and `waitForProcess` run on every restart and exit.
+- **Q:** Why debounce with a 100ms settling loop in `pudu watch`? **A:** Editors and build tools frequently write temporary files, touch files, or perform multi-stage saves. Checking that timestamps and file sizes remain unchanged across 100ms prevents spurious mid-save recompilation.
+- **Q:** Why track symlink ancestors during watch directory walks? **A:** Recursive directory symlinks can induce infinite loops and stack exhaustion in tree walkers. Canonicalizing paths and maintaining an ancestor `Set` stops circular traversals immediately.
+

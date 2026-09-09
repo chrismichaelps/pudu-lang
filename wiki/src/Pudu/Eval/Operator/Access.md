@@ -32,7 +32,7 @@ unwrapTry :: Span -> Value -> Evaluator Value
 ## Governance
 
 - `readIndex` handles tuples, strings, and arrays with strict non-negative bounds checking, raising `E7004` on out-of-range indices.
-- `readMember` searches records and nominal sums before falling back to built-in method tables (`Array`, `Str`, `Map`, `Set`, `Bytes`, `Buckets`, `Char`).
+- `readMember` searches records and nominal sums before falling back to built-in method tables (`Array`, `Str`, `Map`, `Set`, `Bytes`, `Buckets`, `Char`), mapping member names (such as `escapeHtml` -> `StringEscapeHtml`) to their closed method representations.
 - `unwrapTry` returns the inner value for `Ok` and `Some`, or unwinds with `ReturnUnwind` for `Err` and `None`.
 - `builtinMethodNamesFor` provides IDE/REPL autocompletion by reading from the exact same method tables used during evaluation dispatch.
 
@@ -49,3 +49,4 @@ unwrapTry :: Span -> Value -> Evaluator Value
 ## Grill Log
 
 - **Q:** Why extract access and method lookup into `Eval.Operator.Access`? **A:** `readIndex`, `readMember`, `unwrapTry`, and the built-in method lookup tables form a cohesive access and inspection boundary (~240 lines) distinct from arithmetic and comparison operators, bringing `Eval.Operator` well below the 500-line limit.
+- **Q:** Why include `escapeHtml` in `stringMethods`? **A:** Mapping `escapeHtml` in the static `stringMethods` table ensures it is discovered during member evaluation and included in `builtinMethodNamesFor` suggestions.

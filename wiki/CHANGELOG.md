@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-09 — String optimizations, HTML chunk streaming, UI Island lifecycle, and CLI watch hardening
+
+- Zero-closure text dispatch expansion: expanded `callStringMethodFast` in `Pudu.Eval.Builtin.String` to directly dispatch all remaining built-in string methods (`spanOf`, `spanNotOf`, `slice`, `escapeHtml`, `trim`, `toUpper`, `toLower`, `replace`, `repeat`, `split`, `toBytes`, `chars`, `lines`, `reverse`), avoiding `StringMethodValue` closure allocation and environment traversal across all 22 primitive string methods.
+- Native HTML entity escaping: added `StringEscapeHtml` to `Pudu.Eval.Method` and `Pudu.Eval.Operator.Access`, typed `escapeHtml: fn() -> Str` in `Pudu.Type.Check.Rule`, and implemented `escapeHtmlText` in `Pudu.Eval.Builtin.String` using `Data.Text.Lazy.Builder` chunk scanning. Updated `Std.Html.escape` to delegate directly to `content.escapeHtml()`.
+- Single-pass string algorithms & bounds safety: implemented `countPrefix` in `Pudu.Eval.Builtin.String` using single-pass `Text.uncons` scanning, `characterMember` using `Set.member` lookup for multi-character alphabets, `charAtFast` to read characters by dropping prefixes without full-string scans, and `textCount` / replicate size bounding to prevent integer overflow and memory exhaustion.
+- Zero-action array join: converted `ArrayJoin` in `Pudu.Eval.Builtin.Array` to pure `foldr collectText`, eliminating monadic evaluator actions (`mapM asText`) per element when joining text arrays.
+- HTML chunk streaming: updated `Std.Html.document` to stream the doctype directly into `appendRendered` before joining, and introduced `appendAttributes` to stream formatted attribute chunks directly into the active chunk array without intermediate array allocations or joins.
+- Progressive UI Island lifecycle & deferred hydration: enhanced `Std.Ui.Island` with `Hydration` modes (`Eager`, `Visible`, `Idle`) and `islandWithHydration`. Upgraded client micro-runtime (`<pudu-island>` custom element) with scoped lifecycle cleanup, `AbortController` cancellation signals, `IntersectionObserver` visible hydration, `requestIdleCallback` idle hydration, dynamic on-demand module loading via `PuduIslands.registerLazy`, generational tokens, and `pudu:island-ready` / `pudu:island-error` event dispatching.
+- Shared module interface caching: cached `interfaceIdentities`, `interfaceExportedIdentities`, and `interfaceExportedValues` in `TypeInterface` (`Pudu.Type.Interface`) during skeleton generation, replaced linear list membership checks with `Set` lookups in `importOne`, and eliminated duplicate declaration traversal in `Pudu.Type.Check.Import`.
+- CLI watch process isolation & cycle safety: hardened `pudu watch` in `packages/pudu/v0.1/app/Main.hs` with `bracket` child process lifecycle scoping (guaranteeing termination and reaping), a 100ms settling debounce loop for file modification timestamps and file sizes, symlink cycle detection via canonical ancestor path tracking, monitoring for `pudu.toml` manifests, and $O(N \log N)$ `Map` difference indexing for changed paths.
+
 ## 2026-09-08 — Low-level text scanning optimization and linear scaling
 
 - Low-level O(1) text drop: introduced `drop1Text` and `dropText` in `Pudu.Eval.Builtin.String` using `Data.Text.Array.unsafeIndex` and `Data.Text.Internal.Text` to inspect the underlying UTF-8 byte array and advance text scalars in O(1) time without stream decoding or copying.

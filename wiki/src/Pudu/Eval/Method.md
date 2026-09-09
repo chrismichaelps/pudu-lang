@@ -67,6 +67,7 @@ charMethodName    :: CharMethod -> Text
   _Rationale:_ [[Eval Value]] re-exports it, so the extraction changed no call site and no import
   list — which is what makes it safe to do for a size reason. _Rejected:_ forcing every user to
   learn a second import.
+- **Q:** Why include `StringEscapeHtml` in the closed `StringMethod` enum? **A:** HTML entity escaping is a performance-critical primitive for web templating and UI islands. Registering it in the closed method vocabulary provides uniform dispatch, static method resolution, and single-point spelling (`"escapeHtml"`).
 
 ## Referenced by
 

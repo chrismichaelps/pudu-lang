@@ -48,7 +48,8 @@ Own the closed operator, call, member, and index rules for [[Type Check]].
 
 - `Str` carries a closed set of built-in methods, typed exactly, for the same reason `Array` does:
   a method whose semantics the compiler knows can be given a precise type, and an unknown one is
-  reported rather than dispatched.
+  reported rather than dispatched. This includes `escapeHtml() -> Str` alongside length, indexing,
+  slicing, and transformation operations.
 - Every text method answers with a **new** value rather than changing its receiver. That is why
   `Str` needs no mutable form, and why the same `W3002` that catches a discarded array result
   catches a discarded text one.
@@ -128,6 +129,7 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
   _Rationale:_ resolution already identified the type and the checker can name the precise mistake;
   pretending it might be a module recreates the check/run divergence. _Rejected:_ silent fallback;
   a generic missing-export diagnostic.
+- **Q:** Why type `escapeHtml` in the core type checker rather than in `Std.Html`? **A:** `escapeHtml` is wired as a zero-argument built-in method on primitive `Str` values returning `Str`. Typing it in `stringMethodType` ensures that `.escapeHtml()` is recognized statically across all modules and in standard library implementations without circular dependencies.
 
 ## Referenced by
 
