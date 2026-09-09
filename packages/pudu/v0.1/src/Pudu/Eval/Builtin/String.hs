@@ -8,6 +8,7 @@ module Pudu.Eval.Builtin.String
   ) where
 
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Array as Array
@@ -46,9 +47,9 @@ callStringMethod spanValue method receiver arguments = case receiver of
     (StringTake, [IntValue _ count])
       | count < 0 -> outOfRange "a take count cannot be negative"
       | otherwise -> pure (StrValue (Text.take (textCount text count) text))
-    (StringSpanOf, [StrValue accepted]) -> pure (spanLength (`Text.elem` accepted) text)
+    (StringSpanOf, [StrValue accepted]) -> pure (spanLength (characterMember accepted) text)
     (StringSpanNotOf, [StrValue rejected]) ->
-      pure (spanLength (not . (`Text.elem` rejected)) text)
+      pure (spanLength (not . characterMember rejected) text)
     (StringSlice, [IntValue _ from, IntValue _ to]) -> slice text from to
     (StringTrim, []) -> pure (StrValue (Text.strip text))
     (StringToUpper, []) -> pure (StrValue (Text.toUpper text))
@@ -73,7 +74,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
 
   textArray = ArrayValue . Seq.fromList . map StrValue
 
-  spanLength holds = intOf . fromIntegral . Text.length . Text.takeWhile holds
+  spanLength holds = intOf . fromIntegral . countPrefix holds
 
   slice text from to
     | from < 0 = outOfRange "a slice cannot start before the text"
@@ -109,6 +110,21 @@ drop1Text (Text arr off len)
             | otherwise = 4
           !d = min len delta
       in Text arr (off + d) (len - d)
+
+characterMember :: Text -> Char -> Bool
+characterMember alphabet = case Text.uncons alphabet of
+  Nothing -> const False
+  Just (first, rest)
+    | Text.null rest -> (== first)
+    | otherwise -> let members = Set.fromList (Text.unpack alphabet)
+                    in (`Set.member` members)
+
+countPrefix :: (Char -> Bool) -> Text -> Int
+countPrefix holds = go 0
+ where
+  go !count remaining = case Text.uncons remaining of
+    Just (character, rest) | holds character -> go (count + 1) rest
+    _ -> count
 
 textBytes :: Text -> Integer
 textBytes (Text _ _ byteLength) = toInteger byteLength
