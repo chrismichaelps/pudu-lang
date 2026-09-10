@@ -32,6 +32,7 @@ testDataEvaluation = do
   linkedMapAll <- runEntry "test-fixtures/stdlib/UsesLinkedMapAll.pudu"
   pairedAndDomained <- runEntry "test-fixtures/stdlib/UsesBiMapEnumMapAll.pudu"
   nonEmptyAndTwoKeyed <- runEntry "test-fixtures/stdlib/UsesNonEmptyMultiKeyAll.pudu"
+  cachedAndPrefixed <- runEntry "test-fixtures/stdlib/UsesLruCachePrefixTrieAll.pudu"
   pure $ conjoin
     [ {-| Every export of the list module against a stated answer, naming the
           whole result rather than its length, so a function that answers the
@@ -92,6 +93,18 @@ testDataEvaluation = do
     , counterexample
         "a sequence of one keeps its promises and half a key still answers"
         (nonEmptyAndTwoKeyed === Just "71")
+    {-| Every export of the cache bounded by use and the trie keyed by prefix.
+        Reading through the looking call and reading through the using call are
+        done at the same key on the same cache and the key orders compared,
+        which is the only thing that separates them — a cache that recorded
+        writes and not reads answers every value correctly and discards the
+        entry the program relies on. The trie is asked for a node that is on
+        the way to keys and holds none itself, and asked again after a removal
+        that emptied a whole path, where a trie keeping the emptied nodes still
+        answers that something begins there. -}
+    , counterexample
+        "a read moves an entry and an emptied path stops being a prefix"
+        (cachedAndPrefixed === Just "90")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those
