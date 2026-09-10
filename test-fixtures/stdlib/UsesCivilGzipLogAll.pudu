@@ -1,0 +1,321 @@
+module UsesCivilGzipLogAll
+
+import Std.Bytes as Bytes
+import Std.Compress.Gzip as Gzip
+import Std.Compress.Gzip {InvalidMagic, OutputLimitExceeded, TruncatedStream, UnsupportedCompressionMethod}
+import Std.Log as Log
+import Std.Option as Option
+import Std.Result as Result
+import Std.Time.Format.Civil as Civil
+
+/// Whether a day number and a civil date name each other, asked in both
+/// directions from the same pair.
+///
+/// One direction alone cannot catch a pair of matching mistakes: a reader and a
+/// writer that both shifted a day by one agree with each other everywhere and
+/// with the calendar nowhere, so each date is also checked against a day number
+/// that was worked out from the calendar rather than from the other call.
+fn agreesAt(days: Int, year: Int, month: Int, day: Int) -> Bool {
+  Civil.daysFromCivil(year, month, day) == days
+    && Civil.civilFromDays(days) == (year, month, day)
+}
+
+/// Text compressed and read back, or a marker no round trip produces.
+fn roundTripped(text: Str) -> Str {
+  let squeezed = Gzip.compressText(text, &Gzip.config())
+  Result.unwrapOr(Gzip.decompressText(&squeezed), "\u{0}")
+}
+
+/// Every export of `Std.Time.Format.Civil`, `Std.Compress.Gzip` and `Std.Log`.
+///
+/// The calendar is checked in both directions at once, since a reader and a
+/// writer that shifted a day the same way agree with each other everywhere, and
+/// each date is anchored to a day number worked out from the calendar rather
+/// than from the other call. Dates before the epoch are checked beside dates
+/// after it, because the day number goes negative there and that is where
+/// division rounding toward nought and rounding toward negative infinity part
+/// company — every date after the epoch agrees under either.
+///
+/// Compression is checked by reading back what was written rather than by
+/// comparing against a stored stream, and separately for the thing a round trip
+/// cannot show: a stream that is not one is refused by kind, and text that
+/// expands far past what a caller will hold stops at the bound instead of
+/// filling memory.
+///
+/// A logger's line is compared as a value rather than by capturing output,
+/// which is what the rendering call exists for. The writing calls go through a
+/// logger that keeps nothing, since what they answer is the same either way and
+/// only the filtering decides whether anything is written.
+export fn main() -> Int {
+  var held = 0
+
+  // Division rounding toward negative infinity, which is what a calendar needs
+  // and what the ordinary operator does not do below nought.
+  if Civil.floorDiv(7, 2) == 3 && Civil.floorDiv(0 - 7, 2) == 0 - 4 {
+    held = held + 1
+  }
+  if Civil.floorDiv(7, 0 - 2) == 0 - 4 && Civil.floorDiv(0 - 7, 0 - 2) == 3 {
+    held = held + 1
+  }
+  // An exact division does not shift, on either side of nought, which is the
+  // case a correction applied unconditionally would get wrong.
+  if Civil.floorDiv(6, 2) == 3 && Civil.floorDiv(0 - 6, 2) == 0 - 3 {
+    held = held + 1
+  }
+  if Civil.floorDiv(0, 5) == 0 { held = held + 1 }
+
+  // The remainder that pairs with it, which stays at or above nought for a
+  // positive divisor however negative the numerator is.
+  if Civil.floorMod(7, 3) == 1 && Civil.floorMod(0 - 7, 3) == 2 { held = held + 1 }
+  if Civil.floorMod(6, 3) == 0 && Civil.floorMod(0 - 6, 3) == 0 { held = held + 1 }
+  if Civil.floorMod(0 - 1, 400) == 399 { held = held + 1 }
+
+  // The years an extra day falls in, at each of the three rules and at the one
+  // that decides between them.
+  if Civil.isLeapYear(2024) && !Civil.isLeapYear(2023) { held = held + 1 }
+  // A hundredth year is not one, and a four-hundredth is — the pair that
+  // separates the rule from "every fourth year".
+  if !Civil.isLeapYear(1900) && Civil.isLeapYear(2000) { held = held + 1 }
+  if !Civil.isLeapYear(2100) && Civil.isLeapYear(2400) { held = held + 1 }
+  if Civil.isLeapYear(0) && !Civil.isLeapYear(1) { held = held + 1 }
+
+  // How long each month is, and the one whose length depends on the year.
+  if Civil.daysInMonth(2023, 1) == 31 && Civil.daysInMonth(2023, 4) == 30 {
+    held = held + 1
+  }
+  if Civil.daysInMonth(2023, 2) == 28 && Civil.daysInMonth(2024, 2) == 29 {
+    held = held + 1
+  }
+  if Civil.daysInMonth(1900, 2) == 28 && Civil.daysInMonth(2000, 2) == 29 {
+    held = held + 1
+  }
+  if Civil.daysInMonth(2023, 12) == 31 { held = held + 1 }
+  // A month outside the year answers nothing rather than reaching past the
+  // table it reads from.
+  if Civil.daysInMonth(2023, 0) == 0 && Civil.daysInMonth(2023, 13) == 0 {
+    held = held + 1
+  }
+  if Civil.daysInMonth(2023, 0 - 1) == 0 { held = held + 1 }
+
+  // The epoch itself, and the days either side of it.
+  if agreesAt(0, 1970, 1, 1) { held = held + 1 }
+  if agreesAt(1, 1970, 1, 2) { held = held + 1 }
+  if agreesAt(0 - 1, 1969, 12, 31) { held = held + 1 }
+  // A whole year past it, which is where a count of days in a year would show.
+  if agreesAt(365, 1971, 1, 1) { held = held + 1 }
+  // The day an extra day falls on, and the day after it.
+  if agreesAt(59, 1970, 3, 1) { held = held + 1 }
+  if agreesAt(789, 1972, 2, 29) { held = held + 1 }
+  if agreesAt(790, 1972, 3, 1) { held = held + 1 }
+  // A hundredth year that is not a leap year, where the day after the last of
+  // February is the first of March rather than the twenty-ninth.
+  if agreesAt(0 - 25509, 1900, 2, 28) { held = held + 1 }
+  if agreesAt(0 - 25508, 1900, 3, 1) { held = held + 1 }
+  // A four-hundredth year, which is.
+  if agreesAt(11016, 2000, 2, 29) { held = held + 1 }
+  // Well before the epoch, where the day number is negative and the rounding
+  // has to go the way the calendar does.
+  if agreesAt(0 - 719162, 1, 1, 1) { held = held + 1 }
+  if agreesAt(0 - 719468, 0, 3, 1) { held = held + 1 }
+  // Well after it.
+  if agreesAt(19723, 2024, 1, 1) { held = held + 1 }
+  if agreesAt(2932896, 9999, 12, 31) { held = held + 1 }
+  // The last day of a year and the first of the next, which is the pair a
+  // shift of one day always breaks.
+  if agreesAt(19722, 2023, 12, 31) { held = held + 1 }
+
+  // Compression, read back rather than compared against a stored stream. The
+  // text is long enough and repetitive enough that a stream that had not been
+  // compressed at all would be longer than what went in.
+  let repeated = "the same sentence over and over. ".repeat(50)
+  if roundTripped(repeated) == repeated { held = held + 1 }
+  if roundTripped("") == "" { held = held + 1 }
+  if roundTripped("h\u{00e9}llo \u{4e16}\u{754c}") == "h\u{00e9}llo \u{4e16}\u{754c}" {
+    held = held + 1
+  }
+  let squeezed = Gzip.compressText(repeated, &Gzip.config())
+  if squeezed.length() < repeated.length() { held = held + 1 }
+  // A stream starts with the two bytes that say what it is, so a reader can
+  // refuse something else before trying to inflate it.
+  if Bytes.at(&squeezed, 0) == Some(31u8) && Bytes.at(&squeezed, 1) == Some(139u8) {
+    held = held + 1
+  }
+
+  // The settings, each read back and each bounded where it says it is.
+  let plain: Gzip.GzipConfig = Gzip.config()
+  if plain.chunkSize == 65535 && plain.minCompressBytes == 256 { held = held + 1 }
+  let fastest: Gzip.CompressionLevel = Gzip.Fast
+  if Gzip.withLevel(&plain, fastest).level == Gzip.Fast { held = held + 1 }
+  if Gzip.withLevel(&plain, Gzip.Best).level == Gzip.Best { held = held + 1 }
+  if Gzip.withChunkSize(&plain, 1024).chunkSize == 1024 { held = held + 1 }
+  // Past either end the setting is brought back to the end rather than kept.
+  if Gzip.withChunkSize(&plain, 0).chunkSize == 1 { held = held + 1 }
+  if Gzip.withChunkSize(&plain, 999999).chunkSize == 65535 { held = held + 1 }
+  if Gzip.withMinCompressBytes(&plain, 0 - 5).minCompressBytes == 0 { held = held + 1 }
+  if Gzip.withMinCompressBytes(&plain, 1024).minCompressBytes == 1024 {
+    held = held + 1
+  }
+  // Every level produces a stream that reads back, including the one that does
+  // not compress at all.
+  let asIs = Gzip.compressText(repeated, &Gzip.withLevel(&plain, Gzip.NoCompression))
+  if Result.unwrapOr(Gzip.decompressText(&asIs), "") == repeated { held = held + 1 }
+  if asIs.length() > squeezed.length() { held = held + 1 }
+
+  // The bytes given directly rather than as text, and the checked form, which
+  // says what went wrong instead of stopping the program.
+  let raw = Bytes.fromText(repeated)
+  if Result.isOk(&Gzip.compressChecked(&raw, &plain)) { held = held + 1 }
+  if Bytes.encodeHex(&Gzip.compress(&raw, &plain)) == Bytes.encodeHex(&squeezed) {
+    held = held + 1
+  }
+  if Result.unwrapOr(Gzip.decompress(&squeezed), Bytes.fromText("")).length()
+    == raw.length() {
+    held = held + 1
+  }
+
+  // Text that is not a stream at all, refused by kind rather than merely
+  // refused: a reader answering one failure for everything tells a caller
+  // nothing about what it was handed.
+  match Gzip.decompress(&Bytes.fromText("this is not a gzip stream at all")) {
+    case Err(InvalidMagic(first, second)) => {
+      if first == 116 && second == 104 { held = held + 1 }
+    }
+    case _ => {}
+  }
+  // A stream too short to hold even a header.
+  match Gzip.decompress(&Bytes.fromText("short")) {
+    case Err(TruncatedStream) => { held = held + 1 }
+    case _ => {}
+  }
+  // A stream that says it was compressed a way this does not know.
+  let wrongMethod = Bytes.concat(
+      &Bytes.fromArray(&[31u8, 139u8, 99u8]),
+      &Bytes.take(&squeezed, 20)
+  )
+  match Gzip.decompress(&wrongMethod) {
+    case Err(UnsupportedCompressionMethod(method)) => {
+      if method == 99 { held = held + 1 }
+    }
+    case _ => {}
+  }
+  // A stream cut off part way through, which is not the same as one that is
+  // not a stream.
+  match Gzip.decompress(&Bytes.take(&squeezed, squeezed.length() - 5)) {
+    case Ok(_) => {}
+    case Err(_) => { held = held + 1 }
+  }
+
+  // Text that expands far past what a caller will hold. The bound stops it
+  // rather than filling memory, which a round trip could never show: the same
+  // stream reads back whole when the bound allows it.
+  match Gzip.decompressWithin(&squeezed, 10) {
+    case Err(OutputLimitExceeded(bound)) => { if bound == 10 { held = held + 1 } }
+    case _ => {}
+  }
+  if Result.isOk(&Gzip.decompressWithin(&squeezed, 1000000)) { held = held + 1 }
+
+  // A logger's line compared as a value rather than by capturing output.
+  let quiet: Log.Logger = Log.keeping(&Log.stdout(), Log.Silent)
+  if Log.leastOf(&quiet) == Log.Silent { held = held + 1 }
+  if Log.nameOf(&Log.named(&quiet, "server")) == "server" { held = held + 1 }
+  if Log.nameOf(&Log.under(&Log.named(&quiet, "server"), "db")) == "server.db" {
+    held = held + 1
+  }
+  let carrying = Log.carrying(&quiet, "request", "7")
+  let fields: Array[Log.Field] = Log.fieldsOf(&carrying)
+  if fields.length() == 1 && fields[0].key == "request" { held = held + 1 }
+  if Log.fieldsOf(&Log.carryingValue(&quiet, "count", 3))[0].value == "3" {
+    held = held + 1
+  }
+
+  // Each level named, and each read back from its name, including the spellings
+  // a setting is likely to arrive as.
+  if Log.levelName(Log.Debug) == "DEBUG" && Log.levelName(Log.Fatal) == "FATAL" {
+    held = held + 1
+  }
+  if Log.levelName(Log.Silent) == "SILENT" { held = held + 1 }
+  if Log.levelFrom("warn") == Some(Log.Warn) { held = held + 1 }
+  if Log.levelFrom("WARNING") == Some(Log.Warn) { held = held + 1 }
+  if Log.levelFrom("off") == Some(Log.Silent) { held = held + 1 }
+  if Option.isNone(&Log.levelFrom("chatty")) { held = held + 1 }
+
+  // What a logger keeps. A line below the level it was set to is not written,
+  // and a logger set to keep nothing keeps nothing at all.
+  let ordinary = Log.stdout()
+  if Log.keeps(&ordinary, Log.Info) && !Log.keeps(&ordinary, Log.Debug) {
+    held = held + 1
+  }
+  if Log.keeps(&ordinary, Log.Error) { held = held + 1 }
+  if !Log.keeps(&quiet, Log.Fatal) && !Log.keeps(&quiet, Log.Error) {
+    held = held + 1
+  }
+  // Nothing is at the silent level, so nothing is written for one either.
+  if !Log.keeps(&Log.keeping(&ordinary, Log.Debug), Log.Silent) { held = held + 1 }
+  if Log.keeps(&Log.keeping(&ordinary, Log.Debug), Log.Debug) { held = held + 1 }
+
+  // A value that would confuse a reader of a line is quoted; one that would not
+  // is left bare, which is most of them and keeps a line short.
+  if Log.quoted("plain") == "plain" { held = held + 1 }
+  if Log.quoted("has a space") == "\"has a space\"" { held = held + 1 }
+  if Log.quoted("k=v") == "\"k=v\"" { held = held + 1 }
+  if Log.quoted("") == "\"\"" { held = held + 1 }
+  // A line break inside a value is written as an escape, so one line of output
+  // stays one line of output.
+  if Log.quoted("two\nlines") == "\"two\\nlines\"" { held = held + 1 }
+
+  // The three shapes a line can be written in, each of the same line, so what
+  // separates them is visible.
+  let named = Log.carrying(&Log.named(&quiet, "server"), "request", "7")
+  let asLogfmt: Log.Format = Log.logfmt
+  if Log.rendered(&Log.shapedBy(&named, asLogfmt), Log.Info, "started")
+    == "level=INFO logger=server request=7 message=started" {
+    held = held + 1
+  }
+  if Log.stamped(&Log.shapedBy(&named, Log.logfmt), "now", Log.Info, "started")
+    == "timestamp=now level=INFO logger=server request=7 message=started" {
+    held = held + 1
+  }
+  if Log.rendered(&Log.shapedBy(&named, Log.json), Log.Info, "started")
+    == "\{\"level\":\"INFO\",\"logger\":\"server\",\"request\":\"7\",\"message\":\"started\"\}" {
+    held = held + 1
+  }
+  if Log.rendered(&Log.shapedBy(&named, Log.pretty), Log.Warn, "slow")
+    .startsWith("WARN") {
+    held = held + 1
+  }
+  // The line as a value, before anything decides how to write it.
+  let line = Log.lineOf(&named, "now", Log.Error, "broke")
+  if line.moment == "now" && line.message == "broke" { held = held + 1 }
+  if line.name == "server" && line.fields.length() == 1 { held = held + 1 }
+  if Log.logfmt(line).startsWith("timestamp=now level=ERROR") { held = held + 1 }
+
+  // Writing, through a logger that keeps nothing, so what these answer is
+  // checked without a log beside the test output.
+  if Result.isOk(&Log.at(&quiet, Log.Info, "not written")) { held = held + 1 }
+  if Result.isOk(&Log.atMoment(&quiet, "now", Log.Info, "not written")) {
+    held = held + 1
+  }
+  if Result.isOk(&Log.debug(&quiet, "no")) && Result.isOk(&Log.info(&quiet, "no")) {
+    held = held + 1
+  }
+  if Result.isOk(&Log.warn(&quiet, "no")) && Result.isOk(&Log.error(&quiet, "no")) {
+    held = held + 1
+  }
+  if Result.isOk(&Log.fatal(&quiet, "no")) { held = held + 1 }
+  if Result.isOk(&Log.field(&quiet, Log.Error, "code", "7", "no")) { held = held + 1 }
+  // A logger sent to the error stream, so a program's diagnostics can be read
+  // apart from its answer.
+  if !Log.keeps(&Log.keeping(&Log.stderr(), Log.Silent), Log.Error) {
+    held = held + 1
+  }
+  if Log.keeps(&Log.stderr(), Log.Info) { held = held + 1 }
+
+  // A failure logged on the way past, which comes back unchanged so a caller
+  // does not choose between reporting it and returning it.
+  let broke: Result[Int, Str] = Err("no good")
+  if Log.failure(&quiet, "while doing the thing", broke) == broke { held = held + 1 }
+  let fine: Result[Int, Str] = Ok(1)
+  if Log.failure(&quiet, "while doing the thing", fine) == fine { held = held + 1 }
+
+  held
+}

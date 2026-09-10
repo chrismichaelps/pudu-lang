@@ -1,0 +1,215 @@
+module UsesProcessAll
+
+import Std.Bytes as Bytes
+import Std.Process as Process
+import Std.Result as Result
+
+/// A shell command run to completion, with nothing on its input.
+fn ran(command: Str) -> Result[Process.Finished, Str] {
+  Process.run("/bin/sh", &["-c", command])
+}
+
+/// Everything a started program wrote to a stream, read chunk by chunk until
+/// the stream says it has ended.
+///
+/// Written out rather than taken whole, because reading in pieces is the point
+/// of starting a program instead of running one: a call that answered
+/// everything at once could not show output while it was still being produced.
+fn drained(running: &Process.Started, errors: Bool) -> Str {
+  var out = ""
+  var going = true
+  while going {
+    let piece = if errors { Process.readErrors(running) } else { Process.read(running) }
+    match piece {
+      case Ok(Some(chunk)) => { out = out + Result.unwrapOr(Bytes.toText(&chunk), "") }
+      case Ok(None) => { going = false }
+      case Err(_) => { going = false }
+    }
+  }
+  out
+}
+
+/// Every export of `Std.Process`.
+///
+/// A program that ran and reported a non-zero status is not a failure of the
+/// call, and that distinction is the one thing here a caller can get wrong in
+/// both directions, so it is asked from both sides: a program that fails still
+/// answers a finished program, and only a program that cannot be run at all
+/// answers a failure.
+///
+/// Output and errors are kept apart rather than merged, so a command that
+/// writes to both is run and each stream read separately — a merged reader
+/// answers the same characters and puts a warning in the middle of what a
+/// parser was reading.
+///
+/// The streaming calls are asked for the case they exist for: text handed to a
+/// program's input and read back from its output, which a call that had already
+/// returned could not do at all.
+export fn main() -> Int {
+  var held = 0
+
+  // A program that finished, with what it wrote and the status it left.
+  match ran("printf 'hello'") {
+    case Ok(finished) => {
+      if finished.output == "hello" { held = held + 1 }
+      if finished.status == 0 && finished.errors == "" { held = held + 1 }
+      if Process.isSuccess(&finished) { held = held + 1 }
+      if Process.describe(&finished) == "the program exited with status 0" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // A program that ran and decided against the caller. The call still
+  // succeeded: the program ran, and what it decided is the answer.
+  match ran("exit 3") {
+    case Ok(finished) => {
+      if finished.status == 3 { held = held + 1 }
+      if !Process.isSuccess(&finished) { held = held + 1 }
+      if Process.describe(&finished) == "the program exited with status 3" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Both streams from one program, kept apart. A reader that merged them
+  // answers the same characters and puts the warning inside the data.
+  match ran("printf 'out'; printf 'err' >&2; exit 1") {
+    case Ok(finished) => {
+      if finished.output == "out" && finished.errors == "err" { held = held + 1 }
+      if Process.describe(&finished) == "the program exited with status 1: err" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // Output with a line ending on it, which is what a program writing one line
+  // leaves behind and not what it meant to say.
+  match ran("echo done") {
+    case Ok(finished) => {
+      if finished.output == "done\n" { held = held + 1 }
+      if Process.trimmedOutput(&finished) == "done" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Text handed to a program on its input, which is the difference between
+  // this call and the one that runs a program with nothing to say to it.
+  match Process.withInput("/bin/cat", &[], "given") {
+    case Ok(finished) => {
+      if finished.output == "given" { held = held + 1 }
+      if Process.isSuccess(&finished) { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // Nothing on the input is not the same as no input at all: the program still
+  // reads until the stream ends rather than waiting forever.
+  match Process.withInput("/bin/cat", &[], "") {
+    case Ok(finished) => { if finished.output == "" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // The forms that answer only part of what a program left.
+  if Result.unwrapOr(Process.output("/bin/sh", &["-c", "printf 'x'"]), "") == "x" {
+    held = held + 1
+  }
+  // Here a non-zero status is a failure, carrying what the program said about
+  // it — which is the opposite of what running one answers.
+  if Result.isErr(&Process.output("/bin/sh", &["-c", "printf 'why' >&2; exit 2"])) {
+    held = held + 1
+  }
+  if Result.unwrapOr(Process.output("/bin/sh", &["-c", "printf 'why' >&2; exit 2"]), "")
+    == "" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Process.status("/bin/sh", &["-c", "exit 7"]), 0) == 7 {
+    held = held + 1
+  }
+  if Process.succeeded("/bin/sh", &["-c", "exit 0"]) { held = held + 1 }
+  if !Process.succeeded("/bin/sh", &["-c", "exit 1"]) { held = held + 1 }
+  // A program that cannot be run at all has not succeeded, which is a
+  // different thing from one that ran and failed.
+  if !Process.succeeded("/nonexistent/program", &[]) { held = held + 1 }
+
+  // Output split into lines. A trailing line ending does not make a last line
+  // holding nothing.
+  if Result.unwrapOr(Process.lines("/bin/sh", &["-c", "printf 'a\\nb\\n'"]), [])
+    == ["a", "b"] {
+    held = held + 1
+  }
+  if Result.unwrapOr(Process.lines("/bin/sh", &["-c", "printf 'only'"]), [])
+    == ["only"] {
+    held = held + 1
+  }
+  if Result.isErr(&Process.lines("/bin/sh", &["-c", "exit 1"])) { held = held + 1 }
+
+  // Whether a program is there at all, asked by running it, so a program that
+  // refuses the arguments it was given still counts as present.
+  if Process.isAvailable("/bin/sh") { held = held + 1 }
+  if !Process.isAvailable("/nonexistent/program") { held = held + 1 }
+
+  // A program held by the language rather than by a call that has returned.
+  // How much is read at once is a stated number rather than a hidden one.
+  if Process.chunkSize() == 65536 { held = held + 1 }
+
+  // Reading a started program's streams in pieces, and writing to its input.
+  // A program reading until its input ends waits forever if nothing closes it,
+  // so closing is what separates a pipeline that finishes from one that hangs.
+  match Process.start("/bin/cat", &[]) {
+    case Ok(running) => {
+      let sent = Bytes.fromText("through the pipe")
+      if Result.isOk(&Process.write(&running, &sent)) { held = held + 1 }
+      if Result.isOk(&Process.closeInput(&running)) { held = held + 1 }
+      if drained(&running, false) == "through the pipe" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // The two streams of a started program, read apart from each other.
+  match Process.start("/bin/sh", &["-c", "printf 'data'; printf 'note' >&2"]) {
+    case Ok(running) => {
+      let _closed = Process.closeInput(&running)
+      if drained(&running, false) == "data" { held = held + 1 }
+      if drained(&running, true) == "note" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // A program writing more than one read can carry, which is what reading in
+  // pieces is for: the whole of it must come back, across as many reads as it
+  // takes.
+  match Process.start(
+    "/bin/sh",
+      &["-c", "i=0; while [ $i -lt 5000 ]; do printf '0123456789abcdefghij'; i=$((i+1)); done"]
+  ) {
+    case Ok(running) => {
+      let _closed = Process.closeInput(&running)
+      let whole = drained(&running, false)
+      if whole.length() == 100000 { held = held + 1 }
+      if whole.startsWith("0123456789") && whole.endsWith("abcdefghij") {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+
+  // A program that writes nothing says so by ending its stream rather than by
+  // answering an empty piece, which a caller could not tell from a pause.
+  match Process.start("/bin/sh", &["-c", "exit 0"]) {
+    case Ok(running) => {
+      let _closed = Process.closeInput(&running)
+      if drained(&running, false) == "" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+
+  // Starting a program that is not there fails at the start rather than
+  // answering something to read from.
+  if Result.isErr(&Process.start("/nonexistent/program", &[])) { held = held + 1 }
+  if Result.isErr(&Process.run("/nonexistent/program", &[])) { held = held + 1 }
+
+  held
+}

@@ -57,6 +57,8 @@ testRuntimeEvaluation = do
   digested <- runEntry "test-fixtures/stdlib/UsesCryptoAll.pudu"
   checkedAndDrawn <- runEntry "test-fixtures/stdlib/UsesTestOutRandomAll.pudu"
   nested <- runEntry "test-fixtures/stdlib/UsesNestedArrays.pudu"
+  spawned <- runEntry "test-fixtures/stdlib/UsesProcessAll.pudu"
+  datedAndSqueezed <- runEntry "test-fixtures/stdlib/UsesCivilGzipLogAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -180,6 +182,31 @@ testRuntimeEvaluation = do
     , counterexample
         "arrays nest to any depth and every index reaches the cell it names"
         (nested === Just "68")
+    {-| Every export of the process module. A program that ran and reported a
+        non-zero status is not a failure of the call, and that is the one
+        distinction here a caller can get wrong in both directions, so it is
+        asked from both sides. Output and errors are read apart from each
+        other, since a merged reader answers the same characters and puts a
+        warning inside what a parser was reading. The streaming calls are asked
+        for the case they exist for: text written to a program's input and read
+        back from its output, and output larger than one read can carry. -}
+    , counterexample
+        "a program that fails still ran and its two streams stay apart"
+        (spawned === Just "37")
+    {-| Every export of the calendar, compression and logging modules. The
+        calendar is asked in both directions from the same pair, since a reader
+        and a writer that shifted a day the same way agree with each other
+        everywhere, and every date is anchored to a day number worked out from
+        the calendar rather than from the other call — including dates before
+        the epoch, where the day number goes negative and the two ways of
+        rounding a division part company. Compression is read back rather than
+        compared against a stored stream, and separately asked for what a round
+        trip cannot show: a stream that is not one, refused by kind, and output
+        that runs past the bound a caller set. A logger's line is compared as a
+        value, which is what the rendering call exists for. -}
+    , counterexample
+        "a date survives both directions and a stream that is not one is named"
+        (datedAndSqueezed === Just "94")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}
