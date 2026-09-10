@@ -17,12 +17,19 @@ fn request(method: Http.Method, headers: Array[(Str, Str)]) -> Http.Request {
   Http.Request{method: method, target: "/orders", headers: headers, body: ""}
 }
 
+/// A policy given both a count and a budget, through the trait rather than
+/// through the type, so a helper that adjusts a policy need not name which
+/// kind of policy it is.
+fn boundedTries[B: Retry.Adjusting](base: &B, count: Int, millis: Int) -> B {
+  base.attempts(count).budget(millis)
+}
+
 fn main() -> Int {
   var held = 0
   let plan = Retry.backoff()
 
   // 1. Waiting doubles with each attempt
-  let plain = Retry.jitter(&plan, 0)
+  let plain = plan.jitter(0)
   if Retry.waitFor(&plain, 0, 0) == 100 && Retry.waitFor(&plain, 1, 0) == 200
     && Retry.waitFor(&plain, 2, 0) == 400 {
     held = held + 1
@@ -34,7 +41,7 @@ fn main() -> Int {
   }
 
   // 3. Jitter spreads callers out rather than sending them together
-  let spread = Retry.jitter(&plan, 50)
+  let spread = plan.jitter(50)
   var differed = false
   var seed = 0
   while seed < 8 {
@@ -107,10 +114,13 @@ fn main() -> Int {
   }
 
   // 14. A budget can be made smaller than the waits would otherwise take
-  let brief = Retry.budget(&plan, 150)
+  let brief = plan.budget(150)
   if brief.budgetMillis == 150 {
     held = held + 1
   }
 
+  // Two decisions made through the trait rather than through the type.
+  let tight = boundedTries(&Retry.backoff(), 2, 250)
+  if tight.attempts == 2 && tight.budgetMillis == 250 { held = held + 1 }
   held
 }

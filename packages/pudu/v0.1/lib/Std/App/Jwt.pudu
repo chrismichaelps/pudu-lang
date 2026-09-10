@@ -49,142 +49,76 @@ export fn claims() -> JwtClaims {
   }
 }
 
-/// Sets the `sub` (Subject) claim.
-export fn withSubject(c: &JwtClaims, sub: Str) -> JwtClaims {
-  JwtClaims {
-    subject: Some(sub),
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: c.custom,
-  }
+/// Claims with one field set, each answering the claims rather than taking
+/// them apart.
+///
+/// Methods, so a token's claims are written down the page in the order they
+/// are decided. As functions taking the claims first, a token setting five of
+/// them had five calls wrapped in one another and the claims a reader looks
+/// for first ended up furthest in.
+export trait Claiming {
+  fn withSubject(self: &Self, sub: Str) -> Self
+  fn withIssuer(self: &Self, iss: Str) -> Self
+  fn withAudience(self: &Self, aud: Str) -> Self
+  fn withExpiresAt(self: &Self, exp: Int) -> Self
+  fn withNotBefore(self: &Self, nbf: Int) -> Self
+  fn withIssuedAt(self: &Self, iat: Int) -> Self
+  fn withTokenId(self: &Self, jti: Str) -> Self
+  fn withClaim(self: &Self, key: Str, value: Str) -> Self
+  fn expiresIn(self: &Self, durationSeconds: Int, nowSeconds: Int) -> Self
 }
 
-/// Sets the `iss` (Issuer) claim.
-export fn withIssuer(c: &JwtClaims, iss: Str) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: Some(iss),
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: c.custom,
+impl Claiming for JwtClaims {
+  /// Who the token is about.
+  fn withSubject(self: &Self, sub: Str) -> Self {
+    JwtClaims{..*self, subject: Some(sub)}
   }
-}
 
-/// Sets the `aud` (Audience) claim.
-export fn withAudience(c: &JwtClaims, aud: Str) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: Some(aud),
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: c.custom,
+  /// Who issued the token.
+  fn withIssuer(self: &Self, iss: Str) -> Self {
+    JwtClaims{..*self, issuer: Some(iss)}
   }
-}
 
-/// Sets the `exp` (Expiration Time) claim in epoch seconds.
-export fn withExpiresAt(c: &JwtClaims, exp: Int) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: Some(exp),
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: c.custom,
+  /// Who the token is for.
+  fn withAudience(self: &Self, aud: Str) -> Self {
+    JwtClaims{..*self, audience: Some(aud)}
   }
-}
 
-/// Sets the `nbf` (Not Before) claim in epoch seconds.
-export fn withNotBefore(c: &JwtClaims, nbf: Int) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: Some(nbf),
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: c.custom,
+  /// The second after which the token is no longer good.
+  fn withExpiresAt(self: &Self, exp: Int) -> Self {
+    JwtClaims{..*self, expiresAt: Some(exp)}
   }
-}
 
-/// Sets the `iat` (Issued At) claim in epoch seconds.
-export fn withIssuedAt(c: &JwtClaims, iat: Int) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: Some(iat),
-    tokenId: c.tokenId,
-    custom: c.custom,
+  /// The second before which the token is not yet good.
+  fn withNotBefore(self: &Self, nbf: Int) -> Self {
+    JwtClaims{..*self, notBefore: Some(nbf)}
   }
-}
 
-/// Sets the `jti` (JWT ID) claim.
-export fn withTokenId(c: &JwtClaims, jti: Str) -> JwtClaims {
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: Some(jti),
-    custom: c.custom,
+  /// The second the token was made.
+  fn withIssuedAt(self: &Self, iat: Int) -> Self {
+    JwtClaims{..*self, issuedAt: Some(iat)}
   }
-}
 
-/// Adds or updates a custom key-value claim in the payload.
-export fn withClaim(c: &JwtClaims, key: Str, value: Str) -> JwtClaims {
-  var updated: Array[(Str, Str)] = []
-  for pair in c.custom {
-    if pair[0] != key {
-      updated = updated.push(pair)
+  /// The token's own identifier, for a holder that revokes one.
+  fn withTokenId(self: &Self, jti: Str) -> Self {
+    JwtClaims{..*self, tokenId: Some(jti)}
+  }
+
+  /// One claim of the caller's own, replacing any claim already under that
+  /// name so a token cannot carry two answers for one question.
+  fn withClaim(self: &Self, key: Str, value: Str) -> Self {
+    var updated: Array[(Str, Str)] = []
+    for pair in self.custom {
+      if pair[0] != key { updated = updated.push(pair) }
     }
+    JwtClaims{..*self, custom: updated.push((key, value))}
   }
-  updated = updated.push((key, value))
-  JwtClaims {
-    subject: c.subject,
-    issuer: c.issuer,
-    audience: c.audience,
-    expiresAt: c.expiresAt,
-    notBefore: c.notBefore,
-    issuedAt: c.issuedAt,
-    tokenId: c.tokenId,
-    custom: updated,
-  }
-}
 
-/// Retrieves a claim by name from registered or custom claims.
-export fn getClaim(c: &JwtClaims, key: Str) -> Option[Str] {
-  if key == "sub" { return c.subject }
-  if key == "iss" { return c.issuer }
-  if key == "aud" { return c.audience }
-  if key == "jti" { return c.tokenId }
-  for pair in c.custom {
-    if pair[0] == key {
-      return Some(pair[1])
-    }
+  /// The second the token stops being good, counted from a second the caller
+  /// supplies rather than from a clock this reaches for itself.
+  fn expiresIn(self: &Self, durationSeconds: Int, nowSeconds: Int) -> Self {
+    JwtClaims{..*self, expiresAt: Some(nowSeconds + durationSeconds)}
   }
-  None
-}
-
-/// Sets the `exp` claim relative to a reference timestamp.
-export fn expiresIn(c: &JwtClaims, durationSeconds: Int, nowSeconds: Int) -> JwtClaims {
-  withExpiresAt(c, nowSeconds + durationSeconds)
 }
 
 /// Checks whether claims indicate the token has expired relative to a timestamp and leeway.
@@ -213,30 +147,43 @@ export fn validation() -> JwtValidation {
   }
 }
 
-/// Configures mandatory issuer verification.
-export fn requireIssuer(v: &JwtValidation, iss: Str) -> JwtValidation {
-  JwtValidation {
-    expectedIssuer: Some(iss),
-    expectedAudience: v.expectedAudience,
-    leewaySeconds: v.leewaySeconds,
+/// Retrieves a claim by name from registered or custom claims.
+export fn getClaim(c: &JwtClaims, key: Str) -> Option[Str] {
+  if key == "sub" { return c.subject }
+  if key == "iss" { return c.issuer }
+  if key == "aud" { return c.audience }
+  if key == "jti" { return c.tokenId }
+  for pair in c.custom {
+    if pair[0] == key {
+      return Some(pair[1])
+    }
   }
+  None
 }
 
-/// Configures mandatory audience verification.
-export fn requireAudience(v: &JwtValidation, aud: Str) -> JwtValidation {
-  JwtValidation {
-    expectedIssuer: v.expectedIssuer,
-    expectedAudience: Some(aud),
-    leewaySeconds: v.leewaySeconds,
-  }
+/// A check with one expectation set, each answering the check rather than
+/// taking it apart.
+export trait Checking {
+  fn requireIssuer(self: &Self, iss: Str) -> Self
+  fn requireAudience(self: &Self, aud: Str) -> Self
+  fn withLeeway(self: &Self, seconds: Int) -> Self
 }
 
-/// Configures clock skew tolerance in seconds.
-export fn withLeeway(v: &JwtValidation, seconds: Int) -> JwtValidation {
-  JwtValidation {
-    expectedIssuer: v.expectedIssuer,
-    expectedAudience: v.expectedAudience,
-    leewaySeconds: seconds,
+impl Checking for JwtValidation {
+  /// The issuer a token must name.
+  fn requireIssuer(self: &Self, iss: Str) -> Self {
+    JwtValidation{..*self, expectedIssuer: Some(iss)}
+  }
+
+  /// The audience a token must name.
+  fn requireAudience(self: &Self, aud: Str) -> Self {
+    JwtValidation{..*self, expectedAudience: Some(aud)}
+  }
+
+  /// How far apart two clocks may be before a token is refused for the time
+  /// rather than for what it says.
+  fn withLeeway(self: &Self, seconds: Int) -> Self {
+    JwtValidation{..*self, leewaySeconds: seconds}
   }
 }
 

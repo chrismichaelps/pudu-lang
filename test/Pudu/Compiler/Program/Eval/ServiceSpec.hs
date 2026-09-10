@@ -54,7 +54,7 @@ testServiceEvaluation = do
         up when one of them refuses to. -}
     , counterexample
         "an application is a value that starts and stops in a written order"
-        (wired === Just "67")
+        (wired === Just "68")
     {-| That placing text in a page cannot place markup in one: a script
         written into text renders as that text, a quote inside an attribute
         does not end the value and start another, and the ampersand is written

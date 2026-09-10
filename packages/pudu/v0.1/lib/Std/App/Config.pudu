@@ -62,9 +62,8 @@ export fn empty() -> Config { Config{settings: Map.empty(), profile: ""} }
 /// public function below it, so a program needing a different arrangement
 /// writes that arrangement rather than working around this one.
 export fn discover(defaults: &Array[(Str, Str)], path: Str) -> Result[Config, ConfigError] {
-  let base = withProfile(&declaring(defaults), activeProfile())
-  let filed = withFile(&base, path) ?
-  Ok(withArguments(&withEnvironment(&filed)))
+  let filed = declaring(defaults).withProfile(activeProfile()).withFile(path) ?
+  Ok(filed.withEnvironment().withArguments())
 }
 
 /// The profile this invocation asked for, from the argument first and the
@@ -88,70 +87,89 @@ export fn declaring(defaults: &Array[(Str, Str)]) -> Config {
   layered(&empty(), defaults, Declared)
 }
 
-/// A configuration with a document's settings written over it.
+/// A configuration with one more layer written over it, each answering the
+/// configuration rather than taking it apart.
 ///
-/// The document is read as a table of dotted keys, so a section and a key
-/// beneath it name `section.key`, which is the same name the environment and
-/// an argument use for it.
-export fn withDocument(base: &Config, source: Str) -> Result[Config, ConfigError] {
-  let parsed = TomlRead.read(source)
-  if let Err(_) = parsed {
-    Err(Unreadable("the configuration document could not be read"))
-  } else {
-    let document = Result.unwrapOr(parsed, Toml.table())
-    let selected = sectionFor(&document, base.profile)
-    Ok(layered(base, &flatten(&selected, ""), Document))
-  }
+/// Methods, so the layers read down the page in the order they are applied —
+/// which is the order that decides which one wins. As functions taking the
+/// configuration first, the layers had to be written wrapped in one another
+/// and the last one applied appeared first on the page, which is exactly
+/// backwards from how they are read.
+export trait Layering {
+  fn withDocument(self: &Self, source: Str) -> Result[Self, ConfigError]
+  fn withFile(self: &Self, path: Str) -> Result[Self, ConfigError]
+  fn withEnvironment(self: &Self) -> Self
+  fn withArguments(self: &Self) -> Self
+  fn withProfile(self: &Self, name: Str) -> Self
 }
 
-/// A configuration with a document read from a file written over it.
-/// A file that is not there is not a failure: a program with defaults for
-/// everything is correctly configured, and refusing it would make the file
-/// mandatory in every deployment that did not need one.
-export fn withFile(base: &Config, path: Str) -> Result[Config, ConfigError] {
-  if !Io.exists(path) {
-    Ok(*base)
-  } else {
-    let read = Io.read(path)
-    if let Err(_) = read {
-      Err(Unreadable(path))
+impl Layering for Config {
+  /// A configuration with a document's settings written over it.
+  ///
+  /// The profile's section is applied after the top-level one, so a profile
+  /// states its differences rather than replacing what it did not mention.
+  fn withDocument(self: &Self, source: Str) -> Result[Self, ConfigError] {
+    let parsed = TomlRead.read(source)
+    if let Err(_) = parsed {
+      Err(Unreadable("the configuration document could not be read"))
     } else {
-      withDocument(base, Result.unwrapOr(read, ""))
+      let document = Result.unwrapOr(parsed, Toml.table())
+      let selected = sectionFor(&document, self.profile)
+      Ok(layered(self, &flatten(&selected, ""), Document))
     }
   }
-}
 
-/// A configuration with the machine's own variables written over it.
-///
-/// A dotted key is matched by transforming it rather than by consulting a
-/// table of both spellings: `server.port` is `SERVER_PORT`. Only keys the
-/// configuration already knows are looked for, so the whole environment does
-/// not become configuration.
-export fn withEnvironment(base: &Config) -> Config {
-  var found: Array[(Str, Str)] = []
-  for key in Map.keys(&base.settings) {
-    if let Some(held) = Env.variable(environmentName(key)) {
-      found = found.push((key, held))
+  /// A configuration with a document read from a file written over it.
+  ///
+  /// A file that is not there is not a failure: a program with defaults for
+  /// everything is correctly configured, and refusing it would make the file
+  /// mandatory in every deployment that did not need one.
+  fn withFile(self: &Self, path: Str) -> Result[Self, ConfigError] {
+    if !Io.exists(path) {
+      Ok(*self)
+    } else {
+      let read = Io.read(path)
+      if let Err(_) = read {
+        Err(Unreadable(path))
+      } else {
+        self.withDocument(Result.unwrapOr(read, ""))
+      }
     }
   }
-  layered(base, &found, Environment)
-}
 
-/// A configuration with this invocation's arguments written over it.
-/// An argument is `--server.port 8080`, spelled with the key itself, so
-/// nothing has to be learned to override a setting from the command line.
-export fn withArguments(base: &Config) -> Config {
-  var found: Array[(Str, Str)] = []
-  for key in Map.keys(&base.settings) {
-    if let Some(held) = Env.option("--" + key) { found = found.push((key, held)) }
+  /// A configuration with the environment written over it.
+  ///
+  /// A dotted key is matched by transforming it rather than by consulting a
+  /// table of both spellings: `server.port` is `SERVER_PORT`. Only keys the
+  /// configuration already knows are looked for, so the whole environment does
+  /// not become configuration.
+  fn withEnvironment(self: &Self) -> Self {
+    var found: Array[(Str, Str)] = []
+    for key in Map.keys(&self.settings) {
+      if let Some(held) = Env.variable(environmentName(key)) {
+        found = found.push((key, held))
+      }
+    }
+    layered(self, &found, Environment)
   }
-  layered(base, &found, Argument)
-}
 
-/// The profile a configuration selects, chosen before the document is read
-/// because it decides which of the document's sections applies.
-export fn withProfile(base: &Config, name: Str) -> Config {
-  Config{settings: base.settings, profile: name}
+  /// A configuration with this invocation's arguments written over it.
+  ///
+  /// An argument is `--server.port 8080`, spelled with the key itself, so
+  /// nothing has to be learned to override a setting from the command line.
+  fn withArguments(self: &Self) -> Self {
+    var found: Array[(Str, Str)] = []
+    for key in Map.keys(&self.settings) {
+      if let Some(held) = Env.option("--" + key) { found = found.push((key, held)) }
+    }
+    layered(self, &found, Argument)
+  }
+
+  /// The profile a configuration selects, chosen before the document is read
+  /// because it decides which of the document's sections applies.
+  fn withProfile(self: &Self, name: Str) -> Self {
+    Config{settings: self.settings, profile: name}
+  }
 }
 
 /// Which profile is active.

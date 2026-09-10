@@ -321,12 +321,12 @@ export fn run(target: &App) -> Result[Int, AppError] {
   if bodyBytes < 0 { return Err(Configuration("server.bodyBytes must be nonnegative")) }
   let coming = start(target)
   if let Some(problem) = coming.failure { return Err(StageFailed(problem[0], problem[1])) }
-  var listening = Server.withLimits(&Server.server(&target.router), headBytes, bodyBytes)
-  listening = Server.withReadDeadline(&listening, readMillis)
-  listening = Server.withWriteDeadline(&listening, writeMillis)
-  listening = Server.withDrainDeadline(&listening, drainMillis)
-  listening = Server.withWorkers(&listening, workers, queueCapacity)
-  for step in target.steps { listening = Server.using(&listening, step) }
+  var listening = Server.server(&target.router).withLimits(headBytes, bodyBytes)
+  listening = listening.withReadDeadline(readMillis)
+  listening = listening.withWriteDeadline(writeMillis)
+  listening = listening.withDrainDeadline(drainMillis)
+  listening = listening.withWorkers(workers, queueCapacity)
+  for step in target.steps { listening = listening.using(step) }
   let served = Server.listenAndServe(&listening, host, port, limit)
   let stopped = stop(target)
   if let Err(problem) = served {

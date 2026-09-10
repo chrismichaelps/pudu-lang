@@ -441,7 +441,7 @@ export fn main() -> Int {
 
   // 29. Server: withDrainDeadline configuration
   let testRouter = Route.router()
-  let srv = Server.withDrainDeadline(&Server.server(&testRouter), 7500)
+  let srv = Server.server(&testRouter).withDrainDeadline(7500)
   if srv.drainMillis == 7500 { passed = passed + 1 }
 
   // 30. Tenant: registry, quotas, noisy-neighbor concurrency bounding, and suspension

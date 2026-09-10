@@ -35,81 +35,65 @@ export fn spec() -> Spec {
   Spec{width: 0, fill: ' ', align: Left, sign: false, group: ""}
 }
 
-/// The same spec with a least width.
+/// A spec with one decision changed, each answering a spec rather than taking
+/// one apart.
 ///
-/// A least width rather than a width: content wider than it is left alone, on
-/// the grounds that losing characters is worse than losing a column. `truncated`
-/// is how a caller asks for the other thing, by name.
-export fn width(value: &Spec, least: Int) -> Spec {
-  Spec {
-    width: if least < 0 { 0 } else { least },
-    fill: value.fill,
-    align: value.align,
-    sign: value.sign,
-    group: value.group
-  }
+/// Methods, so that a spec asking for three things is written down the page.
+/// As functions taking the spec first, each call had to be wrapped in the next
+/// and the spec a reader looks for first ended up furthest in.
+export trait Shaping {
+  fn width(self: &Self, least: Int) -> Self
+  fn filledWith(self: &Self, filler: Char) -> Self
+  fn aligned(self: &Self, placement: Align) -> Self
+  fn leftAligned(self: &Self) -> Self
+  fn rightAligned(self: &Self) -> Self
+  fn centred(self: &Self) -> Self
+  fn withSign(self: &Self, shown: Bool) -> Self
+  fn grouped(self: &Self, separator: Str) -> Self
 }
 
-/// The same spec filling with a different character.
-export fn filledWith(value: &Spec, filler: Char) -> Spec {
-  Spec {
-    width: value.width,
-    fill: filler,
-    align: value.align,
-    sign: value.sign,
-    group: value.group
+impl Shaping for Spec {
+  /// The same spec at least this wide.
+  ///
+  /// A least width rather than a width: content wider than it is left alone,
+  /// on the grounds that losing characters is worse than losing a column.
+  /// `truncated` is how a caller asks for the other thing, by name.
+  fn width(self: &Self, least: Int) -> Self {
+    Spec{..*self, width: if least < 0 { 0 } else { least }}
   }
-}
 
-/// The same spec with content placed differently within its width.
-export fn aligned(value: &Spec, placement: Align) -> Spec {
-  Spec {
-    width: value.width,
-    fill: value.fill,
-    align: placement,
-    sign: value.sign,
-    group: value.group
+  /// The same spec filling with a different character.
+  fn filledWith(self: &Self, filler: Char) -> Self { Spec{..*self, fill: filler} }
+
+  /// The same spec with content placed differently within its width.
+  fn aligned(self: &Self, placement: Align) -> Self {
+    Spec{..*self, align: placement}
   }
-}
 
-/// The same spec placing content at the left of its width.
-export fn leftAligned(value: &Spec) -> Spec { aligned(value, Left) }
+  /// The same spec placing content at the left of its width.
+  fn leftAligned(self: &Self) -> Self { Spec{..*self, align: Left} }
 
-/// The same spec placing content at the right of its width.
-export fn rightAligned(value: &Spec) -> Spec { aligned(value, Right) }
+  /// The same spec placing content at the right of its width.
+  fn rightAligned(self: &Self) -> Self { Spec{..*self, align: Right} }
 
-/// The same spec placing content in the middle of its width.
-///
-/// An odd remainder goes to the right, so a column of centred values has a
-/// straight left edge.
-export fn centred(value: &Spec) -> Spec { aligned(value, Centre) }
+  /// The same spec placing content in the middle of its width.
+  ///
+  /// An odd remainder goes to the right, so a column of centred values has a
+  /// straight left edge.
+  fn centred(self: &Self) -> Self { Spec{..*self, align: Centre} }
 
-/// The same spec showing a `+` on a number that is not negative.
-///
-/// For a column where the sign carries meaning and its absence would be read as
-/// a missing value rather than as a positive one.
-export fn withSign(value: &Spec, shown: Bool) -> Spec {
-  Spec {
-    width: value.width,
-    fill: value.fill,
-    align: value.align,
-    sign: shown,
-    group: value.group
-  }
-}
+  /// The same spec showing a `+` on a number that is not negative.
+  ///
+  /// For a column where the sign carries meaning and its absence would be read
+  /// as a missing value rather than as a positive one.
+  fn withSign(self: &Self, shown: Bool) -> Self { Spec{..*self, sign: shown} }
 
-/// The same spec separating a number's digits into groups of three.
-///
-/// The separator is the caller's, because which one reads as a thousands mark
-/// depends on where the reader is and the language has no opinion about that.
-export fn grouped(value: &Spec, separator: Str) -> Spec {
-  Spec {
-    width: value.width,
-    fill: value.fill,
-    align: value.align,
-    sign: value.sign,
-    group: separator
-  }
+  /// The same spec separating a number's digits into groups of three.
+  ///
+  /// The separator is the caller's, because which one reads as a thousands
+  /// mark depends on where the reader is and the language has no opinion about
+  /// that.
+  fn grouped(self: &Self, separator: Str) -> Self { Spec{..*self, group: separator} }
 }
 
 /// The width a spec asks for.
@@ -276,7 +260,7 @@ export fn columns(rows: &Array[Array[Str]], separator: Str) -> Array[Str] {
     var index = 0
     while index < widest.length() {
       let cell = if index < row.length() { row[index] } else { "" }
-      pieces = pieces.push(text(&width(&spec(), widest[index]), cell))
+      pieces = pieces.push(text(&spec().width(widest[index]), cell))
       index = index + 1
     }
     out = out.push(Text.join(&pieces, separator).trim())

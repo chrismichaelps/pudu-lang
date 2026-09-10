@@ -44,38 +44,39 @@ export fn config() -> GzipConfig {
   }
 }
 
-/// Sets the compression level profile.
-export fn withLevel(c: &GzipConfig, level: CompressionLevel) -> GzipConfig {
-  GzipConfig {
-    level: level,
-    chunkSize: c.chunkSize,
-    minCompressBytes: c.minCompressBytes,
-  }
+/// A configuration with one setting changed, each answering the configuration
+/// rather than taking it apart.
+///
+/// Methods, so a configuration that differs from the default in two ways reads
+/// down the page rather than wrapping each call in the next.
+export trait Configuring {
+  fn withLevel(self: &Self, level: CompressionLevel) -> Self
+  fn withChunkSize(self: &Self, chunkSize: Int) -> Self
+  fn withMinCompressBytes(self: &Self, minBytes: Int) -> Self
 }
 
-/// Sets the DEFLATE block chunk size bounded between 1 and 65,535 bytes.
-export fn withChunkSize(c: &GzipConfig, chunkSize: Int) -> GzipConfig {
-  let bounded = if chunkSize < 1 {
-    1
-  } else if chunkSize > 65535 {
-    65535
-  } else {
-    chunkSize
+impl Configuring for GzipConfig {
+  /// Sets the compression level profile.
+  fn withLevel(self: &Self, level: CompressionLevel) -> Self {
+    GzipConfig{..*self, level: level}
   }
-  GzipConfig {
-    level: c.level,
-    chunkSize: bounded,
-    minCompressBytes: c.minCompressBytes,
-  }
-}
 
-/// Configures the minimum payload size before HTTP middleware triggers compression.
-export fn withMinCompressBytes(c: &GzipConfig, minBytes: Int) -> GzipConfig {
-  let bounded = if minBytes < 0 { 0 } else { minBytes }
-  GzipConfig {
-    level: c.level,
-    chunkSize: c.chunkSize,
-    minCompressBytes: bounded,
+  /// Sets the DEFLATE block chunk size bounded between 1 and 65,535 bytes.
+  fn withChunkSize(self: &Self, chunkSize: Int) -> Self {
+    let bounded = if chunkSize < 1 {
+      1
+    } else if chunkSize > 65535 {
+      65535
+    } else {
+      chunkSize
+    }
+    GzipConfig{..*self, chunkSize: bounded}
+  }
+
+  /// Configures the minimum payload size before HTTP middleware triggers
+  /// compression.
+  fn withMinCompressBytes(self: &Self, minBytes: Int) -> Self {
+    GzipConfig{..*self, minCompressBytes: if minBytes < 0 { 0 } else { minBytes }}
   }
 }
 

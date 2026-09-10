@@ -3,6 +3,17 @@ module UsesJwt
 import Std.App.Jwt as Jwt
 import Std.Bytes as ByteSeq
 
+/// Claims given both a subject and an issuer, through the trait rather than
+/// through the type.
+fn addressed[C: Jwt.Claiming](base: &C, sub: Str, iss: Str) -> C {
+  base.withSubject(sub).withIssuer(iss)
+}
+
+/// A check given both an issuer and a leeway, through the trait.
+fn expecting[V: Jwt.Checking](base: &V, iss: Str, seconds: Int) -> V {
+  base.requireIssuer(iss).withLeeway(seconds)
+}
+
 export fn main() -> Int {
   var held = 0
 
@@ -10,14 +21,14 @@ export fn main() -> Int {
   let wrongSecret = "completely-different-wrong-secret-key-0987654321".toBytes()
 
   let baseClaims = Jwt.claims()
-  let configuredClaims = Jwt.withSubject(&baseClaims, "user-42")
-  let withIss = Jwt.withIssuer(&configuredClaims, "auth.example.com")
-  let withAud = Jwt.withAudience(&withIss, "api.example.com")
-  let withExp = Jwt.withExpiresAt(&withAud, 1700001000)
-  let withNbf = Jwt.withNotBefore(&withExp, 1700000000)
-  let withIat = Jwt.withIssuedAt(&withNbf, 1700000000)
-  let withJti = Jwt.withTokenId(&withIat, "token-uuid-999")
-  let fullClaims = Jwt.withClaim(&withJti, "role", "admin")
+  let configuredClaims = baseClaims.withSubject("user-42")
+  let withIss = configuredClaims.withIssuer("auth.example.com")
+  let withAud = withIss.withAudience("api.example.com")
+  let withExp = withAud.withExpiresAt(1700001000)
+  let withNbf = withExp.withNotBefore(1700000000)
+  let withIat = withNbf.withIssuedAt(1700000000)
+  let withJti = withIat.withTokenId("token-uuid-999")
+  let fullClaims = withJti.withClaim("role", "admin")
 
   // Assertion 1: Claims builder and getters
   if Jwt.getClaim(&fullClaims, "sub") == Some("user-42") && Jwt.getClaim(&fullClaims, "role") == Some("admin") {
@@ -33,8 +44,8 @@ export fn main() -> Int {
 
   // Assertion 3: Decoding valid token with correct secret succeeds
   let rule = Jwt.validation()
-  let validatedRule = Jwt.requireIssuer(&rule, "auth.example.com")
-  let fullRule = Jwt.requireAudience(&validatedRule, "api.example.com")
+  let validatedRule = rule.requireIssuer("auth.example.com")
+  let fullRule = validatedRule.requireAudience("api.example.com")
 
   let decoded = Jwt.decode(token, &secret, &fullRule, 1700000500)
   match decoded {
@@ -75,7 +86,7 @@ export fn main() -> Int {
   }
 
   // Assertion 8: Leeway tolerates clock drift
-  let leewayRule = Jwt.withLeeway(&fullRule, 10)
+  let leewayRule = fullRule.withLeeway(10)
   let leewayDecoded = Jwt.decode(token, &secret, &leewayRule, 1700001005)
   match leewayDecoded {
     case Ok(c) => {
@@ -85,7 +96,7 @@ export fn main() -> Int {
   }
 
   // Assertion 9: Issuer mismatch fails with IssuerMismatch
-  let wrongIssRule = Jwt.requireIssuer(&fullRule, "other.example.com")
+  let wrongIssRule = fullRule.requireIssuer("other.example.com")
   let issMismatch = Jwt.decode(token, &secret, &wrongIssRule, 1700000500)
   match issMismatch {
     case Err(Jwt.IssuerMismatch) => { held = held + 1 }
@@ -93,7 +104,7 @@ export fn main() -> Int {
   }
 
   // Assertion 10: Audience mismatch fails with AudienceMismatch
-  let wrongAudRule = Jwt.requireAudience(&fullRule, "other-api.example.com")
+  let wrongAudRule = fullRule.requireAudience("other-api.example.com")
   let audMismatch = Jwt.decode(token, &secret, &wrongAudRule, 1700000500)
   match audMismatch {
     case Err(Jwt.AudienceMismatch) => { held = held + 1 }
@@ -112,13 +123,13 @@ export fn main() -> Int {
   }
 
   // Assertion 12: Custom claim mutation and retrieval
-  let updatedClaims = Jwt.withClaim(&fullClaims, "role", "superadmin")
+  let updatedClaims = fullClaims.withClaim("role", "superadmin")
   if Jwt.getClaim(&updatedClaims, "role") == Some("superadmin") {
     held = held + 1
   }
 
   // Assertion 13: expiresIn computes future expiration timestamp
-  let relClaims = Jwt.expiresIn(&baseClaims, 3600, 1700000000)
+  let relClaims = baseClaims.expiresIn(3600, 1700000000)
   if relClaims.expiresAt == Some(1700003600) {
     held = held + 1
   }
@@ -129,8 +140,17 @@ export fn main() -> Int {
   }
 
   // Assertion 15: isValidAt checks both bounds
-  let boundedClaims = Jwt.withNotBefore(&relClaims, 1700000000)
+  let boundedClaims = relClaims.withNotBefore(1700000000)
   if Jwt.isValidAt(&boundedClaims, 1700001000, 0) && !Jwt.isValidAt(&boundedClaims, 1699999999, 0) {
+    held = held + 1
+  }
+
+  // Two decisions made through each trait rather than through the type.
+  let addressedClaims = addressed(&Jwt.claims(), "ada", "pudu")
+  if Jwt.getClaim(&addressedClaims, "sub") == Some("ada") { held = held + 1 }
+  if Jwt.getClaim(&addressedClaims, "iss") == Some("pudu") { held = held + 1 }
+  let expected = expecting(&Jwt.validation(), "pudu", 30)
+  if expected.expectedIssuer == Some("pudu") && expected.leewaySeconds == 30 {
     held = held + 1
   }
 

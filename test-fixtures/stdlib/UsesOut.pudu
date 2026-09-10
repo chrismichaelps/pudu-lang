@@ -25,17 +25,17 @@ export fn main() -> Int {
   if Out.rendered(&out, &[]) == "\n" { held = held + 1 }
 
   // A separator of nothing joins the pieces directly.
-  if Out.rendered(&Out.separatedBy(&out, ""), &["a", "b"]) == "ab\n" { held = held + 1 }
-  if Out.rendered(&Out.separatedBy(&out, ", "), &["a", "b"]) == "a, b\n" { held = held + 1 }
+  if Out.rendered(&out.separatedBy(""), &["a", "b"]) == "ab\n" { held = held + 1 }
+  if Out.rendered(&out.separatedBy(", "), &["a", "b"]) == "a, b\n" { held = held + 1 }
 
   // An empty ending leaves the line open, which is what a prompt needs.
-  let prompt = Out.endingWith(&out, "")
+  let prompt = out.endingWith("")
   if Out.rendered(&prompt, &["Name:"]) == "Name:" { held = held + 1 }
   // With no pieces and no ending there is nothing to write at all.
   if Out.rendered(&prompt, &[]) == "" { held = held + 1 }
 
   // A prefix goes on the line.
-  let noted = Out.prefixedWith(&out, "> ")
+  let noted = out.prefixedWith("> ")
   if Out.rendered(&noted, &["hello"]) == "> hello\n" { held = held + 1 }
 
   // A prefix goes on every line of a piece that already spans lines, so a
@@ -43,24 +43,24 @@ export fn main() -> Int {
   if Out.rendered(&noted, &["one\ntwo"]) == "> one\n> two\n" { held = held + 1 }
 
   // The same holds when the separator is what introduces the line break.
-  if Out.rendered(&Out.separatedBy(&noted, "\n"), &["one", "two"]) == "> one\n> two\n" {
+  if Out.rendered(&noted.separatedBy("\n"), &["one", "two"]) == "> one\n> two\n" {
     held = held + 1
   }
 
   // Indenting adds to the prefix, so indenting an indented printer nests.
-  let once = Out.indentedBy(&out, 2)
-  let twice = Out.indentedBy(&once, 2)
+  let once = out.indentedBy(2)
+  let twice = once.indentedBy(2)
   if Out.rendered(&once, &["x"]) == "  x\n" { held = held + 1 }
   if Out.rendered(&twice, &["x"]) == "    x\n" { held = held + 1 }
   if Out.prefixOf(&twice) == "    " { held = held + 1 }
 
   // A count of nothing, or less than nothing, indents by nothing rather than
   // taking away what is already there.
-  if Out.rendered(&Out.indentedBy(&once, 0), &["x"]) == "  x\n" { held = held + 1 }
-  if Out.rendered(&Out.indentedBy(&once, -4), &["x"]) == "  x\n" { held = held + 1 }
+  if Out.rendered(&once.indentedBy(0), &["x"]) == "  x\n" { held = held + 1 }
+  if Out.rendered(&once.indentedBy(-4), &["x"]) == "  x\n" { held = held + 1 }
 
   // Indenting composes with a prefix that is not spaces.
-  if Out.rendered(&Out.indentedBy(&noted, 2), &["x"]) == ">   x\n" { held = held + 1 }
+  if Out.rendered(&noted.indentedBy(2), &["x"]) == ">   x\n" { held = held + 1 }
 
   // An empty piece is still a piece, so the separator around it stays.
   if Out.rendered(&out, &["a", "", "b"]) == "a  b\n" { held = held + 1 }
@@ -78,7 +78,7 @@ export fn main() -> Int {
   if Out.rendered(&out, &["a", "b"]) == "a b\n" { held = held + 1 }
 
   // The stream is carried through the builders rather than reset by them.
-  let warn = Out.indentedBy(&Out.separatedBy(&Out.stderr(), "; "), 1)
+  let warn = Out.stderr().separatedBy("; ").indentedBy(1)
   match Out.streamOf(&warn) {
     case Out.Errors => { held = held + 1 }
     case Out.Output => {}
@@ -86,7 +86,7 @@ export fn main() -> Int {
   if Out.rendered(&warn, &["a", "b"]) == " a; b\n" { held = held + 1 }
 
   // A printer moved to the other stream keeps its shape.
-  let moved = Out.toStream(&noted, Out.Errors)
+  let moved = noted.toStream(Out.Errors)
   if Out.rendered(&moved, &["hi"]) == "> hi\n" { held = held + 1 }
   match Out.streamOf(&moved) {
     case Out.Errors => { held = held + 1 }
@@ -103,13 +103,13 @@ export fn main() -> Int {
   if Out.rendered(&noted, &["caf\u{e9} \u{1F418}"]) == "> caf\u{e9} \u{1F418}\n" { held = held + 1 }
 
   // An ending of more than one character is written as given.
-  if Out.rendered(&Out.endingWith(&out, "!\n"), &["a"]) == "a!\n" { held = held + 1 }
+  if Out.rendered(&out.endingWith("!\n"), &["a"]) == "a!\n" { held = held + 1 }
   // An ending containing a newline is not prefixed, because it ends the line
   // rather than being part of it.
   if Out.rendered(&noted, &["a"]) == "> a\n" { held = held + 1 }
 
   // The writing side answers the outcome rather than swallowing it.
-  match Out.text(&Out.endingWith(&out, ""), "") {
+  match Out.text(&out.endingWith(""), "") {
     case Ok(_) => { held = held + 1 }
     case Err(_) => {}
   }

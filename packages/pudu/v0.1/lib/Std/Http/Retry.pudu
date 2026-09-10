@@ -43,25 +43,39 @@ export fn backoff() -> Backoff {
   Backoff{attempts: 3, firstWaitMillis: 100, maxWaitMillis: 2000, jitterPercent: 50, budgetMillis: 5000}
 }
 
-/// The policy, trying at most this many times.
-export fn attempts(base: &Backoff, count: Int) -> Backoff {
-  Backoff{..*base, attempts: if count < 1 { 1 } else { count }}
+/// A policy with one part changed, each answering the policy rather than
+/// taking it apart.
+///
+/// Methods, so a policy that differs from the starting point in three ways
+/// reads down the page rather than wrapping each call in the next.
+export trait Adjusting {
+  fn attempts(self: &Self, count: Int) -> Self
+  fn waiting(self: &Self, firstMillis: Int, maxMillis: Int) -> Self
+  fn budget(self: &Self, millis: Int) -> Self
+  fn jitter(self: &Self, percent: Int) -> Self
 }
 
-/// The policy, waiting between this many and that many milliseconds.
-export fn waiting(base: &Backoff, firstMillis: Int, maxMillis: Int) -> Backoff {
-  Backoff{..*base, firstWaitMillis: firstMillis, maxWaitMillis: maxMillis}
-}
+impl Adjusting for Backoff {
+  /// The policy, trying at most this many times.
+  fn attempts(self: &Self, count: Int) -> Self {
+    Backoff{..*self, attempts: if count < 1 { 1 } else { count }}
+  }
 
-/// The policy, giving up after this many milliseconds in total.
-export fn budget(base: &Backoff, millis: Int) -> Backoff {
-  Backoff{..*base, budgetMillis: millis}
-}
+  /// The policy, waiting between this many and that many milliseconds.
+  fn waiting(self: &Self, firstMillis: Int, maxMillis: Int) -> Self {
+    Backoff{..*self, firstWaitMillis: firstMillis, maxWaitMillis: maxMillis}
+  }
 
-/// The policy, spreading waits by up to this many milliseconds.
-export fn jitter(base: &Backoff, percent: Int) -> Backoff {
-  let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
-  Backoff{..*base, jitterPercent: bounded}
+  /// The policy, giving up after this many milliseconds in total.
+  fn budget(self: &Self, millis: Int) -> Self {
+    Backoff{..*self, budgetMillis: millis}
+  }
+
+  /// The policy, spreading waits by up to this proportion.
+  fn jitter(self: &Self, percent: Int) -> Self {
+    let bounded = if percent < 0 { 0 } else if percent > 100 { 100 } else { percent }
+    Backoff{..*self, jitterPercent: bounded}
+  }
 }
 
 /// How long to wait before attempt `attempt`, counting the first as zero.

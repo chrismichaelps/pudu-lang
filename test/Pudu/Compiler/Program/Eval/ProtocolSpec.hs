@@ -89,7 +89,7 @@ testProtocolEvaluation = do
         that must not count the sign, and columns measured from the rows. -}
     , counterexample
         "a spec carries its width, fill, alignment, sign, and grouping"
-        (shaping === Just "46")
+        (shaping === Just "47")
     {-| A byte sequence answers for what it holds, and the two formats that
         travel as text answer against their own published vectors rather than
         against each other: a round trip through an encoder and its own decoder
@@ -114,7 +114,7 @@ testProtocolEvaluation = do
         arriving and a reply going back are checked over a real socket. -}
     , counterexample
         "a server routes, wraps, and answers over a connection"
-        (serving === Just "35")
+        (serving === Just "36")
     {-| That a client bounds what a request may cost and where it may go: an
         address the network trusts is refused unless the caller named it, and
         refused again at every redirect rather than only at the first, since a
@@ -304,7 +304,7 @@ testProtocolEvaluation = do
         same moment, which is the failure a retry is supposed to prevent. -}
     , counterexample
         "a retry backs off, spreads out, and refuses to repeat what must not be repeated"
-        (clientRetries === Just "14")
+        (clientRetries === Just "15")
     {-| Two of these fail on an implementation that looks right. A deadline
         checked after reading the program's output waits for the program
         first, so the deadline bounds nothing; and a deadline waited on

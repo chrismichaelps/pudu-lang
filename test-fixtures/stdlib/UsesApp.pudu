@@ -13,6 +13,12 @@ import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 
+/// A configuration given both a profile and the environment over it, through
+/// the trait rather than through the type.
+fn profiledAndEnvironed[C: Config.Layering](base: &C, name: Str) -> C {
+  base.withProfile(name).withEnvironment()
+}
+
 /// What an application promises.
 ///
 /// Every check here runs without a socket, which is the point being proved: an
@@ -46,7 +52,7 @@ export fn main() -> Int {
   // A profile writes its own section over the shared settings rather than
   // replacing them, so a profile states only its differences.
   let profiled = readOr(
-      &Config.withProfile(&declared, "prod"),
+      &declared.withProfile("prod"),
     "[server]\nport = 9000\nhost = \"127.0.0.1\"\n\n[prod]\n[prod.server]\nport = 443\n"
   )
   if Config.wholeOr(&profiled, "server.port", 0) == 443 { held = held + 1 }
@@ -55,7 +61,7 @@ export fn main() -> Int {
 
   // A profile that is not in the document leaves the document alone rather
   // than emptying the configuration.
-  let missing = readOr(&Config.withProfile(&declared, "staging"), "[server]\nport = 9000\n")
+  let missing = readOr(&declared.withProfile("staging"), "[server]\nport = 9000\n")
   if Config.wholeOr(&missing, "server.port", 0) == 9000 { held = held + 1 }
 
   // Reading states the type it expects and says what it found when the text
@@ -245,6 +251,9 @@ export fn main() -> Int {
   // failed.
   if App.explain(&App.StageFailed("pool", "refused")).contains("pool") { held = held + 1 }
 
+  // Two layers applied through the trait rather than through the type.
+  let layeredConfig = profiledAndEnvironed(&Config.declaring(&[("a", "1")]), "test")
+  if Config.profileOf(&layeredConfig) == "test" { held = held + 1 }
   held
 }
 

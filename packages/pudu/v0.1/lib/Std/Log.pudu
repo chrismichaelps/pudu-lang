@@ -110,61 +110,72 @@ export fn stderr() -> Logger {
   Logger{least: Info, name: "", fields: [], format: logfmt, printer: Out.stderr()}
 }
 
-/// The same logger with one part replaced, so the rest is written once.
-fn rebuilt(
-  value: &Logger,
-  least: Level,
-  name: Str,
-  fields: Array[Field],
-  format: Format,
-  printer: Out.Printer
-) -> Logger {
-  Logger{least: least, name: name, fields: fields, format: format, printer: printer}
-}
-
-/// The same logger keeping lines from a different level up.
-export fn keeping(value: &Logger, least: Level) -> Logger {
-  rebuilt(value, least, value.name, value.fields, value.format, value.printer)
-}
-
-/// The same logger under a name.
+/// A logger with one decision changed, each answering a logger rather than
+/// taking one apart.
 ///
-/// The name says which part of a program spoke, which is the first thing a
-/// reader of a mixed log wants and the thing a timestamp cannot tell them.
-export fn named(value: &Logger, name: Str) -> Logger {
-  rebuilt(value, value.least, name, value.fields, value.format, value.printer)
+/// Methods, so that a logger that differs from the default in three ways is
+/// written down the page rather than with each call wrapped in the next, where
+/// the base a reader looks for first ends up furthest in.
+///
+/// Each answers a new logger, which is what makes carrying a field safe: a
+/// request identifier is attached once where the request is known, and the
+/// logger it was attached to is unchanged for everything else.
+export trait Adjusting {
+  fn keeping(self: &Self, least: Level) -> Self
+  fn named(self: &Self, name: Str) -> Self
+  fn under(self: &Self, name: Str) -> Self
+  fn carrying(self: &Self, key: Str, held: Str) -> Self
+  fn shapedBy(self: &Self, format: Format) -> Self
+  fn through(self: &Self, printer: &Out.Printer) -> Self
 }
 
-/// The same logger under a name beneath its own.
-///
-/// Joined by a dot, so `checkout.payment` reads as the part of the part it is.
-export fn under(value: &Logger, name: Str) -> Logger {
-  named(value, if value.name.isEmpty() { name } else { value.name + "." + name })
-}
+impl Adjusting for Logger {
+  /// The same logger keeping lines from a different level up.
+  fn keeping(self: &Self, least: Level) -> Self { Logger{..*self, least: least} }
 
-/// The same logger carrying another field on every line it makes.
-///
-/// Carried rather than passed, so a request identifier is attached once where
-/// the request is known instead of at each line that mentions it — which is the
-/// place it is forgotten.
-export fn carrying(value: &Logger, key: Str, held: Str) -> Logger {
-  let grown = value.fields.push(Field{key: key, value: held})
-  rebuilt(value, value.least, value.name, grown, value.format, value.printer)
+  /// The same logger under a name.
+  ///
+  /// The name says which part of a program spoke, which is the first thing a
+  /// reader of a mixed log wants and the thing a timestamp cannot tell them.
+  fn named(self: &Self, name: Str) -> Self { Logger{..*self, name: name} }
+
+  /// The same logger under a name beneath its own.
+  ///
+  /// Joined by a dot, so `checkout.payment` reads as the part of the part it
+  /// is.
+  fn under(self: &Self, name: Str) -> Self {
+    Logger {
+      ..*self,
+      name: if self.name.isEmpty() { name } else { self.name + "." + name }
+    }
+  }
+
+  /// The same logger carrying another field on every line it makes.
+  ///
+  /// Carried rather than passed, so a request identifier is attached once
+  /// where the request is known instead of at each line that mentions it —
+  /// which is the place it is forgotten.
+  fn carrying(self: &Self, key: Str, held: Str) -> Self {
+    Logger{..*self, fields: self.fields.push(Field{key: key, value: held})}
+  }
+
+  /// The same logger writing its lines in a different format.
+  fn shapedBy(self: &Self, format: Format) -> Self {
+    Logger{..*self, format: format}
+  }
+
+  /// The same logger writing through a different printer.
+  fn through(self: &Self, printer: &Out.Printer) -> Self {
+    Logger{..*self, printer: *printer}
+  }
 }
 
 /// The same logger carrying a rendered value as a field.
+///
+/// A free function rather than a method, because it is generic in the value it
+/// renders and the trait is not.
 export fn carryingValue[T](value: &Logger, key: Str, held: T) -> Logger {
-  carrying(value, key, unshown(show(held)))
-}
-
-/// The same logger writing its lines in a different format.
-export fn shapedBy(value: &Logger, format: Format) -> Logger {
-  rebuilt(value, value.least, value.name, value.fields, format, value.printer)
-}
-
-/// The same logger writing through a different printer.
-export fn through(value: &Logger, printer: &Out.Printer) -> Logger {
-  rebuilt(value, value.least, value.name, value.fields, value.format, *printer)
+  value.carrying(key, unshown(show(held)))
 }
 
 // -- Reading a logger back ---------------------------------------------------
@@ -459,7 +470,7 @@ export fn field(
   held: Str,
   message: Str
 ) -> Result[(), Str] {
-  at(&carrying(value, key, held), level, message)
+  at(&value.carrying(key, held), level, message)
 }
 
 /// Write a failure's cause at `Error`, and answer the failure unchanged.

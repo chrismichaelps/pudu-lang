@@ -42,59 +42,56 @@ export fn stderr() -> Printer {
   Printer{stream: Errors, separator: " ", ending: "\n", prefix: ""}
 }
 
-/// The same printer writing to the other stream.
-export fn toStream(printer: &Printer, stream: Stream) -> Printer {
-  Printer {
-    stream: stream,
-    separator: printer.separator,
-    ending: printer.ending,
-    prefix: printer.prefix
-  }
-}
-
-/// The same printer with a different separator between pieces.
-export fn separatedBy(printer: &Printer, separator: Str) -> Printer {
-  Printer {
-    stream: printer.stream,
-    separator: separator,
-    ending: printer.ending,
-    prefix: printer.prefix
-  }
-}
-
-/// The same printer with a different ending after the pieces.
+/// A printer with one decision changed, each answering a printer rather than
+/// taking one apart.
 ///
-/// An empty ending leaves the line open, which is what a prompt needs and what
-/// `print` alone cannot do.
-export fn endingWith(printer: &Printer, ending: Str) -> Printer {
-  Printer {
-    stream: printer.stream,
-    separator: printer.separator,
-    ending: ending,
-    prefix: printer.prefix
-  }
+/// Methods, so that setting several of them reads down the page. As functions
+/// taking the printer first, a printer that differed from the default in three
+/// ways had to be written with each call wrapped in the next, and the decision
+/// a reader looks for first ended up furthest in.
+export trait Adjusting {
+  fn toStream(self: &Self, stream: Stream) -> Self
+  fn separatedBy(self: &Self, separator: Str) -> Self
+  fn endingWith(self: &Self, ending: Str) -> Self
+  fn prefixedWith(self: &Self, prefix: Str) -> Self
+  fn indentedBy(self: &Self, spaces: Int) -> Self
 }
 
-/// The same printer with a prefix on every line it writes.
-export fn prefixedWith(printer: &Printer, prefix: Str) -> Printer {
-  Printer {
-    stream: printer.stream,
-    separator: printer.separator,
-    ending: printer.ending,
-    prefix: prefix
+impl Adjusting for Printer {
+  /// The same printer writing to the other stream.
+  fn toStream(self: &Self, stream: Stream) -> Self {
+    Printer{..*self, stream: stream}
   }
-}
 
-/// The same printer indented by a further number of spaces.
-///
-/// Adds to the prefix rather than replacing it, so indenting an already
-/// indented printer nests. A negative count indents by nothing rather than
-/// removing what is there, because taking a prefix away is what
-/// `prefixedWith` is for and a count that silently undid one would make
-/// nesting depend on arithmetic the caller cannot see.
-export fn indentedBy(printer: &Printer, spaces: Int) -> Printer {
-  let added = if spaces <= 0 { "" } else { " ".repeat(spaces) }
-  prefixedWith(printer, printer.prefix + added)
+  /// The same printer with a different separator between pieces.
+  fn separatedBy(self: &Self, separator: Str) -> Self {
+    Printer{..*self, separator: separator}
+  }
+
+  /// The same printer with a different ending after the pieces.
+  ///
+  /// An empty ending leaves the line open, which is what a prompt needs and
+  /// what `print` alone cannot do.
+  fn endingWith(self: &Self, ending: Str) -> Self {
+    Printer{..*self, ending: ending}
+  }
+
+  /// The same printer with a prefix on every line it writes.
+  fn prefixedWith(self: &Self, prefix: Str) -> Self {
+    Printer{..*self, prefix: prefix}
+  }
+
+  /// The same printer indented by a further number of spaces.
+  ///
+  /// Adds to the prefix rather than replacing it, so indenting an already
+  /// indented printer nests. A negative count indents by nothing rather than
+  /// removing what is there, because taking a prefix away is what
+  /// `prefixedWith` is for and a count that silently undid one would make
+  /// nesting depend on arithmetic the caller cannot see.
+  fn indentedBy(self: &Self, spaces: Int) -> Self {
+    let added = if spaces <= 0 { "" } else { " ".repeat(spaces) }
+    Printer{..*self, prefix: self.prefix + added}
+  }
 }
 
 /// The stream a printer writes to.

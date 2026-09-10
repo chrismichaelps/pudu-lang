@@ -59,21 +59,6 @@ export fn server(base: &Route.Router) -> Server {
   Server{router: *base, middleware: [], headLimit: HEAD_LIMIT, bodyLimit: BODY_LIMIT, readMillis: 30000, writeMillis: 30000, drainMillis: 10000, workers: 16, queueCapacity: 64}
 }
 
-/// A server with one more step wrapped around its handlers.
-///
-/// The first added is the outermost, so a step added first sees the request
-/// before every step added after it and sees the response after them. That is
-/// the order a reader assumes from the order they wrote, and the reverse would
-/// make logging and timing report the wrong span.
-export fn using(base: &Server, step: Route.Middleware) -> Server {
-  Server{..*base, middleware: base.middleware.push(step)}
-}
-
-/// A server with different limits on what a request may be.
-export fn withLimits(base: &Server, head: Int, payload: Int) -> Server {
-  Server{..*base, headLimit: head, bodyLimit: payload}
-}
-
 /// The handler a server presents, with every step wrapped around it.
 ///
 /// Built once rather than per request: the chain is the same for every
@@ -438,23 +423,54 @@ export fn logging(write: fn(Str) -> ()) -> Route.Middleware {
   }
 }
 
-/// One deadline for the complete request read, including partial packets.
-export fn withReadDeadline(base: &Server, millis: Int) -> Server {
-  Server{..*base, readMillis: if millis < 1 { 1 } else { millis }}
+/// A server with one decision changed, each answering the server rather than
+/// taking it apart.
+///
+/// Methods, so a server that differs from the default in four ways reads down
+/// the page in the order the decisions are made. As functions taking the
+/// server first, each call had to be wrapped in the next and the server a
+/// reader looks for first ended up furthest in.
+export trait Configuring {
+  fn using(self: &Self, step: Route.Middleware) -> Self
+  fn withLimits(self: &Self, head: Int, payload: Int) -> Self
+  fn withReadDeadline(self: &Self, millis: Int) -> Self
+  fn withWriteDeadline(self: &Self, millis: Int) -> Self
+  fn withWorkers(self: &Self, count: Int, capacity: Int) -> Self
+  fn withDrainDeadline(self: &Self, millis: Int) -> Self
 }
 
-/// Bound socket sending without renewing the budget for partial writes.
-export fn withWriteDeadline(base: &Server, millis: Int) -> Server {
-  Server{..*base, writeMillis: if millis < 1 { 1 } else { millis }}
-}
+impl Configuring for Server {
+  /// A server with one more step wrapped around every handler it has.
+  fn using(self: &Self, step: Route.Middleware) -> Self {
+    Server{..*self, middleware: self.middleware.push(step)}
+  }
 
-/// Bound both active connection consumers and queued accepted connections.
-export fn withWorkers(base: &Server, count: Int, capacity: Int) -> Server {
-  Server{..*base, workers: if count < 1 { 1 } else { count },
-    queueCapacity: if capacity < 1 { 1 } else { capacity } }
-}
+  /// A server with different limits on what a request may be.
+  fn withLimits(self: &Self, head: Int, payload: Int) -> Self {
+    Server{..*self, headLimit: head, bodyLimit: payload}
+  }
 
-/// Bound the maximum duration allowed to drain in-flight worker connections during shutdown.
-export fn withDrainDeadline(base: &Server, millis: Int) -> Server {
-  Server{..*base, drainMillis: if millis < 1 { 1 } else { millis }}
+  /// Bound socket reading so a connection that stops speaking is not held.
+  fn withReadDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, readMillis: if millis < 1 { 1 } else { millis }}
+  }
+
+  /// Bound socket sending without renewing the budget for partial writes.
+  fn withWriteDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, writeMillis: if millis < 1 { 1 } else { millis }}
+  }
+
+  /// Bound both active connection consumers and queued accepted connections.
+  fn withWorkers(self: &Self, count: Int, capacity: Int) -> Self {
+    Server {
+      ..*self,
+      workers: if count < 1 { 1 } else { count },
+      queueCapacity: if capacity < 1 { 1 } else { capacity }
+    }
+  }
+
+  /// Bound how long draining in-flight connections may take at shutdown.
+  fn withDrainDeadline(self: &Self, millis: Int) -> Self {
+    Server{..*self, drainMillis: if millis < 1 { 1 } else { millis }}
+  }
 }

@@ -26,6 +26,17 @@ fn roundTripped(text: Str) -> Str {
   Result.unwrapOr(Gzip.decompressText(&squeezed), "\u{0}")
 }
 
+/// A logger given both a name and a field, through the trait rather than
+/// through the type.
+fn namedAndCarrying[L: Log.Adjusting](base: &L, name: Str, key: Str, held: Str) -> L {
+  base.named(name).carrying(key, held)
+}
+
+/// A configuration given both a level and a chunk size, through the trait.
+fn levelledAndChunked[G: Gzip.Configuring](base: &G, level: Gzip.CompressionLevel, chunk: Int) -> G {
+  base.withLevel(level).withChunkSize(chunk)
+}
+
 /// Every export of `Std.Time.Format.Civil`, `Std.Compress.Gzip` and `Std.Log`.
 ///
 /// The calendar is checked in both directions at once, since a reader and a
@@ -145,19 +156,19 @@ export fn main() -> Int {
   let plain: Gzip.GzipConfig = Gzip.config()
   if plain.chunkSize == 65535 && plain.minCompressBytes == 256 { held = held + 1 }
   let fastest: Gzip.CompressionLevel = Gzip.Fast
-  if Gzip.withLevel(&plain, fastest).level == Gzip.Fast { held = held + 1 }
-  if Gzip.withLevel(&plain, Gzip.Best).level == Gzip.Best { held = held + 1 }
-  if Gzip.withChunkSize(&plain, 1024).chunkSize == 1024 { held = held + 1 }
+  if plain.withLevel(fastest).level == Gzip.Fast { held = held + 1 }
+  if plain.withLevel(Gzip.Best).level == Gzip.Best { held = held + 1 }
+  if plain.withChunkSize(1024).chunkSize == 1024 { held = held + 1 }
   // Past either end the setting is brought back to the end rather than kept.
-  if Gzip.withChunkSize(&plain, 0).chunkSize == 1 { held = held + 1 }
-  if Gzip.withChunkSize(&plain, 999999).chunkSize == 65535 { held = held + 1 }
-  if Gzip.withMinCompressBytes(&plain, 0 - 5).minCompressBytes == 0 { held = held + 1 }
-  if Gzip.withMinCompressBytes(&plain, 1024).minCompressBytes == 1024 {
+  if plain.withChunkSize(0).chunkSize == 1 { held = held + 1 }
+  if plain.withChunkSize(999999).chunkSize == 65535 { held = held + 1 }
+  if plain.withMinCompressBytes(0 - 5).minCompressBytes == 0 { held = held + 1 }
+  if plain.withMinCompressBytes(1024).minCompressBytes == 1024 {
     held = held + 1
   }
   // Every level produces a stream that reads back, including the one that does
   // not compress at all.
-  let asIs = Gzip.compressText(repeated, &Gzip.withLevel(&plain, Gzip.NoCompression))
+  let asIs = Gzip.compressText(repeated, &plain.withLevel(Gzip.NoCompression))
   if Result.unwrapOr(Gzip.decompressText(&asIs), "") == repeated { held = held + 1 }
   if asIs.length() > squeezed.length() { held = held + 1 }
 
@@ -215,18 +226,26 @@ export fn main() -> Int {
   if Result.isOk(&Gzip.decompressWithin(&squeezed, 1000000)) { held = held + 1 }
 
   // A logger's line compared as a value rather than by capturing output.
-  let quiet: Log.Logger = Log.keeping(&Log.stdout(), Log.Silent)
+  let quiet: Log.Logger = Log.stdout().keeping(Log.Silent)
   if Log.leastOf(&quiet) == Log.Silent { held = held + 1 }
-  if Log.nameOf(&Log.named(&quiet, "server")) == "server" { held = held + 1 }
-  if Log.nameOf(&Log.under(&Log.named(&quiet, "server"), "db")) == "server.db" {
+  if Log.nameOf(&quiet.named("server")) == "server" { held = held + 1 }
+  if Log.nameOf(&quiet.named("server").under("db")) == "server.db" {
     held = held + 1
   }
-  let carrying = Log.carrying(&quiet, "request", "7")
+  let carrying = quiet.carrying("request", "7")
   let fields: Array[Log.Field] = Log.fieldsOf(&carrying)
   if fields.length() == 1 && fields[0].key == "request" { held = held + 1 }
   if Log.fieldsOf(&Log.carryingValue(&quiet, "count", 3))[0].value == "3" {
     held = held + 1
   }
+
+  // Two decisions made through each trait rather than through the type.
+  let both = namedAndCarrying(&quiet, "api", "route", "/here")
+  if Log.nameOf(&both) == "api" && Log.fieldsOf(&both)[0].key == "route" {
+    held = held + 1
+  }
+  let tuned = levelledAndChunked(&plain, Gzip.Best, 4096)
+  if tuned.level == Gzip.Best && tuned.chunkSize == 4096 { held = held + 1 }
 
   // Each level named, and each read back from its name, including the spellings
   // a setting is likely to arrive as.
@@ -250,8 +269,8 @@ export fn main() -> Int {
     held = held + 1
   }
   // Nothing is at the silent level, so nothing is written for one either.
-  if !Log.keeps(&Log.keeping(&ordinary, Log.Debug), Log.Silent) { held = held + 1 }
-  if Log.keeps(&Log.keeping(&ordinary, Log.Debug), Log.Debug) { held = held + 1 }
+  if !Log.keeps(&ordinary.keeping(Log.Debug), Log.Silent) { held = held + 1 }
+  if Log.keeps(&ordinary.keeping(Log.Debug), Log.Debug) { held = held + 1 }
 
   // A value that would confuse a reader of a line is quoted; one that would not
   // is left bare, which is most of them and keeps a line short.
@@ -265,21 +284,21 @@ export fn main() -> Int {
 
   // The three shapes a line can be written in, each of the same line, so what
   // separates them is visible.
-  let named = Log.carrying(&Log.named(&quiet, "server"), "request", "7")
+  let named = quiet.named("server").carrying("request", "7")
   let asLogfmt: Log.Format = Log.logfmt
-  if Log.rendered(&Log.shapedBy(&named, asLogfmt), Log.Info, "started")
+  if Log.rendered(&named.shapedBy(asLogfmt), Log.Info, "started")
     == "level=INFO logger=server request=7 message=started" {
     held = held + 1
   }
-  if Log.stamped(&Log.shapedBy(&named, Log.logfmt), "now", Log.Info, "started")
+  if Log.stamped(&named.shapedBy(Log.logfmt), "now", Log.Info, "started")
     == "timestamp=now level=INFO logger=server request=7 message=started" {
     held = held + 1
   }
-  if Log.rendered(&Log.shapedBy(&named, Log.json), Log.Info, "started")
+  if Log.rendered(&named.shapedBy(Log.json), Log.Info, "started")
     == "\{\"level\":\"INFO\",\"logger\":\"server\",\"request\":\"7\",\"message\":\"started\"\}" {
     held = held + 1
   }
-  if Log.rendered(&Log.shapedBy(&named, Log.pretty), Log.Warn, "slow")
+  if Log.rendered(&named.shapedBy(Log.pretty), Log.Warn, "slow")
     .startsWith("WARN") {
     held = held + 1
   }
@@ -305,7 +324,7 @@ export fn main() -> Int {
   if Result.isOk(&Log.field(&quiet, Log.Error, "code", "7", "no")) { held = held + 1 }
   // A logger sent to the error stream, so a program's diagnostics can be read
   // apart from its answer.
-  if !Log.keeps(&Log.keeping(&Log.stderr(), Log.Silent), Log.Error) {
+  if !Log.keeps(&Log.stderr().keeping(Log.Silent), Log.Error) {
     held = held + 1
   }
   if Log.keeps(&Log.stderr(), Log.Info) { held = held + 1 }

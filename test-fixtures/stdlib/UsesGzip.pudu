@@ -12,7 +12,7 @@ export fn main() -> Int {
 
   // 1. Builder pattern and configuration
   let defCfg = Gzip.config()
-  let customCfg = Gzip.withMinCompressBytes(&Gzip.withChunkSize(&Gzip.withLevel(&defCfg, Gzip.Fast), 1024), 64)
+  let customCfg = defCfg.withLevel(Gzip.Fast).withChunkSize(1024).withMinCompressBytes(64)
 
   if customCfg.chunkSize == 1024 && customCfg.minCompressBytes == 64 {
     held = held + 1
@@ -47,7 +47,7 @@ export fn main() -> Int {
   }
 
   // 5. Roundtrip with a small requested codec output buffer
-  let streamingCfg = Gzip.withChunkSize(&defCfg, 16)
+  let streamingCfg = defCfg.withChunkSize(16)
   let multiBlockStream = Gzip.compressText(testPhrase, &streamingCfg)
   let decompressedMulti = Gzip.decompressText(&multiBlockStream)
   if decompressedMulti == Ok(testPhrase) {
@@ -91,7 +91,7 @@ export fn main() -> Int {
   }
 
   // 10. HTTP Middleware integration
-  let mwConfig = Gzip.withMinCompressBytes(&defCfg, 32)
+  let mwConfig = defCfg.withMinCompressBytes(32)
   let gzipMw = Gzip.middleware(&mwConfig)
 
   let handler: Route.Handler = fn(_req: Route.Request) -> Http.Response {

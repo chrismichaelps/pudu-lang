@@ -11,6 +11,13 @@ import Std.Net as Net
 import Std.Option as Option
 import Std.Result as Result
 
+/// A server given both a limit and a read deadline, through the trait rather
+/// than through the type, so a helper that configures a server need not name
+/// which kind of server it is.
+fn boundedServer[S: Server.Configuring](base: &S, head: Int, millis: Int) -> S {
+  base.withLimits(head, head).withReadDeadline(millis)
+}
+
 /// What a server promises.
 ///
 /// Routing and the chain of steps are checked by calling the handler
@@ -60,16 +67,13 @@ export fn main() -> Int {
 
   // A step wraps the handler and sees the answer, which is what a hook that
   // only ran before could not do. The first added is the outermost.
-  let wrapped = Server.using(
-      &Server.using(&Server.server(&routed), stamping("outer")),
-    stamping("inner")
-  )
+  let wrapped = Server.server(&routed).using(stamping("outer")).using(stamping("inner"))
   let stamped = Server.handlerOf(&wrapped)(requestFor(Http.Get, "/health"))
   if headerOf(&stamped, "X-Step-outer") == "yes" { held = held + 1 }
   if headerOf(&stamped, "X-Step-inner") == "yes" { held = held + 1 }
 
   // A step may refuse a request outright rather than call on.
-  let guarded = Server.using(&Server.server(&routed), fn(request: Route.Request, next: Route.Handler) -> Http.Response {
+  let guarded = Server.server(&routed).using(fn(request: Route.Request, next: Route.Handler) -> Http.Response {
       if Option.isNone(&Route.header(&request, "authorization")) {
         Reply.text(401, "who are you")
       } else {
@@ -155,6 +159,9 @@ export fn main() -> Int {
     }
   }
 
+  // Two decisions made through the trait rather than through the type.
+  let bounded = boundedServer(&Server.server(&routed), 4096, 250)
+  if bounded.headLimit == 4096 && bounded.readMillis == 250 { held = held + 1 }
   held
 }
 

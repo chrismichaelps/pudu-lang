@@ -18,6 +18,13 @@ fn quietly() -> Out.Printer {
   Out.bare()
 }
 
+/// A printer given both a separator and an ending, through the trait rather
+/// than through the type, so a helper that adjusts a printer need not name
+/// which kind of printer it is.
+fn spacedAndEnded[P: Out.Adjusting](base: &P, separator: Str, ending: Str) -> P {
+  base.separatedBy(separator).endingWith(ending)
+}
+
 /// Every export of `Std.Test`, `Std.Out` and `Std.Random`.
 ///
 /// A test library is checked by making it fail: a suite where every check holds
@@ -198,42 +205,48 @@ export fn main() -> Int {
   if Out.prefixOf(&plain) == "" { held = held + 1 }
   if Out.streamOf(&plain) == Out.Output { held = held + 1 }
   if Out.streamOf(&Out.stderr()) == Out.Errors { held = held + 1 }
-  if Out.streamOf(&Out.toStream(&plain, Out.Errors)) == Out.Errors { held = held + 1 }
+  if Out.streamOf(&plain.toStream(Out.Errors)) == Out.Errors { held = held + 1 }
   // Changing the stream keeps every other setting, which is what makes the
   // same shape usable for both.
-  let moved = Out.toStream(&Out.separatedBy(&plain, ", "), Out.Errors)
+  let moved = plain.separatedBy(", ").toStream(Out.Errors)
   if Out.separatorOf(&moved) == ", " && Out.endingOf(&moved) == "\n" {
+    held = held + 1
+  }
+
+  // Two decisions made through the trait rather than through the type.
+  let adjusted = spacedAndEnded(&plain, "|", "!")
+  if Out.separatorOf(&adjusted) == "|" && Out.endingOf(&adjusted) == "!" {
     held = held + 1
   }
 
   // The text a write would produce, without writing it.
   if Out.rendered(&plain, &["a", "b"]) == "a b\n" { held = held + 1 }
-  if Out.rendered(&Out.separatedBy(&plain, ", "), &["a", "b"]) == "a, b\n" {
+  if Out.rendered(&plain.separatedBy(", "), &["a", "b"]) == "a, b\n" {
     held = held + 1
   }
   // An empty ending leaves the line open, which is what a prompt needs.
-  if Out.rendered(&Out.endingWith(&plain, ""), &["a"]) == "a" { held = held + 1 }
-  if Out.endingOf(&Out.endingWith(&plain, "!")) == "!" { held = held + 1 }
+  if Out.rendered(&plain.endingWith(""), &["a"]) == "a" { held = held + 1 }
+  if Out.endingOf(&plain.endingWith("!")) == "!" { held = held + 1 }
   // With no pieces the answer is the ending alone: a prefix decorates a line's
   // content, and there is none.
   let noPieces: Array[Str] = []
   if Out.rendered(&plain, &noPieces) == "\n" { held = held + 1 }
-  if Out.rendered(&Out.prefixedWith(&plain, "> "), &noPieces) == "\n" {
+  if Out.rendered(&plain.prefixedWith("> "), &noPieces) == "\n" {
     held = held + 1
   }
 
   // A prefix goes on every line, not only the first, so text that already
   // spans lines is decorated as a block.
-  let quoted = Out.prefixedWith(&plain, "> ")
+  let quoted = plain.prefixedWith("> ")
   if Out.prefixOf(&quoted) == "> " { held = held + 1 }
   if Out.rendered(&quoted, &["one\ntwo"]) == "> one\n> two\n" { held = held + 1 }
   // Indenting adds to the prefix rather than replacing it, so it nests.
-  let indented = Out.indentedBy(&quoted, 2)
+  let indented = quoted.indentedBy(2)
   if Out.prefixOf(&indented) == ">   " { held = held + 1 }
-  if Out.prefixOf(&Out.indentedBy(&indented, 2)) == ">     " { held = held + 1 }
+  if Out.prefixOf(&indented.indentedBy(2)) == ">     " { held = held + 1 }
   // A count of nothing or less adds nothing rather than taking a prefix away.
-  if Out.prefixOf(&Out.indentedBy(&quoted, 0)) == "> " { held = held + 1 }
-  if Out.prefixOf(&Out.indentedBy(&quoted, 0 - 5)) == "> " { held = held + 1 }
+  if Out.prefixOf(&quoted.indentedBy(0)) == "> " { held = held + 1 }
+  if Out.prefixOf(&quoted.indentedBy(0 - 5)) == "> " { held = held + 1 }
 
   // Values rendered ready to be written beside other pieces.
   if Out.showing(&[1, 2]) == ["1", "2"] { held = held + 1 }

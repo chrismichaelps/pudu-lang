@@ -168,7 +168,7 @@ testRuntimeEvaluation = do
         answering an array of the right length. -}
     , counterexample
         "a failing check says what it found and a shuffle keeps what it was given"
-        (checkedAndDrawn === Just "113")
+        (checkedAndDrawn === Just "114")
     {-| An array whose element is an array, at every depth a program reaches
         for: the literal, the annotation, chained indexing, nested iteration,
         passing by reference, a generic bound, and every collection call, to
@@ -206,7 +206,7 @@ testRuntimeEvaluation = do
         value, which is what the rendering call exists for. -}
     , counterexample
         "a date survives both directions and a stream that is not one is named"
-        (datedAndSqueezed === Just "94")
+        (datedAndSqueezed === Just "96")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}
@@ -304,7 +304,7 @@ testRuntimeEvaluation = do
         (enterpriseSsr === Just "90")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
-        (jwtApp === Just "15")
+        (jwtApp === Just "18")
     {-| A declaration carries no captured environment, so it runs in the frame
         of whoever called it. A named function handed to another module ran
         without its own imports and reported them undefined at run time, having

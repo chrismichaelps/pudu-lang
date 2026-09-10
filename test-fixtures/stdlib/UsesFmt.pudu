@@ -3,6 +3,13 @@ module UsesFmt
 import Std.Decimal as Decimal
 import Std.Fmt as Fmt
 
+/// A spec given both a width and an alignment, through the trait rather than
+/// through the type, so a helper that shapes a spec need not name which kind
+/// of spec it is.
+fn widenedAndPlaced[S: Fmt.Shaping](base: &S, least: Int) -> S {
+  base.width(least).rightAligned()
+}
+
 /// What a spec promises, checked by comparing values rather than by looking at
 /// output, because shaping is separable from writing.
 ///
@@ -16,50 +23,50 @@ export fn main() -> Int {
   var held = 0
 
   let plain = Fmt.spec()
-  let eight = Fmt.width(&plain, 8)
+  let eight = plain.width(8)
 
   // A spec that shapes nothing leaves its content alone.
   if Fmt.text(&plain, "ok") == "ok" { held = held + 1 }
   if Fmt.int(&plain, 42) == "42" { held = held + 1 }
 
   // Alignment within a width.
-  if Fmt.text(&Fmt.leftAligned(&eight), "ok") == "ok      " { held = held + 1 }
-  if Fmt.text(&Fmt.rightAligned(&eight), "ok") == "      ok" { held = held + 1 }
+  if Fmt.text(&eight.leftAligned(), "ok") == "ok      " { held = held + 1 }
+  if Fmt.text(&eight.rightAligned(), "ok") == "      ok" { held = held + 1 }
   // An odd remainder goes right, so the left edge stays straight.
-  if Fmt.text(&Fmt.centred(&eight), "ok") == "   ok   " { held = held + 1 }
-  if Fmt.text(&Fmt.centred(&Fmt.width(&plain, 7)), "ok") == "  ok   " { held = held + 1 }
+  if Fmt.text(&eight.centred(), "ok") == "   ok   " { held = held + 1 }
+  if Fmt.text(&plain.width(7).centred(), "ok") == "  ok   " { held = held + 1 }
 
   // Content at least as wide as the width is answered unchanged: shaping a
   // column never costs a character that was there.
-  if Fmt.text(&Fmt.width(&plain, 2), "wider") == "wider" { held = held + 1 }
-  if Fmt.text(&Fmt.width(&plain, 0), "x") == "x" { held = held + 1 }
+  if Fmt.text(&plain.width(2), "wider") == "wider" { held = held + 1 }
+  if Fmt.text(&plain.width(0), "x") == "x" { held = held + 1 }
   // A negative width asks for nothing rather than for something impossible.
-  if Fmt.text(&Fmt.width(&plain, -4), "x") == "x" { held = held + 1 }
+  if Fmt.text(&plain.width(-4), "x") == "x" { held = held + 1 }
 
   // A different fill.
-  if Fmt.text(&Fmt.filledWith(&Fmt.rightAligned(&Fmt.width(&plain, 5)), '.'), "ab") == "...ab" {
+  if Fmt.text(&plain.width(5).rightAligned().filledWith('.'), "ab") == "...ab" {
     held = held + 1
   }
 
   // Numbers, with and without a forced sign.
   if Fmt.int(&plain, -42) == "-42" { held = held + 1 }
-  if Fmt.int(&Fmt.withSign(&plain, true), 42) == "+42" { held = held + 1 }
-  if Fmt.int(&Fmt.withSign(&plain, true), -42) == "-42" { held = held + 1 }
-  if Fmt.int(&Fmt.withSign(&plain, true), 0) == "+0" { held = held + 1 }
+  if Fmt.int(&plain.withSign(true), 42) == "+42" { held = held + 1 }
+  if Fmt.int(&plain.withSign(true), -42) == "-42" { held = held + 1 }
+  if Fmt.int(&plain.withSign(true), 0) == "+0" { held = held + 1 }
 
   // Grouping counts digits, not the sign.
-  let commas = Fmt.grouped(&plain, ",")
+  let commas = plain.grouped(",")
   if Fmt.int(&commas, 1234567) == "1,234,567" { held = held + 1 }
   if Fmt.int(&commas, -1234) == "-1,234" { held = held + 1 }
   if Fmt.int(&commas, 999) == "999" { held = held + 1 }
   if Fmt.int(&commas, 1000) == "1,000" { held = held + 1 }
   // The separator is the caller's.
-  if Fmt.int(&Fmt.grouped(&plain, " "), 1234567) == "1 234 567" { held = held + 1 }
+  if Fmt.int(&plain.grouped(" "), 1234567) == "1 234 567" { held = held + 1 }
 
   // Zero padding keeps the sign in front, where ordinary filling would not.
-  if Fmt.zeroPadded(&Fmt.width(&plain, 5), 42) == "00042" { held = held + 1 }
-  if Fmt.zeroPadded(&Fmt.width(&plain, 5), -42) == "-0042" { held = held + 1 }
-  if Fmt.zeroPadded(&Fmt.width(&plain, 2), 12345) == "12345" { held = held + 1 }
+  if Fmt.zeroPadded(&plain.width(5), 42) == "00042" { held = held + 1 }
+  if Fmt.zeroPadded(&plain.width(5), -42) == "-0042" { held = held + 1 }
+  if Fmt.zeroPadded(&plain.width(2), 12345) == "12345" { held = held + 1 }
 
   // Other bases, negatives included.
   if Fmt.hex(&plain, 255) == "ff" { held = held + 1 }
@@ -88,7 +95,7 @@ export fn main() -> Int {
   if Fmt.truncated("hello", 0, "...") == "" { held = held + 1 }
 
   // A row of values shaped alike.
-  if Fmt.list(&Fmt.width(&plain, 3), &["a", "bb"], "|") == "a  |bb " { held = held + 1 }
+  if Fmt.list(&plain.width(3), &["a", "bb"], "|") == "a  |bb " { held = held + 1 }
 
   // Columns measured from the rows themselves.
   let table = Fmt.columns(&[["id", "name"], ["1", "ana"], ["22", "bo"]], " ")
@@ -101,6 +108,9 @@ export fn main() -> Int {
   if Fmt.widthOf(&plain) == 0 { held = held + 1 }
   if Fmt.widthOf(&eight) == 8 { held = held + 1 }
   if Fmt.text(&plain, "ok") == "ok" { held = held + 1 }
+
+  // Two decisions made through the trait rather than through the type.
+  if Fmt.text(&widenedAndPlaced(&Fmt.spec(), 5), "ab") == "   ab" { held = held + 1 }
 
   held
 }
