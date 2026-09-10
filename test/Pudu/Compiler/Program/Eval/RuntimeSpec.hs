@@ -51,6 +51,8 @@ testRuntimeEvaluation = do
   ordered <- runEntry "test-fixtures/stdlib/UsesOrderAll.pudu"
   bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
+  octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
+  everyParser <- runEntry "test-fixtures/stdlib/UsesParseAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -95,6 +97,20 @@ testRuntimeEvaluation = do
     , counterexample
         "every file operation writes what can be read back"
         (files === Just "45")
+    {-| Every export of the byte module, with the two orders checked against
+        each other as well as against their own answers: a pair of functions
+        that agreed with each other but not with the wire would pass every
+        check that only asked one of them. -}
+    , counterexample
+        "every byte operation answers the bytes it says it answers"
+        (octets === Just "55")
+    {-| Every export of the parser module, on text it accepts and text it
+        refuses. A parser is only worth its name if it also refuses, and
+        `run` insists the whole text is consumed, so one that stopped early is
+        caught here rather than by whoever fed it. -}
+    , counterexample
+        "every parser accepts what it names and refuses what it does not"
+        (everyParser === Just "75")
     , counterexample "an aliased and a selected import both evaluate"
         (ran === Just "35")
     , counterexample "generic and text modules link together"

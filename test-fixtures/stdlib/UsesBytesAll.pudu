@@ -1,0 +1,138 @@
+module UsesBytesAll
+
+import Std.Bytes as Bytes
+import Std.Option as Option
+import Std.Result as Result
+
+/// Anything read out of bytes leaves the rest behind, so a reader is checked
+/// on both halves of what it answers.
+fn readsBack(taken: Result[(UInt8, Bytes), Bytes.BytesError], wanted: UInt8, rest: Int) -> Bool {
+  match taken {
+    case Err(_) => false
+    case Ok(pair) => pair[0] == wanted && Bytes.length(&pair[1]) == rest
+  }
+}
+
+/// Every export of `Std.Bytes`, checked against stated bytes.
+///
+/// The two byte orders are checked against each other as well as against their
+/// own answers: a number written one way and read the other comes back
+/// reversed, and a pair of functions that agreed with each other but not with
+/// the wire would pass every check that only asked one of them.
+export fn main() -> Int {
+  var held = 0
+  let abc = Bytes.fromText("abc")
+
+  // Making and unmaking.
+  if Bytes.length(&Bytes.empty()) == 0 { held = held + 1 }
+  if Bytes.isEmpty(&Bytes.empty()) && !Bytes.isEmpty(&abc) { held = held + 1 }
+  if Bytes.length(&abc) == 3 { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&abc), "") == "abc" { held = held + 1 }
+  if Bytes.toArray(&abc).length() == 3 { held = held + 1 }
+  if Bytes.length(&Bytes.fromArray(&Bytes.toArray(&abc))) == 3 { held = held + 1 }
+  if Option.unwrapOr(Bytes.at(&abc, 0), 0u8) == 97u8 { held = held + 1 }
+  if Option.isNone(&Bytes.at(&abc, 99)) { held = held + 1 }
+
+  // Cutting.
+  if Result.unwrapOr(Bytes.toText(&Bytes.slice(&abc, 1, 3)), "") == "bc" { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&Bytes.take(&abc, 2)), "") == "ab" { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&Bytes.drop(&abc, 2)), "") == "c" { held = held + 1 }
+  let halves = Bytes.splitAt(&abc, 1)
+  if Bytes.length(&halves[0]) == 1 && Bytes.length(&halves[1]) == 2 { held = held + 1 }
+
+  // Putting together.
+  if Result.unwrapOr(Bytes.toText(&Bytes.concat(&abc, &Bytes.fromText("d"))), "") == "abcd" {
+    held = held + 1
+  }
+  if Result.unwrapOr(Bytes.toText(&Bytes.join(&[abc, Bytes.fromText("d")])), "") == "abcd" {
+    held = held + 1
+  }
+  if Bytes.length(&Bytes.repeat(&abc, 3)) == 9 { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&Bytes.reverse(&abc)), "") == "cba" { held = held + 1 }
+
+  // Looking inside.
+  if Bytes.indexOf(&abc, &Bytes.fromText("b")) == 1 { held = held + 1 }
+  if Bytes.indexOf(&abc, &Bytes.fromText("z")) < 0 { held = held + 1 }
+  if Bytes.contains(&abc, &Bytes.fromText("bc")) { held = held + 1 }
+  if !Bytes.contains(&abc, &Bytes.fromText("z")) { held = held + 1 }
+  if Bytes.startsWith(&abc, &Bytes.fromText("ab")) { held = held + 1 }
+  if !Bytes.startsWith(&abc, &Bytes.fromText("b")) { held = held + 1 }
+  if Bytes.endsWith(&abc, &Bytes.fromText("bc")) { held = held + 1 }
+  if !Bytes.endsWith(&abc, &Bytes.fromText("b")) { held = held + 1 }
+  if Bytes.split(&Bytes.fromText("a,b"), &Bytes.fromText(",")).length() == 2 { held = held + 1 }
+
+  // Combined bit by bit. Twice with the same key gives back what went in.
+  let key = Bytes.fromText("key")
+  let hidden = Bytes.xorWith(&abc, &key)
+  if Result.unwrapOr(Bytes.toText(&Bytes.xorWith(&hidden, &key)), "") == "abc" { held = held + 1 }
+
+  // Numbers written and read, one width at a time.
+  if Bytes.length(&Bytes.putU8(1u8)) == 1 { held = held + 1 }
+  if Bytes.length(&Bytes.putU16Be(1u16)) == 2 { held = held + 1 }
+  if Bytes.length(&Bytes.putU32Be(1u32)) == 4 { held = held + 1 }
+  if Bytes.length(&Bytes.putU64Be(1u64)) == 8 { held = held + 1 }
+  if readsBack(Bytes.getU8(&Bytes.putU8(7u8)), 7u8, 0) { held = held + 1 }
+  if Result.isErr(&Bytes.getU8(&Bytes.empty())) { held = held + 1 }
+
+  // The two byte orders write the same number differently.
+  if Bytes.toArray(&Bytes.putU16Be(1u16)) == [0u8, 1u8] { held = held + 1 }
+  if Bytes.toArray(&Bytes.putU16Le(1u16)) == [1u8, 0u8] { held = held + 1 }
+  if Bytes.toArray(&Bytes.putU32Be(1u32)) == [0u8, 0u8, 0u8, 1u8] { held = held + 1 }
+  if Bytes.toArray(&Bytes.putU32Le(1u32)) == [1u8, 0u8, 0u8, 0u8] { held = held + 1 }
+  if Bytes.toArray(&Bytes.putU64Le(1u64))[0] == 1u8 { held = held + 1 }
+  if Bytes.toArray(&Bytes.putU64Be(1u64))[7] == 1u8 { held = held + 1 }
+
+  // Each reader answers what its own writer wrote.
+  if Result.unwrapOr(Result.map(Bytes.getU16Be(&Bytes.putU16Be(513u16)), fn(p: (UInt16, Bytes)) -> UInt16 => p[0]), 0u16)
+    == 513u16 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Bytes.getU16Le(&Bytes.putU16Le(513u16)), fn(p: (UInt16, Bytes)) -> UInt16 => p[0]), 0u16)
+    == 513u16 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Bytes.getU32Be(&Bytes.putU32Be(70000u32)), fn(p: (UInt32, Bytes)) -> UInt32 => p[0]), 0u32)
+    == 70000u32 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Bytes.getU32Le(&Bytes.putU32Le(70000u32)), fn(p: (UInt32, Bytes)) -> UInt32 => p[0]), 0u32)
+    == 70000u32 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Bytes.getU64Be(&Bytes.putU64Be(70000u64)), fn(p: (UInt64, Bytes)) -> UInt64 => p[0]), 0u64)
+    == 70000u64 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Bytes.getU64Le(&Bytes.putU64Le(70000u64)), fn(p: (UInt64, Bytes)) -> UInt64 => p[0]), 0u64)
+    == 70000u64 {
+    held = held + 1
+  }
+
+  // Runs of bytes and text taken off the front.
+  if Result.isOk(&Bytes.getBytes(&abc, 2)) { held = held + 1 }
+  if Result.isErr(&Bytes.getBytes(&abc, 99)) { held = held + 1 }
+  if Result.isOk(&Bytes.getText(&abc, 2)) { held = held + 1 }
+
+  // Written out and read back.
+  if Bytes.encodeHex(&Bytes.fromArray(&[255u8])) == "ff" { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&Result.unwrapOr(Bytes.decodeHex("616263"), Bytes.empty())), "")
+    == "abc" {
+    held = held + 1
+  }
+  if Result.isErr(&Bytes.decodeHex("zz")) { held = held + 1 }
+  if Bytes.encodeBase64(&abc) == "YWJj" { held = held + 1 }
+  if Bytes.encodeBase64Url(&abc) == "YWJj" { held = held + 1 }
+  if Result.unwrapOr(Bytes.toText(&Result.unwrapOr(Bytes.decodeBase64("YWJj"), Bytes.empty())), "")
+    == "abc" {
+    held = held + 1
+  }
+  if Result.unwrapOr(
+    Bytes.toText(&Result.unwrapOr(Bytes.decodeBase64Url("YWJj"), Bytes.empty())),
+    ""
+  ) == "abc" {
+    held = held + 1
+  }
+  if Result.isErr(&Bytes.decodeBase64("!!")) { held = held + 1 }
+
+  held
+}

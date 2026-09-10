@@ -1,0 +1,196 @@
+module UsesParseAll
+
+import Std.Char as Char
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text.Parse as Parse
+
+/// Whether a parser answers a stated value over stated text.
+///
+/// Compared as rendered rather than with equality, because what a parser
+/// answers is every shape the module builds — a character, a tuple, an array,
+/// an option, nothing at all — and only some of those can be compared
+/// directly.
+fn reads[T](parser: Parse.Parser[T], text: Str, wanted: T) -> Bool {
+  match Parse.run(parser, text) {
+    case Err(_) => false
+    case Ok(found) => display(found) == display(wanted)
+  }
+}
+
+/// Whether a parser refuses stated text.
+fn refuses[T](parser: Parse.Parser[T], text: Str) -> Bool {
+  Result.isErr(&Parse.run(parser, text))
+}
+
+/// Every export of `Std.Text.Parse`, checked on text it accepts and text it
+/// refuses.
+///
+/// A parser is only worth its name if it also refuses, and refusing at the
+/// right place matters as much: `run` insists the whole text is consumed, so a
+/// parser that stopped early is caught here rather than by the caller of
+/// whatever it fed.
+export fn main() -> Int {
+  var held = 0
+
+  // The two ends: a value with no input read, and a refusal with none either.
+  if reads(Parse.pure(1), "", 1) { held = held + 1 }
+  if refuses(Parse.fail[Int]("something"), "") { held = held + 1 }
+
+  // One character, by a test and by name.
+  if reads(Parse.satisfy("a letter", Char.isLetter), "a", 'a') { held = held + 1 }
+  if refuses(Parse.satisfy("a letter", Char.isLetter), "1") { held = held + 1 }
+  if reads(Parse.character('a'), "a", 'a') && refuses(Parse.character('a'), "b") {
+    held = held + 1
+  }
+  if reads(Parse.digit(), "7", '7') && refuses(Parse.digit(), "a") { held = held + 1 }
+  if reads(Parse.letter(), "a", 'a') && refuses(Parse.letter(), "1") { held = held + 1 }
+  if reads(Parse.space(), " ", ' ') && refuses(Parse.space(), "a") { held = held + 1 }
+  if reads(Parse.anyCharacter(), "x", 'x') { held = held + 1 }
+  if reads(Parse.oneOf("abc"), "b", 'b') && refuses(Parse.oneOf("abc"), "z") { held = held + 1 }
+  if reads(Parse.noneOf("abc"), "z", 'z') && refuses(Parse.noneOf("abc"), "a") { held = held + 1 }
+
+  // Whole words.
+  if reads(Parse.literal("ab"), "ab", "ab") && refuses(Parse.literal("ab"), "ax") {
+    held = held + 1
+  }
+  if reads(Parse.endOfInput(), "", ()) && refuses(Parse.endOfInput(), "x") { held = held + 1 }
+
+  // Changing and chaining what a parser answers.
+  if reads(Parse.map(Parse.digit(), fn(c: Char) -> Str => Char.toText(c)), "7", "7") {
+    held = held + 1
+  }
+  if reads(
+    Parse.andThen(Parse.digit(), fn(c: Char) -> Parse.Parser[Str] => Parse.literal(Char.toText(c))),
+    "77",
+    "7"
+  ) {
+    held = held + 1
+  }
+  if reads(Parse.both(Parse.digit(), Parse.letter()), "7a", ('7', 'a')) { held = held + 1 }
+  if reads(Parse.keepFirst(Parse.digit(), Parse.letter()), "7a", '7') { held = held + 1 }
+  if reads(Parse.keepSecond(Parse.digit(), Parse.letter()), "7a", 'a') { held = held + 1 }
+
+  // Choosing between parsers.
+  if reads(Parse.orElse(Parse.digit(), Parse.letter()), "a", 'a') { held = held + 1 }
+  if reads(Parse.choice(&[Parse.digit(), Parse.letter()], "a digit or a letter"), "a", 'a') {
+    held = held + 1
+  }
+  if refuses(Parse.choice(&[Parse.digit(), Parse.letter()], "a digit or a letter"), "!") {
+    held = held + 1
+  }
+  // An attempt that fails consumes nothing, so the next parser sees the start.
+  if reads(Parse.orElse(Parse.attempt(Parse.literal("ab")), Parse.literal("ax")), "ax", "ax") {
+    held = held + 1
+  }
+
+  // Repetition, and the difference between none and one.
+  if reads(Parse.many(Parse.digit()), "", []) { held = held + 1 }
+  if reads(Parse.many(Parse.digit()), "12", ['1', '2']) { held = held + 1 }
+  if refuses(Parse.some(Parse.digit()), "") { held = held + 1 }
+  if reads(Parse.some(Parse.digit()), "1", ['1']) { held = held + 1 }
+  if reads(Parse.count(2, Parse.digit()), "12", ['1', '2']) { held = held + 1 }
+  if refuses(Parse.count(2, Parse.digit()), "1") { held = held + 1 }
+  if reads(Parse.skipMany(Parse.digit()), "12", ()) { held = held + 1 }
+  if reads(Parse.skipSome(Parse.digit()), "1", ()) && refuses(Parse.skipSome(Parse.digit()), "") {
+    held = held + 1
+  }
+
+  // Separated lists, with and without a trailing separator.
+  if reads(Parse.separatedBy(Parse.digit(), Parse.character(',')), "1,2", ['1', '2']) {
+    held = held + 1
+  }
+  if reads(Parse.separatedBy(Parse.digit(), Parse.character(',')), "", []) { held = held + 1 }
+  if refuses(Parse.separatedSome(Parse.digit(), Parse.character(',')), "") { held = held + 1 }
+  if reads(Parse.sepEndBy(Parse.digit(), Parse.character(',')), "1,2,", ['1', '2']) {
+    held = held + 1
+  }
+  if reads(Parse.sepEndSome(Parse.digit(), Parse.character(',')), "1,", ['1']) { held = held + 1 }
+
+  // Optional, and a fallback for what is missing.
+  if reads(Parse.optional(Parse.digit()), "", None) { held = held + 1 }
+  if reads(Parse.optional(Parse.digit()), "1", Some('1')) { held = held + 1 }
+  if reads(Parse.option('z', Parse.digit()), "", 'z') { held = held + 1 }
+  if reads(Parse.option('z', Parse.digit()), "1", '1') { held = held + 1 }
+
+  // Reading without consuming, and insisting something does not follow.
+  if reads(Parse.keepSecond(Parse.lookAhead(Parse.digit()), Parse.digit()), "1", '1') {
+    held = held + 1
+  }
+  if reads(Parse.notFollowedBy("a digit", Parse.digit()), "", ()) { held = held + 1 }
+  if refuses(Parse.notFollowedBy("a digit", Parse.digit()), "1") { held = held + 1 }
+
+  // Runs of characters as text.
+  if reads(Parse.takeWhile(Char.isDigit), "12", "12") { held = held + 1 }
+  if reads(Parse.takeWhile(Char.isDigit), "", "") { held = held + 1 }
+  if refuses(Parse.takeWhile1("a digit", Char.isDigit), "") { held = held + 1 }
+  if reads(Parse.takeOf("ab"), "ab", "ab") { held = held + 1 }
+  if reads(Parse.takeNotOf("ab"), "zz", "zz") { held = held + 1 }
+  if reads(Parse.takeOf1("a or b", "ab"), "a", "a") { held = held + 1 }
+  if reads(Parse.takeNotOf1("not a or b", "ab"), "z", "z") { held = held + 1 }
+  if reads(Parse.asText(Parse.many(Parse.digit())), "12", "12") { held = held + 1 }
+  if reads(Parse.manyTill(Parse.anyCharacter(), Parse.character('!')), "ab!", ['a', 'b']) {
+    held = held + 1
+  }
+
+  // Numbers.
+  if reads(Parse.integer(), "42", 42) && refuses(Parse.integer(), "x") { held = held + 1 }
+  if reads(Parse.signed(Parse.integer()), "-42", 0 - 42) { held = held + 1 }
+  if reads(Parse.hexDigit(), "f", 15) && refuses(Parse.hexDigit(), "z") { held = held + 1 }
+  if reads(Parse.hexadecimal(), "ff", 255) { held = held + 1 }
+
+  // Names, quoted text and things wrapped in something.
+  if reads(Parse.identifier(), "name1", "name1") && refuses(Parse.identifier(), "1name") {
+    held = held + 1
+  }
+  if reads(Parse.quoted(), "\"ab\"", "ab") { held = held + 1 }
+  if reads(
+    Parse.between(Parse.character('('), Parse.digit(), Parse.character(')')),
+    "(1)",
+    '1'
+  ) {
+    held = held + 1
+  }
+
+  // Space, and the parsers that step over it.
+  if reads(Parse.spaces(), "  ", ()) { held = held + 1 }
+  if reads(Parse.blanks(), " \t", " \t") { held = held + 1 }
+  if reads(Parse.token(Parse.digit()), "1  ", '1') { held = held + 1 }
+  if reads(Parse.symbol("ab"), "ab ", "ab") { held = held + 1 }
+  if reads(Parse.newline(), "\n", "\n") { held = held + 1 }
+  if reads(Parse.restOfLine(), "abc", "abc") { held = held + 1 }
+  if reads(Parse.lineEnd(), "\n", ()) { held = held + 1 }
+  if reads(Parse.line(), "abc\n", "abc") { held = held + 1 }
+
+  // A parser named for what it wanted, and one made only when needed.
+  if refuses(Parse.label("a digit", Parse.digit()), "a") { held = held + 1 }
+  if reads(Parse.lazy(fn() -> Parse.Parser[Char] => Parse.digit()), "1", '1') { held = held + 1 }
+
+  // Reading part of the text, and where it stopped.
+  match Parse.partial(Parse.digit(), "1abc") {
+    case Err(_) => {}
+    case Ok(found) => if found[0] == '1' && found[1] == 1 { held = held + 1 }
+  }
+
+  // What a refusal says, on its own and against the text it came from.
+  match Parse.run(Parse.digit(), "a") {
+    case Ok(_) => {}
+    case Err(problem) => {
+      let named: Parse.Problem = problem
+      if !Parse.explain(&named).isEmpty() { held = held + 1 }
+      if !Parse.explainIn(&named, "a").isEmpty() { held = held + 1 }
+      if named.position == 0 { held = held + 1 }
+    }
+  }
+
+  // Where a position falls in the text, counted from one.
+  if Parse.lineAndColumn("ab\ncd", 3) == (2, 1) { held = held + 1 }
+
+  // The shapes a parser is written in terms of.
+  let start: Parse.Input = Parse.Input{rest: "ab", position: 0}
+  if start.rest == "ab" { held = held + 1 }
+  let step: Parse.Step[Char] = Parse.digit()(start)
+  if Result.isErr(&step) { held = held + 1 }
+
+  held
+}
