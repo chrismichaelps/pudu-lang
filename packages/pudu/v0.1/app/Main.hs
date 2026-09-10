@@ -560,6 +560,11 @@ data FormatMode = InPlace | CheckOnly | ToStdout
 
 {-| Format every named file.
 
+    A directory names every `.pudu` file beneath it, so a whole tree is
+    formatted by naming the tree rather than by expanding it in the shell,
+    where the expansion differs between shells and silently produces nothing
+    when it matches nothing.
+
     A file that does not lex is left exactly as it was and reported, because a
     formatter that rewrites text it could not read is a formatter that loses
     work. `--check` changes nothing and exits non-zero when any file would
@@ -570,11 +575,25 @@ formatPaths mode paths
       hPutStrLn stderr "pudu fmt: no files given"
       exitFailure
   | otherwise = do
-      outcomes <- mapM formatOne paths
+      expanded <- mapM expand paths
+      let files = concat [names | Right names <- expanded]
+          missing = [path | Left path <- expanded]
+      mapM_ (\path -> hPutStrLn stderr ("pudu fmt: " <> path <> ": no such file or directory")) missing
+      when (null files && null missing) $
+        hPutStrLn stderr "pudu fmt: no Pudu files under the given directories"
+      outcomes <- mapM formatOne (sort files)
       case mode of
+        _ | not (null missing) -> exitFailure
         CheckOnly | or outcomes -> exitFailure
         _ -> pure ()
  where
+  expand path = do
+    isDirectory <- doesDirectoryExist path
+    if isDirectory
+      then Right <$> collectPuduFiles path
+      else do
+        isFile <- doesFileExist path
+        pure (if isFile then Right [path] else Left path)
   formatOne path = do
     contents <- TextIO.readFile path
     source <- newSource (SourceName (Text.pack path)) contents
@@ -1019,7 +1038,7 @@ usage =
     , "  pudu init [path]     initialize a canonical project with pudu.toml"
     , "  pudu explain <file>  run a program and report what running it cost"
     , "  pudu lsp             speak the language server protocol over stdio"
-    , "  pudu fmt <file>...   rewrite files in the one committed style"
+    , "  pudu fmt <path>...   rewrite files, or every file under a directory"
     , "  pudu fmt --check ... report which files are not formatted, changing none"
     , "  pudu fmt --stdout .. write the formatted text to stdout"
     , "  pudu doc <file>...   describe every name a program declares"

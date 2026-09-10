@@ -47,8 +47,10 @@ run 'full suite, optimized' \
 # child shell see the same answer.
 export PUDU
 PUDU=$(cabal list-bin pudu --enable-optimization=2)
+# The directories are given to the formatter rather than expanded here: a
+# shell expansion that matches nothing passes this gate while checking nothing.
 run 'every committed Pudu file is formatted' \
-  bash -c 'cabal run -v0 pudu -- fmt --check $(find packages/pudu test-fixtures examples -name "*.pudu")'
+  bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
