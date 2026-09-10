@@ -1,0 +1,149 @@
+module UsesNumIterAll
+
+import Std.Iter as Iter
+import Std.Num as Num
+import Std.Option as Option
+
+/// A total built through the numeric traits rather than through `+`.
+///
+/// The bound is what is being checked: a caller writing this over their own
+/// numeric type gets it, and a function that quietly reached for the built-in
+/// operator would work here and nowhere else.
+fn addedThroughTraits[T: Num.Zero + Num.Add](items: &Array[T], empty: T) -> T {
+  Num.sumOr(items, empty)
+}
+
+/// Every export of `Std.Num` and `Std.Iter`.
+///
+/// The numeric traits are asked at more than one width, because the point of
+/// them is that an algorithm keeps the caller's type: a function that answered
+/// through `Int` would agree at `Int` and be wrong at every other width, and
+/// nothing at `Int` could tell.
+///
+/// The sequences are checked for what makes them worth having — nothing is
+/// computed until the walk asks. A limit placed on a sequence longer than the
+/// limit is what shows it: a combinator that built its result eagerly would
+/// still answer the right items here, so the checks that matter are the ones
+/// where a bound is placed after a transformation and the transformation must
+/// not have run on what the bound excluded.
+export fn main() -> Int {
+  var held = 0
+  let none: Array[Int] = []
+
+  // Adding a collection up. Nothing rather than nought for an empty one: a
+  // caller wanting nought says so, and one needing to know it was empty
+  // cannot get that back out of a nought.
+  if Option.unwrapOr(Num.sum(&[1, 2, 3]), 0) == 6 { held = held + 1 }
+  if Option.isNone(&Num.sum(&none)) { held = held + 1 }
+  if Num.sumOr(&[1, 2, 3], 0) == 6 { held = held + 1 }
+  if Num.sumOr(&none, 0 - 1) == 0 - 1 { held = held + 1 }
+  if Option.unwrapOr(Num.product(&[2, 3, 4]), 0) == 24 { held = held + 1 }
+  if Option.isNone(&Num.product(&none)) { held = held + 1 }
+
+  // Every running total, one longer than what it was given.
+  if Num.runningSum(&[1, 2, 3]) == [0, 1, 3, 6] { held = held + 1 }
+  if Num.runningSum(&none) == [] { held = held + 1 }
+  if Num.spread(&[1, 5, 3], 5, 1) == 4 { held = held + 1 }
+
+  // The same at another width, which is the whole point of the bound: a
+  // function answering through one type would agree here at `Int` alone.
+  let narrow: Array[Int8] = [1i8, 2i8, 3i8]
+  if Num.sumOr(&narrow, 0i8) == 6i8 { held = held + 1 }
+  if addedThroughTraits(&narrow, 0i8) == 6i8 { held = held + 1 }
+  if addedThroughTraits(&[1, 2, 3], 0) == 6 { held = held + 1 }
+  if Option.unwrapOr(Num.sum(&[1.5f64, 2.5f64]), 0.0f64) == 4.0f64 { held = held + 1 }
+
+  // The traits themselves, each called directly at a stated width.
+  let one: Int = 1
+  let ten: Int = 10
+  if one.zero() == 0 && one.one() == 1 { held = held + 1 }
+  if ten.plus(&one) == 11 && ten.minus(&one) == 9 { held = held + 1 }
+  if ten.times(&Num.two(&one)) == 20 { held = held + 1 }
+  if Option.unwrapOr(ten.dividedBy(&Num.two(&one)), 0) == 5 { held = held + 1 }
+  if Option.unwrapOr(ten.remainderOf(&Num.two(&one)), 0 - 1) == 0 { held = held + 1 }
+  // Dividing by nought answers nothing rather than stopping the program.
+  if Option.isNone(&ten.dividedBy(&one.zero())) { held = held + 1 }
+  if Option.isNone(&ten.remainderOf(&one.zero())) { held = held + 1 }
+
+  // A small constant built from the identity, so it has the caller's type.
+  if Num.two(&one) == 2 { held = held + 1 }
+  if Num.two(&1i8) == 2i8 { held = held + 1 }
+  if Num.small(&one, 10) == 10 { held = held + 1 }
+  if Num.small(&one, 0) == 0 { held = held + 1 }
+  if Num.small(&1i16, 3) == 3i16 { held = held + 1 }
+
+  // A number widened and narrowed back through the witness, and one that does
+  // not fit answering nothing rather than a wrapped value.
+  if Option.unwrapOr(one.fromBigInt(ten.toBigInt()), 0) == 10 { held = held + 1 }
+  if Option.isNone(&1i8.fromBigInt(ten.toBigInt().times(&Num.small(&ten.toBigInt(), 100)))) {
+    held = held + 1
+  }
+
+  // The sequences, each named by the type it answers so the exported name is
+  // reached rather than only inferred.
+  let counted: Iter.Range[Int] = Iter.range(1, 5)
+  let listed: Iter.Items[Str] = Iter.items(["a", "b", "c"])
+  let positioned: Iter.Indexed[Int] = Iter.indexed([10, 20, 30])
+  let again: Iter.Repeated[Str] = Iter.repeat("x", 3)
+  let nothing: Iter.Empty[Int] = Iter.empty()
+
+  if Iter.toArray(&counted) == [1, 2, 3, 4] { held = held + 1 }
+  if Iter.toArray(&listed) == ["a", "b", "c"] { held = held + 1 }
+  if Iter.toArray(&positioned) == [(0, 10), (1, 20), (2, 30)] { held = held + 1 }
+  if Iter.toArray(&again) == ["x", "x", "x"] { held = held + 1 }
+  if Iter.toArray(&nothing) == [] { held = held + 1 }
+  if Iter.count(&counted) == 4 && Iter.count(&nothing) == 0 { held = held + 1 }
+  if Iter.isEmpty(&nothing) && !Iter.isEmpty(&counted) { held = held + 1 }
+  if Option.unwrapOr(Iter.sum(&counted), 0) == 10 { held = held + 1 }
+  if Option.isNone(&Iter.sum(&nothing)) { held = held + 1 }
+  // A range whose end is not past its start yields nothing.
+  if Iter.toArray(&Iter.range(5, 5)) == [] { held = held + 1 }
+  if Iter.toArray(&Iter.repeat("x", 0)) == [] { held = held + 1 }
+
+  // Transformed, kept, bounded, and skipped — each named by its own type.
+  let doubled: Iter.Mapped[Iter.Range[Int], Int, Int] =
+    Iter.map(Iter.range(1, 5), fn(n: Int) -> Int => n * 2)
+  let evens: Iter.Filtered[Iter.Range[Int], Int] =
+    Iter.filter(Iter.range(1, 7), fn(n: Int) -> Bool => n % 2 == 0)
+  let firstTwo: Iter.Taken[Iter.Range[Int], Int] = Iter.take(Iter.range(1, 100), 2)
+  let pastTwo: Iter.Dropped[Iter.Range[Int], Int] = Iter.drop(Iter.range(1, 6), 2)
+  let paired: Iter.Zipped[Iter.Range[Int], Iter.Items[Str], Int, Str] =
+    Iter.zip(Iter.range(1, 100), Iter.items(["a", "b"]))
+
+  if Iter.toArray(&doubled) == [2, 4, 6, 8] { held = held + 1 }
+  if Iter.toArray(&evens) == [2, 4, 6] { held = held + 1 }
+  if Iter.toArray(&pastTwo) == [3, 4, 5] { held = held + 1 }
+  // Skipping past the end leaves nothing rather than refusing.
+  if Iter.toArray(&Iter.drop(Iter.range(1, 3), 99)) == [] { held = held + 1 }
+
+  // A limit on a sequence far longer than the limit. The source is never asked
+  // past it, which is what makes an endless sequence usable at all.
+  if Iter.toArray(&firstTwo) == [1, 2] { held = held + 1 }
+  if Iter.count(&firstTwo) == 2 { held = held + 1 }
+  if Iter.toArray(&Iter.take(Iter.range(1, 3), 99)) == [1, 2] { held = held + 1 }
+  if Iter.toArray(&Iter.take(Iter.range(1, 100), 0)) == [] { held = held + 1 }
+
+  // Two sequences paired end when the shorter one does.
+  if Iter.toArray(&paired) == [(1, "a"), (2, "b")] { held = held + 1 }
+  if Iter.toArray(&Iter.zip(Iter.items(["a"]), nothing)) == [] { held = held + 1 }
+
+  // A bound placed after a transformation, over a source far larger than the
+  // bound. What the transformation is asked for cannot be observed from a
+  // value, so what is checked is that the answer is the bounded one and that
+  // asking for it does not walk the source: a combinator building its result
+  // before the bound applied would answer the same three items after a
+  // million transformations.
+  let bounded = Iter.take(
+    Iter.map(Iter.range(1, 1000000), fn(n: Int) -> Int => n * 2),
+    3
+  )
+  if Iter.toArray(&bounded) == [2, 4, 6] { held = held + 1 }
+  if Iter.count(&bounded) == 3 { held = held + 1 }
+  // The same the other way round: kept, then bounded.
+  if Iter.toArray(&Iter.take(Iter.filter(Iter.range(1, 1000000), fn(n: Int) -> Bool => n % 2 == 0), 3))
+    == [2, 4, 6] {
+    held = held + 1
+  }
+
+  held
+}

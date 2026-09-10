@@ -30,6 +30,8 @@ testDataEvaluation = do
   multiMapAll <- runEntry "test-fixtures/stdlib/UsesMultiMapAll.pudu"
   sortedMapAll <- runEntry "test-fixtures/stdlib/UsesSortedMapAll.pudu"
   linkedMapAll <- runEntry "test-fixtures/stdlib/UsesLinkedMapAll.pudu"
+  pairedAndDomained <- runEntry "test-fixtures/stdlib/UsesBiMapEnumMapAll.pudu"
+  nonEmptyAndTwoKeyed <- runEntry "test-fixtures/stdlib/UsesNonEmptyMultiKeyAll.pudu"
   pure $ conjoin
     [ {-| Every export of the list module against a stated answer, naming the
           whole result rather than its length, so a function that answers the
@@ -70,6 +72,26 @@ testDataEvaluation = do
     , counterexample
         "a map that keeps its insertion order keeps it through every operation"
         (linkedMapAll === Just "41")
+    {-| Every export of the two-way map and the map over a settled domain. A
+        pairing is asked in both directions everywhere, since a map whose two
+        directions disagreed would answer correctly for whichever one a
+        one-sided check happened to ask; the case that produces the
+        disagreement is checked directly, where a pair displaces one that
+        already held its right side. The domain map is checked for the domain
+        not moving: writing a key outside it changes nothing. -}
+    , counterexample
+        "a pairing agrees in both directions and a settled domain stays settled"
+        (pairedAndDomained === Just "63")
+    {-| Every export of the sequence that always holds something and the map
+        keyed by two things. The first is checked hardest at a sequence of one,
+        where the first element and the last are the same and everything after
+        the first is nothing — a reader taking the last out of the tail is
+        wrong there and right everywhere else. The second is asked about half
+        a key in both directions, and asked again after a removal, where an
+        index left claiming a key would answer with entries that are gone. -}
+    , counterexample
+        "a sequence of one keeps its promises and half a key still answers"
+        (nonEmptyAndTwoKeyed === Just "71")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those

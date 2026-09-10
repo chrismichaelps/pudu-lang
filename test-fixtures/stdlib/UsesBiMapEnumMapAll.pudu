@@ -1,0 +1,168 @@
+module UsesBiMapEnumMapAll
+
+import Std.BiMap as BiMap
+import Std.EnumMap as EnumMap
+import Std.Map as Map
+import Std.Option as Option
+
+fn codes() -> BiMap.BiMap[Str, Int] {
+  BiMap.fromPairs(&[("a", 1), ("b", 2), ("c", 3)])
+}
+
+const DAYS: Array[Str] = ["mon", "tue", "wed"]
+
+/// Every export of `Std.BiMap` and `Std.EnumMap`.
+///
+/// A pairing read both ways is what the first is for, so every check asks both
+/// directions: a map whose two directions disagreed would answer correctly for
+/// whichever one a one-sided check happened to ask. The case that produces a
+/// disagreement is checked directly — adding a pair whose right side is
+/// already taken must displace the old pair rather than leave the map holding
+/// two rights for one left.
+///
+/// The second is a map over a settled domain, so what is checked is that the
+/// domain does not move: writing to a key outside it changes nothing, and the
+/// key order stays the domain's own however the map is rebuilt.
+export fn main() -> Int {
+  var held = 0
+  let pairing = codes()
+  let noPairs: BiMap.BiMap[Str, Int] = BiMap.empty()
+
+  // Read in both directions.
+  if Option.unwrapOr(BiMap.getRight(&pairing, "b"), 0) == 2 { held = held + 1 }
+  if Option.unwrapOr(BiMap.getLeft(&pairing, 2), "") == "b" { held = held + 1 }
+  if Option.isNone(&BiMap.getRight(&pairing, "z")) { held = held + 1 }
+  if Option.isNone(&BiMap.getLeft(&pairing, 9)) { held = held + 1 }
+  if BiMap.containsLeft(&pairing, "a") && !BiMap.containsLeft(&pairing, "z") {
+    held = held + 1
+  }
+  if BiMap.containsRight(&pairing, 1) && !BiMap.containsRight(&pairing, 9) {
+    held = held + 1
+  }
+  if BiMap.size(&pairing) == 3 && BiMap.size(&noPairs) == 0 { held = held + 1 }
+  if BiMap.isEmpty(&noPairs) && !BiMap.isEmpty(&pairing) { held = held + 1 }
+
+  // Both sides, and the pairs between them.
+  if BiMap.lefts(&pairing) == ["a", "b", "c"] { held = held + 1 }
+  if BiMap.rights(&pairing) == [1, 2, 3] { held = held + 1 }
+  if BiMap.pairs(&pairing) == [("a", 1), ("b", 2), ("c", 3)] { held = held + 1 }
+
+  // Adding a pair whose right side is taken displaces the old pair rather than
+  // leaving two lefts pointing at one right.
+  let displaced = BiMap.insert(&pairing, "d", 1)
+  if BiMap.size(&displaced) == 3 { held = held + 1 }
+  if !BiMap.containsLeft(&displaced, "a") { held = held + 1 }
+  if Option.unwrapOr(BiMap.getLeft(&displaced, 1), "") == "d" { held = held + 1 }
+  // A pair sharing neither side is an addition.
+  if BiMap.size(&BiMap.insert(&pairing, "d", 4)) == 4 { held = held + 1 }
+
+  // The reporting form refuses rather than displacing.
+  if Option.isNone(&BiMap.insertChecked(&pairing, "d", 1)) { held = held + 1 }
+  if Option.isNone(&BiMap.insertChecked(&pairing, "a", 9)) { held = held + 1 }
+  if BiMap.size(&Option.unwrapOr(BiMap.insertChecked(&pairing, "d", 4), noPairs)) == 4 {
+    held = held + 1
+  }
+
+  // Removed from either side, with both directions kept in step.
+  let withoutA = BiMap.removeLeft(&pairing, "a")
+  if !BiMap.containsLeft(&withoutA, "a") && !BiMap.containsRight(&withoutA, 1) {
+    held = held + 1
+  }
+  let without2 = BiMap.removeRight(&pairing, 2)
+  if !BiMap.containsLeft(&without2, "b") && !BiMap.containsRight(&without2, 2) {
+    held = held + 1
+  }
+  if BiMap.size(&BiMap.removeLeft(&pairing, "z")) == 3 { held = held + 1 }
+  if BiMap.size(&BiMap.removeRight(&pairing, 9)) == 3 { held = held + 1 }
+
+  // Turned about, and read as an ordinary map.
+  if Option.unwrapOr(BiMap.getRight(&BiMap.flipped(&pairing), 2), "") == "b" { held = held + 1 }
+  if Option.unwrapOr(Map.get(&BiMap.toMap(&pairing), "b"), 0) == 2 { held = held + 1 }
+
+  // Built from pairs, displacing or refusing.
+  if BiMap.size(&BiMap.fromPairs(&[("a", 1), ("b", 1)])) == 1 { held = held + 1 }
+  if Option.isNone(&BiMap.fromPairsChecked(&[("a", 1), ("b", 1)])) { held = held + 1 }
+  if BiMap.size(&Option.unwrapOr(BiMap.fromPairsChecked(&[("a", 1), ("b", 2)]), noPairs)) == 2 {
+    held = held + 1
+  }
+
+  // Two together, and over every pair.
+  let others: BiMap.BiMap[Str, Int] = BiMap.fromPairs(&[("d", 4)])
+  if BiMap.size(&BiMap.merge(&pairing, &others)) == 4 { held = held + 1 }
+  if BiMap.lefts(&BiMap.filter(&pairing, fn(_l: Str, r: Int) -> Bool => r > 1)) == ["b", "c"] {
+    held = held + 1
+  }
+  if BiMap.fold(&pairing, fn(total: Int, _l: Str, r: Int) -> Int => total + r, 0) == 6 {
+    held = held + 1
+  }
+  if BiMap.fold(&noPairs, fn(total: Int, _l: Str, r: Int) -> Int => total + r, 0) == 0 {
+    held = held + 1
+  }
+  if BiMap.all(&pairing, fn(_l: Str, r: Int) -> Bool => r > 0) { held = held + 1 }
+  if !BiMap.all(&pairing, fn(_l: Str, r: Int) -> Bool => r > 1) { held = held + 1 }
+  if BiMap.any(&pairing, fn(_l: Str, r: Int) -> Bool => r == 3) { held = held + 1 }
+  if !BiMap.any(&pairing, fn(_l: Str, r: Int) -> Bool => r == 9) { held = held + 1 }
+
+  // A map over a settled domain, built two ways.
+  let counts: EnumMap.EnumMap[Str, Int] = EnumMap.filled(&DAYS, 0)
+  let lengths: EnumMap.EnumMap[Str, Int] = EnumMap.from(&DAYS, fn(day: Str) -> Int => day.length())
+  let noDomain: EnumMap.EnumMap[Str, Int] = EnumMap.filled(&[], 0)
+  if EnumMap.values(&counts) == [0, 0, 0] { held = held + 1 }
+  if EnumMap.values(&lengths) == [3, 3, 3] { held = held + 1 }
+  if EnumMap.keys(&counts) == DAYS { held = held + 1 }
+  if EnumMap.size(&counts) == 3 && EnumMap.size(&noDomain) == 0 { held = held + 1 }
+  if EnumMap.isEmpty(&noDomain) && !EnumMap.isEmpty(&counts) { held = held + 1 }
+  if EnumMap.containsKey(&counts, "mon") && !EnumMap.containsKey(&counts, "sun") {
+    held = held + 1
+  }
+
+  // Every key in the domain has a value, so reading one needs no fallback.
+  // A key outside it is the case the two other readers exist for.
+  if EnumMap.get(&lengths, "tue") == 3 { held = held + 1 }
+  if EnumMap.getOr(&lengths, "sun", 0 - 1) == 0 - 1 { held = held + 1 }
+  if Option.unwrapOr(EnumMap.find(&lengths, "tue"), 0) == 3 { held = held + 1 }
+  if Option.isNone(&EnumMap.find(&lengths, "sun")) { held = held + 1 }
+
+  // Writing. The domain does not grow: a key outside it changes nothing.
+  let written = EnumMap.set(&counts, "tue", 5)
+  if EnumMap.values(&written) == [0, 5, 0] { held = held + 1 }
+  if EnumMap.values(&EnumMap.set(&counts, "sun", 5)) == [0, 0, 0] { held = held + 1 }
+  if EnumMap.size(&EnumMap.set(&counts, "sun", 5)) == 3 { held = held + 1 }
+  if EnumMap.values(&EnumMap.adjust(&written, "tue", fn(v: Int) -> Int => v + 1))
+    == [0, 6, 0] {
+    held = held + 1
+  }
+  if EnumMap.values(&EnumMap.adjust(&written, "sun", fn(v: Int) -> Int => v + 1))
+    == [0, 5, 0] {
+    held = held + 1
+  }
+
+  // Over every entry, in the domain's order.
+  if EnumMap.pairs(&written) == [("mon", 0), ("tue", 5), ("wed", 0)] { held = held + 1 }
+  if EnumMap.values(&EnumMap.mapValues(&written, fn(v: Int) -> Int => v + 1)) == [1, 6, 1] {
+    held = held + 1
+  }
+  if EnumMap.fold(&written, fn(total: Int, _k: Str, v: Int) -> Int => total + v, 0) == 5 {
+    held = held + 1
+  }
+  if EnumMap.keysWhere(&written, fn(v: Int) -> Bool => v > 0) == ["tue"] { held = held + 1 }
+  if EnumMap.countValues(&written, fn(v: Int) -> Bool => v == 0) == 2 { held = held + 1 }
+  if EnumMap.all(&counts, fn(_k: Str, v: Int) -> Bool => v == 0) { held = held + 1 }
+  if !EnumMap.all(&written, fn(_k: Str, v: Int) -> Bool => v == 0) { held = held + 1 }
+  if EnumMap.any(&written, fn(_k: Str, v: Int) -> Bool => v == 5) { held = held + 1 }
+  if !EnumMap.any(&counts, fn(_k: Str, v: Int) -> Bool => v == 5) { held = held + 1 }
+
+  // Two maps combined value by value. A key the second lacks keeps the first
+  // map's value rather than reporting a mismatch the caller would handle on
+  // every call.
+  let partial: EnumMap.EnumMap[Str, Int] = EnumMap.filled(&["tue"], 10)
+  let combined = EnumMap.mergeWith(&written, &partial, fn(l: Int, r: Int) -> Int => l + r)
+  if EnumMap.values(&combined) == [0, 15, 0] { held = held + 1 }
+  if EnumMap.keys(&combined) == DAYS { held = held + 1 }
+
+  // Read as an ordinary map, losing the promise that every key has a value.
+  if Map.size(&EnumMap.toMap(&written)) == 3 { held = held + 1 }
+  if Option.unwrapOr(Map.get(&EnumMap.toMap(&written), "tue"), 0) == 5 { held = held + 1 }
+
+  held
+}

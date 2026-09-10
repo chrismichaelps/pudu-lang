@@ -50,6 +50,7 @@ testRuntimeEvaluation = do
   optionResult <- runEntry "test-fixtures/stdlib/UsesOptionResultAll.pudu"
   ordered <- runEntry "test-fixtures/stdlib/UsesOrderAll.pudu"
   bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
+  countedAndWalked <- runEntry "test-fixtures/stdlib/UsesNumIterAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -94,6 +95,16 @@ testRuntimeEvaluation = do
     , counterexample
         "every bit operation answers for the width it was given"
         (bitwise === Just "39")
+    {-| Every export of the numeric traits and the sequences. The traits are
+        asked at more than one width, since a function that answered through
+        one integer type would agree at that type and be wrong everywhere
+        else, and nothing asked at that type alone could tell. The sequences
+        are checked where a bound sits after a transformation over a source a
+        million long: a combinator that built its result before the bound
+        applied answers the same items and takes a million steps to do it. -}
+    , counterexample
+        "the numeric traits keep the caller's width and a bound stops the walk"
+        (countedAndWalked === Just "51")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}
