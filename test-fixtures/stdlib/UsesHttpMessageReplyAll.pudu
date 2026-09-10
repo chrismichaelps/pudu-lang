@@ -1,0 +1,392 @@
+module UsesHttpMessageReplyAll
+
+import Std.Bytes as Bytes
+import Std.Html as Html
+import Std.Html.Ssr {MissingSlot}
+import Std.Html.Ssr as Ssr
+import Std.Http as Http
+import Std.Http.Message {BadHeader, BadRequestLine, NoRequestLine, ShortBody}
+import Std.Http.Message as Message
+import Std.Http.Server.Reply as Reply
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+
+/// What a header says, or the empty string when the message does not carry it.
+fn headerOf(response: &Http.Response, name: Str) -> Str {
+  Option.unwrapOr(Http.header(&response.headers, name), "")
+}
+
+/// What stopped a request from being read, or the empty string when nothing
+/// did.
+fn failureOf(source: Str) -> Str {
+  match Message.parseHead(source) {
+    case Ok(_) => ""
+    case Err(problem) => Message.explain(&problem)
+  }
+}
+
+/// Every export of `Std.Http.Message`, `Std.Http.Server.Reply` and
+/// `Std.Html.Ssr`.
+///
+/// A message written and read back is checked in both directions from the same
+/// value, because a writer and a reader that agreed on a wrong spelling would
+/// agree with each other and with no other implementation: so the written text
+/// is also compared against the bytes the protocol says, ending and all.
+///
+/// A short body is how a truncated read shows itself, and telling that from a
+/// complete message is the one thing a caller cannot do for itself — so a body
+/// shorter than the length declared for it is checked to be refused, and a body
+/// longer than declared to be accepted, since only the short case means
+/// something went wrong on the way.
+///
+/// Every reply is checked for the length it declares as well as the body it
+/// carries, since a length counted in characters and a length counted in bytes
+/// agree on plain text and disagree the moment a body carries anything else,
+/// and a client reading the declared number stops in the middle of the body.
+export fn main() -> Int {
+  var held = 0
+
+  // A request read from the text a connection carried, and read back from a
+  // head already separated from its body.
+  match Message.parseRequest("GET /here HTTP/1.1\r\nhost: example.com\r\n\r\n") {
+    case Ok(request) => {
+      if request.target == "/here" { held = held + 1 }
+      if Option.unwrapOr(Http.header(&request.headers, "host"), "") == "example.com" {
+        held = held + 1
+      }
+    }
+    case Err(_) => {}
+  }
+  match Message.parseHead("POST /submit HTTP/1.1\r\ncontent-length: 4\r\n") {
+    case Ok(request) => {
+      if request.target == "/submit" && request.body == "" { held = held + 1 }
+      if Http.methodName(&request.method) == "POST" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A message written by hand for a test uses the plain line ending, and
+  // refusing it would teach nobody anything.
+  match Message.parseHead("GET /plain HTTP/1.1\nhost: example.com\n") {
+    case Ok(request) => { if request.target == "/plain" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // Each way a message can fail to be one, named rather than counted: a reader
+  // answering one failure for everything tells a caller nothing.
+  if failureOf("") == "the message has no request line" { held = held + 1 }
+  if failureOf("GET").startsWith("the request line is not a method") { held = held + 1 }
+  if failureOf("GET /here HTTP/1.1\r\nnot a header\r\n")
+    == "a header has no colon: not a header" {
+    held = held + 1
+  }
+  // The failures as values, so a caller can act on which one it was rather
+  // than on the text.
+  match Message.parseHead("") {
+    case Err(NoRequestLine) => { held = held + 1 }
+    case _ => {}
+  }
+  match Message.parseHead("GET") {
+    case Err(BadRequestLine(line)) => { if line == "GET" { held = held + 1 } }
+    case _ => {}
+  }
+  match Message.parseHead("GET /x HTTP/1.1\r\nbroken\r\n") {
+    case Err(BadHeader(line)) => { if line == "broken" { held = held + 1 } }
+    case _ => {}
+  }
+
+  // A response read from what a connection carried.
+  match Message.parseResponse("HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n") {
+    case Ok(response) => {
+      if response.status.code == 404 { held = held + 1 }
+      if response.status.reason == "Not Found" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Message.parseResponse("") {
+    case Err(problem) => {
+      if Message.explain(&problem) == "the message has no status line" { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+  match Message.parseResponse("nonsense") {
+    case Err(problem) => {
+      if Message.explain(&problem).startsWith("the status line is not") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  // A message written as the protocol writes it, ending and all, then read
+  // back — which a writer and a reader agreeing on a wrong spelling would also
+  // pass, so the text itself is compared.
+  let asked = Http.Request {
+    method: Http.Get,
+    target: "/here",
+    headers: [("host", "example.com")],
+    body: ""
+  }
+  let written = Message.renderRequest(&asked)
+  if written == "GET /here HTTP/1.1\r\nhost: example.com\r\n\r\n" { held = held + 1 }
+  match Message.parseRequest(written) {
+    case Ok(back) => { if back.target == asked.target { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let answered = Message.respond(200, "text/plain", "hi")
+  if Message.renderResponse(&answered)
+    == "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: 2\r\n\r\nhi" {
+    held = held + 1
+  }
+
+  // A response built from a status and a body, which declares what it carries.
+  if answered.status.code == 200 && answered.body == "hi" { held = held + 1 }
+  if headerOf(&answered, "content-type") == "text/plain" { held = held + 1 }
+  if headerOf(&answered, "content-length") == "2" { held = held + 1 }
+  // A body carrying a character wider than one byte, where a length counted in
+  // characters and one counted in bytes part company.
+  let wide = Message.respond(200, "text/plain", "h\u{00e9}llo")
+  if headerOf(&wide, "content-length") == "6" { held = held + 1 }
+
+  // The statuses that carry no body say so by carrying none, rather than by
+  // declaring a length of nothing.
+  let nothing = Message.respondEmpty(204)
+  if nothing.status.code == 204 && nothing.body == "" { held = held + 1 }
+  if nothing.headers.length() == 0 { held = held + 1 }
+
+  // A redirect, which is a status and a place to go.
+  let moved = Message.redirect(301, "/elsewhere")
+  if moved.status.code == 301 && headerOf(&moved, "location") == "/elsewhere" {
+    held = held + 1
+  }
+  if moved.body == "" { held = held + 1 }
+  if Message.redirect(302, "/other").status.code == 302 { held = held + 1 }
+
+  // Whether a body is as long as it was declared to be. Only a short one means
+  // something went wrong on the way; a long one is not this call's business.
+  let declared: Array[(Str, Str)] = [("content-length", "5")]
+  if Result.isOk(&Message.checkLength(&declared, "hello")) { held = held + 1 }
+  if Result.isOk(&Message.checkLength(&declared, "hello there")) { held = held + 1 }
+  if Result.isErr(&Message.checkLength(&declared, "hi")) { held = held + 1 }
+  // The failure says both numbers, which is what makes it actionable.
+  match Message.checkLength(&declared, "hi") {
+    case Err(ShortBody(saidSo, found)) => {
+      if saidSo == 5 && found == 2 { held = held + 1 }
+    }
+    case _ => {}
+  }
+  match Message.checkLength(&declared, "hi") {
+    case Err(problem) => {
+      if Message.explain(&problem) == "the body is 2 where 5 was declared" {
+        held = held + 1
+      }
+    }
+    case Ok(_) => {}
+  }
+  // A message that declared nothing has nothing to fall short of.
+  let undeclared: Array[(Str, Str)] = []
+  if Result.isOk(&Message.checkLength(&undeclared, "anything at all")) {
+    held = held + 1
+  }
+  // Counted in bytes rather than characters, which is the case a body of plain
+  // text could never show.
+  let six: Array[(Str, Str)] = [("content-length", "6")]
+  if Result.isOk(&Message.checkLength(&six, "h\u{00e9}llo")) { held = held + 1 }
+
+  // A body sent in pieces, read back into what it framed. The reader stops at
+  // the piece that says there are no more, ignoring anything after it.
+  if Message.decodeChunked("4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n") == "Wikipedia" {
+    held = held + 1
+  }
+  if Message.decodeChunked("0\r\n\r\n") == "" { held = held + 1 }
+  // A piece may carry a note after its size, which is not part of the size.
+  if Message.decodeChunked("4;note=here\r\nWiki\r\n0\r\n\r\n") == "Wiki" {
+    held = held + 1
+  }
+  // Anything after the piece that ends the body is not the body.
+  if Message.decodeChunked("4\r\nWiki\r\n0\r\ntrailer: x\r\n\r\n") == "Wiki" {
+    held = held + 1
+  }
+
+  // The same in bytes, where the framing is refused rather than read as far as
+  // it goes: a body arriving over a connection is what a limit exists for.
+  let framed = Bytes.fromText("4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n")
+  if Result.unwrapOr(Message.decodeChunkedBytes(&framed, 1000), Bytes.fromText(""))
+    == Bytes.fromText("Wikipedia") {
+    held = held + 1
+  }
+  // A body longer than the caller will hold is refused rather than read.
+  if Result.isErr(&Message.decodeChunkedBytes(&framed, 4)) { held = held + 1 }
+  // A size that is not one, and framing that stops part way through.
+  if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("zz\r\nWiki\r\n0\r\n\r\n"), 1000)) {
+    held = held + 1
+  }
+  if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWi\r\n0\r\n\r\n"), 1000)) {
+    held = held + 1
+  }
+  // A trailer after the ending piece is read past rather than refused.
+  let trailed = Bytes.fromText("4\r\nWiki\r\n0\r\nx: y\r\n\r\n")
+  if Result.unwrapOr(Message.decodeChunkedBytes(&trailed, 1000), Bytes.fromText(""))
+    == Bytes.fromText("Wiki") {
+    held = held + 1
+  }
+
+  // A response carrying bytes rather than text, which never goes through a
+  // text encoding on the way out.
+  let payload = Bytes.fromArray(&[0u8, 1u8, 255u8, 254u8])
+  let binary = Message.respondBytes(200, "application/octet-stream", &payload)
+  if headerOf(&binary, "content-length") == "4" { held = held + 1 }
+  if binary.binaryBody == Some(payload) && binary.body == "" { held = held + 1 }
+  // Written out, the head is text and the body is the bytes it was given.
+  let sent = Message.renderResponseBytes(&binary)
+  if Bytes.endsWith(&sent, &payload) { held = held + 1 }
+  if Bytes.startsWith(&sent, &Bytes.fromText("HTTP/1.1 200 OK\r\n")) { held = held + 1 }
+  // A text response written the same way agrees with the text rendering.
+  if Result.unwrapOr(Bytes.toText(&Message.renderResponseBytes(&answered)), "")
+    == Message.renderResponse(&answered) {
+    held = held + 1
+  }
+
+  // The replies a handler gives, each with the type it declares.
+  if Reply.text(200, "hi").body == "hi" { held = held + 1 }
+  if headerOf(&Reply.text(200, "hi"), "content-type") == "text/plain; charset=utf-8" {
+    held = held + 1
+  }
+  if headerOf(&Reply.html(200, "<p>hi</p>"), "content-type") == "text/html; charset=utf-8" {
+    held = held + 1
+  }
+  if headerOf(&Reply.json(200, "\{\}"), "content-type") == "application/json" {
+    held = held + 1
+  }
+  let blank = Reply.empty(204)
+  if blank.status.code == 204 && blank.body == "" { held = held + 1 }
+
+  // A resource that could not read a body says what it would have read, so a
+  // client told no is also told what would be yes.
+  let advertised = Reply.acceptQuery(&["application/json", "text/csv"])
+  if advertised == ("Accept-Query", "application/json, text/csv") { held = held + 1 }
+  let one: Array[Str] = ["application/json"]
+  if Reply.acceptQuery(&one)[1] == "application/json" { held = held + 1 }
+  let none: Array[Str] = []
+  if Reply.acceptQuery(&none)[1] == "" { held = held + 1 }
+  let refused = Reply.unsupportedMediaType(&["application/json"])
+  if refused.status.code == 415 { held = held + 1 }
+  if headerOf(&refused, "Accept-Query") == "application/json" { held = held + 1 }
+  // A body it could read but could not act on is a different refusal, and a
+  // client can act on the difference.
+  if Reply.unprocessable("the dates are the wrong way round").status.code == 422 {
+    held = held + 1
+  }
+
+  // A typed fragment rendered with the escaping rules, so text that looks like
+  // markup arrives as text.
+  let view = Html.element(
+    "p",
+      &[("class", "note")],
+      &[Html.text("2 < 3 & \"quoted\"")]
+  )
+  let fragment = Reply.view(200, view)
+  if fragment.body == "<p class=\"note\">2 &lt; 3 &amp; &quot;quoted&quot;</p>" {
+    held = held + 1
+  }
+  if headerOf(&fragment, "content-type") == "text/html; charset=utf-8" {
+    held = held + 1
+  }
+  // A whole document, which carries the line that says what it is.
+  if Reply.page(200, view).body.startsWith("<!DOCTYPE html>") { held = held + 1 }
+  if Reply.page(200, view).body.endsWith(fragment.body) { held = held + 1 }
+
+  // A value encoded at the boundary rather than by the handler.
+  let payloadValue = Json.object(&[("ok", Json.Boolean(true))])
+  if Reply.jsonValue(200, payloadValue).body == "\{\"ok\":true\}" { held = held + 1 }
+  if headerOf(&Reply.jsonValue(200, payloadValue), "content-type") == "application/json" {
+    held = held + 1
+  }
+
+  // A page rendered once and answered without rendering again, which is the
+  // reason the rendering carries its own length.
+  let piece: Ssr.Piece = Ssr.Fixed(view)
+  let plan = Ssr.prepare(&[piece, Ssr.Slot("body")])
+  let filled = mapOf([("body", Html.text("filled in"))])
+  match Ssr.render(&plan, &filled) {
+    case Ok(text) => { if text.endsWith("filled in") { held = held + 1 } }
+    case Err(_) => {}
+  }
+  // A hole nobody filled is named rather than left blank, since a page missing
+  // a section is not a page.
+  let nothingFilled: Map[Str, Html.Html] = mapOf([])
+  match Ssr.render(&plan, &nothingFilled) {
+    case Err(MissingSlot(name)) => { if name == "body" { held = held + 1 } }
+    case _ => {}
+  }
+  // The pieces in order, so a caller may write them as they come rather than
+  // holding the whole page.
+  match Ssr.chunks(&plan, &filled) {
+    case Ok(pieces) => { if pieces.length() >= 2 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  match Ssr.finish(&plan, &filled) {
+    case Ok(page) => {
+      if page.byteLength == page.body.toBytes().length() { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A page larger than the caller will send is refused rather than sent.
+  if Result.isErr(&Ssr.renderWithin(&plan, &filled, 5)) { held = held + 1 }
+  if Result.isOk(&Ssr.renderWithin(&plan, &filled, 100000)) { held = held + 1 }
+
+  // A view rendered with its length and no plan at all, which is what a
+  // handler answering one thing wants.
+  let alone: Ssr.Rendered = Ssr.fragment(&view)
+  if alone.body == fragment.body { held = held + 1 }
+  if alone.byteLength == alone.body.toBytes().length() { held = held + 1 }
+  let whole: Ssr.Rendered = Ssr.document(&view)
+  if whole.body.startsWith("<!DOCTYPE html>") { held = held + 1 }
+  // A rendering carrying a character wider than one byte, where its length in
+  // bytes and its length in characters differ.
+  let widened: Ssr.Rendered = Ssr.fragment(&Html.text("h\u{00e9}llo"))
+  if widened.byteLength == 6 && widened.body.length() == 5 { held = held + 1 }
+
+  // A rendering answered without rendering it again: the length it already
+  // knows becomes the length the response declares.
+  let reused = Reply.rendered(200, alone)
+  if reused.body == alone.body { held = held + 1 }
+  if headerOf(&reused, "content-length") == show(alone.byteLength) { held = held + 1 }
+  if headerOf(&Reply.rendered(200, widened), "content-length") == "6" {
+    held = held + 1
+  }
+
+  // A tag naming what a body is, so a client holding it can ask whether it has
+  // changed rather than fetching it again.
+  let tag = Reply.computeEtag("the body")
+  if tag == Reply.computeEtag("the body") { held = held + 1 }
+  if tag != Reply.computeEtag("another body") { held = held + 1 }
+  if !tag.isEmpty() { held = held + 1 }
+  if headerOf(&Reply.withEtag(&answered, tag), "ETag") == "\"" + tag + "\"" {
+    held = held + 1
+  }
+  if Reply.notModified(tag).status.code == 304 { held = held + 1 }
+  // A client that already holds the body is told so rather than sent it again.
+  let holding: Array[(Str, Str)] = [("If-None-Match", "\"" + tag + "\"")]
+  if Reply.conditional(&holding, &answered, tag).status.code == 304 { held = held + 1 }
+  // A client holding something else is sent the body, with the tag attached.
+  let stale: Array[(Str, Str)] = [("If-None-Match", "\"something else\"")]
+  let fresh = Reply.conditional(&stale, &answered, tag)
+  if fresh.status.code == 200 && fresh.body == "hi" { held = held + 1 }
+  if headerOf(&fresh, "ETag") == "\"" + tag + "\"" { held = held + 1 }
+
+  // A response carrying bytes, built at the reply layer.
+  let served = Reply.bytes(200, "image/png", &payload)
+  if served.binaryBody == Some(payload) { held = held + 1 }
+  if headerOf(&served, "content-type") == "image/png" { held = held + 1 }
+
+  // The refusals that tell a client when to come back, which is what makes
+  // them different from a bare refusal.
+  if Reply.tooManyRequests(30).status.code == 429 { held = held + 1 }
+  if headerOf(&Reply.tooManyRequests(30), "retry-after") == "30" { held = held + 1 }
+  if Reply.serviceUnavailable(60).status.code == 503 { held = held + 1 }
+  if headerOf(&Reply.serviceUnavailable(60), "retry-after") == "60" { held = held + 1 }
+  if Reply.gatewayTimeout("upstream took too long").status.code == 504 {
+    held = held + 1
+  }
+
+  held
+}

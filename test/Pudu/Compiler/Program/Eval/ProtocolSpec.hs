@@ -26,6 +26,7 @@ testProtocolEvaluation = do
   separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
   configured <- runEntry "test-fixtures/stdlib/UsesToml.pudu"
   scanned <- runEntry "test-fixtures/stdlib/UsesTomlScanAll.pudu"
+  messaged <- runEntry "test-fixtures/stdlib/UsesHttpMessageReplyAll.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
@@ -351,6 +352,20 @@ testProtocolEvaluation = do
     , counterexample
         "every scan says where it stopped and a literal string keeps its backslash"
         (scanned === Just "83")
+    {-| Every export of the message, reply and rendering modules. A message is
+        written and read back from the same value, and the written text is also
+        compared against what the protocol says, ending and all — a writer and
+        a reader agreeing on a wrong spelling agree with each other and with no
+        other implementation. A body shorter than the length declared for it is
+        refused and a longer one accepted, since only the short case is how a
+        truncated read shows itself. Every reply is checked for the length it
+        declares as well as the body it carries, over a body carrying a
+        character wider than one byte, where counting characters and counting
+        bytes part company and a client reading the declared number stops in
+        the middle. -}
+    , counterexample
+        "a message survives being written and read, and declares its body in bytes"
+        (messaged === Just "93")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}
