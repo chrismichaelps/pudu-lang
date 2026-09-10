@@ -29,6 +29,7 @@ testDataEvaluation = do
   setAll <- runEntry "test-fixtures/stdlib/UsesSetAll.pudu"
   multiMapAll <- runEntry "test-fixtures/stdlib/UsesMultiMapAll.pudu"
   sortedMapAll <- runEntry "test-fixtures/stdlib/UsesSortedMapAll.pudu"
+  linkedMapAll <- runEntry "test-fixtures/stdlib/UsesLinkedMapAll.pudu"
   pure $ conjoin
     [ {-| Every export of the list module against a stated answer, naming the
           whole result rather than its length, so a function that answers the
@@ -58,6 +59,17 @@ testDataEvaluation = do
     , counterexample
         "a sorted map answers its neighbours on either side of a key"
         (sortedMapAll === Just "45")
+    {-| Every export of the map that remembers the order its keys were first
+        put in, checked as a sequence rather than as a set: a function keeping
+        the right entries in the wrong order would pass every check that only
+        asked what a key holds. The sample is built out of alphabetical order,
+        so a map that sorted its keys could not pass by accident. Writing to a
+        key already there leaves it where it is, and only `touch` moves it —
+        the difference between an order of first appearance and one of
+        recency. -}
+    , counterexample
+        "a map that keeps its insertion order keeps it through every operation"
+        (linkedMapAll === Just "41")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those

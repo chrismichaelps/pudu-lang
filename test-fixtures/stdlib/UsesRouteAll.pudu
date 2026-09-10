@@ -1,0 +1,143 @@
+module UsesRouteAll
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Map as Map
+import Std.Option as Option
+
+/// A request as it reaches a router, built here rather than taken from a
+/// connection: a handler is given a request and nothing else, which is what
+/// makes one checkable without a socket.
+fn asking(method: Http.Method, target: Str, headers: Array[(Str, Str)], body: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: method, target: target, headers: headers, body: body},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "127.0.0.1"
+  }
+}
+
+fn saying(text: Str) -> Route.Handler {
+  fn(request: Route.Request) -> Http.Response => Reply.text(200, text)
+}
+
+fn answered(router: &Route.Router, request: Route.Request) -> Str {
+  Route.dispatch(router, request).body
+}
+
+/// Every export of `Std.Http.Server.Route`, checked by dispatching a request.
+///
+/// A route is checked through the router rather than by reading its fields, so
+/// what is tested is what a request actually reaches. The method is checked as
+/// well as the path: a path that matches under another method answers that the
+/// method is not allowed rather than that the thing is not there, and those are
+/// different facts about the world.
+export fn main() -> Int {
+  var held = 0
+
+  // A target is split into its path and its query.
+  if Route.pathOf("/a/b?x=1") == "/a/b" { held = held + 1 }
+  if Route.pathOf("/a") == "/a" { held = held + 1 }
+  if Option.unwrapOr(Route.queryOf("/a?x=1&y=2").get("y"), "") == "2" { held = held + 1 }
+  if Map.isEmpty(&Route.queryOf("/a")) { held = held + 1 }
+
+  // A route for each method.
+  let everyMethod = Route.routing(
+      &[
+      Route.get("/thing", saying("got")),
+      Route.post("/thing", saying("posted")),
+      Route.put("/thing", saying("put")),
+      Route.patch("/thing", saying("patched")),
+      Route.delete("/thing", saying("deleted")),
+      Route.query("/thing", saying("queried")),
+      Route.on(Http.Head, "/thing", saying("headed"))
+    ]
+  )
+  if answered(&everyMethod, asking(Http.Get, "/thing", [], "")) == "got" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Post, "/thing", [], "")) == "posted" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Put, "/thing", [], "")) == "put" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Patch, "/thing", [], "")) == "patched" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Delete, "/thing", [], "")) == "deleted" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Query, "/thing", [], "")) == "queried" { held = held + 1 }
+  if answered(&everyMethod, asking(Http.Head, "/thing", [], "")) == "headed" { held = held + 1 }
+
+  // A path nobody wrote, and a path written for another method.
+  if Route.dispatch(&everyMethod, asking(Http.Get, "/absent", [], "")).status.code == 404 {
+    held = held + 1
+  }
+  if Route.dispatch(&everyMethod, asking(Http.Options, "/thing", [], "")).status.code == 405 {
+    held = held + 1
+  }
+
+  // Routers built up rather than written out at once.
+  let empty: Route.Router = Route.router()
+  if Route.dispatch(&empty, asking(Http.Get, "/x", [], "")).status.code == 404 { held = held + 1 }
+  let added: Route.Router = Route.adding(&empty, Route.get("/x", saying("added")))
+  if answered(&added, asking(Http.Get, "/x", [], "")) == "added" { held = held + 1 }
+  let joined = Route.joining(&added, &Route.routing(&[Route.get("/y", saying("joined"))]))
+  if answered(&joined, asking(Http.Get, "/x", [], "")) == "added" { held = held + 1 }
+  if answered(&joined, asking(Http.Get, "/y", [], "")) == "joined" { held = held + 1 }
+
+  // A group of routes under a shared prefix.
+  let grouped = Route.routing(&Route.under("/api", &[Route.get("/thing", saying("under"))]))
+  if answered(&grouped, asking(Http.Get, "/api/thing", [], "")) == "under" { held = held + 1 }
+  if Route.dispatch(&grouped, asking(Http.Get, "/thing", [], "")).status.code == 404 {
+    held = held + 1
+  }
+
+  // What answers when nothing matched.
+  let withOther = Route.withFallback(&added, saying("fell back"))
+  if answered(&withOther, asking(Http.Get, "/nowhere", [], "")) == "fell back" { held = held + 1 }
+  if Route.notFoundHandler(asking(Http.Get, "/x", [], "")).status.code == 404 { held = held + 1 }
+
+  // A named part of the path reaches the handler.
+  let named = Route.routing(
+      &[
+      Route.get(
+        "/thing/:id",
+        fn(request: Route.Request) -> Http.Response =>
+        Reply.text(200, Option.unwrapOr(Route.param(&request, "id"), "none"))
+      )
+    ]
+  )
+  if answered(&named, asking(Http.Get, "/thing/42", [], "")) == "42" { held = held + 1 }
+
+  // What a request carries, read through the module rather than its fields.
+  let carrying = asking(
+    Http.Post,
+    "/thing?page=2",
+    [("content-type", "application/x-www-form-urlencoded"), ("x-name", "value")],
+    "a=1&b=x+y"
+  )
+  if Option.unwrapOr(Route.queryParam(&carrying, "page"), "") == "2" { held = held + 1 }
+  if Option.isNone(&Route.queryParam(&carrying, "absent")) { held = held + 1 }
+  if Option.unwrapOr(Route.header(&carrying, "X-Name"), "") == "value" { held = held + 1 }
+  if Option.isNone(&Route.header(&carrying, "absent")) { held = held + 1 }
+  if Route.body(&carrying) == "a=1&b=x+y" { held = held + 1 }
+  if Option.isNone(&Route.param(&carrying, "id")) { held = held + 1 }
+
+  // An ordinary form: the fields it posted, and that it is one at all.
+  //
+  // A plus is a space in this encoding, so a field read as written would keep
+  // the plus and a caller would never see the space somebody typed.
+  let fields = Route.fieldsOf(&carrying)
+  if Option.unwrapOr(fields.get("a"), "") == "1" { held = held + 1 }
+  if Option.unwrapOr(fields.get("b"), "") == "x y" { held = held + 1 }
+  if Route.carriesFields(&carrying) { held = held + 1 }
+  if !Route.carriesFields(&asking(Http.Post, "/t", [("content-type", "application/json")], "")) {
+    held = held + 1
+  }
+  if Map.isEmpty(&Route.fieldsOf(&asking(Http.Post, "/t", [], ""))) { held = held + 1 }
+
+  // A form carrying a file is the other shape, and is not this one.
+  if !Route.carriesForm(&carrying) { held = held + 1 }
+  if Route.carriesForm(
+      &asking(Http.Post, "/t", [("content-type", "multipart/form-data; boundary=x")], "")
+  ) {
+    held = held + 1
+  }
+
+  held
+}

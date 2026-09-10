@@ -52,6 +52,8 @@ testRuntimeEvaluation = do
   bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
+  surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
+  appliedAndShown <- runEntry "test-fixtures/stdlib/UsesFunctionShowAll.pudu"
   moments <- runEntry "test-fixtures/stdlib/UsesTimeAll.pudu"
   everyParser <- runEntry "test-fixtures/stdlib/UsesParseAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
@@ -105,6 +107,25 @@ testRuntimeEvaluation = do
     , counterexample
         "every byte operation answers the bytes it says it answers"
         (octets === Just "55")
+    {-| Every export of the environment module that a running program may ask
+        for. What the machine holds is not this fixture's to state, so each
+        answer is checked against another answer that must agree with it: the
+        reader of one variable against the list of all of them, the count of
+        arguments against their positions. The three that end the process are
+        not called, since a fixture that called one would report nothing. -}
+    , counterexample
+        "the readers of the environment agree with each other"
+        (surroundings === Just "22")
+    {-| Every export of the function and rendering modules. The two composers
+        are given functions that do not commute and written in the same order,
+        since a pair whose order does not matter would let either stand in for
+        the other; the same holds for exchanging arguments and fixing one,
+        checked against subtraction. The renderers are checked for the one
+        difference between them: quotes around text, which a message built
+        with the wrong one carries to a reader who never typed them. -}
+    , counterexample
+        "composition keeps its order and rendering keeps its quotes"
+        (appliedAndShown === Just "37")
     {-| Every export of the time module against a stated moment rather than a
         reading of the clock, so every answer is fixed. The two that do read
         the clock are asked only what holds of any reading. -}

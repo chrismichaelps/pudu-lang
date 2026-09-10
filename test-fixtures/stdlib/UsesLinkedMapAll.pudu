@@ -1,0 +1,124 @@
+module UsesLinkedMapAll
+
+import Std.LinkedMap as LinkedMap
+import Std.Map as Map
+import Std.Option as Option
+
+fn sample() -> LinkedMap.LinkedMap[Str, Int] {
+  LinkedMap.fromPairs(&[("b", 2), ("a", 1), ("c", 3)])
+}
+
+/// Every export of `Std.LinkedMap`, checked against the order keys were put in.
+///
+/// The order is what this map holds that an ordinary map does not, so every
+/// answer here is checked as a sequence rather than as a set: a function that
+/// kept the right entries in the wrong order would pass every check that only
+/// asked what a key holds.
+///
+/// The sample is built out of alphabetical order on purpose. A map that sorted
+/// its keys would answer `["a", "b", "c"]` and look correct against a sample
+/// that was written in order to begin with.
+///
+/// The pair that separates this from a recency order is checked directly:
+/// writing to a key that is already here leaves it where it is, and `touch`
+/// moves it to the end. A setting does not move to the bottom of a file
+/// because somebody edited it.
+export fn main() -> Int {
+  var held = 0
+  let items = sample()
+  let none: LinkedMap.LinkedMap[Str, Int] = LinkedMap.empty()
+
+  // Built in the order given, not in the order of the keys.
+  if LinkedMap.keys(&items) == ["b", "a", "c"] { held = held + 1 }
+  if LinkedMap.values(&items) == [2, 1, 3] { held = held + 1 }
+  if LinkedMap.pairs(&items) == [("b", 2), ("a", 1), ("c", 3)] { held = held + 1 }
+  if LinkedMap.size(&items) == 3 && LinkedMap.size(&none) == 0 { held = held + 1 }
+  if LinkedMap.isEmpty(&none) && !LinkedMap.isEmpty(&items) { held = held + 1 }
+
+  // Reading.
+  if Option.unwrapOr(LinkedMap.get(&items, "a"), 0) == 1 { held = held + 1 }
+  if Option.isNone(&LinkedMap.get(&items, "z")) { held = held + 1 }
+  if LinkedMap.getOr(&items, "z", 0 - 1) == 0 - 1 { held = held + 1 }
+  if LinkedMap.containsKey(&items, "a") && !LinkedMap.containsKey(&items, "z") {
+    held = held + 1
+  }
+
+  // Writing. A new key joins the end; a key already here keeps its place.
+  if LinkedMap.keys(&LinkedMap.insert(&items, "d", 4)) == ["b", "a", "c", "d"] {
+    held = held + 1
+  }
+  if LinkedMap.keys(&LinkedMap.insert(&items, "b", 9)) == ["b", "a", "c"] { held = held + 1 }
+  if LinkedMap.getOr(&LinkedMap.insert(&items, "b", 9), "b", 0) == 9 { held = held + 1 }
+  // Touching is the other order: the key just written goes last.
+  if LinkedMap.keys(&LinkedMap.touch(&items, "b", 9)) == ["a", "c", "b"] { held = held + 1 }
+  if LinkedMap.keys(&LinkedMap.touch(&items, "d", 4)) == ["b", "a", "c", "d"] {
+    held = held + 1
+  }
+
+  // A key that already has a value is left alone.
+  if LinkedMap.getOr(&LinkedMap.insertIfAbsent(&items, "a", 9), "a", 0) == 1 { held = held + 1 }
+  if LinkedMap.getOr(&LinkedMap.insertIfAbsent(&items, "d", 4), "d", 0) == 4 { held = held + 1 }
+  if LinkedMap.getOr(&LinkedMap.upsert(&items, "a", 100, fn(v: Int) -> Int => v + 10), "a", 0)
+    == 11 {
+    held = held + 1
+  }
+  if LinkedMap.getOr(&LinkedMap.upsert(&items, "z", 100, fn(v: Int) -> Int => v + 10), "z", 0)
+    == 100 {
+    held = held + 1
+  }
+
+  // Removing, by key and from the front of the order.
+  if LinkedMap.keys(&LinkedMap.remove(&items, "a")) == ["b", "c"] { held = held + 1 }
+  if LinkedMap.keys(&LinkedMap.remove(&items, "z")) == ["b", "a", "c"] { held = held + 1 }
+  if LinkedMap.keys(&LinkedMap.removeOldest(&items)) == ["a", "c"] { held = held + 1 }
+  if LinkedMap.isEmpty(&LinkedMap.removeOldest(&none)) { held = held + 1 }
+
+  // The two ends of the order.
+  if Option.unwrapOr(LinkedMap.oldest(&items), ("", 0)) == ("b", 2) { held = held + 1 }
+  if Option.unwrapOr(LinkedMap.newest(&items), ("", 0)) == ("c", 3) { held = held + 1 }
+  if Option.isNone(&LinkedMap.oldest(&none)) && Option.isNone(&LinkedMap.newest(&none)) {
+    held = held + 1
+  }
+
+  // A later pair replaces an earlier one's value and keeps its position.
+  let rewritten = LinkedMap.fromPairs(&[("b", 2), ("a", 1), ("b", 9)])
+  if LinkedMap.pairs(&rewritten) == [("b", 9), ("a", 1)] { held = held + 1 }
+
+  // Over every entry, each keeping the order.
+  if LinkedMap.pairs(&LinkedMap.mapValues(&items, fn(v: Int) -> Int => v * 10))
+    == [("b", 20), ("a", 10), ("c", 30)] {
+    held = held + 1
+  }
+  if LinkedMap.keys(&LinkedMap.filter(&items, fn(_k: Str, v: Int) -> Bool => v > 1))
+    == ["b", "c"] {
+    held = held + 1
+  }
+  // The fold is given the entries in order, so the text it builds records it.
+  if LinkedMap.fold(&items, fn(text: Str, k: Str, _v: Int) -> Str => text + k, "") == "bac" {
+    held = held + 1
+  }
+  if LinkedMap.fold(&none, fn(text: Str, k: Str, _v: Int) -> Str => text + k, "") == "" {
+    held = held + 1
+  }
+  if LinkedMap.all(&items, fn(_k: Str, v: Int) -> Bool => v > 0) { held = held + 1 }
+  if !LinkedMap.all(&items, fn(_k: Str, v: Int) -> Bool => v > 1) { held = held + 1 }
+  if LinkedMap.all(&none, fn(_k: Str, _v: Int) -> Bool => false) { held = held + 1 }
+  if LinkedMap.any(&items, fn(_k: Str, v: Int) -> Bool => v == 3) { held = held + 1 }
+  if !LinkedMap.any(&items, fn(_k: Str, v: Int) -> Bool => v == 9) { held = held + 1 }
+  if !LinkedMap.any(&none, fn(_k: Str, _v: Int) -> Bool => true) { held = held + 1 }
+
+  // Two together: the second wins, and the keys it brings join the end.
+  let other = LinkedMap.fromPairs(&[("a", 9), ("d", 4)])
+  if LinkedMap.pairs(&LinkedMap.merge(&items, &other))
+    == [("b", 2), ("a", 9), ("c", 3), ("d", 4)] {
+    held = held + 1
+  }
+
+  // The order turned about, and dropped.
+  if LinkedMap.keys(&LinkedMap.reversed(&items)) == ["c", "a", "b"] { held = held + 1 }
+  if LinkedMap.values(&LinkedMap.reversed(&items)) == [3, 1, 2] { held = held + 1 }
+  if Map.size(&LinkedMap.toMap(&items)) == 3 { held = held + 1 }
+  if Option.unwrapOr(Map.get(&LinkedMap.toMap(&items), "a"), 0) == 1 { held = held + 1 }
+
+  held
+}

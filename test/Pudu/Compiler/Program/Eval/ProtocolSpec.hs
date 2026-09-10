@@ -15,6 +15,9 @@ testProtocolEvaluation = do
   htmlServer <- runEntry "test-fixtures/stdlib/UsesHtmlServer.pudu"
   htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
   httpAll <- runEntry "test-fixtures/stdlib/UsesHttpAll.pudu"
+  routeAll <- runEntry "test-fixtures/stdlib/UsesRouteAll.pudu"
+  cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
+  urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
   lookupTables <- runEntry "test-fixtures/stdlib/UsesLookupTables.pudu"
   printers <- runEntry "test-fixtures/stdlib/UsesOut.pudu"
@@ -367,6 +370,33 @@ testProtocolEvaluation = do
     , counterexample
         "every protocol name answers the wire form it stands for"
         (httpAll === Just "91")
+    {-| Every export of the routing module, checked by dispatching a request
+        rather than by reading a route's fields, so what is checked is what a
+        request actually reaches. A path written for another method answers
+        that the method is not allowed rather than that the path is not there,
+        and a caller told the wrong one of those retries forever or gives up
+        wrongly. -}
+    , counterexample
+        "a request reaches the route written for its method, and no other"
+        (routeAll === Just "35")
+    {-| Every export of the cursor module, each read checked for the value and
+        for the cursor that follows it. A reader answering the right number
+        without moving on would pass a check that looked only at the value,
+        and the next read would then answer the same bytes again. Each width
+        is also asked past the end, which is the case a caller meets when the
+        other end sent a short message. -}
+    , counterexample
+        "every read answers a value and the position after it"
+        (cursorAll === Just "28")
+    {-| Every export of the address module, with the parts read decoded and the
+        rendering encoded again: a reader leaving `%20` as three characters and
+        a writer leaving a space as a space each look right alone and together
+        produce an address nothing can fetch. Both spellings of a space are
+        read, since a plus is a space in a query and a plus in a path, and a
+        decoder treating them alike turns one name into another silently. -}
+    , counterexample
+        "an address reads decoded, renders encoded, and survives the round trip"
+        (urlAll === Just "48")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

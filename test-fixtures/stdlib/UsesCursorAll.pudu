@@ -1,0 +1,95 @@
+module UsesCursorAll
+
+import Std.Bytes as Bytes
+import Std.Bytes.Cursor as Cursor
+import Std.Option as Option
+import Std.Result as Result
+
+/// How far a cursor has moved after reading, or a stated miss when the read
+/// was refused.
+fn positionAfter[T](step: Result[(T, Cursor.Cursor), Cursor.CursorError]) -> Int {
+  match step {
+    case Err(_) => 0 - 1
+    case Ok(pair) => pair[1].position
+  }
+}
+
+/// Every export of `Std.Bytes.Cursor`, checked on bytes whose values are known.
+///
+/// A cursor answers a value and the cursor that follows it, so every read is
+/// checked for both: a reader that answered the right number without moving on
+/// would pass a check that only looked at the value, and the next read would
+/// then answer the same bytes again.
+///
+/// Reading past the end is checked for each width, since that is the case a
+/// caller meets when the other end sent a short message.
+export fn main() -> Int {
+  var held = 0
+  let source = Bytes.fromArray(&[1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, 8u8, 9u8])
+  let cursor: Cursor.Cursor = Cursor.start(&source)
+
+  // Where it starts, and how much is left.
+  if cursor.position == 0 { held = held + 1 }
+  if Result.unwrapOr(Cursor.remaining(&cursor), 0) == 9 { held = held + 1 }
+
+  // Looking without moving.
+  if Option.unwrapOr(Result.unwrapOr(Cursor.peek(&cursor), None), 0u8) == 1u8 { held = held + 1 }
+  if cursor.position == 0 { held = held + 1 }
+  // At the end there is nothing to look at, which is not a failure.
+  let ended = Result.unwrapOr(Cursor.seek(&cursor, 9), cursor)
+  if Option.isNone(&Result.unwrapOr(Cursor.peek(&ended), Some(0u8))) { held = held + 1 }
+
+  // Moving to a place, and to one that is not there.
+  if Result.unwrapOr(Cursor.seek(&cursor, 4), cursor).position == 4 { held = held + 1 }
+  if Result.isErr(&Cursor.seek(&cursor, 99)) { held = held + 1 }
+  if Result.isErr(&Cursor.seek(&cursor, 0 - 1)) { held = held + 1 }
+  if Result.unwrapOr(Cursor.skip(&cursor, 2), cursor).position == 2 { held = held + 1 }
+  if Result.isErr(&Cursor.skip(&cursor, 99)) { held = held + 1 }
+
+  // Taking a run of bytes, and moving past them.
+  match Cursor.take(&cursor, 3) {
+    case Err(_) => {}
+    case Ok(pair) => {
+      if Bytes.toArray(&pair[0]) == [1u8, 2u8, 3u8] { held = held + 1 }
+      if pair[1].position == 3 { held = held + 1 }
+    }
+  }
+  if Result.isErr(&Cursor.take(&cursor, 99)) { held = held + 1 }
+
+  // One byte at a time.
+  match Cursor.u8(&cursor) {
+    case Err(_) => {}
+    case Ok(pair) => {
+      if pair[0] == 1u8 { held = held + 1 }
+      if pair[1].position == 1 { held = held + 1 }
+    }
+  }
+  if Result.isErr(&Cursor.u8(&ended)) { held = held + 1 }
+
+  // Wider numbers, in each order, each moving on by its own width.
+  if positionAfter(Cursor.u16Be(&cursor)) == 2 { held = held + 1 }
+  if positionAfter(Cursor.u16Le(&cursor)) == 2 { held = held + 1 }
+  if positionAfter(Cursor.u32Be(&cursor)) == 4 { held = held + 1 }
+  if positionAfter(Cursor.u32Le(&cursor)) == 4 { held = held + 1 }
+  if positionAfter(Cursor.u64Be(&cursor)) == 8 { held = held + 1 }
+  if positionAfter(Cursor.u64Le(&cursor)) == 8 { held = held + 1 }
+
+  // The two orders read the same bytes as different numbers.
+  if Result.unwrapOr(Result.map(Cursor.u16Be(&cursor), fn(p: (UInt16, Cursor.Cursor)) -> UInt16 => p[0]), 0u16)
+    == 258u16 {
+    held = held + 1
+  }
+  if Result.unwrapOr(Result.map(Cursor.u16Le(&cursor), fn(p: (UInt16, Cursor.Cursor)) -> UInt16 => p[0]), 0u16)
+    == 513u16 {
+    held = held + 1
+  }
+
+  // Each width refuses when there are not enough bytes left for it.
+  let nearEnd = Result.unwrapOr(Cursor.seek(&cursor, 8), cursor)
+  if Result.isErr(&Cursor.u16Be(&nearEnd)) { held = held + 1 }
+  if Result.isErr(&Cursor.u32Le(&nearEnd)) { held = held + 1 }
+  if Result.isErr(&Cursor.u64Be(&nearEnd)) { held = held + 1 }
+  if Result.unwrapOr(Cursor.remaining(&nearEnd), 0) == 1 { held = held + 1 }
+
+  held
+}

@@ -1,0 +1,124 @@
+module UsesUrlAll
+
+import Std.Option as Option
+import Std.Result as Result
+import Std.Url as Url
+
+fn blank() -> Url.Url {
+  Url.Url{scheme: "http", host: "example.test", port: None, path: "/", query: [], fragment: None}
+}
+
+fn read(source: Str) -> Url.Url {
+  Result.unwrapOr(Url.parse(source), blank())
+}
+
+/// Every export of `Std.Url`, checked against text a browser would send.
+///
+/// The parts are checked decoded and the rendering encoded again, because that
+/// is the pair a caller depends on: a reader that left `%20` as three
+/// characters and a writer that left a space as a space each look right on
+/// their own and produce a URL nothing can fetch.
+///
+/// Both spellings of a space are read. A plus is a space in a query and a
+/// literal plus in a path, and a decoder that treated them alike would turn
+/// somebody's name into another name and nothing would report it.
+export fn main() -> Int {
+  var held = 0
+
+  // Every part of a whole URL, read out decoded.
+  let full = read("HTTPS://example.test:8443/a%20b/c?x=1&y=two#top")
+  if full.scheme == "https" { held = held + 1 }
+  if full.host == "example.test" { held = held + 1 }
+  if Option.unwrapOr(full.port, 0) == 8443 { held = held + 1 }
+  if full.path == "/a b/c" { held = held + 1 }
+  if full.query == [("x", "1"), ("y", "two")] { held = held + 1 }
+  if Option.unwrapOr(full.fragment, "") == "top" { held = held + 1 }
+
+  // What is not written is absent rather than guessed at.
+  let plain = read("http://example.test")
+  if Option.isNone(&plain.port) && Option.isNone(&plain.fragment) { held = held + 1 }
+  if plain.path == "/" && plain.query == [] { held = held + 1 }
+
+  // What stops a reader, each said as its own reason.
+  if Result.isErr(&Url.parse("example.test/a")) { held = held + 1 }
+  if Result.isErr(&Url.parse("http:///a")) { held = held + 1 }
+  if Result.isErr(&Url.parse("http://example.test:80x/")) { held = held + 1 }
+  match Url.parse("http://example.test:80x/") {
+    case Ok(_) => {}
+    case Err(problem) => {
+      match problem {
+        case Url.BadPort(text) => { if text == "80x" { held = held + 1 } }
+        case Url.NoScheme => {}
+        case Url.NoHost => {}
+      }
+    }
+  }
+
+  // Written back, with every part encoded again.
+  if Url.render(&full) == "https://example.test:8443/a%20b/c?x=1&y=two#top" { held = held + 1 }
+  if Url.render(&plain) == "http://example.test/" { held = held + 1 }
+  // A URL read and written comes back as it went in.
+  if Url.render(&read(Url.render(&full))) == Url.render(&full) { held = held + 1 }
+
+  // The query, read by key. A key given twice keeps both values, and the
+  // single reader answers the first: a caller asking for one of a repeated
+  // key wants the one that was written first, not an arbitrary one.
+  let repeated = read("http://example.test/?tag=a&tag=b&other=c")
+  if Option.unwrapOr(Url.queryValue(&repeated, "tag"), "") == "a" { held = held + 1 }
+  if Option.isNone(&Url.queryValue(&repeated, "absent")) { held = held + 1 }
+  if Url.queryValues(&repeated, "tag") == ["a", "b"] { held = held + 1 }
+  if Url.queryValues(&repeated, "absent") == [] { held = held + 1 }
+
+  // The query, changed. Removing a key removes every value it has.
+  if Url.queryValues(&Url.addQuery(&repeated, "tag", "c"), "tag") == ["a", "b", "c"] {
+    held = held + 1
+  }
+  if Url.queryValues(&Url.removeQuery(&repeated, "tag"), "tag") == [] { held = held + 1 }
+  if Url.queryValue(&Url.removeQuery(&repeated, "tag"), "other") == Some("c") { held = held + 1 }
+  if Url.removeQuery(&repeated, "absent").query.length() == 3 { held = held + 1 }
+
+  // The path, changed and taken in pieces. An empty piece is not a segment,
+  // so a path written with a repeated separator names the same thing.
+  if Url.withPath(&plain, "/a/b").path == "/a/b" { held = held + 1 }
+  if Url.segments(&read("http://example.test/a/b/c")) == ["a", "b", "c"] { held = held + 1 }
+  if Url.segments(&read("http://example.test//a//b/")) == ["a", "b"] { held = held + 1 }
+  if Url.segments(&plain) == [] { held = held + 1 }
+
+  // The port a URL uses, written or implied by its scheme.
+  if Option.unwrapOr(Url.effectivePort(&full), 0) == 8443 { held = held + 1 }
+  if Option.unwrapOr(Url.effectivePort(&plain), 0) == 80 { held = held + 1 }
+  if Option.unwrapOr(Url.effectivePort(&read("https://example.test/")), 0) == 443 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Url.defaultPort("ws"), 0) == 80 { held = held + 1 }
+  if Option.unwrapOr(Url.defaultPort("wss"), 0) == 443 { held = held + 1 }
+  if Option.unwrapOr(Url.defaultPort("ftp"), 0) == 21 { held = held + 1 }
+  if Option.isNone(&Url.defaultPort("nothing")) { held = held + 1 }
+
+  // One piece of text, escaped and read back. What is unreserved stays as it
+  // is written, which is what keeps a readable URL readable.
+  if Url.encodeComponent("a b&c=d") == "a%20b%26c%3Dd" { held = held + 1 }
+  if Url.encodeComponent("aZ0-_.~") == "aZ0-_.~" { held = held + 1 }
+  if Url.decodeComponent("a%20b%26c") == "a b&c" { held = held + 1 }
+  // Both spellings of a space are read back as one.
+  if Url.decodeComponent("a+b") == "a b" { held = held + 1 }
+  // An escape that is not two hex digits is left as it was written rather
+  // than guessed at, so a caller showing the result shows what arrived.
+  if Url.decodeComponent("100%") == "100%" { held = held + 1 }
+  if Url.decodeComponent("%zz") == "%zz" { held = held + 1 }
+  if Url.decodeComponent(Url.encodeComponent("a b&c=d#e")) == "a b&c=d#e" { held = held + 1 }
+
+  // A query on its own, written and read.
+  if Url.renderQuery(&[("a", "1"), ("b", "x y")]) == "a=1&b=x%20y" { held = held + 1 }
+  if Url.renderQuery(&[]) == "" { held = held + 1 }
+  if Url.parseQuery("a=1&b=2") == [("a", "1"), ("b", "2")] { held = held + 1 }
+  // The leading mark belongs to the URL, not to the query, and is accepted
+  // either way so a caller need not strip it first.
+  if Url.parseQuery("?a=1") == [("a", "1")] { held = held + 1 }
+  // A key written with no value carries empty text rather than being dropped.
+  if Url.parseQuery("a&b=2") == [("a", ""), ("b", "2")] { held = held + 1 }
+  if Url.parseQuery("") == [] { held = held + 1 }
+  if Url.parseQuery("a=x+y") == [("a", "x y")] { held = held + 1 }
+
+  held
+}

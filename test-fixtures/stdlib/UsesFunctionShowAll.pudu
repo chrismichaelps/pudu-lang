@@ -1,0 +1,105 @@
+module UsesFunctionShowAll
+
+import Std.Function as Function
+import Std.Show as Show
+
+fn double(value: Int) -> Int { value * 2 }
+
+fn increment(value: Int) -> Int { value + 1 }
+
+fn subtract(left: Int, right: Int) -> Int { left - right }
+
+fn halveToward(value: Int) -> Int { if value <= 0 { 0 } else { value / 2 } }
+
+/// Every export of `Std.Function` and `Std.Show`.
+///
+/// The two composers are checked with functions that do not commute, and with
+/// the same pair in the same written order: `compose` and `pipe` differ only
+/// in which of the two runs first, so a pair of functions whose order does not
+/// matter would let either stand in for the other. The same holds for `flip`
+/// and `partial`, checked against subtraction rather than addition.
+///
+/// The renderers are checked for the one difference that matters between them:
+/// `render` puts quotes around text and `text` does not, and a message built
+/// with the wrong one carries quotes a reader never typed.
+export fn main() -> Int {
+  var held = 0
+
+  // A value and a function that ignores one.
+  if Function.identity(7) == 7 { held = held + 1 }
+  if Function.identity("a") == "a" { held = held + 1 }
+  if Function.constant(7, "ignored") == 7 { held = held + 1 }
+
+  // Applying, in each direction.
+  if Function.apply(double, 5) == 10 { held = held + 1 }
+  if Function.applyTo(5, double) == 10 { held = held + 1 }
+
+  // Order, checked with two steps that do not commute: doubling then adding
+  // one is nine, adding one then doubling is ten.
+  if Function.compose(increment, double, 4) == 9 { held = held + 1 }
+  if Function.pipe(increment, double, 4) == 10 { held = held + 1 }
+  if Function.pipe3(increment, double, increment, 4) == 11 { held = held + 1 }
+
+  // Arguments exchanged, and one of them fixed.
+  if Function.flip(subtract, 3, 10) == 7 { held = held + 1 }
+  if Function.partial(subtract, 10, 3) == 7 { held = held + 1 }
+
+  // Repetition, counted and conditional.
+  if Function.twice(double, 3) == 12 { held = held + 1 }
+  if Function.times(3, double, 1) == 8 { held = held + 1 }
+  // A count below one leaves the value alone rather than running once.
+  if Function.times(0, double, 5) == 5 && Function.times(0 - 1, double, 5) == 5 {
+    held = held + 1
+  }
+  if Function.until(100, fn(n: Int) -> Bool => n > 20, double, 1) == 32 { held = held + 1 }
+  // A condition that never holds stops at the bound rather than running on.
+  if Function.until(3, fn(_n: Int) -> Bool => false, increment, 0) == 3 { held = held + 1 }
+  if Function.fixpoint(100, halveToward, 40) == 0 { held = held + 1 }
+  if Function.fixpoint(2, halveToward, 40) == 10 { held = held + 1 }
+
+  // A comparison built from a comparison on one part.
+  if Function.on(subtract, double, 5, 3) == 4 { held = held + 1 }
+
+  // Rendering: with the quotes a reader inspecting a value wants, and without
+  // them for a message somebody reads.
+  if Show.render("a") == "\"a\"" { held = held + 1 }
+  if Show.render(7) == "7" { held = held + 1 }
+  if Show.text("a") == "a" { held = held + 1 }
+  if Show.int(0 - 7) == "-7" { held = held + 1 }
+  if Show.bool(true) == "true" && Show.bool(false) == "false" { held = held + 1 }
+  if Show.char('a') == "a" { held = held + 1 }
+
+  // Several values together, and the empty case beside each: a renderer that
+  // wrote its separator before every element rather than between them differs
+  // from a correct one only there.
+  let nothing: Array[Int] = []
+  if Show.array(&[1, 2, 3]) == "[1, 2, 3]" { held = held + 1 }
+  if Show.array(&nothing) == "[]" { held = held + 1 }
+  if Show.joined(&[1, 2, 3], "-") == "1-2-3" { held = held + 1 }
+  if Show.joined(&nothing, "-") == "" { held = held + 1 }
+  if Show.pair((1, "a"), "=") == "1=\"a\"" { held = held + 1 }
+
+  // A value that may be absent, and one that may have failed.
+  let absent: Option[Int] = None
+  let succeeded: Result[Int, Str] = Ok(7)
+  let failed: Result[Int, Str] = Err("bad")
+  if Show.option(&Some(7), "none") == "7" { held = held + 1 }
+  if Show.option(&absent, "none") == "none" { held = held + 1 }
+  if Show.result(&succeeded) == "ok 7" { held = held + 1 }
+  if Show.result(&failed) == "error \"bad\"" { held = held + 1 }
+
+  // A map, one entry to a line.
+  let noEntries: Map[Str, Int] = mapOf([])
+  if Show.mapLines(&mapOf([("a", 1)])) == "\"a\": 1" { held = held + 1 }
+  if Show.mapLines(&noEntries) == "" { held = held + 1 }
+
+  // A table, with each column as wide as its widest cell. The narrow cell in
+  // the first column is what shows whether the width was measured across the
+  // rows or taken from the row being written. No line ends in a space: a cell
+  // at the end of a row has nothing after it to line up with.
+  let table = Show.table(&[["name", "id"], ["a", "2"]])
+  if table == "name  id\na     2" { held = held + 1 }
+  if !table.contains(" \n") && !table.endsWith(" ") { held = held + 1 }
+
+  held
+}

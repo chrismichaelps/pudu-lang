@@ -1,0 +1,93 @@
+module UsesEnvAll
+
+import Std.Env as Env
+import Std.List as List
+import Std.Option as Option
+
+/// A name no machine sets, used to ask for something that is not there.
+const ABSENT: Str = "PUDU_FIXTURE_VARIABLE_THAT_IS_NOT_SET"
+
+/// Every export of `Std.Env` that a running program may ask for.
+///
+/// What the environment holds is the machine's, not this file's, so nothing
+/// here states a value: each answer is checked against another answer that
+/// must agree with it. The name of a variable is taken from the list of
+/// variables rather than written down, so the reader of one name and the
+/// reader of all of them are checked against each other on whatever machine
+/// this runs on.
+///
+/// The arguments are read the same way. A program under test is given whatever
+/// arguments its runner was given, so the count, the positions and the flags
+/// are checked against each other rather than against a number, and the two
+/// readers are checked for the argument that is not there either way.
+///
+/// `stop`, `succeed` and `fail` are the three that are not called: each ends
+/// the process, so a fixture that called one would report nothing at all.
+export fn main() -> Int {
+  var held = 0
+
+  // The arguments, counted and indexed. Whatever was given, the count is the
+  // length of the list and no position outside it holds anything.
+  let given = Env.all()
+  if Env.count() == given.length() { held = held + 1 }
+  if Option.isNone(&Env.at(0 - 1)) { held = held + 1 }
+  if Option.isNone(&Env.at(Env.count())) { held = held + 1 }
+  if Env.count() == 0 || Option.unwrapOr(Env.at(0), "") == given[0] { held = held + 1 }
+  if Env.count() == 0 || Env.hasFlag(given[0]) { held = held + 1 }
+
+  // A flag nobody passed is not there, and has no value after it.
+  if !Env.hasFlag("--pudu-fixture-absent") { held = held + 1 }
+  if Option.isNone(&Env.option("--pudu-fixture-absent")) { held = held + 1 }
+
+  // What is left once the flags and their values are taken out is never a
+  // flag itself, and is never longer than what was given.
+  let rest = Env.positional(&["--pudu-fixture-absent"])
+  if rest.length() <= given.length() { held = held + 1 }
+  if List.all(&rest, fn(argument: Str) -> Bool => !argument.startsWith("-")) { held = held + 1 }
+
+  // The variables, read as a whole and one at a time. The name is taken from
+  // the list, so the two readers are checked against each other.
+  let variables = Env.variables()
+  if variables.length() > 0 { held = held + 1 }
+  if variables.length() == 0 || Option.unwrapOr(Env.variable(variables[0][0]), "") == variables[0][1] {
+    held = held + 1
+  }
+  if variables.length() == 0 || Env.variableOr(variables[0][0], "fallback") == variables[0][1] {
+    held = held + 1
+  }
+  if variables.length() == 0 || Env.isSet(variables[0][0]) { held = held + 1 }
+
+  // A name that is not set: each of the three readers says so its own way.
+  if Option.isNone(&Env.variable(ABSENT)) { held = held + 1 }
+  if Env.variableOr(ABSENT, "fallback") == "fallback" { held = held + 1 }
+  if !Env.isSet(ABSENT) { held = held + 1 }
+
+  // The search path, split by the machine rather than by this file. Every
+  // entry is a piece of the whole, and no entry carries the separator: a
+  // reader that split on the wrong character would answer one long entry
+  // that is the whole variable.
+  let path = Env.searchPath()
+  if List.all(&path, fn(entry: Str) -> Bool => !entry.contains(":") && !entry.contains(";")) {
+    held = held + 1
+  }
+  if !Env.isSet("PATH") || path.length() > 0 { held = held + 1 }
+
+  // The two directories the machine names. A home is not promised, so what is
+  // checked is that an answer, when there is one, is a path and not an empty
+  // string. A place for a file that is not kept is always named.
+  match Env.homeDirectory() {
+    case None => { held = held + 1 }
+    case Some(home) => { if !home.isEmpty() { held = held + 1 } }
+  }
+  if !Env.temporaryDirectory().isEmpty() { held = held + 1 }
+
+  // The forward-only clock, which means something only as a difference.
+  let first = Env.elapsedMilliseconds()
+  var spin = 0
+  while spin < 1000 { spin = spin + 1 }
+  let second = Env.elapsedMilliseconds()
+  if first >= 0 { held = held + 1 }
+  if second >= first { held = held + 1 }
+
+  held
+}
