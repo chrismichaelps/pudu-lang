@@ -1,0 +1,97 @@
+module Service.Catalog
+
+import Std.Io as Io
+import Std.Json as Json
+import Std.List as List
+import Std.Map as Map
+import Std.Option as Option
+import Domain.Entry as Domain
+import Error as SiteError
+
+export type Catalog = { languageVersion: Str, entries: Array[Domain.Entry], modules: Array[Str] }
+
+export fn load(path: Str) -> Result[Catalog, SiteError.SiteError] {
+  let source = match Io.read(path) {
+    case Ok(content) => content
+    case Err(_) => { return Err(SiteError.CatalogueUnreadable(path)) }
+  }
+  let document = match Json.decode(source) {
+    case Ok(value) => value
+    case Err(_) => { return Err(SiteError.CatalogueInvalid) }
+  }
+  let schemaVersion = match Json.field(&document, "schemaVersion") {
+    case Some(value) => Json.asInt(&value)
+    case None => None
+  }
+  if schemaVersion != Some(1) { return Err(SiteError.CatalogueInvalid) }
+  let languageVersion = match Json.field(&document, "languageVersion") {
+    case Some(value) => Json.asText(&value)
+    case None => None
+  }
+  let version = match languageVersion {
+    case Some(value) => value
+    case None => { return Err(SiteError.CatalogueInvalid) }
+  }
+  let raw = match Json.field(&document, "entries") {
+    case Some(value) => value
+    case None => { return Err(SiteError.CatalogueInvalid) }
+  }
+  let values = match Json.asList(&raw) {
+    case Some(items) => items
+    case None => { return Err(SiteError.CatalogueInvalid) }
+  }
+  let groups = List.map(&values, fn(value: Json.Json) -> Array[Domain.Entry] {
+      Option.toArray(readEntry(&value))
+    })
+  let entries = List.flatten(&groups)
+  if entries.length() == 0 { return Err(SiteError.CatalogueEmpty) }
+  Ok(Catalog{languageVersion: version, entries: entries, modules: moduleNames(&entries)})
+}
+
+export fn moduleEntries(catalog: &Catalog, moduleName: Str) -> Array[Domain.Entry] {
+  List.filter(&catalog.entries, fn(entry: Domain.Entry) -> Bool { entry.moduleName == moduleName })
+}
+
+export fn findAll(catalog: &Catalog, moduleName: Str, kind: Str, name: Str) -> Array[Domain.Entry] {
+  List.filter(&catalog.entries, fn(entry: Domain.Entry) -> Bool {
+      entry.moduleName == moduleName && Domain.category(&entry) == kind && entry.name == name
+    })
+}
+
+fn readEntry(value: &Json.Json) -> Option[Domain.Entry] {
+  let name = textField(value, "name") ?
+  let kind = textField(value, "kind") ?
+  let moduleName = textField(value, "module") ?
+  let signature = textField(value, "signature") ?
+  let documentation = match Json.field(value, "doc") {
+    case Some(held) => textList(&held)
+    case None => []
+  }
+  Some(Domain.Entry {
+      name: name,
+      kind: kind,
+      moduleName: moduleName,
+      signature: signature,
+      documentation: documentation
+    })
+}
+
+fn textField(value: &Json.Json, name: Str) -> Option[Str] {
+  let held = Json.field(value, name) ?
+  Json.asText(&held)
+}
+
+fn textList(value: &Json.Json) -> Array[Str] {
+  let members = Option.unwrapOr(Json.asList(value), [])
+  var out: Array[Str] = []
+  for member in members {
+    if let Some(text) = Json.asText(&member) { out = out.push(text) }
+  }
+  out
+}
+
+fn moduleNames(entries: &Array[Domain.Entry]) -> Array[Str] {
+  var named: Map[Str, Bool] = mapOf([])
+  for entry in entries { named = named.insert(entry.moduleName, true) }
+  List.sorted(&named.keys())
+}

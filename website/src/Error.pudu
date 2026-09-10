@@ -1,0 +1,18 @@
+module Error
+
+export type SiteError
+  = BadSetting(Str)
+  | CatalogueUnreadable(Str)
+  | CatalogueInvalid
+  | CatalogueEmpty
+  | ListenFailed
+
+export fn explain(problem: &SiteError) -> Str {
+  match problem {
+    case BadSetting(name) => "invalid website setting: " + name
+    case CatalogueUnreadable(path) => "the API catalogue could not be read at " + path
+    case CatalogueInvalid => "the API catalogue is not valid generated documentation"
+    case CatalogueEmpty => "the API catalogue contains no public declarations"
+    case ListenFailed => "the website listener could not start"
+  }
+}
