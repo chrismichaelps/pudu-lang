@@ -48,6 +48,9 @@ testRuntimeEvaluation = do
   characters <- runEntry "test-fixtures/stdlib/UsesCharAll.pudu"
   textual <- runEntry "test-fixtures/stdlib/UsesTextAll.pudu"
   optionResult <- runEntry "test-fixtures/stdlib/UsesOptionResultAll.pudu"
+  ordered <- runEntry "test-fixtures/stdlib/UsesOrderAll.pudu"
+  bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
+  files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
@@ -74,6 +77,24 @@ testRuntimeEvaluation = do
     , counterexample
         "an option and a result answer for the absent case as well as the present one"
         (optionResult === Just "73")
+    {-| Every export of the ordering module, asked in all three directions.
+        Two of the three would pass for a comparison that never answers equal,
+        which is the one most easily written by mistake. -}
+    , counterexample
+        "every comparison answers less, equal and greater"
+        (ordered === Just "42")
+    {-| Every export of the bit module at a stated width. A function reading
+        the width from the wrong place would answer for sixty-four bits and be
+        wrong here by exactly that difference. -}
+    , counterexample
+        "every bit operation answers for the width it was given"
+        (bitwise === Just "39")
+    {-| Every export of the file module, checked by writing and reading back
+        under the machine's own temporary directory, with everything made
+        taken away again. -}
+    , counterexample
+        "every file operation writes what can be read back"
+        (files === Just "45")
     , counterexample "an aliased and a selected import both evaluate"
         (ran === Just "35")
     , counterexample "generic and text modules link together"

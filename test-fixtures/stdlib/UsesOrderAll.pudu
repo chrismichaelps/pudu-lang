@@ -1,0 +1,94 @@
+module UsesOrderAll
+
+import Std.Order as Order
+
+/// Anything ordered answers whether it comes first, named by the trait rather
+/// than by a type, so the trait itself is exercised.
+fn compared[T: Order.Ord](left: &T, right: &T) -> Bool { left.before(right) }
+
+/// Every export of `Std.Order`, checked in all three directions.
+///
+/// A comparison is asked of a pair that is less, a pair that is equal and a
+/// pair that is greater. Two of the three would pass for a comparison that
+/// never answers equal, and that is the one most easily written by mistake.
+export fn main() -> Int {
+  var held = 0
+
+  // Whole numbers. The ordering is named so a rename cannot pass unread.
+  let lesser: Order.Ordering = Order.compareInt(1, 2)
+  if Order.isLess(&lesser) { held = held + 1 }
+  if Order.isEqual(&Order.compareInt(2, 2)) { held = held + 1 }
+  if Order.isGreater(&Order.compareInt(3, 2)) { held = held + 1 }
+
+  // Text, character by character.
+  if Order.isLess(&Order.compareText("a", "b")) { held = held + 1 }
+  if Order.isEqual(&Order.compareText("a", "a")) { held = held + 1 }
+  if Order.isGreater(&Order.compareText("b", "a")) { held = held + 1 }
+  // Shorter text comes first when one is a prefix of the other.
+  if Order.isLess(&Order.compareText("ab", "abc")) { held = held + 1 }
+
+  // Characters and truth values.
+  if Order.isLess(&Order.compareChar('a', 'b')) { held = held + 1 }
+  if Order.isEqual(&Order.compareChar('a', 'a')) { held = held + 1 }
+  if Order.isGreater(&Order.compareChar('b', 'a')) { held = held + 1 }
+  if Order.isLess(&Order.compareBool(false, true)) { held = held + 1 }
+  if Order.isEqual(&Order.compareBool(true, true)) { held = held + 1 }
+  if Order.isGreater(&Order.compareBool(true, false)) { held = held + 1 }
+
+  // Turning an ordering around leaves equal where it was.
+  if Order.isGreater(&Order.reverse(Order.compareInt(1, 2))) { held = held + 1 }
+  if Order.isLess(&Order.reverse(Order.compareInt(2, 1))) { held = held + 1 }
+  if Order.isEqual(&Order.reverse(Order.compareInt(1, 1))) { held = held + 1 }
+
+  // A second comparison decides only what the first left equal.
+  if Order.isLess(&Order.thenBy(Order.compareInt(1, 1), Order.compareInt(1, 2))) {
+    held = held + 1
+  }
+  if Order.isGreater(&Order.thenBy(Order.compareInt(2, 1), Order.compareInt(1, 2))) {
+    held = held + 1
+  }
+
+  // Said as a number and as a question.
+  if Order.toInt(Order.compareInt(1, 2)) < 0 { held = held + 1 }
+  if Order.toInt(Order.compareInt(2, 2)) == 0 { held = held + 1 }
+  if Order.toInt(Order.compareInt(3, 2)) > 0 { held = held + 1 }
+  if Order.before(Order.compareInt(1, 2)) && !Order.before(Order.compareInt(2, 1)) {
+    held = held + 1
+  }
+  if !Order.before(Order.compareInt(2, 2)) { held = held + 1 }
+
+  // The smaller and larger of two, by a comparison given.
+  if Order.min(3, 5, Order.compareInt) == 3 { held = held + 1 }
+  if Order.max(3, 5, Order.compareInt) == 5 { held = held + 1 }
+  if Order.ascending(Order.compareInt, 1, 2) && !Order.ascending(Order.compareInt, 2, 1) {
+    held = held + 1
+  }
+  if Order.descending(Order.compareInt, 2, 1) && !Order.descending(Order.compareInt, 1, 2) {
+    held = held + 1
+  }
+
+  // The same questions asked through the traits rather than a function.
+  if Order.same(&1, &1) && !Order.same(&1, &2) { held = held + 1 }
+  if Order.different(&1, &2) && !Order.different(&1, &1) { held = held + 1 }
+  if Order.precedes(&1, &2) && !Order.precedes(&2, &1) { held = held + 1 }
+  if Order.follows(&2, &1) && !Order.follows(&1, &2) { held = held + 1 }
+  if Order.equivalent(&1, &1) && !Order.equivalent(&1, &2) { held = held + 1 }
+  if Order.isLess(&Order.ordering(&1, &2)) { held = held + 1 }
+  if Order.isEqual(&Order.ordering(&2, &2)) { held = held + 1 }
+  if Order.isGreater(&Order.ordering(&3, &2)) { held = held + 1 }
+  if Order.smaller(&3, &5) == 3 && Order.larger(&3, &5) == 5 { held = held + 1 }
+
+  // Held between two bounds, and left alone when already between them.
+  if Order.clamped(&9, &1, &5) == 5 { held = held + 1 }
+  if Order.clamped(&0, &1, &5) == 1 { held = held + 1 }
+  if Order.clamped(&3, &1, &5) == 3 { held = held + 1 }
+
+  // The trait itself, named rather than reached only through a function.
+  if compared(&1, &2) { held = held + 1 }
+
+  // A hash is the same for values that are the same.
+  if Order.hashed(&1) == Order.hashed(&1) { held = held + 1 }
+  if Order.hashed(&"a") == Order.hashed(&"a") { held = held + 1 }
+
+  held
+}

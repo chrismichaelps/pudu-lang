@@ -1,0 +1,88 @@
+module UsesBitsAll
+
+import Std.Bits as Bits
+import Std.Option as Option
+
+/// Every export of `Std.Bits`, checked on a value whose bits are known.
+///
+/// The width matters to nearly all of it, so an unsigned 32-bit value is used
+/// throughout and the answers are stated for that width. A function that read
+/// the width from the wrong place would answer for 64 bits and be wrong here
+/// by exactly the difference.
+const SAMPLE: UInt32 = 0b1010u32
+
+/// Anything with bits answers how many are set, named by the trait rather than
+/// by a width, so the trait itself is exercised.
+fn setBits[T: Bits.Bits](value: &T) -> Int { Bits.popCount(value) }
+
+export fn main() -> Int {
+  var held = 0
+  let value = SAMPLE
+
+  // The pairwise operations, on bits that differ.
+  if Bits.and(&0b1100u32, &0b1010u32) == 0b1000u32 { held = held + 1 }
+  if Bits.or(&0b1100u32, &0b1010u32) == 0b1110u32 { held = held + 1 }
+  if Bits.xor(&0b1100u32, &0b1010u32) == 0b0110u32 { held = held + 1 }
+  // Every bit turned over, so none of the thirty-two is left as it was.
+  if Bits.complement(&0u32) == 0xFFFFFFFFu32 { held = held + 1 }
+  if Bits.complement(&0xFFFFFFFFu32) == 0u32 { held = held + 1 }
+
+  // Moving along, and around.
+  if Bits.shiftLeft(&1u32, 3) == 0b1000u32 { held = held + 1 }
+  if Bits.shiftRight(&0b1000u32, 3) == 1u32 { held = held + 1 }
+  // A rotation keeps every bit; a shift drops what leaves the end.
+  if Bits.rotateLeft(&0x80000000u32, 1) == 1u32 { held = held + 1 }
+  if Bits.rotateRight(&1u32, 1) == 0x80000000u32 { held = held + 1 }
+  if Bits.shiftLeft(&0x80000000u32, 1) == 0u32 { held = held + 1 }
+
+  // The width the value is held in.
+  if Bits.width(&value) == 32 { held = held + 1 }
+
+  // One bit, asked after and changed.
+  if Bits.bit(&value, 3) == 0b1000u32 { held = held + 1 }
+  if Bits.testBit(&value, 1) && !Bits.testBit(&value, 0) { held = held + 1 }
+  if Bits.setBit(&0b1010u32, 0) == 0b1011u32 { held = held + 1 }
+  if Bits.clearBit(&0b1010u32, 1) == 0b1000u32 { held = held + 1 }
+  if Bits.flipBit(&0b1010u32, 0) == 0b1011u32 { held = held + 1 }
+  if Bits.flipBit(&0b1011u32, 0) == 0b1010u32 { held = held + 1 }
+
+  // Counting.
+  if setBits(&0b1010u32) == 2 { held = held + 1 }
+  if Bits.popCount(&0b1010u32) == 2 { held = held + 1 }
+  if Bits.popCount(&0u32) == 0 { held = held + 1 }
+  if Bits.popCount(&0xFFFFFFFFu32) == 32 { held = held + 1 }
+  if Bits.countTrailingZeros(&0b1000u32) == 3 { held = held + 1 }
+  if Bits.countLeadingZeros(&1u32) == 31 { held = held + 1 }
+
+  // Where the outermost set bits are, and the answer when there are none.
+  if Option.unwrapOr(Bits.lowestSetBit(&0b1010u32), 0 - 1) == 1 { held = held + 1 }
+  if Option.unwrapOr(Bits.highestSetBit(&0b1010u32), 0 - 1) == 3 { held = held + 1 }
+  if Option.isNone(&Bits.lowestSetBit(&0u32)) { held = held + 1 }
+  if Option.isNone(&Bits.highestSetBit(&0u32)) { held = held + 1 }
+
+  // Whether exactly one bit is set.
+  if Bits.isSingleBit(&0b1000u32) { held = held + 1 }
+  if !Bits.isSingleBit(&0b1010u32) && !Bits.isSingleBit(&0u32) { held = held + 1 }
+
+  // Every bit as a truth value, one for each of the thirty-two.
+  if Bits.bits(&value).length() == 32 { held = held + 1 }
+  if Bits.bits(&0b1010u32)[1] && !Bits.bits(&0b1010u32)[0] { held = held + 1 }
+
+  // Written out.
+  if Bits.toBinary(&0b1010u32).endsWith("1010") { held = held + 1 }
+  if Bits.toHex(&255u32).endsWith("ff") || Bits.toHex(&255u32).endsWith("FF") { held = held + 1 }
+
+  // The values at each end of the width.
+  if Bits.zero(&value) == 0u32 { held = held + 1 }
+  if Bits.ones(&value) == 0xFFFFFFFFu32 { held = held + 1 }
+
+  // Keeping only part of a value.
+  if Bits.mask(&0xFFFFu32, 4) == 0b1111u32 { held = held + 1 }
+  if Bits.extract(&0b11110000u32, 4, 8) == 0b1111u32 { held = held + 1 }
+
+  // The next power of two at or above a value.
+  if Bits.nextPowerOfTwo(&5u32) == 8u32 { held = held + 1 }
+  if Bits.nextPowerOfTwo(&8u32) == 8u32 { held = held + 1 }
+
+  held
+}
