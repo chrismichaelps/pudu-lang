@@ -133,7 +133,7 @@ if (wantsReport) {
 // The floor only ever rises. A module gaining an export without a fixture
 // reaching it drops the figure below this and fails, which is the whole point:
 // the untested part of the library cannot grow without somebody saying so.
-const floor = 2739;
+const floor = 2766;
 const percent = total === 0 ? 100 : Math.floor((covered / total) * 100);
 
 console.log(JSON.stringify({ exports: total, covered, percent, floor, undocumented: undocumented.length }));

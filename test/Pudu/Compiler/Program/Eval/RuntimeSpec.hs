@@ -53,6 +53,8 @@ testRuntimeEvaluation = do
   countedAndWalked <- runEntry "test-fixtures/stdlib/UsesNumIterAll.pudu"
   decidedAndPaired <- runEntry "test-fixtures/stdlib/UsesBoolTupleInternAll.pudu"
   builtAndIndexed <- runEntry "test-fixtures/stdlib/UsesTextBuilderSourceAll.pudu"
+  readAndCounted <- runEntry "test-fixtures/stdlib/UsesJsonDecimalAll.pudu"
+  digested <- runEntry "test-fixtures/stdlib/UsesCryptoAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -129,6 +131,27 @@ testRuntimeEvaluation = do
     , counterexample
         "fragments stay apart until asked and a byte column is counted in bytes"
         (builtAndIndexed === Just "46")
+    {-| Every export of the value reader and the exact numbers. The reader is
+        asked about the case that separates a whole number from a fractional
+        one, which a decoder reading every number as a float answers the same
+        for, and its failures are asked for by kind rather than counted: a
+        reader reporting one failure for every kind of bad text would pass a
+        check that only asked whether it refused. Every rounding mode is asked
+        about the same halfway case, since away from a half they all agree and
+        a check taken there would accept any of them for any other. -}
+    , counterexample
+        "a whole number stays whole and every rounding mode decides a half its own way"
+        (readAndCounted === Just "93")
+    {-| Every export of the digest module, each digest checked against the
+        published answer for its algorithm rather than against itself: one
+        checked only for being stable, or for differing between two inputs,
+        would pass with any function at all in its place. Sealing is asked for
+        each separate way it can be wrong — a changed byte, the wrong key, the
+        wrong nonce, associated data that does not match, a message cut short —
+        and each answers nothing rather than saying which. -}
+    , counterexample
+        "every digest agrees with its published answer and nothing changed opens"
+        (digested === Just "48")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}
