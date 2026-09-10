@@ -55,6 +55,7 @@ testRuntimeEvaluation = do
   builtAndIndexed <- runEntry "test-fixtures/stdlib/UsesTextBuilderSourceAll.pudu"
   readAndCounted <- runEntry "test-fixtures/stdlib/UsesJsonDecimalAll.pudu"
   digested <- runEntry "test-fixtures/stdlib/UsesCryptoAll.pudu"
+  checkedAndDrawn <- runEntry "test-fixtures/stdlib/UsesTestOutRandomAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -152,6 +153,19 @@ testRuntimeEvaluation = do
     , counterexample
         "every digest agrees with its published answer and nothing changed opens"
         (digested === Just "48")
+    {-| Every export of the test, printing and generator modules. The test
+        module is checked by making it fail: a suite where everything holds
+        exercises none of the reporting that exists for the case a reader
+        opened the output for, so a failing check, a pending one and a held one
+        are run together and the failure text read back under the path that
+        names it. The printer's settings are read back off the value and the
+        text a write would produce is compared without writing it. The
+        generator's rearranging calls are checked for keeping every element,
+        which one that dropped one and repeated another would fail while still
+        answering an array of the right length. -}
+    , counterexample
+        "a failing check says what it found and a shuffle keeps what it was given"
+        (checkedAndDrawn === Just "113")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}

@@ -1,0 +1,330 @@
+module UsesTestOutRandomAll
+
+import Std.List as List
+import Std.Option as Option
+import Std.Out as Out
+import Std.Random as Random
+import Std.Result as Result
+import Std.Test as Test
+
+/// A printer with no separator, no ending and no prefix.
+///
+/// The writing calls are checked through this one, so running the fixture puts
+/// almost nothing on the stream: every piece handed to it is empty, and only
+/// rendering a value has anything of its own to say. What those calls would
+/// have written is checked through the pure rendering call instead, which is
+/// the point of that call existing.
+fn quietly() -> Out.Printer {
+  Out.bare()
+}
+
+/// Every export of `Std.Test`, `Std.Out` and `Std.Random`.
+///
+/// A test library is checked by making it fail: a suite where every check holds
+/// exercises none of the reporting that exists for the case a reader opened the
+/// output for, so a failing check, a pending one and a held one are run together
+/// and the counts and the failure text read back.
+///
+/// A printer is a value rather than a call, which is what makes it checkable at
+/// all, so every setting is read back off the printer it was put on and the text
+/// a write would produce is compared without writing anything. Indentation is
+/// checked over text that already spans lines, where a printer indenting only
+/// the first line answers something that looks right for a single line.
+///
+/// A generator is checked for the two things that make one usable: the same seed
+/// gives the same run, and different seeds do not. Every bounded call is asked
+/// for its bound rather than for a particular value, since the value is not the
+/// promise; the calls that rearrange a collection are checked for keeping every
+/// element, which a shuffle that dropped or repeated one would fail while still
+/// answering an array of the right length.
+export fn main() -> Int {
+  var held = 0
+
+  // Checks that hold and checks that do not, each kind built by its own call.
+  if Test.held(&Test.that("holds", true)) { held = held + 1 }
+  if !Test.held(&Test.that("does not", false)) { held = held + 1 }
+  if Test.held(&Test.not("negated", false)) { held = held + 1 }
+  if Test.held(&Test.equals("same", &1, &1)) { held = held + 1 }
+  if !Test.held(&Test.equals("different", &1, &2)) { held = held + 1 }
+  if Test.held(&Test.differs("differs", &1, &2)) { held = held + 1 }
+  if !Test.held(&Test.differs("does not differ", &1, &1)) { held = held + 1 }
+  if Test.held(&Test.present("there", &Some(1))) { held = held + 1 }
+  let missing: Option[Int] = None
+  if Test.held(&Test.absent("not there", &missing)) { held = held + 1 }
+  let good: Result[Int, Str] = Ok(1)
+  let bad: Result[Int, Str] = Err("no")
+  if Test.held(&Test.succeeded("worked", &good)) { held = held + 1 }
+  if Test.held(&Test.errored("did not", &bad)) { held = held + 1 }
+  if !Test.held(&Test.succeeded("worked", &bad)) { held = held + 1 }
+  if Test.held(&Test.contains("holds it", &[1, 2, 3], 2)) { held = held + 1 }
+  if !Test.held(&Test.contains("does not", &[1, 2, 3], 9)) { held = held + 1 }
+  if Test.held(&Test.all("every one", &[2, 4], fn(n: Int) -> Bool => n % 2 == 0)) {
+    held = held + 1
+  }
+  if !Test.held(&Test.all("not every one", &[2, 3], fn(n: Int) -> Bool => n % 2 == 0)) {
+    held = held + 1
+  }
+  // The same elements in another order, which is what separates this from
+  // comparing the arrays.
+  if Test.held(&Test.sameElements("rearranged", &[3, 1, 2], &[1, 2, 3])) {
+    held = held + 1
+  }
+  if !Test.held(&Test.sameElements("one missing", &[1, 2], &[1, 2, 3])) {
+    held = held + 1
+  }
+  // Nearness rather than equality, asked on both sides of the tolerance.
+  if Test.held(&Test.closeTo("within", 1.01d, 1d, 0.05d)) { held = held + 1 }
+  if !Test.held(&Test.closeTo("outside", 1.2d, 1d, 0.05d)) { held = held + 1 }
+
+  // A check left to be written is neither held nor failed, which is what keeps
+  // it out of the count of what ran.
+  let waiting = Test.todo("later", "not written yet")
+  if Test.pending(&waiting) && !Test.held(&waiting) { held = held + 1 }
+  // A check run only under a condition, and one skipped under one.
+  if Test.held(&Test.runIf(true, "always", &Test.that("inner", true))) {
+    held = held + 1
+  }
+  if Test.pending(&Test.runIf(false, "not here", &Test.that("inner", true))) {
+    held = held + 1
+  }
+  if Test.pending(&Test.skipIf(true, "not here", &Test.that("inner", true))) {
+    held = held + 1
+  }
+  if Test.held(&Test.skipIf(false, "always", &Test.that("inner", true))) {
+    held = held + 1
+  }
+  // A check that holds when the check inside it does not, for testing the
+  // checks themselves.
+  if Test.held(&Test.fails("expected to fail", &Test.that("inner", false))) {
+    held = held + 1
+  }
+  if !Test.held(&Test.fails("expected to fail", &Test.that("inner", true))) {
+    held = held + 1
+  }
+
+  // Checks built over a run of cases rather than written out one by one.
+  let overCases = Test.each(
+      &[2, 4, 6],
+    fn(n: Int) -> Str => "even",
+    fn(n: Int) -> Bool => n % 2 == 0
+  )
+  if overCases.length() == 3 { held = held + 1 }
+  if Test.held(&overCases[0]) { held = held + 1 }
+  let builtCases = Test.eachOf(&[1, 2], fn(n: Int) -> Test.Check => Test.that("case", n > 0))
+  if builtCases.length() == 2 && Test.held(&builtCases[1]) { held = held + 1 }
+
+  // A suite of one failing check beside a held one and a pending one, which is
+  // the only arrangement that exercises the reporting at all.
+  let mixed: Test.Suite = Test.suite(
+    "arithmetic",
+      &[Test.that("holds", true), Test.equals("adds", &3, &4), Test.todo("later", "soon")]
+  )
+  let ran: Test.Report = Test.run(&mixed)
+  if Test.passedOf(&ran) == 1 { held = held + 1 }
+  if Test.failedOf(&ran) == 1 { held = held + 1 }
+  if Test.pendingOf(&ran) == 1 { held = held + 1 }
+  // A pending check did not run, so it is not counted among what did.
+  if Test.total(&ran) == 2 { held = held + 1 }
+  if !Test.passed(&ran) { held = held + 1 }
+  if Test.status(&ran) == 1 { held = held + 1 }
+  // The runner reads a count and a sign, which a status cannot carry.
+  if Test.report(&ran) == 0 - 1 { held = held + 1 }
+
+  // The failure says what it expected and what it found, under the path that
+  // reaches it. A report that only counted would say none of this.
+  if Test.failuresOf(&ran).length() == 1 { held = held + 1 }
+  if Test.failuresOf(&ran)[0] == "arithmetic / adds: expected 4, found 3" {
+    held = held + 1
+  }
+  if Test.summary(&ran) == "1 passed, 1 failed, of 2, 1 pending" { held = held + 1 }
+  if Test.lines(&ran).length() == 2 { held = held + 1 }
+  if Test.lines(&ran)[0] == "FAIL  arithmetic / adds: expected 4, found 3" {
+    held = held + 1
+  }
+  if Test.rendered(&ran)
+    == "FAIL  arithmetic / adds: expected 4, found 3\n1 passed, 1 failed, of 2, 1 pending" {
+    held = held + 1
+  }
+
+  // A suite where everything holds, where the two report numbers part company:
+  // a status of nought and a count of how many held.
+  let clean: Test.Suite = Test.suite("clean", &[Test.that("a", true), Test.that("b", true)])
+  let cleanRan = Test.run(&clean)
+  if Test.passed(&cleanRan) && Test.status(&cleanRan) == 0 { held = held + 1 }
+  if Test.report(&cleanRan) == 2 { held = held + 1 }
+  if Test.summary(&cleanRan) == "2 passed" { held = held + 1 }
+  // A suite that checked nothing holds and says so, which is the case the
+  // count exists to make visible.
+  let noChecks: Array[Test.Check] = []
+  let empty = Test.run(&Test.suite("nothing", &noChecks))
+  if Test.passed(&empty) && Test.total(&empty) == 0 { held = held + 1 }
+  if Test.summary(&empty) == "no checks ran" { held = held + 1 }
+  if Test.report(&empty) == 0 { held = held + 1 }
+
+  // Groups nest, and a failure inside one is named by the path that reaches it.
+  let nested: Test.Suite = Test.group("outer", &[Test.suite("inner", &[Test.equals("adds", &3, &4)])])
+  let nestedRan = Test.run(&nested)
+  if Test.failuresOf(&nestedRan)[0] == "outer / inner / adds: expected 4, found 3" {
+    held = held + 1
+  }
+  // A group added to a suite, and a check added to one.
+  let grown = Test.withGroup(&clean, &Test.suite("more", &[Test.that("c", true)]))
+  if Test.total(&Test.run(&grown)) == 3 { held = held + 1 }
+  let withOne = Test.withCheck(&clean, &Test.that("d", true))
+  if Test.total(&Test.run(&withOne)) == 3 { held = held + 1 }
+
+  // What a suite covers, without running it.
+  if Test.names(&clean) == ["a", "b"] { held = held + 1 }
+  if Test.names(&nested) == ["outer / adds"] { held = held + 1 }
+  // Only the checks whose names a caller wants.
+  let onlyA = Test.filtered(&clean, fn(name: Str) -> Bool => name == "a")
+  if Test.total(&Test.run(&onlyA)) == 1 { held = held + 1 }
+
+  // Two reports added, and a run of them. The failures are kept rather than
+  // only their number, which is what makes adding reports useful.
+  let both = Test.combine(&ran, &cleanRan)
+  if Test.passedOf(&both) == 3 && Test.failedOf(&both) == 1 { held = held + 1 }
+  if Test.failuresOf(&both).length() == 1 && Test.pendingOf(&both) == 1 {
+    held = held + 1
+  }
+  let all = Test.combineAll(&[ran, cleanRan, empty])
+  if Test.total(&all) == 4 && Test.failedOf(&all) == 1 { held = held + 1 }
+  let noReports: Array[Test.Report] = []
+  if Test.total(&Test.combineAll(&noReports)) == 0 { held = held + 1 }
+
+  // A printer is a value, so every setting can be read back off it.
+  let plain: Out.Printer = Out.stdout()
+  if Out.separatorOf(&plain) == " " && Out.endingOf(&plain) == "\n" { held = held + 1 }
+  if Out.prefixOf(&plain) == "" { held = held + 1 }
+  if Out.streamOf(&plain) == Out.Output { held = held + 1 }
+  if Out.streamOf(&Out.stderr()) == Out.Errors { held = held + 1 }
+  if Out.streamOf(&Out.toStream(&plain, Out.Errors)) == Out.Errors { held = held + 1 }
+  // Changing the stream keeps every other setting, which is what makes the
+  // same shape usable for both.
+  let moved = Out.toStream(&Out.separatedBy(&plain, ", "), Out.Errors)
+  if Out.separatorOf(&moved) == ", " && Out.endingOf(&moved) == "\n" {
+    held = held + 1
+  }
+
+  // The text a write would produce, without writing it.
+  if Out.rendered(&plain, &["a", "b"]) == "a b\n" { held = held + 1 }
+  if Out.rendered(&Out.separatedBy(&plain, ", "), &["a", "b"]) == "a, b\n" {
+    held = held + 1
+  }
+  // An empty ending leaves the line open, which is what a prompt needs.
+  if Out.rendered(&Out.endingWith(&plain, ""), &["a"]) == "a" { held = held + 1 }
+  if Out.endingOf(&Out.endingWith(&plain, "!")) == "!" { held = held + 1 }
+  // With no pieces the answer is the ending alone: a prefix decorates a line's
+  // content, and there is none.
+  let noPieces: Array[Str] = []
+  if Out.rendered(&plain, &noPieces) == "\n" { held = held + 1 }
+  if Out.rendered(&Out.prefixedWith(&plain, "> "), &noPieces) == "\n" {
+    held = held + 1
+  }
+
+  // A prefix goes on every line, not only the first, so text that already
+  // spans lines is decorated as a block.
+  let quoted = Out.prefixedWith(&plain, "> ")
+  if Out.prefixOf(&quoted) == "> " { held = held + 1 }
+  if Out.rendered(&quoted, &["one\ntwo"]) == "> one\n> two\n" { held = held + 1 }
+  // Indenting adds to the prefix rather than replacing it, so it nests.
+  let indented = Out.indentedBy(&quoted, 2)
+  if Out.prefixOf(&indented) == ">   " { held = held + 1 }
+  if Out.prefixOf(&Out.indentedBy(&indented, 2)) == ">     " { held = held + 1 }
+  // A count of nothing or less adds nothing rather than taking a prefix away.
+  if Out.prefixOf(&Out.indentedBy(&quoted, 0)) == "> " { held = held + 1 }
+  if Out.prefixOf(&Out.indentedBy(&quoted, 0 - 5)) == "> " { held = held + 1 }
+
+  // Values rendered ready to be written beside other pieces.
+  if Out.showing(&[1, 2]) == ["1", "2"] { held = held + 1 }
+  let noValues: Array[Int] = []
+  if Out.showing(&noValues) == [] { held = held + 1 }
+
+  // The writing calls themselves, through a printer with nothing of its own to
+  // add, so what they answer is checked without a wall of output beside it.
+  let quiet = quietly()
+  if Out.rendered(&quiet, &noPieces) == "" { held = held + 1 }
+  if Result.isOk(&Out.write(&quiet, &noPieces)) { held = held + 1 }
+  if Result.isOk(&Out.text(&quiet, "")) { held = held + 1 }
+  if Result.isOk(&Out.blank(&quiet)) { held = held + 1 }
+  if Result.isOk(&Out.lines(&quiet, &["", ""])) { held = held + 1 }
+  if Result.isOk(&Out.value(&quiet, "")) { held = held + 1 }
+  if Result.isOk(&Out.values(&quiet, &noValues)) { held = held + 1 }
+
+  // A generator, which answers a value and the generator to use next. The same
+  // seed gives the same run, which is what makes a failing run repeatable.
+  let seeded: Random.Generator = Random.fromSeed(42u64)
+  let first = Random.next(&seeded)
+  let again = Random.next(&Random.fromSeed(42u64))
+  if first[1] == again[1] { held = held + 1 }
+  // A different seed gives a different run, or the seed would not be doing
+  // anything.
+  if Random.next(&Random.fromSeed(43u64))[1] != first[1] { held = held + 1 }
+  // The generator moves on, so asking twice is not asking the same thing.
+  if Random.next(&first[0])[1] != first[1] { held = held + 1 }
+  // A generator taken from the clock still answers within its bounds.
+  if Random.below(&Random.fromClock(), 10)[1] < 10 { held = held + 1 }
+
+  // Bounded values are asked for their bound rather than for a value: the
+  // value is not the promise.
+  let under = Random.below(&seeded, 100)
+  if under[1] >= 0 && under[1] < 100 { held = held + 1 }
+  // A bound of one leaves exactly one answer, which is the case a bound can
+  // be checked exactly at.
+  if Random.below(&seeded, 1)[1] == 0 { held = held + 1 }
+  let ranged = Random.between(&seeded, 10, 20)
+  if ranged[1] >= 10 && ranged[1] < 20 { held = held + 1 }
+  if Random.between(&seeded, 5, 6)[1] == 5 { held = held + 1 }
+
+  // A run of bounded values, which must all be within the bound rather than
+  // merely the first.
+  let many = Random.numbers(&seeded, 20, 10)
+  if many[1].length() == 20 { held = held + 1 }
+  if List.all(&many[1], fn(n: Int) -> Bool => n >= 0 && n < 10) { held = held + 1 }
+
+  // The two-answer calls. Nought and a hundred are the two the caller can hold
+  // the library to exactly.
+  let flag = Random.boolean(&seeded)
+  if flag[1] || !flag[1] { held = held + 1 }
+  if !Random.chance(&seeded, 0)[1] { held = held + 1 }
+  if Random.chance(&seeded, 100)[1] { held = held + 1 }
+
+  // Picking one. An empty collection has nothing to pick, which answers
+  // nothing rather than a value that was never in it.
+  let picked = Random.pick(&seeded, &[1, 2, 3])
+  if List.contains(&[1, 2, 3], Option.unwrapOr(picked[1], 0)) { held = held + 1 }
+  let noItems: Array[Int] = []
+  if Option.isNone(&Random.pick(&seeded, &noItems)[1]) { held = held + 1 }
+
+  // Rearranging keeps every element. A shuffle that dropped one and repeated
+  // another answers an array of the right length and fails here.
+  let shuffled = Random.shuffle(&seeded, &[1, 2, 3, 4, 5])
+  if shuffled[1].length() == 5 { held = held + 1 }
+  if List.sorted(&shuffled[1]) == [1, 2, 3, 4, 5] { held = held + 1 }
+  if Random.shuffle(&seeded, &noItems)[1] == [] { held = held + 1 }
+
+  // Taking a few. Every one taken came from the collection, and asking for
+  // more than there are gives what there is rather than repeating.
+  let taken = Random.sample(&seeded, &[1, 2, 3, 4, 5], 3)
+  if taken[1].length() == 3 { held = held + 1 }
+  if List.all(&taken[1], fn(n: Int) -> Bool => n >= 1 && n <= 5) { held = held + 1 }
+  if Random.sample(&seeded, &[1, 2], 9)[1].length() == 2 { held = held + 1 }
+  if Random.sample(&seeded, &[1, 2, 3], 0)[1] == [] { held = held + 1 }
+
+  // Text from a stated alphabet, which must use that alphabet and no other.
+  let word = Random.text(&seeded, 8, "ab")
+  if word[1].length() == 8 { held = held + 1 }
+  if List.all(&word[1].chars(), fn(c: Char) -> Bool => c == 'a' || c == 'b') {
+    held = held + 1
+  }
+  if Random.text(&seeded, 0, "ab")[1] == "" { held = held + 1 }
+  if Random.identifier(&seeded, 12)[1].length() == 12 { held = held + 1 }
+
+  // Bytes from the machine rather than from a seed, which is what a secret is
+  // made from: a seeded generator is repeatable, and that is exactly wrong here.
+  if Result.unwrapOr(Random.secureBytes(16), "".toBytes()).length() == 16 {
+    held = held + 1
+  }
+
+  held
+}
