@@ -1,0 +1,12 @@
+*
+!cabal.project
+!packages/
+!packages/**
+!website/
+!website/**
+website/.vercel/
+website/bin/*
+website/data/api.raw.*
+website/data/api.public.*
+website/data/api.clean.*
+website/data/api.sources.*

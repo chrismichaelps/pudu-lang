@@ -1,0 +1,39 @@
+name: website-linux
+
+on:
+  push:
+    branches:
+      - "feature/**"
+    paths:
+      - ".github/workflows/website-linux.yml"
+      - "packages/pudu/**"
+      - "website/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  renderer:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.10.3
+          cabal-version: 3.16.1.0
+      - run: cabal update
+      - run: cabal build exe:pudu
+      - name: Build the Pudu website executable
+        run: |
+          PUDU="$(cabal list-bin exe:pudu)"
+          "$PUDU" build website/src/Main.pudu -o website/bin/pudu-site-server-linux-x64
+          chmod +x website/bin/pudu-site-server-linux-x64
+          file website/bin/pudu-site-server-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-site-server-linux-x64
+          path: website/bin/pudu-site-server-linux-x64
+          if-no-files-found: error
+          retention-days: 1
