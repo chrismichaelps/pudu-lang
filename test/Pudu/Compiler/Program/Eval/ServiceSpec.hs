@@ -27,6 +27,7 @@ testServiceEvaluation = do
   columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
+  builtAndShaped <- runEntry "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
   remembered <- runEntry "test-fixtures/stdlib/UsesSession.pudu"
   followed <- runEntry "test-fixtures/stdlib/UsesTrace.pudu"
@@ -195,6 +196,22 @@ testServiceEvaluation = do
     , counterexample
         "a query written as one value keeps its values out of its text"
         (shaped === Just "60")
+    {-| Every export of the statement builder and the shape written over it.
+        The property both exist for is that nothing from outside reaches the
+        text, so every check that could show a value leaking reads the text
+        back and counts the values beside it: a builder that wrote a value into
+        the text answers a statement carrying one value fewer, and the text
+        alone would look right. Names are refused rather than quoted at each
+        shape an injection arrives as — a quote, a space, a semicolon, a
+        comment marker, a leading digit, a second dot — since a name quoted
+        wrongly is an injection that looks handled. Two statements joined are
+        the case placeholders make interesting: the second half must come out
+        numbered after the first, and a builder that numbered each half when it
+        was built answers a second half starting again at one, which the
+        database reads as the first half's value. -}
+    , counterexample
+        "a value never reaches the text and a joined statement renumbers"
+        (builtAndShaped === Just "135")
     {-| That a password is kept in a form which proves it later without
         holding it, and that the form carries the settings it was made with —
         so raising the work factor does not invalidate what is already stored,
