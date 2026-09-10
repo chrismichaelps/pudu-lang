@@ -1,0 +1,40 @@
+module Main
+
+import Std.Http.Server as Server
+import Std.Io as Io
+import Config as Config
+import Error as SiteError
+import Service.Catalog as Catalog
+import Web.Routes as Web
+
+fn main() -> Int {
+  match Config.load() {
+    case Err(problem) => fail(&problem)
+    case Ok(settings) => {
+      match Catalog.load(settings.cataloguePath) {
+        case Err(problem) => fail(&problem)
+        case Ok(catalog) => serve(&settings, &catalog)
+      }
+    }
+  }
+}
+
+fn serve(settings: &Config.Config, catalog: &Catalog.Catalog) -> Int {
+  match Server.start(settings.host, settings.port) {
+    case Err(_) => fail(&SiteError.ListenFailed)
+    case Ok(live) => {
+      let _announced = Io.writeLine("Pudu docs listening on http://" + settings.host + ":" + show(Server.portOf(&live)))
+      let result = Server.run(&Server.server(&Web.routes(settings.siteUrl, catalog)), &live, settings.connections)
+      let _stopped = Server.stop(&live)
+      match result {
+        case Ok(_) => 0
+        case Err(_) => 1
+      }
+    }
+  }
+}
+
+fn fail(problem: &SiteError.SiteError) -> Int {
+  let _written = Io.writeErrorLine(SiteError.explain(problem))
+  1
+}

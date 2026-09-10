@@ -1,0 +1,106 @@
+module View.Documentation
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Url as Url
+import Domain.Entry as Domain
+import Seo as Seo
+import Service.Catalog as Catalog
+import View.Layout as Layout
+
+export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
+  var links: Array[H.Node] = []
+  for name in catalog.modules {
+    let count = Catalog.moduleEntries(catalog, name).length()
+    links = links.push(H.li().holding([
+          H.a().href("/module/" + Url.encodeComponent(name)).says(name),
+          H.span().class("meta").says("  " + show(count) + " declarations")
+        ]))
+  }
+  Layout.page(siteUrl, "Pudu modules", "Browse every module in the Pudu standard library and language API.", "/modules", true, None, H.article().class("doc").holding([
+        H.h1().says("Pudu modules"),
+        H.p().says(show(catalog.modules.length()) + " modules generated from Pudu " + catalog.languageVersion + "."),
+        H.ul().class("module-list").holding(links)
+      ]).html())
+}
+
+export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -> Option[Html.Html] {
+  let entries = Catalog.moduleEntries(catalog, moduleName)
+  if entries.length() == 0 { None } else {
+    var rows: Array[H.Node] = []
+    for entry in entries {
+      rows = rows.push(H.li().class("result").holding([
+            H.a().class("result-name").href(symbolPath(&entry)).says(entry.name),
+            H.code().class("signature").says(entry.signature),
+            H.p().class("summary").says(Domain.summary(&entry)),
+            H.div().class("meta").says(entry.kind)
+          ]))
+    }
+    Some(Layout.page(siteUrl, moduleName, "Public declarations in the " + moduleName + " Pudu module.", "/module/" + Url.encodeComponent(moduleName), true, None, H.article().class("doc").holding([
+            H.span().class("kind").says("module"),
+            H.h1().says(moduleName),
+            H.p().says(show(entries.length()) + " public declarations"),
+            H.ul().class("results").holding(rows)
+          ]).html()))
+  }
+}
+
+export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
+  let primary = entries[0]
+  var declarations: Array[H.Node] = []
+  for entry in entries {
+    var paragraphs: Array[H.Node] = []
+    for line in entry.documentation { paragraphs = paragraphs.push(H.p().says(line)) }
+    declarations = declarations.push(H.section().class("declaration").holding([
+          H.span().class("kind").says(entry.kind),
+          H.code().class("signature").says(entry.name + ": " + entry.signature),
+          H.div().holding(paragraphs)
+        ]))
+  }
+  Layout.page(siteUrl, Domain.qualifiedName(&primary), Domain.summary(&primary), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
+        H.h1().says(Domain.qualifiedName(&primary)),
+        H.p().class("meta").says(if entries.length() == 1 { "1 declaration" } else { show(entries.length()) + " declarations with this name" }),
+        H.div().holding(declarations),
+        H.p().class("meta").holding([
+            H.a().href("/module/" + Url.encodeComponent(primary.moduleName)).says("Back to " + primary.moduleName)
+          ])
+      ]).html())
+}
+
+export fn guide(siteUrl: Str) -> Html.Html {
+  Layout.page(siteUrl, "Pudu programming guide", "Learn Pudu values, functions, typed results, references, and generics through small examples.", "/guide", true, None, H.article().class("doc").holding([
+        H.span().class("kind").says("guide"),
+        H.h1().says("Programming can be understood."),
+        H.p().says("A Pudu program is a set of named values and functions. Start with data, then say what should happen to it."),
+        H.h2().says("Values and variables"),
+        code("let language = \"Pudu\"\nvar lessons = 1\nlessons = lessons + 1"),
+        H.p().says("let gives a name to a value. var gives a name that may receive a new value."),
+        H.h2().says("Functions and results"),
+        code("fn double(number: Int) -> Int \{ number * 2 \}\n\nfn label(number: Int) -> Result[Str, Str] \{ Ok(show(number)) \}"),
+        H.p().says("The text after -> is the result type. Result makes failure part of the function's promise."),
+        H.h2().says("References"),
+        code("fn read(score: &Int) -> Int \{ *score \}\nfn add(score: &mut Int) -> () \{ *score = *score + 1 \}"),
+        H.p().says("&Int is a temporary read-only view. &mut Int is one temporary exclusive view that may change the original value."),
+        H.h2().says("Generics"),
+        code("fn first[T](items: &Array[T]) -> Option[T] \{\n  if items.length() == 0 \{ None \} else \{ Some(items[0]) \}\n\}"),
+        H.p().says("T is a type placeholder. One function can work with Array[Int], Array[Str], and other element types without losing type checks."),
+        H.p().holding([H.a().href("/modules").says("Continue in the complete API index")])
+      ]).html())
+}
+
+export fn missing(siteUrl: Str, path: Str) -> Html.Html {
+  Layout.page(siteUrl, "Not found", "The requested Pudu documentation page does not exist.", path, false, None, H.article().class("doc").holding([
+        H.span().class("kind").says("404"),
+        H.h1().says("That page is not here."),
+        H.p().says("No documentation route matches " + path + "."),
+        H.p().holding([H.a().href("/").says("Return to search")])
+      ]).html())
+}
+
+fn code(source: Str) -> H.Node {
+  H.pre().class("signature").holding([H.code().says(source)])
+}
+
+fn symbolPath(entry: &Domain.Entry) -> Str {
+  Seo.symbolPath(entry)
+}

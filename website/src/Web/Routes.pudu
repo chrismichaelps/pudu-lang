@@ -1,0 +1,131 @@
+module Web.Routes
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Io as Io
+import Std.Option as Option
+import Constants as Constants
+import Seo as Seo
+import Service.Catalog as Catalog
+import View.About as About
+import View.Documentation as Documentation
+import View.Donation as Donation
+import View.Home as Home
+
+export fn routes(siteUrl: Str, catalog: &Catalog.Catalog) -> Route.Router {
+  Route.withFallback(&Route.routing(&[
+        Route.get("/", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, Home.home(siteUrl, catalog))
+          }),
+        Route.get("/search", fn(asked: Route.Request) -> Http.Response {
+            Reply.page(200, Home.results(siteUrl, catalog, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+          }),
+        Route.get("/modules", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, Documentation.modules(siteUrl, catalog))
+          }),
+        Route.get("/module/:module", fn(asked: Route.Request) -> Http.Response {
+            let name = Option.unwrapOr(Route.param(&asked, "module"), "")
+            match Documentation.modulePage(siteUrl, catalog, name) {
+              case Some(page) => Reply.page(200, page)
+              case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+            }
+          }),
+        Route.get("/docs/:module/:kind/:name", fn(asked: Route.Request) -> Http.Response {
+            let moduleName = Option.unwrapOr(Route.param(&asked, "module"), "")
+            let kind = Option.unwrapOr(Route.param(&asked, "kind"), "")
+            let name = Option.unwrapOr(Route.param(&asked, "name"), "")
+            let entries = Catalog.findAll(catalog, moduleName, kind, name)
+            if entries.length() == 0 {
+              Reply.page(404, Documentation.missing(siteUrl, asked.path))
+            } else {
+              Reply.page(200, Documentation.symbols(siteUrl, &entries))
+            }
+          }),
+        Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, Documentation.guide(siteUrl))
+          }),
+        Route.get("/about", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, About.page(siteUrl))
+          }),
+        Route.get("/donate", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, Donation.page(siteUrl))
+          }),
+        Route.get("/health", fn(_request: Route.Request) -> Http.Response { noIndex(Reply.text(200, "ok")) }),
+        Route.get("/robots.txt", fn(_request: Route.Request) -> Http.Response {
+            cached(Reply.text(200, Seo.robots(siteUrl)), "text/plain; charset=utf-8")
+          }),
+        Route.get("/sitemap.xml", fn(_request: Route.Request) -> Http.Response {
+            cached(Reply.text(200, Seo.sitemap(siteUrl, catalog)), "application/xml; charset=utf-8")
+          }),
+        Route.get("/assets/site.css", fn(_request: Route.Request) -> Http.Response {
+            stylesheet()
+          }),
+        Route.get("/assets/pudu-lang-full-logo.png", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/assets/pudu-lang-full-logo.png", "image/png")
+          }),
+        Route.get("/assets/pudu-lang-short.png", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/assets/pudu-lang-short.png", "image/png")
+          }),
+        Route.get("/fonts/Nunito-Book.ttf", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/fonts/Nunito-Book.ttf", "font/ttf")
+          }),
+        Route.get("/fonts/Nunito-Bold.ttf", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/fonts/Nunito-Bold.ttf", "font/ttf")
+          }),
+        Route.get("/fonts/Nunito-BookItalic.ttf", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/fonts/Nunito-BookItalic.ttf", "font/ttf")
+          }),
+        Route.get("/fonts/Nunito-BoldItalic.ttf", fn(_request: Route.Request) -> Http.Response {
+            binary("website/public/fonts/Nunito-BoldItalic.ttf", "font/ttf")
+          })
+      ]), fn(asked: Route.Request) -> Http.Response {
+      Reply.page(404, Documentation.missing(siteUrl, asked.path))
+    })
+}
+
+export fn requestFor(target: Str) -> Route.Request {
+  Route.Request {
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: ""},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "platform"
+  }
+}
+
+export fn render(siteUrl: Str, catalog: &Catalog.Catalog, target: Str) -> Http.Response {
+  Route.dispatch(&routes(siteUrl, catalog), requestFor(target))
+}
+
+fn binary(path: Str, mediaType: Str) -> Http.Response {
+  match Io.readAllBytes(path) {
+    case Ok(bytes) => cached(Reply.bytes(200, mediaType, &bytes), mediaType)
+    case Err(_) => Reply.text(404, "asset not found")
+  }
+}
+
+fn stylesheet() -> Http.Response {
+  match Io.read(Constants.STYLESHEET_PATH) {
+    case Ok(content) => cached(Reply.text(200, content), "text/css; charset=utf-8")
+    case Err(_) => Reply.text(404, "asset not found")
+  }
+}
+
+fn cached(response: Http.Response, mediaType: Str) -> Http.Response {
+  Http.Response {
+    status: response.status,
+    headers: [("content-type", mediaType), ("cache-control", "public, max-age=3600")],
+    body: response.body,
+    binaryBody: response.binaryBody
+  }
+}
+
+fn noIndex(response: Http.Response) -> Http.Response {
+  Http.Response {
+    status: response.status,
+    headers: response.headers.push(("X-Robots-Tag", "noindex")),
+    body: response.body,
+    binaryBody: response.binaryBody
+  }
+}
