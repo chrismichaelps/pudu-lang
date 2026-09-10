@@ -13,6 +13,37 @@ fn addedThroughTraits[T: Num.Zero + Num.Add](items: &Array[T], empty: T) -> T {
   Num.sumOr(items, empty)
 }
 
+/// The gap between two values, written against the bound for subtraction
+/// alone. A caller asking for it should not have to satisfy a bound for
+/// addition or division it never uses, which is why the bounds are separate.
+fn gapBetween[T: Num.Sub](larger: &T, smaller: &T) -> T {
+  larger.minus(smaller)
+}
+
+/// A value scaled by the smallest whole number greater than one, written
+/// against multiplication and the identity rather than against a numeric type.
+fn twiceOver[T: Num.One + Num.Mul + Num.Add](value: &T) -> T {
+  value.times(&Num.two(value))
+}
+
+/// A share and what is left over, each against its own bound. Both answer
+/// nothing for a divisor of nought rather than stopping the program, which is
+/// what makes them usable without the caller checking first.
+fn shareOf[T: Num.Div](whole: &T, parts: &T) -> Option[T] {
+  whole.dividedBy(parts)
+}
+
+fn leftOver[T: Num.Rem](whole: &T, parts: &T) -> Option[T] {
+  whole.remainderOf(parts)
+}
+
+/// A value taken out to the width-independent whole number and brought back,
+/// keeping the caller's type. The receiver is the only thing saying what type
+/// to come back as, so a generic algorithm can round-trip without naming one.
+fn throughBigInt[T: Num.Integer](example: &T, value: &T) -> Option[T] {
+  example.fromBigInt(value.toBigInt())
+}
+
 /// Every export of `Std.Num` and `Std.Iter`.
 ///
 /// The numeric traits are asked at more than one width, because the point of
@@ -65,6 +96,21 @@ export fn main() -> Int {
   if Option.isNone(&ten.dividedBy(&one.zero())) { held = held + 1 }
   if Option.isNone(&ten.remainderOf(&one.zero())) { held = held + 1 }
 
+  // The same operations reached through a bound naming one trait at a time,
+  // at two widths. A function that quietly used the built-in operator would
+  // work here and refuse the moment a caller brought their own numeric type.
+  if gapBetween(&ten, &one) == 9 { held = held + 1 }
+  if gapBetween(&10i8, &1i8) == 9i8 { held = held + 1 }
+  if twiceOver(&ten) == 20 && twiceOver(&5i16) == 10i16 { held = held + 1 }
+  if Option.unwrapOr(shareOf(&ten, &Num.two(&one)), 0) == 5 { held = held + 1 }
+  if Option.unwrapOr(leftOver(&ten, &Num.small(&one, 3)), 0 - 1) == 1 {
+    held = held + 1
+  }
+  if Option.isNone(&shareOf(&ten, &one.zero())) { held = held + 1 }
+  if Option.isNone(&leftOver(&ten, &one.zero())) { held = held + 1 }
+  if Option.unwrapOr(throughBigInt(&one, &ten), 0) == 10 { held = held + 1 }
+  if Option.unwrapOr(throughBigInt(&1i8, &100i8), 0i8) == 100i8 { held = held + 1 }
+
   // A small constant built from the identity, so it has the caller's type.
   if Num.two(&one) == 2 { held = held + 1 }
   if Num.two(&1i8) == 2i8 { held = held + 1 }
@@ -102,13 +148,13 @@ export fn main() -> Int {
 
   // Transformed, kept, bounded, and skipped — each named by its own type.
   let doubled: Iter.Mapped[Iter.Range[Int], Int, Int] =
-    Iter.map(Iter.range(1, 5), fn(n: Int) -> Int => n * 2)
+  Iter.map(Iter.range(1, 5), fn(n: Int) -> Int => n * 2)
   let evens: Iter.Filtered[Iter.Range[Int], Int] =
-    Iter.filter(Iter.range(1, 7), fn(n: Int) -> Bool => n % 2 == 0)
+  Iter.filter(Iter.range(1, 7), fn(n: Int) -> Bool => n % 2 == 0)
   let firstTwo: Iter.Taken[Iter.Range[Int], Int] = Iter.take(Iter.range(1, 100), 2)
   let pastTwo: Iter.Dropped[Iter.Range[Int], Int] = Iter.drop(Iter.range(1, 6), 2)
   let paired: Iter.Zipped[Iter.Range[Int], Iter.Items[Str], Int, Str] =
-    Iter.zip(Iter.range(1, 100), Iter.items(["a", "b"]))
+  Iter.zip(Iter.range(1, 100), Iter.items(["a", "b"]))
 
   if Iter.toArray(&doubled) == [2, 4, 6, 8] { held = held + 1 }
   if Iter.toArray(&evens) == [2, 4, 6] { held = held + 1 }

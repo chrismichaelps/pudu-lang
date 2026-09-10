@@ -106,7 +106,7 @@ testRuntimeEvaluation = do
         applied answers the same items and takes a million steps to do it. -}
     , counterexample
         "the numeric traits keep the caller's width and a bound stops the walk"
-        (countedAndWalked === Just "51")
+        (countedAndWalked === Just "60")
     {-| Every export of the truth, pairing and spelling-table modules. Each
         connective is asked at every combination of its inputs rather than at
         one that happens to hold: `and` and `xor` agree on three rows of four,
