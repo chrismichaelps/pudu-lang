@@ -109,12 +109,15 @@ export fn table(rows: &Array[Array[Str]]) -> Str {
 }
 
 /// One table row padded to the given column widths.
+/// The last cell is not padded: nothing follows it that padding could line up
+/// with, and the spaces would be trailing whitespace on every short row.
 fn renderRow(row: &Array[Str], widths: &Array[Int]) -> Str {
   var out = ""
   var column = 0
+  let last = row.length() - 1
   while column < row.length() {
     if column > 0 { out = out + "  " }
-    out = out + padTo(row[column], widths[column])
+    if column == last { out = out + row[column] } else { out = out + padTo(row[column], widths[column]) }
     column = column + 1
   }
   out
