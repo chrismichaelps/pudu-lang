@@ -51,6 +51,8 @@ testRuntimeEvaluation = do
   ordered <- runEntry "test-fixtures/stdlib/UsesOrderAll.pudu"
   bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
   countedAndWalked <- runEntry "test-fixtures/stdlib/UsesNumIterAll.pudu"
+  decidedAndPaired <- runEntry "test-fixtures/stdlib/UsesBoolTupleInternAll.pudu"
+  builtAndIndexed <- runEntry "test-fixtures/stdlib/UsesTextBuilderSourceAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -105,6 +107,28 @@ testRuntimeEvaluation = do
     , counterexample
         "the numeric traits keep the caller's width and a bound stops the walk"
         (countedAndWalked === Just "51")
+    {-| Every export of the truth, pairing and spelling-table modules. Each
+        connective is asked at every combination of its inputs rather than at
+        one that happens to hold: `and` and `xor` agree on three rows of four,
+        so a check that asked only those three would accept either for the
+        other. The pairing functions are asked at a pair whose two sides have
+        different types, which is what makes reading the wrong side visible.
+        The table is asked for the same spelling twice, since one identifier
+        per spelling is the whole of what it promises. -}
+    , counterexample
+        "every connective answers its whole table and a spelling keeps one name"
+        (decidedAndPaired === Just "40")
+    {-| Every export of the text builder and the byte index over text. The
+        builder's fragment count is read beside its finished text, since an
+        implementation that joined eagerly answers the right text and the
+        wrong count. The index is asked about text carrying a character wider
+        than one byte, where a column counted in bytes and one counted in
+        characters differ at exactly one offset, and about a run holding both
+        a bare and a paired line ending, where the paired one must come back
+        with neither half of it. -}
+    , counterexample
+        "fragments stay apart until asked and a byte column is counted in bytes"
+        (builtAndIndexed === Just "46")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}

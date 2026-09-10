@@ -1,0 +1,184 @@
+module UsesTextBuilderSourceAll
+
+import Std.Bytes as Bytes
+import Std.Option as Option
+import Std.Result as Result
+import Std.Text.Builder as Builder
+import Std.Text.Source as Source
+
+/// Read a run of bytes back as text, answering the empty string if it is not
+/// valid text — every run this fixture builds is, so an empty answer where one
+/// was not expected is a failure rather than a decoding accident.
+fn asText(bytes: Option[Bytes]) -> Str {
+  match bytes {
+    case Some(held) => Result.unwrapOr(Bytes.toText(&held), "")
+    case None => "\u{0}"
+  }
+}
+
+/// Every export of `Std.Text.Builder` and `Std.Text.Source`.
+///
+/// The builder is checked for holding its pieces apart until it is asked for
+/// the whole: the piece count is read beside the finished text, so an
+/// implementation that joined eagerly answers the right text and the wrong
+/// count. An empty piece is checked for costing no fragment, which the
+/// finished text cannot show on its own — joining nothing changes nothing
+/// either way, and only the count separates the two.
+///
+/// The source is a byte index over text, so it is asked about text that is not
+/// one byte per character: a column counted in characters and a column counted
+/// in bytes agree on every line of plain text and disagree exactly once here.
+/// Line endings are the other place it can go wrong, so a run carrying both a
+/// bare LF and a CRLF is indexed and each line read back — the CRLF line must
+/// come back without either delimiter while a lone CR inside a line stays.
+/// Positions are asked at the two edges that have no line after them: offset
+/// zero, and the offset one past the last byte, which names the end and is not
+/// out of range.
+export fn main() -> Int {
+  var held = 0
+
+  // A builder holding nothing.
+  let blank: Builder.Builder = Builder.empty()
+  if Builder.isEmpty(&blank) && Builder.chunkCount(&blank) == 0 { held = held + 1 }
+  if Builder.finish(&blank) == "" { held = held + 1 }
+
+  // One piece at a time, counted as pieces rather than as characters.
+  let two = Builder.append(&Builder.append(&blank, "ab"), "cd")
+  if Builder.finish(&two) == "abcd" { held = held + 1 }
+  if Builder.chunkCount(&two) == 2 { held = held + 1 }
+  if !Builder.isEmpty(&two) { held = held + 1 }
+
+  // An empty piece is no piece: it costs neither a fragment nor a join, and
+  // the count says so.
+  let padded = Builder.append(&two, "")
+  if Builder.finish(&padded) == "abcd" && Builder.chunkCount(&padded) == 2 {
+    held = held + 1
+  }
+  let hollow = Builder.append(&blank, "")
+  if Builder.finish(&hollow) == "" && Builder.chunkCount(&hollow) == 0 {
+    held = held + 1
+  }
+  if Builder.isEmpty(&hollow) { held = held + 1 }
+
+  // A piece that brings its own line ending.
+  let lined = Builder.appendLine(&blank, "one")
+  if Builder.finish(&lined) == "one\n" { held = held + 1 }
+  let twoLines = Builder.appendLine(&lined, "two")
+  if Builder.finish(&twoLines) == "one\ntwo\n" { held = held + 1 }
+  // A line holding nothing is still a line: the ending is added even though
+  // the text before it costs no fragment.
+  let blankLine = Builder.appendLine(&blank, "")
+  if Builder.finish(&blankLine) == "\n" && Builder.chunkCount(&blankLine) == 1 {
+    held = held + 1
+  }
+
+  // A run of pieces at once, and a run of none.
+  let run = Builder.appendAll(&blank, &["a", "b", "c"])
+  if Builder.finish(&run) == "abc" && Builder.chunkCount(&run) == 3 {
+    held = held + 1
+  }
+  let noPieces: Array[Str] = []
+  let unmoved = Builder.appendAll(&run, &noPieces)
+  if Builder.finish(&unmoved) == "abc" && Builder.chunkCount(&unmoved) == 3 {
+    held = held + 1
+  }
+
+  // Two builders joined. The order is the one written, not the other.
+  let joined = Builder.concat(&run, &two)
+  if Builder.finish(&joined) == "abcabcd" { held = held + 1 }
+  if Builder.chunkCount(&joined) == 5 { held = held + 1 }
+  if Builder.finish(&Builder.concat(&blank, &run)) == "abc" { held = held + 1 }
+  if Builder.finish(&Builder.concat(&run, &blank)) == "abc" { held = held + 1 }
+
+  // Text whose second line carries a character wider than one byte, so a
+  // column counted in bytes and one counted in characters part ways.
+  let text: Source.Source = Source.fromText("ab\nx\u{00e9}y\r\nlast")
+  // "ab\n" is 3 bytes, "x\u{00e9}y\r\n" is 6, "last" is 4.
+  if Source.byteLength(&text) == 13 { held = held + 1 }
+  if Source.lineCount(&text) == 3 { held = held + 1 }
+
+  // Each line read back without its delimiter, and the CRLF line without
+  // either half of it.
+  if asText(Source.line(&text, 1)) == "ab" { held = held + 1 }
+  if asText(Source.line(&text, 2)) == "x\u{00e9}y" { held = held + 1 }
+  if asText(Source.line(&text, 3)) == "last" { held = held + 1 }
+  // Line numbers are one-based, so nought is outside and so is one past the
+  // last.
+  if Option.isNone(&Source.line(&text, 0)) { held = held + 1 }
+  if Option.isNone(&Source.line(&text, 4)) { held = held + 1 }
+  if Option.isNone(&Source.line(&text, 0 - 1)) { held = held + 1 }
+
+  // The first byte of the text: line one, column one, offset nought.
+  match Source.position(&text, 0) {
+    case Some(at) => {
+      if at.line == 1 && at.byteColumn == 1 && at.offset == 0 { held = held + 1 }
+    }
+    case None => {}
+  }
+  // The byte after the newline: the start of line two.
+  match Source.position(&text, 3) {
+    case Some(at) => {
+      if at.line == 2 && at.byteColumn == 1 { held = held + 1 }
+    }
+    case None => {}
+  }
+  // The byte after the wide character. Counted in bytes it is column four;
+  // counted in characters it would be column three, and this is the one
+  // offset in the text where the two answers differ.
+  match Source.position(&text, 6) {
+    case Some(at) => {
+      if at.line == 2 && at.byteColumn == 4 { held = held + 1 }
+    }
+    case None => {}
+  }
+  // The end: one past the last byte is a position, not an overrun.
+  match Source.position(&text, 13) {
+    case Some(at) => {
+      if at.line == 3 && at.byteColumn == 5 { held = held + 1 }
+    }
+    case None => {}
+  }
+  if Option.isNone(&Source.position(&text, 14)) { held = held + 1 }
+  if Option.isNone(&Source.position(&text, 0 - 1)) { held = held + 1 }
+
+  // An exact byte range. The bounds are half-open, so a range ending at the
+  // length is whole and one ending past it is refused rather than clipped.
+  if asText(Source.slice(&text, 0, 2)) == "ab" { held = held + 1 }
+  if asText(Source.slice(&text, 9, 13)) == "last" { held = held + 1 }
+  if asText(Source.slice(&text, 4, 4)) == "" { held = held + 1 }
+  if Option.isNone(&Source.slice(&text, 0, 14)) { held = held + 1 }
+  if Option.isNone(&Source.slice(&text, 5, 2)) { held = held + 1 }
+  if Option.isNone(&Source.slice(&text, 0 - 1, 2)) { held = held + 1 }
+
+  // Built from bytes rather than from text, which is the same index over the
+  // same run: a byte source and a text source of the same content agree.
+  let raw = Bytes.fromText("ab\nx\u{00e9}y\r\nlast")
+  let fromRaw: Source.Source = Source.fromBytes(&raw)
+  if Source.byteLength(&fromRaw) == Source.byteLength(&text) { held = held + 1 }
+  if Source.lineCount(&fromRaw) == Source.lineCount(&text) { held = held + 1 }
+  if asText(Source.line(&fromRaw, 2)) == asText(Source.line(&text, 2)) {
+    held = held + 1
+  }
+
+  // Text with nothing in it is one line, and its only position is its end.
+  let nothing: Source.Source = Source.fromText("")
+  if Source.byteLength(&nothing) == 0 && Source.lineCount(&nothing) == 1 {
+    held = held + 1
+  }
+  if asText(Source.line(&nothing, 1)) == "" { held = held + 1 }
+  match Source.position(&nothing, 0) {
+    case Some(at) => {
+      if at.line == 1 && at.byteColumn == 1 { held = held + 1 }
+    }
+    case None => {}
+  }
+
+  // Text ending in a newline has a last line holding nothing, which is what
+  // separates counting lines from counting delimiters.
+  let trailing: Source.Source = Source.fromText("a\n")
+  if Source.lineCount(&trailing) == 2 { held = held + 1 }
+  if asText(Source.line(&trailing, 1)) == "a" { held = held + 1 }
+  if asText(Source.line(&trailing, 2)) == "" { held = held + 1 }
+
+  held
+}
