@@ -27,6 +27,8 @@ testDataEvaluation = do
   listAll <- runEntry "test-fixtures/stdlib/UsesListAll.pudu"
   mapAll <- runEntry "test-fixtures/stdlib/UsesMapAll.pudu"
   setAll <- runEntry "test-fixtures/stdlib/UsesSetAll.pudu"
+  multiMapAll <- runEntry "test-fixtures/stdlib/UsesMultiMapAll.pudu"
+  sortedMapAll <- runEntry "test-fixtures/stdlib/UsesSortedMapAll.pudu"
   pure $ conjoin
     [ {-| Every export of the list module against a stated answer, naming the
           whole result rather than its length, so a function that answers the
@@ -44,6 +46,18 @@ testDataEvaluation = do
     , counterexample
         "every set operation answers what it says it answers"
         (setAll === Just "53")
+    {-| Every export of the multi-map, where counting keys and counting values
+        are different questions: a function confusing them would be right only
+        when every key held exactly one value. -}
+    , counterexample
+        "a key holding several values is counted apart from the values"
+        (multiMapAll === Just "34")
+    {-| Every export of the sorted map. The neighbour lookups are checked at a
+        key that is present and one that is not, which is the only case where
+        `floor` differs from `lower` and `ceiling` from `higher`. -}
+    , counterexample
+        "a sorted map answers its neighbours on either side of a key"
+        (sortedMapAll === Just "45")
     , {-| Reading a result set, checked hardest where a database hurts: a
           column that is not there, a row past the end, a null where a value
           was wanted, and a value of the wrong kind. Answering any of those

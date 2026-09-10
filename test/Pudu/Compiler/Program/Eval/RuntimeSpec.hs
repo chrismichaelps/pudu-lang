@@ -52,6 +52,7 @@ testRuntimeEvaluation = do
   bitwise <- runEntry "test-fixtures/stdlib/UsesBitsAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
+  moments <- runEntry "test-fixtures/stdlib/UsesTimeAll.pudu"
   everyParser <- runEntry "test-fixtures/stdlib/UsesParseAll.pudu"
   altered <- runEntry "test-fixtures/stdlib/UsesRecordUpdate.pudu"
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
@@ -104,6 +105,12 @@ testRuntimeEvaluation = do
     , counterexample
         "every byte operation answers the bytes it says it answers"
         (octets === Just "55")
+    {-| Every export of the time module against a stated moment rather than a
+        reading of the clock, so every answer is fixed. The two that do read
+        the clock are asked only what holds of any reading. -}
+    , counterexample
+        "every time operation answers for a stated moment"
+        (moments === Just "40")
     {-| Every export of the parser module, on text it accepts and text it
         refuses. A parser is only worth its name if it also refuses, and
         `run` insists the whole text is consumed, so one that stopped early is
