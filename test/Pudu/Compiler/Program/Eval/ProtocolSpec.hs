@@ -25,6 +25,7 @@ testProtocolEvaluation = do
   byteSequences <- runEntry "test-fixtures/stdlib/UsesBytes.pudu"
   separated <- runEntry "test-fixtures/stdlib/UsesCsv.pudu"
   configured <- runEntry "test-fixtures/stdlib/UsesToml.pudu"
+  scanned <- runEntry "test-fixtures/stdlib/UsesTomlScanAll.pudu"
   protocol <- runEntry "test-fixtures/stdlib/UsesHttp.pudu"
   serving <- runEntry "test-fixtures/stdlib/UsesHttpServer.pudu"
   fetched <- runEntry "test-fixtures/stdlib/UsesHttpClient.pudu"
@@ -338,6 +339,18 @@ testProtocolEvaluation = do
     , counterexample
         "a configuration reads back what it was written as"
         (configured === Just "44")
+    {-| Every export of the configuration scanner. Each reading call answers a
+        value and where it stopped, and the position is checked beside the
+        value every time: a reader answering the right text and the wrong
+        position leaves the caller reading the same characters twice or
+        skipping some, and nothing about the text alone would say so. The two
+        kinds of quoted text are asked where they must differ — an apostrophe
+        gives the format no escapes at all — and numbers are asked for a digit
+        that is not one of the base they name, which is what separates reading
+        a number from recognising that a word is one. -}
+    , counterexample
+        "every scan says where it stopped and a literal string keeps its backslash"
+        (scanned === Just "83")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}

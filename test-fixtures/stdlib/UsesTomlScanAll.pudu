@@ -1,0 +1,222 @@
+module UsesTomlScanAll
+
+import Std.Option as Option
+import Std.Toml {Boolean, Fractional, Moment, Whole}
+import Std.Toml.Scan as Scan
+import Std.Toml as Toml
+
+/// The text a reading call answered, or a marker no successful read produces.
+fn textOf(found: Result[(Str, Int), Toml.TomlError]) -> Str {
+  match found {
+    case Ok(pair) => pair[0]
+    case Err(_) => "\u{0}"
+  }
+}
+
+/// Where a reading call stopped, or a position no successful read produces.
+fn endOf(found: Result[(Str, Int), Toml.TomlError]) -> Int {
+  match found {
+    case Ok(pair) => pair[1]
+    case Err(_) => 0 - 1
+  }
+}
+
+/// Whether a reading call refused.
+fn refused(found: Result[(Str, Int), Toml.TomlError]) -> Bool {
+  match found {
+    case Ok(_) => false
+    case Err(_) => true
+  }
+}
+
+/// Every export of `Std.Toml.Scan`.
+///
+/// Every reading call answers a value and where it stopped, and the position is
+/// checked beside the value every time: a reader that answered the right text
+/// and the wrong position leaves the caller reading the same characters twice
+/// or skipping some, and nothing about the text alone would say so.
+///
+/// The two kinds of quoted text are asked to differ where they must — an
+/// apostrophe gives the format no escapes at all, so a backslash inside one is
+/// a backslash, and a reader treating both alike answers something shorter.
+/// Text spanning lines is asked with an opening on its own line, where the line
+/// ending straight after the marks is dropped rather than kept.
+///
+/// An unquoted word can be four different things, so each is asked for by name.
+/// Numbers are asked in each base the format writes, with the separators a
+/// reader may put between digits, and asked for a digit that is not one of that
+/// base — which is the case that separates reading a number from recognising
+/// one.
+export fn main() -> Int {
+  var held = 0
+
+  // Past what carries no meaning. A comment runs to the line ending, and the
+  // ending itself is passed too.
+  if Scan.skipBlank("   a", 0) == 3 { held = held + 1 }
+  if Scan.skipBlank("\t\n\r a", 0) == 4 { held = held + 1 }
+  if Scan.skipBlank("# a comment\nb", 0) == 12 { held = held + 1 }
+  if Scan.skipBlank("a", 0) == 0 { held = held + 1 }
+  // Starting past the end stays there rather than running on.
+  if Scan.skipBlank("ab", 2) == 2 { held = held + 1 }
+  // Comments and blank lines together, which is what a file between two
+  // settings actually holds.
+  if Scan.skipBlank("  # one\n\n  # two\nkey", 0) == 17 { held = held + 1 }
+
+  // Past spaces and tabs alone, so a line ending still ends the line. This is
+  // the difference between the two skipping calls, and the only text that
+  // shows it is text with a line ending in it.
+  if Scan.skipInline("  \tx", 0) == 3 { held = held + 1 }
+  if Scan.skipInline("  \nx", 0) == 2 { held = held + 1 }
+  if Scan.skipInline("  # not a comment here", 0) == 2 { held = held + 1 }
+  if Scan.skipInline("x", 0) == 0 { held = held + 1 }
+  if Scan.skipInline("  ", 0) == 2 { held = held + 1 }
+
+  // A key with no quotes, which ends at the first character a key may not
+  // hold.
+  if textOf(Scan.readKey("name = 1", 0)) == "name" { held = held + 1 }
+  if endOf(Scan.readKey("name = 1", 0)) == 4 { held = held + 1 }
+  if textOf(Scan.readKey("a-b_c9 = 1", 0)) == "a-b_c9" { held = held + 1 }
+  if textOf(Scan.readKey("x.y", 0)) == "x" && endOf(Scan.readKey("x.y", 0)) == 1 {
+    held = held + 1
+  }
+  // A key with nothing in it is refused rather than answered as empty.
+  if refused(Scan.readKey("= 1", 0)) { held = held + 1 }
+  if refused(Scan.readKey("", 0)) { held = held + 1 }
+  // A quoted key goes through the quoted reader, so it may hold what a bare
+  // key may not.
+  if textOf(Scan.readKey("\"a b\" = 1", 0)) == "a b" { held = held + 1 }
+  if endOf(Scan.readKey("\"a b\" = 1", 0)) == 5 { held = held + 1 }
+  if textOf(Scan.readKey("'a.b' = 1", 0)) == "a.b" { held = held + 1 }
+
+  // Quoted text with escapes, which the double-quoted form has and the other
+  // does not. This is the pair that separates the two.
+  if textOf(Scan.readQuoted("\"a\\nb\"", 0)) == "a\nb" { held = held + 1 }
+  if textOf(Scan.readQuoted("'a\\nb'", 0)) == "a\\nb" { held = held + 1 }
+  // A backslash before a separator, which is why a path is written the second
+  // way.
+  if textOf(Scan.readQuoted("'C:\\path'", 0)) == "C:\\path" { held = held + 1 }
+  if textOf(Scan.readQuoted("\"\"", 0)) == "" && endOf(Scan.readQuoted("\"\"", 0)) == 2 {
+    held = held + 1
+  }
+  if endOf(Scan.readQuoted("\"ab\" rest", 0)) == 4 { held = held + 1 }
+  // Text that never closes, and text a line ending closes for it, which is
+  // not the same as text that closes.
+  if refused(Scan.readQuoted("\"unclosed", 0)) { held = held + 1 }
+  if refused(Scan.readQuoted("\"before\nafter\"", 0)) { held = held + 1 }
+  // An escape the format does not have is refused rather than passed through.
+  if refused(Scan.readQuoted("\"a\\qb\"", 0)) { held = held + 1 }
+
+  // Text spanning lines. A line ending straight after the opening marks is
+  // dropped, because a writer who put the marks on their own line meant the
+  // text to start on the next.
+  if textOf(Scan.readMultiline("\"\"\"\nline\n\"\"\"", 0, "\"")) == "line\n" {
+    held = held + 1
+  }
+  if textOf(Scan.readMultiline("\"\"\"one\ntwo\"\"\"", 0, "\"")) == "one\ntwo" {
+    held = held + 1
+  }
+  if endOf(Scan.readMultiline("\"\"\"ab\"\"\" rest", 0, "\"")) == 8 { held = held + 1 }
+  // The apostrophe form spans lines too, and still has no escapes.
+  if textOf(Scan.readMultiline("'''a\\nb'''", 0, "'")) == "a\\nb" { held = held + 1 }
+  if refused(Scan.readMultiline("\"\"\"never closed", 0, "\"")) { held = held + 1 }
+  // Reached through the quoted reader, which sends three marks here.
+  if textOf(Scan.readQuoted("\"\"\"a\nb\"\"\"", 0)) == "a\nb" { held = held + 1 }
+  if textOf(Scan.readQuoted("'''a\nb'''", 0)) == "a\nb" { held = held + 1 }
+
+  // Each escape the format has, and the position after it.
+  if textOf(Scan.readEscape("\\n", 0)) == "\n" && endOf(Scan.readEscape("\\n", 0)) == 2 {
+    held = held + 1
+  }
+  if textOf(Scan.readEscape("\\t", 0)) == "\t" { held = held + 1 }
+  if textOf(Scan.readEscape("\\r", 0)) == "\r" { held = held + 1 }
+  if textOf(Scan.readEscape("\\\"", 0)) == "\"" { held = held + 1 }
+  if textOf(Scan.readEscape("\\\\", 0)) == "\\" { held = held + 1 }
+  // The escape naming a character by number, in both widths.
+  if textOf(Scan.readEscape("\\u00e9", 0)) == "\u{00e9}" { held = held + 1 }
+  if endOf(Scan.readEscape("\\u00e9", 0)) == 6 { held = held + 1 }
+  if textOf(Scan.readEscape("\\U0001F600", 0)) == "\u{1F600}" { held = held + 1 }
+  if endOf(Scan.readEscape("\\U0001F600", 0)) == 10 { held = held + 1 }
+  if refused(Scan.readEscape("\\q", 0)) { held = held + 1 }
+
+  // The numbered escape read directly, at each width.
+  if textOf(Scan.readScalar("0041", 0, 4)) == "A" { held = held + 1 }
+  if endOf(Scan.readScalar("0041", 0, 4)) == 4 { held = held + 1 }
+  // Written in capitals, which names the same character.
+  if textOf(Scan.readScalar("00E9", 0, 4)) == "\u{00e9}" { held = held + 1 }
+  if textOf(Scan.readScalar("0001F600", 0, 8)) == "\u{1F600}" { held = held + 1 }
+  // Too few digits, and a digit that is not one of this base.
+  if refused(Scan.readScalar("00", 0, 4)) { held = held + 1 }
+  if refused(Scan.readScalar("00g1", 0, 4)) { held = held + 1 }
+
+  // What an unquoted word means, each of the four kinds asked for by name.
+  match Scan.valueOf("true") {
+    case Boolean(flag) => { if flag { held = held + 1 } }
+    case _ => {}
+  }
+  match Scan.valueOf("false") {
+    case Boolean(flag) => { if !flag { held = held + 1 } }
+    case _ => {}
+  }
+  match Scan.valueOf("42") {
+    case Whole(number) => { if number == 42 { held = held + 1 } }
+    case _ => {}
+  }
+  match Scan.valueOf("1.5") {
+    case Fractional(text) => { if text == "1.5" { held = held + 1 } }
+    case _ => {}
+  }
+  // A moment keeps its text rather than being parsed, because which of the
+  // four kinds of moment a text names is another module's question.
+  match Scan.valueOf("1979-05-27") {
+    case Moment(text) => { if text == "1979-05-27" { held = held + 1 } }
+    case _ => {}
+  }
+
+  // The shape a moment is recognised by. A date leads with four digits and a
+  // hyphen; a bare time with two digits and a colon.
+  if Scan.looksLikeMoment("1979-05-27") { held = held + 1 }
+  if Scan.looksLikeMoment("1979-05-27T07:32:00Z") { held = held + 1 }
+  if Scan.looksLikeMoment("07:32:00") { held = held + 1 }
+  // A word too short to hold either shape, and one long enough that holds
+  // neither.
+  if !Scan.looksLikeMoment("07:32") { held = held + 1 }
+  if !Scan.looksLikeMoment("123456789") { held = held + 1 }
+  if !Scan.looksLikeMoment("") { held = held + 1 }
+
+  // Whole numbers in each base the format writes, with the separators a reader
+  // may put between the digits.
+  if Option.unwrapOr(Scan.wholeOf("42"), 0) == 42 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("1_000_000"), 0) == 1000000 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("+7"), 0) == 7 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("-7"), 0) == 0 - 7 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("0xff"), 0) == 255 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("0xFF"), 0) == 255 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("0o755"), 0) == 493 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("0b1011"), 0) == 11 { held = held + 1 }
+  if Option.unwrapOr(Scan.wholeOf("0xdead_beef"), 0) == 3735928559 { held = held + 1 }
+  // A word that is not a whole number at all, and one that is a digit of
+  // another base — which is what separates reading a number from recognising
+  // that a word is one.
+  if Option.isNone(&Scan.wholeOf("1.5")) { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("hello")) { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("0b1021")) { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("0o789")) { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("")) { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("-")) { held = held + 1 }
+
+  // The digits themselves, in a base named by the alphabet they are written
+  // in. A character outside that alphabet answers nothing rather than a
+  // number missing a digit.
+  if Option.unwrapOr(Scan.digitsIn("101", "01", 2), 0) == 5 { held = held + 1 }
+  if Option.unwrapOr(Scan.digitsIn("777", "01234567", 8), 0) == 511 { held = held + 1 }
+  if Option.unwrapOr(Scan.digitsIn("ff", "0123456789abcdef", 16), 0) == 255 {
+    held = held + 1
+  }
+  if Option.unwrapOr(Scan.digitsIn("0", "0123456789", 10), 0 - 1) == 0 {
+    held = held + 1
+  }
+  if Option.isNone(&Scan.digitsIn("12", "01", 2)) { held = held + 1 }
+  if Option.isNone(&Scan.digitsIn("", "0123456789", 10)) { held = held + 1 }
+
+  held
+}

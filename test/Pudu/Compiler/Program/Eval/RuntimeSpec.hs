@@ -56,6 +56,7 @@ testRuntimeEvaluation = do
   readAndCounted <- runEntry "test-fixtures/stdlib/UsesJsonDecimalAll.pudu"
   digested <- runEntry "test-fixtures/stdlib/UsesCryptoAll.pudu"
   checkedAndDrawn <- runEntry "test-fixtures/stdlib/UsesTestOutRandomAll.pudu"
+  nested <- runEntry "test-fixtures/stdlib/UsesNestedArrays.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
@@ -166,6 +167,19 @@ testRuntimeEvaluation = do
     , counterexample
         "a failing check says what it found and a shuffle keeps what it was given"
         (checkedAndDrawn === Just "113")
+    {-| An array whose element is an array, at every depth a program reaches
+        for: the literal, the annotation, chained indexing, nested iteration,
+        passing by reference, a generic bound, and every collection call, to
+        five levels. Every cell of a built grid holds the positions that reach
+        it, so an index taken in the wrong order answers the wrong value rather
+        than a plausible one, and the grids are deliberately not square, since
+        a square grid is the one shape where swapping two indices or
+        transposing wrongly cannot be told from doing it right. Ragged nesting
+        is checked beside rectangular, because nothing in the type says the
+        rows are the same length. -}
+    , counterexample
+        "arrays nest to any depth and every index reaches the cell it names"
+        (nested === Just "68")
     {-| Every export of the file module, checked by writing and reading back
         under the machine's own temporary directory, with everything made
         taken away again. -}
