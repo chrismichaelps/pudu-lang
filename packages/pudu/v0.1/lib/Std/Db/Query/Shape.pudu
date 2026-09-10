@@ -456,58 +456,78 @@ fn withLocking(base: &Statement, locking: Locking) -> Statement {
   }
 }
 
-/// A query with one part changed.
+/// A query with one part changed, each answering the query rather than taking
+/// it apart.
 ///
-/// These exist so that changing one thing about a query looks like changing
-/// one thing. They are also what a program needs when a query is not known in
-/// advance: a search screen adding a filter for each thing the reader typed
-/// builds it exactly this way.
-export fn answering(base: &Select, columns: &Array[Selected]) -> Select {
-  Select{..*base, columns: *columns}
-}
-
-/// The same query, reading from another table beside its own.
-export fn alongside(base: &Select, joins: &Array[Join]) -> Select {
-  Select{..*base, joins: *joins}
-}
-
-/// The same query, keeping only the rows these conditions describe.
-export fn keeping(base: &Select, conditions: &Array[Condition]) -> Select {
-  Select{..*base, conditions: *conditions}
-}
-
-/// The same query, with one more condition than it had.
+/// Written as methods so that a query built a clause at a time reads down the
+/// page. As functions taking the query first, changing several things meant
+/// wrapping each call in the next, and the result read inside out: the table
+/// and the columns — the two things a reader looks for first — ended up
+/// furthest in, and the shape on the page was the shape of the nesting rather
+/// than the shape of the query. A method chain puts the clauses in the order
+/// they are thought of, and the whole `Select` record stays available for the
+/// queries a program knows in full.
 ///
-/// What a search screen wants: a filter is added for each thing the reader
-/// typed, and nothing else about the query changes.
-export fn andKeeping(base: &Select, condition: Condition) -> Select {
-  Select{..*base, conditions: base.conditions.push(condition)}
+/// Each answers a new query and leaves the one it was asked of alone, which is
+/// what makes adding a clause in a loop safe: a search screen adds a filter for
+/// each thing the reader typed and nothing else about the query moves.
+export trait Refining {
+  fn answering(self: &Self, columns: &Array[Selected]) -> Self
+  fn alongside(self: &Self, joins: &Array[Join]) -> Self
+  fn keeping(self: &Self, conditions: &Array[Condition]) -> Self
+  fn andKeeping(self: &Self, condition: Condition) -> Self
+  fn gatheredBy(self: &Self, columns: &Array[Str]) -> Self
+  fn keepingGroups(self: &Self, conditions: &Array[Condition]) -> Self
+  fn inOrder(self: &Self, orderBy: &Array[Ordering]) -> Self
+  fn bounded(self: &Self, bound: Bound) -> Self
+  fn distinctly(self: &Self) -> Self
+  fn locked(self: &Self, locking: Locking) -> Self
 }
 
-/// The same query, gathered by these columns.
-export fn gatheredBy(base: &Select, columns: &Array[Str]) -> Select {
-  Select{..*base, groupBy: *columns}
-}
+impl Refining for Select {
+  /// The same query, answering with these.
+  fn answering(self: &Self, columns: &Array[Selected]) -> Self {
+    Select{..*self, columns: *columns}
+  }
 
-/// The same query, keeping only the groups these conditions describe.
-export fn keepingGroups(base: &Select, conditions: &Array[Condition]) -> Select {
-  Select{..*base, having: *conditions}
-}
+  /// The same query, reading from another table beside its own.
+  fn alongside(self: &Self, joins: &Array[Join]) -> Self {
+    Select{..*self, joins: *joins}
+  }
 
-/// The same query, in this order.
-export fn inOrder(base: &Select, orderBy: &Array[Ordering]) -> Select {
-  Select{..*base, orderBy: *orderBy}
-}
+  /// The same query, keeping only the rows these conditions describe.
+  fn keeping(self: &Self, conditions: &Array[Condition]) -> Self {
+    Select{..*self, conditions: *conditions}
+  }
 
-/// The same query, this much of it.
-export fn bounded(base: &Select, bound: Bound) -> Select {
-  Select{..*base, bound: bound}
-}
+  /// The same query, with one more condition than it had.
+  fn andKeeping(self: &Self, condition: Condition) -> Self {
+    Select{..*self, conditions: self.conditions.push(condition)}
+  }
 
-/// The same query, with duplicate rows removed.
-export fn distinctly(base: &Select) -> Select { Select{..*base, distinct: true} }
+  /// The same query, gathered by these columns.
+  fn gatheredBy(self: &Self, columns: &Array[Str]) -> Self {
+    Select{..*self, groupBy: *columns}
+  }
 
-/// The same query, holding the rows it reads.
-export fn locked(base: &Select, locking: Locking) -> Select {
-  Select{..*base, locking: locking}
+  /// The same query, keeping only the groups these conditions describe.
+  fn keepingGroups(self: &Self, conditions: &Array[Condition]) -> Self {
+    Select{..*self, having: *conditions}
+  }
+
+  /// The same query, in this order.
+  fn inOrder(self: &Self, orderBy: &Array[Ordering]) -> Self {
+    Select{..*self, orderBy: *orderBy}
+  }
+
+  /// The same query, this much of it.
+  fn bounded(self: &Self, bound: Bound) -> Self { Select{..*self, bound: bound} }
+
+  /// The same query, with duplicate rows removed.
+  fn distinctly(self: &Self) -> Self { Select{..*self, distinct: true} }
+
+  /// The same query, holding the rows it reads.
+  fn locked(self: &Self, locking: Locking) -> Self {
+    Select{..*self, locking: locking}
+  }
 }

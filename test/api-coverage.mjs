@@ -130,10 +130,15 @@ if (wantsReport) {
   console.log("");
 }
 
-// The floor only ever rises. A module gaining an export without a fixture
-// reaching it drops the figure below this and fails, which is the whole point:
-// the untested part of the library cannot grow without somebody saying so.
-const floor = 2852;
+// The floor rises as fixtures reach further. A module gaining an export
+// without a fixture reaching it drops the figure below this and fails, which
+// is the whole point: the untested part of the library cannot grow without
+// somebody saying so.
+//
+// It falls only when the library itself loses exports, which is a deliberate
+// act and shows up as a smaller total beside it. Lowering it for any other
+// reason is removing the check.
+const floor = 2860;
 const percent = total === 0 ? 100 : Math.floor((covered / total) * 100);
 
 console.log(JSON.stringify({ exports: total, covered, percent, floor, undocumented: undocumented.length }));

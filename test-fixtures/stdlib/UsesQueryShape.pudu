@@ -198,20 +198,20 @@ fn statementText(query: &Shape.Select) -> Str { Query.textOf(&orEmpty(Shape.sele
 fn users() -> Shape.Select { Shape.everythingFrom("users") }
 
 fn over(conditions: &Array[Shape.Condition]) -> Shape.Select {
-  Shape.keeping(&users(), conditions)
+  users().keeping(conditions)
 }
 
 fn answering(columns: &Array[Shape.Selected], distinct: Bool) -> Shape.Select {
-  let chosen = Shape.answering(&users(), columns)
-  if distinct { Shape.distinctly(&chosen) } else { chosen }
+  let chosen = users().answering(columns)
+  if distinct { chosen.distinctly() } else { chosen }
 }
 
-fn grouping(columns: &Array[Str]) -> Shape.Select { Shape.gatheredBy(&users(), columns) }
+fn grouping(columns: &Array[Str]) -> Shape.Select { users().gatheredBy(columns) }
 
-fn ordering(held: Shape.Ordering) -> Shape.Select { Shape.inOrder(&users(), &[held]) }
+fn ordering(held: Shape.Ordering) -> Shape.Select { users().inOrder(&[held]) }
 
 fn joined(held: Shape.Join) -> Shape.Select {
-  Shape.alongside(&Shape.everythingFrom("orders"), &[held])
+  Shape.everythingFrom("orders").alongside(&[held])
 }
 
 fn conditionText(held: Shape.Condition) -> Str { statementText(&over(&[held])) }
@@ -220,8 +220,8 @@ fn joinText(held: Shape.Join) -> Str { statementText(&joined(held)) }
 
 fn orderText(held: Shape.Ordering) -> Str { statementText(&ordering(held)) }
 
-fn boundText(bound: Shape.Bound) -> Str { statementText(&Shape.bounded(&users(), bound)) }
+fn boundText(bound: Shape.Bound) -> Str { statementText(&users().bounded(bound)) }
 
 fn lockedText(locking: Shape.Locking) -> Str {
-  statementText(&Shape.locked(&users(), locking))
+  statementText(&users().locked(locking))
 }
