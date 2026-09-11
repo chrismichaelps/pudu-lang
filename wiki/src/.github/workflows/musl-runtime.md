@@ -13,6 +13,8 @@ to that copy and executes it in both Alpine and Amazon Linux 2 before uploading 
 
 Installed GHCup tool locations are resolved explicitly and added to later workflow steps. This
 avoids relying on installer shell state that GitHub Actions does not preserve between steps.
+The cross-job proof restores execute permissions on both the attached program and packaged loader,
+because artifact extraction preserves bytes but not executable mode bits.
 
 Resolved Grill Log: the artifact is accepted only after its actual loader dependencies, packaged
 Lambda path, and behavior are checked on both the build libc and the older Lambda-compatible host.

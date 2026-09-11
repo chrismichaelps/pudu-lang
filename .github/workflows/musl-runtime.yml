@@ -154,7 +154,7 @@ jobs:
           path: dist
       - name: Run it on the glibc AWS Lambda provides
         run: |
-          chmod +x dist/deployed
+          chmod +x dist/deployed dist/ld-musl-x86_64.so.1
           docker run --rm \
             --volume "$PWD/dist:/var/task:ro" \
             amazonlinux:2 \

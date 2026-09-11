@@ -42,7 +42,7 @@ example audit, full repository test suite, and live production verification. Fea
 
 ## Next actions
 
-The adapter-free deployment is active on `feature/deploy-without-adapters`. The musl runtime now
-builds and runs on Alpine. Its next workflow run must prove the packaged `/var/task` loader layout on
-Amazon Linux 2; then download the runtime artifacts, assemble the Vercel output, and deploy the Pudu
-function.
+The adapter-free deployment is active on `feature/deploy-without-adapters`. The musl runtime builds
+and runs on Alpine, and Amazon Linux reaches the packaged loader path. The workflow now restores the
+loader's executable bit after artifact extraction; rerun that proof, then download the runtime
+artifacts, assemble the Vercel output, and deploy the Pudu function.
