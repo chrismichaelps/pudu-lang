@@ -30,12 +30,18 @@ scoring table it carried.
 
 ## Vercel production build & deploy
 
-Assemble Build Output API v3 with the canonical HTTPS origin and deploy using compressed archive:
+Assemble Build Output API v3 with the canonical HTTPS origin and deploy using compressed archive.
+The function is a Pudu artefact attached to a runtime linked against musl, because a runtime linked
+against a current glibc cannot start on the Lambda a Vercel function runs on:
 
 ```bash
+scripts/build-musl-runtime.sh -o dist/pudu-musl-x86_64
+
 PUDU_SITE_URL=https://website-ivory-one-hyy8j9ljag.vercel.app \
-PUDU_STATIC_SERVER=website/bin/pudu-site-server-macos \
 website/scripts/build-vercel.sh
 
 vercel deploy --prebuilt --archive=tgz --prod
 ```
+
+No server is started to produce the static pages. `Prerender.pudu` calls `Web.render` for every path
+`Seo.paths` lists, so the pages and the sitemap cannot disagree about which pages exist.

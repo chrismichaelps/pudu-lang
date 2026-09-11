@@ -73,7 +73,7 @@ import Pudu.Diagnostic.Render
 import Pudu.Repl (ReplOptions (..), runRepl)
 import Pudu.Source (Source, SourceName (SourceName), newSource, sourceName, spanSource)
 import GHC.IO.Encoding (setLocaleEncoding)
-import System.Environment (getArgs, getExecutablePath, lookupEnv, setEnv, unsetEnv)
+import System.Environment (getArgs, getExecutablePath, lookupEnv, setEnv, unsetEnv, withArgs)
 import System.Process
   ( ProcessHandle
   , getProcessExitCode
@@ -341,8 +341,16 @@ runCommand = do
     ("check" : paths) -> checkPaths style paths
     ("run" : "--watch" : path : carried) -> watchProgram style path carried
     ("run" : path : "--watch" : carried) -> watchProgram style path carried
-    ("run" : path : _) -> runProgram style path
-    ("explain" : path : _) -> explainProgram style path
+    {-| What follows the program's path belongs to the program.
+
+        A bundle is the program, so its arguments are its own and nothing
+        removes any. Running the same source through the compiler put the
+        compiler's own words in front of them — `run`, and the path — so
+        `Env.at(0)` meant the subcommand here and the first real argument
+        there. A program written and tried this way stopped working when it
+        was built, and the reason was nowhere near the change. -}
+    ("run" : path : carried) -> withArgs carried (runProgram style path)
+    ("explain" : path : carried) -> withArgs carried (explainProgram style path)
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure

@@ -55,7 +55,7 @@ fn main() -> Int {
 /// every request with the site's front page, which looks like a working
 /// deployment with broken routing rather than like a reader that did not
 /// understand the event.
-fn pathIn(event: &Json.Json) -> Str {
+export fn pathIn(event: &Json.Json) -> Str {
   let whole = firstText(event, &["rawPath", "path", "url"])
   let query = Option.unwrapOr(textAt(event, "rawQueryString"), "")
   let target = if whole.isEmpty() { "/" } else { whole }
@@ -80,7 +80,7 @@ fn textAt(event: &Json.Json, name: Str) -> Option[Str] {
 /// Headers are carried as an object rather than dropped: the pages state their
 /// own content type, their caching, and their canonical address, and a response
 /// that arrived without them would be served as text and indexed as a duplicate.
-fn answered(response: &Http.Response) -> Str {
+export fn answered(response: &Http.Response) -> Str {
   var headers: Array[(Str, Json.Json)] = []
   for header in response.headers {
     headers = headers.push((header[0], Json.Text(header[1])))

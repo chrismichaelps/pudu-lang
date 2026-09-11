@@ -1,0 +1,113 @@
+module Prerender
+
+import Std.Env as Env
+import Std.Http as Http
+import Std.Io as Io
+import Std.Option as Option
+import Config as Config
+import Error as SiteError
+import Seo as Seo
+import Service.Catalog as Catalog
+import Web.Routes as Web
+
+/// Every page the site has, written to disk.
+///
+/// The pages a crawler and a first visitor see are static files on a CDN rather
+/// than a function invocation, which is what makes them arrive in one round trip
+/// and what keeps them arriving when nothing is running.
+///
+/// Rendering them is a function call. `Web.render` answers a response for a
+/// path, so producing three thousand pages is three thousand calls and no
+/// server, no port, and no requests a program makes to itself. The Node script
+/// this replaces started the site, waited for it to say it was listening,
+/// fetched every route over a socket with twelve workers, and killed it — all to
+/// reach a function it could not call.
+///
+/// What is rendered comes from `Seo.paths`, which is the same list the sitemap
+/// is built from. Those two disagreeing is the failure worth preventing: a page
+/// in the sitemap that was never rendered is a crawler following a link to
+/// nothing, and a page rendered but missing from the sitemap is one nobody is
+/// told about.
+fn main() -> Int {
+  let into = Option.unwrapOr(Env.at(0), "")
+  if into.isEmpty() {
+    let _said = Io.writeErrorLine("usage: prerender <output directory>")
+    return 1
+  }
+  match Config.load() {
+    case Err(problem) => failed(&problem)
+    case Ok(settings) => {
+      match Catalog.load(settings.cataloguePath) {
+        case Err(problem) => failed(&problem)
+        case Ok(catalog) => {
+          // The pages, and the two files that are not pages: a crawler asks for
+          // both before it asks for anything else, and neither belongs in the
+          // sitemap that one of them points at.
+          var routes = Seo.paths(&catalog)
+          routes = routes.push("/robots.txt")
+          routes = routes.push("/sitemap.xml")
+
+          var written = 0
+          var refused = 0
+          for route in routes {
+            let response = Web.render(settings.siteUrl, &catalog, route)
+            if response.status.code != 200 {
+              // A route that does not answer is reported rather than written.
+              // Written, it would be a page serving whatever the error rendered
+              // as, which reads as a working page with wrong content — and the
+              // sitemap would point a crawler at it.
+              let _said = Io.writeErrorLine(
+                "prerender: " + route + " answered " + show(response.status.code))
+              refused = refused + 1
+            } else {
+              match write(into, route, &response) {
+                case Ok(_) => { written = written + 1 }
+                case Err(problem) => {
+                  let _said = Io.writeErrorLine("prerender: " + route + ": " + problem)
+                  refused = refused + 1
+                }
+              }
+            }
+          }
+
+          let _reported = Io.writeLine(
+            "prerendered " + show(written) + " pages into " + into)
+          if refused > 0 {
+            let _also = Io.writeErrorLine(
+              "prerender: " + show(refused) + " routes did not render")
+            1
+          } else {
+            0
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Where a route's page goes.
+///
+/// A path becomes a directory holding an `index.html`, which is what lets a
+/// static host answer `/modules` for a request that named no file. The two that
+/// are files rather than pages keep their own names, since a crawler asks for
+/// `/robots.txt` and not for `/robots.txt/index.html`.
+///
+/// The route is written as it is rather than decoded first. A name carrying a
+/// character a URL escapes reaches the host escaped, so the file has to be named
+/// the escaped way or the host looks for something that is not there.
+fn write(into: Str, route: Str, response: &Http.Response) -> Result[(), Str] {
+  let target = if route == "/" {
+    into + "/index.html"
+  } else if route == "/robots.txt" || route == "/sitemap.xml" {
+    into + route
+  } else {
+    into + route + "/index.html"
+  }
+  Io.makeDirectory(Io.directoryOf(target)) ?
+  Io.write(target, response.body)
+}
+
+fn failed(problem: &SiteError.SiteError) -> Int {
+  let _said = Io.writeErrorLine(SiteError.explain(problem))
+  1
+}

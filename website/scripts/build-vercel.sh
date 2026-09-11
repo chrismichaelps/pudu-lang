@@ -2,14 +2,13 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-local_server="${PUDU_STATIC_SERVER:-$root/website/bin/pudu-site-server-macos}"
 musl_runtime="${PUDU_MUSL_RUNTIME:-$root/dist/pudu-musl-x86_64}"
 compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
 function_dir="$output/functions/index.func"
 
-if [[ ! -x "$local_server" ]] || [[ -z "${PUDU_SITE_URL:-}" ]]; then
-  echo "set PUDU_SITE_URL and provide a local Pudu server with PUDU_STATIC_SERVER" >&2
+if [[ -z "${PUDU_SITE_URL:-}" ]]; then
+  echo "set PUDU_SITE_URL to the canonical HTTPS origin" >&2
   exit 1
 fi
 
@@ -45,10 +44,14 @@ chmod 644 "$function_dir/api.json" 2>/dev/null || true
   --runtime "$musl_runtime"
 chmod 755 "$function_dir/bootstrap"
 
-node "$root/website/scripts/prerender.mjs" \
-  "$local_server" \
-  "$root/website/data/api.json" \
-  "$output/static"
+# The static half of the site, rendered by the site.
+#
+# `Web.render` answers a response for a path, so producing every page is that
+# many calls: no server is started, no port is taken, and the build makes no
+# requests to itself. What is rendered is `Seo.paths`, the list the sitemap is
+# built from, so the two cannot disagree about which pages exist.
+PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
+  "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
 # `provided.al2` runs the artefact directly: the platform starts `bootstrap` and
 # speaks to it over the Lambda runtime interface, which `Std.Http.Server.Lambda`

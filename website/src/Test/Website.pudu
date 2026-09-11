@@ -1,10 +1,18 @@
 module Test.Website
 
 import Std.Http as Http
+import Std.Json as Json
+import Std.Result as Result
 import Std.Test as Test
+import Function as Function
 import Service.Catalog as Catalog
 import Service.Search as Search
 import Web.Routes as Web
+
+/// The path a function would dispatch on, for an event written as text.
+fn asked(event: Str) -> Str {
+  Function.pathIn(&Result.unwrapOr(Json.decode(event), Json.Null))
+}
 
 fn hasHeader(response: &Http.Response, name: Str, value: Str) -> Bool {
   Http.header(&response.headers, name) == Some(value)
@@ -67,7 +75,34 @@ export fn main() -> Int {
       Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
       Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
       Test.that("same-name sitemap paths are unique", sitemap.body.split("https://pudu.example/docs/Std.Bits/fn/width").length() == 2),
-      Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage"))
+      Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage")),
+
+      // What a platform hands the function, read into the path a route is
+      // dispatched on. A reader that knew one shape would answer every request
+      // with the front page, which looks like working routing rather than like
+      // an event nothing understood.
+      Test.that("an event naming its raw path is routed on it", asked("\{\"rawPath\":\"/modules\"\}") == "/modules"),
+      Test.that("a query string is carried with the path", asked("\{\"rawPath\":\"/search\",\"rawQueryString\":\"q=map\"\}") == "/search?q=map"),
+      Test.that("an event naming a plain path is routed on it", asked("\{\"path\":\"/about\"\}") == "/about"),
+      Test.that("an event naming a whole url is routed on it", asked("\{\"url\":\"/donate\"\}") == "/donate"),
+      Test.that("the raw path is preferred to the others", asked("\{\"rawPath\":\"/a\",\"path\":\"/b\"\}") == "/a"),
+      // An event saying nothing is the front page rather than the empty path,
+      // which routes to nothing and answers 404 for the one address every
+      // visitor arrives at first.
+      Test.that("an event naming nothing is the front page", asked("\{\}") == "/"),
+      // A path that already carries its query is not given it twice, which
+      // would put the search term in the page as part of another term.
+      Test.that("a query already in the path is not repeated", asked("\{\"rawPath\":\"/search?q=map\",\"rawQueryString\":\"q=map\"\}") == "/search?q=map"),
+      Test.that("an empty query adds no question mark", asked("\{\"rawPath\":\"/search\",\"rawQueryString\":\"\"\}") == "/search"),
+
+      // And what goes back. A response that arrived without its headers would
+      // be served as text and indexed as a duplicate, since the pages state
+      // their own content type and their own canonical address.
+      Test.that("an answer carries the status the page answered", Function.answered(&home).contains("\"statusCode\":200")),
+      Test.that("an answer carries the page", Function.answered(&home).contains("<title>")),
+      Test.that("an answer carries the headers the page set", Function.answered(&home).contains("content-type")),
+      Test.that("an answer says its body is not encoded", Function.answered(&home).contains("\"isBase64Encoded\":false")),
+      Test.that("a page that was not found answers as not found", Function.answered(&missing).contains("\"statusCode\":404"))
     ])
   Test.report(&Test.run(&suite))
 }
