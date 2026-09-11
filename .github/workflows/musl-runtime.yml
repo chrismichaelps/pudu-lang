@@ -40,7 +40,7 @@ jobs:
           apk add --no-cache \
             bash binutils build-base coreutils curl git gmp-dev gnupg \
             libffi-dev ncurses-dev patchelf perl tar xz zlib-dev \
-            ncurses-static zlib-static nodejs
+            nodejs
 
       - uses: actions/checkout@v7
 
@@ -64,18 +64,16 @@ jobs:
           "$GHC_BIN" --version
           "$CABAL_BIN" --version
 
-      # The same flags `scripts/build-musl-runtime.sh` uses. The Haskell
-      # libraries are linked in by default; these are the C ones the package
-      # names, linked in as well so the finished runtime needs nothing at run
-      # time but musl's loader.
+      # The Haskell libraries are linked into the runtime. Its C dependencies
+      # remain musl-built shared objects so dynamic loading stays available;
+      # the Lambda package carries the exact files that `ldd` names.
       - name: Build the runtime
         working-directory: packages/pudu/v0.1
         run: |
           cabal update
           cabal build exe:pudu \
             --disable-tests \
-            --enable-optimization=2 \
-            --ghc-options="-optl-Wl,-Bstatic -optl-lffi -optl-lz -optl-lncursesw -optl-lgmp -optl-Wl,-Bdynamic"
+            --enable-optimization=2
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
             "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64"
@@ -84,6 +82,17 @@ jobs:
           cp /lib/ld-musl-x86_64.so.1 "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1"
           patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 \
             "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          patchelf --set-rpath '$ORIGIN' \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+            resolved="$(ldd "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64" | \
+              awk -v wanted="$dependency" '$1 == wanted { print $3 }')"
+            if [ -z "$resolved" ]; then
+              echo "could not resolve $dependency from the built runtime" >&2
+              exit 1
+            fi
+            cp -L "$resolved" "$GITHUB_WORKSPACE/dist/$dependency"
+          done
 
       - name: Say what was produced
         run: |
@@ -91,6 +100,7 @@ jobs:
           file pudu-musl-x86_64 || true
           file pudu-musl-lambda-x86_64 || true
           readelf -l pudu-musl-lambda-x86_64 | grep -F '/var/task/ld-musl-x86_64.so.1'
+          patchelf --print-rpath pudu-musl-lambda-x86_64 | grep -Fx '$ORIGIN'
           ldd pudu-musl-x86_64 || true
           if ldd pudu-musl-x86_64 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
             echo "the runtime still needs glibc, which is the thing this avoids" >&2
@@ -136,6 +146,10 @@ jobs:
             dist/pudu-musl-x86_64
             dist/pudu-musl-lambda-x86_64
             dist/ld-musl-x86_64.so.1
+            dist/libffi.so.8
+            dist/libz.so.1
+            dist/libncursesw.so.6
+            dist/libgmp.so.10
             dist/deployed
           if-no-files-found: error
           retention-days: 7

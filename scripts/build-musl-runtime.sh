@@ -14,12 +14,11 @@
 # so `Net.connect(host, port)` fails for every name. musl resolves names in the
 # library itself.
 #
-# What this produces is dynamically linked against musl and nothing else, so it
-# needs one file present at run time — musl's loader. That is deliberate. A
-# fully static binary cannot `dlopen`, and `cbits/pudu_ffi.c` and
+# What this produces is dynamically linked against musl and its named C
+# libraries. That is deliberate. A fully static binary cannot `dlopen`, and `cbits/pudu_ffi.c` and
 # `cbits/pudu_sqlite.c` load libraries that way, so a fully static runtime would
-# silently be one with no `Std.Foreign` and no SQLite driver. Every other C
-# library is linked in, so the loader is the only dependency.
+# silently be one with no `Std.Foreign` and no SQLite driver. A Lambda package
+# carries the musl loader and every shared dependency beside the runtime.
 #
 # The build runs in a container because GHC needs a musl toolchain to target
 # one, and cross-compiling GHC is considerably harder than borrowing a machine
@@ -71,6 +70,7 @@ done
 output_dir="$(dirname "$output")"
 lambda_output="${PUDU_MUSL_LAMBDA_OUTPUT:-$output_dir/pudu-musl-lambda-x86_64}"
 loader_output="${PUDU_MUSL_LOADER_OUTPUT:-$output_dir/ld-musl-x86_64.so.1}"
+library_output_dir="${PUDU_MUSL_LIBRARY_OUTPUT_DIR:-$(dirname "$loader_output")}"
 
 if ! command -v "$engine" >/dev/null 2>&1; then
   echo "build-musl-runtime: $engine is not installed" >&2
@@ -107,7 +107,7 @@ if ! "$engine" image inspect "$image" >/dev/null 2>&1; then
     "$root/deploy"
 fi
 
-mkdir -p "$output_dir" "$(dirname "$lambda_output")" "$(dirname "$loader_output")"
+mkdir -p "$output_dir" "$(dirname "$lambda_output")" "$(dirname "$loader_output")" "$library_output_dir"
 
 # The build runs as the invoking user so the artefact is not left owned by root,
 # and HOME is inside the mount so cabal's package database survives between runs
@@ -123,25 +123,36 @@ mkdir -p "$output_dir" "$(dirname "$lambda_output")" "$(dirname "$loader_output"
     mkdir -p /work/dist/musl-home
     cabal update
 
-    # The Haskell libraries are linked in by default. These are the C ones the
-    # package names, linked in as well so the finished runtime needs nothing but
-    # the loader: libffi for the foreign interface, zlib for Std.Compress,
-    # ncurses for the interactive session, gmp for whole-number arithmetic.
+    # The Haskell libraries are linked in by default. C dependencies stay
+    # dynamic so foreign-library loading remains available; the Lambda package
+    # carries the exact musl libraries that dependency inspection names.
     cabal build exe:pudu \
       --disable-tests \
-      --enable-optimization=2 \
-      --ghc-options="-optl-Wl,-Bstatic -optl-lffi -optl-lz -optl-lncursesw -optl-lgmp -optl-Wl,-Bdynamic"
+      --enable-optimization=2
 
     cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" /work/dist/pudu-musl-built
     cp /work/dist/pudu-musl-built /work/dist/pudu-musl-lambda-built
     cp /lib/ld-musl-x86_64.so.1 /work/dist/ld-musl-x86_64-built.so.1
     patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 \
       /work/dist/pudu-musl-lambda-built
+    patchelf --set-rpath '\''$ORIGIN'\'' /work/dist/pudu-musl-lambda-built
+    for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+      resolved="$(ldd /work/dist/pudu-musl-built | \
+        awk -v wanted="$dependency" '\''$1 == wanted { print $3 }'\'')"
+      if [ -z "$resolved" ]; then
+        echo "could not resolve $dependency from the built runtime" >&2
+        exit 1
+      fi
+      cp -L "$resolved" "/work/dist/$dependency-built"
+    done
   '
 
 mv "$root/dist/pudu-musl-built" "$output"
 mv "$root/dist/pudu-musl-lambda-built" "$lambda_output"
 mv "$root/dist/ld-musl-x86_64-built.so.1" "$loader_output"
+for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
+  mv "$root/dist/$dependency-built" "$library_output_dir/$dependency"
+done
 chmod +x "$output"
 chmod +x "$lambda_output" "$loader_output"
 
@@ -153,6 +164,7 @@ echo
 echo "built $output"
 echo "built $lambda_output"
 echo "copied $loader_output"
+echo "copied musl libraries to $library_output_dir"
 "$engine" run --rm --platform "$platform" --volume "$output:/runtime:ro" "$image" sh -eu -c '
   echo "--- what it is ---"
   file /runtime || true

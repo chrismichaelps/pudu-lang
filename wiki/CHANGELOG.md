@@ -12,6 +12,8 @@ tags: [changelog]
 - Split the generated runtime into a normal Linux artifact and a Lambda-targeted copy, packaged the
   matching musl loader beside the function, and added Alpine plus Amazon Linux 2 execution proofs.
 - Restored the packaged loader's executable bit after cross-job artifact extraction.
+- Replaced ineffective static-link claims with dependency-driven packaging of the four musl shared
+  libraries and an `$ORIGIN` search path on the Lambda runtime.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.

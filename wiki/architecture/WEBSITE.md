@@ -41,8 +41,10 @@ implementation.
 
 The deployment runtime is built against musl. The normal runtime keeps musl's standard interpreter
 for Linux hosts. A Lambda copy points to `/var/task/ld-musl-x86_64.so.1`, and the matching loader is
-packaged beside the Pudu function. CI proves the attached Pudu program first on Alpine and then in
-Amazon Linux 2 with the same `/var/task` layout used by Lambda.
+packaged beside the Pudu function. Its runtime search path is `$ORIGIN`, and the musl-built `libffi`,
+`zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged beside it.
+CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2 with the same
+`/var/task` layout used by Lambda.
 
 Static HTML, CSS, fonts, and the two supplied logos are served from Vercel's CDN and from Pudu
 routes locally. The generated API catalogue comes from `pudu doc --json`, so public documentation
@@ -69,6 +71,10 @@ XML sitemap covers the current catalogue while it remains below the protocol's 5
 - **Q:** Force every Linux Pudu bundle to use Lambda's `/var/task` loader path? **A:** No. _Rationale:_
   the ordinary runtime remains suitable for Linux hosts; only its Lambda copy receives the platform
   interpreter path. _Rejected:_ making a serverless packaging detail part of every Linux bundle.
+- **Q:** Assume requested static linker flags made every C library static? **A:** No. _Rationale:_
+  dependency inspection showed four dynamic musl libraries, so the Lambda artifact carries the exact
+  files it names and searches beside itself. _Rejected:_ calling an artifact self-contained without
+  executing it on a host where those libraries are absent.
 
 Resolved Grill Log: one Pudu rendering and search core, Pudu-native runtime edges, generated API
 data, typed HTML, explicit errors, and no reverse dependency from domain or services into transport.

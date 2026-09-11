@@ -10,14 +10,13 @@
 # that goes wrong.
 FROM alpine:3.20
 
-# What GHC needs to run and what the package needs to link against. `gmp` is
+# What GHC needs to run and what the package links against. `gmp` is
 # whole-number arithmetic, `libffi` the foreign interface, `zlib` compression,
-# `ncurses` the interactive session. The `-static` packages are the archives the
-# runtime is linked from, so the finished binary needs none of them present.
+# and `ncurses` the interactive session. The Lambda package carries the shared
+# musl libraries reported by the built runtime.
 RUN apk add --no-cache \
       bash binutils build-base coreutils curl git gmp-dev gnupg \
-      libffi-dev ncurses-dev patchelf perl tar xz zlib-dev \
-      ncurses-static zlib-static
+      libffi-dev ncurses-dev patchelf perl tar xz zlib-dev
 
 ARG GHC_VERSION=9.10.1
 ARG CABAL_VERSION=3.12.1.0

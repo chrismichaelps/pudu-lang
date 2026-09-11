@@ -4,6 +4,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 musl_runtime="${PUDU_LAMBDA_RUNTIME:-$root/dist/pudu-musl-lambda-x86_64}"
 musl_loader="${PUDU_MUSL_LOADER:-$root/dist/ld-musl-x86_64.so.1}"
+musl_library_dir="${PUDU_MUSL_LIBRARY_DIR:-$(dirname "$musl_loader")}"
+musl_libraries=(libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10)
 compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
 function_dir="$output/functions/index.func"
@@ -34,11 +36,21 @@ if [[ ! -f "$musl_loader" ]]; then
   echo "  build one with scripts/build-musl-runtime.sh, or set PUDU_MUSL_LOADER" >&2
   exit 1
 fi
+for dependency in "${musl_libraries[@]}"; do
+  if [[ ! -f "$musl_library_dir/$dependency" ]]; then
+    echo "no packaged musl library at $musl_library_dir/$dependency" >&2
+    echo "  build the runtime package with scripts/build-musl-runtime.sh" >&2
+    exit 1
+  fi
+done
 
 rm -rf "$output"
 mkdir -p "$function_dir" "$output/static/assets" "$output/static/fonts"
 cp "$root/website/data/api.json" "$function_dir/api.json"
 cp "$musl_loader" "$function_dir/ld-musl-x86_64.so.1"
+for dependency in "${musl_libraries[@]}"; do
+  cp "$musl_library_dir/$dependency" "$function_dir/$dependency"
+done
 cp "$root/website/public/site.css" "$output/static/assets/site.css"
 cp "$root/website/public/assets/"* "$output/static/assets/"
 cp "$root/website/public/fonts/"* "$output/static/fonts/"
