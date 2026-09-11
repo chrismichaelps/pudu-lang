@@ -257,10 +257,16 @@ testServiceEvaluation = do
         and the skipped turn is counted; a job that fails is recorded and stays
         scheduled, because one bad night must not leave a nightly job silently
         dead; and it waits for its next turn rather than retrying at once,
-        which would turn one failing dependency into a loop against it. -}
+        which would turn one failing dependency into a loop against it. The
+        schedule is put together through a bound naming the scheduling trait
+        alone, adding one job at a time rather than giving them all at once,
+        which is how a service whose modules each schedule their own work writes
+        it — and adding rather than setting is what keeps the last module from
+        replacing the rest. A job is also asked whether it is due on its own,
+        since that is what a scheduler handing jobs to workers asks of each. -}
     , counterexample
         "a job that fails is recorded and runs again"
-        (scheduled === Just "35")
+        (scheduled === Just "45")
     {-| That a number chooses among the forms a language actually has rather
         than by comparing with one — French counting zero with one, three
         Slavic forms where the rule is not about being one, Arabic's forms for

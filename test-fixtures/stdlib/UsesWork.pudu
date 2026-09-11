@@ -17,7 +17,7 @@ export fn main() -> Int {
   let counter = Sync.cell(0)
 
   // A schedule is jobs, and can be read before it runs.
-  let plan = Work.schedule(&[
+  let plan: Work.Schedule = Work.schedule(&[
       Work.job("sweep", EveryFromEnd(100), counting(counter)),
       Work.job("report", EveryFromStart(1000), counting(counter)),
       Work.job("warm", After(50), counting(counter))
@@ -25,9 +25,15 @@ export fn main() -> Int {
   if Work.names(&plan) == ["sweep", "report", "warm"] { held = held + 1 }
   if Work.jobsOf(&plan).length() == 3 { held = held + 1 }
   if Work.names(&Work.nothing()) == [] { held = held + 1 }
-  if Work.names(&Work.also(&Work.nothing(), Work.job("x", After(1), counting(counter)))) == ["x"] {
+  if Work.names(&Work.nothing().also(Work.job("x", After(1), counting(counter)))) == ["x"] {
     held = held + 1
   }
+  // Added one at a time rather than given at once, through a bound naming the
+  // scheduling trait alone, which is what checks it is usable as one. Added
+  // rather than set: a service whose modules each schedule their own work must
+  // not have the last one replace the rest.
+  let assembled: Work.Schedule = everything(&Work.nothing(), counter)
+  if Work.names(&assembled) == ["nightly", "hourly"] { held = held + 1 }
 
   // Which jobs are due is a pure function of the schedule and the moment.
   if Work.dueAt(&plan, 0) == [] { held = held + 1 }
@@ -80,10 +86,8 @@ export fn main() -> Int {
   // A job still running when its next turn arrives does not start a second:
   // two runs of a job that writes is a race nobody designed, and it shows up
   // as duplicated work rather than as an error.
-  let busy = Work.started(
-      &Work.schedule(&[Work.job("busy", EveryFromEnd(10), counting(counter))]),
-    "busy"
-  )
+  let busy = Work.schedule(&[Work.job("busy", EveryFromEnd(10), counting(counter))])
+    .started("busy")
   let skippedOnce = Work.runDue(&busy, 100, at(100))
   if Option.unwrapOr(Work.recordOf(&skippedOnce, "busy"), Work.nothingYet()).runs == 0 {
     held = held + 1
@@ -96,7 +100,7 @@ export fn main() -> Int {
   }
 
   // Once it has finished, it runs again.
-  let freed = Work.runDue(&Work.ended(&skippedOnce, "busy"), 200, at(210))
+  let freed = Work.runDue(&skippedOnce.ended("busy"), 200, at(210))
   if Option.unwrapOr(Work.recordOf(&freed, "busy"), Work.nothingYet()).runs == 1 {
     held = held + 1
   }
@@ -142,7 +146,46 @@ export fn main() -> Int {
   if Work.render(&Work.nothing()).isEmpty() { held = held + 1 }
   if Work.render(&plan).split("\n").length() == 3 { held = held + 1 }
 
+  // Marking a name no job carries marks nothing rather than refusing. The
+  // schedule is what says which jobs exist, and a caller driving jobs on its
+  // own workers asks `names` rather than being told one at a time.
+  if Work.names(&plan.started("absent")) == Work.names(&plan) { held = held + 1 }
+  if Work.dueAt(&plan.ended("absent"), 1200) == Work.dueAt(&plan, 1200) { held = held + 1 }
+
+  // One job asked on its own, rather than through the schedule holding it. A
+  // scheduler deciding which jobs to hand to a worker asks this of each.
+  let one: Work.Job = Work.jobsOf(&plan)[2]
+  if one.name == "warm" && !Work.isDue(&one, 49) && Work.isDue(&one, 50) { held = held + 1 }
+  // A job that runs once is due at its delay and not again after it has run,
+  // which is the difference between a delay and an interval.
+  let due: Work.Due = one.due
+  match due { case After(delay) => { if delay == 50 { held = held + 1 } } case _ => {} }
+  if !Work.isDue(&Work.jobsOf(&after)[2], 5000) { held = held + 1 }
+
+  // What one job has done, read through the record rather than its fields, so a
+  // caller reporting a schedule need not know how a record is shaped.
+  let sweeping: Work.Record = Option.unwrapOr(Work.recordOf(&after, "sweep"), Work.nothingYet())
+  if Work.runsOf(&sweeping) == 1 && Work.lastTookOf(&sweeping) == 80 { held = held + 1 }
+  if Work.skipsOf(&sweeping) == 0 { held = held + 1 }
+  if Work.skipsOf(&Option.unwrapOr(Work.recordOf(&skippedOnce, "busy"), Work.nothingYet())) == 1 {
+    held = held + 1
+  }
+  // Nothing recorded yet is nothing on every count, not merely on the one a
+  // caller happened to ask about.
+  if Work.runsOf(&Work.nothingYet()) == 0 && Work.skipsOf(&Work.nothingYet()) == 0
+    && Work.lastTookOf(&Work.nothingYet()) == 0 {
+    held = held + 1
+  }
+
   held
+}
+
+/// Two jobs added one at a time through a bound naming the scheduling trait and
+/// nothing else, the way a service whose modules each schedule their own work
+/// puts a schedule together.
+fn everything[S: Work.Scheduling](base: &S, into: Sync.Cell[Int]) -> S {
+  base.also(Work.job("nightly", EveryFromStart(86400), counting(into)))
+    .also(Work.job("hourly", EveryFromEnd(3600), counting(into)))
 }
 
 /// A job that records that it ran.

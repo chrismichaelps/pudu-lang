@@ -68,9 +68,39 @@ export fn schedule(jobs: &Array[Job]) -> Schedule { Schedule{jobs: *jobs} }
 /// Nothing scheduled.
 export fn nothing() -> Schedule { Schedule{jobs: []} }
 
-/// The schedule with one more job.
-export fn also(base: &Schedule, added: Job) -> Schedule {
-  Schedule{jobs: base.jobs.push(added)}
+/// What a schedule holds and which of its jobs are in flight.
+///
+/// A service adds its jobs one at a time and, when it drives them on workers of
+/// its own, marks each as it starts and finishes. Both are several calls over
+/// the same schedule, so as methods they read in the order the service makes
+/// them rather than inside out.
+export trait Scheduling {
+  fn also(self: &Self, added: Job) -> Self
+  fn started(self: &Self, name: Str) -> Self
+  fn ended(self: &Self, name: Str) -> Self
+}
+
+impl Scheduling for Schedule {
+  /// The schedule with one more job.
+  fn also(self: &Self, added: Job) -> Self {
+    Schedule{jobs: self.jobs.push(added)}
+  }
+
+  /// The schedule with one job marked as running, for a caller driving jobs on
+  /// workers of its own.
+  ///
+  /// A job marked as running is not started again, which is what keeps two runs
+  /// of a job that writes from being a race nobody designed. A name no job
+  /// carries marks nothing rather than refusing: the schedule is what says which
+  /// jobs exist, and `names` is how a caller asks.
+  fn started(self: &Self, name: Str) -> Self {
+    Schedule{jobs: withJob(&self.jobs, name, fn(one: Job) -> Job { Job{..one, running: true} })}
+  }
+
+  /// The same, marked as finished.
+  fn ended(self: &Self, name: Str) -> Self {
+    Schedule{jobs: withJob(&self.jobs, name, fn(one: Job) -> Job { Job{..one, running: false} })}
+  }
 }
 
 /// What the schedule holds.
@@ -166,17 +196,6 @@ fn ran(one: &Job, now: Int, ending: fn() -> Int) -> Job {
 /// One job, skipped because the last run had not finished.
 fn skipped(one: &Job) -> Job {
   Job{..*one, history: Record{..one.history, skips: one.history.skips + 1}}
-}
-
-/// The schedule with one job marked as running, for a caller driving jobs on
-/// workers of its own.
-export fn started(held: &Schedule, name: Str) -> Schedule {
-  Schedule{jobs: withJob(&held.jobs, name, fn(one: Job) -> Job { Job{..one, running: true} })}
-}
-
-/// The same, marked as finished.
-export fn ended(held: &Schedule, name: Str) -> Schedule {
-  Schedule{jobs: withJob(&held.jobs, name, fn(one: Job) -> Job { Job{..one, running: false} })}
 }
 
 fn withJob(jobs: &Array[Job], name: Str, alter: fn(Job) -> Job) -> Array[Job] {
