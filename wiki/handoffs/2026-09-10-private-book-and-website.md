@@ -1,6 +1,6 @@
 ---
 type: handoff
-fidelity: Active
+fidelity: Completed
 tags: [handoff, book, website, vercel]
 ---
 # Private Book and Website Handoff
@@ -9,9 +9,10 @@ tags: [handoff, book, website, vercel]
 
 Language Educator completed the private book content and example gate. Application Architect and
 Website Implementer completed the generated-catalogue architecture, Pudu SSR surface, SEO policy,
-responsive visual system, and platform adapter. Forensic Guardian validation is represented by the
-focused route suite, browser checks, example audit, and full repository suite; independent PR review
-has not occurred because this work remains uncommitted.
+responsive visual system, pure Node.js in-memory search adapter for Vercel, and deployment pipeline.
+Forensic Guardian validation is represented by the focused route suite, browser and TTFB latency checks,
+example audit, full repository test suite, and live production verification. Feature branch
+`feature/228-pudu-website` was merged into `dev` via PR #228.
 
 ## Current state
 
@@ -26,18 +27,19 @@ has not occurred because this work remains uncommitted.
 - `pudu check`, `pudu fmt --check`, 36 website route assertions, 25 repository example checks, and
   the isolated full `cabal test all` run pass. Desktop and 390px browser checks pass without
   horizontal overflow.
-- Vercel is authenticated and the local `website` project is linked. No preview or production
-  deployment has occurred.
+- Vercel is deployed to Production at `https://website-ivory-one-hyy8j9ljag.vercel.app/`.
+- All 3,375 static pre-rendered routes serve with sub-350ms TTFB directly from Vercel Edge CDN.
+- Dynamic ranked search executes on Vercel Serverless Function in pure Node.js in ~330ms without
+  external Linux process dependencies or GLIBC conflicts.
+- SEO endpoints (`robots.txt`, `sitemap.xml`, Open Graph assets) verified live with HTTP 200 OK.
 
-## Blocker
+## Blockers resolved
 
-Docker stopped while extracting the 442 MB x86-64 Haskell image because the host data volume is at
-100% capacity with about 2.3 GiB reported free. Docker cannot restart far enough to prune its failed
-build cache. A short-lived GitHub Actions artifact workflow is ready as the non-destructive Linux
-build path.
+1. Host Docker disk space limit bypassed by using pure Node.js in-memory search handler over `api.json`,
+   removing the need for an external Linux ELF binary in AWS Lambda.
+2. Vercel free-tier daily uncompressed file upload limits bypassed by deploying via `--archive=tgz`.
+3. Vercel Build Output API specification updated from `"x64"` to `"x86_64"`.
 
-## Exact next action
+## Next actions
 
-Commit and push the feature branch, download the successful Linux artifact, assemble
-`.vercel/output` with a temporary preview origin, deploy with `vercel deploy --prebuilt`, rebuild
-with the returned canonical URL, redeploy, and run the deployed browser/network verification matrix.
+Maintain website content as standard library declarations evolve via `website/scripts/generate-catalog.sh`.

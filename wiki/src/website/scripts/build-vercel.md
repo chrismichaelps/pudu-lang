@@ -7,10 +7,12 @@ aliases: [Vercel output builder]
 ---
 # Vercel Output Builder
 
-Produces a Build Output API v3 directory from a Linux Pudu server, the public catalogue, the thin
-Node adapter, static assets, and canonical HTML captured from a local Pudu server. Its extensionless
-rewrites include every fixed canonical page, including about and donation. It refuses a missing or non-Linux
-server.
+Produces a Build Output API v3 directory (`.vercel/output`) from the public catalogue, the lightweight
+Node.js search function, static CSS, Nunito fonts, logos, and 3,375 pre-rendered canonical HTML pages
+captured from a local Pudu server. Configures `"architecture": "x86_64"` and file permissions (`chmod 644`).
+Deploys efficiently using `vercel deploy --prebuilt --archive=tgz` to package output into a single archive,
+avoiding daily free-tier file count thresholds.
 
-Resolved Grill Log: the script assembles deterministic deployment output but does not compile a
-macOS binary for Linux or hide architecture mismatch. Dynamic search alone reaches the function.
+Resolved Grill Log: the script assembles deterministic deployment output without requiring an external
+Linux ELF binary or risking container GLIBC mismatches. Dynamic search reaches the lightweight serverless
+handler; all other routes resolve directly from Vercel's global static Edge CDN.

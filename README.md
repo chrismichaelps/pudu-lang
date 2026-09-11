@@ -20,7 +20,7 @@ pudu build src/Main.pudu -o service
 ./service          # runs anywhere the compiler runs, with nothing installed
 ```
 
-Start with the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are
+Start with the [documentation website](https://website-ivory-one-hyy8j9ljag.vercel.app/) or the [wiki](https://github.com/chrismichaelps/pudu-lang/wiki). The quickest references are
 [language](https://github.com/chrismichaelps/pudu-lang/wiki/Reference-Index),
 [standard library](https://github.com/chrismichaelps/pudu-lang/wiki/Standard-Library),
 [tooling](https://github.com/chrismichaelps/pudu-lang/wiki/CLI-REPL-And-Documentation), and
