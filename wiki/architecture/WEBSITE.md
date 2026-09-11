@@ -43,7 +43,7 @@ The deployment runtime is built against musl. The normal runtime keeps musl's st
 for Linux hosts. A Lambda copy points to `/var/task/ld-musl-x86_64.so.1`, and the matching loader is
 packaged beside the Pudu function. Its runtime search path is `$ORIGIN`, and the musl-built `libffi`,
 `zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged beside it.
-CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2 with the same
+CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2023 with the same
 `/var/task` layout used by Lambda.
 
 Static HTML, CSS, fonts, and the two supplied logos are served from Vercel's CDN and from Pudu
@@ -66,7 +66,7 @@ XML sitemap covers the current catalogue while it remains below the protocol's 5
 - **Q:** Hand-maintain thousands of API records? **A:** No. _Rationale:_ the compiler already owns
   names, kinds, signatures, and documentation. _Rejected:_ a second catalogue source.
 - **Q:** Build a native artifact on macOS and deploy it to Linux? **A:** No. _Rationale:_ CI builds
-  the x86-64 runtime against musl and proves its Lambda layout on Amazon Linux 2. _Rejected:_
+  the x86-64 runtime against musl and proves its Lambda layout on Amazon Linux 2023. _Rejected:_
   committing a local binary as a portable release.
 - **Q:** Force every Linux Pudu bundle to use Lambda's `/var/task` loader path? **A:** No. _Rationale:_
   the ordinary runtime remains suitable for Linux hosts; only its Lambda copy receives the platform

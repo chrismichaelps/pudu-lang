@@ -19,10 +19,9 @@ filesystem once it starts.
 
 ## Why a runtime built on a current Linux does not run on Lambda
 
-A runtime linked against the glibc of a current host records a version requirement — `GLIBC_2.34`
-from a 24.04 build machine. AWS Lambda, which is what a Vercel function runs on, provides an older
-one, as does every Alpine image. The loader refuses before any Pudu code runs, so nothing in the
-program can report it and no diagnostic names the cause.
+A runtime linked against the glibc of its build host records that host's symbol-version requirements.
+AWS Lambda and Alpine do not promise that exact libc contract. The loader can refuse before any Pudu
+code runs, so nothing in the program can report it and no diagnostic names the cause.
 
 Linking glibc statically does not fix this and breaks something else: glibc resolves hostnames
 through NSS modules it loads at run time, which a static link does not carry, so `Net.connect(host,
@@ -31,16 +30,17 @@ port)` fails for every name while an address still works. musl resolves names in
 So the runtime is linked against musl, built by `scripts/build-musl-runtime.sh`. The script pins its
 toolchain image by digest and checks the finished binary does not need glibc, because a link that
 quietly fell back produces a file that builds, passes a smoke test on the build machine, and fails on
-the platform.
+the platform. CI exercises the Lambda package on Vercel's Amazon Linux 2023 target.
 
 ## Why the musl runtime is not fully static
 
 A fully static binary cannot `dlopen`. `cbits/pudu_ffi.c` and `cbits/pudu_sqlite.c` load libraries
 that way, so a fully static runtime would silently be one with no `Std.Foreign` and no SQLite driver.
 
-The runtime is therefore dynamically linked against musl and statically against everything else —
-libffi, zlib, ncurses, gmp. One file has to be present where it runs: musl's loader. That is what an
-Alpine base supplies, and it is the whole difference between this and `FROM scratch`.
+The runtime is therefore dynamically linked against musl and the C libraries used by libffi, zlib,
+ncurses, and gmp. A normal Alpine host supplies them. The Lambda package carries the matching loader
+and shared objects beside its Pudu function, and the Lambda runtime searches its own directory for
+those files. This preserves dynamic loading without depending on the host's glibc libraries.
 
 ## Building for a platform from a machine that is not it
 
@@ -104,7 +104,7 @@ and what lets the loop be pointed at a server a fixture starts, which is how it 
 `fromEnvironment` reads the address a platform announces; a program that also runs as a listener asks
 for it and decides, so one build runs in both places.
 
-Vercel's Build Output API names this runtime `provided.al2` and starts the artefact as `bootstrap`.
+Vercel's Build Output API names this runtime `provided.al2023` and starts the artefact as `bootstrap`.
 `website/scripts/build-vercel.sh` emits that.
 
 ## What this does not yet do

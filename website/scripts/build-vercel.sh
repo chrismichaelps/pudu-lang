@@ -73,12 +73,12 @@ chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
   "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
-# `provided.al2` runs the artefact directly: the platform starts `bootstrap` and
+# `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and
 # speaks to it over the Lambda runtime interface, which `Std.Http.Server.Lambda`
 # implements. No Node launcher, and nothing to add helpers to.
 printf '%s\n' \
   '{' \
-  '  "runtime": "provided.al2",' \
+  '  "runtime": "provided.al2023",' \
   '  "handler": "bootstrap",' \
   '  "architecture": "x86_64",' \
   '  "maxDuration": 60' \

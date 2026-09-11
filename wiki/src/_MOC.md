@@ -24,7 +24,7 @@ tags: [moc, module]
   surface.
 - [[src/website/_MOC|Website modules]] — Pudu SSR, generated API search, views, SEO, tests, and Pudu-native deployment entries.
 - [[Website Linux Artifact Workflow]] — short-lived x86-64 Pudu website build for preview deployment.
-- [[Musl Runtime Workflow]] — portable x86-64 runtime proof across Alpine and Amazon Linux 2.
+- [[Musl Runtime Workflow]] — portable x86-64 runtime proof across Alpine and Amazon Linux 2023.
 - [[Musl Toolchain Image]] · [[Musl Runtime Builder]] — reproducible local musl construction.
 
 - [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.

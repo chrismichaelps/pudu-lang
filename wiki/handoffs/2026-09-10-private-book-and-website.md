@@ -44,5 +44,6 @@ example audit, full repository test suite, and live production verification. Fea
 
 The adapter-free deployment is active on `feature/deploy-without-adapters`. Amazon Linux now reaches
 the packaged loader and reports the four remaining dynamic musl libraries. The Lambda runtime uses
-an `$ORIGIN` search path and the workflow packages those exact dependencies; rerun that proof, then
-download the artifacts, assemble the Vercel output, and deploy the Pudu function.
+an `$ORIGIN` search path and the workflow packages those exact dependencies. Vercel rejected the old
+`provided.al2` metadata before deployment; the output and proof now target `provided.al2023`. Rerun
+that proof, then deploy and test the Pudu function.

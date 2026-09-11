@@ -8,9 +8,8 @@ name: musl-runtime
 # before any Pudu code runs, so nothing in the program can report it.
 #
 # So the artefact is carried into two images it has no business running in
-# unless the link worked: Alpine, which has no glibc at all, and Amazon Linux 2,
-# whose glibc is older than any current build host's and is what AWS Lambda —
-# and therefore a Vercel function — provides.
+# unless the package worked: Alpine, which has no glibc at all, and Amazon
+# Linux 2023, which is the custom-runtime target Vercel currently provides.
 #
 # The job runs *in* Alpine rather than building a container from a runner,
 # because Alpine is musl: nothing has to arrange for a different C library than
@@ -171,6 +170,6 @@ jobs:
           chmod +x dist/deployed dist/ld-musl-x86_64.so.1
           docker run --rm \
             --volume "$PWD/dist:/var/task:ro" \
-            amazonlinux:2 \
+            amazonlinux:2023 \
             /usr/bin/env -i /var/task/deployed | tee said.txt
           grep -qx "Deployed on musl" said.txt

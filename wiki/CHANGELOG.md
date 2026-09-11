@@ -10,10 +10,12 @@ tags: [changelog]
 - Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their
   directories to later steps, avoiding dependence on shell state that GitHub Actions discards.
 - Split the generated runtime into a normal Linux artifact and a Lambda-targeted copy, packaged the
-  matching musl loader beside the function, and added Alpine plus Amazon Linux 2 execution proofs.
+  matching musl loader beside the function, and added Alpine plus Amazon Linux 2023 execution proofs.
 - Restored the packaged loader's executable bit after cross-job artifact extraction.
 - Replaced ineffective static-link claims with dependency-driven packaging of the four musl shared
   libraries and an `$ORIGIN` search path on the Lambda runtime.
+- Aligned the function metadata and execution proof with Vercel's current `provided.al2023` custom
+  runtime target.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.

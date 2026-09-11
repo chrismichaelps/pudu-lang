@@ -17,3 +17,4 @@ Resolved Grill Log: dynamic search reaches the same Pudu router and ranking serv
 and tests, while canonical pages resolve directly from Vercel's static edge output. The builder refuses
 to package a function unless both the Lambda runtime and its matching musl loader are present.
 It also refuses any missing shared dependency named by the runtime package contract.
+The emitted function uses Vercel's current custom-runtime target, `provided.al2023`.
