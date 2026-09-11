@@ -41,8 +41,10 @@ implementation.
 
 The deployment runtime is built against musl. The normal runtime keeps musl's standard interpreter
 for Linux hosts. A Lambda copy points to `/var/task/ld-musl-x86_64.so.1`, and the matching loader is
-packaged beside the Pudu function. Its runtime search path is `$ORIGIN`, and the musl-built `libffi`,
-`zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged beside it.
+packaged beside the Pudu function. The musl-built `libffi`,
+`zlib`, `ncursesw`, `tinfo`, and `gmp` shared libraries named by dependency inspection are packaged
+beside it. Lambda ELF dependencies name their `/var/task` files directly so Vercel's host
+`LD_LIBRARY_PATH` cannot substitute incompatible glibc libraries.
 CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2023 with the same
 `/var/task` layout used by Lambda.
 
@@ -75,6 +77,13 @@ XML sitemap covers the current catalogue while it remains below the protocol's 5
   dependency inspection showed four dynamic musl libraries, so the Lambda artifact carries the exact
   files it names and searches beside itself. _Rejected:_ calling an artifact self-contained without
   executing it on a host where those libraries are absent.
+- **Q:** Rely on `$ORIGIN` alone for Lambda library selection? **A:** No. _Rationale:_ Vercel injects
+  host library paths ahead of the package and musl can select same-named glibc objects. Direct
+  `/var/task` dependency names make the selected files deterministic. _Rejected:_ accepting a clean
+  Amazon Linux container as proof of Vercel's different environment.
+- **Q:** Name the dynamic function `index.func`? **A:** No. _Rationale:_ that function path shadows
+  the static root page before the explicit root rewrite. _Rejected:_ invoking Pudu for a page already
+  present in static output.
 
 Resolved Grill Log: one Pudu rendering and search core, Pudu-native runtime edges, generated API
 data, typed HTML, explicit errors, and no reverse dependency from domain or services into transport.

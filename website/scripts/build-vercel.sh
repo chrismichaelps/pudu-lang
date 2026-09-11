@@ -5,10 +5,10 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 musl_runtime="${PUDU_LAMBDA_RUNTIME:-$root/dist/pudu-musl-lambda-x86_64}"
 musl_loader="${PUDU_MUSL_LOADER:-$root/dist/ld-musl-x86_64.so.1}"
 musl_library_dir="${PUDU_MUSL_LIBRARY_DIR:-$(dirname "$musl_loader")}"
-musl_libraries=(libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10)
+musl_libraries=(libffi.so.8 libz.so.1 libncursesw.so.6 libtinfo.so.6 libgmp.so.10)
 compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
-function_dir="$output/functions/index.func"
+function_dir="$output/functions/dynamic.func"
 
 if [[ -z "${PUDU_SITE_URL:-}" ]]; then
   echo "set PUDU_SITE_URL to the canonical HTTPS origin" >&2
@@ -98,8 +98,8 @@ printf '%s\n' \
   '    { "src": "/modules", "dest": "/modules/index.html" },' \
   '    { "src": "/module/(.*)", "dest": "/module/$1/index.html" },' \
   '    { "src": "/docs/(.*)/(.*)/(.*)", "dest": "/docs/$1/$2/$3/index.html" },' \
-  '    { "src": "/search", "dest": "/index" },' \
-  '    { "src": "/.*", "dest": "/index" }' \
+  '    { "src": "/search", "dest": "/dynamic" },' \
+  '    { "src": "/.*", "dest": "/dynamic" }' \
   '  ]' \
   '}' > "$output/config.json"
 

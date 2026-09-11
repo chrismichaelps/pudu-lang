@@ -9,7 +9,8 @@ aliases: [Musl Runtime Workflow]
 
 Builds the Pudu runtime inside Alpine on an x86-64 runner and creates an additional Lambda copy whose
 ELF interpreter points to the packaged musl loader under `/var/task`. It attaches a small Pudu program
-to that copy, packages every named musl shared dependency beside it, and executes it in both Alpine
+to that copy, binds its dependencies to their packaged `/var/task` paths, packages direct and
+transitive musl shared dependencies beside it, and executes it in both Alpine
 and Amazon Linux 2023 before uploading the artifacts.
 
 Installed GHCup tool locations are resolved explicitly and added to later workflow steps. This
@@ -18,5 +19,5 @@ The cross-job proof restores execute permissions on both the attached program an
 because artifact extraction preserves bytes but not executable mode bits.
 
 Resolved Grill Log: the artifact is accepted only after its actual loader dependencies, packaged
-Lambda path, `$ORIGIN` library search, and behavior are checked on both the build libc and the older
-Lambda-compatible host.
+Lambda path, direct packaged-library selection, and behavior are checked on both the build libc and
+the Lambda-compatible host with a Vercel-like host library search path.

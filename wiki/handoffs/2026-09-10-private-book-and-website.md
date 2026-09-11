@@ -46,4 +46,6 @@ The adapter-free deployment is active on `feature/deploy-without-adapters`. Amaz
 the packaged loader and reports the four remaining dynamic musl libraries. The Lambda runtime uses
 an `$ORIGIN` search path and the workflow packages those exact dependencies. Vercel rejected the old
 `provided.al2` metadata before deployment; the output and proof now target `provided.al2023`. Rerun
-that proof, then deploy and test the Pudu function.
+that proof. The first accepted preview showed Vercel's host library path selecting incompatible
+glibc libraries and `index.func` shadowing static `/`; bind dependencies to `/var/task`, package
+transitive `libtinfo`, use `dynamic.func`, then redeploy and test the Pudu function.

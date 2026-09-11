@@ -40,7 +40,9 @@ that way, so a fully static runtime would silently be one with no `Std.Foreign` 
 The runtime is therefore dynamically linked against musl and the C libraries used by libffi, zlib,
 ncurses, and gmp. A normal Alpine host supplies them. The Lambda package carries the matching loader
 and shared objects beside its Pudu function, and the Lambda runtime searches its own directory for
-those files. This preserves dynamic loading without depending on the host's glibc libraries.
+those files. The Lambda ELF names each packaged `/var/task` dependency directly because a platform
+may inject host library search paths ahead of the function directory. This preserves dynamic loading
+without selecting same-named glibc libraries from the host.
 
 ## Building for a platform from a machine that is not it
 
