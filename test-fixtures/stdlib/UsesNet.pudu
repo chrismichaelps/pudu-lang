@@ -71,6 +71,7 @@ export fn main() -> Int {
 
   held = held + invalidatesTimedOutRead()
   held = held + invalidatesTimedOutSend()
+  held = held + acceptsAndFolds()
 
   // A second listener answers with a port of its own, so binding twice does
   // not silently hand back the same endpoint.
@@ -87,6 +88,81 @@ export fn main() -> Int {
   }
 
   held
+}
+
+/// A connection taken one at a time rather than through `serve`, and a message
+/// whose end is marked by the sender saying nothing more is coming.
+///
+/// This is the shape a protocol with no length ahead of its body has, and the
+/// two halves are what make it work: the sender finishes its half while still
+/// reading, and the reader folds chunks until the stream ends. A sender that
+/// closed outright would discard the reply it is waiting for, and a reader that
+/// read once would answer whatever the first packet happened to carry.
+fn acceptsAndFolds() -> Int {
+  // Bound to the address explicitly rather than through the local shorthand,
+  // since a listener is where a program chooses what it is reachable from and
+  // binding the wrong interface is how a service meant to be local is not.
+  let opened: Result[Net.Listener, Net.NetError] = Net.listen("127.0.0.1", 0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let fromServer: Channel.Channel[Str] = Channel.channel(4)
+    let worker = Concurrent.start(fn() -> () {
+        if let Ok(connection) = Net.accept(&listener) {
+          // Who is at the other end, which for a loopback connection is the
+          // loopback address and not the hostname it was dialled by.
+          let peer = Result.unwrapOr(Net.peerOf(&connection), "")
+          let _said = Channel.send(&fromServer, "peer " + peer)
+          // Everything the client sends, counted a chunk at a time. What this
+          // costs does not depend on how much arrives, which is the whole
+          // reason it is a fold rather than a read into one value.
+          let counted = Net.foldChunks(&connection, 0, fn(total: Int, chunk: Bytes) -> Int {
+              total + chunk.length()
+            })
+          let _reported = Channel.send(&fromServer, "bytes " + show(Result.unwrapOr(counted, 0 - 1)))
+          // A reply of a stated length, which the client reads as exactly that
+          // many bytes.
+          let _replied = Net.sendText(&connection, "pong-8..")
+          let _closed = Net.close(&connection)
+          ()
+        }
+        let _shut = Net.closeListener(&listener)
+        ()
+      })
+
+    var held = 0
+    // Dialled with a bound on how long the attempt may take, because a
+    // connection to a host that is there but not answering otherwise waits as
+    // long as the operating system chooses.
+    let dialled = Net.connectWithin("127.0.0.1", port, 2000)
+    if Result.isOk(&dialled) { held = held + 1 }
+    if let Ok(connection) = dialled {
+      if Result.isOk(&Net.sendTextWithin(&connection, "abcdefghij", 2000)) { held = held + 1 }
+      // Nothing more is coming, said while still reading: this is what ends the
+      // server's fold, and closing here would throw away the reply.
+      if Result.isOk(&Net.finish(&connection)) { held = held + 1 }
+      // Exactly the stated length, rather than whatever has arrived so far.
+      let reply = Net.receiveExactly(&connection, 8)
+      if Result.unwrapOr(Result.map(reply, fn(bytes: Bytes) -> Str { textOf(&bytes) }), "") == "pong-8.." {
+        held = held + 1
+      }
+      // A read for more than the peer will ever send ends rather than waiting,
+      // because the peer has closed and no further byte can arrive.
+      if Result.isErr(&Net.receiveExactly(&connection, 8)) { held = held + 1 }
+      if Result.isOk(&Net.close(&connection)) { held = held + 1 }
+    }
+
+    // What the server saw, which is what says the bytes crossed rather than
+    // that the client believed they did.
+    let peerSaid = Option.unwrapOr(Result.unwrapOr(Channel.receive(&fromServer), None), "")
+    if peerSaid.startsWith("peer 127.0.0.1") { held = held + 1 }
+    let folded = Option.unwrapOr(Result.unwrapOr(Channel.receive(&fromServer), None), "")
+    if folded == "bytes 10" { held = held + 1 }
+
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    held
+  } else {
+    0
+  }
 }
 
 fn invalidatesTimedOutRead() -> Int {

@@ -106,10 +106,20 @@ testProtocolEvaluation = do
         (separated === Just "25")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
-        given, so nothing is assumed about what else the machine holds. -}
+        given, so nothing is assumed about what else the machine holds.
+
+        A connection is also taken one at a time rather than through `serve`,
+        carrying a message whose end is marked by the sender saying nothing more
+        is coming — the shape a protocol with no length ahead of its body has.
+        Both halves of that are checked: the sender finishes its write side
+        while still reading, since closing outright would discard the reply it
+        is waiting for, and the reader folds chunks until the stream ends rather
+        than reading once, which would answer whatever the first packet happened
+        to carry. The reply is read as exactly its stated length, and a read for
+        more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "14")
+        (endpoints === Just "22")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
