@@ -15,6 +15,16 @@ fn finishedSpan(name: Str) -> Trace.Span {
   Trace.finished(&noted, 1757000000125)
 }
 
+/// An exporter addressed at a collector of its own, carrying two headers and
+/// held to a deadline, set through a bound naming the configuring trait and
+/// nothing else.
+fn wiredUp[E: Otlp.Configuring](base: &E) -> E {
+  base.sendingTo("http://collector.internal:4318/v1/traces")
+    .carrying("x-api-key", "secret")
+    .carrying("x-tenant", "acme")
+    .within(1500)
+}
+
 fn documentOf(spans: &Array[Trace.Span]) -> Json.Json {
   Otlp.document(&Otlp.exporter("checkout"), spans)
 }
@@ -131,7 +141,7 @@ fn main() -> Int {
   }
 
   // 13. Headers a collector needs can be carried on every export
-  let keyed = Otlp.carrying(&Otlp.exporter("checkout"), "x-api-key", "secret")
+  let keyed: Otlp.Exporter = Otlp.exporter("checkout").carrying("x-api-key", "secret")
   if keyed.headers.length() == 1 && keyed.headers[0][0] == "x-api-key" {
     held = held + 1
   }
@@ -139,6 +149,32 @@ fn main() -> Int {
   // 14. And the endpoint has a default worth having: the one the specification
   //     names, so a collector run with its own defaults needs no configuration
   if Otlp.exporter("checkout").endpoint == "http://localhost:4318/v1/traces" {
+    held = held + 1
+  }
+
+  // 15. The three settings said through a bound naming the configuring trait
+  //     alone, which is what checks they are usable as methods. Carrying adds
+  //     rather than sets, so a key and a tenant named in two calls both travel
+  let wired = wiredUp(&Otlp.exporter("checkout"))
+  if wired.endpoint == "http://collector.internal:4318/v1/traces"
+    && wired.deadlineMillis == 1500
+    && wired.headers.length() == 2 {
+    held = held + 1
+  }
+  // The service the exporter was made for survives everything said after it
+  if wired.service == "checkout" { held = held + 1 }
+
+  // 16. What each reason for a failed export says. A collector that answered
+  //     is a different thing to debug from one that never did, so the two read
+  //     differently rather than both reading as the export having failed
+  let unreachable: Otlp.ExportError = Otlp.Unreachable("connection refused")
+  if Otlp.explain(&unreachable) == "the collector could not be reached: connection refused" {
+    held = held + 1
+  }
+  if Otlp.explain(&Otlp.Refused(503, "overloaded")) == "the collector answered 503 overloaded" {
+    held = held + 1
+  }
+  if Otlp.explain(&NothingToSend) == "no finished, recorded span was given" {
     held = held + 1
   }
 

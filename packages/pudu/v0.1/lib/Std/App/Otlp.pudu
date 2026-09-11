@@ -54,19 +54,36 @@ export fn exporter(service: Str) -> Exporter {
   }
 }
 
-/// The exporter, addressed to a collector.
-export fn sendingTo(base: &Exporter, endpoint: Str) -> Exporter {
-  Exporter{..*base, endpoint: endpoint}
+/// Where an exporter sends, what it carries, and how long it may take.
+///
+/// Wiring a collector up means saying two or three of these at once, and as
+/// methods they read down the page in the order they are decided: the address
+/// first, then what travels with every export, then how long to wait.
+export trait Configuring {
+  fn sendingTo(self: &Self, endpoint: Str) -> Self
+  fn carrying(self: &Self, name: Str, value: Str) -> Self
+  fn within(self: &Self, millis: Int) -> Self
 }
 
-/// The exporter, with a header added to what it sends.
-export fn carrying(base: &Exporter, name: Str, value: Str) -> Exporter {
-  Exporter{..*base, headers: base.headers.push((name, value))}
-}
+impl Configuring for Exporter {
+  /// The exporter, addressed to a collector.
+  fn sendingTo(self: &Self, endpoint: Str) -> Self {
+    Exporter{..*self, endpoint: endpoint}
+  }
 
-/// The exporter, giving up after this many milliseconds.
-export fn within(base: &Exporter, millis: Int) -> Exporter {
-  Exporter{..*base, deadlineMillis: millis}
+  /// The exporter, with a header added to what it sends.
+  ///
+  /// Added rather than set, so a key and a tenant named in two calls both
+  /// travel. A header named twice is sent twice, which is what the collector
+  /// sees and not something this can decide for it.
+  fn carrying(self: &Self, name: Str, value: Str) -> Self {
+    Exporter{..*self, headers: self.headers.push((name, value))}
+  }
+
+  /// The exporter, giving up after this many milliseconds.
+  fn within(self: &Self, millis: Int) -> Self {
+    Exporter{..*self, deadlineMillis: millis}
+  }
 }
 
 /// The document a collector is sent.

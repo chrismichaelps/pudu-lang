@@ -156,9 +156,17 @@ testProtocolEvaluation = do
     , counterexample
         "a message cannot carry more than it says"
         (posted === Just "46")
+    {-| What a client is set up with is said through a bound naming the
+        configuring trait alone, which is what checks those settings are usable
+        as methods. The protection is checked at the port that decides it and
+        at the call that overrides it, since which of the two wins decides
+        whether the secret above it goes out in the clear. The two
+        authentication mechanisms differ in the variant they hold and in
+        nothing else, so each is read back: a client set up for one holding the
+        other would send a proof the server did not ask for. -}
     , counterexample
         "SMTP client formats RFC 5321 commands, authenticates, parses replies, and rejects invalid states"
-        (smtping === Just "16")
+        (smtping === Just "21")
     , counterexample
         "GZIP compresses, streams multi-block DEFLATE, verifies CRC-32/ISIZE, and integrates HTTP middleware"
         (compressedGzip === Just "12")
@@ -321,10 +329,15 @@ testProtocolEvaluation = do
         own reader agrees however wrong both are. Two of these are about what
         is *not* sent: a span with no ending, which would be read as a
         measurement nothing measured, and a span the trace decided not to
-        record. -}
+        record. The settings are said through a bound naming the configuring
+        trait alone, which is what checks they are usable as methods; a header
+        is named twice to check that carrying adds rather than sets, since a
+        key and a tenant set in two calls must both travel. Each reason an
+        export failed is read for the sentence it gives, because a collector
+        that answered is a different thing to debug from one that never did. -}
     , counterexample
         "finished spans render as the document a collector reads, and unfinished ones do not"
-        (exportedSpans === Just "14")
+        (exportedSpans === Just "19")
     {-| Every form a person actually writes, because a reader that handles
         `--name value` and not `--name=value` is wrong for half of them. Two
         carry their own trap: `--` begins with a dash, so a reader dispatching

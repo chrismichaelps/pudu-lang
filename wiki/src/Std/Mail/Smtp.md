@@ -11,9 +11,11 @@ aliases: [Std Mail Smtp]
 
 Deliver Std.Mail.Message values through SMTP with verified implicit TLS or required STARTTLS.
 `client(host,port,domain)` selects ImplicitTls on port 465 and StartTlsRequired otherwise. Configuration
-contains host, port, domain, credentials, timeoutMs and security. EHLO domain is a required application setting; it is never inferred from the remote server or defaulted to localhost. `withSecurity` explicitly selects
-Plaintext, ImplicitTls or StartTlsRequired. `withDomain`, `withTimeout`, `withAuth` (LOGIN) and
-`withPlainAuth` (PLAIN) return updated configurations. Direct SmtpClient literals must include security.
+contains host, port, domain, credentials, timeoutMs and security. EHLO domain is a required application setting; it is never inferred from the remote server or defaulted to localhost. The `Configuring` trait
+carries every setting as a method on SmtpClient, so a client reads as one chain in the order a
+connection makes the decisions: `identifiedAs` (EHLO name), `loggingIn` (LOGIN) or `loggingInPlainly`
+(PLAIN), `within` (milliseconds) and `protectedBy`, which explicitly selects Plaintext, ImplicitTls or
+StartTlsRequired over what the port implied. Direct SmtpClient literals must include security.
 
 `deliver` returns Result[Int,SmtpError], the count accepted after DATA succeeds. `parseReply` and
 command-formatting helpers remain available. Errors distinguish connection, greeting, authentication,
@@ -47,13 +49,13 @@ accepted DATA. SMTPUTF8, MIME transfer encoding, OAuth SASL and delivery queues 
 ## Usage
 
 ```pudu
-let submission = Smtp.withAuth(&Smtp.client(smtpHost, smtpPort, ehloDomain), user, password)
+let submission = Smtp.client(smtpHost, smtpPort, ehloDomain).loggingIn(user, password)
 let accepted = Smtp.deliver(&submission, &message) ?
 ```
 
 Supply `smtpHost`, `smtpPort` and `ehloDomain` from application configuration. The EHLO identity is
 the client's fully qualified name or address literal, distinct from the server destination. Host
-must be nonempty and port must be in 1..65535. `withSecurity` overrides port-based transport defaults.
+must be nonempty and port must be in 1..65535. `protectedBy` overrides port-based transport defaults.
 
 
 

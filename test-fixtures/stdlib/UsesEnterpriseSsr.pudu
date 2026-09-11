@@ -36,6 +36,12 @@ fn textOf(b: &Bytes) -> Str {
   }
 }
 
+/// A longer code in a longer window that no clock drift is allowed in, set
+/// through a bound naming the configuring trait and nothing else.
+fn tightened[C: Totp.Configuring](base: &C) -> C {
+  base.digits(8).step(60).skew(0)
+}
+
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
   Route.Request {
     message: Http.Request{method: Get, target: "/", headers: headers, body: ""},
@@ -498,7 +504,7 @@ export fn main() -> Int {
   }
 
   let totpSec = "12345678901234567890".toBytes()
-  let totpCfg = Totp.config(totpSec, "Acme Corp", "alice@example.com")
+  let totpCfg: Totp.TotpConfig = Totp.config(totpSec, "Acme Corp", "alice@example.com")
   let totpUri = Totp.provisioningUri(&totpCfg)
   if totpUri.contains("otpauth://totp/Acme%20Corp:alice%40example.com")
     && totpUri.contains("algorithm=SHA256")
@@ -506,7 +512,7 @@ export fn main() -> Int {
     passed = passed + 1
   }
 
-  let totpSt = Totp.state()
+  let totpSt: Totp.TotpState = Totp.state()
   let codeT0 = Totp.generate(&totpCfg, 0)
   if codeT0.length() == 6 { passed = passed + 1 }
   if Totp.verify(&totpCfg, &totpSt, codeT0, 0) { passed = passed + 1 }
@@ -521,6 +527,24 @@ export fn main() -> Int {
   // Forward clock skew (+1 step) within skew allowance succeeds
   let codeT90 = Totp.generate(&totpCfg, 90)
   if Totp.verify(&totpCfg, &totpSt, codeT90, 60) { passed = passed + 1 }
+
+  // The three numbers set through a bound naming the trait alone, which is what
+  // checks they are usable as methods rather than only as functions.
+  let longer = tightened(&totpCfg)
+  if longer.digits == 8 && longer.stepSeconds == 60 && longer.skewSteps == 0 {
+    passed = passed + 1
+  }
+  // A longer code is longer, and the window it was made in is the only one it
+  // works in: no skew means the step before it is refused.
+  if Totp.generate(&longer, 0).length() == 8 { passed = passed + 1 }
+  let strictSt = Totp.state()
+  if !Totp.verify(&longer, &strictSt, Totp.generate(&longer, 0), 60) { passed = passed + 1 }
+  // Nothing asked for is the default rather than a code with no digits, which
+  // would be the same code for everybody.
+  if totpCfg.digits(0).digits == 6 && totpCfg.step(0).stepSeconds == 30 {
+    passed = passed + 1
+  }
+  if totpCfg.skew(0 - 1).skewSteps == 0 { passed = passed + 1 }
 
   passed
 }
