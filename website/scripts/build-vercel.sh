@@ -2,7 +2,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-musl_runtime="${PUDU_MUSL_RUNTIME:-$root/dist/pudu-musl-x86_64}"
+musl_runtime="${PUDU_LAMBDA_RUNTIME:-$root/dist/pudu-musl-lambda-x86_64}"
+musl_loader="${PUDU_MUSL_LOADER:-$root/dist/ld-musl-x86_64.so.1}"
 compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
 function_dir="$output/functions/index.func"
@@ -20,17 +21,24 @@ fi
 # of the ranking and of the page — a copy with no test against the Pudu one, so
 # the two could disagree and the deployed one was the untested one.
 #
-# A runtime linked against musl starts there, so the function is the site
-# itself: `website/src/Function.pudu` serving `Web.Routes`, rendering `View`.
+# A runtime linked against musl starts there when its matching loader is carried
+# beside it, so the function is the site itself: `website/src/Function.pudu`
+# serving `Web.Routes`, rendering `View`.
 if [[ ! -f "$musl_runtime" ]]; then
-  echo "no musl runtime at $musl_runtime" >&2
-  echo "  build one with scripts/build-musl-runtime.sh, or set PUDU_MUSL_RUNTIME" >&2
+  echo "no Lambda musl runtime at $musl_runtime" >&2
+  echo "  build one with scripts/build-musl-runtime.sh, or set PUDU_LAMBDA_RUNTIME" >&2
+  exit 1
+fi
+if [[ ! -f "$musl_loader" ]]; then
+  echo "no packaged musl loader at $musl_loader" >&2
+  echo "  build one with scripts/build-musl-runtime.sh, or set PUDU_MUSL_LOADER" >&2
   exit 1
 fi
 
 rm -rf "$output"
 mkdir -p "$function_dir" "$output/static/assets" "$output/static/fonts"
 cp "$root/website/data/api.json" "$function_dir/api.json"
+cp "$musl_loader" "$function_dir/ld-musl-x86_64.so.1"
 cp "$root/website/public/site.css" "$output/static/assets/site.css"
 cp "$root/website/public/assets/"* "$output/static/assets/"
 cp "$root/website/public/fonts/"* "$output/static/fonts/"
@@ -42,7 +50,7 @@ chmod 644 "$function_dir/api.json" 2>/dev/null || true
 "$compiler" build "$root/website/src/Function.pudu" \
   -o "$function_dir/bootstrap" \
   --runtime "$musl_runtime"
-chmod 755 "$function_dir/bootstrap"
+chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 
 # The static half of the site, rendered by the site.
 #

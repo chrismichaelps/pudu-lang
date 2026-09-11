@@ -16,7 +16,7 @@ FROM alpine:3.20
 # runtime is linked from, so the finished binary needs none of them present.
 RUN apk add --no-cache \
       bash binutils build-base coreutils curl git gmp-dev gnupg \
-      libffi-dev ncurses-dev perl tar xz zlib-dev \
+      libffi-dev ncurses-dev patchelf perl tar xz zlib-dev \
       ncurses-static zlib-static
 
 ARG GHC_VERSION=9.10.1

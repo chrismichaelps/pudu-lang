@@ -68,6 +68,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+output_dir="$(dirname "$output")"
+lambda_output="${PUDU_MUSL_LAMBDA_OUTPUT:-$output_dir/pudu-musl-lambda-x86_64}"
+loader_output="${PUDU_MUSL_LOADER_OUTPUT:-$output_dir/ld-musl-x86_64.so.1}"
+
 if ! command -v "$engine" >/dev/null 2>&1; then
   echo "build-musl-runtime: $engine is not installed" >&2
   echo "  set PUDU_MUSL_ENGINE=podman to use podman instead" >&2
@@ -103,7 +107,7 @@ if ! "$engine" image inspect "$image" >/dev/null 2>&1; then
     "$root/deploy"
 fi
 
-mkdir -p "$(dirname "$output")"
+mkdir -p "$output_dir" "$(dirname "$lambda_output")" "$(dirname "$loader_output")"
 
 # The build runs as the invoking user so the artefact is not left owned by root,
 # and HOME is inside the mount so cabal's package database survives between runs
@@ -129,10 +133,17 @@ mkdir -p "$(dirname "$output")"
       --ghc-options="-optl-Wl,-Bstatic -optl-lffi -optl-lz -optl-lncursesw -optl-lgmp -optl-Wl,-Bdynamic"
 
     cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" /work/dist/pudu-musl-built
+    cp /work/dist/pudu-musl-built /work/dist/pudu-musl-lambda-built
+    cp /lib/ld-musl-x86_64.so.1 /work/dist/ld-musl-x86_64-built.so.1
+    patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 \
+      /work/dist/pudu-musl-lambda-built
   '
 
 mv "$root/dist/pudu-musl-built" "$output"
+mv "$root/dist/pudu-musl-lambda-built" "$lambda_output"
+mv "$root/dist/ld-musl-x86_64-built.so.1" "$loader_output"
 chmod +x "$output"
+chmod +x "$lambda_output" "$loader_output"
 
 # What was actually produced, rather than what was asked for. A link that
 # quietly fell back to the host C library produces a file that builds, passes a
@@ -140,6 +151,8 @@ chmod +x "$output"
 # failure this whole script exists to prevent, so it is checked here.
 echo
 echo "built $output"
+echo "built $lambda_output"
+echo "copied $loader_output"
 "$engine" run --rm --platform "$platform" --volume "$output:/runtime:ro" "$image" sh -eu -c '
   echo "--- what it is ---"
   file /runtime || true

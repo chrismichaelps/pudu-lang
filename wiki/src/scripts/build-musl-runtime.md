@@ -8,7 +8,8 @@ aliases: [Musl Runtime Builder]
 # Musl Runtime Builder
 
 Builds an x86-64 Pudu runtime in the pinned Alpine toolchain image, preserves Cabal state in the
-repository build area, and verifies that the resulting executable does not depend on glibc.
+repository build area, and verifies that the resulting executable does not depend on glibc. It also
+writes a Lambda copy with `/var/task/ld-musl-x86_64.so.1` as its interpreter and copies that loader.
 
 The runtime deliberately keeps musl's loader dynamic so Pudu's foreign-library and SQLite loading
 remain available. All other named C dependencies are linked from static archives.

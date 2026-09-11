@@ -15,8 +15,9 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 compiler="${PUDU:-pudu}"
 runtime="${PUDU_MUSL_RUNTIME:-$root/dist/pudu-musl-x86_64}"
+lambda_runtime="${PUDU_LAMBDA_RUNTIME:-$root/dist/pudu-musl-lambda-x86_64}"
 
-if [[ ! -f "$runtime" ]]; then
+if [[ ! -f "$runtime" ]] || [[ ! -f "$lambda_runtime" ]]; then
   echo "building the musl runtime first" >&2
   "$root/scripts/build-musl-runtime.sh" -o "$runtime"
 fi
@@ -32,7 +33,7 @@ mkdir -p "$root/website/bin"
 # it. Both serve `Web.Routes`, so there is one description of every page.
 "$compiler" build "$root/website/src/Function.pudu" \
   -o "$root/website/bin/pudu-site-function-linux-x64" \
-  --runtime "$runtime"
+  --runtime "$lambda_runtime"
 
 file "$root/website/bin/pudu-site-server-linux-x64"
 file "$root/website/bin/pudu-site-function-linux-x64"

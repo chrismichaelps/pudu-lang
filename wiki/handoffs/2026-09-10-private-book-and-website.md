@@ -9,7 +9,7 @@ tags: [handoff, book, website, vercel]
 
 Language Educator completed the private book content and example gate. Application Architect and
 Website Implementer completed the generated-catalogue architecture, Pudu SSR surface, SEO policy,
-responsive visual system, pure Node.js in-memory search adapter for Vercel, and deployment pipeline.
+responsive visual system, Pudu-native Lambda entry, and deployment pipeline.
 Forensic Guardian validation is represented by the focused route suite, browser and TTFB latency checks,
 example audit, full repository test suite, and live production verification. Feature branch
 `feature/228-pudu-website` was merged into `dev` via PR #228.
@@ -29,20 +29,20 @@ example audit, full repository test suite, and live production verification. Fea
   horizontal overflow.
 - Vercel is deployed to Production at `https://website-ivory-one-hyy8j9ljag.vercel.app/`.
 - All 3,375 static pre-rendered routes serve with sub-350ms TTFB directly from Vercel Edge CDN.
-- Dynamic ranked search executes on Vercel Serverless Function in pure Node.js in ~330ms without
-  external Linux process dependencies or GLIBC conflicts.
+- Dynamic ranked search is served by the Pudu Lambda function through the same `Service.Search`
+  implementation used locally and in the website fixture.
 - SEO endpoints (`robots.txt`, `sitemap.xml`, Open Graph assets) verified live with HTTP 200 OK.
 
 ## Blockers resolved
 
-1. Host Docker disk space limit bypassed by using pure Node.js in-memory search handler over `api.json`,
-   removing the need for an external Linux ELF binary in AWS Lambda.
+1. The duplicate Node search adapter and `website/platform/vercel` folder were removed. The Pudu
+   runtime is built against musl; its Lambda copy names a packaged loader under `/var/task`.
 2. Vercel free-tier daily uncompressed file upload limits bypassed by deploying via `--archive=tgz`.
 3. Vercel Build Output API specification updated from `"x64"` to `"x86_64"`.
 
 ## Next actions
 
-The adapter-free deployment is active on `feature/deploy-without-adapters`. The old glibc website
-artifact passed, but the first musl workflow stopped after installation because the next step could
-not discover GHC. The workflow now resolves the GHCup binary paths explicitly. Push that correction,
-wait for both Alpine and Amazon Linux 2 proofs, then assemble and deploy the Pudu function.
+The adapter-free deployment is active on `feature/deploy-without-adapters`. The musl runtime now
+builds and runs on Alpine. Its next workflow run must prove the packaged `/var/task` loader layout on
+Amazon Linux 2; then download the runtime artifacts, assemble the Vercel output, and deploy the Pudu
+function.

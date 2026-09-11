@@ -32,7 +32,9 @@ scoring table it carried.
 
 Assemble Build Output API v3 with the canonical HTTPS origin and deploy using compressed archive.
 The function is a Pudu artefact attached to a runtime linked against musl, because a runtime linked
-against a current glibc cannot start on the Lambda a Vercel function runs on:
+against a current glibc cannot start on the Lambda a Vercel function runs on. The runtime builder
+also writes `dist/pudu-musl-lambda-x86_64` and packages its matching loader as
+`dist/ld-musl-x86_64.so.1`:
 
 ```bash
 scripts/build-musl-runtime.sh -o dist/pudu-musl-x86_64

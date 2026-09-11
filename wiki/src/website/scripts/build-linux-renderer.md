@@ -7,8 +7,8 @@ aliases: [Linux Pudu renderer builder]
 ---
 # Linux Pudu Renderer Builder
 
-Builds the compiler and the website's bundled Pudu HTTP server in a Linux x86-64 container, then
-places the executable under `website/bin/` for Vercel assembly.
+Attaches the website server and Lambda function to the corresponding x86-64 musl runtimes, then
+places the executables under `website/bin/` for Linux-host and function inspection.
 
-Resolved Grill Log: deployment-native binaries are built on the same operating-system and CPU
-family as the target function, never copied from the developer's macOS build.
+Resolved Grill Log: the ordinary Linux server keeps the normal musl interpreter, while the function
+uses the Lambda-targeted runtime and packaged `/var/task` loader path.

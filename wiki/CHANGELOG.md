@@ -9,6 +9,10 @@ tags: [changelog]
 
 - Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their
   directories to later steps, avoiding dependence on shell state that GitHub Actions discards.
+- Split the generated runtime into a normal Linux artifact and a Lambda-targeted copy, packaged the
+  matching musl loader beside the function, and added Alpine plus Amazon Linux 2 execution proofs.
+- Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
+  prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.
 
 ## 2026-09-10 — Pudu documentation website and private book validation

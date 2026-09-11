@@ -39,7 +39,7 @@ jobs:
         run: |
           apk add --no-cache \
             bash binutils build-base coreutils curl git gmp-dev gnupg \
-            libffi-dev ncurses-dev perl tar xz zlib-dev \
+            libffi-dev ncurses-dev patchelf perl tar xz zlib-dev \
             ncurses-static zlib-static nodejs
 
       - uses: actions/checkout@v7
@@ -79,11 +79,18 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
             "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64"
+          cp "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64" \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
+          cp /lib/ld-musl-x86_64.so.1 "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1"
+          patchelf --set-interpreter /var/task/ld-musl-x86_64.so.1 \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
 
       - name: Say what was produced
         run: |
           cd dist
           file pudu-musl-x86_64 || true
+          file pudu-musl-lambda-x86_64 || true
+          readelf -l pudu-musl-lambda-x86_64 | grep -F '/var/task/ld-musl-x86_64.so.1'
           ldd pudu-musl-x86_64 || true
           if ldd pudu-musl-x86_64 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
             echo "the runtime still needs glibc, which is the thing this avoids" >&2
@@ -109,13 +116,17 @@ jobs:
             }
           }
           PROGRAM
-          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed --runtime dist/pudu-musl-x86_64
+          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed \
+            --runtime dist/pudu-musl-lambda-x86_64
           ls -l dist/deployed
 
       - name: Run it here, where there is no glibc at all
         run: |
           cd /tmp
-          env -i "$GITHUB_WORKSPACE/dist/deployed" | tee said.txt
+          mkdir -p /var/task
+          cp "$GITHUB_WORKSPACE/dist/deployed" /var/task/deployed
+          cp "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1" /var/task/ld-musl-x86_64.so.1
+          env -i /var/task/deployed | tee said.txt
           grep -qx "Deployed on musl" said.txt
 
       - uses: actions/upload-artifact@v4
@@ -123,6 +134,8 @@ jobs:
           name: pudu-musl-x86_64
           path: |
             dist/pudu-musl-x86_64
+            dist/pudu-musl-lambda-x86_64
+            dist/ld-musl-x86_64.so.1
             dist/deployed
           if-no-files-found: error
           retention-days: 7
@@ -143,7 +156,7 @@ jobs:
         run: |
           chmod +x dist/deployed
           docker run --rm \
-            --volume "$PWD/dist/deployed:/deployed:ro" \
+            --volume "$PWD/dist:/var/task:ro" \
             amazonlinux:2 \
-            /usr/bin/env -i /deployed | tee said.txt
+            /usr/bin/env -i /var/task/deployed | tee said.txt
           grep -qx "Deployed on musl" said.txt
