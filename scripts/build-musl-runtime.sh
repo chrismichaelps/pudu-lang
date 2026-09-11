@@ -146,21 +146,12 @@ mkdir -p "$output_dir" "$(dirname "$lambda_output")" "$(dirname "$loader_output"
       patchelf --replace-needed "$dependency" "/var/task/$dependency" \
         /work/dist/pudu-musl-lambda-built
     done
-    resolved="$(ldd /work/dist/libncursesw.so.6-built | \
-      awk '\''$1 == "libtinfo.so.6" { print $3 }'\'')"
-    if [ -z "$resolved" ]; then
-      echo "could not resolve libtinfo.so.6 from libncursesw.so.6" >&2
-      exit 1
-    fi
-    cp -L "$resolved" /work/dist/libtinfo.so.6-built
-    patchelf --replace-needed libtinfo.so.6 /var/task/libtinfo.so.6 \
-      /work/dist/libncursesw.so.6-built
   '
 
 mv "$root/dist/pudu-musl-built" "$output"
 mv "$root/dist/pudu-musl-lambda-built" "$lambda_output"
 mv "$root/dist/ld-musl-x86_64-built.so.1" "$loader_output"
-for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libtinfo.so.6 libgmp.so.10; do
+for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
   mv "$root/dist/$dependency-built" "$library_output_dir/$dependency"
 done
 chmod +x "$output"

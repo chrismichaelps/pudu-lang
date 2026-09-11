@@ -42,7 +42,7 @@ implementation.
 The deployment runtime is built against musl. The normal runtime keeps musl's standard interpreter
 for Linux hosts. A Lambda copy points to `/var/task/ld-musl-x86_64.so.1`, and the matching loader is
 packaged beside the Pudu function. The musl-built `libffi`,
-`zlib`, `ncursesw`, `tinfo`, and `gmp` shared libraries named by dependency inspection are packaged
+`zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged
 beside it. Lambda ELF dependencies name their `/var/task` files directly so Vercel's host
 `LD_LIBRARY_PATH` cannot substitute incompatible glibc libraries.
 CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2023 with the same

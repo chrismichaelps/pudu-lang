@@ -10,7 +10,7 @@ aliases: [Vercel output builder]
 Produces a Build Output API v3 directory (`.vercel/output`) from the public catalogue, a Pudu Lambda
 function, static CSS, Nunito fonts, logos, and canonical HTML pages rendered directly by Pudu. The
 function contains the Lambda-targeted musl runtime and its loader; no JavaScript adapter is included.
-The matching musl `libffi`, `zlib`, `ncursesw`, `tinfo`, and `gmp` libraries are copied beside the
+The matching musl `libffi`, `zlib`, `ncursesw`, and `gmp` libraries are copied beside the
 function and named directly by its ELF dependencies.
 
 Resolved Grill Log: dynamic search reaches the same Pudu router and ranking service as local requests

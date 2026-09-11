@@ -16,8 +16,8 @@ tags: [changelog]
   libraries and an `$ORIGIN` search path on the Lambda runtime.
 - Aligned the function metadata and execution proof with Vercel's current `provided.al2023` custom
   runtime target.
-- Bound Lambda dependencies to their packaged `/var/task` paths, included transitive `libtinfo`, and
-  moved the function away from `index.func` so static `/` is not shadowed.
+- Bound Lambda dependencies to their packaged `/var/task` paths and moved the function away from
+  `index.func` so static `/` is not shadowed.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.

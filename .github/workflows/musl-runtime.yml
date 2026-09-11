@@ -92,15 +92,6 @@ jobs:
             patchelf --replace-needed "$dependency" "/var/task/$dependency" \
               "$GITHUB_WORKSPACE/dist/pudu-musl-lambda-x86_64"
           done
-          resolved="$(ldd "$GITHUB_WORKSPACE/dist/libncursesw.so.6" | \
-            awk '$1 == "libtinfo.so.6" { print $3 }')"
-          if [ -z "$resolved" ]; then
-            echo "could not resolve libtinfo.so.6 from libncursesw.so.6" >&2
-            exit 1
-          fi
-          cp -L "$resolved" "$GITHUB_WORKSPACE/dist/libtinfo.so.6"
-          patchelf --replace-needed libtinfo.so.6 /var/task/libtinfo.so.6 \
-            "$GITHUB_WORKSPACE/dist/libncursesw.so.6"
 
       - name: Say what was produced
         run: |
@@ -112,7 +103,6 @@ jobs:
             patchelf --print-needed pudu-musl-lambda-x86_64 | \
               grep -Fx "/var/task/$dependency"
           done
-          patchelf --print-needed libncursesw.so.6 | grep -Fx /var/task/libtinfo.so.6
           ldd pudu-musl-x86_64 || true
           if ldd pudu-musl-x86_64 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
             echo "the runtime still needs glibc, which is the thing this avoids" >&2
@@ -148,7 +138,7 @@ jobs:
           mkdir -p /var/task
           cp "$GITHUB_WORKSPACE/dist/deployed" /var/task/deployed
           cp "$GITHUB_WORKSPACE/dist/ld-musl-x86_64.so.1" /var/task/ld-musl-x86_64.so.1
-          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libtinfo.so.6 libgmp.so.10; do
+          for dependency in libffi.so.8 libz.so.1 libncursesw.so.6 libgmp.so.10; do
             cp "$GITHUB_WORKSPACE/dist/$dependency" "/var/task/$dependency"
           done
           env -i /var/task/deployed | tee said.txt
@@ -164,7 +154,6 @@ jobs:
             dist/libffi.so.8
             dist/libz.so.1
             dist/libncursesw.so.6
-            dist/libtinfo.so.6
             dist/libgmp.so.10
             dist/deployed
           if-no-files-found: error

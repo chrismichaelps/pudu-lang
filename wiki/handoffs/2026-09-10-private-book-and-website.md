@@ -47,5 +47,6 @@ the packaged loader and reports the four remaining dynamic musl libraries. The L
 an `$ORIGIN` search path and the workflow packages those exact dependencies. Vercel rejected the old
 `provided.al2` metadata before deployment; the output and proof now target `provided.al2023`. Rerun
 that proof. The first accepted preview showed Vercel's host library path selecting incompatible
-glibc libraries and `index.func` shadowing static `/`; bind dependencies to `/var/task`, package
-transitive `libtinfo`, use `dynamic.func`, then redeploy and test the Pudu function.
+glibc libraries and `index.func` shadowing static `/`; bind the four runtime dependencies to
+`/var/task`, use `dynamic.func`, then redeploy and test the Pudu function. The apparent `libtinfo`
+dependency belonged to the incorrectly selected host ncurses library, not the packaged musl one.
