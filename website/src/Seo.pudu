@@ -1,0 +1,120 @@
+module Seo
+
+import Std.Html.Build as H
+import Std.Json as Json
+import Std.Map as Map
+import Std.Option as Option
+import Std.Url as Url
+import Constants as Constants
+import Domain.Entry as Domain
+import Service.Catalog as Catalog
+
+export fn head(
+  siteUrl: Str,
+  title: Str,
+  description: Str,
+  path: Str,
+  indexable: Bool,
+  structured: Option[Json.Json]
+) -> Array[H.Node] {
+  let canonical = siteUrl + path
+  var nodes = [
+    H.tag("title").says(title + " | " + Constants.SITE_NAME),
+    H.meta().name("description").at("content", description),
+    H.meta().name("robots").at("content", if indexable { "index,follow,max-image-preview:large" } else { "noindex,follow" }),
+    H.link().rel("canonical").href(canonical),
+    property("og:type", "website"),
+    property("og:site_name", Constants.SITE_NAME),
+    property("og:title", title + " | " + Constants.SITE_NAME),
+    property("og:description", description),
+    property("og:url", canonical),
+    property("og:image", siteUrl + Constants.FULL_LOGO_PATH),
+    H.meta().name("twitter:card").at("content", "summary"),
+    H.meta().name("twitter:title").at("content", title + " | " + Constants.SITE_NAME),
+    H.meta().name("twitter:description").at("content", description),
+    H.meta().name("twitter:image").at("content", siteUrl + Constants.FULL_LOGO_PATH)
+  ]
+  if let Some(value) = structured {
+    let safe = Json.encode(&value).replace("</", "<\\/")
+    nodes = nodes.push(H.script().kind("application/ld+json").raw(safe))
+  }
+  nodes
+}
+
+export fn websiteSchema(siteUrl: Str) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("WebSite")),
+      ("name", Json.Text(Constants.SITE_NAME)),
+      ("url", Json.Text(siteUrl)),
+      ("description", Json.Text(Constants.SITE_DESCRIPTION))
+    ])
+}
+
+export fn symbolSchema(siteUrl: Str, entry: &Domain.Entry) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("TechArticle")),
+      ("headline", Json.Text(Domain.qualifiedName(entry))),
+      ("description", Json.Text(Domain.summary(entry))),
+      ("url", Json.Text(siteUrl + symbolPath(entry))),
+      ("isPartOf", Json.object(&[
+            ("@type", Json.Text("WebSite")),
+            ("name", Json.Text(Constants.SITE_NAME)),
+            ("url", Json.Text(siteUrl))
+          ]))
+    ])
+}
+
+export fn aboutSchema(siteUrl: Str) -> Json.Json {
+  Json.object(&[
+      ("@context", Json.Text("https://schema.org")),
+      ("@type", Json.Text("AboutPage")),
+      ("name", Json.Text("About Pudu")),
+      ("url", Json.Text(siteUrl + "/about")),
+      ("about", Json.object(&[
+            ("@type", Json.Text("SoftwareSourceCode")),
+            ("name", Json.Text(Constants.SITE_NAME)),
+            ("programmingLanguage", Json.Text(Constants.SITE_NAME)),
+            ("codeRepository", Json.Text(Constants.REPOSITORY_URL))
+          ])),
+      ("author", Json.object(&[
+            ("@type", Json.Text("Person")),
+            ("name", Json.Text(Constants.AUTHOR_NAME)),
+            ("sameAs", Json.List([
+                  Json.Text(Constants.AUTHOR_LINKEDIN_URL),
+                  Json.Text(Constants.AUTHOR_GITHUB_URL)
+                ]))
+          ]))
+    ])
+}
+
+export fn robots(siteUrl: Str) -> Str {
+  "User-agent: *\nAllow: /\nSitemap: " + siteUrl + "/sitemap.xml\n"
+}
+
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog) -> Str {
+  var urls = [siteUrl + "/", siteUrl + "/guide", siteUrl + "/about", siteUrl + "/donate", siteUrl + "/modules"]
+  for moduleName in catalog.modules {
+    urls = urls.push(siteUrl + "/module/" + Url.encodeComponent(moduleName))
+  }
+  var seen: Map[Str, Bool] = mapOf([])
+  for entry in catalog.entries {
+    let url = siteUrl + symbolPath(&entry)
+    if !Map.containsKey(&seen, url) {
+      seen = seen.insert(url, true)
+      urls = urls.push(url)
+    }
+  }
+  var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
+  for url in urls { body = body + "  <url><loc>" + url + "</loc></url>\n" }
+  body + "</urlset>\n"
+}
+
+export fn symbolPath(entry: &Domain.Entry) -> Str {
+  "/docs/" + Url.encodeComponent(entry.moduleName) + "/" + Url.encodeComponent(Domain.category(entry)) + "/" + Url.encodeComponent(entry.name)
+}
+
+fn property(name: Str, content: Str) -> H.Node {
+  H.meta().at("property", name).at("content", content)
+}

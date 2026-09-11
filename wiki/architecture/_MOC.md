@@ -22,6 +22,7 @@ Pudu is a statically typed native systems language for developers who need predi
 - [[architecture/PATTERNS]] — every design pattern written in Pudu and run: which dissolve, which are ordinary generics, and the one feature that was missing.
 - [[architecture/PERFORMANCE|Performance Constitution]] — compiler throughput, low-level IR, optimization barriers, and benchmarks.
 - [[architecture/PACKAGES|Package System]] — manifests, lockfiles, resolution, cache security, and registry protocol.
+- [[architecture/WEBSITE|Pudu Website Architecture]] — generated API data, Pudu SSR, static canonical pages, dynamic search, SEO, and the Vercel boundary.
 
 - [[architecture/FFI-SELF-HOSTING]] — remaining FFI ownership contracts and concrete self-hosting stages.
 

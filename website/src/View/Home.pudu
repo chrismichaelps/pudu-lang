@@ -1,0 +1,93 @@
+module View.Home
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Std.Url as Url
+import Domain.Entry as Domain
+import Seo as Seo
+import Service.Catalog as Catalog
+import Service.Search as Search
+import View.Layout as Layout
+
+export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
+  let intro = H.section().class("intro").holding([
+      H.h1().says("Find the Pudu API you need."),
+      H.p().says("Search every public function, type, trait, constructor, and constant by name or type."),
+      exampleQueries()
+    ])
+  let modules = modulePanel(&catalog.modules, catalog.languageVersion)
+  Layout.page(siteUrl, "Pudu language and API search", "Search every public Pudu language and standard-library declaration by name or type.", "/", true, Some(Seo.websiteSchema(siteUrl)), H.div().holding([
+        intro,
+        Layout.searchForm("", "home-search"),
+        H.div().class("grid").holding([
+            H.section().holding([
+                H.h2().says("Start with a shape"),
+                H.p().class("summary").says("Try Result[T, E], &mut T, Array[T] -> T, server, or json."),
+                H.pre().class("signature").holding([
+                    H.code().says("fn find[T](items: &Array[T], keep: fn(T) -> Bool) -> Option[T]")
+                  ])
+              ]),
+            modules
+          ])
+      ]).html())
+}
+
+export fn results(siteUrl: Str, catalog: &Catalog.Catalog, query: Str) -> Html.Html {
+  let hits = Search.find(&catalog.entries, query, 80)
+  var rows: Array[H.Node] = []
+  for hit in hits { rows = rows.push(resultRow(&hit)) }
+  let heading = if query.trim().isEmpty() { "Search Pudu" } else { "Results for “" + query + "”" }
+  let body = H.div().holding([
+      H.section().class("intro").holding([
+          H.h1().says(heading),
+          H.p().says(show(hits.length()) + " matching declarations")
+        ]),
+      Layout.searchForm(query, "home-search"),
+      H.ul().class("results").holding(rows)
+    ]).html()
+  Layout.page(siteUrl, heading, "Search results from the Pudu public API catalogue.", "/search", false, None, body)
+}
+
+fn resultRow(hit: &Domain.Hit) -> H.Node {
+  let entry = hit.entry
+  H.li().class("result").holding([
+      H.a().class("result-name").href(symbolPath(&entry)).says(Domain.qualifiedName(&entry)),
+      H.code().class("signature").says(entry.signature),
+      H.p().class("summary").says(Domain.summary(&entry)),
+      H.div().class("meta").says(entry.kind + " · " + entry.moduleName)
+    ])
+}
+
+fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
+  var links: Array[H.Node] = []
+  var index = 0
+  while index < modules.length() && index < 18 {
+    let name = modules[index]
+    links = links.push(H.li().holding([
+          H.a().href("/module/" + Url.encodeComponent(name)).says(name)
+        ]))
+    index = index + 1
+  }
+  H.aside().class("panel").holding([
+      H.h2().says("Browse modules"),
+      H.p().class("meta").says("Pudu " + languageVersion),
+      H.ul().class("module-list").holding(links),
+      H.p().holding([H.a().href("/modules").says("View all modules")])
+    ])
+}
+
+fn symbolPath(entry: &Domain.Entry) -> Str {
+  Seo.symbolPath(entry)
+}
+
+fn exampleQueries() -> H.Node {
+  let queries = ["checksum", "Str -> UInt32", "Result", "server"]
+  var links: Array[H.Node] = [H.span().says("Try ")]
+  var index = 0
+  for query in queries {
+    if index > 0 { links = links.push(H.span().says(", ")) }
+    links = links.push(H.a().href("/search?q=" + Url.encodeComponent(query)).says(query))
+    index = index + 1
+  }
+  H.p().class("query-examples").holding(links)
+}

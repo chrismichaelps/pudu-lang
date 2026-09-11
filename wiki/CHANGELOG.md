@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-10 — Pudu documentation website and private book validation
+
+- Built the documentation website in Pudu with one-way domain/service/view/route dependencies, typed server-rendered HTML, generated API data, ranked name and signature search, and thin build/runtime adapters for Vercel.
+- Added canonical metadata, robots policy, XML sitemap, Open Graph and Twitter metadata, structured data, static capture of crawlable routes, responsive Nunito typography, both supplied Pudu logos, the logo-blue visual system, favicon, copyright footer, GitHub navigation, About and author profiles, and an optional donation page.
+- Normalized 3,245 current public declarations from `pudu doc --json`; canonical HTML and search consume that machine-readable compiler output instead of scraping generated pages.
+- Grouped overloads and trait implementations at one kind-qualified canonical symbol URL, preventing both duplicate sitemap entries and case-insensitive build collisions such as `fn/stage` versus `type/Stage`; the final prerender produced 3,375 routes and 3,375 files.
+- Verified all 25 repository examples with the fresh repository compiler, all 36 website route assertions, desktop and 390px browser layouts, both logo assets, favicon metadata, type-signature search, canonical symbol and About pages, noindex error/search behavior, and the full `cabal test all` suite. One socket assertion failed during a concurrent first run and passed on the isolated rerun.
+- Prepared the Linux Pudu renderer, short-lived GitHub artifact workflow, and Vercel Build Output API pipeline. Local Docker construction remains blocked by host disk capacity; the remote Linux artifact path allows preview work to continue without publishing to production.
+
 ## 2026-09-09 — String optimizations, HTML chunk streaming, UI Island lifecycle, and CLI watch hardening
 
 - Zero-closure text dispatch expansion: expanded `callStringMethodFast` in `Pudu.Eval.Builtin.String` to directly dispatch all remaining built-in string methods (`spanOf`, `spanNotOf`, `slice`, `escapeHtml`, `trim`, `toUpper`, `toLower`, `replace`, `repeat`, `split`, `toBytes`, `chars`, `lines`, `reverse`), avoiding `StringMethodValue` closure allocation and environment traversal across all 22 primitive string methods.

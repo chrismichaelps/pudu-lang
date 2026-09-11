@@ -1,0 +1,43 @@
+module Config
+
+import Std.Env as Env
+import Std.Option as Option
+import Std.Text as Text
+import Error as SiteError
+
+export type Config = { host: Str, port: Int, connections: Int, cataloguePath: Str, siteUrl: Str }
+
+export fn load() -> Result[Config, SiteError.SiteError] {
+  let port = whole("PUDU_SITE_PORT", Env.variableOr("PUDU_SITE_PORT", "8080"), 0, 65535) ?
+  let connections = whole(
+    "PUDU_SITE_CONNECTIONS",
+    Env.variableOr("PUDU_SITE_CONNECTIONS", "0"),
+    0,
+    1000000
+  ) ?
+  Ok(Config {
+      host: Env.variableOr("PUDU_SITE_HOST", "127.0.0.1"),
+      port: port,
+      connections: connections,
+      cataloguePath: Env.variableOr("PUDU_CATALOG_PATH", "website/data/api.json"),
+      siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?
+    })
+}
+
+fn baseUrl(written: Str) -> Result[Str, SiteError.SiteError] {
+  let clean = written.trim()
+  if !clean.startsWith("https://") && !clean.startsWith("http://") {
+    return Err(SiteError.BadSetting("PUDU_SITE_URL"))
+  }
+  if clean.endsWith("/") { Ok(clean.take(clean.length() - 1)) } else { Ok(clean) }
+}
+
+fn whole(name: Str, written: Str, least: Int, greatest: Int) -> Result[Int, SiteError.SiteError] {
+  match Text.wholeOf(written) {
+    case Some(value) => {
+      if value < least || value > greatest { Err(SiteError.BadSetting(name)) }
+        else { Ok(value) }
+    }
+    case None => Err(SiteError.BadSetting(name))
+  }
+}

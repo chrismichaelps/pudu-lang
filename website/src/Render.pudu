@@ -1,0 +1,53 @@
+module Render
+
+import Std.Env as Env
+import Std.Http as Http
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+import Config as Config
+import Error as SiteError
+import Service.Catalog as Catalog
+import Web.Routes as Web
+
+fn main() -> Int {
+  match Config.load() {
+    case Err(problem) => failed(&problem)
+    case Ok(settings) => {
+      match Catalog.load(settings.cataloguePath) {
+        case Err(problem) => failed(&problem)
+        case Ok(catalog) => {
+          let target = Option.unwrapOr(Env.at(0), "/")
+          let response = Web.render(settings.siteUrl, &catalog, target)
+          let _written = Io.writeLine(envelope(&response))
+          0
+        }
+      }
+    }
+  }
+}
+
+fn envelope(response: &Http.Response) -> Str {
+  var headers: Array[Json.Json] = []
+  for header in response.headers {
+    headers = headers.push(Json.object(&[
+          ("name", Json.Text(header[0])),
+          ("value", Json.Text(header[1]))
+        ]))
+  }
+  Json.encode(&Json.object(&[
+        ("status", Json.Number(response.status.code)),
+        ("headers", Json.list(&headers)),
+        ("body", Json.Text(response.body))
+      ]))
+}
+
+fn failed(problem: &SiteError.SiteError) -> Int {
+  let response = Json.object(&[
+      ("status", Json.Number(500)),
+      ("headers", Json.list(&[])),
+      ("body", Json.Text(SiteError.explain(problem)))
+    ])
+  let _written = Io.writeLine(Json.encode(&response))
+  1
+}

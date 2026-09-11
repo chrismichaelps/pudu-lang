@@ -1,0 +1,15 @@
+module Constants
+
+export const SITE_NAME: Str = "Pudu"
+export const SITE_DESCRIPTION: Str = "Search the Pudu language and standard library."
+export const FULL_LOGO_PATH: Str = "/assets/pudu-lang-full-logo.png"
+export const SHORT_LOGO_PATH: Str = "/assets/pudu-lang-short.png"
+export const REPOSITORY_URL: Str = "https://github.com/chrismichaelps/pudu-lang/"
+export const DONATION_URL: Str = "https://paypal.me/chrismperezsantiago"
+export const HASKELL_URL: Str = "https://www.haskell.org/"
+export const AUTHOR_NAME: Str = "Chris M. Pérez Santiago"
+export const AUTHOR_GITHUB_URL: Str = "https://github.com/chrismichaelps"
+export const AUTHOR_LINKEDIN_URL: Str = "https://www.linkedin.com/in/chrisperezsantiago/"
+export const COPYRIGHT: Str = "© 2026 Chris M. Pérez Santiago. All rights reserved."
+export const CATALOGUE_PATH: Str = "website/data/api.json"
+export const STYLESHEET_PATH: Str = "website/public/site.css"

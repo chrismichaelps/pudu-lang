@@ -1,0 +1,32 @@
+module View.About
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Constants as Constants
+import Seo as Seo
+import View.Layout as Layout
+
+export fn page(siteUrl: Str) -> Html.Html {
+  Layout.page(siteUrl, "About Pudu", "Meet Pudu 0.1, learn why Haskell matters to its compiler, and meet its author.", "/about", true, Some(Seo.aboutSchema(siteUrl)), H.article().class("doc about").holding([
+        H.span().class("kind").says("about"),
+        H.h1().says("About Pudu"),
+        H.p().says("Pudu 0.1 is the first stable version of the language. It establishes a statically typed native language for programs that need clear control over data, resources, and failure."),
+        H.p().says("Pudu aims to make important behavior visible in the source. Its syntax stays readable while its type system checks the promises a program makes."),
+        H.h2().says("Why Haskell matters"),
+        H.p().holding([
+            H.a().href(Constants.HASKELL_URL).at("rel", "external noopener noreferrer").says("Haskell"),
+            H.span().says(" is important to Pudu. The first Pudu compiler is written in Haskell. Haskell's strong types and functional style help divide compiler work into explicit transformations that can be tested.")
+          ]),
+        H.p().says("Pudu keeps its own syntax and learning path. You do not need to know Haskell to read or write Pudu programs."),
+        H.h2().says("About the author"),
+        H.p().says(Constants.AUTHOR_NAME + " created Pudu and writes its programming book and documentation."),
+        H.ul().class("profile-links").holding([
+            H.li().holding([
+                H.a().href(Constants.AUTHOR_LINKEDIN_URL).at("rel", "external noopener noreferrer me").says("Chris Pérez Santiago on LinkedIn")
+              ]),
+            H.li().holding([
+                H.a().href(Constants.AUTHOR_GITHUB_URL).at("rel", "external noopener noreferrer me").says("Chris Pérez Santiago on GitHub")
+              ])
+          ])
+      ]).html())
+}

@@ -1,0 +1,73 @@
+module Test.Website
+
+import Std.Http as Http
+import Std.Test as Test
+import Service.Catalog as Catalog
+import Service.Search as Search
+import Web.Routes as Web
+
+fn hasHeader(response: &Http.Response, name: Str, value: Str) -> Bool {
+  Http.header(&response.headers, name) == Some(value)
+}
+
+export fn main() -> Int {
+  let loaded = Catalog.load("website/data/api.json")
+  let catalog = match loaded {
+    case Ok(value) => value
+    case Err(_) => { return 0 }
+  }
+  let origin = "https://pudu.example"
+  let home = Web.render(origin, &catalog, "/")
+  let search = Web.render(origin, &catalog, "/search?q=checksum")
+  let hostile = Web.render(origin, &catalog, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(origin, &catalog, "/module/Std.Adler32")
+  let symbol = Web.render(origin, &catalog, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(origin, &catalog, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(origin, &catalog, "/robots.txt")
+  let sitemap = Web.render(origin, &catalog, "/sitemap.xml")
+  let health = Web.render(origin, &catalog, "/health")
+  let donation = Web.render(origin, &catalog, "/donate")
+  let about = Web.render(origin, &catalog, "/about")
+  let overloads = Web.render(origin, &catalog, "/docs/Std.Bits/fn/width")
+  let hits = Search.find(&catalog.entries, "checksum", 10)
+
+  let suite = Test.suite("website", &[
+      Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.0"),
+      Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
+      Test.that("ranked search returns a result", hits.length() > 0),
+      Test.that("exact name ranks first", hits[0].entry.name == "checksum"),
+      Test.that("home renders", home.status.code == 200),
+      Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
+      Test.that("home has structured data", home.body.contains("application/ld+json")),
+      Test.that("home uses the supplied logo", home.body.contains("pudu-lang-full-logo.png")),
+      Test.that("home advertises the short logo as its icon", home.body.contains("rel=\"icon\" type=\"image/png\" href=\"/assets/pudu-lang-short.png\"")),
+      Test.that("home links the repository", home.body.contains("https://github.com/chrismichaelps/pudu-lang/")),
+      Test.that("home names the copyright holder", home.body.contains("© 2026 Chris M. Pérez Santiago")),
+      Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
+      Test.that("search is not indexed", search.body.contains("noindex,follow")),
+      Test.not("query markup is escaped", hostile.body.contains("<script>alert(1)</script>")),
+      Test.that("module page renders", modulePage.status.code == 200),
+      Test.that("symbol page renders", symbol.status.code == 200),
+      Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
+      Test.that("missing page is 404", missing.status.code == 404),
+      Test.that("missing page is not indexed", missing.body.contains("noindex,follow")),
+      Test.that("robots names the sitemap", robots.body.contains("https://pudu.example/sitemap.xml")),
+      Test.that("sitemap includes canonical symbols", sitemap.body.contains("https://pudu.example/docs/Std.Adler32/fn/checksum")),
+      Test.that("sitemap includes donation", sitemap.body.contains("https://pudu.example/donate")),
+      Test.that("sitemap is XML", hasHeader(&sitemap, "content-type", "application/xml; charset=utf-8")),
+      Test.that("health is not indexed", hasHeader(&health, "X-Robots-Tag", "noindex")),
+      Test.that("donation page renders", donation.status.code == 200),
+      Test.that("donation uses the requested PayPal destination", donation.body.contains("https://paypal.me/chrismperezsantiago")),
+      Test.that("about page renders", about.status.code == 200),
+      Test.that("about page explains Haskell's role", about.body.contains("The first Pudu compiler is written in Haskell")),
+      Test.that("about page identifies the author", about.body.contains("Chris M. Pérez Santiago")),
+      Test.that("about page links the author's profiles", about.body.contains("linkedin.com/in/chrisperezsantiago") && about.body.contains("github.com/chrismichaelps")),
+      Test.that("about page carries structured data", about.body.contains("AboutPage")),
+      Test.that("sitemap includes about", sitemap.body.contains("https://pudu.example/about")),
+      Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
+      Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
+      Test.that("same-name sitemap paths are unique", sitemap.body.split("https://pudu.example/docs/Std.Bits/fn/width").length() == 2),
+      Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage"))
+    ])
+  Test.report(&Test.run(&suite))
+}

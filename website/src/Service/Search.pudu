@@ -1,0 +1,38 @@
+module Service.Search
+
+import Std.List as List
+import Std.Option as Option
+import Domain.Entry as Domain
+
+export fn find(entries: &Array[Domain.Entry], query: Str, limit: Int) -> Array[Domain.Hit] {
+  let wanted = query.trim().toLower()
+  if wanted.isEmpty() || limit <= 0 { return [] }
+  let groups = List.map(entries, fn(entry: Domain.Entry) -> Array[Domain.Hit] {
+      let score = scoreOf(&entry, wanted)
+      Option.toArray(if score > 0 { Some(Domain.Hit{entry: entry, score: score}) } else { None })
+    })
+  let found = List.flatten(&groups)
+  let ordered = List.sortBy(&found, fn(left: Domain.Hit, right: Domain.Hit) -> Bool {
+      if left.score == right.score {
+        Domain.qualifiedName(&left.entry) < Domain.qualifiedName(&right.entry)
+      } else { left.score > right.score }
+    })
+  List.take(&ordered, limit)
+}
+
+fn scoreOf(entry: &Domain.Entry, query: Str) -> Int {
+  let name = entry.name.toLower()
+  let moduleName = entry.moduleName.toLower()
+  let signature = entry.signature.toLower()
+  if name == query { return 1000 }
+  if Domain.qualifiedName(entry).toLower() == query { return 980 }
+  if name.startsWith(query) { return 850 }
+  if name.contains(query) { return 700 }
+  if moduleName == query { return 650 }
+  if moduleName.contains(query) { return 500 }
+  if signature.contains(query) { return 300 }
+  for line in entry.documentation {
+    if line.toLower().contains(query) { return 100 }
+  }
+  0
+}

@@ -1,0 +1,68 @@
+---
+type: architecture
+fidelity: Active
+tags: [architecture, website, ssr, vercel]
+aliases: [Pudu Website Architecture]
+---
+# Pudu Website Architecture
+
+## Purpose
+
+Serve the language guide and complete generated API catalogue from a Pudu application, with the
+same server-rendered pages locally and behind a thin Vercel process bridge.
+
+## Dependency direction
+
+```text
+Main / Platform.Render
+        |
+     Web.Routes
+      /      \
+   View     Service
+     |       /   \
+    Seo    Search Catalog
+     |              |
+ Constants     Domain.Entry
+
+Config and Error are leaf policies used from the composition edge. SEO owns canonical metadata,
+structured data, robots policy, and sitemap rendering; views choose page facts but do not spell tags.
+```
+
+Dependencies point downward. Domain code knows no HTTP or HTML. Services know catalogue values,
+not requests. Views receive values and return typed `Std.Html` trees. Routes are the only layer
+that translates an HTTP request into a service call and a rendered response.
+
+## Rendering and deployment
+
+The local entry point starts `Std.Http.Server`. The platform entry point accepts one target as a
+process argument and writes one JSON response envelope. A build tool starts the same Pudu server
+once and captures every crawlable page as static Vercel output. Vercel's Node runtime is only an
+adapter for requests such as search whose query is dynamic: it keeps one Linux Pudu server child
+per warm function instance and proxies the request. Page composition, routing decisions, search,
+error pages, and API rendering remain Pudu code.
+
+Static HTML, CSS, fonts, and the two supplied logos are served from Vercel's CDN and from Pudu
+routes locally. The generated API catalogue comes from `pudu doc --json`, so public documentation
+cannot drift silently from the compiler's current declarations. Canonical documentation remains
+server-rendered HTML even when build-time capture makes delivery static.
+
+Search result URLs are crawlable so a `noindex,follow` directive can be read, but they are excluded
+from the sitemap. Canonical module and symbol URLs are linked from complete HTML indexes. One root
+XML sitemap covers the current catalogue while it remains below the protocol's 50,000 URL limit.
+
+## Grill Log
+
+- **Q:** Reimplement the site in a JavaScript framework for Vercel? **A:** No. _Rationale:_ the
+  product is evidence that Pudu can build its own production documentation surface. JavaScript is
+  limited to the platform request/process boundary. _Rejected:_ a duplicate React renderer.
+- **Q:** Start a new Pudu process for every serverless request? **A:** No. _Rationale:_ loading the
+  generated catalogue is fixed startup work. Crawlable pages are captured once, and dynamic search
+  reuses one child server while a function instance is warm. _Rejected:_ repeated catalogue decode.
+- **Q:** Hand-maintain thousands of API records? **A:** No. _Rationale:_ the compiler already owns
+  names, kinds, signatures, and documentation. _Rejected:_ a second catalogue source.
+- **Q:** Build a native artifact on macOS and deploy it to Linux? **A:** No. _Rationale:_ native
+  architecture and operating-system dependencies must match the Vercel build image. _Rejected:_
+  committing a local binary as a portable release.
+
+Resolved Grill Log: one Pudu rendering core, two narrow runtime edges, generated API data, typed
+HTML, explicit errors, and no reverse dependency from domain or services into transport.
