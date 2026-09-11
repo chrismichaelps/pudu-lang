@@ -10,6 +10,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 testServiceEvaluation :: IO Property
 testServiceEvaluation = do
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
+  addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
@@ -66,6 +67,27 @@ testServiceEvaluation = do
       counterexample
         "a database client binds, authenticates, and rolls back"
         (database === Just "81")
+    {-| The driver layer is an interface rather than an implementation — a
+        driver is a record of functions, which is what lets a program choose
+        which backends it admits — so it is checked against one written in the
+        fixture that records what it was asked. What is checked is that each
+        call arrived where it was addressed. That is the distinction the layer
+        exists for: a client's `query` takes whatever connection is free, so a
+        caller writing `BEGIN` through it puts the begin on one connection and
+        the work on another, and nothing reports it — the transaction holds
+        nothing, commits nothing, and what is left is rows that should have been
+        undone. Every call through a transaction is therefore checked to have
+        been recorded as the transaction's and not the client's, and an action
+        that fails is checked to roll back rather than commit what it managed.
+        Choosing a driver is checked at each way it can fail, and each failure
+        is read for what it does *not* carry: a connection string holds the
+        password, so an error naming the URI would put it wherever errors are
+        logged. Two drivers accepting one scheme is refused rather than settled
+        by order, which would make the backend a program talks to depend on how
+        its driver list happened to be written. -}
+    , counterexample
+        "a call addressed to a transaction reaches the connection it holds"
+        (addressed === Just "37")
     {-| The obligations [[ADR-0016]] places on an application: that a declared
         default is held like any other setting and can say where it came from,
         that a later layer wins over an earlier one, that a profile states its
