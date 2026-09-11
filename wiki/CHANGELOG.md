@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-11 — Adapter-free Vercel runtime build
+
+- Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their
+  directories to later steps, avoiding dependence on shell state that GitHub Actions discards.
+- Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.
+
 ## 2026-09-10 — Pudu documentation website and private book validation
 
 - Built the documentation website in Pudu with one-way domain/service/view/route dependencies, typed server-rendered HTML, generated API data, ranked name and signature search, and thin build/runtime adapters for Vercel.

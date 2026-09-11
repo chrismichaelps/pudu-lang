@@ -42,4 +42,7 @@ example audit, full repository test suite, and live production verification. Fea
 
 ## Next actions
 
-Maintain website content as standard library declarations evolve via `website/scripts/generate-catalog.sh`.
+The adapter-free deployment is active on `feature/deploy-without-adapters`. The old glibc website
+artifact passed, but the first musl workflow stopped after installation because the next step could
+not discover GHC. The workflow now resolves the GHCup binary paths explicitly. Push that correction,
+wait for both Alpine and Amazon Linux 2 proofs, then assemble and deploy the Pudu function.

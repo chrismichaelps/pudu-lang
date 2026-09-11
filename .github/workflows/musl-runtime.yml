@@ -57,8 +57,12 @@ jobs:
         run: |
           ghcup install ghc 9.10.1 --set
           ghcup install cabal 3.12.1.0 --set
-          ghc --version
-          cabal --version
+          GHC_BIN="$(ghcup whereis ghc 9.10.1)"
+          CABAL_BIN="$(ghcup whereis cabal 3.12.1.0)"
+          dirname "$GHC_BIN" >> "$GITHUB_PATH"
+          dirname "$CABAL_BIN" >> "$GITHUB_PATH"
+          "$GHC_BIN" --version
+          "$CABAL_BIN" --version
 
       # The same flags `scripts/build-musl-runtime.sh` uses. The Haskell
       # libraries are linked in by default; these are the C ones the package
