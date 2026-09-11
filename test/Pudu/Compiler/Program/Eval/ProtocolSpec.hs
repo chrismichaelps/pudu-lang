@@ -16,6 +16,7 @@ testProtocolEvaluation = do
   htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
   httpAll <- runEntry "test-fixtures/stdlib/UsesHttpAll.pudu"
   routeAll <- runEntry "test-fixtures/stdlib/UsesRouteAll.pudu"
+  wireAll <- runEntry "test-fixtures/stdlib/UsesDbProtocolAll.pudu"
   cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
   urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
@@ -398,6 +399,22 @@ testProtocolEvaluation = do
     , counterexample
         "every protocol name answers the wire form it stands for"
         (httpAll === Just "91")
+    {-| Every export of the database wire module, each message checked against
+        the wire rather than against the reader beside it: the letter it starts
+        with, the length it states, and the bytes after that length. A writer
+        and a reader that agreed on the same wrong shape would agree with each
+        other and with nothing else, and a round trip is the one check that
+        cannot tell them apart. The stated length is checked on every message
+        because it is all a server has to go on — a byte short leaves a byte
+        behind that the next read takes for a letter, and a byte long waits for
+        one that never comes, and both look like a hang rather than like a
+        malformed message. A value that is absent is checked against one that
+        is empty, since the protocol spells them differently and a reader that
+        treated them alike would answer nothing where the column holds the
+        empty string. -}
+    , counterexample
+        "every database message states the length and the bytes the wire does"
+        (wireAll === Just "70")
     {-| Every export of the routing module, checked by dispatching a request
         rather than by reading a route's fields, so what is checked is what a
         request actually reaches. A path written for another method answers
