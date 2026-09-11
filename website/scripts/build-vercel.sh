@@ -45,8 +45,8 @@ for dependency in "${musl_libraries[@]}"; do
 done
 
 rm -rf "$output"
-mkdir -p "$function_dir" "$output/static/assets" "$output/static/fonts"
-cp "$root/website/data/api.json" "$function_dir/api.json"
+mkdir -p "$function_dir/website/data" "$output/static/assets" "$output/static/fonts"
+cp "$root/website/data/api.json" "$function_dir/website/data/api.json"
 cp "$musl_loader" "$function_dir/ld-musl-x86_64.so.1"
 for dependency in "${musl_libraries[@]}"; do
   cp "$musl_library_dir/$dependency" "$function_dir/$dependency"
@@ -54,7 +54,7 @@ done
 cp "$root/website/public/site.css" "$output/static/assets/site.css"
 cp "$root/website/public/assets/"* "$output/static/assets/"
 cp "$root/website/public/fonts/"* "$output/static/fonts/"
-chmod 644 "$function_dir/api.json" 2>/dev/null || true
+chmod 644 "$function_dir/website/data/api.json" 2>/dev/null || true
 
 # A custom runtime is started by running `bootstrap`, so the artefact is named
 # that. The compiler attaching the program must be the same version of Pudu as

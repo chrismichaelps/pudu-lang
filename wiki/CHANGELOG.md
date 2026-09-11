@@ -18,6 +18,7 @@ tags: [changelog]
   runtime target.
 - Bound Lambda dependencies to their packaged `/var/task` paths and moved the function away from
   `index.func` so static `/` is not shadowed.
+- Preserved the configured `website/data/api.json` catalogue path inside the Lambda package.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.

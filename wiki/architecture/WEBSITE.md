@@ -45,6 +45,8 @@ packaged beside the Pudu function. The musl-built `libffi`,
 `zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged
 beside it. Lambda ELF dependencies name their `/var/task` files directly so Vercel's host
 `LD_LIBRARY_PATH` cannot substitute incompatible glibc libraries.
+The function package preserves `website/data/api.json`, the same default catalogue path used by
+local Pudu processes, relative to Lambda's `/var/task` working directory.
 CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2023 with the same
 `/var/task` layout used by Lambda.
 

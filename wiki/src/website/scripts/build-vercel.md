@@ -12,6 +12,8 @@ function, static CSS, Nunito fonts, logos, and canonical HTML pages rendered dir
 function contains the Lambda-targeted musl runtime and its loader; no JavaScript adapter is included.
 The matching musl `libffi`, `zlib`, `ncursesw`, and `gmp` libraries are copied beside the
 function and named directly by its ELF dependencies.
+The API catalogue is packaged at `website/data/api.json`, matching the Pudu configuration default
+used when Vercel starts the function in `/var/task`.
 
 Resolved Grill Log: dynamic search reaches the same Pudu router and ranking service as local requests
 and tests, while canonical pages resolve directly from Vercel's static edge output. The builder refuses

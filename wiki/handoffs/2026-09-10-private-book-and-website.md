@@ -50,3 +50,5 @@ that proof. The first accepted preview showed Vercel's host library path selecti
 glibc libraries and `index.func` shadowing static `/`; bind the four runtime dependencies to
 `/var/task`, use `dynamic.func`, then redeploy and test the Pudu function. The apparent `libtinfo`
 dependency belonged to the incorrectly selected host ncurses library, not the packaged musl one.
+The next preview started the runtime but found the catalogue packaged at the wrong relative path;
+preserve `website/data/api.json` inside the function before the next deployment.
