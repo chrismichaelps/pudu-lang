@@ -41,7 +41,6 @@ export type Declared = {
 export type Series = { labels: Array[(Str, Str)], value: Int, counts: Array[Int], total: Int }
 
 /// Everything a program reports about itself.
-/// Everything a program reports about itself.
 ///
 /// Declarations are held in a map for lookup and an array for the order they
 /// were declared in, because both questions are asked: rendering walks them in
@@ -93,58 +92,71 @@ export fn empty() -> Metrics {
   Metrics{declared: Map.empty(), order: [], series: Map.empty(), refused: 0}
 }
 
-/// A counter, which only rises.
-export fn counter(base: &Metrics, name: Str, unit: Unit, help: Str) -> Metrics {
-  declaring(base, name, Counter, unit, help, &[], DEFAULT_SERIES_LIMIT)
-}
-
-/// A gauge, which moves either way.
-export fn gauge(base: &Metrics, name: Str, unit: Unit, help: Str) -> Metrics {
-  declaring(base, name, Gauge, unit, help, &[], DEFAULT_SERIES_LIMIT)
-}
-
-/// A distribution over stated boundaries.
+/// What a program measures, declared one metric at a time.
 ///
-/// The boundaries are stated rather than derived from what has been seen: a
-/// distribution whose buckets moved cannot be compared against itself last
-/// week, which is most of what one is for.
-export fn distribution(
-  base: &Metrics,
-  name: Str,
-  unit: Unit,
-  help: Str,
-  bounds: &Array[Int]
-) -> Metrics {
-  let stated = if bounds.length() == 0 { DEFAULT_BOUNDS } else { List.sorted(bounds) }
-  declaring(base, name, Distribution, unit, help, &stated, DEFAULT_SERIES_LIMIT)
+/// A program declares every metric it has in one place, which is several calls
+/// over the same registry. As methods they read down the page as a list of what
+/// is measured; as functions each call wrapped the one before it, so the
+/// registry a reader looks for first ended up furthest in and the metric
+/// declared first read as the last thing on the page.
+export trait Declaring {
+  fn counter(self: &Self, name: Str, unit: Unit, help: Str) -> Self
+  fn gauge(self: &Self, name: Str, unit: Unit, help: Str) -> Self
+  fn distribution(self: &Self, name: Str, unit: Unit, help: Str, bounds: &Array[Int]) -> Self
+  fn limitedTo(self: &Self, name: Str, limit: Int) -> Self
 }
 
-/// The same metric with a different bound on how many series it may have.
-export fn limitedTo(base: &Metrics, name: Str, limit: Int) -> Metrics {
-  if let Some(held) = Map.get(&base.declared, name) {
-    Metrics {
-      declared: Map.insert(
-          &base.declared,
-        name,
-        Declared {
-          name: held.name,
-          kind: held.kind,
-          unit: held.unit,
-          help: held.help,
-          bounds: held.bounds,
-          seriesLimit: limit
-        }
-      ),
-      order: base.order,
-      series: base.series,
-      refused: base.refused
+impl Declaring for Metrics {
+  /// A counter, which only rises.
+  fn counter(self: &Self, name: Str, unit: Unit, help: Str) -> Self {
+    added(self, name, Counter, unit, help, &[], DEFAULT_SERIES_LIMIT)
+  }
+
+  /// A gauge, which moves either way.
+  fn gauge(self: &Self, name: Str, unit: Unit, help: Str) -> Self {
+    added(self, name, Gauge, unit, help, &[], DEFAULT_SERIES_LIMIT)
+  }
+
+  /// A distribution over stated boundaries.
+  ///
+  /// The boundaries are stated rather than derived from what has been seen: a
+  /// distribution whose buckets moved cannot be compared against itself last
+  /// week, which is most of what one is for.
+  fn distribution(self: &Self, name: Str, unit: Unit, help: Str, bounds: &Array[Int]) -> Self {
+    let stated = if bounds.length() == 0 { DEFAULT_BOUNDS } else { List.sorted(bounds) }
+    added(self, name, Distribution, unit, help, &stated, DEFAULT_SERIES_LIMIT)
+  }
+
+  /// The same metric with a different bound on how many series it may have.
+  ///
+  /// Said after the metric it bounds, because it is a change to a declaration
+  /// rather than a declaration: a name nothing declared is left alone.
+  fn limitedTo(self: &Self, name: Str, limit: Int) -> Self {
+    if let Some(held) = Map.get(&self.declared, name) {
+      Metrics {
+        declared: Map.insert(
+            &self.declared,
+          name,
+          Declared {
+            name: held.name,
+            kind: held.kind,
+            unit: held.unit,
+            help: held.help,
+            bounds: held.bounds,
+            seriesLimit: limit
+          }
+        ),
+        order: self.order,
+        series: self.series,
+        refused: self.refused
+      }
+    } else {
+        *self
     }
-  } else {
-      *base
   }
 }
 
-fn declaring(
+fn added(
   base: &Metrics,
   name: Str,
   kind: Kind,
@@ -176,59 +188,75 @@ fn declaring(
   }
 }
 
-/// Add to a counter or a gauge.
+/// What a program measured, recorded one value at a time.
+///
+/// A request records several things about itself, and as methods they read in
+/// the order they are measured rather than inside out. Every one of these
+/// answers a whole registry, so the value recorded last is the outermost call
+/// when they are written as functions — which is the reverse of the order the
+/// program measured them in.
 ///
 /// A metric nothing declared is not measured and is not an error: a module
 /// reporting something the program did not declare should not be able to stop
 /// it, and the absence is visible in what is rendered.
-export fn add(base: &Metrics, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Metrics {
-  changed(base, name, labels, fn(held: Series) -> Series {
-      Series {
-        labels: held.labels,
-        value: held.value + amount,
-        counts: held.counts,
-        total: held.total
-      }
-    })
+export trait Recording {
+  fn add(self: &Self, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Self
+  fn increment(self: &Self, name: Str, labels: &Array[(Str, Str)]) -> Self
+  fn set(self: &Self, name: Str, labels: &Array[(Str, Str)], value: Int) -> Self
+  fn observe(self: &Self, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Self
 }
 
-/// Add one, which is what most counting is.
-export fn increment(base: &Metrics, name: Str, labels: &Array[(Str, Str)]) -> Metrics {
-  add(base, name, labels, 1)
-}
-
-/// Set a gauge to what it is now.
-export fn set(base: &Metrics, name: Str, labels: &Array[(Str, Str)], value: Int) -> Metrics {
-  changed(base, name, labels, fn(held: Series) -> Series {
-      Series{labels: held.labels, value: value, counts: held.counts, total: held.total}
-    })
-}
-
-/// Record one observation in a distribution.
-///
-/// Counts are cumulative: each boundary holds how many observations fell at or
-/// below it, which is what the collectors reading this format expect and what
-/// makes a quantile computable from the buckets alone.
-export fn observe(base: &Metrics, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Metrics {
-  if let Some(declared) = declarationOf(base, name) {
-    changed(base, name, labels, fn(held: Series) -> Series {
-        var counts = held.counts
-        var index = 0
-        while index < declared.bounds.length() {
-          if amount <= declared.bounds[index] {
-            counts = countsWith(&counts, index, atOr(&counts, index) + 1)
-          }
-          index = index + 1
-        }
+impl Recording for Metrics {
+  /// Add to a counter or a gauge.
+  fn add(self: &Self, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Self {
+    changed(self, name, labels, fn(held: Series) -> Series {
         Series {
           labels: held.labels,
-          value: held.value + 1,
-          counts: counts,
-          total: held.total + amount
+          value: held.value + amount,
+          counts: held.counts,
+          total: held.total
         }
       })
-  } else {
-      *base
+  }
+
+  /// Add one, which is what most counting is.
+  fn increment(self: &Self, name: Str, labels: &Array[(Str, Str)]) -> Self {
+    self.add(name, labels, 1)
+  }
+
+  /// Set a gauge to what it is now.
+  fn set(self: &Self, name: Str, labels: &Array[(Str, Str)], value: Int) -> Self {
+    changed(self, name, labels, fn(held: Series) -> Series {
+        Series{labels: held.labels, value: value, counts: held.counts, total: held.total}
+      })
+  }
+
+  /// Record one observation in a distribution.
+  ///
+  /// Counts are cumulative: each boundary holds how many observations fell at
+  /// or below it, which is what the collectors reading this format expect and
+  /// what makes a quantile computable from the buckets alone.
+  fn observe(self: &Self, name: Str, labels: &Array[(Str, Str)], amount: Int) -> Self {
+    if let Some(declared) = declarationOf(self, name) {
+      changed(self, name, labels, fn(held: Series) -> Series {
+          var counts = held.counts
+          var index = 0
+          while index < declared.bounds.length() {
+            if amount <= declared.bounds[index] {
+              counts = countsWith(&counts, index, atOr(&counts, index) + 1)
+            }
+            index = index + 1
+          }
+          Series {
+            labels: held.labels,
+            value: held.value + 1,
+            counts: counts,
+            total: held.total + amount
+          }
+        })
+    } else {
+        *self
+    }
   }
 }
 

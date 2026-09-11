@@ -167,25 +167,37 @@ export fn catalogue(reference: Locale) -> Catalogue {
   Catalogue{reference: reference, messages: Map.empty(), forms: Map.empty()}
 }
 
-/// The catalogue with one more thing it can say.
-export fn saying(base: &Catalogue, held: &Locale, key: Str, message: Str) -> Catalogue {
-  let named = render(held)
-  let existing = Map.getOr(&base.messages, named, Map.empty())
-  Catalogue{..*base, messages: Map.insert(&base.messages, named, Map.insert(&existing, key, message))}
+/// What a catalogue can say, written one message at a time.
+///
+/// A catalogue is every message a program has, which is as many calls as there
+/// are things it says. As methods they read as the list of messages they are;
+/// as functions each call wrapped the one before it, so a catalogue of ten
+/// messages was ten levels deep and the first message written was the last one
+/// a reader reached.
+export trait Saying {
+  fn saying(self: &Self, held: &Locale, key: Str, message: Str) -> Self
+  fn counting(self: &Self, held: &Locale, key: Str, byQuantity: &Array[(Quantity, Str)]) -> Self
 }
 
-/// The catalogue with one more thing it says differently by number.
-export fn counting(
-  base: &Catalogue,
-  held: &Locale,
-  key: Str,
-  byQuantity: &Array[(Quantity, Str)]
-) -> Catalogue {
-  let named = render(held)
-  let existing = Map.getOr(&base.forms, named, Map.empty())
-  Catalogue {
-    ..*base,
-    forms: Map.insert(&base.forms, named, Map.insert(&existing, key, Map.fromPairs(byQuantity)))
+impl Saying for Catalogue {
+  /// The catalogue with one more thing it can say.
+  fn saying(self: &Self, held: &Locale, key: Str, message: Str) -> Self {
+    let named = render(held)
+    let existing = Map.getOr(&self.messages, named, Map.empty())
+    Catalogue {
+      ..*self,
+      messages: Map.insert(&self.messages, named, Map.insert(&existing, key, message))
+    }
+  }
+
+  /// The catalogue with one more thing it says differently by number.
+  fn counting(self: &Self, held: &Locale, key: Str, byQuantity: &Array[(Quantity, Str)]) -> Self {
+    let named = render(held)
+    let existing = Map.getOr(&self.forms, named, Map.empty())
+    Catalogue {
+      ..*self,
+      forms: Map.insert(&self.forms, named, Map.insert(&existing, key, Map.fromPairs(byQuantity)))
+    }
   }
 }
 

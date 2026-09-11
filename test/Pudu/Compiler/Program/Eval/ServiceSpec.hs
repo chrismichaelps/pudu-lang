@@ -114,10 +114,14 @@ testServiceEvaluation = do
         is declared; and that how many label combinations one metric may have
         is bounded, with the combination that would exceed it refused and
         counted rather than evicting a series — an evicted counter restarts at
-        zero, and a counter that falls is read as a restart. -}
+        zero, and a counter that falls is read as a restart. Declaring and
+        recording are each reached through a bound naming that trait alone,
+        which is what checks they are usable as methods: a registry is declared
+        in one chain and a request is measured in another, which is how a
+        program actually writes them. -}
     , counterexample
         "a metric cannot grow a series for every identifier it is handed"
-        (measured === Just "41")
+        (measured === Just "49")
     {-| That a route which decided nothing cannot be written: the requirement
         is given in the same call as the handler, so a route needing nothing
         and a route somebody forgot stop being the same line; that not knowing
@@ -259,10 +263,15 @@ testServiceEvaluation = do
         none and for two, and the languages with no distinction at all, each of
         which a singular-and-plural catalogue gets wrong. And that a missing
         translation is reportable rather than silent, which is the whole reason
-        falling back to the original language is tolerable. -}
+        falling back to the original language is tolerable. The catalogue is
+        written through a bound naming the saying trait alone, which is what
+        checks a message and a counted message are both usable as methods — a
+        catalogue is as many calls as a program has things to say, and written
+        as wrapped calls the first message written read as the last one a
+        reader reached. -}
     , counterexample
         "a number chooses the form the language has, and a gap can be found"
-        (spoken === Just "60")
+        (spoken === Just "68")
     {-| That a lookup answers fresh, stale, or nothing rather than a value or
         nothing. Two answers force a caller to treat an expired entry as an
         absent one, which is what makes every request for a much-read key
