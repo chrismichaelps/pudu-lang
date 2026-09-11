@@ -33,12 +33,14 @@ jobs:
     container:
       image: alpine:3.20
     steps:
+      # `gmp-dev` carries libgmp.a, so there is no separate static package for it
+      # the way there is for ncurses and zlib.
       - name: Install the toolchain musl needs
         run: |
           apk add --no-cache \
             bash binutils build-base coreutils curl git gmp-dev gnupg \
             libffi-dev ncurses-dev perl tar xz zlib-dev \
-            gmp-static ncurses-static zlib-static nodejs
+            ncurses-static zlib-static nodejs
 
       - uses: actions/checkout@v7
 

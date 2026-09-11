@@ -17,7 +17,7 @@ FROM alpine:3.20
 RUN apk add --no-cache \
       bash binutils build-base coreutils curl git gmp-dev gnupg \
       libffi-dev ncurses-dev perl tar xz zlib-dev \
-      gmp-static libffi-dev ncurses-static zlib-static
+      ncurses-static zlib-static
 
 ARG GHC_VERSION=9.10.1
 ARG CABAL_VERSION=3.12.1.0
