@@ -22,6 +22,8 @@ tags: [changelog]
 - Made the HTTP client stop at complete `Content-Length`, chunked, `HEAD`, and bodyless responses
   without waiting for socket closure; added a persistent-loopback regression so the Pudu Lambda
   Runtime API cannot return to invocation timeouts unnoticed.
+- Regenerated the website catalogue from the current standard library: builder methods now appear
+  under their exported traits, the Lambda module is indexed, and `responseComplete` is documented.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.

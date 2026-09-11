@@ -21,7 +21,7 @@ example audit, full repository test suite, and live production verification. Fea
 
 - The ignored private book is versioned as `0.1.0-edition.2`; 76 extracted complete programs pass,
   and print, digital, cover, and EPUB outputs passed their format gates.
-- The Pudu website reads 3,245 generated public declarations, renders all canonical pages, and
+- The Pudu website reads 3,243 generated public declarations, renders all canonical pages, and
   exposes dynamic ranked search. The short logo is the favicon; global navigation includes Guide,
   API, About, Donate, and the GitHub repository. The About page describes Pudu 0.1, Haskell's role,
   and the author's LinkedIn and GitHub profiles. The footer carries the copyright notice.
@@ -56,3 +56,7 @@ The first previews exposed and resolved host-library substitution, static-root s
 layout, and HTTP framing defects. The framing-aware client and its persistent-loopback regression now
 pass `cabal test all`; the next exact action is to build the musl runtime from this commit and redeploy
 the generated Pudu function.
+
+The catalogue was regenerated after the framing change. Its 3,243 entries reflect the current API:
+former standalone builder methods are represented by their exported traits, and the Lambda module
+plus framing helper are now discoverable.
