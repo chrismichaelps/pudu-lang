@@ -458,10 +458,24 @@ testProtocolEvaluation = do
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same
-        program told at its first query, under load, cannot. -}
+        program told at its first query, under load, cannot.
+
+        The rest is driven against a connector written in the fixture, since a
+        driver is an ordinary value and nothing need be installed. A query
+        before the stage starts is refused as closed rather than opening a
+        connection nobody asked for, and the log confirms nothing opened;
+        starting twice is refused, because two pools against one database is a
+        limit breached by a program that believes it has one; and stopping twice
+        is harmless, or a failure during shutdown becomes two failures. Asking
+        for exactly one row is checked against a result holding two, which is a
+        different question from the first of several — a statement that should
+        identify one row and answers two has matched something the caller did
+        not mean, and reading the first would act on it. The two ways a mapped
+        query fails stay apart: a statement the database refused and a result
+        the mapper could not read are different faults with different fixes. -}
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
-        (appDatabase === Just "17")
+        (appDatabase === Just "56")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
