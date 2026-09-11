@@ -9,9 +9,19 @@ export fn pick(left: Int, right: Int) -> Int { right }
 /// name. Before, every module's functions shared one namespace and the last
 /// linked won for everybody — so a private helper could be replaced by a
 /// stranger's export.
+///
+/// The same holds inside an implementation. A method is reachable from every
+/// module, because an implementation is a fact about a type and a trait rather
+/// than a name a module owns — but the body still belongs to the module that
+/// wrote it, and it was the one place that still read names from wherever it
+/// was called. Reached as a method and reached through a bound, so neither path
+/// can regress alone.
 export fn main() -> Int {
   var passed = 0
   if H.useOwn() == 1 { passed = passed + 1 }
   if pick(1, 2) == 2 { passed = passed + 1 }
+  let held = H.Held{value: 7}
+  if held.chosen() == 7 { passed = passed + 1 }
+  if H.throughBound(&held) == 7 { passed = passed + 1 }
   passed
 }

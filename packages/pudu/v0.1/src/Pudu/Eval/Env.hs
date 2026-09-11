@@ -17,6 +17,8 @@ module Pudu.Eval.Env
   , callLimit
   , captureEnvironment
   , currentFrame
+  , currentMethods
+  , replaceMethods
   , currentConcurrentStore
   , currentForeignStore
   , currentHandleStore
@@ -340,6 +342,24 @@ lookupName name =
 bindMethod :: Text -> Value -> Evaluator ()
 bindMethod name value =
   Evaluator $ \env -> pure (Done () env{envMethods = Map.insert name value (envMethods env)})
+
+{-| Every implementation the program has so far.
+
+    Read so a module that has just been loaded can tell which methods are its
+    own — the ones that were not there before it loaded — and give them the
+    environment it was declared in. -}
+currentMethods :: Evaluator (Map Text Value)
+currentMethods = Evaluator $ \env -> pure (Done (envMethods env) env)
+
+{-| Replace the implementations with a rewritten set.
+
+    Used once per module, to scope the methods that module declared. Nothing
+    else rewrites them: an implementation is a fact about a type and a trait,
+    and the only thing that changes about one after it is recorded is which
+    environment its body reads names in. -}
+replaceMethods :: Map Text Value -> Evaluator ()
+replaceMethods methods =
+  Evaluator $ \env -> pure (Done () env{envMethods = methods})
 
 {-| Record which sum a variant belongs to.
 

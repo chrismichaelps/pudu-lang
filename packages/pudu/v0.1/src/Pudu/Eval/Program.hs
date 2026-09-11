@@ -25,8 +25,10 @@ import Pudu.Eval.Env
   , withIntegerKinds
   , captureEnvironment
   , currentFrame
+  , currentMethods
   , pushFrame
   , replaceFrame
+  , replaceMethods
   , Eval (..)
   , Evaluator (..)
   , bind
@@ -113,6 +115,7 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
         dependency's rather than sharing a frame with the last one linked. -}
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
+    inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
     {-| The root's own functions are given its environment, exactly as a
         dependency's are.
@@ -124,7 +127,7 @@ evaluateProgramTallied integerKinds dependencies entryName moduleValue = do
         named function to `List.map`, to a route table, or to anything else
         that calls back reported the function's own imports as undefined —
         at run time, having type-checked. -}
-    scopeRootDeclarations
+    scopeRootDeclarations inherited
     found <- lookupName entryName
     case found of
       Just (FunctionValue closure) -> do
@@ -151,8 +154,9 @@ evaluateInteractiveBlock reuseDeclarations integerKinds dependencies moduleValue
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports moduleValue)
+    inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations moduleValue)
-    scopeRootDeclarations
+    scopeRootDeclarations inherited
     pushFrame locals
   let Evaluator execute = evaluateBlockInFrame block
   Evaluator $ \env -> do
@@ -236,12 +240,35 @@ evaluateModule integerKinds moduleValue =
 
     The same treatment `linkDependencies` gives a dependency, for the module
     that has no one to link it. -}
-scopeRootDeclarations :: Evaluator ()
-scopeRootDeclarations = do
+scopeRootDeclarations :: Map.Map Text Value -> Evaluator ()
+scopeRootDeclarations inherited = do
   loaded <- currentFrame
   outer <- captureEnvironment
   let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
   replaceFrame scoped
+  scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
+
+{-| Give the methods a module declared the environment that module was loaded in.
+
+    An implementation is global — a fact about a type and a trait, reachable from
+    every module in the program — but its *body* belongs to the module that wrote
+    it, exactly as a plain function's does. Without this a method ran in the
+    frame of whoever called it: a bare call in an impl found the caller's
+    namespace, so a module's own private helper was replaced by a later module's
+    export of the same name. `Std.App.Metrics`'s private seven-parameter
+    `declaring` became `Std.App.Config.declaring`, which takes one, and the
+    program aborted on the arity of a call the checker had read correctly.
+
+    This is the same rewrite `scopeTo` performs on a module's frame, applied to
+    the methods that module added. Which those are is the difference between the
+    implementations the program had before it loaded and the ones it has after:
+    keeping impls out of the frame stack is what lets a library dispatch to a
+    program's own type, so they cannot simply be scoped along with the frame. -}
+scopeMethodsDeclaredBy :: Map.Map Text Value -> [Map.Map Text Value] -> Evaluator ()
+scopeMethodsDeclaredBy before environment = do
+  after <- currentMethods
+  let declaredHere = Map.map (scopeTo environment) (Map.difference after before)
+  replaceMethods (Map.union declaredHere after)
 
 linkDependencies :: [(Text, Module)] -> Evaluator (Map.Map Text Value)
 linkDependencies dependencies = do
@@ -255,11 +282,13 @@ linkDependencies dependencies = do
     pushFrame builtins
     pushFrame Map.empty
     installImportAliases (moduleImports dependency)
+    inherited <- currentMethods
     loadModuleDeclarations evaluate (moduleDeclarations dependency)
     loaded <- currentFrame
     outer <- captureEnvironment
     let scoped = Map.map (scopeTo (scoped : drop 1 outer)) loaded
     replaceFrame scoped
+    scopeMethodsDeclaredBy inherited (scoped : drop 1 outer)
     mapM_ (publish path) (Map.toList scoped)
 
   publish path (name, value) = bind (path <> "." <> name) value

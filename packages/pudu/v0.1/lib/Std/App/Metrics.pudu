@@ -109,12 +109,12 @@ export trait Declaring {
 impl Declaring for Metrics {
   /// A counter, which only rises.
   fn counter(self: &Self, name: Str, unit: Unit, help: Str) -> Self {
-    added(self, name, Counter, unit, help, &[], DEFAULT_SERIES_LIMIT)
+    declaring(self, name, Counter, unit, help, &[], DEFAULT_SERIES_LIMIT)
   }
 
   /// A gauge, which moves either way.
   fn gauge(self: &Self, name: Str, unit: Unit, help: Str) -> Self {
-    added(self, name, Gauge, unit, help, &[], DEFAULT_SERIES_LIMIT)
+    declaring(self, name, Gauge, unit, help, &[], DEFAULT_SERIES_LIMIT)
   }
 
   /// A distribution over stated boundaries.
@@ -124,7 +124,7 @@ impl Declaring for Metrics {
   /// week, which is most of what one is for.
   fn distribution(self: &Self, name: Str, unit: Unit, help: Str, bounds: &Array[Int]) -> Self {
     let stated = if bounds.length() == 0 { DEFAULT_BOUNDS } else { List.sorted(bounds) }
-    added(self, name, Distribution, unit, help, &stated, DEFAULT_SERIES_LIMIT)
+    declaring(self, name, Distribution, unit, help, &stated, DEFAULT_SERIES_LIMIT)
   }
 
   /// The same metric with a different bound on how many series it may have.
@@ -156,7 +156,7 @@ impl Declaring for Metrics {
   }
 }
 
-fn added(
+fn declaring(
   base: &Metrics,
   name: Str,
   kind: Kind,
