@@ -51,10 +51,21 @@ testServiceEvaluation = do
           server would so a client treating the two alike cannot pass. Each of
           the four levels of protection is read off the wire, because a level
           written as text and misspelled is given the server's default silently
-          — a server told an unknown level reports nothing until it matters. -}
+          — a server told an unknown level reports nothing until it matters.
+
+          The message layer under all of that is read by hand too: the messages
+          one query answers, in order, since a client reading them in the wrong
+          order agrees with itself and with nothing else. All three transaction
+          statuses are read from the letters a server sends, because a reader
+          answering idle for whatever it did not recognise would pass a check
+          that only asked about the status it was given. A lending ended by hand
+          shows the copy naming the old one refusing to write while the new one
+          writes, and a message larger than its budget is refused rather than
+          read — which is what stops something claiming to be a server from
+          naming a length this program then tries to hold. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "66")
+        (database === Just "81")
     {-| The obligations [[ADR-0016]] places on an application: that a declared
         default is held like any other setting and can say where it came from,
         that a later layer wins over an earlier one, that a profile states its

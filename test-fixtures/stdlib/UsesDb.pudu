@@ -4,7 +4,7 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Db as Db
 import Std.Db.Protocol as Wire
-import Std.Db.Session {Auth, Expired, Idle, Other, Server}
+import Std.Db.Session {Active, Auth, Expired, Failed, Idle, Malformed, Other, Server}
 import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
@@ -403,6 +403,142 @@ export fn main() -> Int {
             if Db.indexOfColumn(&selected[0], "height") < 0 { count = count + 1 }
             let _closed = Session.close(&selected[1])
           }
+        }
+      }
+      count
+    })
+
+  // What a server says when it refuses, read out of the message that says it.
+  // The three fields are the ones a caller acts on: how bad it is, the code to
+  // branch on, and the sentence to log. A reader that answered the message for
+  // the code would send a program branching on a sentence.
+  let refusal: Session.DbError = Session.serverFailure(&ByteSeq.join(&[
+        ByteSeq.fromText("S"),
+        Wire.cString("ERROR"),
+        ByteSeq.fromText("C"),
+        Wire.cString("23505"),
+        ByteSeq.fromText("M"),
+        Wire.cString("duplicate key value violates unique constraint"),
+        bytesOf([0u8])
+      ]))
+  match refusal {
+    case Server(severity, code, message) => {
+      if severity == "ERROR" && code == "23505"
+        && message == "duplicate key value violates unique constraint" {
+        held = held + 1
+      }
+    }
+    case _ => {}
+  }
+  // A message with none of those fields in it still answers a failure rather
+  // than refusing to be read, since a server is free to send fields this
+  // program has never heard of and the reason must survive that.
+  match Session.serverFailure(&bytesOf([0u8])) {
+    case Server(severity, code, message) => {
+      if severity.isEmpty() && code.isEmpty() && message.isEmpty() { held = held + 1 }
+    }
+    case _ => {}
+  }
+
+  // A read that found no message answers one carrying nothing, so a caller
+  // folding over messages has a value to fold from.
+  let none = Session.emptyMessage()
+  if none.kind == "?" && none.payload.isEmpty() { held = held + 1 }
+
+  // The budget a message is read under is a stated number rather than whatever
+  // the socket will give: sixteen mebibytes, which is the largest a server is
+  // configured to send.
+  if Session.DEFAULT_MESSAGE_BYTES == 16 * 1024 * 1024 { held = held + 1 }
+
+  // The messages a query answers, read one at a time under the layer that
+  // collects them. This is what `simple` is built on, and a client reading
+  // them in the wrong order would agree with itself and with nothing else.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        // A connection that has just been opened is this value's to write on.
+        if Result.isOk(&Session.live(&stream)) { count = count + 1 }
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          var carried = stream
+          var kinds = ""
+          var reading = true
+          while reading {
+            match Session.nextMessage(carried) {
+              case Err(_) => { reading = false }
+              case Ok(pair) => {
+                kinds = kinds + pair[0].kind
+                carried = pair[1]
+                if pair[0].kind == "Z" {
+                  // The status the server reports with every ready message, which
+                  // is the only place a caller learns where the transaction
+                  // stands.
+                  carried = Session.withStatus(carried, &pair[0].payload)
+                  reading = false
+                }
+              }
+            }
+          }
+          // A description, two rows, the tag, then ready. Read as one string so
+          // the order is checked rather than only the set.
+          if kinds == "TDDCZ" { count = count + 1 }
+          let standing: Session.TransactionStatus = Db.statusOf(&carried)
+          match standing { case Idle => { count = count + 1 } case _ => {} }
+
+          // The two other statuses, from the letters the server sends. A reader
+          // that answered idle for everything it did not recognise would pass a
+          // check that only asked about the one it was given.
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([84u8]))) {
+            case Active => { count = count + 1 }
+            case _ => {}
+          }
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([69u8]))) {
+            case Failed => { count = count + 1 }
+            case _ => {}
+          }
+          // A letter no server sends is idle rather than a fourth state, since
+          // there are three and a caller must not be handed a fourth.
+          match Db.statusOf(&Session.withStatus(carried, &bytesOf([90u8]))) {
+            case Idle => { count = count + 1 }
+            case _ => {}
+          }
+
+          // Ending this lending and beginning the next: the connection is
+          // untouched and the right to use it moved, so the copy that named the
+          // old lending stops writing and the new one writes.
+          if let Ok(renewed) = Session.renew(carried) {
+            if Result.isOk(&Session.live(&renewed)) { count = count + 1 }
+            if let Err(Expired) = Session.live(&carried) { count = count + 1 }
+            if let Err(Expired) = Session.write(&carried, &Wire.sync()) { count = count + 1 }
+            let _closed = Session.close(&renewed)
+          }
+        }
+      }
+      count
+    })
+
+  // A budget below the five bytes a head takes is refused before the socket is
+  // touched, because no budget that small can admit any message at all.
+  //
+  // The query goes out first so the stub has its turn and finishes; a client
+  // that asked nothing would leave it waiting for a message that never comes.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          if let Err(Other(_)) = Session.nextMessageLimited(stream, 4) { count = count + 1 }
+        }
+      }
+      count
+    })
+
+  // A message larger than the budget is refused rather than read, which is
+  // what keeps a server — or something claiming to be one — from naming a
+  // length this program then tries to hold.
+  held = held + runAgainst(trustServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if Result.isOk(&Session.write(&stream, &Wire.query("select id, name from people"))) {
+          if let Err(Malformed(_)) = Session.nextMessageLimited(stream, 6) { count = count + 1 }
         }
       }
       count
