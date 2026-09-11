@@ -85,51 +85,48 @@ export fn limits() -> Limits {
   }
 }
 
-/// The same bounds, reading at most this many bytes of an answer.
-export fn reading(base: &Limits, bytes: Int) -> Limits {
-  Limits {
-    deadlineMillis: base.deadlineMillis,
-    redirects: base.redirects,
-    bodyBytes: bytes,
-    permittedHosts: base.permittedHosts,
-    followRedirects: base.followRedirects
-  }
-}
-
-/// The same bounds, following at most this many redirects.
-export fn following(base: &Limits, count: Int) -> Limits {
-  Limits {
-    deadlineMillis: base.deadlineMillis,
-    redirects: count,
-    bodyBytes: base.bodyBytes,
-    permittedHosts: base.permittedHosts,
-    followRedirects: count > 0
-  }
-}
-
-/// The same bounds, permitting an address that would otherwise be refused.
+/// What a request is allowed to cost and where it is allowed to go.
 ///
-/// Named rather than a mode, so a service that genuinely must reach an
-/// internal host says which one. A blanket permission would be worked around
-/// outside this module, where nothing checks anything.
-export fn reaching(base: &Limits, hosts: &Array[Str]) -> Limits {
-  Limits {
-    deadlineMillis: base.deadlineMillis,
-    redirects: base.redirects,
-    bodyBytes: base.bodyBytes,
-    permittedHosts: *hosts,
-    followRedirects: base.followRedirects
-  }
+/// A caller bounding a request says two or three of these at once — how long,
+/// how much, how far — and as methods they read down the page in the order the
+/// decisions are made rather than wrapped inside one another.
+export trait Limiting {
+  fn reading(self: &Self, bytes: Int) -> Self
+  fn following(self: &Self, count: Int) -> Self
+  fn reaching(self: &Self, hosts: &Array[Str]) -> Self
+  fn within(self: &Self, millis: Int) -> Self
 }
 
-/// The same bounds, allowing the whole request chain this many milliseconds.
-export fn within(base: &Limits, millis: Int) -> Limits {
-  Limits {
-    deadlineMillis: if millis < 0 { 0 } else { millis },
-    redirects: base.redirects,
-    bodyBytes: base.bodyBytes,
-    permittedHosts: base.permittedHosts,
-    followRedirects: base.followRedirects
+impl Limiting for Limits {
+  /// The same bounds, reading at most this many bytes of an answer.
+  fn reading(self: &Self, bytes: Int) -> Self { Limits{..*self, bodyBytes: bytes} }
+
+  /// The same bounds, following at most this many redirects.
+  ///
+  /// A count of none stops following rather than following without end, so the
+  /// two are one decision: a caller that wanted no redirects cannot leave the
+  /// following switched on by saying zero.
+  fn following(self: &Self, count: Int) -> Self {
+    Limits{..*self, redirects: count, followRedirects: count > 0}
+  }
+
+  /// The same bounds, permitting an address that would otherwise be refused.
+  ///
+  /// Named rather than a mode, so a service that genuinely must reach an
+  /// internal host says which one. A blanket permission would be worked around
+  /// outside this module, where nothing checks anything.
+  fn reaching(self: &Self, hosts: &Array[Str]) -> Self {
+    Limits{..*self, permittedHosts: *hosts}
+  }
+
+  /// The same bounds, allowing the whole request chain this many milliseconds.
+  ///
+  /// There is no way to ask for no deadline. A negative one is nothing rather
+  /// than forever, and nothing is a deadline that has already passed — so a
+  /// request under it fails before it is sent. A caller waiting on something
+  /// that answers only when it has work names a long deadline rather than none.
+  fn within(self: &Self, millis: Int) -> Self {
+    Limits{..*self, deadlineMillis: if millis < 0 { 0 } else { millis }}
   }
 }
 
@@ -144,7 +141,7 @@ export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError
 /// because a redirect is a new request to a new place and treating it as a
 /// continuation is how the checks get skipped.
 export fn send(request: &Http.Request, held: &Limits) -> Result[Http.Response, ClientError] {
-  let bounded = within(held, held.deadlineMillis)
+  let bounded = held.within(held.deadlineMillis)
   var carrying = *request
   var hops = 0
   let expires = clock() + bounded.deadlineMillis
@@ -198,8 +195,34 @@ fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
   Http.Request {
     method: request.method,
     target: pathAndQuery(place),
-    headers: withHost(&request.headers, place),
+    headers: withLength(&withHost(&request.headers, place), request.body),
     body: request.body
+  }
+}
+
+/// The headers, with the body's length stated when there is a body.
+///
+/// A request carrying a body must say how long it is. Without a length and
+/// without a chunked encoding the protocol says the request has no body at all,
+/// so a server reads none — and the bytes that were sent sit in the connection
+/// as the beginning of whatever it reads next. Nothing fails: the request
+/// arrives, the server answers it, and the body is simply not there.
+///
+/// Measured in bytes rather than in characters, because the length is a count
+/// of what goes on the wire and a body carrying anything outside ASCII is longer
+/// than the text it was written as. A length short by the difference truncates
+/// the body; one over it leaves the server waiting for bytes that never come.
+///
+/// A caller that stated its own length is left alone. A request that is framed
+/// some other way — a chunked upload written by hand — is that caller's to
+/// frame, and a second length header would make the request ambiguous, which is
+/// the shape a server is required to refuse.
+fn withLength(headers: &Array[(Str, Str)], body: Str) -> Array[(Str, Str)] {
+  if body.isEmpty() || Option.isSome(&Http.header(headers, "content-length"))
+    || Option.isSome(&Http.header(headers, "transfer-encoding")) {
+      *headers
+  } else {
+    headers.push(("content-length", show(body.toBytes().length())))
   }
 }
 

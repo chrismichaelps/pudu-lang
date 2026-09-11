@@ -67,6 +67,7 @@ testProtocolEvaluation = do
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
   zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
   clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
+  invoked <- runEntry "test-fixtures/stdlib/UsesLambdaAll.pudu"
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
@@ -134,7 +135,22 @@ testProtocolEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "45")
+        (fetched === Just "51")
+    {-| A platform that invokes a program rather than connecting to it, served
+        against a runtime interface the fixture serves itself — which is
+        possible because the interface is a value rather than something read
+        from the environment at each call. What is checked is that each answer
+        went back against the invocation it answered: a loop answering the right
+        body against the wrong identifier answers somebody else's request, and
+        nothing that only read the body could tell. A handler that refuses is
+        checked to report against its own invocation rather than leave it
+        unanswered, since an invocation nothing answers is retried until the
+        platform gives up. The loop is ended by an invocation carrying no
+        identifier rather than by refusing a connection, because the poll is a
+        long one by design and a refusal would take its deadline to notice. -}
+    , counterexample
+        "every answer goes back against the invocation it answered"
+        (invoked === Just "27")
     {-| That a lasting connection is not offered to whoever asks: it is not
         subject to the rule stopping one site reading another's answers, so a
         page on any site could otherwise open one carrying the viewer's

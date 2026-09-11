@@ -32,10 +32,24 @@ export fn page(
     ]).html()
 }
 
+/// One search form, identified by the class that says which one it is.
+///
+/// The home and results pages carry two of these: a small one in the masthead
+/// and a large one in the page. That is the design — the stylesheet gives
+/// `home-search` its own width and height — but both were identified as `q`, and
+/// an identifier occurs once in a document or it identifies nothing. A label
+/// points at the first element carrying the identifier it names, so on those two
+/// pages the second form's label named the first form's input: a reader using it
+/// to reach the field was put in the other one.
+///
+/// The field is still named `q`, because that is the query the server reads.
+/// What is made distinct is what identifies the element on the page, which the
+/// class already distinguishes.
 export fn searchForm(query: Str, extraClass: Str) -> H.Node {
+  let field = "q-" + extraClass
   H.form().class("search " + extraClass).action("/search").method("get").holding([
-      H.labelFor().at("for", "q").class("skip").says("Search Pudu APIs"),
-      H.input().id("q").name("q").kind("search").value(query)
+      H.labelFor().at("for", field).class("skip").says("Search Pudu APIs"),
+      H.input().id(field).name("q").kind("search").value(query)
         .placeholder("Search names or types, such as Array[T] -> T").required(),
       H.button().submit().says("Search")
     ])

@@ -18,9 +18,15 @@ pudu run website/src/Main.pudu
 Open `http://127.0.0.1:8080`. Set `PUDU_SITE_URL` to the public HTTPS origin before a production
 build so canonical URLs, Open Graph URLs, `robots.txt`, and `sitemap.xml` agree.
 
-`Main.pudu` owns the local HTTP listener. `Render.pudu` handles one URL and exits for a serverless
-runtime. Vercel routes pre-rendered canonical HTML directly through Edge CDN, and handles dynamic
-ranked search via an in-memory Node.js function loaded from `data/api.json`.
+`Main.pudu` owns the local HTTP listener. `Function.pudu` serves a platform that invokes the program
+rather than connecting to it, through `Std.Http.Server.Lambda`. `Render.pudu` handles one URL and
+exits. All three serve `Web.Routes`, so every page has one description and ranked search has one
+implementation — `Service.Search`, the one `Test/Website.pudu` checks.
+
+Vercel routes pre-rendered canonical HTML directly through the Edge CDN. Dynamic routes reach the
+Pudu function. There is no JavaScript in the deployment: the ranked search that used to be
+reimplemented in `website/platform/vercel/index.js` is gone, along with the second copy of the
+scoring table it carried.
 
 ## Vercel production build & deploy
 

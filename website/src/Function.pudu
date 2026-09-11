@@ -1,0 +1,113 @@
+module Function
+
+import Std.Http as Http
+import Std.Http.Server.Lambda as Lambda
+import Std.Io as Io
+import Std.Json as Json
+import Std.Option as Option
+import Config as Config
+import Error as SiteError
+import Service.Catalog as Catalog
+import Web.Routes as Web
+
+/// The site, served to a platform that invokes it rather than connects to it.
+///
+/// Every page this answers is rendered by `Web.Routes` from `View`, which is the
+/// same code `Main.pudu` serves over a socket and the same code `Test.Website`
+/// checks. There is no second description of a page anywhere: what a platform
+/// changes is how a request arrives, and that is all this module is.
+///
+/// The catalogue is read once, before the first invocation is taken, because a
+/// platform freezes the process between requests rather than ending it — so work
+/// done here is done once per cold start and work done per request is done every
+/// time. Reading three thousand declarations per request is the difference
+/// between a page and a timeout.
+fn main() -> Int {
+  match Config.load() {
+    case Err(problem) => couldNotStart(&problem)
+    case Ok(settings) => {
+      match Catalog.load(settings.cataloguePath) {
+        case Err(problem) => couldNotStart(&problem)
+        case Ok(catalog) => {
+          let siteUrl = settings.siteUrl
+          let held = catalog
+          let served = Lambda.serveEnvironment(fn(event: Json.Json) -> Result[Str, Str] {
+              Ok(answered(&Web.render(siteUrl, &held, pathIn(&event))))
+            })
+          match served {
+            case Ok(_) => 0
+            case Err(problem) => {
+              let _said = Io.writeLine(Lambda.explain(&problem))
+              1
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// The path and query an invocation is asking for.
+///
+/// Read from the shapes a platform actually sends rather than from one of them.
+/// A request URL arrives as `rawPath` with `rawQueryString` beside it, or as
+/// `path`, or as a whole `url` — and a reader that knew one shape would answer
+/// every request with the site's front page, which looks like a working
+/// deployment with broken routing rather than like a reader that did not
+/// understand the event.
+fn pathIn(event: &Json.Json) -> Str {
+  let whole = firstText(event, &["rawPath", "path", "url"])
+  let query = Option.unwrapOr(textAt(event, "rawQueryString"), "")
+  let target = if whole.isEmpty() { "/" } else { whole }
+  if query.isEmpty() || target.contains("?") { target } else { target + "?" + query }
+}
+
+fn firstText(event: &Json.Json, names: &Array[Str]) -> Str {
+  var found = ""
+  for name in names {
+    if found.isEmpty() { found = Option.unwrapOr(textAt(event, name), "") }
+  }
+  found
+}
+
+fn textAt(event: &Json.Json, name: Str) -> Option[Str] {
+  let held = Json.field(event, name) ?
+  Json.asText(&held)
+}
+
+/// One answer, in the shape a platform reads a response from.
+///
+/// Headers are carried as an object rather than dropped: the pages state their
+/// own content type, their caching, and their canonical address, and a response
+/// that arrived without them would be served as text and indexed as a duplicate.
+fn answered(response: &Http.Response) -> Str {
+  var headers: Array[(Str, Json.Json)] = []
+  for header in response.headers {
+    headers = headers.push((header[0], Json.Text(header[1])))
+  }
+  Json.encode(&Json.object(&[
+        ("statusCode", Json.Number(response.status.code)),
+        ("headers", Json.object(&headers)),
+        ("body", Json.Text(response.body)),
+        ("isBase64Encoded", Json.Boolean(false))
+      ]))
+}
+
+/// Say the function could not start, rather than answering every request with
+/// the same failure.
+///
+/// A platform told a function never started stops sending it work and reports
+/// a deployment that failed. A function that starts and then fails every
+/// request reports a service that is up and broken, which is read as a fault in
+/// the application rather than in what it was given.
+fn couldNotStart(problem: &SiteError.SiteError) -> Int {
+  let reason = SiteError.explain(problem)
+  let _said = Io.writeLine(reason)
+  // Told to the platform when there is one. Run outside a platform this is a
+  // program that failed to start and said so, which is the same thing.
+  if let Some(runtime) = Lambda.fromEnvironment() {
+    let _told = Lambda.failedToStart(&runtime, reason)
+    ()
+  }
+  1
+}

@@ -127,7 +127,7 @@ export fn send(base: &Exporter, spans: &Array[Trace.Span]) -> Result[Int, Export
     headers: [("content-type", "application/json")] + base.headers,
     body: render(base, &sendable)
   }
-  let limits = Client.within(&Client.limits(), base.deadlineMillis)
+  let limits = Client.limits().within(base.deadlineMillis)
   let answer = Result.mapErr(Client.send(&request, &limits), unreachable) ?
   if answer.status.code >= 200 && answer.status.code < 300 {
     Ok(sendable.length())

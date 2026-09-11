@@ -3,6 +3,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 local_server="${PUDU_STATIC_SERVER:-$root/website/bin/pudu-site-server-macos}"
+musl_runtime="${PUDU_MUSL_RUNTIME:-$root/dist/pudu-musl-x86_64}"
+compiler="${PUDU:-pudu}"
 output="$root/website/.vercel/output"
 function_dir="$output/functions/index.func"
 
@@ -11,26 +13,50 @@ if [[ ! -x "$local_server" ]] || [[ -z "${PUDU_SITE_URL:-}" ]]; then
   exit 1
 fi
 
+# The dynamic half of the site is Pudu, not JavaScript.
+#
+# It was JavaScript for one reason: a runtime linked against a current glibc
+# cannot start on the Lambda a Vercel function runs on, so the only language that
+# could answer a request there was the platform's own. That meant a second copy
+# of the ranking and of the page — a copy with no test against the Pudu one, so
+# the two could disagree and the deployed one was the untested one.
+#
+# A runtime linked against musl starts there, so the function is the site
+# itself: `website/src/Function.pudu` serving `Web.Routes`, rendering `View`.
+if [[ ! -f "$musl_runtime" ]]; then
+  echo "no musl runtime at $musl_runtime" >&2
+  echo "  build one with scripts/build-musl-runtime.sh, or set PUDU_MUSL_RUNTIME" >&2
+  exit 1
+fi
+
 rm -rf "$output"
 mkdir -p "$function_dir" "$output/static/assets" "$output/static/fonts"
 cp "$root/website/data/api.json" "$function_dir/api.json"
-cp "$root/website/platform/vercel/index.js" "$function_dir/index.js"
 cp "$root/website/public/site.css" "$output/static/assets/site.css"
 cp "$root/website/public/assets/"* "$output/static/assets/"
 cp "$root/website/public/fonts/"* "$output/static/fonts/"
-chmod 644 "$function_dir/api.json" "$function_dir/index.js" 2>/dev/null || true
+chmod 644 "$function_dir/api.json" 2>/dev/null || true
+
+# A custom runtime is started by running `bootstrap`, so the artefact is named
+# that. The compiler attaching the program must be the same version of Pudu as
+# the runtime it is attached to; both come from this checkout.
+"$compiler" build "$root/website/src/Function.pudu" \
+  -o "$function_dir/bootstrap" \
+  --runtime "$musl_runtime"
+chmod 755 "$function_dir/bootstrap"
 
 node "$root/website/scripts/prerender.mjs" \
   "$local_server" \
   "$root/website/data/api.json" \
   "$output/static"
 
+# `provided.al2` runs the artefact directly: the platform starts `bootstrap` and
+# speaks to it over the Lambda runtime interface, which `Std.Http.Server.Lambda`
+# implements. No Node launcher, and nothing to add helpers to.
 printf '%s\n' \
   '{' \
-  '  "runtime": "nodejs22.x",' \
-  '  "handler": "index.js",' \
-  '  "launcherType": "Nodejs",' \
-  '  "shouldAddHelpers": true,' \
+  '  "runtime": "provided.al2",' \
+  '  "handler": "bootstrap",' \
   '  "architecture": "x86_64",' \
   '  "maxDuration": 60' \
   '}' > "$function_dir/.vc-config.json"

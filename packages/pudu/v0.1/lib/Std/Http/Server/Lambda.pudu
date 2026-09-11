@@ -1,0 +1,272 @@
+module Std.Http.Server.Lambda
+
+import Std.Env as Env
+import Std.Http.Client as Client
+import Std.Http as Http
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+
+/// Serving a platform that invokes a program instead of connecting to it.
+///
+/// A serverless platform does not open a socket to a service. It starts a
+/// process, hands it one request at a time, and freezes it in between — so a
+/// program written as a listener has nothing to listen to, and the usual answer
+/// is a wrapper in whatever language the platform runs natively. That wrapper
+/// then holds a second copy of whatever it had to do to answer, which is a
+/// second copy that can disagree with the first.
+///
+/// This is the other answer: the program asks the platform for work rather than
+/// waiting to be connected to. What it serves is an ordinary handler — the same
+/// one a listener serves — so nothing about a service has to be written twice.
+///
+/// The loop is the one AWS Lambda defines and every platform built on it
+/// speaks. It is written here rather than in the compiler because it is a use of
+/// the library rather than a property of the language: a request is fetched, a
+/// handler answers it, the answer is posted back, and none of that needs the
+/// evaluator's help.
+
+/// Why a run of the loop ended.
+///
+/// A loop that ends is worth telling apart from one that was stopped. The
+/// platform is entitled to freeze a process between requests and to end it
+/// whenever it likes, so ending is ordinary — but ending because the address of
+/// the runtime was never set is a program started outside a platform, and that
+/// is a mistake in how it was deployed rather than a shutdown.
+export type LambdaError
+  = NotUnderARuntime
+  | RuntimeUnreachable(Str)
+  | MalformedInvocation(Str)
+
+/// One invocation, as the platform hands it over.
+export type Invocation = {
+  /// What the answer must be posted against. An answer posted under the wrong
+  /// one answers somebody else's request.
+  id: Str,
+  /// The event, undecoded. Kept as it arrived so a caller can read a shape this
+  /// module does not know about.
+  event: Json.Json
+}
+
+/// The interface a platform offers, and the version of it being spoken.
+///
+/// A value rather than something read from the environment at each call. The
+/// address and the version are the whole of what identifies an interface, and
+/// holding them lets a program point at one this module did not assume: another
+/// platform implementing the same protocol, a local one during development, or a
+/// version after the one below.
+///
+/// It is also what makes this testable. A module that reached for the
+/// environment inside every call could only be checked by setting environment
+/// variables around it; a value can be pointed at a server written in a fixture.
+export type Runtime = {
+  /// Host and port, as the platform gives it: `127.0.0.1:9001`, without a scheme.
+  address: Str,
+  /// The version segment of the interface's paths.
+  version: Str
+}
+
+/// The version of the interface this module was written against.
+///
+/// A version identifier rather than a date, in the way `HTTP/1.1` is a version:
+/// it names the shape of the paths, and AWS has published no other. Exported so
+/// a program that meets another can say so rather than reimplement the module.
+export const RUNTIME_VERSION: Str = "2018-06-01"
+
+/// The variable a platform announces its runtime interface in.
+///
+/// Exported because a platform that sets a different one is a platform this
+/// still works with: read that variable and hand the address to `runtimeAt`.
+export const RUNTIME_ADDRESS_VARIABLE: Str = "AWS_LAMBDA_RUNTIME_API"
+
+/// The interface this process was started under, when it was started under one.
+///
+/// Absent everywhere else, which is how a program tells the two apart: serve the
+/// loop when there is an interface to ask, and open a listener when there is
+/// not. The same program then runs under a platform and on a developer's machine
+/// without being built differently for each.
+export fn fromEnvironment() -> Option[Runtime] {
+  let address = Env.variable(RUNTIME_ADDRESS_VARIABLE) ?
+  if address.isEmpty() { None } else { Some(runtimeAt(address)) }
+}
+
+/// An interface at a stated address, speaking the version this was written for.
+export fn runtimeAt(address: Str) -> Runtime {
+  Runtime{address: address, version: RUNTIME_VERSION}
+}
+
+/// The same interface, speaking a different version of the protocol.
+export fn speaking(base: &Runtime, version: Str) -> Runtime {
+  Runtime{..*base, version: version}
+}
+
+/// Whether this program was started by a platform that invokes it.
+export fn underARuntime() -> Bool { Option.isSome(&fromEnvironment()) }
+
+/// What the loop is allowed to do to reach the runtime interface.
+///
+/// The interface is on an address the network trusts, which the client refuses
+/// to reach unless it is named — and naming it is right here rather than
+/// anywhere else, because this is the one caller that has business reaching it.
+/// A handler that wanted to reach it would have to say so itself.
+///
+/// Waiting for the next invocation is a long poll: the platform holds the
+/// request open until it has work, which on a quiet function is minutes. The
+/// client has no way to ask for no deadline — a negative one is nothing, and
+/// nothing is a deadline already passed — so the wait is bounded by the longest
+/// a platform will let an invocation run. Past that the process is the
+/// platform's to stop, and a deadline here would only report its own bound as
+/// though the runtime had failed.
+const POLL_MILLIS: Int = 900000
+
+fn runtimeLimits(runtime: &Runtime) -> Client.Limits {
+  Client.limits().reaching(&[hostOf(runtime)]).within(POLL_MILLIS).following(0)
+}
+
+/// The host of an address, without the port the client's rules do not name.
+fn hostOf(runtime: &Runtime) -> Str {
+  let at = runtime.address.indexOf(":")
+  if at < 0 { runtime.address } else { runtime.address.take(at) }
+}
+
+/// Where the interface serves one of its paths.
+export fn runtimePath(runtime: &Runtime, rest: Str) -> Str {
+  "http://" + runtime.address + "/" + runtime.version + "/runtime" + rest
+}
+
+/// Ask for the next invocation, waiting until there is one.
+///
+/// The identifier comes back in a header rather than in the body, so a reader
+/// that only decoded the body would answer every invocation against nothing.
+export fn nextInvocation(runtime: &Runtime) -> Result[Invocation, LambdaError] {
+  let asked = Http.Request {
+    method: Http.Get,
+    target: runtimePath(runtime, "/invocation/next"),
+    headers: [],
+    body: ""
+  }
+  let answered = Result.mapErr(Client.send(&asked, &runtimeLimits(runtime)),
+    fn(problem: Client.ClientError) -> LambdaError { RuntimeUnreachable(Client.explain(&problem)) }) ?
+  match Http.header(&answered.headers, "Lambda-Runtime-Aws-Request-Id") {
+    case None => Err(MalformedInvocation("an invocation arrived without a request identifier"))
+    case Some(found) => {
+      // An event that is not JSON is still an invocation, and it still has to be
+      // answered — a function that dropped it would be retried until the
+      // platform gave up. So the failure to read it is the handler's to report.
+      Ok(Invocation{id: found, event: Result.unwrapOr(Json.decode(answered.body), Json.Null)})
+    }
+  }
+}
+
+/// Post an answer for one invocation.
+export fn answer(runtime: &Runtime, invocation: &Invocation, body: Str) -> Result[(), LambdaError] {
+  postTo(runtime, "/invocation/" + invocation.id + "/response", body)
+}
+
+/// Say an invocation could not be answered.
+///
+/// Reported rather than left unanswered. An invocation nothing answers is
+/// retried, and a request that fails the same way every time is retried until
+/// the platform stops — so a failure said once costs one invocation, and a
+/// failure not said costs every retry the platform is willing to make.
+export fn fail(runtime: &Runtime, invocation: &Invocation, reason: Str) -> Result[(), LambdaError] {
+  postTo(
+    runtime,
+    "/invocation/" + invocation.id + "/error",
+    Json.encode(&Json.object(&[
+          ("errorType", Json.Text("Unhandled")),
+          ("errorMessage", Json.Text(reason))
+        ]))
+  )
+}
+
+/// Say the program could not start at all.
+///
+/// Said before any invocation is taken, so the platform stops rather than
+/// sending work to a process that cannot do it. Without it a function whose
+/// configuration is wrong answers every request with the same failure, and the
+/// platform reports a service that is failing rather than one that never began.
+export fn failedToStart(runtime: &Runtime, reason: Str) -> Result[(), LambdaError] {
+  postTo(
+    runtime,
+    "/init/error",
+    Json.encode(&Json.object(&[
+          ("errorType", Json.Text("Runtime.InvalidEntrypoint")),
+          ("errorMessage", Json.Text(reason))
+        ]))
+  )
+}
+
+fn postTo(runtime: &Runtime, rest: Str, body: Str) -> Result[(), LambdaError] {
+  let asked = Http.Request {
+    method: Http.Post,
+    target: runtimePath(runtime, rest),
+    headers: [("content-type", "application/json")],
+    body: body
+  }
+  Result.map(
+    Result.mapErr(Client.send(&asked, &runtimeLimits(runtime)),
+      fn(problem: Client.ClientError) -> LambdaError { RuntimeUnreachable(Client.explain(&problem)) }),
+    fn(_answered: Http.Response) -> () { () }
+  )
+}
+
+/// Take invocations and answer them until the platform stops the process.
+///
+/// The handler is given the event and answers the body to post back. It is the
+/// caller's, so what a function does with an event — decode it as a request,
+/// read a field, ignore it — stays in the program rather than here.
+///
+/// A handler that fails is reported against the invocation it failed on and the
+/// loop continues. One request that cannot be answered is not a reason to stop
+/// answering the next, and a process that ended on one bad request would be
+/// started again to meet the same one.
+export fn serve(runtime: &Runtime, handler: fn(Json.Json) -> Result[Str, Str]) -> Result[(), LambdaError] {
+  var stopped: Option[LambdaError] = None
+  var going = true
+  while going {
+    match nextInvocation(runtime) {
+      case Err(problem) => {
+        stopped = Some(problem)
+        going = false
+      }
+      case Ok(invocation) => {
+        let answered = match handler(invocation.event) {
+          case Ok(body) => answer(runtime, &invocation, body)
+          case Err(reason) => fail(runtime, &invocation, reason)
+        }
+        // Losing the runtime interface is the end of the loop. Every other
+        // outcome was already reported against its own invocation.
+        if let Err(problem) = answered {
+          stopped = Some(problem)
+          going = false
+        }
+      }
+    }
+  }
+  match stopped {
+    case Some(problem) => Err(problem)
+    case None => Ok(())
+  }
+}
+
+/// Serve the interface this process was started under.
+///
+/// What a program written only for a platform calls. A program that also runs as
+/// a listener asks `fromEnvironment` itself and decides.
+export fn serveEnvironment(handler: fn(Json.Json) -> Result[Str, Str]) -> Result[(), LambdaError] {
+  match fromEnvironment() {
+    case None => Err(NotUnderARuntime)
+    case Some(runtime) => serve(&runtime, handler)
+  }
+}
+
+/// Why a loop ended, in words a deployment log can be read by.
+export fn explain(problem: &LambdaError) -> Str {
+  match *problem {
+    case NotUnderARuntime =>
+    "no serverless runtime was offered: this program was started outside a platform that invokes it"
+    case RuntimeUnreachable(cause) => "the serverless runtime could not be reached: " + cause
+    case MalformedInvocation(cause) => "the platform sent an invocation that could not be read: " + cause
+  }
+}
