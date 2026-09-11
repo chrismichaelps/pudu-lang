@@ -2,25 +2,25 @@ name: musl-runtime
 
 # A runtime that runs anywhere Linux runs, and the proof that it does.
 #
-# The proof is the point of this workflow. A musl link either happened or did
-# not, and a runtime that quietly fell back to the host C library builds
-# cleanly, passes a smoke test on the machine that built it, and fails on the
-# platform it was built for — from the loader, before any Pudu code runs, so
-# nothing in the program can report it.
+# The proof is the point. A musl link either happened or did not, and a runtime
+# that quietly fell back to the host C library builds cleanly, passes a smoke
+# test on the machine that built it, and fails on the platform — from the loader,
+# before any Pudu code runs, so nothing in the program can report it.
 #
 # So the artefact is carried into two images it has no business running in
 # unless the link worked: Alpine, which has no glibc at all, and Amazon Linux 2,
 # whose glibc is older than any current build host's and is what AWS Lambda —
 # and therefore a Vercel function — provides.
+#
+# The job runs *in* Alpine rather than building a container from a runner,
+# because Alpine is musl: nothing has to arrange for a different C library than
+# the one the system uses, which is the arrangement that goes wrong. The runner
+# is x86_64, which is what Lambda runs, so nothing is emulated.
 
 on:
   push:
     branches:
       - "feature/**"
-    paths:
-      - ".github/workflows/musl-runtime.yml"
-      - "scripts/build-musl-runtime.sh"
-      - "packages/pudu/**"
   workflow_dispatch:
 
 permissions:
@@ -29,27 +29,66 @@ permissions:
 jobs:
   runtime:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
+    container:
+      image: alpine:3.20
     steps:
+      - name: Install the toolchain musl needs
+        run: |
+          apk add --no-cache \
+            bash binutils build-base coreutils curl git gmp-dev gnupg \
+            libffi-dev ncurses-dev perl tar xz zlib-dev \
+            gmp-static ncurses-static zlib-static nodejs
+
       - uses: actions/checkout@v7
 
-      - name: Build the musl runtime
-        run: scripts/build-musl-runtime.sh -o dist/pudu-musl-x86_64
-
-      # The compiler that attaches the program and the runtime it is attached to
-      # must be the same version of Pudu. Built from this same checkout, they
-      # are, which is why the bundle is assembled here rather than downloaded
-      # from anywhere.
-      - uses: haskell-actions/setup@v2
-        with:
-          ghc-version: 9.10.3
-          cabal-version: 3.16.1.0
-      - run: cabal update
-      - run: cabal build exe:pudu --disable-tests --enable-optimization=2
-
-      - name: Attach a program to the musl runtime
+      - name: Install GHC and cabal
+        env:
+          BOOTSTRAP_HASKELL_NONINTERACTIVE: 1
+          BOOTSTRAP_HASKELL_MINIMAL: 1
+          GHCUP_INSTALL_BASE_PREFIX: /opt
         run: |
-          PUDU="$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+          echo "/opt/.ghcup/bin" >> "$GITHUB_PATH"
+
+      - name: Select the versions the package is built with
+        run: |
+          ghcup install ghc 9.10.1 --set
+          ghcup install cabal 3.12.1.0 --set
+          ghc --version
+          cabal --version
+
+      # The same flags `scripts/build-musl-runtime.sh` uses. The Haskell
+      # libraries are linked in by default; these are the C ones the package
+      # names, linked in as well so the finished runtime needs nothing at run
+      # time but musl's loader.
+      - name: Build the runtime
+        working-directory: packages/pudu/v0.1
+        run: |
+          cabal update
+          cabal build exe:pudu \
+            --disable-tests \
+            --enable-optimization=2 \
+            --ghc-options="-optl-Wl,-Bstatic -optl-lffi -optl-lz -optl-lncursesw -optl-lgmp -optl-Wl,-Bdynamic"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)" \
+            "$GITHUB_WORKSPACE/dist/pudu-musl-x86_64"
+
+      - name: Say what was produced
+        run: |
+          cd dist
+          file pudu-musl-x86_64 || true
+          ldd pudu-musl-x86_64 || true
+          if ldd pudu-musl-x86_64 2>&1 | grep -qi "libc\.so\.6\|GLIBC"; then
+            echo "the runtime still needs glibc, which is the thing this avoids" >&2
+            exit 1
+          fi
+
+      # Same version of Pudu on both sides: the compiler that attaches the
+      # program and the runtime it is attached to come from this one checkout.
+      - name: Attach a program to it
+        run: |
+          PUDU="$(cd packages/pudu/v0.1 && cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
           mkdir -p dist/probe
           cat > dist/probe/Deployed.pudu <<'PROGRAM'
           module Deployed
@@ -64,52 +103,41 @@ jobs:
             }
           }
           PROGRAM
-          "$PUDU" build dist/probe/Deployed.pudu \
-            -o dist/deployed \
-            --runtime dist/pudu-musl-x86_64
+          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed --runtime dist/pudu-musl-x86_64
           ls -l dist/deployed
 
-      # Where a glibc-linked artefact fails. Run with an empty environment and
-      # from a directory the artefact was not built in, because what is under
-      # test is that it needs nothing from around it.
-      - name: Run it on Alpine, which has no glibc
+      - name: Run it here, where there is no glibc at all
         run: |
-          docker run --rm \
-            --volume "$PWD/dist/deployed:/deployed:ro" \
-            alpine:3.20 \
-            /usr/bin/env -i /deployed | tee said.txt
+          cd /tmp
+          env -i "$GITHUB_WORKSPACE/dist/deployed" | tee said.txt
           grep -qx "Deployed on musl" said.txt
-
-      - name: Run it on the glibc AWS Lambda provides
-        run: |
-          docker run --rm \
-            --volume "$PWD/dist/deployed:/deployed:ro" \
-            amazonlinux:2 \
-            /usr/bin/env -i /deployed | tee said-lambda.txt
-          grep -qx "Deployed on musl" said-lambda.txt
-
-      # The same program attached to the runtime this workflow's own host built,
-      # which is the artefact that has been failing. If this ever succeeds on
-      # Amazon Linux 2 the wall has moved and the musl runtime is no longer
-      # needed for that platform — worth knowing, so it is recorded rather than
-      # asserted either way.
-      - name: Record whether a glibc-linked artefact still fails there
-        continue-on-error: true
-        run: |
-          PUDU="$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
-          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed-glibc
-          if docker run --rm \
-            --volume "$PWD/dist/deployed-glibc:/deployed:ro" \
-            amazonlinux:2 \
-            /usr/bin/env -i /deployed; then
-            echo "::notice::a glibc-linked artefact now runs on Amazon Linux 2"
-          else
-            echo "::notice::a glibc-linked artefact still does not run on Amazon Linux 2, as expected"
-          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: pudu-musl-x86_64
-          path: dist/pudu-musl-x86_64
+          path: |
+            dist/pudu-musl-x86_64
+            dist/deployed
           if-no-files-found: error
           retention-days: 7
+
+  # The artefact carried into the glibc AWS Lambda actually provides. Separate
+  # from the build because it needs a runner that can run containers rather than
+  # one that is a container.
+  lambda:
+    needs: runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pudu-musl-x86_64
+          path: dist
+      - name: Run it on the glibc AWS Lambda provides
+        run: |
+          chmod +x dist/deployed
+          docker run --rm \
+            --volume "$PWD/dist/deployed:/deployed:ro" \
+            amazonlinux:2 \
+            /usr/bin/env -i /deployed | tee said.txt
+          grep -qx "Deployed on musl" said.txt

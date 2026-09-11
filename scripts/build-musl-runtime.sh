@@ -23,15 +23,22 @@
 #
 # The build runs in a container because GHC needs a musl toolchain to target
 # one, and cross-compiling GHC is considerably harder than borrowing a machine
-# that already is the target. The image is pinned by digest: an image tag is
-# rewritten by whoever publishes it, and a runtime that quietly changed the
-# library it links against is the thing this script exists to prevent.
+# that already is the target. The toolchain is built here rather than pulled:
+# no published musl image carries a GHC new enough, since the package needs
+# `base >= 4.20` — GHC 9.10 — and the images that exist stop at 9.4. The image
+# is kept, so building it is a cost paid once.
+#
+# The runtime is for x86_64, which is what Lambda and every serverless platform
+# built on it runs. On a machine that is not x86_64 the container is emulated
+# and a GHC build under emulation takes hours, so the script says so rather than
+# appearing to hang.
 #
 # Usage:
 #   scripts/build-musl-runtime.sh [-o output]
 #
 # Environment:
-#   PUDU_MUSL_IMAGE   the image to build in, pinned by digest
+#   PUDU_MUSL_IMAGE   the toolchain image to build in
+#   PUDU_MUSL_PLATFORM  the platform to build for, default linux/amd64
 #   PUDU_MUSL_ENGINE  docker (default) or podman
 set -euo pipefail
 
@@ -39,10 +46,9 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 output="$root/dist/pudu-musl-x86_64"
 engine="${PUDU_MUSL_ENGINE:-docker}"
 
-# GHC built against musl, with the C libraries the package needs. Replace this
-# with a digest for the version you intend to keep; a bare tag is accepted so
-# the script can be run before one is chosen, and warns when it is.
-image="${PUDU_MUSL_IMAGE:-docker.io/utdemir/ghc-musl:v25-ghc9101}"
+# The toolchain image, built from deploy/musl.Dockerfile when it is not there.
+image="${PUDU_MUSL_IMAGE:-pudu-musl-toolchain:ghc9.10.1}"
+platform="${PUDU_MUSL_PLATFORM:-linux/amd64}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -73,15 +79,29 @@ if ! "$engine" info >/dev/null 2>&1; then
   exit 1
 fi
 
-case "$image" in
-  *@sha256:*) ;;
+# Emulating another architecture is the difference between minutes and hours for
+# a GHC build, and a reader watching it would have no way to tell which they are
+# in. Said once, here.
+host="$("$engine" info --format '{{.Architecture}}' 2>/dev/null || echo unknown)"
+case "$host" in
+  x86_64 | amd64) ;;
   *)
-    echo "build-musl-runtime: the image is named by tag rather than by digest." >&2
-    echo "  A tag is rewritten by whoever publishes it, so two runs of this can" >&2
-    echo "  link against different libraries. Pin PUDU_MUSL_IMAGE to a digest" >&2
-    echo "  before anything is released from it." >&2
+    echo "build-musl-runtime: this machine is $host and the runtime is for x86_64." >&2
+    echo "  The container will be emulated, and a GHC build under emulation takes" >&2
+    echo "  hours rather than minutes. The CI job musl-runtime.yml builds this on" >&2
+    echo "  an x86_64 runner; downloading its artefact is the faster path." >&2
+    echo "  Continuing anyway." >&2
     ;;
 esac
+
+if ! "$engine" image inspect "$image" >/dev/null 2>&1; then
+  echo "building the toolchain image $image (once; this takes a while)"
+  "$engine" build \
+    --platform "$platform" \
+    -f "$root/deploy/musl.Dockerfile" \
+    -t "$image" \
+    "$root/deploy"
+fi
 
 mkdir -p "$(dirname "$output")"
 
@@ -89,6 +109,7 @@ mkdir -p "$(dirname "$output")"
 # and HOME is inside the mount so cabal's package database survives between runs
 # rather than being downloaded again each time.
 "$engine" run --rm \
+  --platform "$platform" \
   --volume "$root:/work" \
   --workdir /work/packages/pudu/v0.1 \
   --env HOME=/work/dist/musl-home \
@@ -119,14 +140,14 @@ chmod +x "$output"
 # failure this whole script exists to prevent, so it is checked here.
 echo
 echo "built $output"
-"$engine" run --rm --volume "$output:/runtime:ro" "$image" sh -eu -c '
+"$engine" run --rm --platform "$platform" --volume "$output:/runtime:ro" "$image" sh -eu -c '
   echo "--- what it is ---"
   file /runtime || true
   echo "--- what it needs at run time ---"
   ldd /runtime 2>&1 || true
 '
 
-if "$engine" run --rm --volume "$output:/runtime:ro" "$image" sh -c 'ldd /runtime 2>&1' | grep -qi "libc\.so\.6\|GLIBC"; then
+if "$engine" run --rm --platform "$platform" --volume "$output:/runtime:ro" "$image" sh -c 'ldd /runtime 2>&1' | grep -qi "libc\.so\.6\|GLIBC"; then
   echo >&2
   echo "build-musl-runtime: the runtime still needs glibc, which is the thing this avoids." >&2
   echo "  It will not start on Lambda or on Alpine. Check that the image is a musl one." >&2
