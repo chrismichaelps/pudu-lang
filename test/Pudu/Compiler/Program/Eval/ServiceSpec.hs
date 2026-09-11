@@ -40,10 +40,21 @@ testServiceEvaluation = do
           apart from the statement rather than pasted into it, that the challenge
           is answered without the password crossing, that a server which cannot
           prove it knows the password is refused, and that a failed transaction
-          is undone rather than left open. -}
+          is undone rather than left open.
+
+          The transaction surface is driven by hand as well as through the
+          combinators, with the status read back at each step: a client that
+          sent the statements without reading it cannot tell a transaction it is
+          in from one the server closed under it. Returning to a savepoint is
+          checked to keep the transaction open, which is the whole difference
+          between it and a rollback, and the stub reports the status a real
+          server would so a client treating the two alike cannot pass. Each of
+          the four levels of protection is read off the wire, because a level
+          written as text and misspelled is given the server's default silently
+          — a server told an unknown level reports nothing until it matters. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "39")
+        (database === Just "66")
     {-| The obligations [[ADR-0016]] places on an application: that a declared
         default is held like any other setting and can say where it came from,
         that a later layer wins over an earlier one, that a profile states its

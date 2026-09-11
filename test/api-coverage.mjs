@@ -138,7 +138,7 @@ if (wantsReport) {
 // It falls only when the library itself loses exports, which is a deliberate
 // act and shows up as a smaller total beside it. Lowering it for any other
 // reason is removing the check.
-const floor = 2883;
+const floor = 2895;
 const percent = total === 0 ? 100 : Math.floor((covered / total) * 100);
 
 console.log(JSON.stringify({ exports: total, covered, percent, floor, undocumented: undocumented.length }));

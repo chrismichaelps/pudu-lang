@@ -249,6 +249,165 @@ export fn main() -> Int {
       count
     })
 
+  // A transaction opened, kept, and undone by hand, with the status read back
+  // at each step. A client that sent the statements without reading the status
+  // cannot tell a transaction it is in from one the server closed under it.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if !Db.inTransaction(&stream) { count = count + 1 }
+        if let Ok(open) = Db.begin(stream) {
+          if Db.inTransaction(&open) { count = count + 1 }
+          if let Ok(back) = Db.rollback(open) {
+            if !Db.inTransaction(&back) { count = count + 1 }
+            if let Ok(again) = Db.begin(back) {
+              if let Ok(done) = Db.commit(again) {
+                if !Db.inTransaction(&done) { count = count + 1 }
+                let asked = Db.simple(done, "what did you get")
+                if let Ok(pair) = asked {
+                  let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+                  // Each one crossed the wire as its own statement, in order.
+                  if seen.contains("BEGIN\nROLLBACK\nBEGIN\nCOMMIT\n") { count = count + 1 }
+                  let _closed = Session.close(&pair[1])
+                }
+              }
+            }
+          }
+        }
+      }
+      count
+    })
+
+  // A level of protection is named rather than written as text. A caller
+  // spelling one wrong would be given the server's default silently, since a
+  // server told an unknown level reports nothing until it matters — so what
+  // goes on the wire is read back for each of the four.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        var carried = stream
+        let levels: Array[Db.Isolation] = [
+          Db.ReadCommitted,
+          Db.RepeatableRead,
+          Db.Serializable,
+          Db.ReadUncommitted
+        ]
+        for level in levels {
+          if let Ok(open) = Db.beginWith(carried, &level) {
+            if let Ok(back) = Db.rollback(open) { carried = back }
+          }
+        }
+        let asked = Db.simple(carried, "what did you get")
+        if let Ok(pair) = asked {
+          let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+          if seen.contains("BEGIN ISOLATION LEVEL READ COMMITTED\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL REPEATABLE READ\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL SERIALIZABLE\n") { count = count + 1 }
+          if seen.contains("BEGIN ISOLATION LEVEL READ UNCOMMITTED\n") { count = count + 1 }
+          // Four begins, so no two levels were written the same way.
+          if seen.split("BEGIN ISOLATION LEVEL ").length() == 5 { count = count + 1 }
+          let _closed = Session.close(&pair[1])
+        }
+      }
+      count
+    })
+
+  // A marked point returned to, then one forgotten. Returning to a savepoint
+  // keeps the transaction open and releasing one keeps what was done since, so
+  // neither is a rollback and the status says which.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if let Ok(open) = Db.begin(stream) {
+          if let Ok(marked) = Db.savepoint(open, "step") {
+            if let Ok(undone) = Db.rollbackTo(marked, "step") {
+              // Still inside the transaction, which is the difference between
+              // this and a rollback.
+              if Db.inTransaction(&undone) { count = count + 1 }
+              if let Ok(forgotten) = Db.release(undone, "step") {
+                if Db.inTransaction(&forgotten) { count = count + 1 }
+                let asked = Db.simple(forgotten, "what did you get")
+                if let Ok(pair) = asked {
+                  let seen = Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")
+                  if seen.contains("SAVEPOINT \"step\"\n") { count = count + 1 }
+                  if seen.contains("ROLLBACK TO SAVEPOINT \"step\"\n") { count = count + 1 }
+                  if seen.contains("RELEASE SAVEPOINT \"step\"\n") { count = count + 1 }
+                  let _closed = Session.close(&pair[1])
+                }
+              }
+            }
+          }
+        }
+      }
+      count
+    })
+
+  // A pooled transaction at a stated level, which is the form a read that must
+  // not see a write half-applied is written in.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let made: Result[Db.Pool, Session.DbError] = Db.pool(&settings, 1)
+      if let Ok(pooled) = made {
+        let done = Db.transactionWith(&pooled, &Db.Serializable,
+          fn(inside: Session.Connection) -> (Result[Int, Session.DbError], Session.Connection) {
+            (Ok(7), inside)
+          })
+        if Result.unwrapOr(done, 0) == 7 { count = count + 1 }
+        let after = Db.withConnection(&pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+            let asked = Db.simple(open, "what did you get")
+            match asked {
+              case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "seen"), "")), pair[1])
+              case Err(reason) => (Err(reason), open)
+            }
+          })
+        let seen = Result.unwrapOr(after, "")
+        if seen.contains("BEGIN ISOLATION LEVEL SERIALIZABLE\n") { count = count + 1 }
+        if seen.contains("COMMIT\n") { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
+  // What a statement that produced no rows changed, which lives only in the
+  // tag the server sends. A caller checking that an update did something reads
+  // this rather than a row count, which for an update is zero either way.
+  held = held + runAgainst(transactionServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(stream) = Session.connect(&settings) {
+        if let Ok(pair) = Db.simple(stream, "update people set name = 'ada'") {
+          if Db.affected(&pair[0]) == 3 { count = count + 1 }
+          if Db.rowCount(&pair[0]) == 0 { count = count + 1 }
+          // And a select reports no change, rather than reporting its row count
+          // as one.
+          if let Ok(selected) = Db.simple(pair[1], "select many") {
+            if Db.rowCount(&selected[0]) == 3 { count = count + 1 }
+
+            // A whole column at once, keeping the absent value absent: a column
+            // read as text would answer three strings and lose which row had
+            // nothing.
+            let names = Db.column(&selected[0], "name")
+            if names.length() == 3 { count = count + 1 }
+            if Option.unwrapOr(names[0], "") == "ada" && Option.isNone(&names[1])
+              && Option.unwrapOr(names[2], "") == "grace" {
+              count = count + 1
+            }
+            // A column the result does not have is no values rather than three
+            // absent ones, which is the answer that tells a caller the column
+            // was missing rather than empty.
+            if Db.column(&selected[0], "height").length() == 0 { count = count + 1 }
+
+            // Where a column sits, and that a column it does not have says so
+            // rather than answering the first.
+            if Db.indexOfColumn(&selected[0], "id") == 0 { count = count + 1 }
+            if Db.indexOfColumn(&selected[0], "name") == 1 { count = count + 1 }
+            if Db.indexOfColumn(&selected[0], "height") < 0 { count = count + 1 }
+            let _closed = Session.close(&selected[1])
+          }
+        }
+      }
+      count
+    })
+
   // A server whose signature does not prove it knows the password is refused,
   // which is the half of the exchange that stops something in the middle from
   // impersonating the server.
@@ -424,13 +583,36 @@ fn transactionServer(connection: Net.Connection) -> Bool {
       let sql = statementIn(&asked)
       seen = seen + sql + "\n"
       if sql.startsWith("BEGIN") { status = 84u8 }
-      if sql.startsWith("ROLLBACK") { status = 73u8 }
+      // Returning to a savepoint keeps the transaction open, which is the whole
+      // difference between it and a rollback. A stub that ended the transaction
+      // here would let a client treating the two alike pass.
+      if sql.startsWith("ROLLBACK TO") {
+        status = 84u8
+      } else if sql.startsWith("ROLLBACK") {
+        status = 73u8
+      }
       if sql.startsWith("COMMIT") { status = 73u8 }
       if sql.startsWith("what did you get") {
         let _answered = Net.send(&connection, &ByteSeq.join(&[
               rowDescription(&[("seen", 25)]),
               dataRow(&[Some(seen)]),
               commandComplete("SELECT 1"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else if sql.startsWith("update ") {
+        // An update reports what it changed in its tag and sends no rows, which
+        // is the only place the number lives.
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              commandComplete("UPDATE 3"),
+              Wire.frame("Z", &bytesOf([status]))
+            ]))
+      } else if sql.startsWith("select many") {
+        let _answered = Net.send(&connection, &ByteSeq.join(&[
+              rowDescription(&[("id", 23), ("name", 25)]),
+              dataRow(&[Some("1"), Some("ada")]),
+              dataRow(&[Some("2"), None]),
+              dataRow(&[Some("3"), Some("grace")]),
+              commandComplete("SELECT 3"),
               Wire.frame("Z", &bytesOf([status]))
             ]))
       } else {
