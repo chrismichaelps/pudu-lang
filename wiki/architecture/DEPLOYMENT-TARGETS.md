@@ -84,17 +84,31 @@ starts, and compiles them. Three consequences:
 That last figure is the argument for the platforms that run a daemon. Cloud Run, Fly.io, Render,
 Railway and AWS App Runner all run a compiled daemon directly, and `deploy/Dockerfile` is what they
 need. Vercel's serverless model freezes a process between requests, so it pays the start cost
-repeatedly and wants a request handler rather than a listener.
+repeatedly and wants a request handler rather than a listener — which is what the next section is.
+
+## Serving a platform that invokes rather than connects
+
+A serverless platform does not connect to a service. It starts a process, hands it one request at a
+time, and freezes it in between, so a program written as a listener has nothing to listen to. The
+usual answer is a wrapper in the platform's own language — which then holds a second copy of whatever
+it took to answer the request, and that copy can disagree with the first.
+
+`Std.Http.Server.Lambda` is the other answer: the program asks the platform for work rather than
+waiting to be connected to, over the interface AWS Lambda defines and every platform built on it
+speaks. What it serves is an ordinary handler, so a service is written once and `Main.pudu`,
+`Function.pudu` and `Render.pudu` all serve the same routes.
+
+The interface is a value — its address and its protocol version are both settable — rather than read
+from the environment at each call. That is what lets a program reach one this module did not assume,
+and what lets the loop be pointed at a server a fixture starts, which is how it is tested at all.
+`fromEnvironment` reads the address a platform announces; a program that also runs as a listener asks
+for it and decides, so one build runs in both places.
+
+Vercel's Build Output API names this runtime `provided.al2` and starts the artefact as `bootstrap`.
+`website/scripts/build-vercel.sh` emits that.
 
 ## What this does not yet do
 
-- **It does not remove the JavaScript from the website's Vercel deployment.**
-  `website/platform/vercel/index.js` reimplements ranked search in JavaScript, reading
-  `website/data/api.json`. A musl runtime makes running Pudu on Lambda possible; moving that logic
-  back into Pudu is separate work, and it is the larger part of what the adapter costs.
-- **There is no Lambda custom-runtime mode.** Serving a Vercel function from the artefact with no
-  Node launcher needs the runtime to poll the Lambda Runtime API. `website/src/Render.pudu` already
-  handles one URL and exits, so the Pudu half of that shape exists.
 - **There is no WebAssembly target.** It would mean compiling the evaluator through GHC's
   `wasm32-wasi` backend and shipping an interpreter into the edge runtime, and WASI has no listening
   sockets, so `Std.Http.Server` could not listen there at all. It would not reduce the start cost
