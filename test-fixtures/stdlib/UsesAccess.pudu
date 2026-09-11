@@ -142,6 +142,56 @@ export fn main() -> Int {
   // handler, so it cannot be done differently in two of them.
   if Route.dispatch(&asAdmin, requestFor(Http.Get, "/me")).status.code == 200 { held = held + 1 }
 
+  // Every method a route can answer states its requirement the same way, and
+  // there is no call that makes one without — a route answering PUT with the
+  // check left out would be a line that looks exactly like a route that needs
+  // none. The method a route answers is part of what it is: the same pattern
+  // under two methods is two routes, each decided on its own.
+  let writes: Array[Access.Guarded] = [
+    Access.post("/users", HoldingRole("admin"), answer),
+    Access.put("/users/:id", HoldingRole("admin"), answer),
+    Access.patch("/users/:id", Someone, answer),
+    Access.query("/users", Anyone, answer),
+    Access.on(Http.Head, "/users", Anyone, answer)
+  ]
+  let writing = Access.requirements(&writes)
+  if writing[0] == ("POST /users", "the role admin") { held = held + 1 }
+  if writing[1] == ("PUT /users/:id", "the role admin") { held = held + 1 }
+  if writing[2] == ("PATCH /users/:id", "anyone identified") { held = held + 1 }
+  if writing[3] == ("QUERY /users", "anyone") { held = held + 1 }
+  // A method this module names no call for is still written with a
+  // requirement, so a protocol gaining a method does not gain a way to skip
+  // the check.
+  if writing[4] == ("HEAD /users", "anyone") { held = held + 1 }
+  if Access.openRoutes(&writes) == ["QUERY /users", "HEAD /users"] { held = held + 1 }
+
+  // A route's requirement and the route itself are both readable, so a
+  // reviewer reads what is protected rather than inferring it from a handler.
+  let guarded: Access.Guarded = writes[0]
+  let wanted: Access.Requirement = guarded.requirement
+  if Access.describe(&wanted) == "the role admin" && guarded.name == "POST /users" {
+    held = held + 1
+  }
+  // The same pattern decided under two methods answers each on its own: an
+  // admin-only PUT and an identified PATCH over one path.
+  let mixed = Access.routing(&writes, fn(_request: Route.Request) -> Access.Principal {
+      Access.principal("ada", &["reader"])
+    })
+  if Route.dispatch(&mixed, requestFor(Http.Patch, "/users/7")).status.code == 200 {
+    held = held + 1
+  }
+  if Route.dispatch(&mixed, requestFor(Http.Put, "/users/7")).status.code == 403 {
+    held = held + 1
+  }
+
+  // A decision is a value, so it can be held and asked more than one question
+  // without being decided twice.
+  let verdict: Access.Decision = Access.decide(&HoldingRole("admin"), &reader)
+  if !Access.permits(&verdict) && Access.statusOf(&verdict) == 403
+    && Access.reasonOf(&verdict).contains("admin") {
+    held = held + 1
+  }
+
   // What a requirement is reads back as text, so a model can be reported.
   if Access.describe(&HoldingAny(["a", "b"])) == "any one of a, b" { held = held + 1 }
   if Access.describe(&HoldingAll(["a", "b"])) == "every one of a, b" { held = held + 1 }

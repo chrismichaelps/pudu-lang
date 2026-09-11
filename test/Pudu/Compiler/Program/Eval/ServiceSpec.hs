@@ -127,10 +127,14 @@ testServiceEvaluation = do
         and a route somebody forgot stop being the same line; that not knowing
         who is asking and not being permitted are different answers with
         different statuses; and that a denial does not name what was missing,
-        because doing that one route at a time maps the model. -}
+        because doing that one route at a time maps the model. Every method a
+        route can answer is written the same way, including one this module
+        names no call for, so a protocol gaining a method does not gain a way
+        to skip the check. The same pattern is decided under two methods, which
+        is the case a router that keyed only on the path gets wrong. -}
     , counterexample
         "a route states what it requires or it is not a route"
-        (permitted === Just "48")
+        (permitted === Just "58")
     {-| That everything wrong is reported at once rather than the first thing,
         since a person correcting a form wants the whole list; that a failure
         says what was expected and never repeats what was submitted, so a
