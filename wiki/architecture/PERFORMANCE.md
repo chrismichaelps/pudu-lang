@@ -100,6 +100,36 @@ The target-neutral [[Core IR]] lowers into control-flow IR suitable for these pr
 - Ownership enables stack allocation and deterministic destruction; escape analysis may promote non-escaping aggregates.
 - Runtime helpers are small, versioned, and benchmarked; no hidden garbage collector is introduced.
 
+## Indexing text costs what reaching the index costs
+
+`charAt` walks the text to find the character asked for. `Str` holds UTF-8, where a character is one
+to four bytes, so the byte a character index names cannot be computed — it has to be counted to. The
+builtin drops that many characters and takes the first of what is left.
+
+Every parser in the library is written as an index walking forward over a source: `Std.Json`,
+`Std.Csv`, `Std.Toml`, `Std.Yaml`, `Std.Xml`, `Std.Text.Parse`, `Std.Url`. Each of those reads
+position after position, and reaching each one costs what it takes to walk there — so the work to
+read a document grows with the square of its length rather than with its length.
+
+Measured on an Apple M-series host with an `-O2` runtime, decoding JSON:
+
+| input | time |
+| --- | --- |
+| 118 KB | 0.85 s |
+| 590 KB | 8.95 s |
+| 2.46 MB | 113 s |
+
+Five times the input is ten times the work, and four times again is thirteen times more. The
+compiler's own documentation index is 24.5 MB; decoding it that way takes hours, which is how this
+was found — a build step written in Pudu was abandoned and left in JavaScript.
+
+This is a property of the representation rather than of the parsers, and the parsers cannot avoid it
+while a position is a character index into text that has to be counted. Fixing it means one of: a
+`Str` that carries what it costs to reach a position, a reader that holds a position rather than
+handing one back to be found again, or parsers written over `Bytes`, where a position is the byte it
+names. Until one of those, no parser in the library should be pointed at a document of any size, and
+`Std.Bytes.Cursor` is what a program reading a large one should reach for.
+
 ## Benchmark and Regression Gates
 
 - Criterion-style microbenchmarks: source indexing, lexing, parsing, name lookup, unification, ownership dataflow, lowering, each optimization pass, C emission.
