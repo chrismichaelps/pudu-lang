@@ -30,6 +30,8 @@ module Pudu.Bundle
   ( Bundle (..)
   , bundleOf
   , writeBundled
+  , writeBundledOnto
+  , runtimeBytes
   , attachedBundle
   , materialise
   ) where
@@ -172,7 +174,30 @@ utf8 = Encoding.encodeUtf8
 writeBundled :: FilePath -> Bundle -> IO ()
 writeBundled target bundle = do
   self <- getExecutablePath
-  compiler <- ByteString.readFile self
+  writeBundledOnto self target bundle
+
+{-| The same, onto a runtime other than the one running.
+
+    A bundle is a runtime with a program appended, and until now the runtime was
+    always the compiler doing the appending — so the only machine that could
+    build an artefact for a platform was that platform. A Linux deployment had
+    to be built on Linux even though nothing about appending the modules is
+    platform-specific.
+
+    Naming the runtime separates the two halves: the program is checked by the
+    compiler running here, and the runtime it is attached to is whichever one
+    will run it there. That is what lets one machine produce an artefact for a
+    kernel and C library it does not have.
+
+    The compiler checking the program and the runtime about to evaluate it are
+    then two different builds, and nothing here can tell whether they agree.
+    They have to be the same version of Pudu: the bundle carries source, and a
+    runtime of another version would check it by different rules than the ones
+    it was admitted under. The caller is the one placed to know which runtime it
+    fetched, so the check belongs there rather than here. -}
+writeBundledOnto :: FilePath -> FilePath -> Bundle -> IO ()
+writeBundledOnto base target bundle = do
+  compiler <- runtimeBytes base
   let body = encode bundle
       size = Text.pack (show (ByteString.length body))
       padded = Text.replicate (lengthWidth - Text.length size) "0" <> size
@@ -197,6 +222,45 @@ discard :: FilePath -> IO ()
 discard path = do
   removed <- try (removeFile path) :: IO (Either IOException ())
   pure (either (const ()) id removed)
+
+{-| An executable's bytes with any bundle it already carries removed.
+
+    A runtime handed to a build is as likely to be a built artefact as a bare
+    runtime: the obvious thing to reach for is the last thing that was built, and
+    a released runtime is itself distributed as a file somebody may have already
+    stapled a program to. Appending to one of those would work — the trailer is
+    read from the end, so the newest wins — and the previous program's bytes
+    would stay in the file for ever, a whole copy of a program nothing can reach.
+    Building twice onto the same runtime would double it, and a loop would grow
+    it without bound.
+
+    So a bundle already attached is removed rather than buried, which makes a
+    build onto a runtime answer the same bytes whether that runtime was bare or
+    built a moment ago.
+
+    The removal is only made when the trailer both parses and decodes. An
+    executable that merely ends with these bytes is left whole: truncating a
+    runtime on the strength of a coincidence would produce a file that still
+    looks like an executable and cannot run. -}
+runtimeBytes :: FilePath -> IO ByteString.ByteString
+runtimeBytes path = do
+  whole <- ByteString.readFile path
+  let trailer = ByteString.length marker + lengthWidth
+  pure $ case attachedSize whole trailer of
+    Nothing -> whole
+    Just size -> ByteString.take (ByteString.length whole - trailer - size) whole
+
+{-| How many bytes of attached bundle a file ends with, when it ends with one. -}
+attachedSize :: ByteString.ByteString -> Int -> Maybe Int
+attachedSize whole trailer = do
+  unless (ByteString.length whole >= trailer) Nothing
+  let (sizeText, found) = ByteString.splitAt lengthWidth (ByteString.drop (ByteString.length whole - trailer) whole)
+  unless (found == marker) Nothing
+  (size, _) <- Char8.readInt (Char8.dropWhile (== '0') sizeText)
+  let start = ByteString.length whole - trailer - size
+  unless (size >= 0 && start >= 0) Nothing
+  _ <- decode (ByteString.take size (ByteString.drop start whole))
+  pure size
 
 {-| The bundle attached to the running executable, if there is one. -}
 attachedBundle :: IO (Maybe Bundle)

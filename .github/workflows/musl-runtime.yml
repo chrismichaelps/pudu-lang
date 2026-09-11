@@ -1,0 +1,115 @@
+name: musl-runtime
+
+# A runtime that runs anywhere Linux runs, and the proof that it does.
+#
+# The proof is the point of this workflow. A musl link either happened or did
+# not, and a runtime that quietly fell back to the host C library builds
+# cleanly, passes a smoke test on the machine that built it, and fails on the
+# platform it was built for — from the loader, before any Pudu code runs, so
+# nothing in the program can report it.
+#
+# So the artefact is carried into two images it has no business running in
+# unless the link worked: Alpine, which has no glibc at all, and Amazon Linux 2,
+# whose glibc is older than any current build host's and is what AWS Lambda —
+# and therefore a Vercel function — provides.
+
+on:
+  push:
+    branches:
+      - "feature/**"
+    paths:
+      - ".github/workflows/musl-runtime.yml"
+      - "scripts/build-musl-runtime.sh"
+      - "packages/pudu/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the musl runtime
+        run: scripts/build-musl-runtime.sh -o dist/pudu-musl-x86_64
+
+      # The compiler that attaches the program and the runtime it is attached to
+      # must be the same version of Pudu. Built from this same checkout, they
+      # are, which is why the bundle is assembled here rather than downloaded
+      # from anywhere.
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: 9.10.3
+          cabal-version: 3.16.1.0
+      - run: cabal update
+      - run: cabal build exe:pudu --disable-tests --enable-optimization=2
+
+      - name: Attach a program to the musl runtime
+        run: |
+          PUDU="$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          mkdir -p dist/probe
+          cat > dist/probe/Deployed.pudu <<'PROGRAM'
+          module Deployed
+
+          import Std.Io as Io
+          import Std.Text as Text
+
+          fn main() -> Int {
+            match Io.writeLine(Text.toTitle("deployed") + " on musl") {
+              case Ok(_) => 0
+              case Err(_) => 1
+            }
+          }
+          PROGRAM
+          "$PUDU" build dist/probe/Deployed.pudu \
+            -o dist/deployed \
+            --runtime dist/pudu-musl-x86_64
+          ls -l dist/deployed
+
+      # Where a glibc-linked artefact fails. Run with an empty environment and
+      # from a directory the artefact was not built in, because what is under
+      # test is that it needs nothing from around it.
+      - name: Run it on Alpine, which has no glibc
+        run: |
+          docker run --rm \
+            --volume "$PWD/dist/deployed:/deployed:ro" \
+            alpine:3.20 \
+            /usr/bin/env -i /deployed | tee said.txt
+          grep -qx "Deployed on musl" said.txt
+
+      - name: Run it on the glibc AWS Lambda provides
+        run: |
+          docker run --rm \
+            --volume "$PWD/dist/deployed:/deployed:ro" \
+            amazonlinux:2 \
+            /usr/bin/env -i /deployed | tee said-lambda.txt
+          grep -qx "Deployed on musl" said-lambda.txt
+
+      # The same program attached to the runtime this workflow's own host built,
+      # which is the artefact that has been failing. If this ever succeeds on
+      # Amazon Linux 2 the wall has moved and the musl runtime is no longer
+      # needed for that platform — worth knowing, so it is recorded rather than
+      # asserted either way.
+      - name: Record whether a glibc-linked artefact still fails there
+        continue-on-error: true
+        run: |
+          PUDU="$(cabal list-bin exe:pudu --disable-tests --enable-optimization=2)"
+          "$PUDU" build dist/probe/Deployed.pudu -o dist/deployed-glibc
+          if docker run --rm \
+            --volume "$PWD/dist/deployed-glibc:/deployed:ro" \
+            amazonlinux:2 \
+            /usr/bin/env -i /deployed; then
+            echo "::notice::a glibc-linked artefact now runs on Amazon Linux 2"
+          else
+            echo "::notice::a glibc-linked artefact still does not run on Amazon Linux 2, as expected"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pudu-musl-x86_64
+          path: dist/pudu-musl-x86_64
+          if-no-files-found: error
+          retention-days: 7

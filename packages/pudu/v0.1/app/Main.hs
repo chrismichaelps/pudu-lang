@@ -34,7 +34,14 @@ import System.FilePath
   , takeFileName
   )
 import System.IO.Error (isDoesNotExistError, isFullError, isPermissionError)
-import Pudu.Bundle (Bundle (..), attachedBundle, bundleOf, materialise, writeBundled)
+import Pudu.Bundle
+  ( Bundle (..)
+  , attachedBundle
+  , bundleOf
+  , materialise
+  , writeBundled
+  , writeBundledOnto
+  )
 import Pudu.Compiler (CompileResult (..))
 import Pudu.Compiler.Program
   ( ProgramResult (..)
@@ -339,11 +346,11 @@ runCommand = do
     ("run" : []) -> do
       hPutStrLn stderr "pudu run: no file given"
       exitFailure
-    ("build" : path : "-o" : target : _) -> buildProgram style path target
-    ("build" : path : _) -> buildProgram style path (defaultTargetName path)
-    ("build" : []) -> do
-      hPutStrLn stderr "pudu build: no file given"
-      exitFailure
+    ("build" : asked) -> case buildArguments asked of
+      Left problem -> do
+        hPutStrLn stderr ("pudu build: " <> problem)
+        exitFailure
+      Right (path, target, runtime) -> buildProgram style path target runtime
     ("test" : paths) -> testPaths style paths
     ["init", path] -> initProject (Just path)
     ["init"] -> initProject Nothing
@@ -484,8 +491,51 @@ runProgram style path = do
     The program is checked first and refused if it does not compile, because a
     build that produced a file which fails at startup would have moved the
     error to the worst possible place to meet it. -}
-buildProgram :: RenderStyle -> FilePath -> FilePath -> IO ()
-buildProgram style path target = do
+{-| What a build was asked for: the program, where to write it, and which
+    runtime to attach it to.
+
+    Read as flags in any order rather than by position, because `--runtime` is
+    the argument most likely to be set once in a script and then never looked at
+    again, and a script is where an argument in the wrong place is hardest to
+    see.
+
+    Anything unrecognised is refused rather than ignored. A build writes a file
+    named after the program whatever it is handed, so a misspelled flag that was
+    skipped silently would produce a plausible artefact built to different
+    settings than the ones asked for — and the place that is discovered is the
+    platform it was deployed to. -}
+buildArguments :: [String] -> Either String (FilePath, FilePath, Maybe FilePath)
+buildArguments = go Nothing Nothing Nothing
+ where
+  go path target runtime arguments = case arguments of
+    [] -> case path of
+      Nothing -> Left "no file given"
+      Just found -> Right (found, maybe (defaultTargetName found) id target, runtime)
+    ("-o" : rest) -> case rest of
+      (value : remaining)
+        | not (isFlag value) ->
+            if target == Nothing
+              then go path (Just value) runtime remaining
+              else Left "-o given more than once"
+      _ -> Left "-o needs a name to write to"
+    ("--runtime" : rest) -> case rest of
+      (value : remaining)
+        | not (isFlag value) ->
+            if runtime == Nothing
+              then go path target (Just value) remaining
+              else Left "--runtime given more than once"
+      _ -> Left "--runtime needs the path of a runtime to attach the program to"
+    (value : remaining)
+      | isFlag value -> Left ("unknown option '" <> value <> "'")
+      | path == Nothing -> go (Just value) target runtime remaining
+      | otherwise -> Left ("more than one file given: '" <> value <> "'")
+
+  isFlag value = case value of
+    ('-' : _ : _) -> True
+    _ -> False
+
+buildProgram :: RenderStyle -> FilePath -> FilePath -> Maybe FilePath -> IO ()
+buildProgram style path target runtime = do
   program <- compileProgram path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
@@ -504,7 +554,21 @@ buildProgram style path target = do
         -- that may not be written to. Said plainly, because a reader who has
         -- just been told their program compiled needs to know it was the
         -- writing that stopped and where.
-        written <- try (writeBundled target bundle) :: IO (Either IOException ())
+        -- A runtime that is not there, or is a directory, or may not be read, is
+        -- said before the program is written rather than as a failure to write
+        -- it: the target is untouched either way, and a reader told the write
+        -- failed would look at the target and the disk rather than at the path
+        -- they named.
+        usable <- maybe (pure Nothing) runtimeProblem runtime
+        case usable of
+          Just problem -> do
+            hPutStrLn stderr ("pudu build: cannot attach the program to " <> maybe "" id runtime)
+            hPutStrLn stderr ("  " <> problem)
+            exitFailure
+          Nothing -> pure ()
+        written <-
+          try (maybe (writeBundled target bundle) (\base -> writeBundledOnto base target bundle) runtime)
+            :: IO (Either IOException ())
         case written of
           Left problem -> do
             hPutStrLn stderr ("pudu build: could not write " <> target)
@@ -517,6 +581,38 @@ buildProgram style path target = do
                   <> Text.pack (show (length (bundleModules bundle)))
                   <> " modules)"
               )
+
+{-| Why a runtime cannot be attached to, or nothing when it can.
+
+    Asked of the path rather than of the file's contents. Whether the bytes are a
+    Pudu runtime for the platform it will run on cannot be told from here — a
+    runtime for another kernel is exactly what this is for, so there is nothing
+    about it this machine could execute to ask. What can be told is whether the
+    path names a readable file at all, which is what a mistyped path or a
+    forgotten download looks like, and those are the mistakes that happen often.
+
+    A runtime must also be the same version of Pudu as the compiler building
+    against it. A bundle carries source, and a runtime of another version would
+    check it by different rules than the ones it was just admitted under. Nothing
+    here can see the version of a binary it cannot run, so that agreement is the
+    caller's to keep. -}
+runtimeProblem :: FilePath -> IO (Maybe String)
+runtimeProblem path = do
+  directory <- doesDirectoryExist path
+  if directory
+    then pure (Just "it is a directory, not a runtime")
+    else do
+      present <- doesFileExist path
+      if not present
+        then pure (Just "there is no file at that path")
+        else do
+          readable <- try (getFileSize path) :: IO (Either IOException Integer)
+          pure $ case readable of
+            Left problem
+              | isPermissionError problem -> Just "permission to read it was refused"
+              | otherwise -> Just (show problem)
+            Right 0 -> Just "it is empty"
+            Right _ -> Nothing
 
 {-| Why a build could not be written, in the terms of the thing that stopped
     it rather than the terms of the call that failed. -}
@@ -1034,6 +1130,9 @@ usage =
   , "                       under it changes"
     , "  pudu build <file> [-o name]  write one file that runs anywhere the"
     , "                       compiler runs, with every module it needs inside it"
+    , "  pudu build <file> --runtime <path>  the same, attached to that runtime"
+    , "                       rather than to this compiler, so one machine can"
+    , "                       build for a platform it is not (same version only)"
     , "  pudu test [path]...  discover and execute test fixtures"
     , "  pudu init [path]     initialize a canonical project with pudu.toml"
     , "  pudu explain <file>  run a program and report what running it cost"
