@@ -1,6 +1,6 @@
 ---
 type: handoff
-fidelity: Completed
+fidelity: Active
 tags: [handoff, book, website, vercel]
 ---
 # Private Book and Website Handoff
@@ -10,6 +10,9 @@ tags: [handoff, book, website, vercel]
 Language Educator completed the private book content and example gate. Application Architect and
 Website Implementer completed the generated-catalogue architecture, Pudu SSR surface, SEO policy,
 responsive visual system, Pudu-native Lambda entry, and deployment pipeline.
+Application Architect transitioned to Standard Library Boundary Implementer for the framed-response
+completion defect exposed by the live Lambda Runtime API. Owned files are `Std/Http/Client.pudu`,
+`Std/Http/Message.pudu`, `UsesHttpClient.pudu`, the protocol count assertion, and their vault mirrors.
 Forensic Guardian validation is represented by the focused route suite, browser and TTFB latency checks,
 example audit, full repository test suite, and live production verification. Feature branch
 `feature/228-pudu-website` was merged into `dev` via PR #228.
@@ -27,10 +30,12 @@ example audit, full repository test suite, and live production verification. Fea
 - `pudu check`, `pudu fmt --check`, 36 website route assertions, 25 repository example checks, and
   the isolated full `cabal test all` run pass. Desktop and 390px browser checks pass without
   horizontal overflow.
-- Vercel is deployed to Production at `https://website-ivory-one-hyy8j9ljag.vercel.app/`.
-- All 3,375 static pre-rendered routes serve with sub-350ms TTFB directly from Vercel Edge CDN.
-- Dynamic ranked search is served by the Pudu Lambda function through the same `Service.Search`
-  implementation used locally and in the website fixture.
+- The existing production deployment remains at `https://website-ivory-one-hyy8j9ljag.vercel.app/`
+  while the adapter-free replacement is verified on preview.
+- The replacement output contains all 3,375 Pudu-prerendered routes for direct Vercel Edge CDN
+  delivery and a Pudu `provided.al2023` function for ranked search and dynamic failures.
+- Dynamic ranked search uses the same `Service.Search` implementation locally, in the website
+  fixture, and in the replacement function; live preview verification remains before promotion.
 - SEO endpoints (`robots.txt`, `sitemap.xml`, Open Graph assets) verified live with HTTP 200 OK.
 
 ## Blockers resolved
@@ -42,13 +47,12 @@ example audit, full repository test suite, and live production verification. Fea
 
 ## Next actions
 
-The adapter-free deployment is active on `feature/deploy-without-adapters`. Amazon Linux now reaches
-the packaged loader and reports the four remaining dynamic musl libraries. The Lambda runtime uses
-an `$ORIGIN` search path and the workflow packages those exact dependencies. Vercel rejected the old
-`provided.al2` metadata before deployment; the output and proof now target `provided.al2023`. Rerun
-that proof. The first accepted preview showed Vercel's host library path selecting incompatible
-glibc libraries and `index.func` shadowing static `/`; bind the four runtime dependencies to
-`/var/task`, use `dynamic.func`, then redeploy and test the Pudu function. The apparent `libtinfo`
-dependency belonged to the incorrectly selected host ncurses library, not the packaged musl one.
-The next preview started the runtime but found the catalogue packaged at the wrong relative path;
-preserve `website/data/api.json` inside the function before the next deployment.
+The adapter-free deployment is active on `feature/deploy-without-adapters`. Its Lambda executable
+names the packaged loader and four musl libraries under `/var/task`; CI executes that layout on
+Alpine and Amazon Linux 2023 with Vercel-like host library paths. The function is `dynamic.func`,
+its catalogue remains at `website/data/api.json`, and the output targets `provided.al2023`.
+
+The first previews exposed and resolved host-library substitution, static-root shadowing, catalogue
+layout, and HTTP framing defects. The framing-aware client and its persistent-loopback regression now
+pass `cabal test all`; the next exact action is to build the musl runtime from this commit and redeploy
+the generated Pudu function.

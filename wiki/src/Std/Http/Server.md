@@ -33,7 +33,7 @@ failure was asked for.
   trip and a client fetching a page makes many requests. _Rejected:_ ignoring the header that asks
   for it to close.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Http Server Route]] · [[Std Http Server Reply]] · [[Std Http]] · [[Std Net]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[Std Http Server Lambda]] · [[Std Http Server Route]] · [[Std Http Server Reply]] · [[Std Http]] · [[Std Net]] · [[architecture/STDLIB]]
 
 ## Request read deadlines
 
@@ -101,4 +101,3 @@ Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot 
 `readRequest` uses `Message.parseHead` directly on the delimited head string, avoiding re-concatenating and re-scanning `\r\n\r\n`. In persistent keep-alive connections (`serveWith`), `Net.peerOf(connection)` is cached per connection rather than invoking the `getpeername()` system call on every request.
 
 Resolved Grill Log: the server read loop must not reconstruct delimiters that the byte transport already split; peer identity is static for the lifetime of a connection and must not incur repeated OS context switches.
-

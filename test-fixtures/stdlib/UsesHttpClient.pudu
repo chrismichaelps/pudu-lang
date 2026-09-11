@@ -7,6 +7,7 @@ import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Http.Server as Server
+import Std.Net as Net
 import Std.Result as Result
 
 /// What a client promises.
@@ -235,7 +236,41 @@ export fn main() -> Int {
     }
   }
 
+  held = held + framedBeforeClose()
+
   held
+}
+
+/// A message ends where its framing says, not when its reusable transport closes.
+fn framedBeforeClose() -> Int {
+  match Net.listenLocal(0) {
+    case Err(_) => 0
+    case Ok(listener) => {
+      let port = Result.unwrapOr(Net.portOf(&listener), 0)
+      let worker = Concurrent.start(fn() -> () {
+          if let Ok(connection) = Net.accept(&listener) {
+            let _request = Net.receive(&connection, 65536)
+            let _sent = Net.sendText(
+                &connection,
+              "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\nhello"
+            )
+            let _heldOpen = Concurrent.sleep(200)
+            let _closed = Net.close(&connection)
+          }
+          ()
+        })
+      let limits = Client.limits().reaching(&["127.0.0.1"]).within(100)
+      let answer = Client.fetch("http://127.0.0.1:" + show(port) + "/framed", &limits)
+      let _closed = Net.closeListener(&listener)
+      if let Ok(startedWorker) = worker {
+        let _joined = Concurrent.join(&startedWorker)
+      }
+      match answer {
+        case Ok(response) => if response.status.code == 200 && response.body == "hello" { 1 } else { 0 }
+        case Err(_) => 0
+      }
+    }
+  }
 }
 
 /// Bounds set through a bound naming the limiting trait and nothing else.

@@ -185,9 +185,9 @@ fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Resp
   let port = Option.unwrapOr(Url.effectivePort(&place), if secured(&place) { 443 } else { 80 })
   let written = Message.renderRequest(&addressed(request, &place))
   if secured(&place) {
-    overSecured(&place, port, written, held, expires)
+    overSecured(&place, port, written, held, expires, &request.method)
   } else {
-    overPlain(&place, port, written, held, expires)
+    overPlain(&place, port, written, held, expires, &request.method)
   }
 }
 
@@ -247,14 +247,15 @@ fn overSecured(
   port: Int,
   written: Str,
   held: &Limits,
-  expires: Int
+  expires: Int,
+  method: &Http.Method
 ) -> Result[Http.Response, ClientError] {
   let opened = Tls.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return securedFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Tls.Secured{token: 0})
   let outcome = Result.andThen(Tls.sendTextWithin(&connection, written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Tls.TlsError] {
-      receiveSecured(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires)
+      receiveSecured(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
   )
   let closed = Tls.closeWithin(&connection, remaining(expires))
@@ -275,14 +276,15 @@ fn overPlain(
   port: Int,
   written: Str,
   held: &Limits,
-  expires: Int
+  expires: Int,
+  method: &Http.Method
 ) -> Result[Http.Response, ClientError] {
   let opened = Net.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return plainFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Net.Connection{token: 0})
   let outcome = Result.andThen(Net.sendTextWithin(&connection, written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Net.NetError] {
-      receivePlain(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires)
+      receivePlain(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
   )
   let closed = Net.close(&connection)
@@ -301,7 +303,8 @@ fn overPlain(
 fn receiveSecured(
   connection: &Tls.Secured,
   limit: Int,
-  expires: Int
+  expires: Int,
+  method: &Http.Method
 ) -> Result[Received, Tls.TlsError] {
   var pieces: Array[Bytes] = []
   var size = 0
@@ -322,6 +325,7 @@ fn receiveSecured(
           going = false
         } else {
           pieces = pieces.push(bytes)
+          if Message.responseComplete(&ByteSeq.join(&pieces), method) { going = false }
         }
       } else {
         going = false
@@ -338,7 +342,8 @@ fn receiveSecured(
 fn receivePlain(
   connection: &Net.Connection,
   limit: Int,
-  expires: Int
+  expires: Int,
+  method: &Http.Method
 ) -> Result[Received, Net.NetError] {
   var pieces: Array[Bytes] = []
   var size = 0
@@ -359,6 +364,7 @@ fn receivePlain(
           going = false
         } else {
           pieces = pieces.push(bytes)
+          if Message.responseComplete(&ByteSeq.join(&pieces), method) { going = false }
         }
       } else {
         going = false

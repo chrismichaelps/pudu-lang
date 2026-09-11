@@ -19,6 +19,9 @@ tags: [changelog]
 - Bound Lambda dependencies to their packaged `/var/task` paths and moved the function away from
   `index.func` so static `/` is not shadowed.
 - Preserved the configured `website/data/api.json` catalogue path inside the Lambda package.
+- Made the HTTP client stop at complete `Content-Length`, chunked, `HEAD`, and bodyless responses
+  without waiting for socket closure; added a persistent-loopback regression so the Pudu Lambda
+  Runtime API cannot return to invocation timeouts unnoticed.
 - Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
   prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
 - Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.
