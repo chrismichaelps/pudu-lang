@@ -107,6 +107,17 @@ data Builtin
   | ArgumentsBuiltin
   | EnvironmentBuiltin
   | TemporaryDirectoryBuiltin
+  | RenamePathBuiltin
+  | CreateTemporaryFileBuiltin
+  | CreateDirectoryExclusiveBuiltin
+  | RemoveEmptyDirectoryBuiltin
+  | PermissionsOfBuiltin
+  | SetPermissionsOfBuiltin
+  | PathIsSymbolicLinkBuiltin
+  | CreateSymbolicLinkBuiltin
+  | CanonicalPathBuiltin
+  | FileSizeBuiltin
+  | DirectoryExistsBuiltin
   | HomeDirectoryBuiltin
   | PathSeparatorsBuiltin
   | SearchSeparatorBuiltin
@@ -271,6 +282,17 @@ builtinName value = case value of
   ArgumentsBuiltin -> "arguments"
   EnvironmentBuiltin -> "environment"
   TemporaryDirectoryBuiltin -> "temporaryPath"
+  RenamePathBuiltin -> "renamePath"
+  CreateTemporaryFileBuiltin -> "createTemporaryFile"
+  CreateDirectoryExclusiveBuiltin -> "createDirectoryExclusive"
+  RemoveEmptyDirectoryBuiltin -> "removeEmptyDirectory"
+  PermissionsOfBuiltin -> "permissionsOf"
+  SetPermissionsOfBuiltin -> "setPermissionsOf"
+  PathIsSymbolicLinkBuiltin -> "pathIsSymbolicLink"
+  CreateSymbolicLinkBuiltin -> "createSymbolicLink"
+  CanonicalPathBuiltin -> "canonicalPath"
+  FileSizeBuiltin -> "fileSize"
+  DirectoryExistsBuiltin -> "directoryExists"
   HomeDirectoryBuiltin -> "userHome"
   PathSeparatorsBuiltin -> "pathSeparators"
   SearchSeparatorBuiltin -> "searchSeparator"

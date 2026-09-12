@@ -74,6 +74,11 @@ tags: [changelog]
 - `Std.Audio` resamples by linear interpolation in exact arithmetic with half-away-from-zero rounding,
   downmixes to mono, upmixes mono, and remaps channels by name, refusing channels the source lacks.
   Audio now 42 assertions.
+- Added `Std.Fs` on new runtime effects: files replaced by renaming a staged copy created under an
+  exclusively claimed name, temporary directories claimed by creation with scoped cleanup, portable
+  permission flags, metadata, symbolic links, canonical paths, containment decided on real locations,
+  and tree removal that never follows links. `Std.Io.copy` now copies bytes and `move` renames before
+  falling back to copy and remove. 19 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

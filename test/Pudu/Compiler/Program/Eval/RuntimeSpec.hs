@@ -60,6 +60,7 @@ testRuntimeEvaluation = do
   spawned <- runEntry "test-fixtures/stdlib/UsesProcessAll.pudu"
   datedAndSqueezed <- runEntry "test-fixtures/stdlib/UsesCivilGzipLogAll.pudu"
   files <- runEntry "test-fixtures/stdlib/UsesIoAll.pudu"
+  filesystem <- runEntry "test-fixtures/stdlib/UsesFs.pudu"
   octets <- runEntry "test-fixtures/stdlib/UsesBytesAll.pudu"
   surroundings <- runEntry "test-fixtures/stdlib/UsesEnvAll.pudu"
   appliedAndShown <- runEntry "test-fixtures/stdlib/UsesFunctionShowAll.pudu"
@@ -213,6 +214,13 @@ testRuntimeEvaluation = do
     , counterexample
         "every file operation writes what can be read back"
         (files === Just "45")
+    {-| The file operations whose safety depends on being one step: a file
+        replaced by renaming a staged copy over it, a temporary name claimed by
+        creating it, containment decided on the real location a link resolves
+        to, and a tree removed without following the links inside it. -}
+    , counterexample
+        "a filesystem operation that must be one step is one step"
+        (filesystem === Just "19")
     {-| Every export of the byte module, with the two orders checked against
         each other as well as against their own answers: a pair of functions
         that agreed with each other but not with the wire would pass every

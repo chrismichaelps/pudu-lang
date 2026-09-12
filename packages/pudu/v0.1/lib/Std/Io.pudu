@@ -93,15 +93,53 @@ export fn listPaths(path: Str) -> Result[Array[Str], Str] {
 /// A directory created along with every parent it needs.
 export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 
-/// A file copied, or a report of what stopped it.
+/// A file copied byte for byte, or a report of what stopped it.
+///
+/// Bytes rather than text, so a copy of an image or an archive is the file
+/// and not a failure to decode one.
 export fn copy(from: Str, to: Str) -> Result[(), Str] {
-  writeFile(to, readFile(from) ?)
+  match readAllBytes(from) {
+    case Ok(contents) =>
+    match writeAllBytes(to, &contents) {
+      case Ok(_) => Ok(())
+      case Err(reason) => Err(describe(reason))
+    }
+    case Err(reason) => Err(describe(reason))
+  }
 }
 
-/// A file moved, which is a copy followed by removing the original.
+/// A file moved by renaming it, copying only when a rename cannot reach.
+///
+/// A rename within one filesystem never leaves both or neither; the copy and
+/// removal are the fallback for a destination on another filesystem.
 export fn move(from: Str, to: Str) -> Result[(), Str] {
-  copy(from, to) ?
-  removeFile(from)
+  match renamePath(from, to) {
+    case Ok(_) => Ok(())
+    case Err(message) =>
+    if !fileExists(from) {
+      Err(message)
+    } else {
+      copy(from, to) ?
+      removeFile(from)
+    }
+  }
+}
+
+/// The cause an operating-system message names for a path, so other modules
+/// classify failures the way this one does.
+export fn classified(message: Str, path: Str) -> IoError { causeOf(message, path) }
+
+fn describe(reason: IoError) -> Str {
+  match reason {
+    case NotFound(path) => "does not exist: " + path
+    case PermissionDenied(path) => "permission denied: " + path
+    case IsDirectory(path) => "is a directory: " + path
+    case AlreadyExists(path) => "already exists: " + path
+    case NotText => "not text"
+    case UnexpectedEnd => "unexpected end"
+    case HandleClosed => "handle is closed"
+    case Other(message) => message
+  }
 }
 
 /// The path vocabulary, so a program reaching for it through `Std.Io` finds

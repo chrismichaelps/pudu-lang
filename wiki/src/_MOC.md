@@ -25,6 +25,7 @@ tags: [moc, module]
 - [[Uses Audio]] — exact samples, time, gain, mixing, slicing, and WAV bytes and refusals.
 - [[Uses Audio Graph]] — exact waveforms, ramps, and mixes, with split renders equal to whole ones.
 - [[Uses Video]] — exact NTSC timing over an hour, cross-scale arithmetic, and track ordering refusals.
+- [[Uses Fs]] — atomic replacement, temporary names, permissions, containment, and non-following removal.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.

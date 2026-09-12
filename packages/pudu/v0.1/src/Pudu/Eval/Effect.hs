@@ -120,6 +120,17 @@ effectBuiltins =
   , ArgumentsBuiltin
   , EnvironmentBuiltin
   , TemporaryDirectoryBuiltin
+  , RenamePathBuiltin
+  , CreateTemporaryFileBuiltin
+  , CreateDirectoryExclusiveBuiltin
+  , RemoveEmptyDirectoryBuiltin
+  , PermissionsOfBuiltin
+  , SetPermissionsOfBuiltin
+  , PathIsSymbolicLinkBuiltin
+  , CreateSymbolicLinkBuiltin
+  , CanonicalPathBuiltin
+  , FileSizeBuiltin
+  , DirectoryExistsBuiltin
   , HomeDirectoryBuiltin
   , PathSeparatorsBuiltin
   , SearchSeparatorBuiltin
@@ -367,6 +378,29 @@ callEffect spanValue builtin arguments = do
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
+      (RenamePathBuiltin, [StrValue from, StrValue to]) ->
+        effectUnit (renamePathAt (Text.unpack from) (Text.unpack to))
+      (CreateTemporaryFileBuiltin, [StrValue directory, StrValue prefix]) ->
+        resultOf . fmap StrValue
+          <$> lift refusal (createTemporaryFileIn (Text.unpack directory) (Text.unpack prefix))
+      (CreateDirectoryExclusiveBuiltin, [StrValue path]) ->
+        effectUnit (createDirectoryExclusiveAt (Text.unpack path))
+      (RemoveEmptyDirectoryBuiltin, [StrValue path]) ->
+        effectUnit (removeEmptyDirectoryAt (Text.unpack path))
+      (PermissionsOfBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (permissionsMaskAt (Text.unpack path))
+      (SetPermissionsOfBuiltin, [StrValue path, IntValue _ mask]) ->
+        effectUnit (setPermissionsMaskAt (Text.unpack path) mask)
+      (PathIsSymbolicLinkBuiltin, [StrValue path]) ->
+        resultOf . fmap BoolValue <$> lift refusal (isSymbolicLinkAt (Text.unpack path))
+      (CreateSymbolicLinkBuiltin, [StrValue target, StrValue link]) ->
+        effectUnit (createSymbolicLinkAt (Text.unpack target) (Text.unpack link))
+      (CanonicalPathBuiltin, [StrValue path]) ->
+        resultOf . fmap StrValue <$> lift refusal (canonicalPathAt (Text.unpack path))
+      (FileSizeBuiltin, [StrValue path]) ->
+        resultOf . fmap intOf <$> lift refusal (fileSizeAt (Text.unpack path))
+      (DirectoryExistsBuiltin, [StrValue path]) ->
+        BoolValue <$> lift refusal (testDirectoryExists (Text.unpack path))
       (HomeDirectoryBuiltin, []) -> optionalText <$> lift refusal homeDirectoryPath
       (PathSeparatorsBuiltin, []) ->
         ArrayValue . Seq.fromList . map StrValue <$> lift refusal (pure pathSeparators)
