@@ -44,6 +44,20 @@ fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
   true
 }
 
+fn rankingAgrees(full: &Array[Domain.Entry], compact: &Array[Domain.Entry], query: Str) -> Bool {
+  let left = Search.find(full, query, 20)
+  let right = Search.find(compact, query, 20)
+  if left.length() != right.length() { return false }
+  var index = 0
+  while index < left.length() {
+    if Domain.qualifiedName(&left[index].entry) != Domain.qualifiedName(&right[index].entry) {
+      return false
+    }
+    index = index + 1
+  }
+  true
+}
+
 export fn main() -> Int {
   let loaded = Catalog.load("website/data/api.json")
   let catalog = match loaded {
@@ -93,6 +107,7 @@ export fn main() -> Int {
       Test.that("exact name ranks first", hits[0].entry.name == "checksum"),
       Test.that("compact catalogue keeps every searchable declaration", searchCatalog.entries.length() == catalog.entries.length()),
       Test.that("compact catalogue keeps the language version", searchCatalog.languageVersion == catalog.languageVersion),
+      Test.that("the compact index ranks exactly as the full catalogue does", rankingAgrees(&catalog.entries, &searchCatalog.entries, "checksum") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "list") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "bits") && rankingAgrees(&catalog.entries, &searchCatalog.entries, "encode")),
       Test.that("compact catalogue preserves ranked results", compactHits.length() == hits.length() && compactHits[0].entry.name == hits[0].entry.name),
       Test.that("module leaf intent keeps the complete List module first", firstResultsBelongTo(&listIntent, "Std.List", 97)),
       Test.that("module-only scope returns every List declaration", listScope.length() == 97 && firstResultsBelongTo(&listScope, "Std.List", 97)),
