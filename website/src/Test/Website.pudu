@@ -4,6 +4,7 @@ import Std.Http as Http
 import Std.Json as Json
 import Std.Result as Result
 import Std.Test as Test
+import Domain.Entry as Domain
 import Function as Function
 import Service.Catalog as Catalog
 import Service.Search as Search
@@ -17,6 +18,23 @@ fn asked(event: Str) -> Str {
 
 fn hasHeader(response: &Http.Response, name: Str, value: Str) -> Bool {
   Http.header(&response.headers, name) == Some(value)
+}
+
+fn firstResultsBelongTo(hits: &Array[Domain.Hit], moduleName: Str, count: Int) -> Bool {
+  if hits.length() < count { return false }
+  var index = 0
+  while index < count {
+    if hits[index].entry.moduleName != moduleName { return false }
+    index = index + 1
+  }
+  true
+}
+
+fn everyResultHasKind(hits: &Array[Domain.Hit], kind: Str) -> Bool {
+  for hit in hits {
+    if Domain.category(&hit.entry) != kind { return false }
+  }
+  true
 }
 
 export fn main() -> Int {
@@ -45,6 +63,13 @@ export fn main() -> Int {
     case Err(_) => { return 0 }
   }
   let compactHits = Search.find(&searchCatalog.entries, "checksum", 10)
+  let listIntent = Search.find(&catalog.entries, "List", 200)
+  let listScope = Search.find(&catalog.entries, "module:Std.List", 200)
+  let scopedMap = Search.find(&catalog.entries, "map module:Std.List is:exact", 10)
+  let typedMap = Search.find(&catalog.entries, "map :: &Array[X] -> fn(X) -> Y -> Array[Y]", 10)
+  let typeKinds = Search.find(&catalog.entries, "Listener kind:type", 20)
+  let invalidFilter = Search.find(&catalog.entries, "kind:not-a-kind", 20)
+  let multiTerm = Search.find(&catalog.entries, "adler checksum", 10)
   let dynamicSearch = DynamicWeb.render(origin, &searchCatalog, "/search?q=checksum")
   let dynamicMissing = DynamicWeb.render(origin, &searchCatalog, "/not-a-page")
   let vercelEvent = Json.object(&[
@@ -60,6 +85,13 @@ export fn main() -> Int {
       Test.that("compact catalogue keeps every searchable declaration", searchCatalog.entries.length() == catalog.entries.length()),
       Test.that("compact catalogue keeps the language version", searchCatalog.languageVersion == catalog.languageVersion),
       Test.that("compact catalogue preserves ranked results", compactHits.length() == hits.length() && compactHits[0].entry.name == hits[0].entry.name),
+      Test.that("module leaf intent keeps the complete List module first", firstResultsBelongTo(&listIntent, "Std.List", 97)),
+      Test.that("module-only scope returns every List declaration", listScope.length() == 97 && firstResultsBelongTo(&listScope, "Std.List", 97)),
+      Test.that("module and exact filters select the intended declaration", scopedMap.length() == 1 && Domain.qualifiedName(&scopedMap[0].entry) == "Std.List.map"),
+      Test.that("generic placeholder names do not change a type match", typedMap.length() > 0 && Domain.qualifiedName(&typedMap[0].entry) == "Std.List.map"),
+      Test.that("kind scope excludes declarations of every other kind", typeKinds.length() > 0 && everyResultHasKind(&typeKinds, "type")),
+      Test.that("unknown filters remain searchable text", invalidFilter.length() == 0),
+      Test.that("every ordinary term must match", multiTerm.length() > 0 && Domain.qualifiedName(&multiTerm[0].entry) == "Std.Adler32.checksum"),
       Test.that("dynamic search uses the shared result view", dynamicSearch.status.code == 200 && dynamicSearch.body.contains("Std.Adler32.checksum")),
       Test.that("dynamic fallback is a no-index 404", dynamicMissing.status.code == 404 && hasHeader(&dynamicMissing, "X-Robots-Tag", "noindex") && dynamicMissing.body.contains("noindex,follow")),
       Test.that("home renders", home.status.code == 200),
@@ -76,6 +108,7 @@ export fn main() -> Int {
       Test.that("home teaches through a complete program", home.body.contains("Write a complete program") && home.body.contains("module Hello")),
       Test.that("home explains references", home.body.contains("&amp;mut T gives one temporary place permission")),
       Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
+      Test.that("search explains its query syntax", search.body.contains("module:Std.List") && search.body.contains("type after ::")),
       Test.that("search is not indexed", search.body.contains("noindex,follow")),
       Test.not("query markup is escaped", hostile.body.contains("<script>alert(1)</script>")),
       Test.that("module page renders", modulePage.status.code == 200),

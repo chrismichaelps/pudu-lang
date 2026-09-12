@@ -9,14 +9,15 @@ import View.Layout as Layout
 
 /// Ranked search results shared by local and serverless routes.
 export fn results(siteUrl: Str, entries: &Array[Domain.Entry], query: Str) -> Html.Html {
-  let hits = Search.find(entries, query, 80)
+  let hits = Search.find(entries, query, 200)
   var rows: Array[H.Node] = []
   for hit in hits { rows = rows.push(resultRow(&hit)) }
   let heading = if query.trim().isEmpty() { "Search Pudu" } else { "Results for “" + query + "”" }
   let body = H.div().holding([
       H.section().class("intro").holding([
           H.h1().says(heading),
-          H.p().says(show(hits.length()) + " matching declarations")
+          H.p().says(show(hits.length()) + " matching declarations"),
+          H.p().class("query-help").says("Use module:Std.List, kind:fn, or is:exact. Put a Pudu type after ::.")
         ]),
       Layout.searchForm(query, "home-search"),
       H.ul().class("results").holding(rows)

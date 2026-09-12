@@ -13,6 +13,10 @@ tags: [changelog]
 - Replaced the dynamic function's full JSON catalogue with the compact Pudu-generated search
   database, bounded its route closure to search and no-index fallback, and unwrapped Vercel's
   invocation body in Pudu.
+- Added a parsed Pudu search query with module and kind scope, exact-name intent, multi-term
+  matching, generic-normalized type shapes, module-first ranking, and discoverable query help.
+- Raised the bounded result page to 200 declarations so the largest current standard module remains
+  complete, and reduced the home search-to-content gap from 42 to 24 pixels.
 
 ## 2026-09-11 — Adapter-free Vercel runtime build
 

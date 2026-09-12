@@ -18,3 +18,6 @@ Invocation checks include Vercel's outer `Action: Invoke` envelope with its requ
 
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.
+Search checks assert rank position and exclusion for module intent, explicit scope, exact names,
+multi-term text, and generic-renamed Pudu type shapes.
+The rendered result page must expose the query syntax it accepts.

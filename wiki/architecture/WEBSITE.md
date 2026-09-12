@@ -33,6 +33,33 @@ values, not requests. Views receive values and return typed `Std.Html` trees. Th
 the complete crawlable documentation graph. The dynamic router owns only search and the no-index
 fallback, so the Lambda closure does not retain static-page machinery.
 
+## Search contract
+
+Search data is generated from the validated `pudu doc --json` catalogue before deployment. The
+dynamic function receives only fields required by query matching and result rendering. It never
+reparses source files and never owns a second documentation truth.
+
+A query is parsed into independent name terms, an optional Pudu type shape, an optional module
+filter, an optional declaration-kind filter, and exact-name intent. `module:Std.List`, `kind:fn`, and
+`is:exact` are the closed filter vocabulary. A type may follow `::`; a filter-free query containing
+`->` is also a type query. Unknown `name:value` tokens remain ordinary search terms.
+
+Cheap scope and token tests run before type-shape comparison. Ranking is deterministic: exact module
+leaf intent, exact qualified and unqualified names, prefixes, complete token matches, structural
+type matches, and documentation matches descend in that order, with qualified name as the stable
+tie-break. A plain `List` query surfaces every `Std.List` declaration before unrelated names that
+contain `list`; the result bound is large enough to keep the complete current module visible.
+
+Pudu type matching preserves concrete constructors, references, mutability, result channels,
+constraints, and argument order. It normalizes insignificant whitespace, case for search, and
+single-letter generic placeholder names. It does not apply Haskell-specific alias, type-class, or
+argument-reordering rules. Ranking fixtures assert top-hit and top-N positions, not only presence.
+
+Every public standard-library declaration must carry a non-empty source-owned summary. Richer
+comments may add usage, parameter, return, failure, and example sections. Symbol pages render that
+material and related declarations without inventing semantics in the view layer. Documentation
+examples join the executable example gate before publication.
+
 ## Rendering and deployment
 
 The local entry point starts `Std.Http.Server`. `Function.pudu` serves the Lambda Runtime API through
@@ -73,6 +100,12 @@ XML sitemap covers the current catalogue while it remains below the protocol's 5
 - **Q:** Load the catalogue for every invocation? **A:** No. _Rationale:_ the Pudu function loads it
   before entering the Lambda invocation loop, so warm invocations reuse the same values. _Rejected:_
   repeated catalogue decoding inside the request callback.
+- **Q:** Treat search as one case-insensitive substring? **A:** No. _Rationale:_ names, module scope,
+  declaration kind, prose, and Pudu type structure carry different intent and need separate parsing,
+  prefilters, and ranking evidence. _Rejected:_ one score chosen by the first matching field.
+- **Q:** Copy Hoogle's rewrite system? **A:** No. _Rationale:_ its build-time index, separated query
+  parts, cheap candidate filters, and ranking fixtures are useful evidence, but Pudu has different
+  ownership and failure types. _Rejected:_ importing Haskell aliases, contexts, or argument reorder.
 - **Q:** Hand-maintain thousands of API records? **A:** No. _Rationale:_ the compiler already owns
   names, kinds, signatures, and documentation. _Rejected:_ a second catalogue source.
 - **Q:** Build a native artifact on macOS and deploy it to Linux? **A:** No. _Rationale:_ CI builds
