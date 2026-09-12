@@ -291,8 +291,8 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.Ui.Canvas` | 41 | bounded exact-pixel application rendering by bands and spans, with damage repaint |
-| `Std.Ui.Layout` | 33 | declarative views, two-pass placement, accessibility semantics, tags, damage regions |
-| `Std.Ui.Screen` | 16 | routed press and key input, focus by tag, state updates repainting only damage |
+| `Std.Ui.Layout` | 40 | declarative views and text, two-pass placement, accessibility semantics, tags, damage extents |
+| `Std.Ui.Screen` | 20 | routed press and key input, visible focus rings, state updates repainting only damage |
 | `Std.Ui.Text` | 21 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged glyph rectangles |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |

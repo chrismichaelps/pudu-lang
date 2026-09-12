@@ -123,10 +123,10 @@ testServiceEvaluation = do
         (canvas === Just "41")
     , counterexample
         "declarative layout places exact frames, names every control, and repaints only damage"
-        (layout === Just "33")
+        (layout === Just "40")
     , counterexample
-        "a screen routes input to tagged controls and repaints only what changed"
-        (interaction === Just "16")
+        "a screen routes input to tagged controls, rings focus, and repaints only what changed"
+        (interaction === Just "20")
     , counterexample
         "bitmap text measures, wraps, and draws into exact pixels"
         (lettering === Just "21")

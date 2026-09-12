@@ -244,5 +244,83 @@ export fn main() -> Int {
     }
   }
 
+  let ink = Canvas.rgb(0u8, 0u8, 0u8)
+  let greeting = Layout.column([Layout.text("Hi").padded(1)]).aligned(Layout.Start)
+  if let Ok(placed) = Layout.place(&greeting, Canvas.size(40, 20)) {
+    let tree = Layout.semantics(&placed)
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 0, 13, 9)) && tree.length() == 1 &&
+    tree[0].role == Layout.Label && tree[0].name == "Hi"
+    {
+      held = held + 1
+    }
+    if let Ok(blank) = Canvas.canvas(40, 20, white) {
+      if let Ok(painted) = Layout.paint(&placed, &blank) {
+        if let Ok(surface) = Canvas.render(&painted) {
+          if Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(ink)) &&
+          Canvas.pixelAt(&surface, Canvas.point(2, 1)) == Ok(Some(white))
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+  }
+
+  let large = Layout.column([Layout.text("I").scaled(2).inked(red)]).aligned(Layout.Start)
+  if let Ok(placed) = Layout.place(&large, Canvas.size(20, 20)) {
+    if let Ok(blank) = Canvas.canvas(20, 20, white) {
+      if let Ok(painted) = Layout.paint(&placed, &blank) {
+        if let Ok(surface) = Canvas.render(&painted) {
+          if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 0, 10, 14)) &&
+          Canvas.pixelAt(&surface, Canvas.point(2, 0)) == Ok(Some(red)) &&
+          Canvas.pixelAt(&surface, Canvas.point(1, 0)) == Ok(Some(white))
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+  }
+
+  if let Err(Layout.InvalidTextScale(0, 0)) = Layout.place(&Layout.text("x").scaled(0), tenByTen) {
+    held = held + 1
+  }
+  let forgedText = Layout.View{..Layout.text("a"), children: [Layout.box()]}
+  if let Err(Layout.LeafWithChildren(0)) = Layout.place(&forgedText, tenByTen) { held = held + 1 }
+
+  let silent = Layout.column([Layout.text("")]).aligned(Layout.Start)
+  if let Ok(placed) = Layout.place(&silent, tenByTen) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 0, 0, 7)) &&
+    Layout.semantics(&placed).length() == 0
+    {
+      held = held + 1
+    }
+  }
+
+  let wasText = Layout.column([Layout.text("ab").wide(4)]).aligned(Layout.Start)
+  let nowText = Layout.column([Layout.text("ok").wide(4)]).aligned(Layout.Start)
+  if let Ok(was) = Layout.place(&wasText, Canvas.size(16, 8)) {
+    if let Ok(now) = Layout.place(&nowText, Canvas.size(16, 8)) {
+      let regions = Layout.damage(&was, &now)
+      if let Ok(blank) = Canvas.canvas(16, 8, white) {
+        if let Ok(oldCanvas) = Layout.paint(&was, &blank) {
+          if let Ok(newCanvas) = Layout.paint(&now, &blank) {
+            if let Ok(oldSurface) = Canvas.render(&oldCanvas) {
+              if let Ok(full) = Canvas.render(&newCanvas) {
+                if let Ok(patched) = Canvas.repaint(&newCanvas, &oldSurface, &regions) {
+                  if regions == [Canvas.rect(0, 0, 11, 7)] &&
+                  Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&full)
+                  {
+                    held = held + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   held
 }

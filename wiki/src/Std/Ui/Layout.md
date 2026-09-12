@@ -61,9 +61,18 @@ separates identity from the spoken name, so two "Delete" buttons can differ. Pla
 controls with one tag (`DuplicateTag`), which is what lets [[Std Ui Screen]] name an event's source
 by tag alone. `nodeTagged`, `tagOf`, and `isControlAt` read identity back from a layout.
 
-**Damage is data.** A node that changed frame or fill damages where it was and where it is if it
-paints; a region identical to the one just recorded is recorded once, so a recolored node damages its
-frame a single time. A change of structure or viewport damages the whole viewport. More than sixteen
+**Text is a leaf measured once.** `text` makes a `Words` leaf whose intrinsic content size is its
+[[Std Ui Text]] measure at the view's `scaled` face, taken in the measuring pass with every other size.
+Non-empty text is a `Label` named by the text itself, so what a screen reader says is what is drawn;
+empty text is decoration. Paint draws the text in its `inked` color from the top left of the padded
+content. Text is not clipped to its frame: a fixed width narrower than the text leaves the text
+visible, and the node's extent—its frame grown to cover the drawn text—is what damage reports, so
+repaint stays exact. Scales outside 1 to 64 and text beyond the character bound are refused at
+placement.
+
+**Damage is data.** A node that changed its extent, frame, fill, text, ink, scale, or origin damages
+where it was and where it is if it paints; a region identical to the one just recorded is recorded
+once, so a recolored node damages its extent a single time. A change of structure or viewport damages the whole viewport. More than sixteen
 regions merge into their bounding rectangle. Repainting the damage of an earlier surface equals a full render of the
 later layout, which the fixture checks byte for byte.
 

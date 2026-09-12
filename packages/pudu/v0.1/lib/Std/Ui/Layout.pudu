@@ -6,6 +6,7 @@ import Std.Num {Integer}
 import Std.Option as Option
 import Std.Set as Set
 import Std.Ui.Canvas as Canvas
+import Std.Ui.Text as Text
 
 /// Which way a stack places its children.
 export type Axis
@@ -43,6 +44,7 @@ export type Kind
   = Box
   | Stack(Axis)
   | Layer
+  | Words(Str)
 
 /// Space inside a node's edges, in logical pixels.
 export type Insets = { top: Int, right: Int, bottom: Int, left: Int }
@@ -66,7 +68,9 @@ export type View = {
   fill: Option[Canvas.Color],
   role: Role,
   name: Str,
-  tag: Str
+  tag: Str,
+  ink: Canvas.Color,
+  scale: Int
 }
 
 /// One node after placement, in reading and painting order.
@@ -77,7 +81,12 @@ export type Placed = {
   fill: Option[Canvas.Color],
   role: Role,
   name: Str,
-  tag: Str
+  tag: Str,
+  text: Str,
+  ink: Canvas.Color,
+  scale: Int,
+  origin: Canvas.Point,
+  extent: Canvas.Rect
 }
 
 /// A placed screen: every node's frame, flat, in pre-order.
@@ -109,10 +118,12 @@ export type LayoutError
   | LeafWithChildren(Int)
   | UnnamedRole(Int)
   | DuplicateTag(Int)
+  | InvalidTextScale(Int, Int)
+  | TextTooLong(Int)
   | ViewportMismatch(Int, Int)
   | Drawing(Canvas.CanvasError)
 
-type Measure = { size: Canvas.Size, nodes: Int }
+type Measure = { size: Canvas.Size, written: Canvas.Size, nodes: Int }
 
 type Limits = { maxNodes: Int, maxDepth: Int }
 
@@ -121,6 +132,9 @@ type Limits = { maxNodes: Int, maxDepth: Int }
 /// Bounded so that summing every length in the largest admitted tree stays
 /// inside a 64-bit integer without widening on the layout path.
 const MAX_LENGTH: Int = 1073741824
+
+/// The most characters one text view may hold.
+const MAX_TEXT: Int = 1048576
 
 /// The largest node budget a caller may request.
 const MAX_NODE_BUDGET: Int = 16777216
@@ -145,7 +159,23 @@ export fn box() -> View {
     fill: None,
     role: Decoration,
     name: "",
-    tag: ""
+    tag: "",
+    ink: Canvas.Color{red: 0u8, green: 0u8, blue: 0u8, alpha: 255u8},
+    scale: 1
+  }
+}
+
+/// A leaf showing text, measured by its face and named by what it says.
+///
+/// Non-empty text is a `Label` whose accessible name is the text itself, so a
+/// label can never be read aloud as something other than what is drawn. Empty
+/// text is decoration.
+export fn text(value: Str) -> View {
+  View {
+    ..box(),
+    kind: Words(value),
+    role: if value.isEmpty() { Decoration } else { Label },
+    name: value
   }
 }
 
@@ -190,6 +220,8 @@ export trait Composing {
   fn means(self: &Self, role: Role) -> Self
   fn named(self: &Self, name: Str) -> Self
   fn tagged(self: &Self, tag: Str) -> Self
+  fn inked(self: &Self, color: Canvas.Color) -> Self
+  fn scaled(self: &Self, scale: Int) -> Self
 }
 
 impl Composing for View {
@@ -235,6 +267,12 @@ impl Composing for View {
   /// The same view with the identity its events carry, when two controls
   /// share an accessible name.
   fn tagged(self: &Self, tag: Str) -> Self { View{..*self, tag: tag} }
+
+  /// The same view drawing its text in a color.
+  fn inked(self: &Self, color: Canvas.Color) -> Self { View{..*self, ink: color} }
+
+  /// The same view drawing its text at a whole-number scale from 1 to 64.
+  fn scaled(self: &Self, scale: Int) -> Self { View{..*self, scale: scale} }
 }
 
 /// Place a view into a viewport with default node and depth budgets.
@@ -362,13 +400,18 @@ export fn hitTest(target: &Layout, location: Canvas.Point) -> Option[Int] {
   found
 }
 
-/// A canvas holding every filled node's rectangle, in painting order.
+/// A canvas holding every node's fill and text, in painting order.
+///
+/// A node's fill covers its frame; its text starts at the top left of its
+/// padded content and is not clipped to the frame, so text wider than a fixed
+/// frame stays visible and its extent is what damage reports.
 export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, LayoutError] {
   let shape = Canvas.dimensions(onto)
   if shape != target.viewport {
     Err(ViewportMismatch(shape.width, shape.height))
   } else {
     var held = *onto
+    var index = 0
     for placed in target.nodes {
       if let Some(color) = placed.fill {
         match Canvas.fill(&held, placed.frame, color) {
@@ -376,6 +419,18 @@ export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, 
           case Err(reason) => { return Err(Drawing(reason)) }
         }
       }
+      if !placed.text.isEmpty() {
+        let face = match Text.face(placed.scale) {
+          case Ok(value) => value
+          case Err(_) => { return Err(InvalidTextScale(index, placed.scale)) }
+        }
+        match Text.draw(&face, &held, placed.origin, placed.text, placed.ink) {
+          case Ok(next) => held = next
+          case Err(Text.Drawing(reason)) => { return Err(Drawing(reason)) }
+          case Err(_) => { return Err(TextTooLong(index)) }
+        }
+      }
+      index = index + 1
     }
     Ok(held)
   }
@@ -383,7 +438,8 @@ export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, 
 
 /// The regions whose pixels differ between two placements of a screen.
 ///
-/// A node that changed frame or fill damages where it was and where it is. A
+/// A node that changed what it paints damages where it was and where it is,
+/// measured by its extent: its frame, grown to cover text overflowing it. A
 /// change of structure or viewport damages everything, because node positions
 /// no longer correspond. Repainting only these regions of the earlier surface
 /// gives exactly the surface a full render of the later layout gives.
@@ -397,9 +453,11 @@ export fn damage(before: &Layout, after: &Layout) -> Array[Canvas.Rect] {
     while index < after.nodes.length() {
       let was = before.nodes[index]
       let now = after.nodes[index]
-      if was.frame != now.frame || was.fill != now.fill {
-        if Option.isSome(&was.fill) { found = withVisible(found, &was.frame, &whole) }
-        if Option.isSome(&now.fill) { found = withVisible(found, &now.frame, &whole) }
+      if was.extent != now.extent || was.frame != now.frame || was.fill != now.fill ||
+      was.text != now.text || was.ink != now.ink || was.scale != now.scale || was.origin != now.origin
+      {
+        if paints(&was) { found = withVisible(found, &was.extent, &whole) }
+        if paints(&now) { found = withVisible(found, &now.extent, &whole) }
       }
       index = index + 1
     }
@@ -420,7 +478,7 @@ fn measured(
     Err(DepthBudgetExceeded(limits.maxDepth))
   } else {
     admitted(view, index) ?
-    var held = found.push(Measure{size: Canvas.size(0, 0), nodes: 1})
+    var held = found.push(Measure{size: Canvas.size(0, 0), written: Canvas.size(0, 0), nodes: 1})
     var sumWidth = 0
     var sumHeight = 0
     var maxWidth = 0
@@ -435,8 +493,10 @@ fn measured(
       maxHeight = Math.max(maxHeight, size.height)
     }
     let gaps = if view.children.length() > 0 { view.spacing * (view.children.length() - 1) } else { 0 }
+    let written = if let Words(value) = view.kind { textSize(value, view.scale) } else { Canvas.size(0, 0) }
     let content = match view.kind {
       case Box => Canvas.size(0, 0)
+      case Words(_) => written
       case Layer => Canvas.size(maxWidth, maxHeight)
       case Stack(Horizontal) => Canvas.size(sumWidth + gaps, maxHeight)
       case Stack(Vertical) => Canvas.size(maxWidth, sumHeight + gaps)
@@ -444,7 +504,11 @@ fn measured(
     let width = Option.unwrapOr(view.width, content.width + view.padding.left + view.padding.right)
     let height =
     Option.unwrapOr(view.height, content.height + view.padding.top + view.padding.bottom)
-    let measure = Measure{size: Canvas.size(width, height), nodes: held.length() - index}
+    let measure = Measure {
+      size: Canvas.size(width, height),
+      written: written,
+      nodes: held.length() - index
+    }
     Ok(List.set(&held, index, measure))
   }
 }
@@ -477,7 +541,16 @@ fn admitted(view: &View, index: Int) -> Result[(), LayoutError] {
     if length < 0 { return Err(NegativeLength(index, length)) }
     if length > MAX_LENGTH { return Err(LengthTooLarge(index, length)) }
   }
-  if view.kind == Box && view.children.length() > 0 {
+  if let Words(value) = view.kind {
+    if view.scale < 1 || view.scale > 64 { return Err(InvalidTextScale(index, view.scale)) }
+    if value.length() > MAX_TEXT { return Err(TextTooLong(index)) }
+  }
+  let leaf = match view.kind {
+    case Box => true
+    case Words(_) => true
+    case _ => false
+  }
+  if leaf && view.children.length() > 0 {
     Err(LeafWithChildren(index))
   } else if view.role != Decoration && view.role != Group && view.name.isEmpty() {
     Err(UnnamedRole(index))
@@ -495,6 +568,15 @@ fn arranged(
   depth: Int,
   out: Array[Placed]
 ) -> Array[Placed] {
+  let content = Canvas.rect(
+    frame.x + view.padding.left,
+    frame.y + view.padding.top,
+    Math.max(0, frame.width - view.padding.left - view.padding.right),
+    Math.max(0, frame.height - view.padding.top - view.padding.bottom)
+  )
+  let written = measures[index].written
+  let shown = if let Words(value) = view.kind { value } else { "" }
+  let drawn = Canvas.rect(content.x, content.y, written.width, written.height)
   let held = out.push(Placed {
       frame: frame,
       parent: parent,
@@ -502,16 +584,16 @@ fn arranged(
       fill: view.fill,
       role: view.role,
       name: view.name,
-      tag: if view.tag.isEmpty() { view.name } else { view.tag }
+      tag: if view.tag.isEmpty() { view.name } else { view.tag },
+      text: shown,
+      ink: view.ink,
+      scale: view.scale,
+      origin: Canvas.point(content.x, content.y),
+      extent: if shown.isEmpty() { frame } else { union(&frame, &drawn) }
     })
-  let content = Canvas.rect(
-    frame.x + view.padding.left,
-    frame.y + view.padding.top,
-    Math.max(0, frame.width - view.padding.left - view.padding.right),
-    Math.max(0, frame.height - view.padding.top - view.padding.bottom)
-  )
   match view.kind {
     case Box => held
+    case Words(_) => held
     case Layer => layered(view, &content, measures, index, depth, held)
     case Stack(axis) => stacked(view, axis, &content, measures, index, depth, held)
   }
@@ -610,6 +692,23 @@ fn crossOffset(alignment: Alignment, length: Int, available: Int) -> Int {
     case Center => (available - length) / 2
     case End => available - length
   }
+}
+
+fn paints(placed: &Placed) -> Bool { Option.isSome(&placed.fill) || !placed.text.isEmpty() }
+
+fn textSize(value: Str, scale: Int) -> Canvas.Size {
+  if let Ok(face) = Text.face(scale) {
+    if let Ok(size) = Text.measure(&face, value) { return size }
+  }
+  Canvas.size(0, 0)
+}
+
+fn union(first: &Canvas.Rect, second: &Canvas.Rect) -> Canvas.Rect {
+  let left = Math.min(first.x, second.x)
+  let top = Math.min(first.y, second.y)
+  let right = Math.max(first.x + first.width, second.x + second.width)
+  let bottom = Math.max(first.y + first.height, second.y + second.height)
+  Canvas.rect(left, top, right - left, bottom - top)
 }
 
 fn isControl(role: Role) -> Bool { role == Button || role == Toggle || role == Field }

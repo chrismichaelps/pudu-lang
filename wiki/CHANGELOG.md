@@ -39,6 +39,12 @@ tags: [changelog]
 - The canvas now finds a command's first span by halving and rebuilds only overlapped spans, reusing
   encoded pixels for the last two colors: a 400-character paragraph (1,072 rectangles) went from
   3.22 s to 1.40 s at -O2.
+- Layout gained text views: `text` leaves measured in the single measuring pass, named by what they
+  say, drawn in `inked` color at `scaled` size, and damaged by their extent so text overflowing a fixed
+  frame still repaints exactly. Layout now 40 assertions.
+- Screens draw a one-pixel focus ring outside the focused control, recolorable with `focusRing`;
+  focus moves damage only the rings left and reached, and every frame in the fixture matches a
+  reference built without the screen. Screen now 20 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

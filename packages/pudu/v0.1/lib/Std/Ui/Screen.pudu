@@ -35,18 +35,23 @@ export type ScreenError
 /// A running screen: what is known, how it is shown and changed, and the frame
 /// it last produced.
 ///
-/// The frame is held as a value: its layout, its display list, its pixels, the
-/// regions that changed to produce them, and the tag holding focus.
+/// The frame is held as a value: its layout, its pixels, the regions that
+/// changed to produce them, the tag holding focus, and the color of the ring
+/// that shows where focus is.
 export type Screen[S] = {
   state: S,
   view: fn(S) -> Layout.View,
   update: fn(S, Event) -> S,
   background: Canvas.Color,
+  ring: Canvas.Color,
   layout: Layout.Layout,
   surface: Canvas.Surface,
   focus: Option[Str],
   damaged: Array[Canvas.Rect]
 }
+
+/// The color a focus ring is drawn in until `focusRing` changes it.
+const DEFAULT_RING: Canvas.Color = Canvas.Color{red: 0u8, green: 90u8, blue: 200u8, alpha: 255u8}
 
 /// A screen showing its first frame.
 ///
@@ -59,7 +64,7 @@ export fn start[S](
   background: Canvas.Color
 ) -> Result[Screen[S], ScreenError] {
   let placed = placedView(view, state, viewport) ?
-  let painted = paintedLayout(&placed, background) ?
+  let painted = composed(&placed, background, None, DEFAULT_RING) ?
   let surface = match Canvas.render(&painted) {
     case Ok(value) => value
     case Err(reason) => { return Err(Drawing(reason)) }
@@ -69,6 +74,7 @@ export fn start[S](
       view: view,
       update: update,
       background: background,
+      ring: DEFAULT_RING,
       layout: placed,
       surface: surface,
       focus: None,
@@ -81,13 +87,13 @@ export fn start[S](
 /// A press activates the frontmost control under it and moves focus there; a
 /// press on anything else changes nothing. `Next` and `Previous` move focus
 /// through the controls in reading order and wrap. `Activate` activates the
-/// focused control. An input that produces no event returns the same frame
-/// with no damage.
+/// focused control. An input that changes neither state nor focus returns the
+/// same frame with no damage.
 export fn handle[S](target: &Screen[S], input: Input) -> Result[Screen[S], ScreenError] {
   match input {
     case Pressed(location) => pressed(target, location)
-    case KeyPressed(Next) => Ok(Screen{..*target, focus: stepped(target, 1), damaged: []})
-    case KeyPressed(Previous) => Ok(Screen{..*target, focus: stepped(target, -1), damaged: []})
+    case KeyPressed(Next) => refocused(target, stepped(target, 1))
+    case KeyPressed(Previous) => refocused(target, stepped(target, -1))
     case KeyPressed(Activate) => activated(target)
     case KeyPressed(Dismiss) => updated(target, Dismissed, target.focus)
   }
@@ -108,6 +114,20 @@ export fn handleAll[S](
   }
   Ok(Screen{..held, damaged: damaged})
 }
+
+/// The screen drawing its focus ring in another color.
+///
+/// Only the ring around the focused control is damaged; with nothing focused
+/// the frame is unchanged.
+export fn focusRing[S](target: &Screen[S], color: Canvas.Color) -> Result[Screen[S], ScreenError] {
+  let painted = composed(&target.layout, target.background, target.focus, color) ?
+  let regions = ringRegions(&target.layout, target.focus, [])
+  let surface = repainted(&painted, &target.surface, &regions) ?
+  Ok(Screen{..*target, ring: color, surface: surface, damaged: regions})
+}
+
+/// The color focus rings are drawn in when a screen starts.
+export fn defaultRing() -> Canvas.Color { DEFAULT_RING }
 
 /// What the screen currently knows.
 export fn stateOf[S](target: &Screen[S]) -> S { target.state }
@@ -166,6 +186,19 @@ fn stepped[S](target: &Screen[S], direction: Int) -> Option[Str] {
   }
 }
 
+/// The screen with focus moved, damaging the ring it left and the ring it
+/// reached.
+fn refocused[S](target: &Screen[S], focus: Option[Str]) -> Result[Screen[S], ScreenError] {
+  if focus == target.focus {
+    Ok(Screen{..*target, damaged: []})
+  } else {
+    let painted = composed(&target.layout, target.background, focus, target.ring) ?
+    let regions = ringRegions(&target.layout, focus, ringRegions(&target.layout, target.focus, []))
+    let surface = repainted(&painted, &target.surface, &regions) ?
+    Ok(Screen{..*target, surface: surface, focus: focus, damaged: regions})
+  }
+}
+
 fn updated[S](
   target: &Screen[S],
   event: Event,
@@ -173,17 +206,17 @@ fn updated[S](
 ) -> Result[Screen[S], ScreenError] {
   let state = (target.update)(target.state, event)
   let placed = placedView(target.view, state, target.layout.viewport) ?
-  let painted = paintedLayout(&placed, target.background) ?
-  let regions = Layout.damage(&target.layout, &placed)
-  let surface = match Canvas.repaint(&painted, &target.surface, &regions) {
-    case Ok(value) => value
-    case Err(reason) => { return Err(Drawing(reason)) }
-  }
   let kept = if let Some(tag) = focus {
     if Option.isSome(&Layout.nodeTagged(&placed, tag)) { focus } else { None }
   } else {
     None
   }
+  let painted = composed(&placed, target.background, kept, target.ring) ?
+  var regions: Array[Canvas.Rect] = []
+  for region in Layout.damage(&target.layout, &placed) { regions = withRegion(regions, region) }
+  regions = ringRegions(&target.layout, target.focus, regions)
+  regions = ringRegions(&placed, kept, regions)
+  let surface = repainted(&painted, &target.surface, &regions) ?
   Ok(Screen {
       ..*target,
       state: state,
@@ -205,14 +238,85 @@ fn placedView[S](
   }
 }
 
-fn paintedLayout(placed: &Layout.Layout, background: Canvas.Color) -> Result[Canvas.Canvas, ScreenError] {
+/// The display list of a frame: the layout's fills and text, then the focus
+/// ring over them so no control can hide it.
+fn composed(
+  placed: &Layout.Layout,
+  background: Canvas.Color,
+  focus: Option[Str],
+  ring: Canvas.Color
+) -> Result[Canvas.Canvas, ScreenError] {
   let blank = match Canvas.canvas(placed.viewport.width, placed.viewport.height, background) {
     case Ok(value) => value
     case Err(reason) => { return Err(Drawing(reason)) }
   }
-  match Layout.paint(placed, &blank) {
-    case Ok(value) => Ok(value)
-    case Err(Layout.Drawing(reason)) => Err(Drawing(reason))
-    case Err(reason) => Err(Placement(reason))
+  var held = match Layout.paint(placed, &blank) {
+    case Ok(value) => value
+    case Err(Layout.Drawing(reason)) => { return Err(Drawing(reason)) }
+    case Err(reason) => { return Err(Placement(reason)) }
   }
+  if let Some(area) = focusFrame(placed, focus) {
+    for edge in ringEdges(&area) {
+      held = match Canvas.fill(&held, edge, ring) {
+        case Ok(next) => next
+        case Err(reason) => { return Err(Drawing(reason)) }
+      }
+    }
+  }
+  Ok(held)
+}
+
+fn repainted(
+  painted: &Canvas.Canvas,
+  previous: &Canvas.Surface,
+  regions: &Array[Canvas.Rect]
+) -> Result[Canvas.Surface, ScreenError] {
+  match Canvas.repaint(painted, previous, regions) {
+    case Ok(value) => Ok(value)
+    case Err(reason) => Err(Drawing(reason))
+  }
+}
+
+fn focusFrame(placed: &Layout.Layout, focus: Option[Str]) -> Option[Canvas.Rect] {
+  if let Some(tag) = focus {
+    if let Some(node) = Layout.nodeTagged(placed, tag) { return Layout.frameOf(placed, node) }
+  }
+  None
+}
+
+/// The four one-pixel edges just outside a frame.
+fn ringEdges(area: &Canvas.Rect) -> Array[Canvas.Rect] {
+  [
+    Canvas.rect(area.x - 1, area.y - 1, area.width + 2, 1),
+    Canvas.rect(area.x - 1, area.y + area.height, area.width + 2, 1),
+    Canvas.rect(area.x - 1, area.y, 1, area.height),
+    Canvas.rect(area.x + area.width, area.y, 1, area.height)
+  ]
+}
+
+/// The visible region a focus ring occupies, added once.
+fn ringRegions(
+  placed: &Layout.Layout,
+  focus: Option[Str],
+  found: Array[Canvas.Rect]
+) -> Array[Canvas.Rect] {
+  if let Some(area) = focusFrame(placed, focus) {
+    let left = if area.x - 1 < 0 { 0 } else { area.x - 1 }
+    let top = if area.y - 1 < 0 { 0 } else { area.y - 1 }
+    let rawRight = area.x + area.width + 1
+    let rawBottom = area.y + area.height + 1
+    let right = if rawRight > placed.viewport.width { placed.viewport.width } else { rawRight }
+    let bottom = if rawBottom > placed.viewport.height { placed.viewport.height } else { rawBottom }
+    if left >= right || top >= bottom {
+      found
+    } else {
+      withRegion(found, Canvas.rect(left, top, right - left, bottom - top))
+    }
+  } else {
+    found
+  }
+}
+
+fn withRegion(found: Array[Canvas.Rect], region: Canvas.Rect) -> Array[Canvas.Rect] {
+  if found.contains(region) { found } else { found.push(region) }
 }

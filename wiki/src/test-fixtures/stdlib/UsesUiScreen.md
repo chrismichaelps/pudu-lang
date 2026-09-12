@@ -14,7 +14,12 @@ aliases: [Uses Ui Screen]
 
 Executable Pudu fixture for interactive screens. A counter with increment and reset controls over an
 indicator whose color follows the count; the reset control is absent at two and after dismissal. Its
-`main` returns 16 held assertions.
+`main` returns 20 held assertions. Frames are compared with a reference built from layout and canvas
+with explicit ring edges, never with another screen.
+
+Focus rings: a press damages the indicator and the new ring and draws the ring color just below the
+focused control; each `Next` damages exactly the ring left and the ring reached; recoloring the ring
+damages only its region; and recoloring with nothing focused changes nothing.
 
 Refusals: an unnamed button and duplicate control tags surface as placement errors, and a transparent
 background surfaces as a drawing error.

@@ -40,6 +40,13 @@ and painted; `Layout.damage` against the previous placement names the changed re
 `Canvas.repaint` redraws only those into the previous surface. The fixture requires the resulting
 bytes to equal a fresh `start` at the same state, so incremental frames cannot drift from full ones.
 
+**Focus is always visible.** The focused control is drawn with a one-pixel ring just outside its
+frame, composed after the layout's fills and text so no control can cover it. `focusRing` changes
+the ring's color and `defaultRing` names the starting color. Moving focus damages the ring region it
+left and the one it reached, clipped to the viewport and recorded once; an update damages the layout's
+regions plus both rings. The fixture compares every such frame with a reference built from layout,
+canvas, and explicit ring edges rather than from the screen itself.
+
 **Focus follows identity across updates.** If the focused tag still names a control after an update it
 stays focused; if the control disappeared, focus becomes none rather than jumping to a neighbour the
 person did not choose.

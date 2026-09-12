@@ -42,16 +42,51 @@ fn twins(count: Int) -> Layout.View {
     ])
 }
 
-fn sameBytes(left: &Screen.Screen[Int], right: &Screen.Screen[Int]) -> Bool {
-  let leftSurface = Screen.surfaceOf(left)
-  let rightSurface = Screen.surfaceOf(right)
-  Canvas.rgbaBytes(&leftSurface) == Canvas.rgbaBytes(&rightSurface)
+/// The pixels a frame must hold, built from layout and canvas directly rather
+/// than through the screen: the counter at a count, with a ring of one color
+/// around a frame when one is given.
+fn reference(count: Int, ring: Option[Canvas.Rect], color: Canvas.Color) -> Option[Bytes] {
+  if let Ok(placed) = Layout.place(&counter(count), Canvas.size(4, 6)) {
+    if let Ok(blank) = Canvas.canvas(4, 6, WHITE) {
+      if let Ok(painted) = Layout.paint(&placed, &blank) {
+        var held = painted
+        if let Some(area) = ring {
+          let edges = [
+            Canvas.rect(area.x - 1, area.y - 1, area.width + 2, 1),
+            Canvas.rect(area.x - 1, area.y + area.height, area.width + 2, 1),
+            Canvas.rect(area.x - 1, area.y, 1, area.height),
+            Canvas.rect(area.x + area.width, area.y, 1, area.height)
+          ]
+          for edge in edges {
+            if let Ok(next) = Canvas.fill(&held, edge, color) { held = next }
+          }
+        }
+        if let Ok(surface) = Canvas.render(&held) {
+          if let Ok(bytes) = Canvas.rgbaBytes(&surface) { return Some(bytes) }
+        }
+      }
+    }
+  }
+  None
 }
 
-/// Input routing, focus, and damage-driven frames without a window.
+fn shows(target: &Screen.Screen[Int], expected: Option[Bytes]) -> Bool {
+  let surface = Screen.surfaceOf(target)
+  if let Some(bytes) = expected { Canvas.rgbaBytes(&surface) == Ok(bytes) } else { false }
+}
+
+fn colorAt(target: &Screen.Screen[Int], x: Int, y: Int) -> Option[Canvas.Color] {
+  let surface = Screen.surfaceOf(target)
+  if let Ok(found) = Canvas.pixelAt(&surface, Canvas.point(x, y)) { found } else { None }
+}
+
+/// Input routing, focus rings, and damage-driven frames without a window.
 export fn main() -> Int {
   var held = 0
   let viewport = Canvas.size(4, 6)
+  let ring = Screen.defaultRing()
+  let incFrame = Some(Canvas.rect(0, 0, 4, 2))
+  let resetFrame = Some(Canvas.rect(0, 2, 4, 2))
 
   if let Err(Screen.Placement(Layout.UnnamedRole(1))) =
   Screen.start(0, unnamed, counted, viewport, WHITE)
@@ -71,21 +106,20 @@ export fn main() -> Int {
 
   if let Ok(first) = Screen.start(0, counter, counted, viewport, WHITE) {
     if Screen.stateOf(&first) == 0 && Screen.damagedOf(&first) == [Canvas.rect(0, 0, 4, 6)] &&
-    Screen.focusOf(&first) == None
+    Screen.focusOf(&first) == None && shows(&first, reference(0, None, ring))
     {
       held = held + 1
     }
 
     if let Ok(one) = Screen.handle(&first, Screen.Pressed(Canvas.point(1, 1))) {
-      if Screen.stateOf(&one) == 1 && Screen.damagedOf(&one) == [Canvas.rect(0, 4, 4, 2)] &&
-      Screen.focusOf(&one) == Some("inc") &&
-      Layout.nodeCount(&Screen.layoutOf(&one)) == 4
+      if Screen.stateOf(&one) == 1 &&
+      Screen.damagedOf(&one) == [Canvas.rect(0, 4, 4, 2), Canvas.rect(0, 0, 4, 3)] &&
+      Screen.focusOf(&one) == Some("inc") && Layout.nodeCount(&Screen.layoutOf(&one)) == 4
       {
         held = held + 1
       }
-      if let Ok(fresh) = Screen.start(1, counter, counted, viewport, WHITE) {
-        if sameBytes(&one, &fresh) { held = held + 1 }
-      }
+      if shows(&one, reference(1, incFrame, ring)) { held = held + 1 }
+      if colorAt(&one, 0, 2) == Some(ring) && colorAt(&one, 0, 3) == Some(GRAY) { held = held + 1 }
     }
 
     if let Ok(still) = Screen.handle(&first, Screen.Pressed(Canvas.point(1, 5))) {
@@ -99,13 +133,34 @@ export fn main() -> Int {
       if let Ok(b) = Screen.handle(&a, Screen.KeyPressed(Screen.Next)) {
         if let Ok(c) = Screen.handle(&b, Screen.KeyPressed(Screen.Next)) {
           if Screen.focusOf(&a) == Some("inc") && Screen.focusOf(&b) == Some("Reset") &&
-          Screen.focusOf(&c) == Some("inc") && Screen.damagedOf(&c) == []
+          Screen.focusOf(&c) == Some("inc") &&
+          Screen.damagedOf(&a) == [Canvas.rect(0, 0, 4, 3)] &&
+          Screen.damagedOf(&b) == [Canvas.rect(0, 0, 4, 3), Canvas.rect(0, 1, 4, 4)] &&
+          Screen.damagedOf(&c) == [Canvas.rect(0, 1, 4, 4), Canvas.rect(0, 0, 4, 3)]
           {
+            held = held + 1
+          }
+          if shows(&b, reference(0, resetFrame, ring)) && shows(&c, reference(0, incFrame, ring)) {
             held = held + 1
           }
         }
       }
+
+      if let Ok(recolored) = Screen.focusRing(&a, RED) {
+        if Screen.damagedOf(&recolored) == [Canvas.rect(0, 0, 4, 3)] &&
+        colorAt(&recolored, 0, 2) == Some(RED) && shows(&recolored, reference(0, incFrame, RED))
+        {
+          held = held + 1
+        }
+      }
     }
+
+    if let Ok(unfocused) = Screen.focusRing(&first, RED) {
+      if Screen.damagedOf(&unfocused) == [] && shows(&unfocused, reference(0, None, ring)) {
+        held = held + 1
+      }
+    }
+
     if let Ok(back) = Screen.handle(&first, Screen.KeyPressed(Screen.Previous)) {
       if Screen.focusOf(&back) == Some("Reset") { held = held + 1 }
     }
@@ -124,7 +179,7 @@ export fn main() -> Int {
     ]
     if let Ok(reset) = Screen.handleAll(&first, &sequence) {
       if Screen.stateOf(&reset) == 0 && Screen.focusOf(&reset) == Some("Reset") &&
-      Screen.damagedOf(&reset).length() > 0
+      Screen.damagedOf(&reset).length() > 0 && shows(&reset, reference(0, resetFrame, ring))
       {
         held = held + 1
       }
@@ -145,16 +200,18 @@ export fn main() -> Int {
       Screen.Pressed(Canvas.point(0, 0))
     ]
     if let Ok(hidden) = Screen.handleAll(&first, &hide) {
-      if Screen.stateOf(&hidden) == 2 && Screen.focusOf(&hidden) == Some("inc") {
-        if let Ok(fresh) = Screen.start(2, counter, counted, viewport, WHITE) {
-          if sameBytes(&hidden, &fresh) { held = held + 1 }
-        }
+      if Screen.stateOf(&hidden) == 2 && Screen.focusOf(&hidden) == Some("inc") &&
+      shows(&hidden, reference(2, incFrame, ring))
+      {
+        held = held + 1
       }
     }
 
     let focusReset = [Screen.KeyPressed(Screen.Previous), Screen.KeyPressed(Screen.Dismiss)]
     if let Ok(dropped) = Screen.handleAll(&first, &focusReset) {
-      if Screen.stateOf(&dropped) == 100 && Screen.focusOf(&dropped) == None {
+      if Screen.stateOf(&dropped) == 100 && Screen.focusOf(&dropped) == None &&
+      shows(&dropped, reference(100, None, ring))
+      {
         held = held + 1
       }
     }
