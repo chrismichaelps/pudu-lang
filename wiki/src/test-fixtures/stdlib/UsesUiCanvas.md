@@ -12,10 +12,13 @@ aliases: [Uses Ui Canvas]
 
 ## Purpose and interface
 
-Executable Pudu fixture for the native software canvas. Its `main` returns 33 held assertions for
+Executable Pudu fixture for the native software canvas. Its `main` returns 41 held assertions for
 valid construction, pixel/command/storage bounds, surface-shape validation, clipping on every edge,
 painter order, byte order, opaque replacement, repeated translucent blending, transparent no-op
-behavior, zero-area rectangles, and invalid geometry.
+behavior, zero-area rectangles, and invalid geometry. Band and span cases cover a translucent span
+split, staggered band edges, and a later command that starts higher still painting in front.
+Repaint cases require byte equality with a full render, identity for no regions and off-canvas
+regions, and typed refusal of a negative region or a surface of another size.
 
 ## Grill Log
 

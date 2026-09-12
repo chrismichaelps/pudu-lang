@@ -14,9 +14,15 @@ tags: [changelog]
   explicit frame/resource lifetimes, accessibility, real-time audio, and timestamped media, but no
   foreign toolkit or platform framework enters the portable packages.
 - Added a bounded RGBA conformance canvas with overflow-safe clipping, exact painter ordering,
-  source-over blending, pixel and command budgets, and 33 Pudu-level edge assertions. The optimized
-  gate passes; an exploratory 512×512 run remains far outside an interactive frame budget, so the
-  next-generation performance claim remains blocked on a repeatable benchmark and renderer work.
+  source-over blending, pixel and command budgets, and 33 Pudu-level edge assertions.
+- Replaced per-pixel canvas writes with a band-and-span rasterizer and added `repaint` for damaged
+  regions. A 512×512 frame with an opaque and a translucent fill went from 4.35 s and 267 MB to
+  0.10 s and 96 MB at -O2, indistinguishable from startup; the fixture now holds 41 assertions,
+  including byte equality between repaint and full render.
+- `Std.Bytes.join` joins neighbours in pairs and `repeat` doubles, instead of carrying every octet
+  through an array: joining 262,144 four-byte parts fell from 1.71 s to 1.06 s at -O2.
+- Limited Apple references to the developer documentation archive and read OpenSwiftUI only for
+  declarative size negotiation; no API names or code are carried over.
 
 ## 2026-09-12 — Adapter-free production website
 

@@ -117,7 +117,7 @@ testServiceEvaluation = do
         (screens === Just "37")
     , counterexample
         "a native canvas clips and blends into exact bounded pixels"
-        (canvas === Just "33")
+        (canvas === Just "41")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two

@@ -15,7 +15,9 @@ Exports construction, slicing/search, binary integer get/put, UTF-8 conversion, 
 and explicit copying operations.
 ## Governance and algorithm
 Short input is a typed `BytesError`; byte order is named on every numeric operation; slicing uses the
-runtime byte representation and whole-input encoders build chunks before joining.
+runtime byte representation and whole-input encoders build chunks before joining. `join` joins
+neighbours in pairs, level by level, and `repeat` doubles its running copy, so both are whole-run
+copies rather than a value per octet.
 ## Grill Log
 - **Q:** Reuse `Array[UInt8]` as the public type? **A:** No. _Rationale:_ bytes need compact storage,
   slice semantics, and a text boundary that an ordinary array does not promise. _Rejected:_ text as
