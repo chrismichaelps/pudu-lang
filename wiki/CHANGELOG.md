@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-12 — Adapter-free production website
+
+- Promoted the verified Pudu-native `provided.al2023` deployment to production without rebuilding
+  the Preview artifact; static pages, dynamic search, true 404s, SEO files, logos, and responsive
+  navigation were verified against the live domain.
+- Replaced the dynamic function's full JSON catalogue with the compact Pudu-generated search
+  database, bounded its route closure to search and no-index fallback, and unwrapped Vercel's
+  invocation body in Pudu.
+
 ## 2026-09-11 — Adapter-free Vercel runtime build
 
 - Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their

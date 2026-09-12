@@ -3,10 +3,9 @@ module View.Home
 import Std.Html.Build as H
 import Std.Html as Html
 import Std.Url as Url
-import Domain.Entry as Domain
 import Seo as Seo
 import Service.Catalog as Catalog
-import Service.Search as Search
+import View.Dynamic as Dynamic
 import View.Layout as Layout
 
 export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
@@ -28,34 +27,43 @@ export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
                   ])
               ]),
             modules
+          ]),
+        H.section().class("home-section start-section").holding([
+            H.div().holding([
+                H.span().class("kind").says("Start here"),
+                H.h2().says("Write a complete program"),
+                H.p().says("A Pudu program names its module, imports what it uses, and returns a status from main."),
+                H.p().class("home-actions").holding([
+                    H.a().href("/guide").says("Read the language guide"),
+                    H.a().href("/modules").says("Browse the complete API")
+                  ])
+              ]),
+            H.pre().class("signature home-code").holding([
+                H.code().says("module Hello\n\nimport Std.Io as Io\n\nfn main() -> Int \{\n  let _written = Io.writeLine(\"Hello from Pudu!\")\n  0\n\}")
+              ])
+          ]),
+        H.section().class("home-section").holding([
+            H.h2().says("Understand what the code promises"),
+            H.p().class("section-lead").says("Pudu keeps important choices visible in function signatures and at the place where a value is used."),
+            H.div().class("principles").holding([
+                principle("Typed results", "Result[Value, Problem] tells the caller that work may fail. The caller handles both paths."),
+                principle("Explicit references", "&T borrows a value for reading. &mut T gives one temporary place permission to change it."),
+                principle("Checked patterns", "match lists the shapes a value may have, so each case can be handled directly.")
+              ])
+          ]),
+        H.section().class("home-section haskell-note").holding([
+            H.div().holding([
+                H.span().class("kind").says("Compiler"),
+                H.h2().says("Built on a Haskell foundation"),
+                H.p().says("The first Pudu compiler is written in Haskell. Its strong types and functional style help keep compiler stages explicit and testable.")
+              ]),
+            H.p().holding([H.a().href("/about").says("Learn about Pudu and its author")])
           ])
       ]).html())
 }
 
 export fn results(siteUrl: Str, catalog: &Catalog.Catalog, query: Str) -> Html.Html {
-  let hits = Search.find(&catalog.entries, query, 80)
-  var rows: Array[H.Node] = []
-  for hit in hits { rows = rows.push(resultRow(&hit)) }
-  let heading = if query.trim().isEmpty() { "Search Pudu" } else { "Results for “" + query + "”" }
-  let body = H.div().holding([
-      H.section().class("intro").holding([
-          H.h1().says(heading),
-          H.p().says(show(hits.length()) + " matching declarations")
-        ]),
-      Layout.searchForm(query, "home-search"),
-      H.ul().class("results").holding(rows)
-    ]).html()
-  Layout.page(siteUrl, heading, "Search results from the Pudu public API catalogue.", "/search", false, None, body)
-}
-
-fn resultRow(hit: &Domain.Hit) -> H.Node {
-  let entry = hit.entry
-  H.li().class("result").holding([
-      H.a().class("result-name").href(symbolPath(&entry)).says(Domain.qualifiedName(&entry)),
-      H.code().class("signature").says(entry.signature),
-      H.p().class("summary").says(Domain.summary(&entry)),
-      H.div().class("meta").says(entry.kind + " · " + entry.moduleName)
-    ])
+  Dynamic.results(siteUrl, &catalog.entries, query)
 }
 
 fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
@@ -76,10 +84,6 @@ fn modulePanel(modules: &Array[Str], languageVersion: Str) -> H.Node {
     ])
 }
 
-fn symbolPath(entry: &Domain.Entry) -> Str {
-  Seo.symbolPath(entry)
-}
-
 fn exampleQueries() -> H.Node {
   let queries = ["checksum", "Str -> UInt32", "Result", "server"]
   var links: Array[H.Node] = [H.span().says("Try ")]
@@ -90,4 +94,11 @@ fn exampleQueries() -> H.Node {
     index = index + 1
   }
   H.p().class("query-examples").holding(links)
+}
+
+fn principle(title: Str, explanation: Str) -> H.Node {
+  H.article().class("principle").holding([
+      H.h3().says(title),
+      H.p().says(explanation)
+    ])
 }

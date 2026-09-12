@@ -6,6 +6,7 @@ import Std.Url as Url
 import Domain.Entry as Domain
 import Seo as Seo
 import Service.Catalog as Catalog
+import View.Dynamic as Dynamic
 import View.Layout as Layout
 
 export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
@@ -89,12 +90,7 @@ export fn guide(siteUrl: Str) -> Html.Html {
 }
 
 export fn missing(siteUrl: Str, path: Str) -> Html.Html {
-  Layout.page(siteUrl, "Not found", "The requested Pudu documentation page does not exist.", path, false, None, H.article().class("doc").holding([
-        H.span().class("kind").says("404"),
-        H.h1().says("That page is not here."),
-        H.p().says("No documentation route matches " + path + "."),
-        H.p().holding([H.a().href("/").says("Return to search")])
-      ]).html())
+  Dynamic.missing(siteUrl, path)
 }
 
 fn code(source: Str) -> H.Node {

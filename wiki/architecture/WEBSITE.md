@@ -14,23 +14,24 @@ same routes and rendering used by the local server, static capture, and Vercel f
 ## Dependency direction
 
 ```text
-Main / Function / Render / Prerender
-        |
-     Web.Routes
-      /      \
-   View     Service
-     |       /   \
-    Seo    Search Catalog
-     |              |
- Constants     Domain.Entry
+Main / Render / Prerender        Function
+           |                        |
+       Web.Routes              Web.Dynamic
+          /  \                   /      \
+       View  Service.Catalog  View.Dynamic  Service.Search
+         \       /                \          /
+          Seo / Constants          Domain.Entry
+
+SearchIndex -> Service.Catalog -> generated compact search database
+```
 
 Config and Error are leaf policies used from the composition edge. SEO owns canonical metadata,
 structured data, robots policy, and sitemap rendering; views choose page facts but do not spell tags.
-```
 
-Dependencies point downward. Domain code knows no HTTP or HTML. Services know catalogue values,
-not requests. Views receive values and return typed `Std.Html` trees. Routes are the only layer
-that translates an HTTP request into a service call and a rendered response.
+Dependencies point downward. Domain code knows no HTTP or HTML. Services know catalogue and query
+values, not requests. Views receive values and return typed `Std.Html` trees. The static router owns
+the complete crawlable documentation graph. The dynamic router owns only search and the no-index
+fallback, so the Lambda closure does not retain static-page machinery.
 
 ## Rendering and deployment
 
@@ -45,10 +46,15 @@ packaged beside the Pudu function. The musl-built `libffi`,
 `zlib`, `ncursesw`, and `gmp` shared libraries named by dependency inspection are packaged
 beside it. Lambda ELF dependencies name their `/var/task` files directly so Vercel's host
 `LD_LIBRARY_PATH` cannot substitute incompatible glibc libraries.
-The function package preserves `website/data/api.json`, the same default catalogue path used by
-local Pudu processes, relative to Lambda's `/var/task` working directory.
+The function package preserves the generated compact search database under `/var/task`; full
+`website/data/api.json` remains a build input for static documentation only.
 CI proves the attached Pudu program first on Alpine and then in Amazon Linux 2023 with the same
 `/var/task` layout used by Lambda.
+
+Vercel wraps its HTTP request document in the invocation event's textual `body`. The Pudu function
+unwraps that one transport envelope, then applies the same path and query rules as local routing.
+Function metadata supplies the canonical production origin so dynamic pages agree with static SEO
+metadata after promotion.
 
 Static HTML, CSS, fonts, and the two supplied logos are served from Vercel's CDN and from Pudu
 routes locally. The generated API catalogue comes from `pudu doc --json`, so public documentation

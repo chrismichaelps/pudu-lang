@@ -8,7 +8,9 @@ import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
-import Web.Routes as Web
+import Web.Dynamic as Web
+
+const SEARCH_INDEX_PATH: Str = "website/data/search-index.pudu-data"
 
 /// The site, served to a platform that invokes it rather than connects to it.
 ///
@@ -26,7 +28,7 @@ fn main() -> Int {
   match Config.load() {
     case Err(problem) => couldNotStart(&problem)
     case Ok(settings) => {
-      match Catalog.load(settings.cataloguePath) {
+      match Catalog.loadSearch(SEARCH_INDEX_PATH) {
         case Err(problem) => couldNotStart(&problem)
         case Ok(catalog) => {
           let siteUrl = settings.siteUrl
@@ -56,10 +58,25 @@ fn main() -> Int {
 /// deployment with broken routing rather than like a reader that did not
 /// understand the event.
 export fn pathIn(event: &Json.Json) -> Str {
-  let whole = firstText(event, &["rawPath", "path", "url"])
-  let query = Option.unwrapOr(textAt(event, "rawQueryString"), "")
+  let request = requestIn(event)
+  let whole = firstText(&request, &["rawPath", "path", "url"])
+  let query = Option.unwrapOr(textAt(&request, "rawQueryString"), "")
   let target = if whole.isEmpty() { "/" } else { whole }
   if query.isEmpty() || target.contains("?") { target } else { target + "?" + query }
+}
+
+/// The HTTP request carried by a platform invocation.
+///
+/// AWS-compatible gateway events expose their path directly. Vercel's provided
+/// runtime carries its request document as JSON text in `body` and marks the
+/// outer event as `Action: Invoke`.
+fn requestIn(event: &Json.Json) -> Json.Json {
+  if Option.unwrapOr(textAt(event, "Action"), "") != "Invoke" { return *event }
+  let body = Option.unwrapOr(textAt(event, "body"), "")
+  match Json.decode(body) {
+    case Ok(request) => request
+    case Err(_) => *event
+  }
 }
 
 fn firstText(event: &Json.Json, names: &Array[Str]) -> Str {

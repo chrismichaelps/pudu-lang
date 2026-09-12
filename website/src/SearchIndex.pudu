@@ -1,0 +1,34 @@
+module SearchIndex
+
+import Std.Env as Env
+import Std.Io as Io
+import Std.Option as Option
+import Error as SiteError
+import Service.Catalog as Catalog
+
+/// Derive the serverless search input from the complete public catalogue.
+fn main() -> Int {
+  let source = Option.unwrapOr(Env.at(0), "")
+  let target = Option.unwrapOr(Env.at(1), "")
+  if source.isEmpty() || target.isEmpty() {
+    let _said = Io.writeErrorLine("usage: search-index <api.json> <target>")
+    return 1
+  }
+  match Catalog.load(source) {
+    case Err(problem) => failed(&problem)
+    case Ok(catalog) => {
+      match Io.write(target, Catalog.searchIndex(&catalog)) {
+        case Ok(_) => 0
+        case Err(_) => {
+          let _said = Io.writeErrorLine("search-index: could not write " + target)
+          1
+        }
+      }
+    }
+  }
+}
+
+fn failed(problem: &SiteError.SiteError) -> Int {
+  let _said = Io.writeErrorLine(SiteError.explain(problem))
+  1
+}

@@ -1,0 +1,49 @@
+module View.Dynamic
+
+import Std.Html.Build as H
+import Std.Html as Html
+import Domain.Entry as Domain
+import Seo as Seo
+import Service.Search as Search
+import View.Layout as Layout
+
+/// Ranked search results shared by local and serverless routes.
+export fn results(siteUrl: Str, entries: &Array[Domain.Entry], query: Str) -> Html.Html {
+  let hits = Search.find(entries, query, 80)
+  var rows: Array[H.Node] = []
+  for hit in hits { rows = rows.push(resultRow(&hit)) }
+  let heading = if query.trim().isEmpty() { "Search Pudu" } else { "Results for “" + query + "”" }
+  let body = H.div().holding([
+      H.section().class("intro").holding([
+          H.h1().says(heading),
+          H.p().says(show(hits.length()) + " matching declarations")
+        ]),
+      Layout.searchForm(query, "home-search"),
+      H.ul().class("results").holding(rows)
+    ]).html()
+  Layout.page(siteUrl, heading, "Search results from the Pudu public API catalogue.", "/search", false, None, body)
+}
+
+/// The shared dynamic fallback page.
+export fn missing(siteUrl: Str, path: Str) -> Html.Html {
+  Layout.page(siteUrl, "Not found", "The requested Pudu documentation page does not exist.", path, false, None, H.article().class("doc").holding([
+        H.span().class("kind").says("404"),
+        H.h1().says("That page is not here."),
+        H.p().says("No documentation route matches " + path + "."),
+        H.p().holding([H.a().href("/").says("Return to search")])
+      ]).html())
+}
+
+fn resultRow(hit: &Domain.Hit) -> H.Node {
+  let entry = hit.entry
+  H.li().class("result").holding([
+      H.a().class("result-name").href(symbolPath(&entry)).says(Domain.qualifiedName(&entry)),
+      H.code().class("signature").says(entry.signature),
+      H.p().class("summary").says(Domain.summary(&entry)),
+      H.div().class("meta").says(entry.kind + " · " + entry.moduleName)
+    ])
+}
+
+fn symbolPath(entry: &Domain.Entry) -> Str {
+  Seo.symbolPath(entry)
+}
