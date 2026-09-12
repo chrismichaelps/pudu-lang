@@ -1,0 +1,318 @@
+module Std.Ui.Canvas
+
+import Std.Buffer as Buffer
+import Std.Bytes as Bytes
+import Std.Num {Integer}
+import Std.Option as Option
+
+/// A logical point in the canvas coordinate space.
+export type Point = { x: Int, y: Int }
+
+/// A logical two-dimensional size.
+export type Size = { width: Int, height: Int }
+
+/// A half-open rectangle: left and top are included; right and bottom are not.
+export type Rect = { x: Int, y: Int, width: Int, height: Int }
+
+/// A straight-alpha red, green, blue, and alpha color.
+export type Color = { red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8 }
+
+/// Why a canvas or drawing command could not be admitted.
+export type CanvasError
+  = InvalidSize(Int, Int)
+  | InvalidPixelBudget(Int)
+  | InvalidCommandBudget(Int)
+  | PixelBudgetExceeded(Int, Int, Int)
+  | CommandBudgetExceeded(Int)
+  | PixelStorageOverflow(Int, Int)
+  | OpaqueBackgroundRequired(UInt8)
+  | NegativeExtent(Int, Int)
+  | MalformedSurface(Int, Int)
+  | RenderingFailed
+
+/// One rectangle operation in the flat display list.
+export type Command = { area: Rect, color: Color }
+
+/// A bounded display list waiting to be rendered.
+export type Canvas = {
+  size: Size,
+  background: Color,
+  maxPixels: Int,
+  maxCommands: Int,
+  commands: Array[Command]
+}
+
+/// A row-major RGBA framebuffer produced opaque by `render`.
+export type Surface = { size: Size, pixels: Buffer.Buffer }
+
+/// A point value.
+export fn point(x: Int, y: Int) -> Point { Point{x: x, y: y} }
+
+/// A size value.
+export fn size(width: Int, height: Int) -> Size { Size{width: width, height: height} }
+
+/// A rectangle value.
+export fn rect(x: Int, y: Int, width: Int, height: Int) -> Rect {
+  Rect{x: x, y: y, width: width, height: height}
+}
+
+/// An RGBA color value.
+export fn rgba(red: UInt8, green: UInt8, blue: UInt8, alpha: UInt8) -> Color {
+  Color{red: red, green: green, blue: blue, alpha: alpha}
+}
+
+/// An opaque RGB color value.
+export fn rgb(red: UInt8, green: UInt8, blue: UInt8) -> Color {
+  rgba(red, green, blue, 255u8)
+}
+
+/// A canvas with the default 16,777,216-pixel allocation budget.
+export fn canvas(width: Int, height: Int, background: Color) -> Result[Canvas, CanvasError] {
+  canvasWithinLimits(width, height, background, 16777216, 65536)
+}
+
+/// A canvas whose maximum pixel allocation is stated by the caller.
+export fn canvasWithin(
+  width: Int,
+  height: Int,
+  background: Color,
+  maxPixels: Int
+) -> Result[Canvas, CanvasError] {
+  canvasWithinLimits(width, height, background, maxPixels, 65536)
+}
+
+/// A canvas with explicit pixel-allocation and display-list bounds.
+export fn canvasWithinLimits(
+  width: Int,
+  height: Int,
+  background: Color,
+  maxPixels: Int,
+  maxCommands: Int
+) -> Result[Canvas, CanvasError] {
+  let target = Canvas {
+    size: Size{width: width, height: height},
+    background: background,
+    maxPixels: maxPixels,
+    maxCommands: maxCommands,
+    commands: []
+  }
+  validate(&target) ?
+  Ok(target)
+}
+
+/// The canvas after filling a rectangle.
+///
+/// A zero-area rectangle is a no-op. Negative extents are refused because
+/// interpreting them by flipping an edge would hide a layout defect.
+export fn fill(target: &Canvas, area: Rect, color: Color) -> Result[Canvas, CanvasError] {
+  validate(target) ?
+  if area.width < 0 || area.height < 0 {
+    Err(NegativeExtent(area.width, area.height))
+  } else if area.width == 0 || area.height == 0 || color.alpha == 0u8 {
+    Ok(*target)
+  } else if target.commands.length() >= target.maxCommands {
+    Err(CommandBudgetExceeded(target.maxCommands))
+  } else {
+    Ok(Canvas {
+        size: target.size,
+        background: target.background,
+        maxPixels: target.maxPixels,
+        maxCommands: target.maxCommands,
+        commands: target.commands.push(Command{area: area, color: color})
+      })
+  }
+}
+
+/// The logical dimensions of a canvas.
+export fn dimensions(target: &Canvas) -> Size { target.size }
+
+/// How many drawing commands the canvas holds.
+export fn commandCount(target: &Canvas) -> Int { target.commands.length() }
+
+/// Render the display list into an opaque row-major RGBA framebuffer.
+export fn render(target: &Canvas) -> Result[Surface, CanvasError] {
+  validate(target) ?
+  let count = target.size.width.toBigInt() * target.size.height.toBigInt()
+  let pixelCount = Option.unwrapOr(convertInteger[Int](count), 0)
+  let pixel = Bytes.putU32Le(packed(target.background))
+  var pixels = Buffer.fromBytes(Bytes.repeat(&pixel, pixelCount))
+  for command in target.commands {
+    pixels = rasterFill(&pixels, &target.size, &command.area, command.color) ?
+  }
+  Ok(Surface{size: target.size, pixels: pixels})
+}
+
+/// The logical dimensions of a rendered surface.
+export fn surfaceSize(target: &Surface) -> Result[Size, CanvasError] {
+  validateSurface(target) ?
+  Ok(target.size)
+}
+
+/// The exact row-major RGBA bytes of a rendered surface.
+export fn rgbaBytes(target: &Surface) -> Result[Bytes, CanvasError] {
+  validateSurface(target) ?
+  Ok(Buffer.toBytes(&target.pixels))
+}
+
+/// The color of one pixel, or nothing outside the surface.
+export fn pixelAt(target: &Surface, location: Point) -> Result[Option[Color], CanvasError] {
+  validateSurface(target) ?
+  if location.x < 0 || location.y < 0 ||
+  location.x >= target.size.width || location.y >= target.size.height
+  {
+    Ok(None)
+  } else {
+    let offset =
+    (location.y.toBigInt() * target.size.width.toBigInt() + location.x.toBigInt()) * 4
+    if let Some(narrowed) = convertInteger[Int](offset) {
+      if let Some(value) = Buffer.readU32(&target.pixels, narrowed) {
+        Ok(Some(unpacked(value)))
+      } else {
+        let expected = expectedSurfaceBytes(&target.size) ?
+        Err(MalformedSurface(expected, Buffer.size(&target.pixels)))
+      }
+    } else {
+      Err(PixelStorageOverflow(target.size.width, target.size.height))
+    }
+  }
+}
+
+fn validateSurface(target: &Surface) -> Result[(), CanvasError] {
+  if target.size.width <= 0 || target.size.height <= 0 {
+    Err(InvalidSize(target.size.width, target.size.height))
+  } else {
+    let expected = expectedSurfaceBytes(&target.size) ?
+    let actual = Buffer.size(&target.pixels)
+    if expected != actual { Err(MalformedSurface(expected, actual)) } else { Ok(()) }
+  }
+}
+
+fn expectedSurfaceBytes(shape: &Size) -> Result[Int, CanvasError] {
+  let count = shape.width.toBigInt() * shape.height.toBigInt() * 4
+  if let Some(narrowed) = convertInteger[Int](count) {
+    Ok(narrowed)
+  } else {
+    Err(PixelStorageOverflow(shape.width, shape.height))
+  }
+}
+
+fn validate(target: &Canvas) -> Result[(), CanvasError] {
+  if target.size.width <= 0 || target.size.height <= 0 {
+    Err(InvalidSize(target.size.width, target.size.height))
+  } else if target.maxPixels < 0 {
+    Err(InvalidPixelBudget(target.maxPixels))
+  } else if target.maxCommands < 0 {
+    Err(InvalidCommandBudget(target.maxCommands))
+  } else if target.commands.length() > target.maxCommands {
+    Err(CommandBudgetExceeded(target.maxCommands))
+  } else if target.background.alpha != 255u8 {
+    Err(OpaqueBackgroundRequired(target.background.alpha))
+  } else {
+    let count = target.size.width.toBigInt() * target.size.height.toBigInt()
+    if count > target.maxPixels.toBigInt() {
+      Err(PixelBudgetExceeded(target.size.width, target.size.height, target.maxPixels))
+    } else if Option.isNone(&convertInteger[Int](count * 4)) {
+      Err(PixelStorageOverflow(target.size.width, target.size.height))
+    } else {
+      Ok(())
+    }
+  }
+}
+
+fn rasterFill(
+  pixels: &Buffer.Buffer,
+  viewport: &Size,
+  area: &Rect,
+  color: Color
+) -> Result[Buffer.Buffer, CanvasError] {
+  if area.width < 0 || area.height < 0 {
+    Err(NegativeExtent(area.width, area.height))
+  } else if let Some(visible) = clippedTo(area, viewport) {
+    var held = *pixels
+    let opaque = color.alpha == 255u8
+    let replacement = packed(color)
+    var y = visible.y
+    if opaque {
+      let pixel = Bytes.putU32Le(replacement)
+      let row = Buffer.fromBytes(Bytes.repeat(&pixel, visible.width))
+      let rowBytes = visible.width * 4
+      while y < visible.y + visible.height {
+        let offset = (y * viewport.width + visible.x) * 4
+        held = Option.okOr(Buffer.copy(&row, 0, &held, offset, rowBytes), RenderingFailed) ?
+        y = y + 1
+      }
+    } else {
+      while y < visible.y + visible.height {
+        var x = visible.x
+        while x < visible.x + visible.width {
+          let offset = (y * viewport.width + x) * 4
+          let under = Option.okOr(Buffer.readU32(&held, offset), RenderingFailed) ?
+          let over = packed(blended(color, unpacked(under)))
+          held = Option.okOr(Buffer.writeU32(&held, offset, over), RenderingFailed) ?
+          x = x + 1
+        }
+        y = y + 1
+      }
+    }
+    Ok(held)
+  } else {
+    Ok(*pixels)
+  }
+}
+
+fn clippedTo(area: &Rect, viewport: &Size) -> Option[Rect] {
+  let zero = 0.toBigInt()
+  let limitX = viewport.width.toBigInt()
+  let limitY = viewport.height.toBigInt()
+  let rawLeft = area.x.toBigInt()
+  let rawTop = area.y.toBigInt()
+  let rawRight = rawLeft + area.width.toBigInt()
+  let rawBottom = rawTop + area.height.toBigInt()
+  let left = if rawLeft < zero { zero } else if rawLeft > limitX { limitX } else { rawLeft }
+  let top = if rawTop < zero { zero } else if rawTop > limitY { limitY } else { rawTop }
+  let right = if rawRight < zero { zero } else if rawRight > limitX { limitX } else { rawRight }
+  let bottom = if rawBottom < zero { zero } else if rawBottom > limitY { limitY } else { rawBottom }
+  if left >= right || top >= bottom {
+    None
+  } else {
+    let x = Option.unwrapOr(convertInteger[Int](left), 0)
+    let y = Option.unwrapOr(convertInteger[Int](top), 0)
+    let width = Option.unwrapOr(convertInteger[Int](right - left), 0)
+    let height = Option.unwrapOr(convertInteger[Int](bottom - top), 0)
+    Some(Rect{x: x, y: y, width: width, height: height})
+  }
+}
+
+fn blended(source: Color, destination: Color) -> Color {
+  let alpha = intOf(source.alpha)
+  rgba(
+    byteOf((intOf(source.red) * alpha + intOf(destination.red) * (255 - alpha) + 127) / 255),
+    byteOf((intOf(source.green) * alpha + intOf(destination.green) * (255 - alpha) + 127) / 255),
+    byteOf((intOf(source.blue) * alpha + intOf(destination.blue) * (255 - alpha) + 127) / 255),
+    255u8
+  )
+}
+
+fn packed(color: Color) -> UInt32 {
+  wordOf(color.red) |
+  (wordOf(color.green) << 8) |
+  (wordOf(color.blue) << 16) |
+  (wordOf(color.alpha) << 24)
+}
+
+fn unpacked(value: UInt32) -> Color {
+  rgba(
+    byteOf(wordInt(value & 255u32)),
+    byteOf(wordInt((value >> 8) & 255u32)),
+    byteOf(wordInt((value >> 16) & 255u32)),
+    byteOf(wordInt((value >> 24) & 255u32))
+  )
+}
+
+fn intOf(value: UInt8) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }
+
+fn wordOf(value: UInt8) -> UInt32 { Option.unwrapOr(convertInteger[UInt32](value), 0u32) }
+
+fn wordInt(value: UInt32) -> Int { Option.unwrapOr(convertInteger[Int](value), 0) }
+
+fn byteOf(value: Int) -> UInt8 { Option.unwrapOr(convertInteger[UInt8](value), 0u8) }

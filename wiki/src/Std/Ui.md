@@ -1,6 +1,6 @@
 ---
 type: module
-path: "@root/lib/Std/Ui.pudu"
+path: "@root/packages/pudu/v0.1/lib/Std/Ui.pudu"
 fidelity: Active
 domain: "[[Standard Library]]"
 subsystem: "[[architecture/STDLIB]]"
@@ -34,6 +34,7 @@ waits for the network, and a viewer holds server state for as long as they are l
 event says which it is: one that only needs what is already on the screen is answered where it
 happened, and one that needs what only the server knows makes the trip. That distinction is in the
 event's type, so a component states it once rather than a framework guessing per interaction.
+
 ## Grill Log
 - **Q:** Reconcile two elements of different names by matching their children? **A:** No.
   _Rationale:_ an element that became a different element shares nothing with what it was; matching

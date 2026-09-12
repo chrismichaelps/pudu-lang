@@ -17,6 +17,8 @@ tags: [moc, module]
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
+- [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.
+- [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.

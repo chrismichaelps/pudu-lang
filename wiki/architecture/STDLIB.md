@@ -290,6 +290,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
+| `Std.Ui.Canvas` | 23 | bounded exact-pixel application rendering; conformance-only pending latency work |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |
@@ -694,6 +695,9 @@ There is no third step. No network, no cache, no lock file, no version solving. 
 dependencies are its own files plus the compiler it is built with, and that is the whole answer.
 
 ## Active completion queue
+
+The cross-cutting release order is maintained in [[First Release Readiness]]. It distinguishes
+missing modules from existing surfaces that still lack lifetime, limit, or validation evidence.
 
 - ~~**`Std.HashMap` and `Hash`.**~~ Shipped; see [[ADR-0015]]. The remaining note is kept only as
   the record of what had to be settled first: equality/hash coherence and a

@@ -5,6 +5,8 @@ tags: [moc, handoff]
 
 # Handoff Map
 
+- [[2026-09-12-release-readiness-ui]] — corrected first-release audit and checked UI patch application on `dev`.
+
 - [[2026-09-10-private-book-and-website]] — private book completion, website verification, and disk-space blocker before the Vercel preview.
 
 - [[2026-09-06-lsp-full-capabilities]] — complete LSP capabilities, editor extension bundle, and validation gates.

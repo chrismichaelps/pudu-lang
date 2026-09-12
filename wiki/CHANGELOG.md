@@ -5,6 +5,19 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-12 — Native application-media foundation
+
+- Corrected the serious-release table against the standard library that actually ships, separating
+  missing lifecycle, package, large-input, HTTP-client, filesystem, and concurrency evidence from
+  optional ecosystem breadth.
+- Established the Pudu-only UI, audio, and video boundary: raylib and Apple publications inform
+  explicit frame/resource lifetimes, accessibility, real-time audio, and timestamped media, but no
+  foreign toolkit or platform framework enters the portable packages.
+- Added a bounded RGBA conformance canvas with overflow-safe clipping, exact painter ordering,
+  source-over blending, pixel and command budgets, and 33 Pudu-level edge assertions. The optimized
+  gate passes; an exploratory 512×512 run remains far outside an interactive frame budget, so the
+  next-generation performance claim remains blocked on a repeatable benchmark and renderer work.
+
 ## 2026-09-12 — Adapter-free production website
 
 - Promoted the verified Pudu-native `provided.al2023` deployment to production without rebuilding
