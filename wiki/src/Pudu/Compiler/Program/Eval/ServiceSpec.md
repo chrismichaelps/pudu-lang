@@ -22,8 +22,8 @@ The UI fixture counts cover pure component state, structural differences, the Pu
 exact pixels, repaint equality, and typed refusals, and declarative layout's exact frames,
 accessibility semantics, and damage that repaints to the same bytes as a full render, and interactive
 screens whose incremental frames after routed input equal a fresh start at the same state, bitmap
-text whose measures, wrapping, and glyph pixels are exact, and PCM audio whose samples, time, and WAV
-bytes are exact. Exact equality is intentional: adding a check without registering it
+text whose measures, wrapping, and glyph pixels are exact, PCM audio whose samples, time, and WAV
+bytes are exact, and audio graphs whose split renders equal whole ones. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
 ## Grill Log

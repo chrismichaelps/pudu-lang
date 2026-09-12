@@ -1,0 +1,251 @@
+module Std.Audio.Graph
+
+import Std.Audio as Audio
+
+/// A periodic waveform with an exact integer shape.
+export type Wave
+  = Square
+  | Saw
+  | Triangle
+
+/// A source of audio that renders any range of frames on demand.
+///
+/// Every node is a function of frame position, not of how many times it was
+/// asked, so a range rendered in one slice or in many gives the same samples.
+/// That is what makes seeking exact and what lets a presenter choose its slice
+/// size without changing the sound.
+export type Node
+  = Silent
+  | Clip(Audio.Pcm, Int)
+  | Tone(Wave, Int, Int)
+  | Gained(Array[Node], Int)
+  | Mixed(Array[Node])
+  | Ramp(Array[Node], Int, Int, Int, Int)
+
+/// Why a graph could not render.
+export type GraphError
+  = Refused(Audio.AudioError)
+  | InvalidPeriod(Int)
+  | InvalidAmplitude(Int)
+  | InvalidRamp(Int, Int)
+  | InvalidChild(Int)
+  | TooDeep(Int)
+
+/// The deepest nesting a graph may reach.
+const MAX_DEPTH: Int = 64
+
+/// The most frames one render may request, matching the slice bound audio keeps.
+const MAX_SLICE_FRAMES: Int = 4096
+
+/// A clip of audio that begins at a frame of the output.
+export fn clip(audio: Audio.Pcm, startFrame: Int) -> Node { Clip(audio, startFrame) }
+
+/// A waveform repeating every `period` frames between `-amplitude` and `amplitude`.
+export fn tone(wave: Wave, period: Int, amplitude: Int) -> Node { Tone(wave, period, amplitude) }
+
+/// A node scaled by a Q15 gain, where 32,768 is unity.
+export fn gained(source: Node, amount: Int) -> Node { Gained([source], amount) }
+
+/// Nodes summed with saturation.
+export fn mixed(sources: Array[Node]) -> Node { Mixed(sources) }
+
+/// A node whose gain moves in a straight line from `fromGain` at `fromFrame` to
+/// `toGain` at `toFrame`, holding each end outside that span.
+export fn ramp(source: Node, fromFrame: Int, fromGain: Int, toFrame: Int, toGain: Int) -> Node {
+  Ramp([source], fromFrame, fromGain, toFrame, toGain)
+}
+
+/// Exactly `frames` frames of a graph starting at frame `start`.
+///
+/// The graph is checked before any sample is produced, so an invalid node deep
+/// in a mix is refused rather than discovered halfway through a slice.
+export fn render(
+  graph: &Node,
+  shape: &Audio.Format,
+  start: Int,
+  frames: Int
+) -> Result[Audio.Pcm, GraphError] {
+  refused(Audio.format(shape.sampleRate, shape.channels)) ?
+  if start < 0 {
+    Err(Refused(Audio.NegativeFrames(start)))
+  } else if frames < 0 {
+    Err(Refused(Audio.NegativeFrames(frames)))
+  } else if frames > MAX_SLICE_FRAMES {
+    Err(Refused(Audio.SliceTooLarge(frames, MAX_SLICE_FRAMES)))
+  } else {
+    admitted(graph, shape, 0) ?
+    rendered(graph, shape, start, frames)
+  }
+}
+
+fn admitted(graph: &Node, shape: &Audio.Format, depth: Int) -> Result[(), GraphError] {
+  if depth > MAX_DEPTH {
+    return Err(TooDeep(MAX_DEPTH))
+  }
+  match graph {
+    case Silent => Ok(())
+    case Clip(audio, _) =>
+    if audio.format != *shape { Err(Refused(Audio.FormatMismatch)) } else { Ok(()) }
+    case Tone(_, period, amplitude) =>
+    if period < 2 {
+      Err(InvalidPeriod(period))
+    } else if amplitude < 0 || amplitude > 32767 {
+      Err(InvalidAmplitude(amplitude))
+    } else {
+      Ok(())
+    }
+    case Gained(children, amount) => {
+      if amount < 0 || amount > 131072 { return Err(Refused(Audio.InvalidGain(amount))) }
+      onlyChild(&children, shape, depth)
+    }
+    case Mixed(children) => {
+      for child in children { admitted(&child, shape, depth + 1) ? }
+      Ok(())
+    }
+    case Ramp(children, fromFrame, fromGain, toFrame, toGain) => {
+      if toFrame <= fromFrame || fromFrame < 0 { return Err(InvalidRamp(fromFrame, toFrame)) }
+      if fromGain < 0 || fromGain > 131072 { return Err(Refused(Audio.InvalidGain(fromGain))) }
+      if toGain < 0 || toGain > 131072 { return Err(Refused(Audio.InvalidGain(toGain))) }
+      onlyChild(&children, shape, depth)
+    }
+  }
+}
+
+fn onlyChild(children: &Array[Node], shape: &Audio.Format, depth: Int) -> Result[(), GraphError] {
+  if children.length() != 1 {
+    Err(InvalidChild(children.length()))
+  } else {
+    admitted(&children[0], shape, depth + 1)
+  }
+}
+
+fn rendered(
+  graph: &Node,
+  shape: &Audio.Format,
+  start: Int,
+  frames: Int
+) -> Result[Audio.Pcm, GraphError] {
+  match graph {
+    case Silent => refused(Audio.silence(shape, frames))
+    case Clip(audio, offset) => clipped(&audio, shape, offset, start, frames)
+    case Tone(wave, period, amplitude) => toned(wave, period, amplitude, shape, start, frames)
+    case Gained(children, amount) => {
+      let inner = rendered(&children[0], shape, start, frames) ?
+      refused(Audio.gain(&inner, amount))
+    }
+    case Mixed(children) => {
+      var held = refused(Audio.silence(shape, frames)) ?
+      for child in children {
+        let inner = rendered(&child, shape, start, frames) ?
+        held = refused(Audio.mix(&held, &inner)) ?
+      }
+      Ok(held)
+    }
+    case Ramp(children, fromFrame, fromGain, toFrame, toGain) => {
+      let inner = rendered(&children[0], shape, start, frames) ?
+      ramped(&inner, start, fromFrame, fromGain, toFrame, toGain)
+    }
+  }
+}
+
+fn clipped(
+  audio: &Audio.Pcm,
+  shape: &Audio.Format,
+  offset: Int,
+  start: Int,
+  frames: Int
+) -> Result[Audio.Pcm, GraphError] {
+  if start + frames <= offset {
+    refused(Audio.silence(shape, frames))
+  } else if start >= offset {
+    refused(Audio.slice(audio, start - offset, frames))
+  } else {
+    let lead = refused(Audio.silence(shape, offset - start)) ?
+    let body = refused(Audio.slice(audio, 0, frames - (offset - start))) ?
+    refused(Audio.append(&lead, &body))
+  }
+}
+
+fn toned(
+  wave: Wave,
+  period: Int,
+  amplitude: Int,
+  shape: &Audio.Format,
+  start: Int,
+  frames: Int
+) -> Result[Audio.Pcm, GraphError] {
+  var values: Array[Int] = []
+  var frame = start
+  while frame < start + frames {
+    let value = waveAt(wave, frame % period, period, amplitude)
+    var channel = 0
+    while channel < shape.channels {
+      values = values.push(value)
+      channel = channel + 1
+    }
+    frame = frame + 1
+  }
+  refused(Audio.fromSamples(shape, values))
+}
+
+/// One sample of a waveform at a phase from zero up to `period`.
+///
+/// Square is high for the first half; saw rises from `-amplitude`; triangle
+/// rises from `-amplitude` to `amplitude` over the first half and falls back.
+/// Each is integer division of exact products, so every host agrees.
+fn waveAt(wave: Wave, phase: Int, period: Int, amplitude: Int) -> Int {
+  match wave {
+    case Square => if phase * 2 < period { amplitude } else { -amplitude }
+    case Saw => -amplitude + (2 * amplitude * phase) / period
+    case Triangle => {
+      let half = period / 2
+      if phase < half {
+          -amplitude + (2 * amplitude * phase) / half
+      } else {
+        amplitude - (2 * amplitude * (phase - half)) / (period - half)
+      }
+    }
+  }
+}
+
+fn ramped(
+  source: &Audio.Pcm,
+  start: Int,
+  fromFrame: Int,
+  fromGain: Int,
+  toFrame: Int,
+  toGain: Int
+) -> Result[Audio.Pcm, GraphError] {
+  let channels = source.format.channels
+  let values = Audio.samples(source)
+  var scaled: Array[Int] = []
+  var index = 0
+  while index < values.length() {
+    let frame = start + index / channels
+    let amount = if frame <= fromFrame {
+      fromGain
+    } else if frame >= toFrame {
+      toGain
+    } else {
+      fromGain + ((toGain - fromGain) * (frame - fromFrame)) / (toFrame - fromFrame)
+    }
+    scaled = scaled.push(saturated(roundedQ15(values[index] * amount)))
+    index = index + 1
+  }
+  refused(Audio.fromSamples(&source.format, scaled))
+}
+
+fn roundedQ15(product: Int) -> Int {
+  if product >= 0 { (product + 16384) / 32768 } else { -((16384 - product) / 32768) }
+}
+
+fn saturated(value: Int) -> Int {
+  if value > 32767 { 32767 } else if value < -32768 { -32768 } else { value }
+}
+
+fn refused[T](outcome: Result[T, Audio.AudioError]) -> Result[T, GraphError] {
+  match outcome {
+    case Ok(value) => Ok(value)
+    case Err(reason) => Err(Refused(reason))
+  }
+}

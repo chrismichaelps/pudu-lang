@@ -80,8 +80,8 @@ supplied by an untrusted document cannot select an arbitrary allocation.
 4. Declarative layout with focus order, hit testing, an accessibility semantics tree, and damage
    regions (`Std.Ui.Layout`); press and key routing with state-driven damage repaint
    (`Std.Ui.Screen`). Text entry, scrolling, and a visible focus indicator follow text layout.
-5. Exact PCM, frame-counted time, gain, mixing, bounded slices, and WAV in `Std.Audio`; then a
-   pull-model render graph over bounded slices, resampling, and channel layouts.
+5. Exact PCM, frame-counted time, gain, mixing, bounded slices, and WAV in `Std.Audio`, and a
+   stateless pull-model render graph in `Std.Audio.Graph`; then resampling and channel layouts.
 6. Rational clocks, frame planes, color/HDR metadata, synchronization, seeking, and a small
    uncompressed/reference codec foundation in `Std.Video`.
 7. Per-platform window/input, speaker, camera, and display presenters after their native capability

@@ -53,12 +53,13 @@ order, hit testing, painting, and damage regions.
   400-character paragraph draw and render in 1.40 s (from 3.22 s).
 - `3567c73` — layout text leaves with extent-based damage (40 assertions) and visible recolorable
   focus rings on screens (20 assertions).
-- Audio slice — `Std.Audio` exact byte-backed PCM, time, gain, mix, slices, and WAV (30 assertions).
+- `c1eebc5` — `Std.Audio` exact byte-backed PCM, time, gain, mix, slices, and WAV (30 assertions).
+- Graph slice — `Std.Audio.Graph` stateless pull-model nodes with slice-independent renders (21).
 
 ## Exact next action
 
-A pull-model audio render graph over bounded slices in `Std.Audio`, then text entry and scrolling on
-`Std.Ui.Screen`, then `Std.Video` rational clocks and frame planes. Profile rendering many small
+Text entry and scrolling on `Std.Ui.Screen`, then `Std.Video` rational clocks and frame planes, then
+resampling and channel layouts in audio. Profile rendering many small
 rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
 the UI event slice. Keep every fixture as the semantic oracle for later optimization.
 

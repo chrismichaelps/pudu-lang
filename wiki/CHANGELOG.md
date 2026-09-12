@@ -49,6 +49,10 @@ tags: [changelog]
   to exact fractions, Q15 gain rounding half away from zero, saturating mix, exact-length slices bounded
   at 4,096 frames, and WAV encoding and bounded decoding with specific refusals. Encoding one second of
   48 kHz stereo adds 0.02 s and decoding 0.03 s at -O2. 30 assertions.
+- Added `Std.Audio.Graph`: a pull-model render graph whose nodes—clips placed by frame, integer square,
+  saw, and triangle tones, Q15 gain, saturating mixes, and linear gain ramps—are functions of frame
+  position. The whole graph is admitted before rendering, slices are bounded at 4,096 frames and depth at
+  sixty-four, and a range rendered in slices equals the range rendered whole. 21 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

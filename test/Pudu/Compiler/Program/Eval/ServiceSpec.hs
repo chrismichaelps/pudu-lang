@@ -19,6 +19,7 @@ testServiceEvaluation = do
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
+  rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
@@ -134,6 +135,9 @@ testServiceEvaluation = do
     , counterexample
         "PCM audio keeps exact samples, time, and WAV bytes and refuses malformed input"
         (sound === Just "30")
+    , counterexample
+        "an audio graph renders exact samples that do not depend on slice boundaries"
+        (rendering === Just "21")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two

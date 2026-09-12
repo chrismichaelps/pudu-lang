@@ -1,0 +1,121 @@
+module UsesAudioGraph
+
+import Std.Audio as Audio
+import Std.Audio.Graph as Graph
+
+fn valuesOf(outcome: Result[Audio.Pcm, Graph.GraphError]) -> Array[Int] {
+  if let Ok(audio) = outcome { Audio.samples(&audio) } else { [-99999] }
+}
+
+/// A pull-model graph rendered in bounded slices with sample-exact results.
+export fn main() -> Int {
+  var held = 0
+
+  if let Ok(mono) = Audio.format(8000, 1) {
+    if valuesOf(Graph.render(&Graph.Silent, &mono, 5, 3)) == [0, 0, 0] { held = held + 1 }
+    if let Err(Graph.Refused(Audio.SliceTooLarge(4097, 4096))) =
+    Graph.render(&Graph.Silent, &mono, 0, 4097)
+    {
+      held = held + 1
+    }
+    if let Err(Graph.Refused(Audio.NegativeFrames(-1))) = Graph.render(&Graph.Silent, &mono, -1, 1) {
+      held = held + 1
+    }
+
+    let square = Graph.tone(Graph.Square, 4, 1000)
+    if valuesOf(Graph.render(&square, &mono, 0, 6)) == [1000, 1000, -1000, -1000, 1000, 1000] {
+      held = held + 1
+    }
+    let saw = Graph.tone(Graph.Saw, 4, 1000)
+    if valuesOf(Graph.render(&saw, &mono, 0, 5)) == [-1000, -500, 0, 500, -1000] { held = held + 1 }
+    let triangle = Graph.tone(Graph.Triangle, 4, 1000)
+    if valuesOf(Graph.render(&triangle, &mono, 0, 5)) == [-1000, 0, 1000, 0, -1000] {
+      held = held + 1
+    }
+
+    let whole = valuesOf(Graph.render(&triangle, &mono, 3, 12))
+    let firstPart = valuesOf(Graph.render(&triangle, &mono, 3, 5))
+    let secondPart = valuesOf(Graph.render(&triangle, &mono, 8, 7))
+    if whole.length() == 12 && whole == firstPart.concat(secondPart) { held = held + 1 }
+
+    if let Err(Graph.InvalidPeriod(1)) = Graph.render(&Graph.tone(Graph.Square, 1, 5), &mono, 0, 1) {
+      held = held + 1
+    }
+    if let Err(Graph.InvalidAmplitude(32768)) =
+    Graph.render(&Graph.tone(Graph.Saw, 8, 32768), &mono, 0, 1)
+    {
+      held = held + 1
+    }
+
+    if let Ok(steady) = Audio.fromSamples(&mono, [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]) {
+      let placed = Graph.clip(steady, 3)
+      if valuesOf(Graph.render(&placed, &mono, 0, 2)) == [0, 0] &&
+      valuesOf(Graph.render(&placed, &mono, 1, 4)) == [0, 0, 1000, 1000] &&
+      valuesOf(Graph.render(&placed, &mono, 9, 4)) == [1000, 1000, 0, 0]
+      {
+        held = held + 1
+      }
+
+      let fade = Graph.ramp(Graph.clip(steady, 0), 0, 0, 4, 32768)
+      if valuesOf(Graph.render(&fade, &mono, 0, 6)) == [0, 250, 500, 750, 1000, 1000] {
+        held = held + 1
+      }
+      let fadeWhole = valuesOf(Graph.render(&fade, &mono, 0, 8))
+      let fadeFirst = valuesOf(Graph.render(&fade, &mono, 0, 3))
+      let fadeRest = valuesOf(Graph.render(&fade, &mono, 3, 5))
+      if fadeWhole == fadeFirst.concat(fadeRest) { held = held + 1 }
+
+      let halved = Graph.gained(Graph.clip(steady, 0), 16384)
+      if valuesOf(Graph.render(&halved, &mono, 0, 2)) == [500, 500] { held = held + 1 }
+
+      let loud = Graph.gained(Graph.clip(steady, 0), 131072)
+      let summed = Graph.mixed([loud, loud, Graph.Silent])
+      if valuesOf(Graph.render(&summed, &mono, 0, 2)) == [8000, 8000] { held = held + 1 }
+      let clipped = Graph.mixed([
+          Graph.gained(Graph.tone(Graph.Square, 2, 30000), 32768),
+          Graph.tone(Graph.Square, 2, 30000)
+        ])
+      if valuesOf(Graph.render(&clipped, &mono, 0, 2)) == [32767, -32768] { held = held + 1 }
+
+      if let Err(Graph.InvalidRamp(4, 4)) =
+      Graph.render(&Graph.ramp(Graph.Silent, 4, 0, 4, 1), &mono, 0, 1)
+      {
+        held = held + 1
+      }
+      if let Err(Graph.Refused(Audio.InvalidGain(131073))) =
+      Graph.render(&Graph.gained(Graph.Silent, 131073), &mono, 0, 1)
+      {
+        held = held + 1
+      }
+      if let Err(Graph.InvalidChild(2)) =
+      Graph.render(&Graph.Gained([Graph.Silent, Graph.Silent], 1), &mono, 0, 1)
+      {
+        held = held + 1
+      }
+    }
+
+    var deep = Graph.Silent
+    var level = 0
+    while level < 70 {
+      deep = Graph.gained(deep, 32768)
+      level = level + 1
+    }
+    if let Err(Graph.TooDeep(64)) = Graph.render(&deep, &mono, 0, 1) { held = held + 1 }
+  }
+
+  if let Ok(stereo) = Audio.format(8000, 2) {
+    let square = Graph.tone(Graph.Square, 2, 7)
+    if valuesOf(Graph.render(&square, &stereo, 1, 2)) == [-7, -7, 7, 7] { held = held + 1 }
+    if let Ok(mono) = Audio.format(8000, 1) {
+      if let Ok(one) = Audio.silence(&mono, 1) {
+        if let Err(Graph.Refused(Audio.FormatMismatch)) =
+        Graph.render(&Graph.mixed([Graph.Silent, Graph.clip(one, 0)]), &stereo, 0, 1)
+        {
+          held = held + 1
+        }
+      }
+    }
+  }
+
+  held
+}
