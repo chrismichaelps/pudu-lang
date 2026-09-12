@@ -14,54 +14,178 @@ export type BytesError
   | BadLength(Int)
 
 /// A sequence holding nothing.
+///
+/// The starting point for building a sequence up with `concat`, and the identity
+/// for joining.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.empty())  // 0
+/// ```
 export fn empty() -> Bytes { bytesOf([]) }
 
 /// The bytes of an array of octets.
+///
+/// The way in from values a program computed itself, as opposed to `fromText`,
+/// which encodes.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.fromArray(&[1u8, 2u8]))  // 2
+/// ```
 export fn fromArray(octets: &Array[UInt8]) -> Bytes { bytesOf(*octets) }
 
 /// The UTF-8 encoding of text. This direction cannot fail.
+///
+/// Every text value has a UTF-8 encoding, so there is no failure to report. The
+/// reverse direction can fail, which is why `toText` answers a `Result`.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.fromText("hi"))  // 2
+/// ```
 export fn fromText(text: Str) -> Bytes { text.toBytes() }
 
 /// The text a sequence encodes, or the reason it is not text.
-/// The position carried is the sequence's length rather than the offending
-/// byte: the runtime reports only that decoding failed, and inventing a
-/// position it did not supply would be worse than naming none.
+///
+/// The position carried is the sequence's length rather than the offending byte:
+/// the runtime reports only that decoding failed, and inventing a position it did
+/// not supply would be worse than naming none.
+///
+/// Invalid bytes are reported rather than replaced. A substituted character would
+/// make a corrupt sequence look like readable text.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.toText(&Bytes.fromText("hi"))  // Ok("hi")
+/// ```
 export fn toText(source: &Bytes) -> Result[Str, BytesError] {
   Option.okOr(source.toText(), NotText(source.length()))
 }
 
 /// The octets of a sequence, one value per byte.
-/// This is the operation that costs a value per byte, and it is named so a
-/// reader can see it. Walking a sequence with `at` costs nothing extra.
+///
+/// This is the operation that costs a value per byte, and it is named so a reader
+/// can see it. Walking a sequence with `at` costs nothing extra.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.toArray(&Bytes.fromArray(&[1u8, 2u8]))  // [1u8, 2u8]
+/// ```
 export fn toArray(source: &Bytes) -> Array[UInt8] { source.toArray() }
 
 /// How many bytes a sequence holds.
+///
+/// Bytes, not characters: text encoded as UTF-8 may be longer than its character
+/// count.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.fromText("é"))  // 2
+/// ```
 export fn length(source: &Bytes) -> Int { source.length() }
 
 /// Whether a sequence holds nothing.
+///
+/// Asks directly rather than comparing `length` against nought.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.isEmpty(&Bytes.empty())  // true
+/// ```
 export fn isEmpty(source: &Bytes) -> Bool { source.isEmpty() }
 
 /// The byte at a position, or nothing when the position is outside.
+///
+/// The bounds-checked read, and the way to walk a sequence without paying for
+/// `toArray`.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.at(&Bytes.fromArray(&[7u8]), 0)  // Some(7u8)
+/// Bytes.at(&Bytes.fromArray(&[7u8]), 9)  // None
+/// ```
 export fn at(source: &Bytes, index: Int) -> Option[UInt8] { source.at(index) }
 
 /// The stretch between two positions, sharing storage with its source.
+///
+/// Sharing rather than copying, so taking a frame apart costs nothing per piece.
+/// Excluding the upper position means neighbouring slices neither overlap nor skip
+/// a byte.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.slice(&frame, 2, 6))  // 4
+/// ```
 export fn slice(source: &Bytes, from: Int, to: Int) -> Bytes { source.slice(from, to) }
 
 /// The first bytes of a sequence, sharing storage with it.
+///
+/// A count past the end takes everything rather than failing.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.take(&frame, 4))  // 4, or less when frame is shorter
+/// ```
 export fn take(source: &Bytes, count: Int) -> Bytes { source.take(count) }
 
 /// Everything after the first bytes, sharing storage with the source.
+///
+/// The complement of `take` at the same count, and equally free of copying.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.drop(&frame, 4))
+/// ```
 export fn drop(source: &Bytes, count: Int) -> Bytes { source.drop(count) }
 
 /// A sequence cut in two at a position, both halves sharing its storage.
+///
+/// The two halves rejoin to the original. Neither copies, which is what makes
+/// parsing a framed protocol cheap.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.splitAt(&frame, 4)  // (header, rest)
+/// ```
 export fn splitAt(source: &Bytes, index: Int) -> (Bytes, Bytes) {
   (source.take(index), source.drop(index))
 }
 
 /// Two sequences joined. This copies, and is named so a reader can see it.
+///
+/// Joining many sequences one pair at a time copies the growing left side each
+/// round; `join` copies once.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.concat(&a, &b))  // the two lengths added
+/// ```
 export fn concat(left: &Bytes, right: &Bytes) -> Bytes { left.concat(*right) }
 
 /// Every sequence joined in order, copying once rather than once per join.
+///
+/// The form to reach for when the pieces are already gathered — assembling a
+/// message from its parts, for instance.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.join(&[header, body, trailer])
+/// ```
 export fn join(parts: &Array[Bytes]) -> Bytes {
   var octets: Array[UInt8] = []
   for part in parts {
@@ -71,6 +195,14 @@ export fn join(parts: &Array[Bytes]) -> Bytes {
 }
 
 /// A sequence repeated, or nothing repeated when the count is not positive.
+///
+/// The usual way to build padding or a fill pattern.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.repeat(&Bytes.fromArray(&[0u8]), 4))  // 4
+/// ```
 export fn repeat(source: &Bytes, count: Int) -> Bytes {
   var parts: Array[Bytes] = []
   var made = 0
@@ -82,22 +214,63 @@ export fn repeat(source: &Bytes, count: Int) -> Bytes {
 }
 
 /// Where a sub-sequence begins, or `-1` when it is absent.
+///
+/// The raw form, answering the runtime's own sentinel. `contains` is the form for
+/// callers that only need to know whether it is there.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.indexOf(&frame, &needle)  // -1 when absent
+/// ```
 export fn indexOf(source: &Bytes, needle: &Bytes) -> Int { source.indexOf(*needle) }
 
 /// Whether a sub-sequence appears anywhere.
+///
+/// Contiguous, as with any sub-sequence search.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.contains(&frame, &Bytes.fromText("\r\n"))
+/// ```
 export fn contains(source: &Bytes, needle: &Bytes) -> Bool { source.contains(*needle) }
 
 /// Whether a sequence begins with another.
+///
+/// The test behind recognising a magic number or a protocol prefix. An empty prefix
+/// matches everything.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.startsWith(&file, &Bytes.fromArray(&[0x89u8, 0x50u8]))  // a PNG header
+/// ```
 export fn startsWith(source: &Bytes, prefix: &Bytes) -> Bool { source.startsWith(*prefix) }
 
 /// Whether a sequence ends with another.
+///
+/// The mirror of `startsWith`.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.endsWith(&frame, &Bytes.fromText("\r\n"))
+/// ```
 export fn endsWith(source: &Bytes, suffix: &Bytes) -> Bool { source.endsWith(*suffix) }
 
 /// Two sequences combined bit by bit, as long as the shorter of them.
-/// The length is the shorter rather than the longer because the operation has
-/// no answer where only one sequence has a byte: padding the shorter with
-/// zeros would quietly copy the longer's tail into the result, which for a
-/// proof carried over a wire is the difference between checking it and not.
+///
+/// The length is the shorter rather than the longer because the operation has no
+/// answer where only one sequence has a byte: padding the shorter with zeros would
+/// quietly copy the longer's tail into the result, which for a proof carried over a
+/// wire is the difference between checking it and not.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.length(&Bytes.xorWith(&a, &b))  // the shorter of the two lengths
+/// ```
 export fn xorWith(left: &Bytes, right: &Bytes) -> Bytes {
   let size = if left.length() < right.length() { left.length() } else { right.length() }
   var octets: Array[UInt8] = []
@@ -112,11 +285,27 @@ export fn xorWith(left: &Bytes, right: &Bytes) -> Bytes {
 }
 
 /// A sequence in reverse. This copies.
+///
+/// Named with its cost visible, as the other copying operations here are.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.toArray(&Bytes.reverse(&Bytes.fromArray(&[1u8, 2u8])))  // [2u8, 1u8]
+/// ```
 export fn reverse(source: &Bytes) -> Bytes { source.reverse() }
 
 /// The pieces between each appearance of a separator.
-/// An empty separator would divide nothing, so it answers with the whole
-/// sequence rather than looping.
+///
+/// An empty separator would divide nothing, so it answers with the whole sequence
+/// rather than looping. Empty pieces between adjacent separators are kept, since a
+/// frame with an empty field still has that field.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.split(&line, &Bytes.fromText(","))
+/// ```
 export fn split(source: &Bytes, separator: &Bytes) -> Array[Bytes] {
   if separator.isEmpty() { [*source] } else {
     var pieces: Array[Bytes] = []
@@ -194,6 +383,20 @@ fn readLe(source: &Bytes, width: Int) -> Result[(UInt64, Bytes), BytesError] {
 }
 
 /// One byte, and the rest of the input.
+///
+/// The remainder is handed back rather than an offset kept by the caller, so a
+/// decoder threads what is left instead of counting how far it has come. Input that
+/// ended early is reported as its own cause, which a caller waiting for more can
+/// retry.
+///
+/// ## Examples
+///
+/// ```
+/// match Bytes.getU8(&frame) {
+///   case Ok((tag, rest)) => decodeBody(tag, &rest)
+///   case Err(problem) => report(problem)
+/// }
+/// ```
 export fn getU8(source: &Bytes) -> Result[(UInt8, Bytes), BytesError] {
   if let Some(octet) = source.at(0) {
     Ok((octet, source.drop(1)))
@@ -203,35 +406,76 @@ export fn getU8(source: &Bytes) -> Result[(UInt8, Bytes), BytesError] {
 }
 
 /// Two bytes as a number, most significant first, and the rest of the input.
+///
+/// Big-endian is network byte order, which is what most wire formats specify.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU16Be(&frame)  // Ok((length, rest))
+/// ```
 export fn getU16Be(source: &Bytes) -> Result[(UInt16, Bytes), BytesError] {
   let read = readBe(source, 2) ?
   narrow16(read)
 }
 
 /// Two bytes as a number, least significant first, and the rest of the input.
+///
+/// Little-endian, for formats that specify it — most file formats written by x86
+/// and ARM machines.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU16Le(&frame)  // Ok((value, rest))
+/// ```
 export fn getU16Le(source: &Bytes) -> Result[(UInt16, Bytes), BytesError] {
   let read = readLe(source, 2) ?
   narrow16(read)
 }
 
 /// Four bytes as a number, most significant first, and the rest of the input.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU32Be(&frame)  // Ok((value, rest))
+/// ```
 export fn getU32Be(source: &Bytes) -> Result[(UInt32, Bytes), BytesError] {
   let read = readBe(source, 4) ?
   narrow32(read)
 }
 
 /// Four bytes as a number, least significant first, and the rest of the input.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU32Le(&frame)  // Ok((value, rest))
+/// ```
 export fn getU32Le(source: &Bytes) -> Result[(UInt32, Bytes), BytesError] {
   let read = readLe(source, 4) ?
   narrow32(read)
 }
 
 /// Eight bytes as a number, most significant first, and the rest of the input.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU64Be(&frame)  // Ok((value, rest))
+/// ```
 export fn getU64Be(source: &Bytes) -> Result[(UInt64, Bytes), BytesError] {
   readBe(source, 8)
 }
 
 /// Eight bytes as a number, least significant first, and the rest of the input.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getU64Le(&frame)  // Ok((value, rest))
+/// ```
 export fn getU64Le(source: &Bytes) -> Result[(UInt64, Bytes), BytesError] {
   readLe(source, 8)
 }
@@ -252,7 +496,17 @@ fn narrow32(read: (UInt64, Bytes)) -> Result[(UInt32, Bytes), BytesError] {
   }
 }
 
-/// The next bytes as their own sequence, and the rest of the input.
+/// A fixed number of bytes, and the rest of the input.
+///
+/// The piece shares storage with the input rather than copying, so reading a large
+/// payload out of a frame costs nothing extra. Input shorter than the count is
+/// reported as ending early.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getBytes(&frame, 16)  // Ok((payload, rest))
+/// ```
 export fn getBytes(source: &Bytes, count: Int) -> Result[(Bytes, Bytes), BytesError] {
   if count < 0 || count > source.length() {
     Err(Truncated(count, source.length()))
@@ -261,7 +515,16 @@ export fn getBytes(source: &Bytes, count: Int) -> Result[(Bytes, Bytes), BytesEr
   }
 }
 
-/// The next bytes decoded as text, and the rest of the input.
+/// A fixed number of bytes as text, and the rest of the input.
+///
+/// `getBytes` followed by decoding, so it reports both an input that ended early
+/// and bytes that are not valid text — two causes a caller handles differently.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.getText(&frame, 4)  // Ok(("name", rest))
+/// ```
 export fn getText(source: &Bytes, count: Int) -> Result[(Str, Bytes), BytesError] {
   let read = getBytes(source, count) ?
   let text = toText(&read[0]) ?
@@ -280,25 +543,72 @@ fn spellBe(value: UInt64, width: Int) -> Array[UInt8] {
   octets
 }
 
-/// One byte written.
+/// One byte as a sequence.
+///
+/// The writing side of `getU8`. Build a message by joining these rather than by
+/// repeated `concat`.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.join(&[Bytes.putU8(1u8), Bytes.putU16Be(300u16)])
+/// ```
 export fn putU8(value: UInt8) -> Bytes { bytesOf([value]) }
 
-/// Two bytes written, most significant first.
+/// Two bytes spelling a number, most significant first.
+///
+/// The writing side of `getU16Be`, and network byte order.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU16Be(300u16)
+/// ```
 export fn putU16Be(value: UInt16) -> Bytes { bytesOf(spellBe(wide16(value), 2)) }
 
-/// Two bytes written, least significant first.
+/// Two bytes spelling a number, least significant first.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU16Le(300u16)
+/// ```
 export fn putU16Le(value: UInt16) -> Bytes { bytesOf(spellBe(wide16(value), 2)).reverse() }
 
-/// Four bytes written, most significant first.
+/// Four bytes spelling a number, most significant first.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU32Be(70000u32)
+/// ```
 export fn putU32Be(value: UInt32) -> Bytes { bytesOf(spellBe(wide32(value), 4)) }
 
-/// Four bytes written, least significant first.
+/// Four bytes spelling a number, least significant first.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU32Le(70000u32)
+/// ```
 export fn putU32Le(value: UInt32) -> Bytes { bytesOf(spellBe(wide32(value), 4)).reverse() }
 
-/// Eight bytes written, most significant first.
+/// Eight bytes spelling a number, most significant first.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU64Be(value)
+/// ```
 export fn putU64Be(value: UInt64) -> Bytes { bytesOf(spellBe(value, 8)) }
 
-/// Eight bytes written, least significant first.
+/// Eight bytes spelling a number, least significant first.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.putU64Le(value)
+/// ```
 export fn putU64Le(value: UInt64) -> Bytes { bytesOf(spellBe(value, 8)).reverse() }
 
 fn wide16(value: UInt16) -> UInt64 {
@@ -330,7 +640,16 @@ fn hexTable() -> Map[Char, Int] {
   table
 }
 
-/// A sequence written as lower-case hexadecimal, two digits a byte.
+/// A sequence written as lower-case hexadecimal, two digits per byte.
+///
+/// No prefix and no separator, so the text's length is exactly twice the sequence's.
+/// `decodeHex` reads it back.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.encodeHex(&Bytes.fromArray(&[255u8, 0u8]))  // "ff00"
+/// ```
 export fn encodeHex(source: &Bytes) -> Str {
   var out = ""
   for octet in source.toArray() {
@@ -344,9 +663,17 @@ fn narrowInt(octet: UInt8) -> Int {
   Option.unwrapOr(convertInteger[Int](octet), 0)
 }
 
-/// The bytes hexadecimal text spells, or why it spells none.
-/// An odd number of digits is a length error rather than a digit error: the
-/// digits may all be valid and the text still not name a whole number of bytes.
+/// A sequence read from hexadecimal text.
+///
+/// Accepts either case. Text of odd length, or holding a digit no alphabet has, is
+/// reported as its own cause rather than being partly decoded.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.decodeHex("ff00")  // Ok(two bytes)
+/// Bytes.decodeHex("fff")   // Err(...)
+/// ```
 export fn decodeHex(text: Str) -> Result[Bytes, BytesError] {
   if text.length() % 2 != 0 { Err(BadLength(text.length())) } else {
     var octets: Array[UInt8] = []
@@ -390,12 +717,28 @@ fn alphabetTable(alphabet: Str) -> Map[Char, Int] {
   table
 }
 
-/// A sequence written as base64, padded to a multiple of four characters.
+/// A sequence written as standard Base64, padded with `=`.
+///
+/// The alphabet ends in `+` and `/`, which are not safe in a URL; `encodeBase64Url`
+/// is the variant that is.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.encodeBase64(&Bytes.fromText("hi"))  // "aGk="
+/// ```
 export fn encodeBase64(source: &Bytes) -> Str { encodeWith(source, BASE64_DIGITS, true) }
 
-/// A sequence written as base64 in the alphabet a URL admits, unpadded.
-/// Padding is dropped because `=` is itself a character a URL escapes, which
-/// is the whole reason this alphabet exists.
+/// A sequence written as URL-safe Base64, without padding.
+///
+/// `-` and `_` replace `+` and `/`, and the padding is left off, so the text can sit
+/// in a path or a query without escaping.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.encodeBase64Url(&Bytes.fromText("hi"))  // "aGk"
+/// ```
 export fn encodeBase64Url(source: &Bytes) -> Str { encodeWith(source, BASE64_URL_DIGITS, false) }
 
 fn encodeWith(source: &Bytes, alphabet: Str, padded: Bool) -> Str {
@@ -425,12 +768,30 @@ fn encodeWith(source: &Bytes, alphabet: Str, padded: Bool) -> Str {
   out
 }
 
-/// The bytes base64 text spells, or why it spells none.
+/// A sequence read from standard Base64.
+///
+/// The inverse of `encodeBase64`. A digit outside the alphabet or a length that
+/// cannot be a valid encoding is reported rather than skipped.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.decodeBase64("aGk=")  // Ok(bytes of "hi")
+/// ```
 export fn decodeBase64(text: Str) -> Result[Bytes, BytesError] {
   decodeWith(text, BASE64_VALUES)
 }
 
-/// The bytes URL-alphabet base64 spells, padded or not.
+/// A sequence read from URL-safe Base64.
+///
+/// The inverse of `encodeBase64Url`, accepting the `-` and `_` alphabet and
+/// tolerating the absent padding.
+///
+/// ## Examples
+///
+/// ```
+/// Bytes.decodeBase64Url("aGk")  // Ok(bytes of "hi")
+/// ```
 export fn decodeBase64Url(text: Str) -> Result[Bytes, BytesError] {
   decodeWith(text, BASE64_URL_VALUES)
 }
