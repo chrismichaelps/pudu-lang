@@ -294,6 +294,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui.Layout` | 40 | declarative views and text, two-pass placement, accessibility semantics, tags, damage extents |
 | `Std.Ui.Screen` | 20 | routed press and key input, visible focus rings, state updates repainting only damage |
 | `Std.Ui.Text` | 21 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged glyph rectangles |
+| `Std.Audio` | 30 | exact 16-bit PCM bytes, frame-counted time, Q15 gain, saturating mix, bounded slices and WAV |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |

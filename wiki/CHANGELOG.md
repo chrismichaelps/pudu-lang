@@ -45,6 +45,10 @@ tags: [changelog]
 - Screens draw a one-pixel focus ring outside the focused control, recolorable with `focusRing`;
   focus moves damage only the rings left and reached, and every frame in the fixture matches a
   reference built without the screen. Screen now 20 assertions.
+- Added `Std.Audio`: interleaved 16-bit PCM held as little-endian bytes, frame-counted time converted
+  to exact fractions, Q15 gain rounding half away from zero, saturating mix, exact-length slices bounded
+  at 4,096 frames, and WAV encoding and bounded decoding with specific refusals. Encoding one second of
+  48 kHz stereo adds 0.02 s and decoding 0.03 s at -O2. 30 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

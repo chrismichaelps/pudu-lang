@@ -66,6 +66,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.
 - [[Std Ui Screen]] — state, view, and update driven by routed input with damage-only repaint.
 - [[Std Ui Text]] — an original bitmap face: measuring, wrapping, and drawing into the canvas.
+- [[Std Audio]] — exact 16-bit PCM, rational time, Q15 gain, saturating mix, and bounded WAV.
 - [[Std Mail]] — a message a program sends, which cannot carry more than it says.
 - [[Std Mail Smtp]] — native RFC 5321 client transport over streaming TCP with AUTH LOGIN/PLAIN and multi-line reply parsing.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.

@@ -51,15 +51,15 @@ order, hit testing, painting, and damage regions.
   damage; layout gained tags. Layout 33 and screen 16 assertions.
 - `a1d9181` — `Std.Ui.Text` original bitmap face, 21 assertions; canvas span search makes a
   400-character paragraph draw and render in 1.40 s (from 3.22 s).
-- Text views and focus rings — layout text leaves with extent-based damage (40 assertions) and visible
-  recolorable focus rings on screens (20 assertions).
+- `3567c73` — layout text leaves with extent-based damage (40 assertions) and visible recolorable
+  focus rings on screens (20 assertions).
+- Audio slice — `Std.Audio` exact byte-backed PCM, time, gain, mix, slices, and WAV (30 assertions).
 
 ## Exact next action
 
-Text entry and scrolling on `Std.Ui.Screen`, then profile the remaining second of rendering many small
-rectangles before claiming any interactive frame rate. After that, begin `Std.Audio`: PCM frames with
-explicit channel layout, rational sample time, pull-model render slices of bounded size, and a WAV
-encoder, all held to exact-sample fixtures. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
+A pull-model audio render graph over bounded slices in `Std.Audio`, then text entry and scrolling on
+`Std.Ui.Screen`, then `Std.Video` rational clocks and frame planes. Profile rendering many small
+rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
 the UI event slice. Keep every fixture as the semantic oracle for later optimization.
 
 ## Grill Log
