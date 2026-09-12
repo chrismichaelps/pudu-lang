@@ -3,12 +3,13 @@ module Service.Search
 import Std.List as List
 import Std.Option as Option
 import Domain.Entry as Domain
+import Domain.Search as Query
 
 export fn find(entries: &Array[Domain.Entry], query: Str, limit: Int) -> Array[Domain.Hit] {
-  let wanted = query.trim().toLower()
-  if wanted.isEmpty() || limit <= 0 { return [] }
+  let wanted = Query.parse(query)
+  if !Query.hasIntent(&wanted) || limit <= 0 { return [] }
   let groups = List.map(entries, fn(entry: Domain.Entry) -> Array[Domain.Hit] {
-      let score = scoreOf(&entry, wanted)
+      let score = scoreOf(&entry, &wanted)
       Option.toArray(if score > 0 { Some(Domain.Hit{entry: entry, score: score}) } else { None })
     })
   let found = List.flatten(&groups)
@@ -20,19 +21,85 @@ export fn find(entries: &Array[Domain.Entry], query: Str, limit: Int) -> Array[D
   List.take(&ordered, limit)
 }
 
-fn scoreOf(entry: &Domain.Entry, query: Str) -> Int {
+fn scoreOf(entry: &Domain.Entry, query: &Query.Query) -> Int {
   let name = entry.name.toLower()
   let moduleName = entry.moduleName.toLower()
+  let qualified = Domain.qualifiedName(entry).toLower()
   let signature = entry.signature.toLower()
-  if name == query { return 1000 }
-  if Domain.qualifiedName(entry).toLower() == query { return 980 }
-  if name.startsWith(query) { return 850 }
-  if name.contains(query) { return 700 }
-  if moduleName == query { return 650 }
-  if moduleName.contains(query) { return 500 }
-  if signature.contains(query) { return 300 }
+  if !moduleAllowed(moduleName, query.moduleFilter) { return 0 }
+  if !kindAllowed(entry, query.kindFilter) { return 0 }
+
+  let termPoints = termsScore(entry, &query.terms)
+  if query.terms.length() > 0 && termPoints == 0 { return 0 }
+  let typeScore = typeScoreOf(signature, query.typeShape)
+  if query.typeShape != None && typeScore == 0 { return 0 }
+
+  let written = query.terms.join(" ")
+  if query.exact && query.terms.length() > 0 && name != written && qualified != written {
+    return 0
+  }
+  if query.typeShape == None && query.terms.length() == 1
+    && Query.moduleLeaf(entry.moduleName) == query.terms[0] {
+    return 1400 + termPoints
+  }
+  if qualified == written { return 1320 + typeScore }
+  if name == written { return 1280 + typeScore }
+  if query.terms.length() == 1 && name.startsWith(written) { return 1100 + typeScore }
+  if termPoints > 0 { return 700 + termPoints + typeScore }
+  if typeScore > 0 { return typeScore }
+  if query.moduleFilter != None || query.kindFilter != None { return 200 }
+  0
+}
+
+fn moduleAllowed(moduleName: Str, filter: Option[Str]) -> Bool {
+  match filter {
+    case None => true
+    case Some(wanted) => moduleName == wanted || Query.moduleLeaf(moduleName) == wanted
+  }
+}
+
+fn kindAllowed(entry: &Domain.Entry, filter: Option[Str]) -> Bool {
+  match filter {
+    case None => true
+    case Some(wanted) => Domain.category(entry).toLower() == wanted
+  }
+}
+
+fn termsScore(entry: &Domain.Entry, terms: &Array[Str]) -> Int {
+  var score = 0
+  for term in terms {
+    let matched = termScore(entry, term)
+    if matched == 0 { return 0 }
+    score = score + matched
+  }
+  score
+}
+
+fn termScore(entry: &Domain.Entry, term: Str) -> Int {
+  let name = entry.name.toLower()
+  let qualified = Domain.qualifiedName(entry).toLower()
+  let moduleName = entry.moduleName.toLower()
+  if name == term { return 180 }
+  if qualified == term { return 175 }
+  if name.startsWith(term) { return 150 }
+  if name.contains(term) { return 120 }
+  if Query.moduleLeaf(entry.moduleName) == term { return 110 }
+  if moduleName.contains(term) { return 90 }
+  if entry.signature.toLower().contains(term) { return 60 }
   for line in entry.documentation {
-    if line.toLower().contains(query) { return 100 }
+    if line.toLower().contains(term) { return 30 }
   }
   0
+}
+
+fn typeScoreOf(signature: Str, query: Option[Str]) -> Int {
+  match query {
+    case None => 0
+    case Some(wanted) => {
+      let available = Query.normalizeType(signature)
+      if available == wanted { 1000 }
+        else if available.contains(wanted) { 850 }
+        else { 0 }
+    }
+  }
 }

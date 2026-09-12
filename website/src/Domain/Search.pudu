@@ -1,0 +1,107 @@
+module Domain.Search
+
+import Std.Char as Char
+import Std.Text as Text
+
+export type Query = {
+  terms: Array[Str],
+  typeShape: Option[Str],
+  moduleFilter: Option[Str],
+  kindFilter: Option[Str],
+  exact: Bool
+}
+
+/// Parse names, Pudu type shapes, and the closed search-filter vocabulary.
+export fn parse(raw: Str) -> Query {
+  var free: Array[Str] = []
+  var moduleFilter: Option[Str] = None
+  var kindFilter: Option[Str] = None
+  var exact = false
+  for word in Text.words(raw) {
+    if word.startsWith("module:") && word.length() > 7 {
+      moduleFilter = Some(word.drop(7).toLower())
+    } else if word.startsWith("kind:") && validKind(word.drop(5)) {
+      kindFilter = Some(word.drop(5).toLower())
+    } else if word == "is:exact" {
+      exact = true
+    } else {
+      free = free.push(word)
+    }
+  }
+
+  let expression = free.join(" ").trim()
+  let marker = expression.indexOf("::")
+  if marker >= 0 {
+    Query {
+      terms: loweredWords(expression.slice(0, marker)),
+      typeShape: shapeOf(expression.drop(marker + 2)),
+      moduleFilter: moduleFilter,
+      kindFilter: kindFilter,
+      exact: exact
+    }
+  } else if expression.contains("->") {
+    Query {
+      terms: [],
+      typeShape: shapeOf(expression),
+      moduleFilter: moduleFilter,
+      kindFilter: kindFilter,
+      exact: exact
+    }
+  } else {
+    Query {
+      terms: loweredWords(expression),
+      typeShape: None,
+      moduleFilter: moduleFilter,
+      kindFilter: kindFilter,
+      exact: exact
+    }
+  }
+}
+
+/// Whether a parsed query can deliberately select at least one declaration.
+export fn hasIntent(query: &Query) -> Bool {
+  query.terms.length() > 0 || query.typeShape != None || query.moduleFilter != None
+    || query.kindFilter != None
+}
+
+/// Normalize only search-insignificant type spelling and generic placeholder names.
+export fn normalizeType(value: Str) -> Str {
+  let compact = value.replace(" ", "").replace("\t", "").replace("\n", "").replace("\r", "")
+  var normalized = ""
+  var token = ""
+  for character in compact {
+    if Char.isIdentifier(character) {
+      token = token + Char.toText(character)
+    } else {
+      normalized = normalized + normalizedToken(token) + Char.toText(character)
+      token = ""
+    }
+  }
+  (normalized + normalizedToken(token)).toLower()
+}
+
+/// The final component of a module name, compared without case.
+export fn moduleLeaf(moduleName: Str) -> Str {
+  let pieces = moduleName.split(".")
+  if pieces.length() == 0 { "" } else { pieces[pieces.length() - 1].toLower() }
+}
+
+fn loweredWords(value: Str) -> Array[Str] {
+  var lowered: Array[Str] = []
+  for word in Text.words(value) { lowered = lowered.push(word.toLower()) }
+  lowered
+}
+
+fn shapeOf(value: Str) -> Option[Str] {
+  let normalized = normalizeType(value)
+  if normalized.isEmpty() { None } else { Some(normalized) }
+}
+
+fn normalizedToken(token: Str) -> Str {
+  if token.length() == 1 && Char.isLetter(token[0]) { "_" } else { token }
+}
+
+fn validKind(value: Str) -> Bool {
+  let lowered = value.toLower()
+  lowered == "fn" || lowered == "type" || lowered == "trait" || lowered == "const"
+}

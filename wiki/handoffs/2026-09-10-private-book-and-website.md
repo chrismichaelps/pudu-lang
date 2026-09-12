@@ -19,6 +19,9 @@ Vercel output builder, responsive navigation and home surface, website regressio
 vault mirrors. The objective is to keep
 the deployed handler entirely in Pudu while removing catalogue work that is useful only to static
 documentation generation from each serverless cold start.
+After PR #230 reached production, the role transitioned to Search and Documentation Architect on
+`feature/228-search-docs`. This role owns the query model, ranking service, result-page information
+architecture, public `Std` documentation gate, bounded comment batches, and their vault mirrors.
 Forensic Guardian validation is represented by the focused route suite, browser and TTFB latency checks,
 example audit, full repository test suite, and live production verification. Feature branch
 `feature/228-pudu-website` was merged into `dev` via PR #228.
