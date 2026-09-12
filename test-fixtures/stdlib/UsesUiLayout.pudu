@@ -214,5 +214,35 @@ export fn main() -> Int {
     }
   }
 
+  let tagged = Layout.row([
+      Layout.box().wide(2).means(Layout.Button).named("Delete").tagged("delete-1"),
+      Layout.box().wide(2).means(Layout.Button).named("Delete").tagged("delete-2"),
+      Layout.box().wide(2).means(Layout.Label).named("Status")
+    ])
+  if let Ok(placed) = Layout.place(&tagged, tenByTen) {
+    if Layout.nodeTagged(&placed, "delete-2") == Some(2) &&
+    Layout.tagOf(&placed, 3) == Some("Status") && Layout.tagOf(&placed, 9) == None &&
+    Layout.nodeTagged(&placed, "Status") == None
+    {
+      held = held + 1
+    }
+    if Layout.isControlAt(&placed, 1) && !Layout.isControlAt(&placed, 3) &&
+    !Layout.isControlAt(&placed, -1)
+    {
+      held = held + 1
+    }
+  }
+  let duplicated = Layout.row([
+      Layout.box().means(Layout.Button).named("Delete"),
+      Layout.box().means(Layout.Toggle).named("Delete")
+    ])
+  if let Err(Layout.DuplicateTag(2)) = Layout.place(&duplicated, tenByTen) { held = held + 1 }
+
+  if let Ok(dim) = Layout.place(&Layout.column([Layout.box().tall(3).filled(red)]), tenByTen) {
+    if let Ok(lit) = Layout.place(&Layout.column([Layout.box().tall(3).filled(blue)]), tenByTen) {
+      if Layout.damage(&dim, &lit) == [Canvas.rect(0, 0, 10, 3)] { held = held + 1 }
+    }
+  }
+
   held
 }

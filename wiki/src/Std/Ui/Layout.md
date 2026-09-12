@@ -56,9 +56,15 @@ and placement refuses a tree that omits one. The semantics tree is derived from 
 an assistive client reports is the frame that was painted. Decoration nodes are transparent to both
 the semantics tree (a meaningful node's parent is its nearest meaningful ancestor) and pointing.
 
+**A control's tag is its identity.** Every node carries a tag that defaults to its name; `tagged`
+separates identity from the spoken name, so two "Delete" buttons can differ. Placement refuses two
+controls with one tag (`DuplicateTag`), which is what lets [[Std Ui Screen]] name an event's source
+by tag alone. `nodeTagged`, `tagOf`, and `isControlAt` read identity back from a layout.
+
 **Damage is data.** A node that changed frame or fill damages where it was and where it is if it
-paints; a change of structure or viewport damages the whole viewport. More than sixteen regions merge
-into their bounding rectangle. Repainting the damage of an earlier surface equals a full render of the
+paints; a region identical to the one just recorded is recorded once, so a recolored node damages its
+frame a single time. A change of structure or viewport damages the whole viewport. More than sixteen
+regions merge into their bounding rectangle. Repainting the damage of an earlier surface equals a full render of the
 later layout, which the fixture checks byte for byte.
 
 ## Measured

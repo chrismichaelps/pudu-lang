@@ -28,6 +28,11 @@ tags: [changelog]
   unnamed meaningful roles, focus order, hit testing, painting into the canvas, and damage regions
   whose repaint equals a full render. 29 assertions; a 1,001-node screen places in about 0.18 s and
   paints plus renders in about 0.56 s at -O2, still outside an interactive frame budget.
+- Added `Std.Ui.Screen`: a running screen as state, view function, update function, and frame.
+  Presses route through hit testing to controls, `Next`/`Previous`/`Activate`/`Dismiss` drive focus
+  and activation, events name controls by tag, and each update repaints only layout damage with bytes
+  equal to a fresh start. Layout gained tags with duplicate-tag refusal and single damage for a
+  recolored node. 16 screen assertions; layout now 33.
 
 ## 2026-09-12 — Adapter-free production website
 

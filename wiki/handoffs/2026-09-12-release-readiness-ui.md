@@ -45,15 +45,15 @@ order, hit testing, painting, and damage regions.
 
 - `bc50f06` — exact-pixel canvas and the corrected readiness audit.
 - `fd6cfd3` — band-and-span rasterizer and repaint; 512×512 frame 4.35 s → 0.10 s at -O2.
-- Layout slice — 29 assertions; 1,001 nodes place in about 0.18 s and paint plus render in about
+- `a1cb1c5` — declarative layout; 1,001 nodes place in about 0.18 s and paint plus render in about
   0.56 s at -O2, which is interpreter cost and not yet an interactive frame.
+- Screen slice — `Std.Ui.Screen` routes presses and action keys to tagged controls and repaints only
+  damage; layout gained tags. Layout 33 and screen 16 assertions.
 
 ## Exact next action
 
-Add event routing and state-driven updates to layout: a screen as state plus a view function, input
-events resolved through `hitTest` and `focusOrder`, and each update producing `damage` for `repaint`.
-Then text measurement and a Pudu-native glyph rasterizer, since labels are the next thing every
-application needs. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
+Text measurement and a Pudu-native glyph rasterizer, since labels are the next thing every
+application needs; then a visible focus indicator, text entry, and scrolling on `Std.Ui.Screen`. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
 the UI event slice. Keep every fixture as the semantic oracle for later optimization.
 
 ## Grill Log

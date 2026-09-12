@@ -1,0 +1,218 @@
+module Std.Ui.Screen
+
+import Std.Option as Option
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Layout as Layout
+
+/// A key a screen answers without text entry.
+///
+/// Named by what it does rather than by the keycap, so a platform presenter
+/// maps its own keys once and the screen never sees a keyboard layout.
+export type Key
+  = Next
+  | Previous
+  | Activate
+  | Dismiss
+
+/// Something a person did.
+export type Input
+  = Pressed(Canvas.Point)
+  | KeyPressed(Key)
+
+/// What an update is told happened.
+///
+/// A control is named by its tag, the identity placement already requires to
+/// be unique among controls, so an event cannot be ambiguous about its source.
+export type Event
+  = Activated(Str)
+  | Dismissed
+
+/// Why a screen could not be shown.
+export type ScreenError
+  = Placement(Layout.LayoutError)
+  | Drawing(Canvas.CanvasError)
+
+/// A running screen: what is known, how it is shown and changed, and the frame
+/// it last produced.
+///
+/// The frame is held as a value: its layout, its display list, its pixels, the
+/// regions that changed to produce them, and the tag holding focus.
+export type Screen[S] = {
+  state: S,
+  view: fn(S) -> Layout.View,
+  update: fn(S, Event) -> S,
+  background: Canvas.Color,
+  layout: Layout.Layout,
+  surface: Canvas.Surface,
+  focus: Option[Str],
+  damaged: Array[Canvas.Rect]
+}
+
+/// A screen showing its first frame.
+///
+/// The whole viewport is damaged, because nothing was shown before it.
+export fn start[S](
+  state: S,
+  view: fn(S) -> Layout.View,
+  update: fn(S, Event) -> S,
+  viewport: Canvas.Size,
+  background: Canvas.Color
+) -> Result[Screen[S], ScreenError] {
+  let placed = placedView(view, state, viewport) ?
+  let painted = paintedLayout(&placed, background) ?
+  let surface = match Canvas.render(&painted) {
+    case Ok(value) => value
+    case Err(reason) => { return Err(Drawing(reason)) }
+  }
+  Ok(Screen {
+      state: state,
+      view: view,
+      update: update,
+      background: background,
+      layout: placed,
+      surface: surface,
+      focus: None,
+      damaged: [Canvas.rect(0, 0, viewport.width, viewport.height)]
+    })
+}
+
+/// The screen after one input.
+///
+/// A press activates the frontmost control under it and moves focus there; a
+/// press on anything else changes nothing. `Next` and `Previous` move focus
+/// through the controls in reading order and wrap. `Activate` activates the
+/// focused control. An input that produces no event returns the same frame
+/// with no damage.
+export fn handle[S](target: &Screen[S], input: Input) -> Result[Screen[S], ScreenError] {
+  match input {
+    case Pressed(location) => pressed(target, location)
+    case KeyPressed(Next) => Ok(Screen{..*target, focus: stepped(target, 1), damaged: []})
+    case KeyPressed(Previous) => Ok(Screen{..*target, focus: stepped(target, -1), damaged: []})
+    case KeyPressed(Activate) => activated(target)
+    case KeyPressed(Dismiss) => updated(target, Dismissed, target.focus)
+  }
+}
+
+/// The screen after several inputs, in order.
+///
+/// The damage is every region any of the inputs changed, in order.
+export fn handleAll[S](
+  target: &Screen[S],
+  inputs: &Array[Input]
+) -> Result[Screen[S], ScreenError] {
+  var held = Screen{..*target, damaged: []}
+  var damaged: Array[Canvas.Rect] = []
+  for input in inputs {
+    held = handle(&held, input) ?
+    for region in held.damaged { damaged = damaged.push(region) }
+  }
+  Ok(Screen{..held, damaged: damaged})
+}
+
+/// What the screen currently knows.
+export fn stateOf[S](target: &Screen[S]) -> S { target.state }
+
+/// The pixels of the current frame.
+export fn surfaceOf[S](target: &Screen[S]) -> Canvas.Surface { target.surface }
+
+/// The placement of the current frame.
+export fn layoutOf[S](target: &Screen[S]) -> Layout.Layout { target.layout }
+
+/// The regions that changed to produce the current frame.
+export fn damagedOf[S](target: &Screen[S]) -> Array[Canvas.Rect] { target.damaged }
+
+/// The tag of the focused control, if any.
+export fn focusOf[S](target: &Screen[S]) -> Option[Str] { target.focus }
+
+fn pressed[S](target: &Screen[S], location: Canvas.Point) -> Result[Screen[S], ScreenError] {
+  if let Some(node) = Layout.hitTest(&target.layout, location) {
+    if Layout.isControlAt(&target.layout, node) {
+      if let Some(tag) = Layout.tagOf(&target.layout, node) {
+        return updated(target, Activated(tag), Some(tag))
+      }
+    }
+  }
+  Ok(Screen{..*target, damaged: []})
+}
+
+fn activated[S](target: &Screen[S]) -> Result[Screen[S], ScreenError] {
+  if let Some(tag) = target.focus {
+    updated(target, Activated(tag), target.focus)
+  } else {
+    Ok(Screen{..*target, damaged: []})
+  }
+}
+
+fn stepped[S](target: &Screen[S], direction: Int) -> Option[Str] {
+  let order = Layout.focusOrder(&target.layout)
+  let count = order.length()
+  if count == 0 {
+    None
+  } else {
+    var current = -1
+    if let Some(tag) = target.focus {
+      var index = 0
+      while index < count {
+        if Layout.tagOf(&target.layout, order[index]) == Some(tag) { current = index }
+        index = index + 1
+      }
+    }
+    let next = if current < 0 {
+      if direction > 0 { 0 } else { count - 1 }
+    } else {
+      (current + direction + count) % count
+    }
+    Layout.tagOf(&target.layout, order[next])
+  }
+}
+
+fn updated[S](
+  target: &Screen[S],
+  event: Event,
+  focus: Option[Str]
+) -> Result[Screen[S], ScreenError] {
+  let state = (target.update)(target.state, event)
+  let placed = placedView(target.view, state, target.layout.viewport) ?
+  let painted = paintedLayout(&placed, target.background) ?
+  let regions = Layout.damage(&target.layout, &placed)
+  let surface = match Canvas.repaint(&painted, &target.surface, &regions) {
+    case Ok(value) => value
+    case Err(reason) => { return Err(Drawing(reason)) }
+  }
+  let kept = if let Some(tag) = focus {
+    if Option.isSome(&Layout.nodeTagged(&placed, tag)) { focus } else { None }
+  } else {
+    None
+  }
+  Ok(Screen {
+      ..*target,
+      state: state,
+      layout: placed,
+      surface: surface,
+      focus: kept,
+      damaged: regions
+    })
+}
+
+fn placedView[S](
+  view: fn(S) -> Layout.View,
+  state: S,
+  viewport: Canvas.Size
+) -> Result[Layout.Layout, ScreenError] {
+  match Layout.place(&view(state), viewport) {
+    case Ok(value) => Ok(value)
+    case Err(reason) => Err(Placement(reason))
+  }
+}
+
+fn paintedLayout(placed: &Layout.Layout, background: Canvas.Color) -> Result[Canvas.Canvas, ScreenError] {
+  let blank = match Canvas.canvas(placed.viewport.width, placed.viewport.height, background) {
+    case Ok(value) => value
+    case Err(reason) => { return Err(Drawing(reason)) }
+  }
+  match Layout.paint(placed, &blank) {
+    case Ok(value) => Ok(value)
+    case Err(Layout.Drawing(reason)) => Err(Drawing(reason))
+    case Err(reason) => Err(Placement(reason))
+  }
+}

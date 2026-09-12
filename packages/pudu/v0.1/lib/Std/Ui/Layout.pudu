@@ -4,6 +4,7 @@ import Std.List as List
 import Std.Math as Math
 import Std.Num {Integer}
 import Std.Option as Option
+import Std.Set as Set
 import Std.Ui.Canvas as Canvas
 
 /// Which way a stack places its children.
@@ -64,7 +65,8 @@ export type View = {
   alignment: Alignment,
   fill: Option[Canvas.Color],
   role: Role,
-  name: Str
+  name: Str,
+  tag: Str
 }
 
 /// One node after placement, in reading and painting order.
@@ -74,7 +76,8 @@ export type Placed = {
   depth: Int,
   fill: Option[Canvas.Color],
   role: Role,
-  name: Str
+  name: Str,
+  tag: Str
 }
 
 /// A placed screen: every node's frame, flat, in pre-order.
@@ -105,6 +108,7 @@ export type LayoutError
   | DepthBudgetExceeded(Int)
   | LeafWithChildren(Int)
   | UnnamedRole(Int)
+  | DuplicateTag(Int)
   | ViewportMismatch(Int, Int)
   | Drawing(Canvas.CanvasError)
 
@@ -140,7 +144,8 @@ export fn box() -> View {
     alignment: Stretch,
     fill: None,
     role: Decoration,
-    name: ""
+    name: "",
+    tag: ""
   }
 }
 
@@ -184,6 +189,7 @@ export trait Composing {
   fn filled(self: &Self, color: Canvas.Color) -> Self
   fn means(self: &Self, role: Role) -> Self
   fn named(self: &Self, name: Str) -> Self
+  fn tagged(self: &Self, tag: Str) -> Self
 }
 
 impl Composing for View {
@@ -225,6 +231,10 @@ impl Composing for View {
 
   /// The same view with an accessible name.
   fn named(self: &Self, name: Str) -> Self { View{..*self, name: name} }
+
+  /// The same view with the identity its events carry, when two controls
+  /// share an accessible name.
+  fn tagged(self: &Self, tag: Str) -> Self { View{..*self, tag: tag} }
 }
 
 /// Place a view into a viewport with default node and depth budgets.
@@ -257,6 +267,7 @@ export fn placeWithin(
     let measures = measured(root, 0, &limits, []) ?
     let whole = Canvas.rect(0, 0, viewport.width, viewport.height)
     let nodes = arranged(root, whole, &measures, 0, -1, 0, [])
+    distinctControls(&nodes) ?
     Ok(Layout{viewport: viewport, nodes: nodes})
   }
 }
@@ -278,6 +289,28 @@ export fn nodeNamed(target: &Layout, name: Str) -> Option[Int] {
     index = index + 1
   }
   found
+}
+
+/// The control carrying a tag, the identity its events are named by.
+export fn nodeTagged(target: &Layout, tag: Str) -> Option[Int] {
+  var index = 0
+  var found = None
+  while index < target.nodes.length() && Option.isNone(&found) {
+    let placed = target.nodes[index]
+    if isControl(placed.role) && placed.tag == tag { found = Some(index) }
+    index = index + 1
+  }
+  found
+}
+
+/// The tag of a node, or nothing for a position outside the layout.
+export fn tagOf(target: &Layout, node: Int) -> Option[Str] {
+  if node < 0 || node >= target.nodes.length() { None } else { Some(target.nodes[node].tag) }
+}
+
+/// Whether a node is a control that takes focus and activation.
+export fn isControlAt(target: &Layout, node: Int) -> Bool {
+  node >= 0 && node < target.nodes.length() && isControl(target.nodes[node].role)
 }
 
 /// The accessibility tree: every node that is not decoration, in reading order.
@@ -416,6 +449,19 @@ fn measured(
   }
 }
 
+fn distinctControls(nodes: &Array[Placed]) -> Result[(), LayoutError] {
+  var seen: Set[Str] = Set.empty()
+  var index = 0
+  for placed in nodes {
+    if isControl(placed.role) {
+      if Set.contains(&seen, placed.tag) { return Err(DuplicateTag(index)) }
+      seen = Set.insert(&seen, placed.tag)
+    }
+    index = index + 1
+  }
+  Ok(())
+}
+
 fn admitted(view: &View, index: Int) -> Result[(), LayoutError] {
   let lengths = [
     Option.unwrapOr(view.width, 0),
@@ -455,7 +501,8 @@ fn arranged(
       depth: depth,
       fill: view.fill,
       role: view.role,
-      name: view.name
+      name: view.name,
+      tag: if view.tag.isEmpty() { view.name } else { view.tag }
     })
   let content = Canvas.rect(
     frame.x + view.padding.left,
@@ -586,7 +633,9 @@ fn withVisible(found: Array[Canvas.Rect], area: &Canvas.Rect, whole: &Canvas.Rec
   if left >= right || top >= bottom {
     found
   } else {
-    found.push(Canvas.rect(left, top, right - left, bottom - top))
+    let visible = Canvas.rect(left, top, right - left, bottom - top)
+    let count = found.length()
+    if count > 0 && found[count - 1] == visible { found } else { found.push(visible) }
   }
 }
 

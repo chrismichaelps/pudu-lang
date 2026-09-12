@@ -12,7 +12,11 @@ aliases: [Uses Ui Layout]
 
 ## Purpose and interface
 
-Executable Pudu fixture for declarative layout. Its `main` returns 29 held assertions.
+Executable Pudu fixture for declarative layout. Its `main` returns 33 held assertions.
+
+Identity: tags that separate two controls sharing a spoken name, lookup by tag that ignores
+non-controls, tag and control queries outside the layout, refusal of two controls with one tag, and a
+recolored node damaging its frame exactly once.
 
 Refusals: zero viewport, zero node budget, negative and oversized lengths, a forged leaf with
 children, an unnamed button, node and nesting budgets, and painting onto a canvas of another size.
