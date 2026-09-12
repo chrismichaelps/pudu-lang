@@ -510,52 +510,117 @@ export fn merge[T: Ord](left: &Array[T], right: &Array[T]) -> Array[T] {
 }
 
 /// Every element but the first, or an empty array when there is none.
+///
 /// Named for what it is rather than for the position it drops, because the partial
-/// version other languages call `tail` is not offered here at all.
+/// version other languages call `tail` is not offered here at all. Pairing it with
+/// `first` walks an array from the front without ever risking a failure.
+///
+/// ## Examples
+///
+/// ```
+/// List.rest(&[1, 2, 3])  // [2, 3]
+/// List.rest(&[1])        // []
+/// List.rest(&[])         // []
+/// ```
 export fn rest[T](items: &Array[T]) -> Array[T] {
   items.slice(1, items.length())
 }
 
 /// Every element but the last, or an empty array when there is none.
-/// The mirror of `rest`. Pairing it with `last` walks an array from the end the way
-/// `first` and `rest` walk it from the start.
+///
+/// The mirror of `rest`. Pairing it with `last` walks an array from the back the
+/// way `first` and `rest` walk it from the front.
+///
+/// ## Examples
+///
+/// ```
+/// List.initial(&[1, 2, 3])  // [1, 2]
+/// List.initial(&[])         // []
+/// ```
 export fn initial[T](items: &Array[T]) -> Array[T] {
   let size = items.length()
   if size == 0 { items.slice(0, 0) } else { items.slice(0, size - 1) }
 }
 
 /// The array split at a position: the first `at` elements, then the rest.
-/// The two parts always rejoin to the original. A position outside the array puts
-/// everything in one side and leaves the other empty.
+///
+/// The two parts always rejoin to the original, and a position outside the array
+/// puts everything in one side rather than failing. This is `take` and `drop` at
+/// the same position, named for the fact that both halves are wanted.
+///
+/// ## Examples
+///
+/// ```
+/// List.splitAt(&[1, 2, 3, 4], 2)  // ([1, 2], [3, 4])
+/// List.splitAt(&[1, 2], 99)       // ([1, 2], [])
+/// ```
 export fn splitAt[T](items: &Array[T], position: Int) -> (Array[T], Array[T]) {
   (take(items, position), drop(items, position))
 }
 
 /// The longest leading run of elements the predicate accepts.
-/// Stops at the first element it rejects and ignores everything after, so a later
-/// accepted element is not collected. `filter` is the function that does collect it.
+///
+/// Stops at the first element it rejects and ignores everything after it, so a
+/// later accepted element is not collected. That is the difference from `filter`,
+/// which does collect it.
+///
+/// ## Examples
+///
+/// ```
+/// List.takeWhile(&[1, 2, 9, 3], fn(n: Int) -> Bool => n < 5)  // [1, 2]
+/// List.filter(&[1, 2, 9, 3], fn(n: Int) -> Bool => n < 5)     // [1, 2, 3]
+/// ```
+///
+/// ## See also
+///
+/// - `dropWhile` — the elements `takeWhile` stopped before.
+/// - `span` — both parts in one pass.
 export fn takeWhile[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
   items.slice(0, prefixLength(items, holds))
 }
 
 /// Everything after the longest leading run the predicate accepts.
+///
 /// Stops discarding at the first rejected element, so the result begins with that
-/// element even if later ones would also be accepted.
+/// element even when later ones would also have been accepted. Useful for skipping
+/// a header or a run of padding.
+///
+/// ## Examples
+///
+/// ```
+/// List.dropWhile(&[1, 2, 9, 3], fn(n: Int) -> Bool => n < 5)  // [9, 3]
+/// ```
 export fn dropWhile[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
   items.slice(prefixLength(items, holds), items.length())
 }
 
 /// The longest leading run the predicate accepts, and the rest.
-/// `takeWhile` and `dropWhile` in one pass, which is worth having when the predicate
-/// is expensive or the boundary is wanted along with both sides.
+///
+/// `takeWhile` and `dropWhile` in one pass, which is worth having when the
+/// predicate is expensive or when both sides are needed. The two parts always
+/// rejoin to the original.
+///
+/// ## Examples
+///
+/// ```
+/// List.span(&[1, 2, 9, 3], fn(n: Int) -> Bool => n < 5)  // ([1, 2], [9, 3])
+/// ```
 export fn span[T](items: &Array[T], holds: fn(T) -> Bool) -> (Array[T], Array[T]) {
   let boundary = prefixLength(items, holds)
   (items.slice(0, boundary), items.slice(boundary, items.length()))
 }
 
 /// The longest leading run the predicate *rejects*, and the rest.
-/// This is `span` with the predicate negated: `span` keeps while it holds, and this
-/// one keeps until it does. Useful for cutting at the first delimiter.
+///
+/// This is `span` with the predicate negated: `span` keeps while it holds, and
+/// this one keeps until it does. It is the form to reach for when cutting at the
+/// first delimiter, since the delimiter starts the second part.
+///
+/// ## Examples
+///
+/// ```
+/// List.breakWhen(&[1, 2, 9, 3], fn(n: Int) -> Bool => n > 5)  // ([1, 2], [9, 3])
+/// ```
 export fn breakWhen[T](items: &Array[T], holds: fn(T) -> Bool) -> (Array[T], Array[T]) {
   var boundary = 0
   let size = items.length()
@@ -564,8 +629,16 @@ export fn breakWhen[T](items: &Array[T], holds: fn(T) -> Bool) -> (Array[T], Arr
 }
 
 /// The elements the predicate accepts, and the elements it rejects.
-/// Every element lands in exactly one side and the original order is kept in both, so
-/// rejoining the two sides recovers a permutation of the input.
+///
+/// Every element lands in exactly one side and the original order is kept in both,
+/// so the two sides rejoin to a permutation of the input. One pass, where calling
+/// `filter` twice with opposite predicates would be two.
+///
+/// ## Examples
+///
+/// ```
+/// List.partition(&[1, 2, 3, 4], fn(n: Int) -> Bool => n % 2 == 0)  // ([2, 4], [1, 3])
+/// ```
 export fn partition[T](items: &Array[T], keep: fn(T) -> Bool) -> (Array[T], Array[T]) {
   var kept = []
   var rejected = []
@@ -576,8 +649,17 @@ export fn partition[T](items: &Array[T], keep: fn(T) -> Bool) -> (Array[T], Arra
 }
 
 /// The first element the predicate accepts, or `None`.
-/// Stops at the first match. When the position matters rather than the value, ask
-/// `findIndex` instead of searching the result again.
+///
+/// Stops at the first match, so an early hit costs little. When the position
+/// matters rather than the value, ask `findIndex` instead of searching the result
+/// again.
+///
+/// ## Examples
+///
+/// ```
+/// List.find(&[1, 4, 6], fn(n: Int) -> Bool => n % 2 == 0)  // Some(4)
+/// List.find(&[1, 3], fn(n: Int) -> Bool => n % 2 == 0)     // None
+/// ```
 export fn find[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[T] {
   for item in items {
     if holds(item) { return Some(item) }
@@ -586,8 +668,16 @@ export fn find[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[T] {
 }
 
 /// The position of the first element the predicate accepts, or `None`.
-/// Stops at the first match. The position stays valid only against the array it was
-/// asked about, since any change may move the element.
+///
+/// Stops at the first match. The position is valid against the array that was
+/// asked about; anything that changes the array may move the element it named.
+///
+/// ## Examples
+///
+/// ```
+/// List.findIndex(&[1, 4, 6], fn(n: Int) -> Bool => n % 2 == 0)  // Some(1)
+/// List.findIndex(&[1, 3], fn(n: Int) -> Bool => n % 2 == 0)     // None
+/// ```
 export fn findIndex[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[Int] {
   var index = 0
   let size = items.length()
@@ -599,8 +689,15 @@ export fn findIndex[T](items: &Array[T], holds: fn(T) -> Bool) -> Option[Int] {
 }
 
 /// Every position whose element the predicate accepts.
-/// Walks the whole array and returns the positions in ascending order. An empty result
-/// means nothing matched.
+///
+/// Walks the whole array and answers the positions in ascending order. An empty
+/// result means nothing matched, which `findIndex` reports as `None`.
+///
+/// ## Examples
+///
+/// ```
+/// List.findIndices(&[1, 4, 6], fn(n: Int) -> Bool => n % 2 == 0)  // [1, 2]
+/// ```
 export fn findIndices[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[Int] {
   var out = []
   var index = 0
@@ -613,8 +710,16 @@ export fn findIndices[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[Int] {
 }
 
 /// Every position holding the given value.
-/// The plural of `indexOf`, in ascending order. Its length is what `count` reports for
-/// the same value.
+///
+/// The plural of `indexOf`, in ascending order. Its length is what `count` reports
+/// for the same value, so use `count` when only the number matters.
+///
+/// ## Examples
+///
+/// ```
+/// List.indicesOf(&[1, 2, 1], 1)  // [0, 2]
+/// List.indicesOf(&[1, 2], 9)     // []
+/// ```
 export fn indicesOf[T](items: &Array[T], wanted: T) -> Array[Int] {
   var out = []
   var index = 0
@@ -627,15 +732,34 @@ export fn indicesOf[T](items: &Array[T], wanted: T) -> Array[Int] {
 }
 
 /// Whether one array begins with another.
-/// An empty prefix is a prefix of everything, and a prefix longer than the array is a
-/// prefix of nothing.
+///
+/// An empty prefix is a prefix of everything, and a prefix longer than the array
+/// is a prefix of nothing. Both follow from comparing only as many elements as the
+/// prefix has.
+///
+/// ## Examples
+///
+/// ```
+/// List.isPrefixOf(&[1, 2], &[1, 2, 3])  // true
+/// List.isPrefixOf(&[], &[1])            // true
+/// List.isPrefixOf(&[1, 2, 3], &[1])     // false
+/// ```
 export fn isPrefixOf[T](prefix: &Array[T], items: &Array[T]) -> Bool {
   let size = prefix.length()
   if size > items.length() { false } else { items.slice(0, size) == *prefix }
 }
 
 /// Whether one array ends with another.
-/// The mirror of `isPrefixOf`, with the same answers for the empty and over-long cases.
+///
+/// The mirror of `isPrefixOf`, with the same answers for the empty and the
+/// over-long cases.
+///
+/// ## Examples
+///
+/// ```
+/// List.isSuffixOf(&[2, 3], &[1, 2, 3])  // true
+/// List.isSuffixOf(&[1, 2], &[1, 2, 3])  // false
+/// ```
 export fn isSuffixOf[T](suffix: &Array[T], items: &Array[T]) -> Bool {
   let size = suffix.length()
   let total = items.length()
@@ -643,8 +767,18 @@ export fn isSuffixOf[T](suffix: &Array[T], items: &Array[T]) -> Bool {
 }
 
 /// The remainder after a prefix, or `None` when the prefix is not there.
-/// The `None` separates "the prefix was absent" from "the remainder was empty", which
-/// a length check alone cannot tell apart.
+///
+/// The `None` separates "the prefix was absent" from "the remainder was empty",
+/// which a length check alone cannot tell apart. That distinction is the reason to
+/// reach for this rather than `isPrefixOf` followed by `drop`.
+///
+/// ## Examples
+///
+/// ```
+/// List.stripPrefix(&[1, 2], &[1, 2, 3])  // Some([3])
+/// List.stripPrefix(&[1, 2], &[1, 2])     // Some([])
+/// List.stripPrefix(&[9], &[1, 2])        // None
+/// ```
 export fn stripPrefix[T](prefix: &Array[T], items: &Array[T]) -> Option[Array[T]] {
   if isPrefixOf(prefix, items) {
     Some(items.slice(prefix.length(), items.length()))
@@ -654,8 +788,21 @@ export fn stripPrefix[T](prefix: &Array[T], items: &Array[T]) -> Option[Array[T]
 }
 
 /// A separator placed between every pair of elements.
-/// Nothing is added before the first element or after the last, so an array of one is
-/// returned unchanged and an empty array stays empty.
+///
+/// Nothing is added before the first element or after the last, so an array of one
+/// comes back unchanged and an empty array stays empty. This is the element-level
+/// form of joining text with a delimiter.
+///
+/// ## Examples
+///
+/// ```
+/// List.intersperse(&[1, 2, 3], 0)  // [1, 0, 2, 0, 3]
+/// List.intersperse(&[1], 0)        // [1]
+/// ```
+///
+/// ## See also
+///
+/// - `intercalate` — the same idea with whole arrays as the separator.
 export fn intersperse[T](items: &Array[T], separator: T) -> Array[T] {
   var out = []
   var index = 0
@@ -669,8 +816,17 @@ export fn intersperse[T](items: &Array[T], separator: T) -> Array[T] {
 }
 
 /// Every array joined end to end.
-/// Removes one level of nesting only. An array of arrays of arrays comes back as an
-/// array of arrays.
+///
+/// Removes one level of nesting only: an array of arrays of arrays comes back as
+/// an array of arrays. Joining all the pieces in one pass, rather than repeated
+/// `concat`, which recopies the growing left side each round.
+///
+/// ## Examples
+///
+/// ```
+/// List.flatten(&[[1, 2], [3], []])    // [1, 2, 3]
+/// List.flatten(&[[[1]], [[2]]])       // [[1], [2]], one level only
+/// ```
 export fn flatten[T](groups: &Array[Array[T]]) -> Array[T] {
   var out = []
   for members in groups { out = out.concat(members) }
@@ -678,8 +834,16 @@ export fn flatten[T](groups: &Array[Array[T]]) -> Array[T] {
 }
 
 /// Every array joined with a separator array between them.
-/// `intersperse` for whole arrays rather than single elements, and the operation behind
-/// joining text with a delimiter.
+///
+/// `intersperse` for whole arrays rather than single elements, and the operation
+/// behind joining text with a delimiter. The separator does not appear at either
+/// end.
+///
+/// ## Examples
+///
+/// ```
+/// List.intercalate(&[[1], [2], [3]], &[0])  // [1, 0, 2, 0, 3]
+/// ```
 export fn intercalate[T](groups: &Array[Array[T]], separator: &Array[T]) -> Array[T] {
   var out = []
   var index = 0
@@ -693,15 +857,33 @@ export fn intercalate[T](groups: &Array[Array[T]], separator: &Array[T]) -> Arra
 }
 
 /// Every element transformed into an array, and those arrays joined.
-/// The transform may answer an empty array to drop an element or a longer one to expand
-/// it, which is what `map` on its own cannot do.
+///
+/// The transform may answer an empty array to drop an element or a longer one to
+/// expand it, which is exactly what `map` on its own cannot do. `map` followed by
+/// `flatten`, without building the intermediate array of arrays.
+///
+/// ## Examples
+///
+/// ```
+/// List.flatMap(&[1, 2], fn(n: Int) -> Array[Int] => [n, n])  // [1, 1, 2, 2]
+/// List.flatMap(&[1, 2], fn(n: Int) -> Array[Int] => if n > 1 { [n] } else { [] })  // [2]
+/// ```
 export fn flatMap[A, B](items: &Array[A], transform: fn(A) -> Array[B]) -> Array[B] {
   flatten(&items.map(transform))
 }
 
 /// Runs of adjacent equal elements.
-/// Adjacent, not equal overall: an unsorted array gives several runs of the same value.
-/// Sort first when the intent is to gather every occurrence together.
+///
+/// Adjacent, not equal overall: an unsorted array yields several runs of the same
+/// value. Sort first when the intent is to gather every occurrence of a value
+/// together.
+///
+/// ## Examples
+///
+/// ```
+/// List.group(&[1, 1, 2, 1])            // [[1, 1], [2], [1]]
+/// List.group(&List.sorted(&[1, 1, 2, 1]))  // [[1, 1, 1], [2]]
+/// ```
 export fn group[T](items: &Array[T]) -> Array[Array[T]] {
   var out = []
   var current = []
@@ -718,8 +900,20 @@ export fn group[T](items: &Array[T]) -> Array[Array[T]] {
 }
 
 /// The elements with later duplicates removed, keeping the first of each.
-/// Order is the order of first appearance, not sorted order. Each element is compared
-/// against the ones already kept.
+///
+/// Order is order of first appearance, not sorted order, and each element is
+/// compared against the ones already kept. Sorting first is not required and would
+/// change the result's order.
+///
+/// ## Examples
+///
+/// ```
+/// List.distinct(&[3, 1, 3, 2, 1])  // [3, 1, 2]
+/// ```
+///
+/// ## See also
+///
+/// - `distinctBy` — sameness the type does not define itself.
 export fn distinct[T](items: &Array[T]) -> Array[T] {
   var out = []
   for item in items {
@@ -729,16 +923,32 @@ export fn distinct[T](items: &Array[T]) -> Array[T] {
 }
 
 /// The array with the first element equal to the given value removed.
-/// Only the first. An array that does not hold the value comes back unchanged rather
-/// than reporting that nothing was removed.
+///
+/// Only the first. An array that does not hold the value comes back unchanged
+/// rather than reporting that nothing was removed, so pair it with `contains` when
+/// the difference matters.
+///
+/// ## Examples
+///
+/// ```
+/// List.removeFirst(&[1, 2, 1], 1)  // [2, 1]
+/// List.removeFirst(&[1, 2], 9)     // [1, 2]
+/// ```
 export fn removeFirst[T](items: &Array[T], unwanted: T) -> Array[T] {
   let found = items.indexOf(unwanted)
   if found < 0 { items.slice(0, items.length()) } else { items.remove(found) }
 }
 
 /// Every element of the first array that is not in the second.
-/// Duplicates in the first array are each kept or each dropped together, since
-/// membership is decided per value rather than per occurrence.
+///
+/// Membership is decided per value rather than per occurrence, so duplicates in
+/// the first array are all kept or all dropped together.
+///
+/// ## Examples
+///
+/// ```
+/// List.difference(&[1, 2, 2, 3], &[2])  // [1, 3]
+/// ```
 export fn difference[T](left: &Array[T], right: &Array[T]) -> Array[T] {
   var out = []
   for item in left {
@@ -748,8 +958,16 @@ export fn difference[T](left: &Array[T], right: &Array[T]) -> Array[T] {
 }
 
 /// The first array followed by the elements of the second it does not already hold.
-/// Duplicates already inside the first array are left as they are; only the elements
-/// contributed by the second are filtered.
+///
+/// Duplicates already inside the first array are left as they are; only the
+/// elements contributed by the second are filtered. The result therefore starts
+/// with the first array unchanged.
+///
+/// ## Examples
+///
+/// ```
+/// List.union(&[1, 1, 2], &[2, 3])  // [1, 1, 2, 3]
+/// ```
 export fn union[T](left: &Array[T], right: &Array[T]) -> Array[T] {
   var out = distinct(left)
   for item in right {
@@ -759,8 +977,15 @@ export fn union[T](left: &Array[T], right: &Array[T]) -> Array[T] {
 }
 
 /// Every element of the first array that is also in the second.
-/// Order and duplicates follow the first array. The second array is consulted for
-/// membership only.
+///
+/// Order and duplicates follow the first array; the second is consulted for
+/// membership only. Swapping the arguments can therefore change the result.
+///
+/// ## Examples
+///
+/// ```
+/// List.intersection(&[1, 2, 2, 3], &[2, 3])  // [2, 2, 3]
+/// ```
 export fn intersection[T](left: &Array[T], right: &Array[T]) -> Array[T] {
   var out = []
   for item in left {
@@ -770,8 +995,20 @@ export fn intersection[T](left: &Array[T], right: &Array[T]) -> Array[T] {
 }
 
 /// Two arrays' corresponding elements paired, stopping at the shorter.
-/// Stopping rather than padding means no value has to be invented for the missing side,
-/// so the result is as long as the shorter input.
+///
+/// Stopping rather than padding means no value has to be invented for the missing
+/// side, so the result is exactly as long as the shorter input.
+///
+/// ## Examples
+///
+/// ```
+/// List.zip(&[1, 2, 3], &["a", "b"])  // [(1, "a"), (2, "b")]
+/// ```
+///
+/// ## See also
+///
+/// - `zipWith` — combine the pairs without building them.
+/// - `unzip` — separate the pairs back out.
 export fn zip[A, B](left: &Array[A], right: &Array[B]) -> Array[(A, B)] {
   var out = []
   var index = 0
@@ -784,8 +1021,15 @@ export fn zip[A, B](left: &Array[A], right: &Array[B]) -> Array[(A, B)] {
 }
 
 /// Two arrays' corresponding elements combined, stopping at the shorter.
-/// `zip` followed by `map` without building the pairs in between, which also lets the
-/// combine step name its two arguments.
+///
+/// `zip` followed by `map` without building the pairs in between, which also lets
+/// the combining step name its two arguments instead of taking them apart.
+///
+/// ## Examples
+///
+/// ```
+/// List.zipWith(&[1, 2], &[10, 20], fn(a: Int, b: Int) -> Int => a + b)  // [11, 22]
+/// ```
 export fn zipWith[A, B, C](left: &Array[A], right: &Array[B], combine: fn(A, B) -> C) -> Array[C] {
   var out = []
   var index = 0
@@ -798,8 +1042,15 @@ export fn zipWith[A, B, C](left: &Array[A], right: &Array[B], combine: fn(A, B) 
 }
 
 /// Every element paired with its position.
-/// Positions count from nought and match the array being enumerated, so they stay valid
-/// for `get` and `set` against that same array.
+///
+/// Positions count from nought and match the array being enumerated, so they stay
+/// valid for `get`, `set`, and `modify` against that same array.
+///
+/// ## Examples
+///
+/// ```
+/// List.enumerate(&["a", "b"])  // [(0, "a"), (1, "b")]
+/// ```
 export fn enumerate[T](items: &Array[T]) -> Array[(Int, T)] {
   var out = []
   var index = 0
@@ -812,8 +1063,15 @@ export fn enumerate[T](items: &Array[T]) -> Array[(Int, T)] {
 }
 
 /// Pairs separated back into two arrays.
-/// The inverse of `zip` for input that `zip` could have produced; both results have the
-/// length of the input.
+///
+/// The inverse of `zip` for input that `zip` could have produced. Both results
+/// have the length of the input, so no element is lost or invented.
+///
+/// ## Examples
+///
+/// ```
+/// List.unzip(&[(1, "a"), (2, "b")])  // ([1, 2], ["a", "b"])
+/// ```
 export fn unzip[A, B](pairs: &Array[(A, B)]) -> (Array[A], Array[B]) {
   var lefts = []
   var rights = []
@@ -825,8 +1083,17 @@ export fn unzip[A, B](pairs: &Array[(A, B)]) -> (Array[A], Array[B]) {
 }
 
 /// The value paired with the first matching key, or `None`.
+///
 /// An array of pairs searched left to right, which is worth using for a handful of
-/// entries. A `Map` is the structure to reach for once the list grows.
+/// entries where a hash would cost more than it saves. Reach for a `Map` once the
+/// list grows or the lookups repeat.
+///
+/// ## Examples
+///
+/// ```
+/// List.lookup(&[("a", 1), ("b", 2)], "b")  // Some(2)
+/// List.lookup(&[("a", 1)], "z")            // None
+/// ```
 export fn lookup[K, V](pairs: &Array[(K, V)], wanted: K) -> Option[V] {
   for pair in pairs {
     if pair[0] == wanted { return Some(pair[1]) }
@@ -835,8 +1102,17 @@ export fn lookup[K, V](pairs: &Array[(K, V)], wanted: K) -> Option[V] {
 }
 
 /// One value repeated a number of times.
-/// A count of nought or less gives an empty array. The same value is repeated, not
-/// copied per position.
+///
+/// A count of nought or less gives an empty array. The same value is repeated
+/// rather than copied per position, which matters only for types whose identity is
+/// observable.
+///
+/// ## Examples
+///
+/// ```
+/// List.replicate(3, 0)   // [0, 0, 0]
+/// List.replicate(0, 0)   // []
+/// ```
 export fn replicate[T](times: Int, value: T) -> Array[T] {
   var out = []
   var remaining = times
@@ -848,9 +1124,18 @@ export fn replicate[T](times: Int, value: T) -> Array[T] {
 }
 
 /// The whole numbers from `from` up to but not including `to`.
-/// Excluding the upper end means the result's length is the difference between them,
-/// and that ranges laid end to end do not repeat a number. A `to` at or below `from`
-/// gives an empty array.
+///
+/// Excluding the upper end makes the result's length the difference between the
+/// two bounds, and lets ranges laid end to end neither repeat nor skip a number. A
+/// `to` at or below `from` gives an empty array rather than counting backwards.
+///
+/// ## Examples
+///
+/// ```
+/// List.range(0, 4)             // [0, 1, 2, 3]
+/// List.range(4, 0)             // []
+/// List.length(&List.range(2, 7))  // 5
+/// ```
 export fn range(from: Int, to: Int) -> Array[Int] {
   var out = []
   var current = from
@@ -862,8 +1147,17 @@ export fn range(from: Int, to: Int) -> Array[Int] {
 }
 
 /// Repeated application of a function, starting from a seed.
-/// The seed is the first element, so a count of one gives just the seed. The count is
-/// required because a strict language cannot hold an endless sequence.
+///
+/// The seed is the first element, so a count of one answers just the seed. The
+/// count is required rather than optional because a strict language cannot hold an
+/// endless sequence and stop it later.
+///
+/// ## Examples
+///
+/// ```
+/// List.iterate(4, 1, fn(n: Int) -> Int => n * 2)  // [1, 2, 4, 8]
+/// List.iterate(1, 1, fn(n: Int) -> Int => n * 2)  // [1]
+/// ```
 export fn iterate[T](times: Int, seed: T, step: fn(T) -> T) -> Array[T] {
   var out = []
   var current = seed
@@ -877,8 +1171,16 @@ export fn iterate[T](times: Int, seed: T, step: fn(T) -> T) -> Array[T] {
 }
 
 /// Every running total, left to right, starting from `start`.
-/// The result begins with `start` and ends with what `fold` would have answered, so it
-/// is one longer than the input.
+///
+/// The result begins with `start` and ends with what `fold` would have answered,
+/// so it is one longer than the input. That is what makes it useful for running
+/// balances, where both ends of the walk matter.
+///
+/// ## Examples
+///
+/// ```
+/// List.scan(&[1, 2, 3], fn(total: Int, n: Int) -> Int => total + n, 0)  // [0, 1, 3, 6]
+/// ```
 export fn scan[T, A](items: &Array[T], combine: fn(A, T) -> A, start: A) -> Array[A] {
   var out = [start]
   var accumulated = start
@@ -890,8 +1192,17 @@ export fn scan[T, A](items: &Array[T], combine: fn(A, T) -> A, start: A) -> Arra
 }
 
 /// Combine every element into one, right to left.
-/// The direction matters for any step that is not associative: building a list by
-/// prepending, or dividing, gives a different answer than `fold`.
+///
+/// The direction matters for any step that is not associative: subtracting, or
+/// building a structure by prepending, gives a different answer than `fold`. When
+/// the step is associative and the start is its identity, both agree.
+///
+/// ## Examples
+///
+/// ```
+/// List.fold(&[1, 2, 3], fn(a: Int, n: Int) -> Int => a - n, 0)       // -6
+/// List.foldRight(&[1, 2, 3], fn(n: Int, a: Int) -> Int => n - a, 0)  // 2
+/// ```
 export fn foldRight[T, A](items: &Array[T], combine: fn(T, A) -> A, start: A) -> A {
   var accumulated = start
   var index = items.length()
@@ -903,7 +1214,16 @@ export fn foldRight[T, A](items: &Array[T], combine: fn(T, A) -> A, start: A) ->
 }
 
 /// Every prefix, shortest first, including the empty one and the whole array.
-/// There are one more prefixes than elements, because both ends count.
+///
+/// There is one more prefix than there are elements, because both ends count. The
+/// count is worth remembering when pairing this with `suffixes` to split an array
+/// every possible way.
+///
+/// ## Examples
+///
+/// ```
+/// List.prefixes(&[1, 2])  // [[], [1], [1, 2]]
+/// ```
 export fn prefixes[T](items: &Array[T]) -> Array[Array[T]] {
   var out = []
   var index = 0
@@ -916,7 +1236,14 @@ export fn prefixes[T](items: &Array[T]) -> Array[Array[T]] {
 }
 
 /// Every suffix, longest first, including the whole array and the empty one.
-/// The mirror of `prefixes`, and the same count for the same reason.
+///
+/// The mirror of `prefixes`, and one longer than the input for the same reason.
+///
+/// ## Examples
+///
+/// ```
+/// List.suffixes(&[1, 2])  // [[1, 2], [2], []]
+/// ```
 export fn suffixes[T](items: &Array[T]) -> Array[Array[T]] {
   var out = []
   var index = 0
@@ -929,9 +1256,22 @@ export fn suffixes[T](items: &Array[T]) -> Array[Array[T]] {
 }
 
 /// The elements ordered by a comparison, which answers whether the left one
-/// belongs first. A comparison that is not a strict order gives an unspecified order
-/// rather than a failure, which is the same promise every comparison sort makes.
-/// Equal elements keep their original order.
+/// belongs first.
+///
+/// A comparison that is not a strict order gives an unspecified order rather than
+/// a failure, which is the same promise every comparison sort makes. The sort is
+/// stable: elements the comparison calls equal keep their original order.
+///
+/// ## Examples
+///
+/// ```
+/// List.sortBy(&[3, 1, 2], fn(a: Int, b: Int) -> Bool => b < a)  // [3, 2, 1]
+/// ```
+///
+/// ## See also
+///
+/// - `sorted` — the type's own ordering.
+/// - `sortOn` — ordering by a key drawn from each element.
 export fn sortBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
   let size = items.length()
   if size <= 1 { items.slice(0, size) } else {
@@ -943,8 +1283,16 @@ export fn sortBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
 }
 
 /// Two arrays ordered by the same comparison interleaved into one.
-/// Both inputs must already be in that order for the result to be. When elements
-/// compare equal the left array's comes first.
+///
+/// Both inputs must already be in that order for the result to be; this neither
+/// checks nor sorts. When elements compare equal the left array's comes first,
+/// which keeps the operation stable.
+///
+/// ## Examples
+///
+/// ```
+/// List.mergeBy(&[1, 3], &[2, 4], fn(a: Int, b: Int) -> Bool => a < b)  // [1, 2, 3, 4]
+/// ```
 export fn mergeBy[T](left: &Array[T], right: &Array[T], before: fn(T, T) -> Bool) -> Array[T] {
   var out = []
   var leftIndex = 0
@@ -964,7 +1312,16 @@ export fn mergeBy[T](left: &Array[T], right: &Array[T], before: fn(T, T) -> Bool
 }
 
 /// The element a comparison ranks first, or `None` for an empty array.
-/// Among elements the comparison calls equal the earliest is kept, matching `minimum`.
+///
+/// Among elements the comparison calls equal the earliest is kept, matching
+/// `minimum`.
+///
+/// ## Examples
+///
+/// ```
+/// List.minimumBy(&[3, 1, 2], fn(a: Int, b: Int) -> Bool => a < b)  // Some(1)
+/// List.minimumBy(&[], fn(a: Int, b: Int) -> Bool => a < b)         // None
+/// ```
 export fn minimumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] {
   if items.length() == 0 { None } else {
     var best = items[0]
@@ -976,7 +1333,15 @@ export fn minimumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] 
 }
 
 /// The element a comparison ranks last, or `None` for an empty array.
-/// Among elements the comparison calls equal the earliest is kept, matching `maximum`.
+///
+/// Among elements the comparison calls equal the earliest is kept, matching
+/// `maximum`.
+///
+/// ## Examples
+///
+/// ```
+/// List.maximumBy(&[3, 1, 2], fn(a: Int, b: Int) -> Bool => a < b)  // Some(3)
+/// ```
 export fn maximumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] {
   if items.length() == 0 { None } else {
     var best = items[0]
@@ -988,7 +1353,15 @@ export fn maximumBy[T](items: &Array[T], before: fn(T, T) -> Bool) -> Option[T] 
 }
 
 /// How many elements the predicate accepts.
+///
 /// The length `filter` would have produced, without building the filtered array.
+/// Reach for it when the count is the answer rather than a step toward one.
+///
+/// ## Examples
+///
+/// ```
+/// List.countWhere(&[1, 2, 3, 4], fn(n: Int) -> Bool => n % 2 == 0)  // 2
+/// ```
 export fn countWhere[T](items: &Array[T], holds: fn(T) -> Bool) -> Int {
   items.filter(holds).length()
 }
@@ -1002,15 +1375,33 @@ fn prefixLength[T](items: &Array[T], holds: fn(T) -> Bool) -> Int {
 }
 
 /// Whether no element equals the given value.
-/// `contains` negated, written out because a negated call reads poorly inside a larger
-/// condition.
+///
+/// `contains` negated, written out because a negated call reads poorly inside a
+/// larger condition and is easy to misread when several are combined.
+///
+/// ## Examples
+///
+/// ```
+/// List.notContains(&[1, 2], 9)  // true
+/// List.notContains(&[1, 2], 1)  // false
+/// ```
 export fn notContains[T](items: &Array[T], wanted: T) -> Bool {
   !items.contains(wanted)
 }
 
 /// Whether one array appears inside another as a contiguous run.
-/// Contiguous: the elements must sit next to each other and in order. An empty needle
-/// is inside everything.
+///
+/// Contiguous: the elements must sit next to each other and in order. An empty
+/// needle is inside everything, which follows from having nothing to fail to
+/// match.
+///
+/// ## Examples
+///
+/// ```
+/// List.isInfixOf(&[2, 3], &[1, 2, 3, 4])  // true
+/// List.isInfixOf(&[1, 3], &[1, 2, 3])     // false, not adjacent
+/// List.isInfixOf(&[], &[1])               // true
+/// ```
 export fn isInfixOf[T](needle: &Array[T], items: &Array[T]) -> Bool {
   let small = needle.length()
   let large = items.length()
@@ -1025,8 +1416,17 @@ export fn isInfixOf[T](needle: &Array[T], items: &Array[T]) -> Bool {
 }
 
 /// The remainder before a suffix, or `None` when the suffix is not there.
-/// The mirror of `stripPrefix`, and `None` for the same reason: an absent suffix and an
-/// empty remainder are different answers.
+///
+/// The mirror of `stripPrefix`, and `None` for the same reason: an absent suffix
+/// and an empty remainder are different answers that a length check cannot tell
+/// apart.
+///
+/// ## Examples
+///
+/// ```
+/// List.stripSuffix(&[2, 3], &[1, 2, 3])  // Some([1])
+/// List.stripSuffix(&[9], &[1, 2])        // None
+/// ```
 export fn stripSuffix[T](suffix: &Array[T], items: &Array[T]) -> Option[Array[T]] {
   if isSuffixOf(suffix, items) {
     Some(items.slice(0, items.length() - suffix.length()))
@@ -1036,8 +1436,16 @@ export fn stripSuffix[T](suffix: &Array[T], items: &Array[T]) -> Option[Array[T]
 }
 
 /// The array with trailing elements the predicate accepts removed.
-/// Works from the end and stops at the first rejected element, which is what trimming
-/// trailing whitespace from a sequence needs.
+///
+/// Works from the end and stops at the first rejected element, which is what
+/// trimming trailing padding from a sequence needs. Leading elements are never
+/// examined.
+///
+/// ## Examples
+///
+/// ```
+/// List.dropWhileEnd(&[1, 0, 2, 0, 0], fn(n: Int) -> Bool => n == 0)  // [1, 0, 2]
+/// ```
 export fn dropWhileEnd[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
   var size = items.length()
   while size > 0 && holds(items[size - 1]) { size = size - 1 }
@@ -1045,24 +1453,49 @@ export fn dropWhileEnd[T](items: &Array[T], holds: fn(T) -> Bool) -> Array[T] {
 }
 
 /// The last `wanted` elements, or every element when the array is shorter.
+///
 /// `take` measured from the other end, with the same forgiving treatment of counts
 /// outside the array.
+///
+/// ## Examples
+///
+/// ```
+/// List.takeEnd(&[1, 2, 3, 4], 2)  // [3, 4]
+/// List.takeEnd(&[1, 2], 99)       // [1, 2]
+/// ```
 export fn takeEnd[T](items: &Array[T], wanted: Int) -> Array[T] {
   let size = items.length()
   items.slice(clampIndex(size - wanted, size), size)
 }
 
 /// Every element but the last `skipped`.
-/// `drop` measured from the other end. Skipping more than the array holds leaves it
-/// empty.
+///
+/// `drop` measured from the other end. Skipping more than the array holds leaves
+/// it empty, and a negative count skips nothing.
+///
+/// ## Examples
+///
+/// ```
+/// List.dropEnd(&[1, 2, 3, 4], 2)  // [1, 2]
+/// List.dropEnd(&[1, 2], 99)       // []
+/// ```
 export fn dropEnd[T](items: &Array[T], skipped: Int) -> Array[T] {
   let size = items.length()
   items.slice(0, clampIndex(size - skipped, size))
 }
 
-/// The rows and columns exchanged. Rows of unequal length contribute only the
-/// positions they have, so no element is invented to fill a gap. Applying it twice to
-/// ragged input does not always give back the original.
+/// The rows and columns exchanged.
+///
+/// Rows of unequal length contribute only the positions they have, so no element
+/// is invented to fill a gap. That makes the operation total for ragged input, but
+/// it also means applying it twice does not always give back the original.
+///
+/// ## Examples
+///
+/// ```
+/// List.transpose(&[[1, 2], [3, 4]])  // [[1, 3], [2, 4]]
+/// List.transpose(&[[1, 2], [3]])     // [[1, 3], [2]]
+/// ```
 export fn transpose[T](rows: &Array[Array[T]]) -> Array[Array[T]] {
   var longest = 0
   for row in rows {
@@ -1082,8 +1515,16 @@ export fn transpose[T](rows: &Array[Array[T]]) -> Array[Array[T]] {
 }
 
 /// Every subsequence, including the empty one and the whole array.
-/// The count doubles with each element, so this is for small inputs by nature rather
-/// than by choice. Elements keep their relative order in every result.
+///
+/// The count doubles with each element, so this is for small inputs by nature
+/// rather than by choice. Elements keep their relative order in every result,
+/// which is what separates a subsequence from a permutation.
+///
+/// ## Examples
+///
+/// ```
+/// List.subsequences(&[1, 2])  // [[], [1], [2], [1, 2]]
+/// ```
 export fn subsequences[T](items: &Array[T]) -> Array[Array[T]] {
   var out = [[]]
   for item in items {
@@ -1094,9 +1535,17 @@ export fn subsequences[T](items: &Array[T]) -> Array[Array[T]] {
   out
 }
 
-/// Every ordering of the elements. The count is the factorial of the length,
-/// so this is for small inputs by nature rather than by choice. Repeated elements
-/// produce repeated orderings, since positions are permuted rather than values.
+/// Every ordering of the elements.
+///
+/// The count is the factorial of the length, so this is for small inputs by nature
+/// rather than by choice. Repeated elements produce repeated orderings, since
+/// positions are permuted rather than values.
+///
+/// ## Examples
+///
+/// ```
+/// List.permutations(&[1, 2])  // [[1, 2], [2, 1]]
+/// ```
 export fn permutations[T](items: &Array[T]) -> Array[Array[T]] {
   let size = items.length()
   if size == 0 { [[]] } else {
@@ -1115,9 +1564,17 @@ export fn permutations[T](items: &Array[T]) -> Array[Array[T]] {
 }
 
 /// An array grown from a seed until the step answers `None`.
-/// The step count is bounded because a strict language cannot recover from a step that
-/// never stops; exhausting the bound answers with what it had. The opposite direction
-/// from `fold`: one value in, many out.
+///
+/// The step count is bounded because a strict language cannot recover from a step
+/// that never stops; exhausting the bound answers with what it had rather than
+/// failing. This is the opposite direction from `fold`: one value in, many out.
+///
+/// ## Examples
+///
+/// ```
+/// List.unfold(10, 1, fn(n: Int) -> Option[(Int, Int)] =>
+///   if n > 8 { None } else { Some((n, n * 2)) })  // [1, 2, 4, 8]
+/// ```
 export fn unfold[S, T](limit: Int, seed: S, step: fn(S) -> Option[(T, S)]) -> Array[T] {
   var out = []
   var current = seed
@@ -1136,8 +1593,17 @@ export fn unfold[S, T](limit: Int, seed: S, step: fn(S) -> Option[(T, S)]) -> Ar
 }
 
 /// The array repeated end to end a number of times.
-/// A count of nought or less gives an empty array, and repeating an empty array gives
-/// an empty array whatever the count.
+///
+/// A count of nought or less gives an empty array, and repeating an empty array
+/// gives an empty array whatever the count, so the result's length is always the
+/// two multiplied.
+///
+/// ## Examples
+///
+/// ```
+/// List.cycle(&[1, 2], 3)  // [1, 2, 1, 2, 1, 2]
+/// List.cycle(&[1, 2], 0)  // []
+/// ```
 export fn cycle[T](items: &Array[T], times: Int) -> Array[T] {
   var out = []
   var remaining = times
@@ -1149,8 +1615,17 @@ export fn cycle[T](items: &Array[T], times: Int) -> Array[T] {
 }
 
 /// The array in pieces of at most `size` elements.
-/// Only the final piece may be shorter. A size of nought or less gives no pieces rather
-/// than an endless supply of empty ones.
+///
+/// Only the final piece may be shorter. A size of nought or less gives no pieces
+/// at all rather than an endless supply of empty ones, which is the only total
+/// answer available.
+///
+/// ## Examples
+///
+/// ```
+/// List.chunksOf(&[1, 2, 3, 4, 5], 2)  // [[1, 2], [3, 4], [5]]
+/// List.chunksOf(&[1, 2], 0)           // []
+/// ```
 export fn chunksOf[T](items: &Array[T], size: Int) -> Array[Array[T]] {
   var out = []
   if size <= 0 { out } else {
@@ -1166,8 +1641,20 @@ export fn chunksOf[T](items: &Array[T], size: Int) -> Array[Array[T]] {
 }
 
 /// Every contiguous run of `size` elements, one position apart.
+///
 /// Nothing at all when the array is shorter than the window. Neighbouring windows
-/// overlap, which is what comparing each element with the next needs.
+/// overlap, which is what comparing each element with the ones beside it needs.
+///
+/// ## Examples
+///
+/// ```
+/// List.windows(&[1, 2, 3, 4], 2)  // [[1, 2], [2, 3], [3, 4]]
+/// List.windows(&[1], 2)           // []
+/// ```
+///
+/// ## See also
+///
+/// - `chunksOf` — pieces that do not overlap.
 export fn windows[T](items: &Array[T], size: Int) -> Array[Array[T]] {
   var out = []
   if size <= 0 { out } else {
@@ -1182,15 +1669,33 @@ export fn windows[T](items: &Array[T], size: Int) -> Array[Array[T]] {
 }
 
 /// A value placed into an array that is already in ascending order, keeping it
-/// in order. Placed after equal elements, so repeated insertion is stable. An array
-/// that was not in order to begin with is not put in order by this.
+/// in order.
+///
+/// Placed after equal elements, so repeated insertion is stable. An array that was
+/// not in order to begin with is not put in order by this: the value lands at the
+/// first position where it belongs, whatever follows.
+///
+/// ## Examples
+///
+/// ```
+/// List.insertOrdered(&[1, 3, 5], 4)  // [1, 3, 4, 5]
+/// List.insertOrdered(&[], 1)         // [1]
+/// ```
 export fn insertOrdered[T: Ord](items: &Array[T], value: T) -> Array[T] {
   insertBy(items, value, fn(left: T, right: T) -> Bool => left.before(&right))
 }
 
 /// A value placed into an array ordered by a comparison, keeping it in order.
+///
 /// `insertOrdered` for an ordering the type does not supply itself, with the same
-/// placement after equal elements.
+/// placement after equal elements and the same requirement that the array already
+/// be in that order.
+///
+/// ## Examples
+///
+/// ```
+/// List.insertBy(&[5, 3, 1], 4, fn(a: Int, b: Int) -> Bool => b < a)  // [5, 4, 3, 1]
+/// ```
 export fn insertBy[T](items: &Array[T], value: T, before: fn(T, T) -> Bool) -> Array[T] {
   var position = 0
   let size = items.length()
@@ -1199,8 +1704,16 @@ export fn insertBy[T](items: &Array[T], value: T, before: fn(T, T) -> Bool) -> A
 }
 
 /// Runs of adjacent elements that a comparison calls equivalent.
-/// Each element is compared against the first of the current run, so a comparison that
-/// is not transitive gives runs that depend on where they started.
+///
+/// Each element is compared against the first of the current run, so a comparison
+/// that is not transitive produces runs that depend on where they started. As with
+/// `group`, the runs are adjacent rather than gathered from the whole array.
+///
+/// ## Examples
+///
+/// ```
+/// List.groupBy(&[1, 2, 5, 6], fn(a: Int, b: Int) -> Bool => (b - a) < 2)  // [[1, 2], [5, 6]]
+/// ```
 export fn groupBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[Array[T]] {
   var out = []
   var current = []
@@ -1217,8 +1730,15 @@ export fn groupBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[Array[T]
 }
 
 /// The elements with later duplicates removed under a comparison.
-/// `distinct` for a notion of sameness the type does not supply itself, keeping the
-/// first of each group in order of first appearance.
+///
+/// `distinct` for a notion of sameness the type does not supply itself, keeping
+/// the first of each group in order of first appearance.
+///
+/// ## Examples
+///
+/// ```
+/// List.distinctBy(&[1, 11, 2], fn(a: Int, b: Int) -> Bool => a % 10 == b % 10)  // [1, 2]
+/// ```
 export fn distinctBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[T] {
   var out = []
   for item in items {
@@ -1232,28 +1752,61 @@ export fn distinctBy[T](items: &Array[T], same: fn(T, T) -> Bool) -> Array[T] {
 }
 
 /// The elements ordered by a key drawn from each one.
-/// The key may be of any ordered type, not only a number: sorting people by name is the
-/// same operation as sorting them by age. Elements with equal keys keep their original
-/// order.
+///
+/// The key may be of any ordered type, not only a number: sorting people by name
+/// is the same operation as sorting them by age. Elements with equal keys keep
+/// their original order, so sorting on a second key afterwards builds a compound
+/// ordering rather than discarding the first.
+///
+/// ## Examples
+///
+/// ```
+/// List.sortOn(&["ccc", "a", "bb"], fn(s: Str) -> Int => s.length())  // ["a", "bb", "ccc"]
+/// ```
 export fn sortOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Array[T] {
   sortBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// The element whose key is smallest, or `None` for an empty array.
-/// The element is returned, not the key. Among equal keys the earliest element wins.
+///
+/// The element is returned, not the key, which is the reason to use this instead
+/// of mapping to keys and taking the minimum. Among equal keys the earliest
+/// element wins.
+///
+/// ## Examples
+///
+/// ```
+/// List.minimumOn(&["ccc", "a", "bb"], fn(s: Str) -> Int => s.length())  // Some("a")
+/// ```
 export fn minimumOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Option[T] {
   minimumBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// The element whose key is largest, or `None` for an empty array.
-/// The element is returned, not the key. Among equal keys the earliest element wins.
+///
+/// The element is returned, not the key. Among equal keys the earliest element
+/// wins, matching `minimumOn`.
+///
+/// ## Examples
+///
+/// ```
+/// List.maximumOn(&["ccc", "a", "bb"], fn(s: Str) -> Int => s.length())  // Some("ccc")
+/// ```
 export fn maximumOn[T, K: Ord](items: &Array[T], key: fn(T) -> K) -> Option[T] {
   maximumBy(items, fn(left: T, right: T) -> Bool => key(left).before(&key(right)))
 }
 
 /// Every running total, from the right.
-/// `scan` walked the other way, and one longer than the input for the same reason: both
-/// ends are included.
+///
+/// `scan` walked the other way, and one longer than the input for the same reason:
+/// both ends are included. The result's first element is what `foldRight` would
+/// have answered.
+///
+/// ## Examples
+///
+/// ```
+/// List.scanRight(&[1, 2, 3], fn(n: Int, total: Int) -> Int => n + total, 0)  // [6, 5, 3, 0]
+/// ```
 export fn scanRight[T, A](items: &Array[T], combine: fn(T, A) -> A, start: A) -> Array[A] {
   var out = [start]
   var accumulated = start
@@ -1267,9 +1820,18 @@ export fn scanRight[T, A](items: &Array[T], combine: fn(T, A) -> A, start: A) ->
 }
 
 /// A fold that also collects what each step produced, left to right.
-/// Each step receives the running value and an element, and answers the next running
-/// value together with one output. The final running value and every output are
-/// returned.
+///
+/// Each step receives the running value and an element, and answers the next
+/// running value together with one output. The final running value and every
+/// output are returned, which is what numbering or labelling elements in sequence
+/// needs.
+///
+/// ## Examples
+///
+/// ```
+/// List.mapAccum(&[1, 2, 3], fn(total: Int, n: Int) -> (Int, Int) => (total + n, total), 0)
+/// // (6, [0, 1, 3])
+/// ```
 export fn mapAccum[T, A, B](items: &Array[T], step: fn(A, T) -> (A, B), start: A) -> (A, Array[B]) {
   var accumulated = start
   var out = []
@@ -1282,7 +1844,15 @@ export fn mapAccum[T, A, B](items: &Array[T], step: fn(A, T) -> (A, B), start: A
 }
 
 /// Three arrays' corresponding elements gathered, stopping at the shortest.
-/// Stopping rather than padding, the same choice `zip` makes for two.
+///
+/// Stopping rather than padding, the same choice `zip` makes for two, so the
+/// result is as long as the shortest input.
+///
+/// ## Examples
+///
+/// ```
+/// List.zip3(&[1, 2], &["a", "b"], &[true, false])  // [(1, "a", true), (2, "b", false)]
+/// ```
 export fn zip3[A, B, C](one: &Array[A], two: &Array[B], three: &Array[C]) -> Array[(A, B, C)] {
   var out = []
   var index = 0
@@ -1297,7 +1867,16 @@ export fn zip3[A, B, C](one: &Array[A], two: &Array[B], three: &Array[C]) -> Arr
 }
 
 /// Three arrays' corresponding elements combined, stopping at the shortest.
-/// `zip3` followed by `map` without building the triples in between.
+///
+/// `zip3` followed by `map` without building the triples in between, which also
+/// lets the combining step name its three arguments.
+///
+/// ## Examples
+///
+/// ```
+/// List.zipWith3(&[1, 2], &[10, 20], &[100, 200],
+///   fn(a: Int, b: Int, c: Int) -> Int => a + b + c)  // [111, 222]
+/// ```
 export fn zipWith3[A, B, C, D](
   one: &Array[A],
   two: &Array[B],
@@ -1317,8 +1896,15 @@ export fn zipWith3[A, B, C, D](
 }
 
 /// Triples separated back into three arrays.
-/// The inverse of `zip3` for input that `zip3` could have produced; all three results
-/// have the length of the input.
+///
+/// The inverse of `zip3` for input that `zip3` could have produced; all three
+/// results have the length of the input.
+///
+/// ## Examples
+///
+/// ```
+/// List.unzip3(&[(1, "a", true)])  // ([1], ["a"], [true])
+/// ```
 export fn unzip3[A, B, C](triples: &Array[(A, B, C)]) -> (Array[A], Array[B], Array[C]) {
   var firsts = []
   var seconds = []
@@ -1332,8 +1918,16 @@ export fn unzip3[A, B, C](triples: &Array[(A, B, C)]) -> (Array[A], Array[B], Ar
 }
 
 /// Every pairing of one array's elements with the other's.
-/// The result's length is the two lengths multiplied. Ordered by the left array first,
-/// so all pairs sharing a left element sit together.
+///
+/// The result's length is the two lengths multiplied, and it is ordered by the
+/// left array first, so all pairs sharing a left element sit together. Either
+/// array being empty makes the result empty.
+///
+/// ## Examples
+///
+/// ```
+/// List.cartesian(&[1, 2], &["a", "b"])  // [(1, "a"), (1, "b"), (2, "a"), (2, "b")]
+/// ```
 export fn cartesian[A, B](left: &Array[A], right: &Array[B]) -> Array[(A, B)] {
   var out = []
   for leftItem in left {
@@ -1343,8 +1937,17 @@ export fn cartesian[A, B](left: &Array[A], right: &Array[B]) -> Array[(A, B)] {
 }
 
 /// The elements at the given positions, skipping positions the array lacks.
-/// Positions may repeat and may be in any order; the result follows the positions given
-/// rather than the array's own order.
+///
+/// Positions may repeat and may be in any order; the result follows the positions
+/// given rather than the array's own order. Positions outside the array are
+/// skipped rather than treated as a failure.
+///
+/// ## Examples
+///
+/// ```
+/// List.pick(&[10, 20, 30], &[2, 0, 2])  // [30, 10, 30]
+/// List.pick(&[10], &[5])                // []
+/// ```
 export fn pick[T](items: &Array[T], positions: &Array[Int]) -> Array[T] {
   var out = []
   let size = items.length()
@@ -1355,15 +1958,32 @@ export fn pick[T](items: &Array[T], positions: &Array[Int]) -> Array[T] {
 }
 
 /// The element at a position, or `None` when there is none.
-/// The bounds-checked read. Negative positions and positions past the end both answer
-/// `None` rather than failing.
+///
+/// The bounds-checked read. Negative positions and positions past the end both
+/// answer `None` rather than failing, which is what keeps indexing total.
+///
+/// ## Examples
+///
+/// ```
+/// List.get(&[1, 2, 3], 1)   // Some(2)
+/// List.get(&[1, 2, 3], 9)   // None
+/// List.get(&[1, 2, 3], -1)  // None
+/// ```
 export fn get[T](items: &Array[T], position: Int) -> Option[T] {
   if position < 0 || position >= items.length() { None } else { Some(items[position]) }
 }
 
 /// The array with one position replaced, or unchanged when it has none.
-/// A new array is returned and the original is left as it was. A position outside the
-/// array is not an error and adds nothing.
+///
+/// A new array is returned and the original is left as it was. A position outside
+/// the array is not an error and adds nothing, so the result never grows.
+///
+/// ## Examples
+///
+/// ```
+/// List.set(&[1, 2, 3], 1, 9)  // [1, 9, 3]
+/// List.set(&[1, 2, 3], 9, 9)  // [1, 2, 3]
+/// ```
 export fn set[T](items: &Array[T], position: Int, value: T) -> Array[T] {
   if position < 0 || position >= items.length() { *items } else {
     items.remove(position).insert(position, value)
@@ -1371,8 +1991,17 @@ export fn set[T](items: &Array[T], position: Int, value: T) -> Array[T] {
 }
 
 /// The array with one position transformed, or unchanged when it has none.
-/// `get` and `set` in one step, without the caller unwrapping the `Option` in between.
-/// The transform does not run at all when the position is absent.
+///
+/// `get` and `set` in one step, without the caller unwrapping the `Option` in
+/// between. The transform does not run at all when the position is absent, so a
+/// costly transform is not wasted on a miss.
+///
+/// ## Examples
+///
+/// ```
+/// List.modify(&[1, 2, 3], 1, fn(n: Int) -> Int => n * 10)  // [1, 20, 3]
+/// List.modify(&[1, 2, 3], 9, fn(n: Int) -> Int => n * 10)  // [1, 2, 3]
+/// ```
 export fn modify[T](items: &Array[T], position: Int, transform: fn(T) -> T) -> Array[T] {
   if position < 0 || position >= items.length() { *items } else {
     set(items, position, transform(items[position]))
