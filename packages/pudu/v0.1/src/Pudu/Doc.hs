@@ -108,6 +108,25 @@ buildIndex tokens types moduleValue =
   owner = moduleNameText (locatedValue (moduleName moduleValue))
   schemes = Map.fromList (moduleSchemes types)
   docs = docComments tokens
+  traitDocs = Map.fromList (concatMap declarationTraitDocs (moduleDeclarations moduleValue))
+
+  declarationTraitDocs (Located declarationSpan declaration) = case declaration of
+    TraitDeclaration value ->
+      let (_, collected) =
+            List.mapAccumL
+              (traitDoc (locatedValue (traitName value)))
+              (unOffset (spanStart declarationSpan))
+              (traitMembers value)
+       in concat collected
+    _ -> []
+
+  traitDoc holder previousEnd (Located memberSpan value) =
+    ( unOffset (spanEnd memberSpan)
+    , [ ( (holder, locatedValue (functionName value))
+        , docsBefore previousEnd (unOffset (spanStart memberSpan))
+        )
+      ]
+    )
 
   entry lowerBound (Located declarationSpan declaration) = case declaration of
     BindingDeclaration _ _ name _ _ ->
@@ -176,22 +195,30 @@ buildIndex tokens types moduleValue =
       (holder <> "." <> locatedValue (functionName value))
 
   implMember holder lowerBound (Located memberSpan value) =
-    make
+    makeWith
+      (inheritedComment holder (locatedValue (functionName value)))
       lowerBound
       (locatedValue (functionName value))
       (DocMethod (implLabel holder))
       memberSpan
       (implLabel holder <> "." <> locatedValue (functionName value))
 
-  make lowerBound name kind spanValue key =
+  make = makeWith []
+
+  makeWith inherited lowerBound name kind spanValue key =
     DocEntry
       { docName = name
       , docKind = kind
       , docModule = owner
       , docSignature = concreteSelf kind . schemeSignature <$> lookupScheme key name
-      , docComment = docsBefore lowerBound (unOffset (spanStart spanValue))
+      , docComment = case docsBefore lowerBound (unOffset (spanStart spanValue)) of
+          [] -> inherited
+          direct -> direct
       , docSpan = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
       }
+
+  inheritedComment holder name =
+    Map.findWithDefault [] (implTraitLabel holder, name) traitDocs
 
   {-| The documentation immediately above a declaration.
 
@@ -263,6 +290,17 @@ implLabel value = case locatedValue (implTarget value) of
   ReferenceType _ inner -> case locatedValue inner of
     NamedType path _ -> moduleNameText path
     _ -> "?"
+  _ -> "?"
+
+{-| The local trait name that owns an implementation member's default
+    documentation. Trait comments available to this index come from the same
+    source module, so a qualified path is reduced to its final segment. -}
+implTraitLabel :: Impl -> Text
+implTraitLabel value = case locatedValue (implTrait value) of
+  NamedType path _ ->
+    case reverse (Text.splitOn "." (moduleNameText path)) of
+      name : _ -> name
+      [] -> "?"
   _ -> "?"
 
 {-| Doc comments keyed by the offset of the token they lead.

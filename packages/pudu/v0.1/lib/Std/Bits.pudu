@@ -7,6 +7,7 @@ module Std.Bits
 /// target's; a value now answers for its own. `BigInt` has no implementation,
 /// because it has no width and every operation here needs one.
 export trait Bits {
+  /// Return the fixed number of bits stored by this integer type.
   fn width(self: &Self) -> Int
   fn noBits(self: &Self) -> Self
   fn lowBit(self: &Self) -> Self

@@ -17,6 +17,11 @@ tags: [changelog]
   matching, generic-normalized type shapes, module-first ranking, and discoverable query help.
 - Raised the bounded result page to 200 declarations so the largest current standard module remains
   complete, and reduced the home search-to-content gap from 42 to 24 pixels.
+- Made undocumented implementation methods inherit their local trait member's explanation while
+  preserving direct implementation comments as overrides; the generated catalogue now has zero
+  undocumented public declarations across 3,243 entries.
+- Expanded symbol-family pages with declaration-provider explanations and conditional guides for
+  arrows, references, mutable references, type arguments, `Option`, `Result`, and `Self`.
 
 ## 2026-09-11 — Adapter-free Vercel runtime build
 
