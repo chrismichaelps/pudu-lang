@@ -37,7 +37,8 @@ resource lifetime, limits, focused regressions, full gate, and mirror review agr
 ## Rows from the earlier table that are no longer missing
 
 - `Std.Process` includes started processes, stdin/stdout/stderr streaming, bounded waiting, stop,
-  drain, and pipelines.
+  drain, and pipelines, plus launches with stated variables, isolation from the parent environment, a
+  working directory, and `withStarted`, which stops a program when the scope that started it returns.
 - `Std.Random.secureBytes` is separated from deterministic generators. `Std.Crypto` includes
   SHA-256, SHA-512, HMAC-SHA256, constant-time comparisons, password derivation, and authenticated
   encryption. SHA-3 and BLAKE3 are breadth additions rather than release blockers.

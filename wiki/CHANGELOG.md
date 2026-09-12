@@ -79,6 +79,10 @@ tags: [changelog]
   permission flags, metadata, symbolic links, canonical paths, containment decided on real locations,
   and tree removal that never follows links. `Std.Io.copy` now copies bytes and `move` renames before
   falling back to copy and remove. 19 assertions.
+- `Std.Process` gains launches: `launch` with `withVariable`, `isolated`, and `inDirectory` states the
+  environment and working directory a program starts with, `begin` refuses invalid variable names before
+  starting, `runLaunch` reads both streams at once, and `withStarted` stops a program when the scope that
+  started it returns. Process now 47 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

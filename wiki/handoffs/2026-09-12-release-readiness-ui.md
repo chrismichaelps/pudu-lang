@@ -66,8 +66,9 @@ order, hit testing, painting, and damage regions.
 
 ## Exact next action
 
-Filesystem safety is delivered in `Std.Fs`; expose a device flush for durable replacement, then continue
-up the release table with process lifecycle and cancellation evidence. After the native media row,
+Filesystem safety is delivered in `Std.Fs` and process launches with scoped lifetimes in `Std.Process`.
+Next up the release table: crypto breadth (SHA-3 and BLAKE3) beside the shipped hashes, HMAC, AEAD, and
+constant-time comparison, then a device flush for durable replacement. After the native media row,
 move up the release table starting with filesystem safety. After the native media row,
 move up the release table starting with filesystem safety. Profile rendering many small
 rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows

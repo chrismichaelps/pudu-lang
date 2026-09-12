@@ -332,3 +332,91 @@ fn readAllErrors(running: &Started) -> Str {
     case Err(_) => ""
   }
 }
+
+/// How a program is to be started: what runs, its arguments, the variables it
+/// is given, whether it also sees this program's environment, and the directory
+/// it starts in.
+///
+/// A record changed through `Launching` rather than a call taking five
+/// positional arguments, so a launch reads as what it changes from the default.
+export type Launch = {
+  program: Str,
+  arguments: Array[Str],
+  variables: Array[(Str, Str)],
+  inherits: Bool,
+  directory: Str
+}
+
+/// A launch of a program with arguments, inheriting this program's environment
+/// and directory.
+export fn launch(program: Str, arguments: &Array[Str]) -> Launch {
+  Launch{program: program, arguments: *arguments, variables: [], inherits: true, directory: ""}
+}
+
+/// A launch with one thing changed, each answering a launch.
+export trait Launching {
+  fn withVariable(self: &Self, name: Str, value: Str) -> Self
+  fn isolated(self: &Self) -> Self
+  fn inDirectory(self: &Self, directory: Str) -> Self
+}
+
+impl Launching for Launch {
+  /// The same launch giving the program a variable, overriding one it would
+  /// inherit under the same name.
+  fn withVariable(self: &Self, name: Str, value: Str) -> Self {
+    Launch{..*self, variables: self.variables.push((name, value))}
+  }
+
+  /// The same launch giving the program only the variables it states, so it
+  /// cannot see a secret this program happens to hold.
+  fn isolated(self: &Self) -> Self { Launch{..*self, inherits: false} }
+
+  /// The same launch starting the program in a directory.
+  fn inDirectory(self: &Self, directory: Str) -> Self { Launch{..*self, directory: directory} }
+}
+
+/// Start a launch and answer without waiting for it.
+///
+/// A variable name that is empty or holds `=` is refused before anything
+/// starts, because the operating system would split or drop it silently.
+export fn begin(plan: &Launch) -> Result[Started, Str] {
+  for pair in plan.variables {
+    if pair[0].isEmpty() || pair[0].contains("=") {
+      return Err("invalid environment variable name: " + pair[0])
+    }
+  }
+  let token =
+  spawnProgramWith(plan.program, plan.arguments, plan.variables, plan.inherits, plan.directory) ?
+  Ok(Started{token: token})
+}
+
+/// Run a launch to completion with text on its input.
+///
+/// The error stream is read on its own worker while output is read here, so a
+/// program writing a lot to both cannot stall on a full pipe nobody is reading.
+export fn runLaunch(plan: &Launch, standardInput: Str) -> Result[Finished, Str] {
+  let running = begin(plan) ?
+  if !standardInput.isEmpty() { writeText(&running, standardInput) ? }
+  closeInput(&running) ?
+  let held = running
+  let gathered = Sync.cell("")
+  let reader = Concurrent.start(fn() -> () {
+      let _kept = Sync.set(&gathered, readAllErrors(&held))
+    })
+  let written = drain(&running) ?
+  let left = wait(&running) ?
+  let _joined = joined(&reader)
+  Ok(Finished{status: left, output: written, errors: Result.unwrapOr(Sync.get(&gathered), "")})
+}
+
+/// An action given a started program that is stopped when the action returns.
+///
+/// Stopped whether the action succeeded or failed and whether or not the
+/// program had already finished, so a program cannot outlive the code that
+/// started it. The action's own answer is what is returned.
+export fn withStarted[T](plan: &Launch, action: fn(&Started) -> Result[T, Str]) -> Result[T, Str] {
+  let running = begin(plan) ?
+  let outcome = action(&running)
+  let _stopped = stop(&running)
+  outcome
+}

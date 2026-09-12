@@ -27,6 +27,7 @@ data Builtin
   | FileExistsBuiltin
   | Sha512Builtin
   | SpawnBuiltin
+  | SpawnWithBuiltin
   | ChildReadBuiltin
   | ChildReadErrorBuiltin
   | ChildWriteBuiltin
@@ -202,6 +203,7 @@ builtinName value = case value of
   FileExistsBuiltin -> "fileExists"
   Sha512Builtin -> "sha512Of"
   SpawnBuiltin -> "spawnProgram"
+  SpawnWithBuiltin -> "spawnProgramWith"
   ChildReadBuiltin -> "childReadChunk"
   ChildReadErrorBuiltin -> "childReadErrorChunk"
   ChildWriteBuiltin -> "childWriteChunk"

@@ -193,7 +193,7 @@ testRuntimeEvaluation = do
         back from its output, and output larger than one read can carry. -}
     , counterexample
         "a program that fails still ran and its two streams stay apart"
-        (spawned === Just "37")
+        (spawned === Just "47")
     {-| Every export of the calendar, compression and logging modules. The
         calendar is asked in both directions from the same pair, since a reader
         and a writer that shifted a day the same way agree with each other

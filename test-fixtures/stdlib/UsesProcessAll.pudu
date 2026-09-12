@@ -1,6 +1,8 @@
 module UsesProcessAll
 
 import Std.Bytes as Bytes
+import Std.Env as Env
+import Std.Fs as Fs
 import Std.Process as Process
 import Std.Result as Result
 
@@ -210,6 +212,61 @@ export fn main() -> Int {
   // answering something to read from.
   if Result.isErr(&Process.start("/nonexistent/program", &[])) { held = held + 1 }
   if Result.isErr(&Process.run("/nonexistent/program", &[])) { held = held + 1 }
+
+  // A launch states what the program sees: the variables it is given, whether it
+  // also sees this program's environment, and the directory it starts in.
+  let probe = Process.launch("/bin/sh", &["-c", "printf \"$PUDU_PROBE\""])
+    .withVariable("PUDU_PROBE", "given")
+  match Process.runLaunch(&probe, "") {
+    case Ok(finished) => { if finished.output == "given" && finished.status == 0 { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let inherited = Process.launch("/bin/sh", &["-c", "[ -n \"$PATH\" ] && printf yes"])
+  if Result.unwrapOr(Process.runLaunch(&inherited, ""), Process.Finished{status: 1, output: "", errors: ""}).output == "yes" {
+    held = held + 1
+  }
+  let alone = Process.launch("/bin/sh", &["-c", "printf \"$PUDU_ONLY:\"; [ -z \"$HOME\" ] && printf unset"])
+    .isolated()
+    .withVariable("PUDU_ONLY", "1")
+  match Process.runLaunch(&alone, "") {
+    case Ok(finished) => { if finished.output == "1:unset" { held = held + 1 } }
+    case Err(_) => {}
+  }
+  let moved = Process.launch("/bin/sh", &["-c", "printf \"$HOME\""]).withVariable("HOME", "/elsewhere")
+  match Process.runLaunch(&moved, "") {
+    case Ok(finished) => { if finished.output == "/elsewhere" { held = held + 1 } }
+    case Err(_) => {}
+  }
+  if let Ok(real) = Fs.canonical(Env.temporaryDirectory()) {
+    let there = Process.launch("/bin/sh", &["-c", "pwd -P"]).inDirectory(real)
+    match Process.runLaunch(&there, "") {
+      case Ok(finished) => { if Process.trimmedOutput(&finished) == real { held = held + 1 } }
+      case Err(_) => {}
+    }
+  }
+  if Result.isErr(&Process.begin(&Process.launch("/bin/sh", &["-c", "exit 0"]).inDirectory("/nonexistent/place"))) {
+    held = held + 1
+  }
+  if let Err(message) = Process.begin(&Process.launch("/bin/sh", &["-c", "exit 0"]).withVariable("A=B", "x")) {
+    if message == "invalid environment variable name: A=B" { held = held + 1 }
+  }
+  match Process.runLaunch(&Process.launch("/bin/cat", &[]), "fed") {
+    case Ok(finished) => { if finished.output == "fed" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
+  // A program started for a scope does not outlive it.
+  let sleeper = Process.launch("/bin/sh", &["-c", "sleep 30"])
+  let scoped = Process.withStarted(&sleeper, fn(running: &Process.Started) -> Result[Process.Started, Str] {
+      Ok(*running)
+    })
+  if let Ok(kept) = scoped {
+    if let Ok(Some(_)) = Process.waitWithin(&kept, 0) { held = held + 1 }
+  }
+  let refused = Process.withStarted(&sleeper, fn(running: &Process.Started) -> Result[Int, Str] {
+      Err("stopped early")
+    })
+  if refused == Err("stopped early") { held = held + 1 }
 
   held
 }

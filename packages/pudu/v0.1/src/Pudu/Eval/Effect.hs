@@ -17,6 +17,7 @@ import Pudu.Eval.Child
   , readChildChunk
   , readChildErrorChunk
   , startChild
+  , startChildWith
   , stopChild
   , waitChild
   , waitChildWithin
@@ -142,6 +143,7 @@ effectBuiltins =
   , ZoneOffsetBuiltin
   , RunBuiltin
   , SpawnBuiltin
+  , SpawnWithBuiltin
   , ChildReadBuiltin
   , ChildReadErrorBuiltin
   , ChildWriteBuiltin
@@ -419,6 +421,19 @@ callEffect spanValue builtin arguments = do
       (SpawnBuiltin, [StrValue program, ArrayValue given]) -> do
         children <- currentChildStore
         resultOf . fmap intValue <$> lift refusal (startChild children (Text.unpack program) (textsOf given))
+      (SpawnWithBuiltin, [StrValue program, ArrayValue given, ArrayValue pairs, BoolValue inherits, StrValue directory]) -> do
+        children <- currentChildStore
+        resultOf . fmap intValue
+          <$> lift
+            refusal
+            ( startChildWith
+                children
+                (Text.unpack program)
+                (textsOf given)
+                (pairsOf pairs)
+                inherits
+                (Text.unpack directory)
+            )
       (ChildReadBuiltin, [IntValue _ token, IntValue _ wanted]) -> do
         children <- currentChildStore
         resultOf . fmap optionalBytesValue
@@ -507,6 +522,9 @@ processValue outcome =
 
 textsOf :: Seq.Seq Value -> [Text]
 textsOf values = [text | StrValue text <- toList values]
+
+pairsOf :: Seq.Seq Value -> [(Text, Text)]
+pairsOf values = [(name, value) | TupleValue [StrValue name, StrValue value] <- toList values]
 
 {-| An outcome as the language's own failure carrier. -}
 resultOf :: IoOutcome Value -> Value

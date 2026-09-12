@@ -86,6 +86,7 @@ effectValueNames =
   , "arguments", "environment", "temporaryPath", "userHome"
   , "pathSeparators", "searchSeparator", "exit", "clock"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"
+  , "spawnProgramWith"
   ]
 
 {-| The implicit import is suppressed by an explicit import of the same module,

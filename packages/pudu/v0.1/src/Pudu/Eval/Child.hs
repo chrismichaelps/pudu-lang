@@ -21,6 +21,7 @@ module Pudu.Eval.Child
   , newChildStore
   , closeChildStore
   , startChild
+  , startChildWith
   , readChildChunk
   , readChildErrorChunk
   , writeChildChunk
@@ -39,6 +40,7 @@ import qualified Data.IntMap.Strict as IntMap
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Eval.Io (IoOutcome (..))
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (ExitFailure, ExitSuccess))
 import System.IO (Handle, hClose, hSetBinaryMode)
 import System.Process
@@ -91,7 +93,21 @@ closeChildStore store = do
     want is not known here and a stream left attached to this program's own
     would put a child's output where the compiler's belongs. -}
 startChild :: ChildStore -> FilePath -> [Text] -> IO (IoOutcome Int)
-startChild store program arguments = do
+startChild store program arguments = startChildWith store program arguments [] True ""
+
+{-| Start a program with a stated environment and working directory.
+
+    Variables given here override inherited ones of the same name. Without
+    inheritance the program sees only what was given, so a child meant to run in
+    a controlled environment cannot pick up a secret the parent happened to hold.
+    An empty directory keeps the parent's. -}
+startChildWith
+  :: ChildStore -> FilePath -> [Text] -> [(Text, Text)] -> Bool -> FilePath -> IO (IoOutcome Int)
+startChildWith store program arguments variables inherits directory = do
+  inherited <- if inherits then getEnvironment else pure []
+  let given = [(Text.unpack name, Text.unpack value) | (name, value) <- variables]
+      overridden = map fst given
+      merged = given ++ [pair | pair@(name, _) <- inherited, name `notElem` overridden]
   started <-
     try
       ( createProcess
@@ -99,6 +115,8 @@ startChild store program arguments = do
             { std_in = CreatePipe
             , std_out = CreatePipe
             , std_err = CreatePipe
+            , env = if inherits && null variables then Nothing else Just merged
+            , cwd = if null directory then Nothing else Just directory
             }
       )
   case started of

@@ -303,6 +303,14 @@ effectSignatures =
   , ("appendFile", monotype (FunctionTypeValue False [stringType, stringType] (resultOf unitTypeValue)))
   , ("fileExists", monotype (FunctionTypeValue False [stringType] boolType))
   , ("spawnProgram", monotype (FunctionTypeValue False [stringType, arrayOf stringType] (resultOf integerType)))
+  , ( "spawnProgramWith"
+    , monotype
+        ( FunctionTypeValue
+            False
+            [stringType, arrayOf stringType, arrayOf (TupleTypeValue [stringType, stringType]), boolType, stringType]
+            (resultOf integerType)
+        )
+    )
   , ("childReadChunk", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
   , ("childReadErrorChunk", monotype (FunctionTypeValue False [integerType, integerType] (resultOf (NominalType "Option" [bytesType]))))
   , ("childWriteChunk", monotype (FunctionTypeValue False [integerType, bytesType] (resultOf unitTypeValue)))
