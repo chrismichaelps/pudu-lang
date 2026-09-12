@@ -23,7 +23,8 @@ exact pixels, repaint equality, and typed refusals, and declarative layout's exa
 accessibility semantics, and damage that repaints to the same bytes as a full render, and interactive
 screens whose incremental frames after routed input equal a fresh start at the same state, bitmap
 text whose measures, wrapping, and glyph pixels are exact, PCM audio whose samples, time, and WAV
-bytes are exact, and audio graphs whose split renders equal whole ones. Exact equality is intentional: adding a check without registering it
+bytes are exact, audio graphs whose split renders equal whole ones, and video timing and tracks that are
+exact over long streams. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
 ## Grill Log

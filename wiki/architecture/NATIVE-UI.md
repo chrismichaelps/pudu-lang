@@ -82,8 +82,8 @@ supplied by an untrusted document cannot select an arbitrary allocation.
    (`Std.Ui.Screen`). Text entry, scrolling, and a visible focus indicator follow text layout.
 5. Exact PCM, frame-counted time, gain, mixing, bounded slices, and WAV in `Std.Audio`, and a
    stateless pull-model render graph in `Std.Audio.Graph`; then resampling and channel layouts.
-6. Rational clocks, frame planes, color/HDR metadata, synchronization, seeking, and a small
-   uncompressed/reference codec foundation in `Std.Video`.
+6. Exact fractional rates and timestamps, ordered picture tracks, and audio alignment in `Std.Video`;
+   then color/HDR metadata, seeking, and a small uncompressed reference codec foundation.
 7. Per-platform window/input, speaker, camera, and display presenters after their native capability
    contracts exist.
 
@@ -120,7 +120,17 @@ release gates, not deferred aspirations.
 - [OpenSwiftUI](https://github.com/OpenSwiftUIProject/OpenSwiftUI) (MIT) — read for the shape of
   declarative parent/child size negotiation and dependency-driven invalidation; no code is used.
 
-Apple references are limited to the developer documentation archive. Every contract above is restated
+- [SwiftUI user interface state](https://developer.apple.com/documentation/swiftui/managing-user-interface-state)
+  — one source of truth and views derived from it; here a screen's state is the only input to its view.
+- [Metal tile-based deferred rendering](https://developer.apple.com/documentation/metal/tailor-your-apps-for-apple-gpus-and-tile-based-deferred-rendering)
+  — never read back what will be covered, and avoid redundant opaque overdraw; guidance for the canvas
+  rasterizer and any later accelerated backend, not for the declarative layer.
+- [OpenAttributeGraph](https://github.com/OpenSwiftUIProject/OpenAttributeGraph) (MIT) — dependency
+  propagation that stops when a recomputed value equals the old one; screens skip an update whose view
+  is unchanged. No code is used.
+
+Apple references are the developer documentation archive and the public SwiftUI and Metal
+documentation. Every contract above is restated
 in Pudu's own terms; no API names, type hierarchies, or code are carried over.
 
 ## Grill Log

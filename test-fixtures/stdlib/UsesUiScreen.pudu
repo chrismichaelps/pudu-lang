@@ -170,6 +170,13 @@ export fn main() -> Int {
     }
     if let Ok(dismissed) = Screen.handle(&first, Screen.KeyPressed(Screen.Dismiss)) {
       if Screen.stateOf(&dismissed) == 100 { held = held + 1 }
+      if let Ok(again) = Screen.handle(&dismissed, Screen.KeyPressed(Screen.Dismiss)) {
+        if Screen.stateOf(&again) == 100 && Screen.damagedOf(&again) == [] &&
+        shows(&again, reference(100, None, ring))
+        {
+          held = held + 1
+        }
+      }
     }
 
     let sequence = [

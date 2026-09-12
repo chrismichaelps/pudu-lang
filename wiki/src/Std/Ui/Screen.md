@@ -47,6 +47,11 @@ left and the one it reached, clipped to the viewport and recorded once; an updat
 regions plus both rings. The fixture compares every such frame with a reference built from layout,
 canvas, and explicit ring edges rather than from the screen itself.
 
+**An unchanged view stops the update.** A screen keeps the view it last placed. When an update gives
+a new state whose view equals that view and focus is unchanged, the state is kept and placement,
+painting, and repaint are skipped with no damage—the same rule a dependency graph uses to stop
+propagation when a recomputed value equals the old one.
+
 **Focus follows identity across updates.** If the focused tag still names a control after an update it
 stays focused; if the control disappeared, focus becomes none rather than jumping to a neighbour the
 person did not choose.

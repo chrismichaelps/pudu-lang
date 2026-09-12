@@ -292,10 +292,11 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.Ui.Canvas` | 41 | bounded exact-pixel application rendering by bands and spans, with damage repaint |
 | `Std.Ui.Layout` | 40 | declarative views and text, two-pass placement, accessibility semantics, tags, damage extents |
-| `Std.Ui.Screen` | 20 | routed press and key input, visible focus rings, state updates repainting only damage |
+| `Std.Ui.Screen` | 21 | routed input, visible focus rings, unchanged views skipped, updates repainting only damage |
 | `Std.Ui.Text` | 21 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged glyph rectangles |
 | `Std.Audio` | 30 | exact 16-bit PCM bytes, frame-counted time, Q15 gain, saturating mix, bounded slices and WAV |
 | `Std.Audio.Graph` | 21 | stateless pull-model nodes: clips, integer tones, gain, mixes, sample-accurate ramps |
+| `Std.Video` | 19 | exact fractional rates and timestamps, non-overlapping picture tracks, audio alignment |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |

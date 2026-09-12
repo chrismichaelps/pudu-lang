@@ -53,6 +53,11 @@ tags: [changelog]
   saw, and triangle tones, Q15 gain, saturating mixes, and linear gain ramps—are functions of frame
   position. The whole graph is admitted before rendering, slices are bounded at 4,096 frames and depth at
   sixty-four, and a range rendered in slices equals the range rendered whole. 21 assertions.
+- Added `Std.Video`: frame rates and timestamps as exact fractions with cross-scale addition and
+  comparison, frame/time conversion exact over hours, tracks of same-size pictures that refuse overlap
+  and empty durations with lookup by halving, and audio frames aligned on the same clock. 19 assertions.
+- Screens keep the view they last placed; an update producing an equal view with unchanged focus keeps
+  the new state and skips placement, painting, and repaint. Screen now 21 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

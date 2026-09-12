@@ -35,15 +35,16 @@ export type ScreenError
 /// A running screen: what is known, how it is shown and changed, and the frame
 /// it last produced.
 ///
-/// The frame is held as a value: its layout, its pixels, the regions that
-/// changed to produce them, the tag holding focus, and the color of the ring
-/// that shows where focus is.
+/// The frame is held as a value: the view it was placed from, its layout, its
+/// pixels, the regions that changed to produce them, the tag holding focus, and
+/// the color of the ring that shows where focus is.
 export type Screen[S] = {
   state: S,
   view: fn(S) -> Layout.View,
   update: fn(S, Event) -> S,
   background: Canvas.Color,
   ring: Canvas.Color,
+  shown: Layout.View,
   layout: Layout.Layout,
   surface: Canvas.Surface,
   focus: Option[Str],
@@ -63,7 +64,8 @@ export fn start[S](
   viewport: Canvas.Size,
   background: Canvas.Color
 ) -> Result[Screen[S], ScreenError] {
-  let placed = placedView(view, state, viewport) ?
+  let shown = view(state)
+  let placed = placedView(&shown, viewport) ?
   let painted = composed(&placed, background, None, DEFAULT_RING) ?
   let surface = match Canvas.render(&painted) {
     case Ok(value) => value
@@ -75,6 +77,7 @@ export fn start[S](
       update: update,
       background: background,
       ring: DEFAULT_RING,
+      shown: shown,
       layout: placed,
       surface: surface,
       focus: None,
@@ -205,7 +208,11 @@ fn updated[S](
   focus: Option[Str]
 ) -> Result[Screen[S], ScreenError] {
   let state = (target.update)(target.state, event)
-  let placed = placedView(target.view, state, target.layout.viewport) ?
+  let shown = (target.view)(state)
+  if shown == target.shown && focus == target.focus {
+    return Ok(Screen{..*target, state: state, damaged: []})
+  }
+  let placed = placedView(&shown, target.layout.viewport) ?
   let kept = if let Some(tag) = focus {
     if Option.isSome(&Layout.nodeTagged(&placed, tag)) { focus } else { None }
   } else {
@@ -220,6 +227,7 @@ fn updated[S](
   Ok(Screen {
       ..*target,
       state: state,
+      shown: shown,
       layout: placed,
       surface: surface,
       focus: kept,
@@ -227,12 +235,8 @@ fn updated[S](
     })
 }
 
-fn placedView[S](
-  view: fn(S) -> Layout.View,
-  state: S,
-  viewport: Canvas.Size
-) -> Result[Layout.Layout, ScreenError] {
-  match Layout.place(&view(state), viewport) {
+fn placedView(shown: &Layout.View, viewport: Canvas.Size) -> Result[Layout.Layout, ScreenError] {
+  match Layout.place(shown, viewport) {
     case Ok(value) => Ok(value)
     case Err(reason) => Err(Placement(reason))
   }
