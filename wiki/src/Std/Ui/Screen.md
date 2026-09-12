@@ -53,6 +53,13 @@ or nowhere, text changes nothing and damages nothing, and empty text is ignored.
 state itself: the update decides what typing and erasing mean, so a field's contents stay one value in
 state that the view shows.
 
+**Scrolling reaches the scrolling node under the pointer.** `Scrolled(point, delta)` finds the
+frontmost scrolling node with a tag whose frame and window contain the point, clamps its offset plus the
+delta to the node's range, and delivers `ScrolledTo(tag, offset)`. State never holds a position the
+layout would not show, a scroll that cannot move changes nothing, and a scroll over an untagged node or
+outside any scrolling node is ignored. The view shows the offset from state through `scrolledTo`, so
+scroll position is one value like every other.
+
 **An unchanged view stops the update.** A screen keeps the view it last placed. When an update gives
 a new state whose view equals that view and focus is unchanged, the state is kept and placement,
 painting, and repaint are skipped with no damage—the same rule a dependency graph uses to stop

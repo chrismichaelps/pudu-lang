@@ -59,12 +59,15 @@ order, hit testing, painting, and damage regions.
 - `8b724f8` — the canvas never composes commands under an opaque region-covering command (43);
   300 stacked fills render in 0.14 s instead of 4.38 s.
 - `e74ccd1` — typed text and erasing reach only a focused field (screen 27).
-- Scrolling slice — windowed scroll stacks with clips for painting, hit testing, and damage (layout 46,
+- `52ed91c` — windowed scroll stacks with clips for painting, hit testing, and damage (layout 46,
   text 22).
+- Scroll input slice — clamped `ScrolledTo` events for the tagged scrolling node under the pointer
+  (screen 31).
 
 ## Exact next action
 
-Deliver scroll input on `Std.Ui.Screen`, then resampling and channel layouts in audio. After the native media row,
+Resampling and channel layouts in `Std.Audio`, then move up the release table starting with
+filesystem safety: permissions, race-resistant temporary files, and an explicit atomic replacement. After the native media row,
 move up the release table starting with filesystem safety. After the native media row,
 move up the release table starting with filesystem safety. Profile rendering many small
 rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows

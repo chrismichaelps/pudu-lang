@@ -14,7 +14,10 @@ aliases: [Uses Ui Screen]
 
 Executable Pudu fixture for interactive screens. A counter with increment and reset controls over an
 indicator whose color follows the count; the reset control is absent at two and after dismissal. Its
-`main` returns 27 held assertions. A form with a name field and a clear button checks text entry:
+`main` returns 31 held assertions. A feed of six rows in a four-high window checks scrolling: a
+scroll over the feed moves it and repaints to the bytes of a fresh screen at that offset; a scroll past
+the end clamps and a further scroll changes nothing; scrolls over the header and over an untagged list
+are ignored; and a scroll above the top changes nothing. A form with a name field and a clear button checks text entry:
 typing with nothing focused changes nothing; typing into the focused field appends and repaints to
 the same bytes as a fresh focused screen; erasing removes the last character; erasing an empty field
 damages only the ring focus reached; and typing while the button holds focus changes nothing. Dismissing an already dismissed screen keeps its state, damages

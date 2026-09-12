@@ -20,6 +20,7 @@ export type Input
   = Pressed(Canvas.Point)
   | KeyPressed(Key)
   | TypedText(Str)
+  | Scrolled(Canvas.Point, Int)
 
 /// What an update is told happened.
 ///
@@ -30,6 +31,7 @@ export type Event
   | Dismissed
   | Typed(Str, Str)
   | Erased(Str)
+  | ScrolledTo(Str, Int)
 
 /// Why a screen could not be shown.
 export type ScreenError
@@ -104,6 +106,7 @@ export fn handle[S](target: &Screen[S], input: Input) -> Result[Screen[S], Scree
     case KeyPressed(Activate) => activated(target)
     case KeyPressed(Dismiss) => updated(target, Dismissed, target.focus)
     case KeyPressed(Erase) => edited(target, fn(tag: Str) -> Event { Erased(tag) })
+    case Scrolled(location, delta) => wheeled(target, location, delta)
     case TypedText(text) =>
     if text.isEmpty() {
       Ok(Screen{..*target, damaged: []})
@@ -182,6 +185,39 @@ fn edited[S](target: &Screen[S], event: fn(Str) -> Event) -> Result[Screen[S], S
     }
   }
   Ok(Screen{..*target, damaged: []})
+}
+
+/// A scroll delivered to the frontmost tagged scrolling node under a point.
+///
+/// The new offset is clamped to the node's range before the update sees it, so
+/// state never holds a position the layout would not show; a scroll that
+/// cannot move, or lands on no tagged scrolling node, changes nothing.
+fn wheeled[S](
+  target: &Screen[S],
+  location: Canvas.Point,
+  delta: Int
+) -> Result[Screen[S], ScreenError] {
+  var index = target.layout.nodes.length() - 1
+  while index >= 0 {
+    let placed = target.layout.nodes[index]
+    if placed.scrolls && !placed.tag.isEmpty() && inside(&placed.frame, &location) &&
+    inside(&placed.clip, &location)
+    {
+      let wanted = placed.offset + delta
+      let clamped = if wanted < 0 { 0 } else if wanted > placed.range { placed.range } else { wanted }
+      if clamped == placed.offset {
+        return Ok(Screen{..*target, damaged: []})
+      }
+      return updated(target, ScrolledTo(placed.tag, clamped), target.focus)
+    }
+    index = index - 1
+  }
+  Ok(Screen{..*target, damaged: []})
+}
+
+fn inside(area: &Canvas.Rect, location: &Canvas.Point) -> Bool {
+  location.x >= area.x && location.y >= area.y &&
+  location.x < area.x + area.width && location.y < area.y + area.height
 }
 
 fn activated[S](target: &Screen[S]) -> Result[Screen[S], ScreenError] {

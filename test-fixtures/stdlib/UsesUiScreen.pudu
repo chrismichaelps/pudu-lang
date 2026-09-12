@@ -51,6 +51,29 @@ fn edit(name: Str, event: Screen.Event) -> Str {
   }
 }
 
+/// A list of six rows in a four-high window whose scroll position is the state.
+fn feed(offset: Int) -> Layout.View {
+  Layout.column([
+      Layout.box().tall(2).filled(GRAY),
+      Layout.scrollColumn([
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE),
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE),
+          Layout.box().tall(2).filled(RED),
+          Layout.box().tall(2).filled(BLUE)
+        ]).tall(4).tagged("feed").scrolledTo(offset),
+      Layout.scrollColumn([Layout.box().tall(9).filled(RED)]).tall(2)
+    ]).filled(WHITE)
+}
+
+fn scrolledTo(offset: Int, event: Screen.Event) -> Int {
+  match event {
+    case Screen.ScrolledTo("feed", next) => next
+    case _ => offset
+  }
+}
+
 fn unnamed(count: Int) -> Layout.View { Layout.column([Layout.box().means(Layout.Button)]) }
 
 fn twins(count: Int) -> Layout.View {
@@ -286,6 +309,42 @@ export fn main() -> Int {
       {
         held = held + 1
       }
+    }
+  }
+
+  let feedSize = Canvas.size(4, 8)
+  if let Ok(top) = Screen.start(0, feed, scrolledTo, feedSize, WHITE) {
+    if let Ok(down) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 3), 3)) {
+      if let Ok(fresh) = Screen.start(3, feed, scrolledTo, feedSize, WHITE) {
+        let left = Screen.surfaceOf(&down)
+        let right = Screen.surfaceOf(&fresh)
+        if Screen.stateOf(&down) == 3 && Screen.damagedOf(&down).length() > 0 &&
+        Canvas.rgbaBytes(&left) == Canvas.rgbaBytes(&right)
+        {
+          held = held + 1
+        }
+      }
+      if let Ok(far) = Screen.handle(&down, Screen.Scrolled(Canvas.point(1, 3), 50)) {
+        if let Ok(again) = Screen.handle(&far, Screen.Scrolled(Canvas.point(1, 3), 1)) {
+          if Screen.stateOf(&far) == 8 && Screen.stateOf(&again) == 8 &&
+          Screen.damagedOf(&again) == []
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+    if let Ok(header) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 1), 3)) {
+      if let Ok(untagged) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 7), 3)) {
+        if Screen.stateOf(&header) == 0 && Screen.damagedOf(&header) == [] &&
+        Screen.stateOf(&untagged) == 0 && Screen.damagedOf(&untagged) == []
+        {
+          held = held + 1
+        }
+      }
+    }
+    if let Ok(up) = Screen.handle(&top, Screen.Scrolled(Canvas.point(1, 3), -2)) {
+      if Screen.stateOf(&up) == 0 && Screen.damagedOf(&up) == [] { held = held + 1 }
     }
   }
 

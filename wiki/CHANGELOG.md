@@ -68,6 +68,9 @@ tags: [changelog]
   shifted by a clamped `scrolledTo` offset, and every node records its scrolling ancestors' window as a
   clip that painting, hit testing, and damage respect. `Text.drawWithin` cuts glyphs to a window. Layout
   now 46 assertions and text 22.
+- Screens deliver scrolling: `Scrolled(point, delta)` reaches the update as `ScrolledTo(tag, offset)`
+  for the frontmost tagged scrolling node under the point, clamped to its range, and a scroll that
+  cannot move changes nothing. Screen now 31 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 
