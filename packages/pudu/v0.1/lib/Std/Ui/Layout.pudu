@@ -1,0 +1,605 @@
+module Std.Ui.Layout
+
+import Std.List as List
+import Std.Math as Math
+import Std.Num {Integer}
+import Std.Option as Option
+import Std.Ui.Canvas as Canvas
+
+/// Which way a stack places its children.
+export type Axis
+  = Horizontal
+  | Vertical
+
+/// Where a child sits across its stack, or inside a layer.
+///
+/// `Stretch` gives a child without a fixed length the whole cross extent,
+/// which is what an application column or toolbar wants; the other three keep
+/// the child at its measured length.
+export type Alignment
+  = Start
+  | Center
+  | End
+  | Stretch
+
+/// What a node means to someone who cannot see it.
+///
+/// Every role except `Decoration` and `Group` requires a name, and placement
+/// refuses a tree that omits one, so an unlabeled control is a layout error
+/// rather than a defect found later with a screen reader.
+export type Role
+  = Decoration
+  | Group
+  | Heading
+  | Label
+  | Image
+  | Button
+  | Toggle
+  | Field
+
+/// How a node arranges its children.
+export type Kind
+  = Box
+  | Stack(Axis)
+  | Layer
+
+/// Space inside a node's edges, in logical pixels.
+export type Insets = { top: Int, right: Int, bottom: Int, left: Int }
+
+/// A declarative description of a screen.
+///
+/// Modifiers are fields of the one node rather than wrapper nodes, so a padded,
+/// sized, filled, named box is one node in the tree and one entry in the
+/// layout, and the order in which the modifiers were written cannot change
+/// what they mean: padding is always inside the fixed size, and the fill always
+/// covers the whole frame.
+export type View = {
+  kind: Kind,
+  children: Array[View],
+  width: Option[Int],
+  height: Option[Int],
+  grow: Int,
+  padding: Insets,
+  spacing: Int,
+  alignment: Alignment,
+  fill: Option[Canvas.Color],
+  role: Role,
+  name: Str
+}
+
+/// One node after placement, in reading and painting order.
+export type Placed = {
+  frame: Canvas.Rect,
+  parent: Int,
+  depth: Int,
+  fill: Option[Canvas.Color],
+  role: Role,
+  name: Str
+}
+
+/// A placed screen: every node's frame, flat, in pre-order.
+///
+/// Parents precede children, so painting in order puts a container behind its
+/// contents and reading in order is the reading order.
+export type Layout = { viewport: Canvas.Size, nodes: Array[Placed] }
+
+/// One entry in the accessibility tree derived from placement.
+export type Semantic = {
+  node: Int,
+  parent: Int,
+  role: Role,
+  name: Str,
+  frame: Canvas.Rect,
+  focusable: Bool
+}
+
+/// Why a view could not be placed or painted.
+///
+/// Node positions are pre-order indices, the same numbering `Layout` uses.
+export type LayoutError
+  = InvalidViewport(Int, Int)
+  | InvalidBudget(Int)
+  | NegativeLength(Int, Int)
+  | LengthTooLarge(Int, Int)
+  | NodeBudgetExceeded(Int)
+  | DepthBudgetExceeded(Int)
+  | LeafWithChildren(Int)
+  | UnnamedRole(Int)
+  | ViewportMismatch(Int, Int)
+  | Drawing(Canvas.CanvasError)
+
+type Measure = { size: Canvas.Size, nodes: Int }
+
+type Limits = { maxNodes: Int, maxDepth: Int }
+
+/// The largest length, grow weight, or viewport edge a view may state.
+///
+/// Bounded so that summing every length in the largest admitted tree stays
+/// inside a 64-bit integer without widening on the layout path.
+const MAX_LENGTH: Int = 1073741824
+
+/// The largest node budget a caller may request.
+const MAX_NODE_BUDGET: Int = 16777216
+
+/// Damage lists longer than this are merged into their bounding rectangle,
+/// because repainting one region is cheaper than clearing many.
+const DAMAGE_LIMIT: Int = 16
+
+const NO_INSETS: Insets = Insets{top: 0, right: 0, bottom: 0, left: 0}
+
+/// A leaf node with no intrinsic extent.
+export fn box() -> View {
+  View {
+    kind: Box,
+    children: [],
+    width: None,
+    height: None,
+    grow: 0,
+    padding: NO_INSETS,
+    spacing: 0,
+    alignment: Stretch,
+    fill: None,
+    role: Decoration,
+    name: ""
+  }
+}
+
+/// A leaf that takes one share of the spare length in its stack.
+export fn spacer() -> View { View{..box(), grow: 1} }
+
+/// Children placed left to right.
+export fn row(children: Array[View]) -> View {
+  View{..box(), kind: Stack(Horizontal), children: children}
+}
+
+/// Children placed top to bottom.
+export fn column(children: Array[View]) -> View {
+  View{..box(), kind: Stack(Vertical), children: children}
+}
+
+/// Children placed over one another, later ones in front.
+export fn layer(children: Array[View]) -> View {
+  View{..box(), kind: Layer, children: children}
+}
+
+/// Insets from four edges.
+export fn insets(top: Int, right: Int, bottom: Int, left: Int) -> Insets {
+  Insets{top: top, right: right, bottom: bottom, left: left}
+}
+
+/// A view with one property changed, each answering a view.
+///
+/// Methods so a styled node reads down or along the page, and names distinct
+/// from the fields so a read of `view.width` and a change by `view.wide(4)`
+/// cannot be confused.
+export trait Composing {
+  fn wide(self: &Self, length: Int) -> Self
+  fn tall(self: &Self, length: Int) -> Self
+  fn sized(self: &Self, width: Int, height: Int) -> Self
+  fn growing(self: &Self, weight: Int) -> Self
+  fn padded(self: &Self, length: Int) -> Self
+  fn inset(self: &Self, edges: Insets) -> Self
+  fn spaced(self: &Self, length: Int) -> Self
+  fn aligned(self: &Self, alignment: Alignment) -> Self
+  fn filled(self: &Self, color: Canvas.Color) -> Self
+  fn means(self: &Self, role: Role) -> Self
+  fn named(self: &Self, name: Str) -> Self
+}
+
+impl Composing for View {
+  /// The same view with a fixed width.
+  fn wide(self: &Self, length: Int) -> Self { View{..*self, width: Some(length)} }
+
+  /// The same view with a fixed height.
+  fn tall(self: &Self, length: Int) -> Self { View{..*self, height: Some(length)} }
+
+  /// The same view with a fixed width and height.
+  fn sized(self: &Self, width: Int, height: Int) -> Self {
+    View{..*self, width: Some(width), height: Some(height)}
+  }
+
+  /// The same view taking `weight` shares of its stack's spare length.
+  fn growing(self: &Self, weight: Int) -> Self { View{..*self, grow: weight} }
+
+  /// The same view with equal padding on every edge.
+  fn padded(self: &Self, length: Int) -> Self {
+    View{..*self, padding: Insets{top: length, right: length, bottom: length, left: length}}
+  }
+
+  /// The same view with padding stated per edge.
+  fn inset(self: &Self, edges: Insets) -> Self { View{..*self, padding: edges} }
+
+  /// The same view with a gap between consecutive children.
+  fn spaced(self: &Self, length: Int) -> Self { View{..*self, spacing: length} }
+
+  /// The same view aligning its children across its axis.
+  fn aligned(self: &Self, alignment: Alignment) -> Self {
+    View{..*self, alignment: alignment}
+  }
+
+  /// The same view painted with a color behind its children.
+  fn filled(self: &Self, color: Canvas.Color) -> Self { View{..*self, fill: Some(color)} }
+
+  /// The same view with an accessibility role.
+  fn means(self: &Self, role: Role) -> Self { View{..*self, role: role} }
+
+  /// The same view with an accessible name.
+  fn named(self: &Self, name: Str) -> Self { View{..*self, name: name} }
+}
+
+/// Place a view into a viewport with default node and depth budgets.
+export fn place(root: &View, viewport: Canvas.Size) -> Result[Layout, LayoutError] {
+  placeWithin(root, viewport, 65536, 256)
+}
+
+/// Place a view with explicit node and nesting budgets.
+///
+/// Two passes over the tree. The first measures every node's intrinsic size
+/// bottom-up, once, independent of the space offered; the second gives each
+/// node its frame top-down, resolving stretch and grow from the frame its
+/// parent was given. No node is measured twice.
+export fn placeWithin(
+  root: &View,
+  viewport: Canvas.Size,
+  maxNodes: Int,
+  maxDepth: Int
+) -> Result[Layout, LayoutError] {
+  if viewport.width <= 0 || viewport.height <= 0 ||
+  viewport.width > MAX_LENGTH || viewport.height > MAX_LENGTH
+  {
+    Err(InvalidViewport(viewport.width, viewport.height))
+  } else if maxNodes < 1 || maxNodes > MAX_NODE_BUDGET {
+    Err(InvalidBudget(maxNodes))
+  } else if maxDepth < 0 {
+    Err(InvalidBudget(maxDepth))
+  } else {
+    let limits = Limits{maxNodes: maxNodes, maxDepth: maxDepth}
+    let measures = measured(root, 0, &limits, []) ?
+    let whole = Canvas.rect(0, 0, viewport.width, viewport.height)
+    let nodes = arranged(root, whole, &measures, 0, -1, 0, [])
+    Ok(Layout{viewport: viewport, nodes: nodes})
+  }
+}
+
+/// How many nodes were placed.
+export fn nodeCount(target: &Layout) -> Int { target.nodes.length() }
+
+/// The frame of a node, or nothing for a position outside the layout.
+export fn frameOf(target: &Layout, node: Int) -> Option[Canvas.Rect] {
+  if node < 0 || node >= target.nodes.length() { None } else { Some(target.nodes[node].frame) }
+}
+
+/// The first node in reading order with a name.
+export fn nodeNamed(target: &Layout, name: Str) -> Option[Int] {
+  var index = 0
+  var found = None
+  while index < target.nodes.length() && Option.isNone(&found) {
+    if target.nodes[index].name == name { found = Some(index) }
+    index = index + 1
+  }
+  found
+}
+
+/// The accessibility tree: every node that is not decoration, in reading order.
+///
+/// Derived from placement rather than from pixels, so a frame an assistive
+/// client reports is exactly the frame that was painted.
+export fn semantics(target: &Layout) -> Array[Semantic] {
+  var found: Array[Semantic] = []
+  var index = 0
+  for placed in target.nodes {
+    if placed.role != Decoration {
+      found = found.push(Semantic {
+          node: index,
+          parent: meaningfulAncestor(target, placed.parent),
+          role: placed.role,
+          name: placed.name,
+          frame: placed.frame,
+          focusable: isControl(placed.role)
+        })
+    }
+    index = index + 1
+  }
+  found
+}
+
+/// The nodes keyboard focus visits, in reading order.
+export fn focusOrder(target: &Layout) -> Array[Int] {
+  var found: Array[Int] = []
+  var index = 0
+  for placed in target.nodes {
+    if isControl(placed.role) { found = found.push(index) }
+    index = index + 1
+  }
+  found
+}
+
+/// The frontmost meaningful node under a point.
+///
+/// Frontmost is last in painting order. Decoration is transparent to pointing,
+/// so a background never takes a press meant for what it holds.
+export fn hitTest(target: &Layout, location: Canvas.Point) -> Option[Int] {
+  var index = target.nodes.length() - 1
+  var found = None
+  while index >= 0 && Option.isNone(&found) {
+    let placed = target.nodes[index]
+    if placed.role != Decoration && contains(&placed.frame, &location) { found = Some(index) }
+    index = index - 1
+  }
+  found
+}
+
+/// A canvas holding every filled node's rectangle, in painting order.
+export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, LayoutError] {
+  let shape = Canvas.dimensions(onto)
+  if shape != target.viewport {
+    Err(ViewportMismatch(shape.width, shape.height))
+  } else {
+    var held = *onto
+    for placed in target.nodes {
+      if let Some(color) = placed.fill {
+        match Canvas.fill(&held, placed.frame, color) {
+          case Ok(next) => held = next
+          case Err(reason) => { return Err(Drawing(reason)) }
+        }
+      }
+    }
+    Ok(held)
+  }
+}
+
+/// The regions whose pixels differ between two placements of a screen.
+///
+/// A node that changed frame or fill damages where it was and where it is. A
+/// change of structure or viewport damages everything, because node positions
+/// no longer correspond. Repainting only these regions of the earlier surface
+/// gives exactly the surface a full render of the later layout gives.
+export fn damage(before: &Layout, after: &Layout) -> Array[Canvas.Rect] {
+  let whole = Canvas.rect(0, 0, after.viewport.width, after.viewport.height)
+  if before.viewport != after.viewport || before.nodes.length() != after.nodes.length() {
+    [whole]
+  } else {
+    var found: Array[Canvas.Rect] = []
+    var index = 0
+    while index < after.nodes.length() {
+      let was = before.nodes[index]
+      let now = after.nodes[index]
+      if was.frame != now.frame || was.fill != now.fill {
+        if Option.isSome(&was.fill) { found = withVisible(found, &was.frame, &whole) }
+        if Option.isSome(&now.fill) { found = withVisible(found, &now.frame, &whole) }
+      }
+      index = index + 1
+    }
+    if found.length() > DAMAGE_LIMIT { [bounding(&found)] } else { found }
+  }
+}
+
+fn measured(
+  view: &View,
+  depth: Int,
+  limits: &Limits,
+  found: Array[Measure]
+) -> Result[Array[Measure], LayoutError] {
+  let index = found.length()
+  if index >= limits.maxNodes {
+    Err(NodeBudgetExceeded(limits.maxNodes))
+  } else if depth > limits.maxDepth {
+    Err(DepthBudgetExceeded(limits.maxDepth))
+  } else {
+    admitted(view, index) ?
+    var held = found.push(Measure{size: Canvas.size(0, 0), nodes: 1})
+    var sumWidth = 0
+    var sumHeight = 0
+    var maxWidth = 0
+    var maxHeight = 0
+    for child in view.children {
+      let position = held.length()
+      held = measured(&child, depth + 1, limits, held) ?
+      let size = held[position].size
+      sumWidth = sumWidth + size.width
+      sumHeight = sumHeight + size.height
+      maxWidth = Math.max(maxWidth, size.width)
+      maxHeight = Math.max(maxHeight, size.height)
+    }
+    let gaps = if view.children.length() > 0 { view.spacing * (view.children.length() - 1) } else { 0 }
+    let content = match view.kind {
+      case Box => Canvas.size(0, 0)
+      case Layer => Canvas.size(maxWidth, maxHeight)
+      case Stack(Horizontal) => Canvas.size(sumWidth + gaps, maxHeight)
+      case Stack(Vertical) => Canvas.size(maxWidth, sumHeight + gaps)
+    }
+    let width = Option.unwrapOr(view.width, content.width + view.padding.left + view.padding.right)
+    let height =
+    Option.unwrapOr(view.height, content.height + view.padding.top + view.padding.bottom)
+    let measure = Measure{size: Canvas.size(width, height), nodes: held.length() - index}
+    Ok(List.set(&held, index, measure))
+  }
+}
+
+fn admitted(view: &View, index: Int) -> Result[(), LayoutError] {
+  let lengths = [
+    Option.unwrapOr(view.width, 0),
+    Option.unwrapOr(view.height, 0),
+    view.grow,
+    view.spacing,
+    view.padding.top,
+    view.padding.right,
+    view.padding.bottom,
+    view.padding.left
+  ]
+  for length in lengths {
+    if length < 0 { return Err(NegativeLength(index, length)) }
+    if length > MAX_LENGTH { return Err(LengthTooLarge(index, length)) }
+  }
+  if view.kind == Box && view.children.length() > 0 {
+    Err(LeafWithChildren(index))
+  } else if view.role != Decoration && view.role != Group && view.name.isEmpty() {
+    Err(UnnamedRole(index))
+  } else {
+    Ok(())
+  }
+}
+
+fn arranged(
+  view: &View,
+  frame: Canvas.Rect,
+  measures: &Array[Measure],
+  index: Int,
+  parent: Int,
+  depth: Int,
+  out: Array[Placed]
+) -> Array[Placed] {
+  let held = out.push(Placed {
+      frame: frame,
+      parent: parent,
+      depth: depth,
+      fill: view.fill,
+      role: view.role,
+      name: view.name
+    })
+  let content = Canvas.rect(
+    frame.x + view.padding.left,
+    frame.y + view.padding.top,
+    Math.max(0, frame.width - view.padding.left - view.padding.right),
+    Math.max(0, frame.height - view.padding.top - view.padding.bottom)
+  )
+  match view.kind {
+    case Box => held
+    case Layer => layered(view, &content, measures, index, depth, held)
+    case Stack(axis) => stacked(view, axis, &content, measures, index, depth, held)
+  }
+}
+
+fn layered(
+  view: &View,
+  content: &Canvas.Rect,
+  measures: &Array[Measure],
+  index: Int,
+  depth: Int,
+  out: Array[Placed]
+) -> Array[Placed] {
+  var held = out
+  var position = index + 1
+  for child in view.children {
+    let measure = measures[position]
+    let width = crossLength(view.alignment, child.width, measure.size.width, content.width)
+    let height = crossLength(view.alignment, child.height, measure.size.height, content.height)
+    let frame = Canvas.rect(
+      content.x + crossOffset(view.alignment, width, content.width),
+      content.y + crossOffset(view.alignment, height, content.height),
+      width,
+      height
+    )
+    held = arranged(&child, frame, measures, position, index, depth + 1, held)
+    position = position + measure.nodes
+  }
+  held
+}
+
+fn stacked(
+  view: &View,
+  axis: Axis,
+  content: &Canvas.Rect,
+  measures: &Array[Measure],
+  index: Int,
+  depth: Int,
+  out: Array[Placed]
+) -> Array[Placed] {
+  let horizontal = axis == Horizontal
+  let available = if horizontal { content.width } else { content.height }
+  let across = if horizontal { content.height } else { content.width }
+  let count = view.children.length()
+  var used = if count > 0 { view.spacing * (count - 1) } else { 0 }
+  var weights = 0
+  var position = index + 1
+  for child in view.children {
+    let size = measures[position].size
+    used = used + (if horizontal { size.width } else { size.height })
+    weights = weights + child.grow
+    position = position + measures[position].nodes
+  }
+  let spare = Math.max(0, available - used)
+
+  var held = out
+  var offset = 0
+  var given = 0
+  var weightSeen = 0
+  position = index + 1
+  for child in view.children {
+    let measure = measures[position]
+    var extra = 0
+    if child.grow > 0 {
+      weightSeen = weightSeen + child.grow
+      let share = spare.toBigInt() * weightSeen.toBigInt() / weights.toBigInt()
+      let target = Option.unwrapOr(convertInteger[Int](share), spare)
+      extra = target - given
+      given = target
+    }
+    let main = (if horizontal { measure.size.width } else { measure.size.height }) + extra
+    let fixedAcross = if horizontal { child.height } else { child.width }
+    let natural = if horizontal { measure.size.height } else { measure.size.width }
+    let cross = crossLength(view.alignment, fixedAcross, natural, across)
+    let shift = crossOffset(view.alignment, cross, across)
+    let frame = if horizontal {
+      Canvas.rect(content.x + offset, content.y + shift, main, cross)
+    } else {
+      Canvas.rect(content.x + shift, content.y + offset, cross, main)
+    }
+    held = arranged(&child, frame, measures, position, index, depth + 1, held)
+    offset = offset + main + view.spacing
+    position = position + measure.nodes
+  }
+  held
+}
+
+fn crossLength(alignment: Alignment, fixed: Option[Int], natural: Int, available: Int) -> Int {
+  if alignment == Stretch && Option.isNone(&fixed) { available } else { natural }
+}
+
+fn crossOffset(alignment: Alignment, length: Int, available: Int) -> Int {
+  match alignment {
+    case Start => 0
+    case Stretch => 0
+    case Center => (available - length) / 2
+    case End => available - length
+  }
+}
+
+fn isControl(role: Role) -> Bool { role == Button || role == Toggle || role == Field }
+
+fn meaningfulAncestor(target: &Layout, start: Int) -> Int {
+  var at = start
+  while at >= 0 && target.nodes[at].role == Decoration { at = target.nodes[at].parent }
+  at
+}
+
+fn contains(area: &Canvas.Rect, location: &Canvas.Point) -> Bool {
+  location.x >= area.x && location.y >= area.y &&
+  location.x < area.x + area.width && location.y < area.y + area.height
+}
+
+fn withVisible(found: Array[Canvas.Rect], area: &Canvas.Rect, whole: &Canvas.Rect) -> Array[Canvas.Rect] {
+  let left = Math.max(area.x, whole.x)
+  let top = Math.max(area.y, whole.y)
+  let right = Math.min(area.x + area.width, whole.x + whole.width)
+  let bottom = Math.min(area.y + area.height, whole.y + whole.height)
+  if left >= right || top >= bottom {
+    found
+  } else {
+    found.push(Canvas.rect(left, top, right - left, bottom - top))
+  }
+}
+
+fn bounding(areas: &Array[Canvas.Rect]) -> Canvas.Rect {
+  var left = areas[0].x
+  var top = areas[0].y
+  var right = areas[0].x + areas[0].width
+  var bottom = areas[0].y + areas[0].height
+  for area in areas {
+    left = Math.min(left, area.x)
+    top = Math.min(top, area.y)
+    right = Math.max(right, area.x + area.width)
+    bottom = Math.max(bottom, area.y + area.height)
+  }
+  Canvas.rect(left, top, right - left, bottom - top)
+}

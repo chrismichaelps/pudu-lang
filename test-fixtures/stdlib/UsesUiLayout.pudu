@@ -1,0 +1,218 @@
+module UsesUiLayout
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Layout as Layout
+
+/// Declarative placement, accessibility, painting, and damage without a window.
+export fn main() -> Int {
+  var held = 0
+  let white = Canvas.rgb(255u8, 255u8, 255u8)
+  let blue = Canvas.rgb(0u8, 0u8, 255u8)
+  let red = Canvas.rgb(255u8, 0u8, 0u8)
+  let tenByTen = Canvas.size(10, 10)
+
+  if let Err(Layout.InvalidViewport(0, 10)) = Layout.place(&Layout.box(), Canvas.size(0, 10)) {
+    held = held + 1
+  }
+  if let Err(Layout.InvalidBudget(0)) = Layout.placeWithin(&Layout.box(), tenByTen, 0, 8) {
+    held = held + 1
+  }
+  if let Err(Layout.NegativeLength(0, -1)) = Layout.place(&Layout.box().wide(-1), tenByTen) {
+    held = held + 1
+  }
+  if let Err(Layout.LengthTooLarge(0, 1073741825)) =
+  Layout.place(&Layout.box().tall(1073741825), tenByTen)
+  {
+    held = held + 1
+  }
+  let forged = Layout.View{..Layout.box(), children: [Layout.box()]}
+  if let Err(Layout.LeafWithChildren(0)) = Layout.place(&forged, tenByTen) { held = held + 1 }
+  if let Err(Layout.UnnamedRole(1)) =
+  Layout.place(&Layout.column([Layout.box().means(Layout.Button)]), tenByTen)
+  {
+    held = held + 1
+  }
+  if let Err(Layout.NodeBudgetExceeded(2)) =
+  Layout.placeWithin(&Layout.column([Layout.box(), Layout.box()]), tenByTen, 2, 8)
+  {
+    held = held + 1
+  }
+  if let Err(Layout.DepthBudgetExceeded(1)) =
+  Layout.placeWithin(&Layout.column([Layout.column([Layout.box()])]), tenByTen, 10, 1)
+  {
+    held = held + 1
+  }
+
+  if let Ok(whole) = Layout.place(&Layout.box(), Canvas.size(10, 5)) {
+    if Layout.frameOf(&whole, 0) == Some(Canvas.rect(0, 0, 10, 5)) &&
+    Layout.frameOf(&whole, 1) == None && Layout.frameOf(&whole, -1) == None &&
+    Layout.nodeCount(&whole) == 1
+    {
+      held = held + 1
+    }
+  }
+
+  let padded = Layout.column([Layout.box().tall(10), Layout.box().tall(20)]).padded(2).spaced(3)
+  if let Ok(placed) = Layout.place(&padded, Canvas.size(50, 100)) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(2, 2, 46, 10)) &&
+    Layout.frameOf(&placed, 2) == Some(Canvas.rect(2, 15, 46, 20))
+    {
+      held = held + 1
+    }
+  }
+
+  let weighted = Layout.row([Layout.box().wide(10), Layout.spacer(), Layout.box().growing(2)])
+  if let Ok(placed) = Layout.place(&weighted, Canvas.size(100, 20)) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 0, 10, 20)) &&
+    Layout.frameOf(&placed, 2) == Some(Canvas.rect(10, 0, 30, 20)) &&
+    Layout.frameOf(&placed, 3) == Some(Canvas.rect(40, 0, 60, 20))
+    {
+      held = held + 1
+    }
+  }
+
+  let thirds = Layout.row([Layout.spacer(), Layout.spacer(), Layout.spacer()])
+  if let Ok(placed) = Layout.place(&thirds, Canvas.size(10, 1)) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 0, 3, 1)) &&
+    Layout.frameOf(&placed, 2) == Some(Canvas.rect(3, 0, 3, 1)) &&
+    Layout.frameOf(&placed, 3) == Some(Canvas.rect(6, 0, 4, 1))
+    {
+      held = held + 1
+    }
+  }
+
+  let centered = Layout.row([Layout.box().sized(4, 4)]).aligned(Layout.Center)
+  if let Ok(placed) = Layout.place(&centered, tenByTen) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, 3, 4, 4)) { held = held + 1 }
+  }
+
+  let trailing = Layout.column([Layout.box().sized(4, 4)]).aligned(Layout.End)
+  if let Ok(placed) = Layout.place(&trailing, tenByTen) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(6, 0, 4, 4)) { held = held + 1 }
+  }
+
+  let corner = Layout.layer([Layout.box().sized(2, 2)]).aligned(Layout.End)
+  let covering = Layout.layer([Layout.box()])
+  if let Ok(placedCorner) = Layout.place(&corner, Canvas.size(10, 6)) {
+    if let Ok(placedCovering) = Layout.place(&covering, Canvas.size(10, 6)) {
+      if Layout.frameOf(&placedCorner, 1) == Some(Canvas.rect(8, 4, 2, 2)) &&
+      Layout.frameOf(&placedCovering, 1) == Some(Canvas.rect(0, 0, 10, 6))
+      {
+        held = held + 1
+      }
+    }
+  }
+
+  let crowded = Layout.row([Layout.box().wide(8), Layout.box().wide(8)])
+  if let Ok(placed) = Layout.place(&crowded, Canvas.size(10, 2)) {
+    if Layout.frameOf(&placed, 2) == Some(Canvas.rect(8, 0, 8, 2)) { held = held + 1 }
+  }
+
+  let squeezed = Layout.column([Layout.box()]).padded(20)
+  if let Ok(placed) = Layout.place(&squeezed, tenByTen) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(20, 20, 0, 0)) { held = held + 1 }
+  }
+
+  let huge = 1073741824
+  let vast = Layout.row([Layout.box().growing(huge), Layout.box().growing(huge)])
+  if let Ok(placed) = Layout.place(&vast, Canvas.size(huge, 1)) {
+    if Layout.frameOf(&placed, 2) == Some(Canvas.rect(536870912, 0, 536870912, 1)) {
+      held = held + 1
+    }
+  }
+
+  let inbox = Layout.column([
+      Layout.box().tall(2).means(Layout.Heading).named("Inbox"),
+      Layout.row([
+          Layout.box().wide(3).means(Layout.Button).named("Send"),
+          Layout.box().wide(3).means(Layout.Field).named("Search")
+        ]).tall(4).means(Layout.Group)
+    ])
+  if let Ok(placed) = Layout.place(&inbox, tenByTen) {
+    let tree = Layout.semantics(&placed)
+    if tree.length() == 4 && tree[0].parent == -1 && tree[1].node == 2 && tree[2].parent == 2 &&
+    tree[2].focusable && !tree[0].focusable
+    {
+      held = held + 1
+    }
+    if Layout.focusOrder(&placed) == [3, 4] { held = held + 1 }
+    if Layout.nodeNamed(&placed, "Send") == Some(3) && Layout.nodeNamed(&placed, "Missing") == None {
+      held = held + 1
+    }
+    if Layout.hitTest(&placed, Canvas.point(1, 3)) == Some(3) &&
+    Layout.hitTest(&placed, Canvas.point(8, 3)) == Some(2) &&
+    Layout.hitTest(&placed, Canvas.point(8, 9)) == None
+    {
+      held = held + 1
+    }
+  }
+
+  let framed = Layout.column([Layout.box().tall(4).padded(1).filled(blue)]).filled(white)
+  if let Ok(placed) = Layout.place(&framed, Canvas.size(4, 6)) {
+    if let Ok(target) = Canvas.canvas(4, 6, white) {
+      if let Ok(painted) = Layout.paint(&placed, &target) {
+        if Canvas.commandCount(&painted) == 2 {
+          if let Ok(surface) = Canvas.render(&painted) {
+            if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(blue)) &&
+            Canvas.pixelAt(&surface, Canvas.point(0, 5)) == Ok(Some(white))
+            {
+              held = held + 1
+            }
+          }
+        }
+      }
+    }
+    if let Ok(wrong) = Canvas.canvas(5, 6, white) {
+      if let Err(Layout.ViewportMismatch(5, 6)) = Layout.paint(&placed, &wrong) {
+        held = held + 1
+      }
+    }
+    if Layout.damage(&placed, &placed) == [] { held = held + 1 }
+  }
+
+  let before = Layout.row([Layout.box().wide(2).filled(red), Layout.spacer()]).filled(white)
+  let after = Layout.row([Layout.spacer(), Layout.box().wide(2).filled(red)]).filled(white)
+  if let Ok(was) = Layout.place(&before, Canvas.size(8, 3)) {
+    if let Ok(now) = Layout.place(&after, Canvas.size(8, 3)) {
+      let regions = Layout.damage(&was, &now)
+      if regions == [Canvas.rect(0, 0, 2, 3), Canvas.rect(6, 0, 2, 3)] {
+        held = held + 1
+      }
+      if let Ok(blank) = Canvas.canvas(8, 3, white) {
+        if let Ok(oldCanvas) = Layout.paint(&was, &blank) {
+          if let Ok(newCanvas) = Layout.paint(&now, &blank) {
+            if let Ok(oldSurface) = Canvas.render(&oldCanvas) {
+              if let Ok(full) = Canvas.render(&newCanvas) {
+                if let Ok(patched) = Canvas.repaint(&newCanvas, &oldSurface, &regions) {
+                  if Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&full) { held = held + 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if let Ok(one) = Layout.place(&Layout.column([Layout.box().filled(red)]), tenByTen) {
+    if let Ok(two) = Layout.place(&Layout.column([Layout.box(), Layout.box()]), tenByTen) {
+      if Layout.damage(&one, &two) == [Canvas.rect(0, 0, 10, 10)] { held = held + 1 }
+    }
+  }
+
+  var manyBefore: Array[Layout.View] = []
+  var manyAfter: Array[Layout.View] = []
+  var count = 0
+  while count < 17 {
+    manyBefore = manyBefore.push(Layout.box().tall(1).filled(red))
+    manyAfter = manyAfter.push(Layout.box().tall(1).filled(blue))
+    count = count + 1
+  }
+  if let Ok(first) = Layout.place(&Layout.column(manyBefore), Canvas.size(4, 20)) {
+    if let Ok(second) = Layout.place(&Layout.column(manyAfter), Canvas.size(4, 20)) {
+      if Layout.damage(&first, &second) == [Canvas.rect(0, 0, 4, 17)] { held = held + 1 }
+    }
+  }
+
+  held
+}

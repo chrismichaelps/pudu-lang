@@ -63,6 +63,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui Live]] — a screen held on the server, sending what changed.
 - [[Std Ui]] — screens as functions from state to view, and the difference between two.
 - [[Std Ui Canvas]] — bounded Pudu-native RGBA software rendering for application UI.
+- [[Std Ui Layout]] — declarative views placed in two passes, with accessibility and damage.
 - [[Std Mail]] — a message a program sends, which cannot carry more than it says.
 - [[Std Mail Smtp]] — native RFC 5321 client transport over streaming TCP with AUTH LOGIN/PLAIN and multi-line reply parsing.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.

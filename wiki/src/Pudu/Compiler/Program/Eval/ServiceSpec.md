@@ -18,8 +18,9 @@ the Haskell property attaches a contract-specific counterexample to that count.
 
 ## Governance and algorithm
 
-The UI fixture counts cover pure component state, structural differences, and the Pudu-native canvas'
-exact pixels and typed refusals. Exact equality is intentional: adding a check without registering it
+The UI fixture counts cover pure component state, structural differences, the Pudu-native canvas'
+exact pixels, repaint equality, and typed refusals, and declarative layout's exact frames,
+accessibility semantics, and damage that repaints to the same bytes as a full render. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
 ## Grill Log
@@ -35,4 +36,4 @@ counterexamples identify the failed service contract.
 
 ## Referenced by
 
-[[Std Ui]] · [[2026-09-12-release-readiness-ui]]
+[[Std Ui]] · [[Std Ui Canvas]] · [[Std Ui Layout]] · [[2026-09-12-release-readiness-ui]]

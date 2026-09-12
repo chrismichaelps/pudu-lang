@@ -20,8 +20,9 @@ committed directly to `dev` at the user's explicit direction; no branch or PR is
 1. **Language Architect:** owns [[First Release Readiness]], [[Native Application UI]], and the
    Pudu-native/no-foreign boundary.
 2. **Stdlib Implementer:** owns `packages/pudu/v0.1/lib/Std/Ui/Canvas.pudu`,
-   `test-fixtures/stdlib/UsesUiCanvas.pudu`, their mirrors, and the exact-count service fixture
-   registration.
+   `packages/pudu/v0.1/lib/Std/Ui/Layout.pudu`, `test-fixtures/stdlib/UsesUiCanvas.pudu`,
+   `test-fixtures/stdlib/UsesUiLayout.pudu`, their mirrors, and the exact-count service fixture
+   registrations.
 3. **Independent Reviewer:** reviews the completed diff without editing and classifies findings P0–P3.
 4. **Forensic Guardian:** checks mirror fidelity, MOC links, changelog evidence, and the private-input
    boundary before delivery.
@@ -33,14 +34,27 @@ or the commits on `feature/228-std-prose`.
 
 `Std.Ui.Canvas` is a bounded Pudu-native RGBA software renderer. It owns pure geometry, a flat ordered
 fill list, overflow-safe clipping, opaque replacement, integer source-over blending, and exact
-framebuffer inspection. It neither opens a window nor binds a native toolkit.
+framebuffer inspection. It neither opens a window nor binds a native toolkit. It rasterizes by bands
+and spans, and `repaint` redraws damaged regions with byte equality to `render`.
+
+`Std.Ui.Layout` is the declarative layer above it: `View` values with modifiers as fields, two-pass
+placement, exact grow distribution, a semantics tree that refuses unnamed meaningful roles, focus
+order, hit testing, painting, and damage regions.
+
+## State
+
+- `bc50f06` — exact-pixel canvas and the corrected readiness audit.
+- `fd6cfd3` — band-and-span rasterizer and repaint; 512×512 frame 4.35 s → 0.10 s at -O2.
+- Layout slice — 29 assertions; 1,001 nodes place in about 0.18 s and paint plus render in about
+  0.56 s at -O2, which is interpreter cost and not yet an interactive frame.
 
 ## Exact next action
 
-After committing the exact-pixel conformance slice, add a repeatable canvas benchmark and replace
-whole-frame immutable copies with a Pudu-native bounded renderer that meets an interactive percentile
-deadline. Keep the current output fixture as the semantic oracle; do not begin widgets or a presenter
-until the renderer passes that gate.
+Add event routing and state-driven updates to layout: a screen as state plus a view function, input
+events resolved through `hitTest` and `focusOrder`, and each update producing `damage` for `repaint`.
+Then text measurement and a Pudu-native glyph rasterizer, since labels are the next thing every
+application needs. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
+the UI event slice. Keep every fixture as the semantic oracle for later optimization.
 
 ## Grill Log
 

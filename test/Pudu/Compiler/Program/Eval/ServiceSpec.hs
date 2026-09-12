@@ -15,6 +15,7 @@ testServiceEvaluation = do
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
+  layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
@@ -118,6 +119,9 @@ testServiceEvaluation = do
     , counterexample
         "a native canvas clips and blends into exact bounded pixels"
         (canvas === Just "41")
+    , counterexample
+        "declarative layout places exact frames, names every control, and repaints only damage"
+        (layout === Just "29")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two

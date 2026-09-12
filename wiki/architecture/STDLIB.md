@@ -290,7 +290,8 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
-| `Std.Ui.Canvas` | 23 | bounded exact-pixel application rendering; conformance-only pending latency work |
+| `Std.Ui.Canvas` | 41 | bounded exact-pixel application rendering by bands and spans, with damage repaint |
+| `Std.Ui.Layout` | 29 | declarative views, two-pass placement, accessibility semantics, damage regions |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |

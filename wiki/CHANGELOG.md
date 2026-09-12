@@ -23,6 +23,11 @@ tags: [changelog]
   through an array: joining 262,144 four-byte parts fell from 1.71 s to 1.06 s at -O2.
 - Limited Apple references to the developer documentation archive and read OpenSwiftUI only for
   declarative size negotiation; no API names or code are carried over.
+- Added `Std.Ui.Layout`: declarative `View` values whose modifiers are fields rather than wrapper
+  nodes, two-pass placement with exact cumulative grow distribution, a semantics tree that refuses
+  unnamed meaningful roles, focus order, hit testing, painting into the canvas, and damage regions
+  whose repaint equals a full render. 29 assertions; a 1,001-node screen places in about 0.18 s and
+  paints plus renders in about 0.56 s at -O2, still outside an interactive frame budget.
 
 ## 2026-09-12 — Adapter-free production website
 

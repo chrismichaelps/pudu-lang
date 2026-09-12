@@ -75,7 +75,8 @@ supplied by an untrusted document cannot select an arbitrary allocation.
 1. Canvas rectangles and exact pixels.
 2. Lines, rounded rectangles, paths, and damage regions.
 3. Font-independent text layout contracts, then a Pudu-native rasterizer.
-4. Constraint layout, focus traversal, pointer/keyboard events, and an accessibility semantics tree.
+4. Declarative layout with focus order, hit testing, an accessibility semantics tree, and damage
+   regions (`Std.Ui.Layout`); then keyboard/pointer event routing and state-driven updates.
 5. PCM samples, a real-time-safe graph, mixing, resampling, channel layouts, and WAV encoding in
    `Std.Audio`.
 6. Rational clocks, frame planes, color/HDR metadata, synchronization, seeking, and a small
