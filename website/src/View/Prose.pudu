@@ -1,0 +1,111 @@
+module View.Prose
+
+import Std.Html.Build as H
+import Std.Text as Text
+
+/// Renders a declaration's documentation lines as structured prose.
+///
+/// A doc comment is written the way a developer writes one: paragraphs
+/// separated by a blank line, fenced blocks holding runnable Pudu, headings
+/// introducing a section, and dash-led lines forming a list. The exporter hands
+/// those lines over untouched, so this is where they become structure rather
+/// than one paragraph per physical line.
+///
+/// Inline spans wrapped in backticks become code, which is how a name written
+/// mid-sentence stays distinguishable from the prose around it.
+
+/// The blocks a documentation comment describes, in source order.
+export fn blocks(lines: &Array[Str]) -> Array[H.Node] {
+  var out: Array[H.Node] = []
+  var paragraph: Array[Str] = []
+  var code: Array[Str] = []
+  var listItems: Array[H.Node] = []
+  var fenced = false
+  for raw in lines {
+    let line = Text.trimEnd(raw)
+    if fenced {
+      if line.trim().startsWith("```") {
+        out = out.push(H.pre().holding([H.code().says(code.join("\n"))]))
+        code = []
+        fenced = false
+      } else {
+        code = code.push(line)
+      }
+    } else if line.trim().startsWith("```") {
+      out = flushParagraph(out, &paragraph)
+      paragraph = []
+      out = flushList(out, &listItems)
+      listItems = []
+      fenced = true
+    } else if line.trim().isEmpty() {
+      out = flushParagraph(out, &paragraph)
+      paragraph = []
+      out = flushList(out, &listItems)
+      listItems = []
+    } else if line.startsWith("## ") {
+      out = flushParagraph(out, &paragraph)
+      paragraph = []
+      out = flushList(out, &listItems)
+      listItems = []
+      out = out.push(H.h3().holding(inline(line.slice(3, line.length()))))
+    } else if line.startsWith("- ") {
+      out = flushParagraph(out, &paragraph)
+      paragraph = []
+      listItems = listItems.push(H.li().holding(inline(line.slice(2, line.length()))))
+    } else {
+      out = flushList(out, &listItems)
+      listItems = []
+      paragraph = paragraph.push(line.trim())
+    }
+  }
+  if fenced && code.length() > 0 {
+    out = out.push(H.pre().holding([H.code().says(code.join("\n"))]))
+  }
+  out = flushParagraph(out, &paragraph)
+  flushList(out, &listItems)
+}
+
+/// The gathered paragraph lines joined into one paragraph, when there are any.
+fn flushParagraph(out: Array[H.Node], paragraph: &Array[Str]) -> Array[H.Node] {
+  if paragraph.length() == 0 { out }
+    else { out.push(H.p().holding(inline(paragraph.join(" ")))) }
+}
+
+/// The gathered list items closed into one list, when there are any.
+fn flushList(out: Array[H.Node], listItems: &Array[H.Node]) -> Array[H.Node] {
+  if listItems.length() == 0 { out } else { out.push(H.ul().holding(*listItems)) }
+}
+
+/// One line of prose split into plain text and backticked code spans.
+/// An unclosed backtick is left as ordinary text rather than swallowing the
+/// rest of the sentence.
+export fn inline(text: Str) -> Array[H.Node] {
+  var out: Array[H.Node] = []
+  var pending = ""
+  var index = 0
+  let size = text.length()
+  while index < size {
+    let character = text.slice(index, index + 1)
+    if character == "`" {
+      let tail = text.slice(index + 1, size)
+      let offset = tail.indexOf("`")
+      let closing = if offset < 0 { -1 } else { index + 1 + offset }
+      if closing < 0 {
+        pending = pending + character
+        index = index + 1
+      } else {
+        if !pending.isEmpty() {
+          out = out.push(H.words(pending))
+          pending = ""
+        }
+        out = out.push(H.code().says(text.slice(index + 1, closing)))
+        index = closing + 1
+      }
+    } else {
+      pending = pending + character
+      index = index + 1
+    }
+  }
+  if !pending.isEmpty() { out = out.push(H.words(pending)) }
+  out
+}

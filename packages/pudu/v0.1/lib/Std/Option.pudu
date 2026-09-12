@@ -1,6 +1,17 @@
 module Std.Option
 
 /// Whether a value is present.
+///
+/// Borrows the option, so it can be asked without giving the value up. Use it in a
+/// condition; use a `match` when the value itself is wanted, since that gets it
+/// out in the same step.
+///
+/// ## Examples
+///
+/// ```
+/// Option.isSome(&Some(1))  // true
+/// Option.isSome(&None)     // false
+/// ```
 export fn isSome[T](value: &Option[T]) -> Bool {
   match value {
     case Some(_) => true
@@ -9,6 +20,16 @@ export fn isSome[T](value: &Option[T]) -> Bool {
 }
 
 /// Whether a value is absent.
+///
+/// `isSome` negated, written out because a negated call reads poorly inside a
+/// larger condition.
+///
+/// ## Examples
+///
+/// ```
+/// Option.isNone(&None)     // true
+/// Option.isNone(&Some(1))  // false
+/// ```
 export fn isNone[T](value: &Option[T]) -> Bool {
   match value {
     case Some(_) => false
@@ -17,8 +38,19 @@ export fn isNone[T](value: &Option[T]) -> Bool {
 }
 
 /// The value, or a fallback when there is none.
-/// There is no `unwrap` that panics: nothing in `Std` is partial, and a caller
-/// who has no fallback wants `okOr` and the failure that goes with it.
+///
+/// There is no `unwrap` that panics: nothing in `Std` is partial, and a caller who
+/// has no fallback wants `okOr` and the failure that goes with it.
+///
+/// The fallback is evaluated whether or not it is needed. When building it is
+/// expensive or can itself fail, reach for `unwrapOrElse`.
+///
+/// ## Examples
+///
+/// ```
+/// Option.unwrapOr(Some(5), 0)  // 5
+/// Option.unwrapOr(None, 0)     // 0
+/// ```
 export fn unwrapOr[T](value: Option[T], fallback: T) -> T {
   match value {
     case Some(found) => found
@@ -26,8 +58,17 @@ export fn unwrapOr[T](value: Option[T], fallback: T) -> T {
   }
 }
 
-/// The value as an array of nought or one element, which is how a caller
-/// iterates over a maybe-absent value without matching on it.
+/// The value as an array of nought or one element.
+///
+/// This is how a caller iterates over a maybe-absent value without matching on it,
+/// and it is what lets an option flow into anything that already takes an array.
+///
+/// ## Examples
+///
+/// ```
+/// Option.toArray(Some(1))  // [1]
+/// Option.toArray(None)     // []
+/// ```
 export fn toArray[T](value: Option[T]) -> Array[T] {
   match value {
     case Some(found) => [found]
@@ -36,6 +77,17 @@ export fn toArray[T](value: Option[T]) -> Array[T] {
 }
 
 /// The first value if it is present, otherwise the second.
+///
+/// Both arguments are evaluated, so this is for options you already hold. Chained,
+/// it expresses a list of fallbacks in order of preference.
+///
+/// ## Examples
+///
+/// ```
+/// Option.orElse(Some(1), Some(2))  // Some(1)
+/// Option.orElse(None, Some(2))     // Some(2)
+/// Option.orElse(None, None)        // None
+/// ```
 export fn orElse[T](first: Option[T], second: Option[T]) -> Option[T] {
   match first {
     case Some(found) => Some(found)
@@ -44,8 +96,21 @@ export fn orElse[T](first: Option[T], second: Option[T]) -> Option[T] {
 }
 
 /// A present value, or a declared failure when there is none.
-/// This is the bridge from "might be absent" to "explains why", and it is the
-/// only honest way to leave `Option` behind.
+///
+/// This is the bridge from "might be absent" to "explains why", and it is the only
+/// honest way to leave `Option` behind. An absent value says nothing about the
+/// reason; the caller supplies that reason here, at the point where it is known.
+///
+/// ## Examples
+///
+/// ```
+/// Option.okOr(Some(5), "missing")  // Ok(5)
+/// Option.okOr(None, "missing")     // Err("missing")
+/// ```
+///
+/// ## See also
+///
+/// - `okOrElse` — build the failure only when it is needed.
 export fn okOr[T, E](value: Option[T], failure: E) -> Result[T, E] {
   match value {
     case Some(found) => Ok(found)
@@ -54,8 +119,16 @@ export fn okOr[T, E](value: Option[T], failure: E) -> Result[T, E] {
 }
 
 /// The value, or a fallback computed only when there is none.
+///
 /// The fallback is a function so it runs only when it is needed, which matters
 /// when computing it is expensive or can itself fail.
+///
+/// ## Examples
+///
+/// ```
+/// Option.unwrapOrElse(Some(5), fn() -> Int => expensive())  // 5, never calls expensive
+/// Option.unwrapOrElse(None, fn() -> Int => expensive())     // calls expensive
+/// ```
 export fn unwrapOrElse[T](value: Option[T], fallback: fn() -> T) -> T {
   match value {
     case Some(found) => found
@@ -64,24 +137,69 @@ export fn unwrapOrElse[T](value: Option[T], fallback: fn() -> T) -> T {
 }
 
 /// The value transformed, if there is one.
+///
+/// Absence passes straight through untouched, so the transform never has to
+/// consider it. Use this when the transform always succeeds; when it may itself
+/// answer nothing, `andThen` keeps the result from nesting.
+///
+/// ## Examples
+///
+/// ```
+/// Option.map(Some(2), fn(n: Int) -> Int => n * 10)  // Some(20)
+/// Option.map(None, fn(n: Int) -> Int => n * 10)     // None
+/// ```
 export fn map[A, B](value: Option[A], transform: fn(A) -> B) -> Option[B] {
   Some(transform(value ?))
 }
 
 /// The value transformed into another option, flattened.
+///
+/// The form to use when the transform can itself answer nothing: `map` would give
+/// back `Some(None)`, and this gives `None`. Chaining it is how several
+/// maybe-absent steps run one after another without nesting.
+///
+/// ## Examples
+///
+/// ```
+/// Option.andThen(Some("12"), fn(s: Str) -> Option[Int] => Text.toInt(s))  // Some(12)
+/// Option.andThen(Some("no"), fn(s: Str) -> Option[Int] => Text.toInt(s))  // None
+/// ```
 export fn andThen[A, B](value: Option[A], transform: fn(A) -> Option[B]) -> Option[B] {
   transform(value ?)
 }
 
 /// The value if it is present and the predicate accepts it.
+///
+/// A filter over a single value. An absent value stays absent without the
+/// predicate running at all.
+///
+/// ## Examples
+///
+/// ```
+/// Option.keepIf(Some(4), fn(n: Int) -> Bool => n > 3)  // Some(4)
+/// Option.keepIf(Some(1), fn(n: Int) -> Bool => n > 3)  // None
+/// ```
+///
+/// ## See also
+///
+/// - `dropIf` — the same test, dropping what it accepts.
 export fn keepIf[T](value: Option[T], accept: fn(T) -> Bool) -> Option[T] {
   let found = value ?
   if accept(found) { Some(found) } else { None }
 }
 
 /// The result of transforming the value, or a fallback when there is none.
-/// The arguments are in the order a reader meets them: the value, what to do
-/// with it, and what to do without it.
+///
+/// The arguments are in the order a reader meets them: the value, what to do with
+/// it, and what to do without it. Unlike `map`, both paths end at the same type,
+/// so this is how an option is left behind entirely.
+///
+/// ## Examples
+///
+/// ```
+/// Option.fold(Some(2), fn(n: Int) -> Str => show(n), "none")  // "2"
+/// Option.fold(None, fn(n: Int) -> Str => show(n), "none")     // "none"
+/// ```
 export fn fold[A, B](value: Option[A], transform: fn(A) -> B, fallback: B) -> B {
   match value {
     case Some(found) => transform(found)
@@ -90,6 +208,16 @@ export fn fold[A, B](value: Option[A], transform: fn(A) -> B, fallback: B) -> B 
 }
 
 /// Whether the value is present and the predicate accepts it.
+///
+/// Absence answers false without running the predicate. The option is borrowed, so
+/// this is a question rather than a step that consumes it.
+///
+/// ## Examples
+///
+/// ```
+/// Option.holds(&Some(4), fn(n: Int) -> Bool => n > 3)  // true
+/// Option.holds(&None, fn(n: Int) -> Bool => n > 3)     // false
+/// ```
 export fn holds[T](value: &Option[T], predicate: fn(T) -> Bool) -> Bool {
   match value {
     case Some(found) => predicate(found)
@@ -98,11 +226,30 @@ export fn holds[T](value: &Option[T], predicate: fn(T) -> Bool) -> Bool {
 }
 
 /// A nested option flattened by one level.
+///
+/// What `map` produces when its transform also answers an option. Reaching for
+/// `andThen` instead avoids building the nesting in the first place.
+///
+/// ## Examples
+///
+/// ```
+/// Option.flatten(Some(Some(1)))  // Some(1)
+/// Option.flatten(Some(None))     // None
+/// ```
 export fn flatten[T](value: Option[Option[T]]) -> Option[T] {
   value ?
 }
 
 /// Every present value, with the absent ones dropped.
+///
+/// The result says nothing about how many were dropped. When every value must be
+/// present for the whole to mean anything, `allPresent` reports that instead.
+///
+/// ## Examples
+///
+/// ```
+/// Option.present(&[Some(1), None, Some(3)])  // [1, 3]
+/// ```
 export fn present[T](values: &Array[Option[T]]) -> Array[T] {
   var out = []
   for value in values {
@@ -115,11 +262,31 @@ export fn present[T](values: &Array[Option[T]]) -> Array[T] {
 }
 
 /// Two options paired, present only when both are.
+///
+/// Either one being absent makes the pair absent, which is the useful default: a
+/// pair with a hole in it is rarely what a caller can act on.
+///
+/// ## Examples
+///
+/// ```
+/// Option.zip(Some(1), Some("a"))  // Some((1, "a"))
+/// Option.zip(Some(1), None)       // None
+/// ```
 export fn zip[A, B](left: Option[A], right: Option[B]) -> Option[(A, B)] {
   Some((left ?, right ?))
 }
 
 /// Whether a value is present, as a plain question about an owned value.
+///
+/// The same answer as `isSome`, for a caller holding the option rather than a
+/// reference to one.
+///
+/// ## Examples
+///
+/// ```
+/// Option.exists(Some(1))  // true
+/// Option.exists(None)     // false
+/// ```
 export fn exists[T](value: Option[T]) -> Bool {
   match value {
     case Some(_) => true
@@ -128,14 +295,30 @@ export fn exists[T](value: Option[T]) -> Bool {
 }
 
 /// The first element of an array, as an option.
+///
 /// The bridge from "a collection that might be empty" to "a value that might be
 /// absent", which is the shape the rest of this module works on.
+///
+/// ## Examples
+///
+/// ```
+/// Option.fromArray(&[1, 2])  // Some(1)
+/// Option.fromArray(&[])      // None
+/// ```
 export fn fromArray[T](items: &Array[T]) -> Option[T] {
   if items.length() == 0 { None } else { Some(items[0]) }
 }
 
 /// Every element transformed, keeping only the results that are present.
-/// One pass rather than a map followed by a filter, which is why it exists.
+///
+/// One pass rather than a map followed by a filter, which is why it exists. The
+/// transform decides both what an element becomes and whether it survives.
+///
+/// ## Examples
+///
+/// ```
+/// Option.mapPresent(&["1", "x", "3"], fn(s: Str) -> Option[Int] => Text.toInt(s))  // [1, 3]
+/// ```
 export fn mapPresent[A, B](items: &Array[A], transform: fn(A) -> Option[B]) -> Array[B] {
   var out = []
   for item in items {
@@ -148,6 +331,17 @@ export fn mapPresent[A, B](items: &Array[A], transform: fn(A) -> Option[B]) -> A
 }
 
 /// The value, or the failure a caller names, without discarding either.
+///
+/// `okOr` with the failure built only when it is needed, which matters when
+/// describing the failure costs something — gathering context, or formatting a
+/// message.
+///
+/// ## Examples
+///
+/// ```
+/// Option.okOrElse(None, fn() -> Str => describe())  // Err(describe())
+/// Option.okOrElse(Some(1), fn() -> Str => describe())  // Ok(1), never calls describe
+/// ```
 export fn okOrElse[T, E](value: Option[T], failure: fn() -> E) -> Result[T, E] {
   match value {
     case Some(found) => Ok(found)
@@ -156,11 +350,33 @@ export fn okOrElse[T, E](value: Option[T], failure: fn() -> E) -> Result[T, E] {
 }
 
 /// Both values if both are present, combined.
+///
+/// `zip` followed by `map` without building the pair, which also lets the
+/// combining step name its two arguments.
+///
+/// ## Examples
+///
+/// ```
+/// Option.map2(Some(1), Some(2), fn(a: Int, b: Int) -> Int => a + b)  // Some(3)
+/// Option.map2(Some(1), None, fn(a: Int, b: Int) -> Int => a + b)     // None
+/// ```
 export fn map2[A, B, C](left: Option[A], right: Option[B], combine: fn(A, B) -> C) -> Option[C] {
   Some(combine(left ?, right ?))
 }
 
 /// Every value if every one is present, otherwise nothing.
+///
+/// All or nothing: one absent value makes the whole answer absent. This is the
+/// form for input where a partial result would be misleading, and the counterpart
+/// to `present`, which keeps what it can.
+///
+/// ## Examples
+///
+/// ```
+/// Option.allPresent(&[Some(1), Some(2)])  // Some([1, 2])
+/// Option.allPresent(&[Some(1), None])     // None
+/// Option.allPresent(&[])                  // Some([])
+/// ```
 export fn allPresent[T](values: &Array[Option[T]]) -> Option[Array[T]] {
   var out = []
   for value in values {
@@ -170,6 +386,16 @@ export fn allPresent[T](values: &Array[Option[T]]) -> Option[Array[T]] {
 }
 
 /// The first present value, or nothing when there is none.
+///
+/// Stops at the first one it finds. `orElse` chained expresses the same preference
+/// order for options already held; this takes them as an array.
+///
+/// ## Examples
+///
+/// ```
+/// Option.firstPresent(&[None, Some(2), Some(3)])  // Some(2)
+/// Option.firstPresent(&[None, None])              // None
+/// ```
 export fn firstPresent[T](values: &Array[Option[T]]) -> Option[T] {
   for value in values {
     match value {
@@ -181,13 +407,33 @@ export fn firstPresent[T](values: &Array[Option[T]]) -> Option[T] {
 }
 
 /// The value if it is present, otherwise nothing, with the option discarded.
-/// The counterpart to `keepIf`: it drops a value the predicate accepts.
+///
+/// The counterpart to `keepIf`: it drops a value the predicate accepts. Written
+/// out rather than left to a negated predicate, because a negation inside a filter
+/// is easy to misread.
+///
+/// ## Examples
+///
+/// ```
+/// Option.dropIf(Some(1), fn(n: Int) -> Bool => n < 3)  // None
+/// Option.dropIf(Some(4), fn(n: Int) -> Bool => n < 3)  // Some(4)
+/// ```
 export fn dropIf[T](value: Option[T], reject: fn(T) -> Bool) -> Option[T] {
   let found = value ?
   if reject(found) { None } else { Some(found) }
 }
 
 /// A value made present when a condition holds.
+///
+/// The way to turn a plain condition into an option without writing the `if` at
+/// every call site. The value is evaluated either way, so keep it cheap.
+///
+/// ## Examples
+///
+/// ```
+/// Option.when(true, 5)   // Some(5)
+/// Option.when(false, 5)  // None
+/// ```
 export fn when[T](condition: Bool, value: T) -> Option[T] {
   if condition { Some(value) } else { None }
 }

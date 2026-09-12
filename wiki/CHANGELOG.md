@@ -23,6 +23,11 @@ tags: [changelog]
 - Expanded symbol-family pages with declaration-provider explanations and conditional guides for
   arrows, references, mutable references, type arguments, `Option`, `Result`, and `Self`.
 
+- Replaced the per-declaration notation guide with rendered documentation structure: a doc comment's
+  paragraphs, fenced examples, section headings, and cross-reference lists now survive to the page.
+- Rewrote the `Std.List` core as full reference documentation, each declaration carrying its
+  behaviour, its edge cases, worked examples, and the neighbours worth reaching for instead.
+
 ## 2026-09-11 — Adapter-free Vercel runtime build
 
 - Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their

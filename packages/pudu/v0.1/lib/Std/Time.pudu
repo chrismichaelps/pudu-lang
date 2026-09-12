@@ -1,128 +1,383 @@
 module Std.Time
 
 /// A point on the system clock, as milliseconds since the start of 1970.
+///
 /// A distinct type from a plain number so a duration and an instant cannot be
-/// confused for one another, which is the mistake date handling is made of.
+/// confused for one another, which is the mistake date handling is made of. An
+/// instant names a moment; it carries no zone, because a moment is the same moment
+/// everywhere.
+///
+/// ## Examples
+///
+/// ```
+/// let now = Time.currentInstant()
+/// let later = Time.add(&now, &Time.minutes(5))
+/// ```
 export type Instant = { millis: Int }
 
 /// A length of time, as milliseconds.
+///
+/// A span rather than a point. Durations add and subtract among themselves and can
+/// be applied to an instant; two instants subtract to give one.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.plus(&Time.minutes(1), &Time.seconds(30)))  // 90
+/// ```
 export type Duration = { millis: Int }
 
 /// A civil date with no instant until a zone is applied.
-/// The distinction from an instant is the one date handling gets wrong most
-/// often: a birthday is a date everywhere, while a meeting is an instant.
+///
+/// The distinction from an instant is the one date handling gets wrong most often:
+/// a birthday is a date everywhere, while a meeting is an instant. Keep a value in
+/// this type when the calendar day is what matters, whatever the reader's zone.
+///
+/// ## Examples
+///
+/// ```
+/// Time.renderDate(&Date{year: 2026, month: 9, day: 12})  // "2026-09-12"
+/// ```
 export type Date = { year: Int, month: Int, day: Int }
 
 /// A time of day with no date and no zone.
+///
+/// The clock reading alone — an opening hour, an alarm. Pair it with a `Date`
+/// through `atUtc` to name an actual instant.
+///
+/// ## Examples
+///
+/// ```
+/// Time.renderTime(&TimeOfDay{hour: 9, minute: 30, second: 0})  // "09:30:00"
+/// ```
 export type TimeOfDay = { hour: Int, minute: Int, second: Int }
 
 /// The instant this is called at, on the system clock.
-/// The system clock can move backwards when it is adjusted, which is why
-/// measuring a duration uses `elapsed` rather than two of these.
+///
+/// The system clock can move backwards when it is adjusted, which is why measuring
+/// a duration uses `elapsed` rather than two of these. Use this for timestamps a
+/// person or another machine will read.
+///
+/// ## Examples
+///
+/// ```
+/// let started = Time.currentInstant()
+/// ```
 export fn currentInstant() -> Instant { Instant{millis: now()} }
 
 /// An instant built from milliseconds since the start of 1970.
+///
+/// The way back in from a timestamp received over a wire or read from a database.
+/// Negative values name instants before 1970.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toSeconds(&Time.instantOf(1_000))  // 1
+/// ```
 export fn instantOf(count: Int) -> Instant { Instant{millis: count} }
 
 /// The milliseconds an instant stands at.
+///
+/// The way out to a plain number, for storage or for a protocol that wants one.
+/// The type distinction is deliberately lost here, so convert back with `instantOf`
+/// rather than doing arithmetic on the number.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toMillis(&Time.instantOf(1500))  // 1500
+/// ```
 export fn toMillis(value: &Instant) -> Int { value.millis }
 
 /// The whole seconds an instant stands at.
+///
+/// Milliseconds are dropped rather than rounded, so this always names an instant at
+/// or before the original.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toSeconds(&Time.instantOf(1999))  // 1
+/// ```
 export fn toSeconds(value: &Instant) -> Int { value.millis / 1000 }
 
 /// A duration of milliseconds.
+///
+/// The base unit the others are built from.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationMillis(&Time.millis(250))  // 250
+/// ```
 export fn millis(count: Int) -> Duration { Duration{millis: count} }
 
 /// A duration of seconds.
+///
+/// Writing the unit at the call site is what keeps a duration from being confused
+/// with a bare number of milliseconds.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationMillis(&Time.seconds(2))  // 2000
+/// ```
 export fn seconds(count: Int) -> Duration { Duration{millis: count * 1000} }
 
 /// A duration of minutes.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.minutes(2))  // 120
+/// ```
 export fn minutes(count: Int) -> Duration { Duration{millis: count * 60000} }
 
 /// A duration of hours.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.hours(1))  // 3600
+/// ```
 export fn hours(count: Int) -> Duration { Duration{millis: count * 3600000} }
 
 /// A duration of days, taken as exactly twenty-four hours.
+///
 /// Calendar days are not all that long; a day that crosses a clock change is a
-/// question for `Date`, not for a duration.
+/// question for `Date`, not for a duration. Adding this to an instant moves it by
+/// exactly that many hours, which is not always the same civil day-of-month step.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.days(1))  // 86400
+/// ```
 export fn days(count: Int) -> Duration { Duration{millis: count * 86400000} }
 
 /// The milliseconds a duration lasts.
+///
+/// The way out to a plain number, for an interface that takes one.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationMillis(&Time.seconds(2))  // 2000
+/// ```
 export fn durationMillis(value: &Duration) -> Int { value.millis }
 
 /// The whole seconds a duration lasts.
+///
+/// Milliseconds are dropped rather than rounded, so a duration under a second
+/// answers nought.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.millis(1999))  // 1
+/// ```
 export fn durationSeconds(value: &Duration) -> Int { value.millis / 1000 }
 
 /// A duration added to an instant.
+///
+/// Moves forward by exactly that much clock time. A negative duration moves
+/// backward, which `subtract` says more plainly.
+///
+/// ## Examples
+///
+/// ```
+/// let deadline = Time.add(&Time.currentInstant(), &Time.minutes(30))
+/// ```
 export fn add(value: &Instant, amount: &Duration) -> Instant {
   Instant{millis: value.millis + amount.millis}
 }
 
 /// A duration taken from an instant.
+///
+/// The mirror of `add`, for naming a moment in the past.
+///
+/// ## Examples
+///
+/// ```
+/// let ago = Time.subtract(&Time.currentInstant(), &Time.hours(1))
+/// ```
 export fn subtract(value: &Instant, amount: &Duration) -> Instant {
   Instant{millis: value.millis - amount.millis}
 }
 
 /// The time from the first instant to the second, negative when it is behind.
+///
+/// Signed rather than absolute, so the direction survives; `absolute` removes it
+/// when only the magnitude matters.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.between(&Time.instantOf(0), &Time.instantOf(5000)))  // 5
+/// ```
 export fn between(from: &Instant, to: &Instant) -> Duration {
   Duration{millis: to.millis - from.millis}
 }
 
 /// Whether the first instant is before the second.
+///
+/// Strict: an instant is not before itself.
+///
+/// ## Examples
+///
+/// ```
+/// Time.isBefore(&Time.instantOf(1), &Time.instantOf(2))  // true
+/// ```
 export fn isBefore(left: &Instant, right: &Instant) -> Bool { left.millis < right.millis }
 
 /// Whether the first instant is after the second.
+///
+/// The mirror of `isBefore`, and equally strict.
+///
+/// ## Examples
+///
+/// ```
+/// Time.isAfter(&Time.instantOf(2), &Time.instantOf(1))  // true
+/// ```
 export fn isAfter(left: &Instant, right: &Instant) -> Bool { left.millis > right.millis }
 
 /// The earlier of two instants.
+///
+/// Equal instants answer either; they name the same moment.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toMillis(&Time.earliest(&Time.instantOf(5), &Time.instantOf(9)))  // 5
+/// ```
 export fn earliest(left: &Instant, right: &Instant) -> Instant {
   if left.millis < right.millis { *left } else { *right }
 }
 
 /// The later of two instants.
+///
+/// The mirror of `earliest`.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toMillis(&Time.latest(&Time.instantOf(5), &Time.instantOf(9)))  // 9
+/// ```
 export fn latest(left: &Instant, right: &Instant) -> Instant {
   if left.millis > right.millis { *left } else { *right }
 }
 
 /// Two durations added.
+///
+/// Durations combine among themselves; adding one to an instant is `add`.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.plus(&Time.minutes(1), &Time.seconds(30)))  // 90
+/// ```
 export fn plus(left: &Duration, right: &Duration) -> Duration {
   Duration{millis: left.millis + right.millis}
 }
 
 /// One duration taken from another.
+///
+/// The result may be negative, which is a meaningful duration: it points the other
+/// way.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.minus(&Time.minutes(1), &Time.seconds(90)))  // -30
+/// ```
 export fn minus(left: &Duration, right: &Duration) -> Duration {
   Duration{millis: left.millis - right.millis}
 }
 
 /// A duration multiplied by a whole number.
+///
+/// For a backoff that doubles, or a timeout expressed as several attempts' worth.
+/// A factor of nought gives an empty duration.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.scale(&Time.seconds(2), 3))  // 6
+/// ```
 export fn scale(value: &Duration, factor: Int) -> Duration {
   Duration{millis: value.millis * factor}
 }
 
 /// A duration with its sign removed.
+///
+/// For comparing magnitudes when the direction does not matter — how far apart two
+/// instants are, rather than which came first.
+///
+/// ## Examples
+///
+/// ```
+/// Time.durationSeconds(&Time.absolute(&Time.seconds(-5)))  // 5
+/// ```
 export fn absolute(value: &Duration) -> Duration {
   if value.millis < 0 { Duration{millis: 0 - value.millis} } else { *value }
 }
 
 /// An instant rendered in UTC with a pattern.
-/// The pattern vocabulary is the platform's: `%Y-%m-%d %H:%M:%S` and the rest.
+///
+/// The pattern vocabulary is the platform's: `%Y-%m-%d %H:%M:%S` and the rest. UTC
+/// rather than the machine's zone, so the same instant renders the same text
+/// wherever the program runs.
+///
+/// ## Examples
+///
+/// ```
+/// Time.format(&instant, "%Y-%m-%d")  // Ok("2026-09-12")
+/// ```
 export fn format(value: &Instant, pattern: Str) -> Result[Str, Str] {
   formatTime(pattern, value.millis, "utc")
 }
 
 /// An instant rendered in the machine's own zone with a pattern.
+///
+/// For text a person on this machine will read. The same instant renders
+/// differently on a machine in another zone, which is exactly why `format` exists
+/// for everything else.
+///
+/// ## Examples
+///
+/// ```
+/// Time.formatLocal(&instant, "%H:%M")  // Ok("14:05")
+/// ```
 export fn formatLocal(value: &Instant, pattern: Str) -> Result[Str, Str] {
   formatTime(pattern, value.millis, "local")
 }
 
 /// An instant rendered as RFC 3339, in UTC.
-/// The form to write when a machine will read it back, because it sorts as text
-/// in the same order it sorts as time.
+///
+/// The form to write when a machine will read it back, because it sorts as text in
+/// the same order it sorts as time. That property is what lets timestamps be
+/// compared, indexed, or ordered without parsing them first.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toRfc3339(&Time.instantOf(0))  // Ok("1970-01-01T00:00:00Z")
+/// ```
 export fn toRfc3339(value: &Instant) -> Result[Str, Str] {
   formatTime("%Y-%m-%dT%H:%M:%SZ", value.millis, "utc")
 }
 
 /// An instant read from RFC 3339.
+///
+/// The inverse of `toRfc3339`. Text that is not a valid timestamp is reported
+/// rather than guessed at, since a guessed date is worse than a refused one.
+///
+/// ## Examples
+///
+/// ```
+/// Time.fromRfc3339("1970-01-01T00:00:00Z")  // Ok(instant at 0)
+/// ```
 export fn fromRfc3339(text: Str) -> Result[Instant, Str] {
   Ok(Instant{millis: parseTime("%Y-%m-%dT%H:%M:%SZ", text) ?})
 }
@@ -133,6 +388,16 @@ export fn parse(pattern: Str, text: Str) -> Result[Instant, Str] {
 }
 
 /// An instant rendered as a date in UTC.
+///
+/// UTC, so the answer does not depend on where the program runs. An instant late in
+/// the day is a different civil date in another zone, which is the reason to keep
+/// dates and instants apart.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toDate(&Time.instantOf(0))  // Ok(Date{year: 1970, month: 1, day: 1})
+/// ```
 export fn toDate(value: &Instant) -> Result[Date, Str] {
   let year = formatTime("%Y", value.millis, "utc") ?
   let month = formatTime("%m", value.millis, "utc") ?
@@ -145,6 +410,14 @@ export fn toDate(value: &Instant) -> Result[Date, Str] {
 }
 
 /// An instant rendered as a time of day in UTC.
+///
+/// The clock reading without the date, in UTC for the same reason as `toDate`.
+///
+/// ## Examples
+///
+/// ```
+/// Time.toTimeOfDay(&Time.instantOf(0))  // Ok(TimeOfDay{hour: 0, minute: 0, second: 0})
+/// ```
 export fn toTimeOfDay(value: &Instant) -> Result[TimeOfDay, Str] {
   let hour = formatTime("%H", value.millis, "utc") ?
   let minute = formatTime("%M", value.millis, "utc") ?
@@ -157,32 +430,87 @@ export fn toTimeOfDay(value: &Instant) -> Result[TimeOfDay, Str] {
 }
 
 /// A date and a time of day read as an instant in UTC.
+///
+/// The step that turns civil values into a moment. It is a choice, not a
+/// conversion: the same date and time name different instants in different zones,
+/// and this one names the UTC instant.
+///
+/// ## Examples
+///
+/// ```
+/// Time.atUtc(&Date{year: 1970, month: 1, day: 1}, &TimeOfDay{hour: 0, minute: 0, second: 0})
+/// // Ok(instant at 0)
+/// ```
 export fn atUtc(date: &Date, time: &TimeOfDay) -> Result[Instant, Str] {
   parse("%Y-%m-%d %H:%M:%S", renderDate(date) + " " + renderTime(time))
 }
 
 /// A date written as `YYYY-MM-DD`.
+///
+/// Zero-padded, so dates sort as text in the same order they sort as dates.
+///
+/// ## Examples
+///
+/// ```
+/// Time.renderDate(&Date{year: 2026, month: 9, day: 5})  // "2026-09-05"
+/// ```
 export fn renderDate(value: &Date) -> Str {
   pad(value.year, 4) + "-" + pad(value.month, 2) + "-" + pad(value.day, 2)
 }
 
 /// A time of day written as `HH:MM:SS`.
+///
+/// Zero-padded on a twenty-four hour clock, so times sort as text in clock order.
+///
+/// ## Examples
+///
+/// ```
+/// Time.renderTime(&TimeOfDay{hour: 9, minute: 5, second: 0})  // "09:05:00"
+/// ```
 export fn renderTime(value: &TimeOfDay) -> Str {
   pad(value.hour, 2) + ":" + pad(value.minute, 2) + ":" + pad(value.second, 2)
 }
 
 /// A date read from `YYYY-MM-DD`.
+///
+/// The inverse of `renderDate`. Text in any other shape is reported rather than
+/// interpreted, since a date read the wrong way round is a bug that survives a long
+/// time.
+///
+/// ## Examples
+///
+/// ```
+/// Time.parseDate("2026-09-12")  // Ok(Date{year: 2026, month: 9, day: 12})
+/// ```
 export fn parseDate(text: Str) -> Result[Date, Str] {
   let instant = parse("%Y-%m-%d", text) ?
   toDate(&instant)
 }
 
 /// The machine's own offset from UTC, in minutes east of it.
+///
+/// Minutes rather than hours because not every zone is a whole number of hours from
+/// UTC. The value can change while a program runs, at a clock change.
+///
+/// ## Examples
+///
+/// ```
+/// Time.localOffsetMinutes()  // -240 for a zone four hours west
+/// ```
 export fn localOffsetMinutes() -> Int { zoneOffset() }
 
 /// A duration written the way a person reads one, such as `1h 5m 3s`.
-/// Milliseconds appear only when they are the whole of it, because a duration
-/// long enough to have hours does not need them.
+///
+/// Milliseconds appear only when they are the whole of it, because a duration long
+/// enough to have hours does not need them. For text a machine reads back, use a
+/// plain count of milliseconds instead.
+///
+/// ## Examples
+///
+/// ```
+/// Time.describe(&Time.seconds(3903))  // "1h 5m 3s"
+/// Time.describe(&Time.millis(250))    // "250ms"
+/// ```
 export fn describe(value: &Duration) -> Str {
   let total = absolute(value).millis
   if total == 0 { "0s" } else {
@@ -207,7 +535,18 @@ export fn describe(value: &Duration) -> Str {
 }
 
 /// Milliseconds on a clock that only moves forward, for measuring a duration.
-/// Two readings may be subtracted; one alone means nothing.
+///
+/// Two readings may be subtracted; one alone means nothing. This is the clock to
+/// use for timing, because the system clock can be adjusted backwards and would
+/// then report a negative elapsed time.
+///
+/// ## Examples
+///
+/// ```
+/// let start = Time.elapsed()
+/// work()
+/// let took = Time.elapsed() - start
+/// ```
 export fn elapsed() -> Int { clock() }
 
 /// A whole number read from text, or a fallback.

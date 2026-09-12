@@ -4,10 +4,21 @@ module Std.Json
 /// name, and a qualifier and a constructor cannot share one.
 import Std.Text as Reading
 /// A JSON value.
-/// Numbers are whole here: the language's floating types exist, but a decoder
-/// that silently turned `1` into a float would lose the distinction a caller
-/// cares about. A fractional literal decodes as `Fractional`, keeping its text
-/// so nothing is rounded on the way through.
+///
+/// Numbers are whole here: the language's floating types exist, but a decoder that
+/// silently turned `1` into a float would lose the distinction a caller cares
+/// about. A fractional literal decodes as `Fractional`, keeping its text so nothing
+/// is rounded on the way through.
+///
+/// That choice means a round trip through `decode` and `encode` gives back the
+/// number as it was written, which is what a program forwarding someone else's JSON
+/// needs.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encode(&Json.object(&[("id", Json.Whole(1))]))  // "{\"id\":1}"
+/// ```
 export type Json
   = Null
   | Boolean(Bool)
@@ -18,6 +29,18 @@ export type Json
   | Object(Array[(Str, Json)])
 
 /// What went wrong while reading JSON.
+///
+/// One variant per cause a caller can act on differently, rather than one message
+/// for everything. `explain` renders any of them as text for a person.
+///
+/// ## Examples
+///
+/// ```
+/// match Json.decode("{") {
+///   case Ok(value) => use(value)
+///   case Err(problem) => report(Json.explain(&problem))
+/// }
+/// ```
 export type JsonError
   = Unexpected(Int, Str)
   | Unterminated(Str)
@@ -25,6 +48,17 @@ export type JsonError
   | Empty
 
 /// A value read from text, or what stopped the reader.
+///
+/// The whole text must be one value: trailing content is a failure rather than
+/// being ignored, so a truncated or concatenated document is caught rather than
+/// half-read.
+///
+/// ## Examples
+///
+/// ```
+/// Json.decode("[1, 2]")  // Ok(List([Whole(1), Whole(2)]))
+/// Json.decode("[1,")     // Err(...)
+/// ```
 export fn decode(source: Str) -> Result[Json, JsonError] {
   if source.trim().isEmpty() { Err(Empty) } else {
     let started = skipSpace(source, 0)
@@ -35,6 +69,16 @@ export fn decode(source: Str) -> Result[Json, JsonError] {
 }
 
 /// A value written as compact text, with no spaces between its parts.
+///
+/// The form to send over a wire. Object keys keep the order they were built in
+/// rather than being sorted, so a document forwarded through this module comes out
+/// looking like it went in.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encode(&Json.list(&[Json.Whole(1), Json.Whole(2)]))  // "[1,2]"
+/// ```
 export fn encode(value: &Json) -> Str {
   match value {
     case Null => "null"
@@ -48,10 +92,37 @@ export fn encode(value: &Json) -> Str {
 }
 
 /// A value written across lines, each level indented by two spaces.
+///
+/// For a file a person will read or a diff a person will review. `encode` is the
+/// form to send.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encodePretty(&Json.object(&[("a", Json.Whole(1))]))
+/// // {
+/// //   "a": 1
+/// // }
+/// ```
 export fn encodePretty(value: &Json) -> Str { prettyAt(value, 0) }
 
-/// The value stored under a key, or `None` when the value is not an object or
-/// has no such key.
+/// The value stored under a key, or `None` when the value is not an object or has
+/// no such key.
+///
+/// One answer for both cases, because a caller reading a field usually treats "not
+/// an object" and "no such field" the same way: the data was not the shape it
+/// expected.
+///
+/// ## Examples
+///
+/// ```
+/// Json.field(&document, "name")   // Some(Text("ada"))
+/// Json.field(&document, "absent") // None
+/// ```
+///
+/// ## See also
+///
+/// - `path` — several keys in one step.
 export fn field(value: &Json, key: Str) -> Option[Json] {
   match value {
     case Object(entries) => {
@@ -65,6 +136,16 @@ export fn field(value: &Json, key: Str) -> Option[Json] {
 }
 
 /// The value at a position in a list, or `None`.
+///
+/// Positions count from nought. A position past the end, a negative position, and a
+/// value that is not a list all answer `None`.
+///
+/// ## Examples
+///
+/// ```
+/// Json.at(&Json.list(&[Json.Whole(1)]), 0)  // Some(Whole(1))
+/// Json.at(&Json.list(&[Json.Whole(1)]), 9)  // None
+/// ```
 export fn at(value: &Json, index: Int) -> Option[Json] {
   match value {
     case List(members) => {
@@ -75,6 +156,16 @@ export fn at(value: &Json, index: Int) -> Option[Json] {
 }
 
 /// The value reached by following a path of object keys.
+///
+/// `field` applied in turn, stopping at the first step that is missing. This is
+/// what reading a nested configuration value looks like without a column of nested
+/// matches.
+///
+/// ## Examples
+///
+/// ```
+/// Json.path(&document, &["server", "port"])  // Some(Whole(8080))
+/// ```
 export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
   var current = *value
   for key in steps {
@@ -84,6 +175,16 @@ export fn path(value: &Json, steps: &Array[Str]) -> Option[Json] {
 }
 
 /// The text a value holds, or `None` when it holds something else.
+///
+/// No coercion: a number does not become its text form here. A caller that wants
+/// that should ask for the number and render it deliberately.
+///
+/// ## Examples
+///
+/// ```
+/// Json.asText(&Json.Text("ada"))  // Some("ada")
+/// Json.asText(&Json.Whole(1))     // None
+/// ```
 export fn asText(value: &Json) -> Option[Str] {
   match value {
     case Text(content) => Some(content)
@@ -92,6 +193,15 @@ export fn asText(value: &Json) -> Option[Str] {
 }
 
 /// The whole number a value holds, or `None`.
+///
+/// A fractional literal answers `None` rather than being truncated, so a value that
+/// was written with a fraction is never silently read as a whole number.
+///
+/// ## Examples
+///
+/// ```
+/// Json.asInt(&Json.Whole(5))  // Some(5)
+/// ```
 export fn asInt(value: &Json) -> Option[Int] {
   match value {
     case Number(number) => Some(number)
@@ -100,6 +210,15 @@ export fn asInt(value: &Json) -> Option[Int] {
 }
 
 /// The truth value a value holds, or `None`.
+///
+/// No coercion: neither nought nor empty text is false here.
+///
+/// ## Examples
+///
+/// ```
+/// Json.asBool(&Json.Boolean(true))  // Some(true)
+/// Json.asBool(&Json.Whole(1))       // None
+/// ```
 export fn asBool(value: &Json) -> Option[Bool] {
   match value {
     case Boolean(flag) => Some(flag)
@@ -108,6 +227,16 @@ export fn asBool(value: &Json) -> Option[Bool] {
 }
 
 /// The members a list holds, or `None`.
+///
+/// An empty list answers `Some([])`, which is a different answer from `None`: the
+/// value was a list, and it was empty.
+///
+/// ## Examples
+///
+/// ```
+/// Json.asList(&Json.list(&[]))    // Some([])
+/// Json.asList(&Json.Whole(1))     // None
+/// ```
 export fn asList(value: &Json) -> Option[Array[Json]] {
   match value {
     case List(members) => Some(members)
@@ -116,6 +245,15 @@ export fn asList(value: &Json) -> Option[Array[Json]] {
 }
 
 /// The entries an object holds, or `None`.
+///
+/// Entries come back in the order they were written rather than sorted, and a
+/// duplicate key is kept as written rather than resolved.
+///
+/// ## Examples
+///
+/// ```
+/// Json.asObject(&Json.object(&[("a", Json.Whole(1))]))  // Some([("a", Whole(1))])
+/// ```
 export fn asObject(value: &Json) -> Option[Array[(Str, Json)]] {
   match value {
     case Object(entries) => Some(entries)
@@ -124,6 +262,17 @@ export fn asObject(value: &Json) -> Option[Array[(Str, Json)]] {
 }
 
 /// Whether a value is null.
+///
+/// Asked directly because JSON null is a value rather than an absence: a field
+/// present and null is different from a field that is not there, and only `field`
+/// can tell you about the second.
+///
+/// ## Examples
+///
+/// ```
+/// Json.isNull(&Json.Null)       // true
+/// Json.isNull(&Json.Text(""))   // false
+/// ```
 export fn isNull(value: &Json) -> Bool {
   match value {
     case Null => true
@@ -132,12 +281,40 @@ export fn isNull(value: &Json) -> Bool {
 }
 
 /// An object built from key and value pairs.
+///
+/// Keys are kept in the order given. Duplicates are not resolved here, so pass
+/// distinct keys unless a duplicate is what you mean to write.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encode(&Json.object(&[("a", Json.Whole(1))]))  // "{\"a\":1}"
+/// ```
 export fn object(entries: &Array[(Str, Json)]) -> Json { Object(*entries) }
 
 /// A list built from values.
+///
+/// The members keep their order, as a JSON list does.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encode(&Json.list(&[Json.Whole(1), Json.Null]))  // "[1,null]"
+/// ```
 export fn list(members: &Array[Json]) -> Json { List(*members) }
 
 /// An object with one key added or replaced.
+///
+/// A new value is returned; the original is untouched. An existing key keeps its
+/// position rather than moving to the end, so building a document up field by field
+/// does not reorder it.
+///
+/// ## Examples
+///
+/// ```
+/// Json.encode(&Json.withField(&Json.object(&[("a", Json.Whole(1))]), "b", Json.Whole(2)))
+/// // "{\"a\":1,\"b\":2}"
+/// ```
 export fn withField(value: &Json, key: Str, held: Json) -> Json {
   match value {
     case Object(entries) => {
@@ -156,6 +333,15 @@ export fn withField(value: &Json, key: Str, held: Json) -> Json {
 }
 
 /// Every key an object has, in the order they were written.
+///
+/// A value that is not an object answers an empty array rather than failing, which
+/// keeps this usable as a probe.
+///
+/// ## Examples
+///
+/// ```
+/// Json.keys(&Json.object(&[("b", Json.Null), ("a", Json.Null)]))  // ["b", "a"]
+/// ```
 export fn keys(value: &Json) -> Array[Str] {
   match value {
     case Object(entries) => {
@@ -168,6 +354,18 @@ export fn keys(value: &Json) -> Array[Str] {
 }
 
 /// A reader's failure explained in the terms a caller can report.
+///
+/// Text for a person, naming what was expected and where. Match on the `JsonError`
+/// itself when the program needs to act differently per cause rather than report.
+///
+/// ## Examples
+///
+/// ```
+/// match Json.decode(text) {
+///   case Ok(value) => use(value)
+///   case Err(problem) => Io.writeErrorLine(Json.explain(&problem))
+/// }
+/// ```
 export fn explain(problem: &JsonError) -> Str {
   match problem {
     case Unexpected(position, wanted) => "expected " + wanted + " at " + show(position)

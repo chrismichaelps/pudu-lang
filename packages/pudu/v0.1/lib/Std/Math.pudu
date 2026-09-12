@@ -4,36 +4,97 @@ import Std.Num {Add, Div, Mul, One, Rem, Sub, Zero, small, two}
 import Std.Order {Ord}
 
 /// The smaller of two values.
+///
+/// Generic over any ordered type, so it works for text and dates as readily as for
+/// numbers. Equal values answer either one; they are indistinguishable under the
+/// ordering.
+///
+/// ## Examples
+///
+/// ```
+/// Math.min(3, 7)      // 3
+/// Math.min("b", "a")  // "a"
+/// ```
+///
+/// ## See also
+///
+/// - `minBy` — an ordering the type does not supply itself.
 export fn min[T: Ord](left: T, right: T) -> T {
   if right.before(&left) { right } else { left }
 }
 
 /// The larger of two values.
+///
+/// The mirror of `min`, and equally generic over ordered types.
+///
+/// ## Examples
+///
+/// ```
+/// Math.max(3, 7)  // 7
+/// ```
 export fn max[T: Ord](left: T, right: T) -> T {
   if left.before(&right) { right } else { left }
 }
 
 /// The distance of a value from zero.
-/// An unsigned type is its own distance, which is what makes this correct
-/// rather than merely defined for one.
+///
+/// An unsigned type is its own distance, which is what makes this correct rather
+/// than merely defined for one. Note that for a signed type the most negative value
+/// has no positive counterpart, and subtraction there wraps as it does anywhere
+/// else.
+///
+/// ## Examples
+///
+/// ```
+/// Math.abs(-3)  // 3
+/// Math.abs(3)   // 3
+/// ```
 export fn abs[T: Ord + Zero + Sub](value: T) -> T {
   if value.before(&value.zero()) { value.zero().minus(&value) } else { value }
 }
 
 /// Confine a value to a range, inclusive at both ends.
-/// A range whose lower bound exceeds its upper yields the lower bound, which is
-/// the only answer that satisfies neither caller silently.
+///
+/// A range whose lower bound exceeds its upper yields the lower bound, which is the
+/// only answer that satisfies neither caller silently.
+///
+/// ## Examples
+///
+/// ```
+/// Math.clamp(9, 0, 5)   // 5
+/// Math.clamp(-1, 0, 5)  // 0
+/// Math.clamp(3, 0, 5)   // 3
+/// ```
 export fn clamp[T: Ord](value: T, lower: T, upper: T) -> T {
   if value.before(&lower) { lower } else { min(value, upper) }
 }
 
 /// Whether a value lies between two bounds, inclusive at both ends.
+///
+/// Inclusive on both sides, so a value equal to either bound is between them.
+///
+/// ## Examples
+///
+/// ```
+/// Math.between(5, 0, 5)  // true
+/// Math.between(6, 0, 5)  // false
+/// ```
 export fn between[T: Ord](value: T, lower: T, upper: T) -> Bool {
   !value.before(&lower) && !upper.before(&value)
 }
 
 /// The sign of a value: -1, 0, or 1, in the value's own type.
-/// An unsigned type never answers -1, because it has no such value.
+///
+/// An unsigned type never answers -1, because it has no such value. The result
+/// keeps the argument's type rather than becoming an `Int`, so it can be multiplied
+/// back in without a conversion.
+///
+/// ## Examples
+///
+/// ```
+/// Math.signum(-9)  // -1
+/// Math.signum(0)   // 0
+/// ```
 export fn signum[T: Ord + Zero + One + Sub](value: T) -> T {
   if value.zero().before(&value) { value.one() } else {
     if value.before(&value.zero()) { value.zero().minus(&value.one()) } else { value.zero() }
@@ -41,33 +102,98 @@ export fn signum[T: Ord + Zero + One + Sub](value: T) -> T {
 }
 
 /// The next value.
+///
+/// Adds the type's own one, so it advances a character code or a counter without
+/// the caller naming the step. Wraps at the type's limit as ordinary addition does.
+///
+/// ## Examples
+///
+/// ```
+/// Math.succ(3)  // 4
+/// ```
 export fn succ[T: One + Add](value: T) -> T { value.plus(&value.one()) }
 
 /// The previous value.
+///
+/// The mirror of `succ`, and subject to the same wrapping at the type's lower
+/// limit.
+///
+/// ## Examples
+///
+/// ```
+/// Math.pred(3)  // 2
+/// ```
 export fn pred[T: One + Sub](value: T) -> T { value.minus(&value.one()) }
 
 /// One value taken from another, with the arguments in the order a reader meets
 /// them: `subtract(3, 10)` is seven.
+///
+/// The amount comes first because it reads as "subtract three from ten" and because
+/// it lets the function be applied to the amount alone.
+///
+/// ## Examples
+///
+/// ```
+/// Math.subtract(3, 10)  // 7
+/// ```
 export fn subtract[T: Sub](amount: T, value: T) -> T { value.minus(&amount) }
 
 /// Truncating division, or `None` when the divisor is nought.
-/// Nothing in `Std` is partial: the operator reports at run time, and this is
-/// the form that reports as a value instead.
+///
+/// Nothing in `Std` is partial: the operator reports at run time, and this is the
+/// form that reports as a value instead. Truncating means the result moves toward
+/// nought, so -7 divided by 2 is -3.
+///
+/// ## Examples
+///
+/// ```
+/// Math.divide(7, 2)  // Some(3)
+/// Math.divide(7, 0)  // None
+/// ```
 export fn divide[T: Div](value: T, divisor: T) -> Option[T] { value.dividedBy(&divisor) }
 
 /// The remainder of a truncating division, or `None` for a nought divisor.
+///
+/// Takes its sign from the dividend, matching truncating division: the quotient
+/// times the divisor plus the remainder gives back the dividend.
+///
+/// ## Examples
+///
+/// ```
+/// Math.remainder(7, 2)   // Some(1)
+/// Math.remainder(-7, 2)  // Some(-1)
+/// ```
 export fn remainder[T: Rem](value: T, divisor: T) -> Option[T] {
   value.remainderOf(&divisor)
 }
 
 /// The quotient and the remainder together, or `None` for a nought divisor.
+///
+/// One division where `divide` and `remainder` would be two, and the form to reach
+/// for when converting a number into digits or a duration into parts.
+///
+/// ## Examples
+///
+/// ```
+/// Math.divMod(7, 2)  // Some((3, 1))
+/// ```
 export fn divMod[T: Div + Rem](value: T, divisor: T) -> Option[(T, T)] {
   let quotient = value.dividedBy(&divisor) ?
   let rest = value.remainderOf(&divisor) ?
   Some((quotient, rest))
 }
 
-/// Whether a value divides another with no remainder. Nought divides nothing.
+/// Whether a value divides another with no remainder.
+///
+/// Nought divides nothing, so it answers false rather than failing. Every value
+/// divides nought.
+///
+/// ## Examples
+///
+/// ```
+/// Math.divides(3, 9)  // true
+/// Math.divides(0, 9)  // false
+/// ```
 export fn divides[T: Rem + Zero + Ord](divisor: T, value: T) -> Bool {
   match value.remainderOf(&divisor) {
     case Some(rest) => !rest.before(&rest.zero()) && !rest.zero().before(&rest)
@@ -76,24 +202,73 @@ export fn divides[T: Rem + Zero + Ord](divisor: T, value: T) -> Bool {
 }
 
 /// Whether a value is even.
+///
+/// Works for negative values too, since it asks about the remainder being nought
+/// rather than about the remainder being one.
+///
+/// ## Examples
+///
+/// ```
+/// Math.isEven(4)   // true
+/// Math.isEven(-3)  // false
+/// ```
 export fn isEven[T: Rem + Zero + One + Add + Ord](value: T) -> Bool {
   divides(two(&value), value)
 }
 
 /// Whether a value is odd.
+///
+/// `isEven` negated, written out so a caller states the condition the way they think
+/// of it.
+///
+/// ## Examples
+///
+/// ```
+/// Math.isOdd(3)  // true
+/// ```
 export fn isOdd[T: Rem + Zero + One + Add + Ord](value: T) -> Bool { !isEven(value) }
 
 /// A value squared.
+///
+/// Named because `value * value` written out repeats the expression, and a repeated
+/// expression is a place for a typo to hide.
+///
+/// ## Examples
+///
+/// ```
+/// Math.square(4)  // 16
+/// ```
 export fn square[T: Mul](value: T) -> T { value.times(&value) }
 
 /// A value cubed.
+///
+/// The same reasoning as `square`, one factor further.
+///
+/// ## Examples
+///
+/// ```
+/// Math.cube(3)  // 27
+/// ```
 export fn cube[T: Mul](value: T) -> T { value.times(&value).times(&value) }
 
 /// A value raised to a non-negative power, by repeated squaring.
-/// A negative exponent yields one, matching integer exponentiation everywhere
-/// else: the true answer is not a whole number, and this signature promises one.
-/// The exponent is a plain count, because it says how many times rather than
-/// naming a value of the base's type.
+///
+/// A negative exponent yields one, matching integer exponentiation everywhere else:
+/// the true answer is not a whole number, and this signature promises one. The
+/// exponent is a plain count, because it says how many times rather than naming a
+/// value of the base's type.
+///
+/// ## Examples
+///
+/// ```
+/// Math.pow(2, 10)  // 1024
+/// Math.pow(2, 0)   // 1
+/// Math.pow(2, -1)  // 1
+/// ```
+///
+/// ## See also
+///
+/// - `checkedPow` — `None` for a negative exponent instead.
 export fn pow[T: One + Mul](base: T, exponent: Int) -> T {
   var result = base.one()
   var remaining = exponent
@@ -107,15 +282,33 @@ export fn pow[T: One + Mul](base: T, exponent: Int) -> T {
 }
 
 /// A value raised to a power, or `None` when the exponent is negative.
-/// The total companion to `pow`, which answers one for a negative exponent
-/// because its signature promises a value of the base's type.
+///
+/// The total companion to `pow`, which answers one for a negative exponent because
+/// its signature promises a value of the base's type. Reach for this when a
+/// negative exponent is a caller mistake worth reporting.
+///
+/// ## Examples
+///
+/// ```
+/// Math.checkedPow(2, 10)  // Some(1024)
+/// Math.checkedPow(2, -1)  // None
+/// ```
 export fn checkedPow[T: One + Mul](base: T, exponent: Int) -> Option[T] {
   if exponent < 0 { None } else { Some(pow(base, exponent)) }
 }
 
 /// The greatest common divisor, by Euclid's algorithm.
-/// The result is never negative, so it can be used as a divisor without a
-/// caller having to check its sign.
+///
+/// The result is never negative, so it can be used as a divisor without a caller
+/// having to check its sign. The divisor of nought and a value is that value's
+/// distance from nought.
+///
+/// ## Examples
+///
+/// ```
+/// Math.gcd(12, 18)  // 6
+/// Math.gcd(0, 5)    // 5
+/// ```
 export fn gcd[T: Ord + Zero + One + Add + Sub + Rem](left: T, right: T) -> T {
   var remaining = abs(right)
   var current = abs(left)
@@ -131,8 +324,18 @@ export fn gcd[T: Ord + Zero + One + Add + Sub + Rem](left: T, right: T) -> T {
   current
 }
 
-/// The least common multiple. Nought with either argument nought, since no
-/// positive multiple of nought exists.
+/// The least common multiple.
+///
+/// Nought with either argument nought, since no positive multiple of nought exists.
+/// Computed through `gcd` rather than by multiplying first, which keeps the
+/// intermediate value smaller.
+///
+/// ## Examples
+///
+/// ```
+/// Math.lcm(4, 6)  // 12
+/// Math.lcm(0, 6)  // 0
+/// ```
 export fn lcm[T: Ord + Zero + One + Add + Sub + Mul + Div + Rem](left: T, right: T) -> T {
   if isZero(&left) || isZero(&right) { left.zero() } else {
     match left.dividedBy(&gcd(left, right)) {
@@ -143,7 +346,17 @@ export fn lcm[T: Ord + Zero + One + Add + Sub + Mul + Div + Rem](left: T, right:
 }
 
 /// The product of every whole number from one up to the value.
-/// A value below one has an empty product, which is one.
+///
+/// A value below one has an empty product, which is one. The result grows faster
+/// than any fixed width can hold, so a large argument wraps as ordinary
+/// multiplication does.
+///
+/// ## Examples
+///
+/// ```
+/// Math.factorial(5)  // 120
+/// Math.factorial(0)  // 1
+/// ```
 export fn factorial[T: Ord + Zero + One + Add + Mul](value: T) -> T {
   var total = value.one()
   var current = two(&value)
@@ -155,8 +368,18 @@ export fn factorial[T: Ord + Zero + One + Add + Mul](value: T) -> T {
 }
 
 /// The greatest value whose square does not exceed the given one.
+///
 /// Newton's method on whole numbers; a negative value has no square root and
-/// answers `None` rather than a number that is not one.
+/// answers `None` rather than a number that is not one. The answer is exact for
+/// perfect squares and rounded down otherwise.
+///
+/// ## Examples
+///
+/// ```
+/// Math.isqrt(16)  // Some(4)
+/// Math.isqrt(17)  // Some(4)
+/// Math.isqrt(-1)  // None
+/// ```
 export fn isqrt[T: Ord + Zero + One + Add + Div](value: T) -> Option[T] {
   if value.before(&value.zero()) { None } else {
     if value.before(&two(&value)) { Some(value) } else {
@@ -175,6 +398,16 @@ export fn isqrt[T: Ord + Zero + One + Add + Div](value: T) -> Option[T] {
 }
 
 /// Whether a value is prime. Values below two are not.
+///
+/// Trial division by two and then by odd values up to the square root, so the work
+/// rises with the square root of the value rather than the value itself.
+///
+/// ## Examples
+///
+/// ```
+/// Math.isPrime(7)  // true
+/// Math.isPrime(1)  // false
+/// ```
 export fn isPrime[T: Ord + Zero + One + Add + Mul + Rem](value: T) -> Bool {
   let one = value.one()
   let twoOf = two(&value)
@@ -194,6 +427,17 @@ export fn isPrime[T: Ord + Zero + One + Add + Mul + Rem](value: T) -> Bool {
 
 /// The number of decimal digits, counting a lone nought as one and ignoring a
 /// sign.
+///
+/// Nought has one digit because it is written with one, which is what aligning a
+/// column of numbers needs.
+///
+/// ## Examples
+///
+/// ```
+/// Math.digitCount(1234)  // 4
+/// Math.digitCount(0)     // 1
+/// Math.digitCount(-12)   // 2
+/// ```
 export fn digitCount[T: Ord + Zero + One + Add + Sub + Div](value: T) -> Int {
   let ten = small(&value, 10)
   var remaining = abs(value)
@@ -209,11 +453,28 @@ export fn digitCount[T: Ord + Zero + One + Add + Sub + Div](value: T) -> Int {
 }
 
 /// The smaller of two values, chosen by a comparison the caller supplies.
+///
+/// `min` for a type with no ordering of its own, or for an ordering other than the
+/// type's own.
+///
+/// ## Examples
+///
+/// ```
+/// Math.minBy("aaa", "bb", fn(a: Str, b: Str) -> Bool => a.length() < b.length())  // "bb"
+/// ```
 export fn minBy[T](left: T, right: T, before: fn(T, T) -> Bool) -> T {
   if before(right, left) { right } else { left }
 }
 
 /// The larger of two values, chosen by a comparison the caller supplies.
+///
+/// The mirror of `minBy`.
+///
+/// ## Examples
+///
+/// ```
+/// Math.maxBy("aaa", "bb", fn(a: Str, b: Str) -> Bool => a.length() < b.length())  // "aaa"
+/// ```
 export fn maxBy[T](left: T, right: T, before: fn(T, T) -> Bool) -> T {
   if before(left, right) { right } else { left }
 }
@@ -233,8 +494,15 @@ fn halve[T: Zero + One + Add + Div](value: T) -> T {
 
 /// Stein's binary algorithm for the greatest common divisor.
 ///
-/// Replaces slow hardware division and modulo operations with bitwise shifts
-/// and subtractions, executing with high efficiency close to the hardware.
+/// Replaces division and modulo with shifts and subtractions, which the hardware
+/// does in fewer cycles. `gcd` is the generic form; this one is specific to `Int`
+/// and is the one to reach for in a hot loop.
+///
+/// ## Examples
+///
+/// ```
+/// Math.binaryGcd(12, 18)  // 6
+/// ```
 export fn binaryGcd(u: Int, v: Int) -> Int {
   var a = if u < 0 { -u } else { u }
   var b = if v < 0 { -v } else { v }
@@ -263,12 +531,33 @@ export fn binaryGcd(u: Int, v: Int) -> Int {
   a << shift
 }
 
-/// Tests whether an integer is an exact positive power of two (1, 2, 4, 8, ...).
+/// Whether an integer is an exact positive power of two (1, 2, 4, 8, and so on).
+///
+/// Decided by a single bitwise test rather than by dividing repeatedly. Nought and
+/// negative values are not powers of two.
+///
+/// ## Examples
+///
+/// ```
+/// Math.isPowerOfTwo(8)  // true
+/// Math.isPowerOfTwo(6)  // false
+/// Math.isPowerOfTwo(0)  // false
+/// ```
 export fn isPowerOfTwo(n: Int) -> Bool {
   n > 0 && (n & (n - 1)) == 0
 }
 
-/// Computes the smallest power of two greater than or equal to n.
+/// The smallest power of two greater than or equal to the value.
+///
+/// A value that is already a power of two answers itself. This is the sizing step
+/// behind a growing buffer or a hash table.
+///
+/// ## Examples
+///
+/// ```
+/// Math.nextPowerOfTwo(5)  // 8
+/// Math.nextPowerOfTwo(8)  // 8
+/// ```
 export fn nextPowerOfTwo(n: Int) -> Int {
   if n <= 1 { return 1 }
   var v = n - 1
@@ -281,8 +570,18 @@ export fn nextPowerOfTwo(n: Int) -> Int {
   v + 1
 }
 
-/// Fast integer base-2 logarithm (floor(log2(n))) using bit shifts.
-/// Returns None if n <= 0.
+/// The base-2 logarithm rounded down, using bit shifts.
+///
+/// `None` for values at or below nought, which have no logarithm. For a positive
+/// value this is the position of its highest set bit.
+///
+/// ## Examples
+///
+/// ```
+/// Math.ilog2(8)  // Some(3)
+/// Math.ilog2(9)  // Some(3)
+/// Math.ilog2(0)  // None
+/// ```
 export fn ilog2(n: Int) -> Option[Int] {
   if n <= 0 { return None }
   var v = n
@@ -313,19 +612,46 @@ export fn ilog2(n: Int) -> Option[Int] {
   Some(log)
 }
 
-/// Branchless minimum of two integers.
+/// The smaller of two integers, without a branch.
+///
+/// Computed with arithmetic and masking rather than a comparison, so it costs the
+/// same whichever value is smaller. That matters in a loop the processor cannot
+/// predict; elsewhere `min` says the intent more plainly.
+///
+/// ## Examples
+///
+/// ```
+/// Math.branchlessMin(3, 7)  // 3
+/// ```
 export fn branchlessMin(a: Int, b: Int) -> Int {
   let diff = a - b
   b + (diff & (diff >> 63))
 }
 
-/// Branchless maximum of two integers.
+/// The larger of two integers, without a branch.
+///
+/// The mirror of `branchlessMin`, and worth the same trade for the same reason.
+///
+/// ## Examples
+///
+/// ```
+/// Math.branchlessMax(3, 7)  // 7
+/// ```
 export fn branchlessMax(a: Int, b: Int) -> Int {
   let diff = a - b
   a - (diff & (diff >> 63))
 }
 
-/// Branchless absolute value of an integer.
+/// The distance of an integer from zero, without a branch.
+///
+/// Uses the sign bit rather than a comparison. As with the generic `abs`, the most
+/// negative value has no positive counterpart and wraps.
+///
+/// ## Examples
+///
+/// ```
+/// Math.branchlessAbs(-3)  // 3
+/// ```
 export fn branchlessAbs(n: Int) -> Int {
   let mask = n >> 63
   (n ^ mask) - mask

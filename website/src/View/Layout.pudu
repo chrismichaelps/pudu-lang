@@ -21,7 +21,7 @@ export fn page(
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=6")
+          H.link().rel("stylesheet").href("/assets/site.css?v=7")
         ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       H.body().holding([
           H.a().class("skip").href("#content").says("Skip to content"),

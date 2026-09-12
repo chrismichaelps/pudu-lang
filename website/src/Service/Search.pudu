@@ -75,6 +75,14 @@ fn termsScore(entry: &Domain.Entry, terms: &Array[Str]) -> Int {
   score
 }
 
+/// What one term is worth against one declaration, highest match first.
+///
+/// Documentation is matched on its summary line alone. A declaration's full
+/// reference text names the types and neighbours it discusses, so matching any
+/// line of it would rank a page that merely mentions a term alongside the page
+/// that defines it. The summary is also the only documentation the compact
+/// runtime index carries, so ranking the same way here keeps a deployed search
+/// and a local one from answering differently.
 fn termScore(entry: &Domain.Entry, term: Str) -> Int {
   let name = entry.name.toLower()
   let qualified = Domain.qualifiedName(entry).toLower()
@@ -86,9 +94,7 @@ fn termScore(entry: &Domain.Entry, term: Str) -> Int {
   if Query.moduleLeaf(entry.moduleName) == term { return 110 }
   if moduleName.contains(term) { return 90 }
   if entry.signature.toLower().contains(term) { return 60 }
-  for line in entry.documentation {
-    if line.toLower().contains(term) { return 30 }
-  }
+  if entry.documentation.length() > 0 && entry.documentation[0].toLower().contains(term) { return 30 }
   0
 }
 
