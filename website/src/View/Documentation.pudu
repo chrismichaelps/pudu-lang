@@ -8,6 +8,7 @@ import Seo as Seo
 import Service.Catalog as Catalog
 import View.Dynamic as Dynamic
 import View.Layout as Layout
+import View.Prose as Prose
 
 export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
   var links: Array[H.Node] = []
@@ -54,15 +55,11 @@ export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
       else { entry.name + ": " + entry.signature }
     var content: Array[H.Node] = [
       H.h2().class("declaration-title").says(entry.kind),
-      H.code().class("signature").says(shownSignature),
-      H.p().class("kind-explanation").says(kindExplanation(entry.kind)),
-      H.h3().says("What it does")
+      H.code().class("signature").says(shownSignature)
     ]
-    for line in entry.documentation {
-      if !line.isEmpty() { content = content.push(H.p().says(line)) }
-    }
-    content = content.push(H.h3().says("Read the signature"))
-    content = content.push(H.ul().class("signature-guide").holding(signatureGuide(entry.signature)))
+    let provider = providerNote(entry.kind)
+    if !provider.isEmpty() { content = content.push(H.p().class("kind-explanation").says(provider)) }
+    for block in Prose.blocks(&entry.documentation) { content = content.push(block) }
     declarations = declarations.push(H.section().class("declaration").holding(content))
   }
   Layout.page(siteUrl, Domain.qualifiedName(&primary), Domain.summary(&primary), Seo.symbolPath(&primary), true, Some(Seo.symbolSchema(siteUrl, &primary)), H.article().class("doc").holding([
@@ -76,53 +73,13 @@ export fn symbols(siteUrl: Str, entries: &Array[Domain.Entry]) -> Html.Html {
       ]).html())
 }
 
-/// The explanation each plainly written declaration kind carries. A method's
-/// kind names the type or trait it belongs to, so those two read as prefixes
-/// rather than entries here.
-const KIND_EXPLANATIONS: Map[Str, Str] = mapOf([
-    ("fn", "This is a callable function."),
-    ("type", "This declaration introduces a public type."),
-    ("trait", "This declaration names behavior that types can implement."),
-    ("const", "This is a named value that cannot be reassigned."),
-    ("macro", "This declaration transforms syntax during compilation."),
-    ("foreign", "This function is provided by an external library.")
-  ])
-
-/// The note each signature marker earns, in the order a reader meets them.
-const SIGNATURE_NOTES: Array[(Str, Str)] = [
-  ("->", "Read arrows from left to right: inputs come first, and the final type is returned."),
-  ("&", "& borrows a value for this call instead of moving or copying it."),
-  ("&mut", "&mut grants temporary exclusive permission to change the borrowed value."),
-  ("[", "Names inside [ ] are type arguments, such as the item type held by a collection."),
-  ("Option[", "Option holds Some(value) or None when no value is available."),
-  ("Result[", "Result makes success and recoverable failure part of the function's type."),
-  ("Self", "Self means the concrete type that implements this trait.")
-]
-
-/// What a declaration of this kind is, in one sentence for a first reader.
-fn kindExplanation(kind: Str) -> Str {
-  if kind.startsWith("fn (trait ") { "This declaration defines a function required by a trait." }
-    else if kind.startsWith("fn (") { "This declaration implements the function for one concrete type." }
-    else {
-    match KIND_EXPLANATIONS.get(kind) {
-      case Some(text) => text
-      case None => "This is a public Pudu declaration."
-    }
-  }
-}
-
-/// The reading notes a signature earns, one for each marker it writes.
-fn signatureGuide(signature: Str) -> Array[H.Node] {
-  if signature.isEmpty() {
-    return [H.li().says("This declaration has no value signature because it introduces a type or trait.")]
-  }
-  var notes: Array[H.Node] = [
-    H.li().says("The text after the name is the type checked by Pudu.")
-  ]
-  for note in SIGNATURE_NOTES {
-    if signature.contains(note[0]) { notes = notes.push(H.li().says(note[1])) }
-  }
-  notes
+/// Where a method comes from, for the two kinds that answer differently than
+/// their own name does. Every other kind is already written in full beside the
+/// signature, so it earns no sentence of its own.
+fn providerNote(kind: Str) -> Str {
+  if kind.startsWith("fn (trait ") { "Required by this trait. A type that implements the trait supplies the body." }
+    else if kind.startsWith("fn (") { "One implementation of a trait method, for this type." }
+    else { "" }
 }
 
 export fn guide(siteUrl: Str) -> Html.Html {

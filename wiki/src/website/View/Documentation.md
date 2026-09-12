@@ -23,6 +23,12 @@ written kind to its sentence, and `SIGNATURE_NOTES` pairs each signature marker 
 earns, walked in the order a reader meets them. A method's kind names the type or trait it belongs
 to, so those two stay prefix tests rather than table entries.
 
+Documentation prose is rendered by [[website View Prose]], which turns the exporter's untouched
+lines into paragraphs, examples, section headings, and cross-reference lists. The view adds no
+notation guide of its own: a sentence repeated on every declaration is page furniture, not
+documentation. The only sentence it still supplies names where a trait method comes from, which the
+kind alone does not say.
+
 Resolved Grill Log: signatures are prominent, prose stays readable, and source-derived facts are not
 rewritten in the view layer. Missing-page HTML delegates to the bounded dynamic view so edge fallback
 and local routing use one no-index response.
