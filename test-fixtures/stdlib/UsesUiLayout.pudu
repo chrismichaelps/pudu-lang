@@ -322,5 +322,85 @@ export fn main() -> Int {
     }
   }
 
+  var sheets: Array[Layout.View] = []
+  var sheet = 0
+  while sheet < 5 {
+    sheets = sheets.push(Layout.box().tall(4))
+    sheet = sheet + 1
+  }
+  if let Ok(placed) = Layout.place(&Layout.scrollColumn(sheets).scrolledTo(3), Canvas.size(6, 10)) {
+    if Layout.frameOf(&placed, 1) == Some(Canvas.rect(0, -3, 6, 4)) &&
+    Layout.scrollOffsetOf(&placed, 0) == Some(3) && Layout.scrollRangeOf(&placed, 0) == Some(10) &&
+    Layout.scrollOffsetOf(&placed, 9) == None && Layout.scrollRangeOf(&placed, -1) == None
+    {
+      held = held + 1
+    }
+  }
+  if let Ok(placed) = Layout.place(&Layout.scrollColumn(sheets).scrolledTo(99), Canvas.size(6, 10)) {
+    if Layout.frameOf(&placed, 5) == Some(Canvas.rect(0, 6, 6, 4)) &&
+    Layout.scrollOffsetOf(&placed, 0) == Some(10)
+    {
+      held = held + 1
+    }
+  }
+
+  let list = fn(offset: Int) -> Layout.View {
+    Layout.column([
+        Layout.box().tall(2).filled(blue),
+        Layout.scrollColumn([
+            Layout.box().tall(4).filled(red).means(Layout.Button).named("a"),
+            Layout.box().tall(4).filled(red).means(Layout.Button).named("b"),
+            Layout.box().tall(4).filled(red).means(Layout.Button).named("c")
+          ]).tall(4).scrolledTo(offset)
+      ]).filled(white)
+  }
+  if let Ok(placed) = Layout.place(&list(1), Canvas.size(4, 8)) {
+    if let Ok(blank) = Canvas.canvas(4, 8, white) {
+      if let Ok(painted) = Layout.paint(&placed, &blank) {
+        if let Ok(surface) = Canvas.render(&painted) {
+          if Canvas.pixelAt(&surface, Canvas.point(0, 1)) == Ok(Some(blue)) &&
+          Canvas.pixelAt(&surface, Canvas.point(0, 2)) == Ok(Some(red)) &&
+          Canvas.pixelAt(&surface, Canvas.point(0, 5)) == Ok(Some(red)) &&
+          Canvas.pixelAt(&surface, Canvas.point(0, 6)) == Ok(Some(white)) &&
+          Layout.scrollRangeOf(&placed, 2) == Some(8)
+          {
+            held = held + 1
+          }
+        }
+      }
+    }
+    if Layout.hitTest(&placed, Canvas.point(0, 1)) == None &&
+    Layout.hitTest(&placed, Canvas.point(0, 3)) == Some(3) &&
+    Layout.hitTest(&placed, Canvas.point(0, 6)) == None
+    {
+      held = held + 1
+    }
+  }
+  if let Ok(top) = Layout.place(&list(0), Canvas.size(4, 8)) {
+    if let Ok(moved) = Layout.place(&list(2), Canvas.size(4, 8)) {
+      if let Ok(blank) = Canvas.canvas(4, 8, white) {
+        if let Ok(oldCanvas) = Layout.paint(&top, &blank) {
+          if let Ok(newCanvas) = Layout.paint(&moved, &blank) {
+            if let Ok(oldSurface) = Canvas.render(&oldCanvas) {
+              if let Ok(full) = Canvas.render(&newCanvas) {
+                let regions = Layout.damage(&top, &moved)
+                if let Ok(patched) = Canvas.repaint(&newCanvas, &oldSurface, &regions) {
+                  if regions.length() > 0 && Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&full) {
+                    held = held + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  if let Err(Layout.NegativeLength(0, -1)) =
+  Layout.place(&Layout.scrollColumn([]).scrolledTo(-1), tenByTen)
+  {
+    held = held + 1
+  }
+
   held
 }

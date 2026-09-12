@@ -291,9 +291,9 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
 | `Std.Ui.Canvas` | 43 | bounded exact-pixel rendering by bands and spans, opaque-cover culling, damage repaint |
-| `Std.Ui.Layout` | 40 | declarative views and text, two-pass placement, accessibility semantics, tags, damage extents |
+| `Std.Ui.Layout` | 46 | declarative views and text, two-pass placement, scrolling windows, accessibility, damage extents |
 | `Std.Ui.Screen` | 27 | routed input, text entry to focused fields, focus rings, unchanged views skipped, damage repaint |
-| `Std.Ui.Text` | 21 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged glyph rectangles |
+| `Std.Ui.Text` | 22 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged and clipped glyphs |
 | `Std.Audio` | 30 | exact 16-bit PCM bytes, frame-counted time, Q15 gain, saturating mix, bounded slices and WAV |
 | `Std.Audio.Graph` | 21 | stateless pull-model nodes: clips, integer tones, gain, mixes, sample-accurate ramps |
 | `Std.Video` | 19 | exact fractional rates and timestamps, non-overlapping picture tracks, audio alignment |

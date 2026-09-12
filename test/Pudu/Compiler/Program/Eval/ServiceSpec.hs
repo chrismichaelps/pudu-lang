@@ -126,13 +126,13 @@ testServiceEvaluation = do
         (canvas === Just "43")
     , counterexample
         "declarative layout places exact frames, names every control, and repaints only damage"
-        (layout === Just "40")
+        (layout === Just "46")
     , counterexample
         "a screen routes input to tagged controls, rings focus, and repaints only what changed"
         (interaction === Just "27")
     , counterexample
         "bitmap text measures, wraps, and draws into exact pixels"
-        (lettering === Just "21")
+        (lettering === Just "22")
     , counterexample
         "PCM audio keeps exact samples, time, and WAV bytes and refuses malformed input"
         (sound === Just "30")

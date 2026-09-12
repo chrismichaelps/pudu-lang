@@ -42,6 +42,10 @@ run whose exact extent repeats in the rows below extends downward into one talle
 stem is one command rather than seven. The letter "I" is three rectangles. Fewer commands mean fewer
 band edges and spans in the canvas rasterizer.
 
+**Drawing can be cut to a window.** `drawWithin` draws as `draw` does with every glyph rectangle
+intersected with a window first; rectangles wholly outside it add no command, so text scrolled out of
+view costs nothing to render.
+
 **Bounded input.** Each call admits at most 1,048,576 characters; the canvas command budget bounds
 what a draw may add, and exceeding it is reported with the canvas's own error.
 

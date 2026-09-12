@@ -70,6 +70,14 @@ visible, and the node's extent—its frame grown to cover the drawn text—is wh
 repaint stays exact. Scales outside 1 to 64 and text beyond the character bound are refused at
 placement.
 
+**Scrolling is a window over a document.** `scrollColumn` and `scrollRow` place their children at
+their full lengths in a document shifted by the node's `scrolledTo` offset, clamped between zero and
+the content's length beyond the window. Every placed node records the window of its scrolling
+ancestors as its clip; painting cuts fills and glyph rectangles to it, hit testing ignores points outside
+it, and damage reports extents cut to it, so content scrolled out of view is neither drawn nor pressed
+and a scroll repaints to the same bytes as a full render. `scrollOffsetOf` and `scrollRangeOf` read the
+clamped offset and how far a node can scroll. A negative offset is refused like any negative length.
+
 **Damage is data.** A node that changed its extent, frame, fill, text, ink, scale, or origin damages
 where it was and where it is if it paints; a region identical to the one just recorded is recorded
 once, so a recolored node damages its extent a single time. A change of structure or viewport damages the whole viewport. More than sixteen

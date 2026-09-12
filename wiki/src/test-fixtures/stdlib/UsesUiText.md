@@ -12,7 +12,8 @@ aliases: [Uses Ui Text]
 
 ## Purpose and interface
 
-Executable Pudu fixture for bitmap text. Its `main` returns 21 held assertions.
+Executable Pudu fixture for bitmap text. Its `main` returns 22 held assertions. Drawing "I" within a
+one-row window keeps only the top bar's rectangle.
 
 Faces and measures: scales below one and above sixty-four are refused; metrics, empty text, a single
 glyph without trailing space, several glyphs, and multi-line text with a trailing newline measure

@@ -89,6 +89,16 @@ export fn main() -> Int {
       }
     }
 
+    if let Ok(target) = Canvas.canvas(12, 16, white) {
+      if let Ok(cut) = Text.drawWithin(&one, &target, Canvas.point(0, 0), "I", black, Canvas.rect(0, 0, 12, 1)) {
+        if Canvas.commandCount(&cut) == 1 {
+          if let Ok(surface) = Canvas.render(&cut) {
+            if litAt(&surface, 1, 0, black) && !litAt(&surface, 2, 3, black) { held = held + 1 }
+          }
+        }
+      }
+    }
+
     if let Ok(tight) = Canvas.canvasWithinLimits(10, 10, white, 100, 2) {
       if let Err(Text.Drawing(Canvas.CommandBudgetExceeded(2))) =
       Text.draw(&one, &tight, Canvas.point(0, 0), "I", black)

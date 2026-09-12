@@ -12,7 +12,12 @@ aliases: [Uses Ui Layout]
 
 ## Purpose and interface
 
-Executable Pudu fixture for declarative layout. Its `main` returns 40 held assertions.
+Executable Pudu fixture for declarative layout. Its `main` returns 46 held assertions.
+
+Scrolling: an offset shifts children and reports its clamped offset and range; an offset past the range
+clamps; content scrolled under a header is not painted over it or past the window's end; hit testing
+ignores a control's clipped-away part; a scroll's damage repaints to the bytes of a full render; and a
+negative offset is refused.
 
 Text views: a padded label's measured frame, its semantics entry named by its text, and its glyph
 pixels at the padded origin; a scaled, inked label's frame and pixels; a refused scale; a text leaf

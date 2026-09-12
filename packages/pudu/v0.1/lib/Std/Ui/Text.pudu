@@ -236,6 +236,32 @@ export fn draw(
   text: Str,
   color: Canvas.Color
 ) -> Result[Canvas.Canvas, TextError] {
+  drawn(target, onto, origin, text, color, None)
+}
+
+/// Text drawn as `draw` draws it, with every glyph rectangle cut to a window.
+///
+/// Rectangles wholly outside the window add no command, so text scrolled out of
+/// view costs nothing to render.
+export fn drawWithin(
+  target: &Face,
+  onto: &Canvas.Canvas,
+  origin: Canvas.Point,
+  text: Str,
+  color: Canvas.Color,
+  window: Canvas.Rect
+) -> Result[Canvas.Canvas, TextError] {
+  drawn(target, onto, origin, text, color, Some(window))
+}
+
+fn drawn(
+  target: &Face,
+  onto: &Canvas.Canvas,
+  origin: Canvas.Point,
+  text: Str,
+  color: Canvas.Color,
+  window: Option[Canvas.Rect]
+) -> Result[Canvas.Canvas, TextError] {
   let characters = admitted(text) ?
   var held = *onto
   var column = 0
@@ -247,7 +273,7 @@ export fn draw(
     } else {
       let x = origin.x + column * ADVANCE_UNITS * target.scale
       let y = origin.y + line * LINE_UNITS * target.scale
-      held = glyphDrawn(target, &held, glyphOf(character), x, y, color) ?
+      held = glyphDrawn(target, &held, glyphOf(character), x, y, color, window) ?
       column = column + 1
     }
   }
@@ -281,7 +307,8 @@ fn glyphDrawn(
   glyph: UInt64,
   x: Int,
   y: Int,
-  color: Canvas.Color
+  color: Canvas.Color,
+  window: Option[Canvas.Rect]
 ) -> Result[Canvas.Canvas, TextError] {
   var held = *onto
   var row = 0
@@ -294,11 +321,14 @@ fn glyphDrawn(
         if !(row > 0 && isRun(glyph, row - 1, start, end)) {
           var rows = 1
           while row + rows < GLYPH_ROWS && isRun(glyph, row + rows, start, end) { rows = rows + 1 }
-          let area = Canvas.rect(
-            x + start * target.scale,
-            y + row * target.scale,
-            (end - start) * target.scale,
-            rows * target.scale
+          let area = within(
+            Canvas.rect(
+              x + start * target.scale,
+              y + row * target.scale,
+              (end - start) * target.scale,
+              rows * target.scale
+            ),
+            window
           )
           held = match Canvas.fill(&held, area, color) {
             case Ok(next) => next
@@ -313,6 +343,27 @@ fn glyphDrawn(
     row = row + 1
   }
   Ok(held)
+}
+
+fn within(area: Canvas.Rect, window: Option[Canvas.Rect]) -> Canvas.Rect {
+  if let Some(bounds) = window {
+    let left = if area.x > bounds.x { area.x } else { bounds.x }
+    let top = if area.y > bounds.y { area.y } else { bounds.y }
+    let areaRight = area.x + area.width
+    let boundsRight = bounds.x + bounds.width
+    let areaBottom = area.y + area.height
+    let boundsBottom = bounds.y + bounds.height
+    let right = if areaRight < boundsRight { areaRight } else { boundsRight }
+    let bottom = if areaBottom < boundsBottom { areaBottom } else { boundsBottom }
+    Canvas.rect(
+      left,
+      top,
+      if right > left { right - left } else { 0 },
+      if bottom > top { bottom - top } else { 0 }
+    )
+  } else {
+    area
+  }
 }
 
 fn lit(glyph: UInt64, row: Int, column: Int) -> Bool {

@@ -58,11 +58,13 @@ order, hit testing, painting, and damage regions.
 - `749c84a` — `Std.Video` exact timing and tracks (19); screens skip unchanged views (21).
 - `8b724f8` — the canvas never composes commands under an opaque region-covering command (43);
   300 stacked fills render in 0.14 s instead of 4.38 s.
-- Text entry slice — typed text and erasing reach only a focused field (screen 27).
+- `e74ccd1` — typed text and erasing reach only a focused field (screen 27).
+- Scrolling slice — windowed scroll stacks with clips for painting, hit testing, and damage (layout 46,
+  text 22).
 
 ## Exact next action
 
-Scrolling views in layout, then resampling and channel layouts in audio. After the native media row,
+Deliver scroll input on `Std.Ui.Screen`, then resampling and channel layouts in audio. After the native media row,
 move up the release table starting with filesystem safety. After the native media row,
 move up the release table starting with filesystem safety. Profile rendering many small
 rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows

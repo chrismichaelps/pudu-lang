@@ -45,6 +45,7 @@ export type Kind
   | Stack(Axis)
   | Layer
   | Words(Str)
+  | Scroll(Axis)
 
 /// Space inside a node's edges, in logical pixels.
 export type Insets = { top: Int, right: Int, bottom: Int, left: Int }
@@ -70,7 +71,8 @@ export type View = {
   name: Str,
   tag: Str,
   ink: Canvas.Color,
-  scale: Int
+  scale: Int,
+  offset: Int
 }
 
 /// One node after placement, in reading and painting order.
@@ -86,7 +88,11 @@ export type Placed = {
   ink: Canvas.Color,
   scale: Int,
   origin: Canvas.Point,
-  extent: Canvas.Rect
+  extent: Canvas.Rect,
+  clip: Canvas.Rect,
+  scrolls: Bool,
+  offset: Int,
+  range: Int
 }
 
 /// A placed screen: every node's frame, flat, in pre-order.
@@ -161,7 +167,8 @@ export fn box() -> View {
     name: "",
     tag: "",
     ink: Canvas.Color{red: 0u8, green: 0u8, blue: 0u8, alpha: 255u8},
-    scale: 1
+    scale: 1,
+    offset: 0
   }
 }
 
@@ -197,6 +204,19 @@ export fn layer(children: Array[View]) -> View {
   View{..box(), kind: Layer, children: children}
 }
 
+/// Children placed top to bottom inside a window showing part of them.
+///
+/// The children keep their full lengths and are shifted by the scroll offset;
+/// anything outside the window is neither painted nor hit.
+export fn scrollColumn(children: Array[View]) -> View {
+  View{..box(), kind: Scroll(Vertical), children: children}
+}
+
+/// Children placed left to right inside a window showing part of them.
+export fn scrollRow(children: Array[View]) -> View {
+  View{..box(), kind: Scroll(Horizontal), children: children}
+}
+
 /// Insets from four edges.
 export fn insets(top: Int, right: Int, bottom: Int, left: Int) -> Insets {
   Insets{top: top, right: right, bottom: bottom, left: left}
@@ -222,6 +242,7 @@ export trait Composing {
   fn tagged(self: &Self, tag: Str) -> Self
   fn inked(self: &Self, color: Canvas.Color) -> Self
   fn scaled(self: &Self, scale: Int) -> Self
+  fn scrolledTo(self: &Self, offset: Int) -> Self
 }
 
 impl Composing for View {
@@ -273,6 +294,10 @@ impl Composing for View {
 
   /// The same view drawing its text at a whole-number scale from 1 to 64.
   fn scaled(self: &Self, scale: Int) -> Self { View{..*self, scale: scale} }
+
+  /// The same scrolling view shifted by `offset` along its axis, clamped to how
+  /// far its content reaches past its window.
+  fn scrolledTo(self: &Self, offset: Int) -> Self { View{..*self, offset: offset} }
 }
 
 /// Place a view into a viewport with default node and depth budgets.
@@ -304,7 +329,7 @@ export fn placeWithin(
     let limits = Limits{maxNodes: maxNodes, maxDepth: maxDepth}
     let measures = measured(root, 0, &limits, []) ?
     let whole = Canvas.rect(0, 0, viewport.width, viewport.height)
-    let nodes = arranged(root, whole, &measures, 0, -1, 0, [])
+    let nodes = arranged(root, whole, &whole, &measures, 0, -1, 0, [])
     distinctControls(&nodes) ?
     Ok(Layout{viewport: viewport, nodes: nodes})
   }
@@ -351,6 +376,16 @@ export fn isControlAt(target: &Layout, node: Int) -> Bool {
   node >= 0 && node < target.nodes.length() && isControl(target.nodes[node].role)
 }
 
+/// How far a node is scrolled after clamping, or nothing outside the layout.
+export fn scrollOffsetOf(target: &Layout, node: Int) -> Option[Int] {
+  if node < 0 || node >= target.nodes.length() { None } else { Some(target.nodes[node].offset) }
+}
+
+/// How far a node can scroll: its content's length beyond its window.
+export fn scrollRangeOf(target: &Layout, node: Int) -> Option[Int] {
+  if node < 0 || node >= target.nodes.length() { None } else { Some(target.nodes[node].range) }
+}
+
 /// The accessibility tree: every node that is not decoration, in reading order.
 ///
 /// Derived from placement rather than from pixels, so a frame an assistive
@@ -394,7 +429,11 @@ export fn hitTest(target: &Layout, location: Canvas.Point) -> Option[Int] {
   var found = None
   while index >= 0 && Option.isNone(&found) {
     let placed = target.nodes[index]
-    if placed.role != Decoration && contains(&placed.frame, &location) { found = Some(index) }
+    if placed.role != Decoration && contains(&placed.frame, &location) &&
+    contains(&placed.clip, &location)
+    {
+      found = Some(index)
+    }
     index = index - 1
   }
   found
@@ -404,7 +443,8 @@ export fn hitTest(target: &Layout, location: Canvas.Point) -> Option[Int] {
 ///
 /// A node's fill covers its frame; its text starts at the top left of its
 /// padded content and is not clipped to the frame, so text wider than a fixed
-/// frame stays visible and its extent is what damage reports.
+/// frame stays visible and its extent is what damage reports. Both are cut to
+/// the window of every scrolling ancestor.
 export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, LayoutError] {
   let shape = Canvas.dimensions(onto)
   if shape != target.viewport {
@@ -414,7 +454,7 @@ export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, 
     var index = 0
     for placed in target.nodes {
       if let Some(color) = placed.fill {
-        match Canvas.fill(&held, placed.frame, color) {
+        match Canvas.fill(&held, intersection(&placed.frame, &placed.clip), color) {
           case Ok(next) => held = next
           case Err(reason) => { return Err(Drawing(reason)) }
         }
@@ -424,7 +464,7 @@ export fn paint(target: &Layout, onto: &Canvas.Canvas) -> Result[Canvas.Canvas, 
           case Ok(value) => value
           case Err(_) => { return Err(InvalidTextScale(index, placed.scale)) }
         }
-        match Text.draw(&face, &held, placed.origin, placed.text, placed.ink) {
+        match Text.drawWithin(&face, &held, placed.origin, placed.text, placed.ink, placed.clip) {
           case Ok(next) => held = next
           case Err(Text.Drawing(reason)) => { return Err(Drawing(reason)) }
           case Err(_) => { return Err(TextTooLong(index)) }
@@ -454,10 +494,11 @@ export fn damage(before: &Layout, after: &Layout) -> Array[Canvas.Rect] {
       let was = before.nodes[index]
       let now = after.nodes[index]
       if was.extent != now.extent || was.frame != now.frame || was.fill != now.fill ||
-      was.text != now.text || was.ink != now.ink || was.scale != now.scale || was.origin != now.origin
+      was.text != now.text || was.ink != now.ink || was.scale != now.scale || was.origin != now.origin ||
+      was.clip != now.clip
       {
-        if paints(&was) { found = withVisible(found, &was.extent, &whole) }
-        if paints(&now) { found = withVisible(found, &now.extent, &whole) }
+        if paints(&was) { found = withVisible(found, &intersection(&was.extent, &was.clip), &whole) }
+        if paints(&now) { found = withVisible(found, &intersection(&now.extent, &now.clip), &whole) }
       }
       index = index + 1
     }
@@ -500,6 +541,8 @@ fn measured(
       case Layer => Canvas.size(maxWidth, maxHeight)
       case Stack(Horizontal) => Canvas.size(sumWidth + gaps, maxHeight)
       case Stack(Vertical) => Canvas.size(maxWidth, sumHeight + gaps)
+      case Scroll(Horizontal) => Canvas.size(sumWidth + gaps, maxHeight)
+      case Scroll(Vertical) => Canvas.size(maxWidth, sumHeight + gaps)
     }
     let width = Option.unwrapOr(view.width, content.width + view.padding.left + view.padding.right)
     let height =
@@ -535,7 +578,8 @@ fn admitted(view: &View, index: Int) -> Result[(), LayoutError] {
     view.padding.top,
     view.padding.right,
     view.padding.bottom,
-    view.padding.left
+    view.padding.left,
+    view.offset
   ]
   for length in lengths {
     if length < 0 { return Err(NegativeLength(index, length)) }
@@ -562,6 +606,7 @@ fn admitted(view: &View, index: Int) -> Result[(), LayoutError] {
 fn arranged(
   view: &View,
   frame: Canvas.Rect,
+  clip: &Canvas.Rect,
   measures: &Array[Measure],
   index: Int,
   parent: Int,
@@ -589,19 +634,25 @@ fn arranged(
       ink: view.ink,
       scale: view.scale,
       origin: Canvas.point(content.x, content.y),
-      extent: if shown.isEmpty() { frame } else { union(&frame, &drawn) }
+      extent: if shown.isEmpty() { frame } else { union(&frame, &drawn) },
+      clip: *clip,
+      scrolls: if let Scroll(_) = view.kind { true } else { false },
+      offset: 0,
+      range: 0
     })
   match view.kind {
     case Box => held
     case Words(_) => held
-    case Layer => layered(view, &content, measures, index, depth, held)
-    case Stack(axis) => stacked(view, axis, &content, measures, index, depth, held)
+    case Layer => layered(view, &content, clip, measures, index, depth, held)
+    case Stack(axis) => stacked(view, axis, &content, clip, measures, index, depth, held)
+    case Scroll(axis) => scrolled(view, axis, &content, clip, measures, index, depth, held)
   }
 }
 
 fn layered(
   view: &View,
   content: &Canvas.Rect,
+  clip: &Canvas.Rect,
   measures: &Array[Measure],
   index: Int,
   depth: Int,
@@ -619,7 +670,7 @@ fn layered(
       width,
       height
     )
-    held = arranged(&child, frame, measures, position, index, depth + 1, held)
+    held = arranged(&child, frame, clip, measures, position, index, depth + 1, held)
     position = position + measure.nodes
   }
   held
@@ -629,6 +680,7 @@ fn stacked(
   view: &View,
   axis: Axis,
   content: &Canvas.Rect,
+  clip: &Canvas.Rect,
   measures: &Array[Measure],
   index: Int,
   depth: Int,
@@ -674,11 +726,46 @@ fn stacked(
     } else {
       Canvas.rect(content.x + shift, content.y + offset, cross, main)
     }
-    held = arranged(&child, frame, measures, position, index, depth + 1, held)
+    held = arranged(&child, frame, clip, measures, position, index, depth + 1, held)
     offset = offset + main + view.spacing
     position = position + measure.nodes
   }
   held
+}
+
+/// A scrolling stack: children placed at their full lengths in a document
+/// shifted by the clamped offset, and clipped to the window.
+fn scrolled(
+  view: &View,
+  axis: Axis,
+  content: &Canvas.Rect,
+  clip: &Canvas.Rect,
+  measures: &Array[Measure],
+  index: Int,
+  depth: Int,
+  out: Array[Placed]
+) -> Array[Placed] {
+  let horizontal = axis == Horizontal
+  let visible = if horizontal { content.width } else { content.height }
+  let count = view.children.length()
+  var used = if count > 0 { view.spacing * (count - 1) } else { 0 }
+  var position = index + 1
+  for child in view.children {
+    let size = measures[position].size
+    used = used + (if horizontal { size.width } else { size.height })
+    position = position + measures[position].nodes
+  }
+  let range = Math.max(0, used - visible)
+  let offset = Math.min(view.offset, range)
+  let length = Math.max(visible, used)
+  let document = if horizontal {
+    Canvas.rect(content.x - offset, content.y, length, content.height)
+  } else {
+    Canvas.rect(content.x, content.y - offset, content.width, length)
+  }
+  let window = intersection(content, clip)
+  let held = stacked(view, axis, &document, &window, measures, index, depth, out)
+  List.set(&held, index, Placed{..held[index], offset: offset, range: range})
 }
 
 fn crossLength(alignment: Alignment, fixed: Option[Int], natural: Int, available: Int) -> Int {
@@ -708,6 +795,14 @@ fn union(first: &Canvas.Rect, second: &Canvas.Rect) -> Canvas.Rect {
   let top = Math.min(first.y, second.y)
   let right = Math.max(first.x + first.width, second.x + second.width)
   let bottom = Math.max(first.y + first.height, second.y + second.height)
+  Canvas.rect(left, top, right - left, bottom - top)
+}
+
+fn intersection(first: &Canvas.Rect, second: &Canvas.Rect) -> Canvas.Rect {
+  let left = Math.max(first.x, second.x)
+  let top = Math.max(first.y, second.y)
+  let right = Math.max(left, Math.min(first.x + first.width, second.x + second.width))
+  let bottom = Math.max(top, Math.min(first.y + first.height, second.y + second.height))
   Canvas.rect(left, top, right - left, bottom - top)
 }
 

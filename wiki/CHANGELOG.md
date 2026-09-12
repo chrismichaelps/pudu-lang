@@ -64,6 +64,10 @@ tags: [changelog]
 - Screens accept text: `TypedText` and the `Erase` key reach the update as `Typed` and `Erased` events
   only when focus is on a `Field`, so typing while a button holds focus changes nothing. Screen now 27
   assertions.
+- Layout gained scrolling: `scrollColumn` and `scrollRow` place children at full length in a document
+  shifted by a clamped `scrolledTo` offset, and every node records its scrolling ancestors' window as a
+  clip that painting, hit testing, and damage respect. `Text.drawWithin` cuts glyphs to a window. Layout
+  now 46 assertions and text 22.
 
 ## 2026-09-12 — Adapter-free production website
 
