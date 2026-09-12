@@ -5,17 +5,54 @@ import Std.Path as Path
 import Std.Result as Result
 
 /// A line written to the program's output.
+///
 /// The output is flushed, so a program that prints and then waits for input has
-/// already shown what it printed.
+/// already shown what it printed. The newline is added for you.
+///
+/// Writing can fail — a closed pipe, a full disk — so the answer is a `Result`
+/// rather than nothing. Ignoring it is a decision, not a default.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeLine("Hello from Pudu!")
+/// ```
 export fn writeLine(message: Str) -> Result[(), Str] { print(message) }
 
 /// A line written to the program's error output.
+///
+/// Diagnostics belong here rather than on the ordinary output, so a caller piping
+/// the program's result somewhere still sees what went wrong.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeErrorLine("could not read the file")
+/// ```
 export fn writeErrorLine(message: Str) -> Result[(), Str] { printError(message) }
 
 /// Any value rendered and written as a line.
+///
+/// `writeLine` with `show` applied first, for the values a program prints while it
+/// is being written rather than as its real output.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeValue([1, 2, 3])
+/// ```
 export fn writeValue[T](value: T) -> Result[(), Str] { print(show(value)) }
 
 /// Every line written in order, stopping at the first that fails.
+///
+/// Stopping means the lines after a failure are not written, so a partly written
+/// output reflects exactly how far it got.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeLines(&["first", "second"])
+/// ```
 export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
   for line in lines {
     print(line) ?
@@ -24,11 +61,32 @@ export fn writeLines(lines: &Array[Str]) -> Result[(), Str] {
 }
 
 /// One line of input, or `None` at the end of it.
-/// The end of input is not a failure: a program reading until there is no more
-/// is doing the ordinary thing.
+///
+/// The end of input is not a failure: a program reading until there is no more is
+/// doing the ordinary thing. A genuine failure is still reported as one, so the
+/// two cases stay apart.
+///
+/// ## Examples
+///
+/// ```
+/// match Io.readLineOrEnd() {
+///   case Ok(Some(line)) => handle(line)
+///   case Ok(None) => done()
+///   case Err(why) => report(why)
+/// }
+/// ```
 export fn readLineOrEnd() -> Result[Option[Str], Str] { readLine() }
 
 /// Every remaining line of input.
+///
+/// Reads until the input ends, holding all of it. For input that may be large,
+/// reading one line at a time with `readLineOrEnd` keeps the cost flat.
+///
+/// ## Examples
+///
+/// ```
+/// let lines = Io.readAllLines()
+/// ```
 export fn readAllLines() -> Result[Array[Str], Str] {
   var out = []
   var reading = true
@@ -42,17 +100,56 @@ export fn readAllLines() -> Result[Array[Str], Str] {
 }
 
 /// A file's whole contents.
+///
+/// Holds the entire file, so the memory a program needs grows with the file it is
+/// given. `foldLines` and `foldChunks` are the forms whose cost does not.
+///
+/// ## Examples
+///
+/// ```
+/// match Io.read("notes.txt") {
+///   case Ok(text) => use(text)
+///   case Err(why) => report(why)
+/// }
+/// ```
 export fn read(path: Str) -> Result[Str, Str] { readFile(path) }
 
 /// A file's contents in lines.
+///
+/// `read` split on newlines, with the same memory profile: the whole file is held.
+/// Use `foldLines` for a file that may not fit.
+///
+/// ## Examples
+///
+/// ```
+/// let lines = Io.readLines("notes.txt")
+/// ```
 export fn readLines(path: Str) -> Result[Array[Str], Str] {
   Ok(readFile(path) ?.lines())
 }
 
 /// A file replaced with the given contents.
+///
+/// Replaces rather than adds: whatever the file held is gone. The file is created
+/// when it is absent. Use `append` to keep what is already there.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.write("notes.txt", "replaced")
+/// ```
 export fn write(path: Str, contents: Str) -> Result[(), Str] { writeFile(path, contents) }
 
 /// Lines written to a file, each followed by a newline.
+///
+/// Including the last line, so the file ends with a newline the way a text file is
+/// expected to. The file is replaced, as with `write`.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeFileLines("notes.txt", &["first", "second"])
+/// ```
 export fn writeFileLines(path: Str, lines: &Array[Str]) -> Result[(), Str] {
   var out = ""
   for line in lines { out = out + line + "\n" }
@@ -60,29 +157,94 @@ export fn writeFileLines(path: Str, lines: &Array[Str]) -> Result[(), Str] {
 }
 
 /// Contents added to the end of a file, creating it when it is absent.
+///
+/// The counterpart to `write`, and what a log wants: an absent file is not a
+/// failure to be handled before the first entry can be recorded.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.append("log.txt", "one more entry\n")
+/// ```
 export fn append(path: Str, contents: Str) -> Result[(), Str] { appendFile(path, contents) }
 
 /// A line added to the end of a file.
+///
+/// `append` with the newline supplied, which is the form a log entry actually
+/// wants.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.appendLine("log.txt", "started")
+/// ```
 export fn appendLine(path: Str, line: Str) -> Result[(), Str] {
   appendFile(path, line + "\n")
 }
 
 /// Whether a path names something that exists.
+///
+/// Answers a plain `Bool`, because asking cannot fail in a way a caller acts on.
+/// The answer is already stale when you receive it: something else may create or
+/// remove the path before the next call, so prefer attempting the operation and
+/// handling its failure.
+///
+/// ## Examples
+///
+/// ```
+/// if Io.exists("notes.txt") { load() } else { start() }
+/// ```
 export fn exists(path: Str) -> Bool { fileExists(path) }
 
 /// A file removed, or a report of why it could not be.
+///
+/// An absent file is reported as a failure here. `removeIfPresent` is the form for
+/// callers to whom "already gone" is success.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.remove("scratch.txt")
+/// ```
 export fn remove(path: Str) -> Result[(), Str] { removeFile(path) }
 
 /// A file removed if it is there, and nothing done if it is not.
-/// Removing something that is already gone is what the caller wanted.
+///
+/// Removing something that is already gone is what the caller wanted, so this
+/// reports success rather than making every cleanup path handle an absence it does
+/// not care about.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.removeIfPresent("scratch.txt")
+/// ```
 export fn removeIfPresent(path: Str) -> Result[(), Str] {
   if fileExists(path) { removeFile(path) } else { Ok(()) }
 }
 
 /// The names a directory holds, without their paths.
+///
+/// Names only, so joining them to the directory is the caller's step — or use
+/// `listPaths`, which does it. The order is whatever the operating system gives.
+///
+/// ## Examples
+///
+/// ```
+/// Io.list("src")  // Ok(["Main.pudu", "Util.pudu"])
+/// ```
 export fn list(path: Str) -> Result[Array[Str], Str] { listDirectory(path) }
 
 /// The paths a directory holds, each joined to the directory.
+///
+/// The form to reach for when the results are about to be opened, since a bare name
+/// is only meaningful relative to the directory it came from.
+///
+/// ## Examples
+///
+/// ```
+/// Io.listPaths("src")  // Ok(["src/Main.pudu", "src/Util.pudu"])
+/// ```
 export fn listPaths(path: Str) -> Result[Array[Str], Str] {
   let names = listDirectory(path) ?
   var out = []
@@ -91,14 +253,42 @@ export fn listPaths(path: Str) -> Result[Array[Str], Str] {
 }
 
 /// A directory created along with every parent it needs.
+///
+/// Missing parents are created rather than reported, so a caller writing to a
+/// nested path does not have to walk it. A directory that already exists is not a
+/// failure.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.makeDirectory("build/output/pdf")
+/// ```
 export fn makeDirectory(path: Str) -> Result[(), Str] { createDirectory(path) }
 
 /// A file copied, or a report of what stopped it.
+///
+/// The destination is replaced when it exists. The source is left as it was.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.copy("notes.txt", "notes.bak")
+/// ```
 export fn copy(from: Str, to: Str) -> Result[(), Str] {
   writeFile(to, readFile(from) ?)
 }
 
 /// A file moved, which is a copy followed by removing the original.
+///
+/// Written as those two steps, so a failure partway leaves the copy behind rather
+/// than losing the file. It is not atomic, and it is not a rename across devices
+/// that the operating system could have done in one step.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.move("draft.txt", "final.txt")
+/// ```
 export fn move(from: Str, to: Str) -> Result[(), Str] {
   copy(from, to) ?
   removeFile(from)
@@ -111,27 +301,99 @@ export fn move(from: Str, to: Str) -> Result[(), Str] {
 /// one a caller checked against before writing.
 
 /// The character this machine writes between the pieces of a path.
+///
+/// From `Std.Path`, so a program reaching for it through `Std.Io` gets the same
+/// answer. Prefer `join` to writing the separator yourself.
+///
+/// ## Examples
+///
+/// ```
+/// Io.separator()  // "/" on this machine
+/// ```
 export fn separator() -> Str { Path.separator() }
 
 /// Whether a character ends a piece of a path on this machine.
+///
+/// Useful when scanning a path by hand; the rest of this vocabulary usually makes
+/// that unnecessary.
+///
+/// ## Examples
+///
+/// ```
+/// Io.isSeparator("/")  // true on this machine
+/// ```
 export fn isSeparator(character: Str) -> Bool { Path.isSeparator(character) }
 
 /// Two path pieces joined with a separator, without doubling one.
+///
+/// A trailing separator on the left or a leading one on the right is handled, so
+/// callers do not have to normalise before joining.
+///
+/// ## Examples
+///
+/// ```
+/// Io.join("src", "Main.pudu")   // "src/Main.pudu"
+/// Io.join("src/", "Main.pudu")  // "src/Main.pudu"
+/// ```
 export fn join(left: Str, right: Str) -> Str { Path.join(left, right) }
 
 /// A path without its last piece, or `.` when it has only one.
+///
+/// The `.` rather than empty text, so the answer is always a usable directory.
+///
+/// ## Examples
+///
+/// ```
+/// Io.directoryOf("src/Main.pudu")  // "src"
+/// Io.directoryOf("Main.pudu")      // "."
+/// ```
 export fn directoryOf(path: Str) -> Str { Path.directoryOf(path) }
 
 /// The last piece of a path.
+///
+/// The file name with its extension still attached; `withoutExtension` removes it.
+///
+/// ## Examples
+///
+/// ```
+/// Io.nameOf("src/Main.pudu")  // "Main.pudu"
+/// ```
 export fn nameOf(path: Str) -> Str { Path.nameOf(path) }
 
 /// A path's extension, without its dot, or nothing when it has none.
+///
+/// Absent rather than empty text, so "no extension" and "an empty extension" stay
+/// apart.
+///
+/// ## Examples
+///
+/// ```
+/// Io.extensionOf("src/Main.pudu")  // Some("pudu")
+/// Io.extensionOf("README")         // None
+/// ```
 export fn extensionOf(path: Str) -> Option[Str] { Path.extensionOf(path) }
 
 /// A path with its extension removed.
+///
+/// The directory part is kept, so this names the same file without its type.
+///
+/// ## Examples
+///
+/// ```
+/// Io.withoutExtension("src/Main.pudu")  // "src/Main"
+/// ```
 export fn withoutExtension(path: Str) -> Str { Path.withoutExtension(path) }
 
 /// A path carrying the given extension, replacing any it had.
+///
+/// Replacing rather than adding, so applying it twice gives the same answer as
+/// applying it once.
+///
+/// ## Examples
+///
+/// ```
+/// Io.withExtension("src/Main.pudu", "json")  // "src/Main.json"
+/// ```
 export fn withExtension(path: Str, extension: Str) -> Str {
   Path.withExtension(path, extension)
 }
@@ -269,18 +531,51 @@ fn firstFailure[T](outcome: Result[T, IoError], after: Result[(), IoError]) -> R
 }
 
 /// The next bytes from a reader, or nothing when the input has ended.
-/// Nothing is a different answer from an empty sequence: a reader that could
-/// not tell them apart would either stop early or never stop.
+///
+/// Nothing is a different answer from an empty sequence: a reader that could not
+/// tell them apart would either stop early or never stop.
+///
+/// The count is a request, not a promise — a short read is ordinary and does not
+/// mean the input has ended.
+///
+/// ## Examples
+///
+/// ```
+/// match Io.readFrom(&reader, 4096) {
+///   case Ok(Some(chunk)) => handle(chunk)
+///   case Ok(None) => done()
+///   case Err(why) => report(why)
+/// }
+/// ```
 export fn readFrom(reader: &Reader, count: Int) -> Result[Option[Bytes], IoError] {
   Result.mapErr(readChunk(reader.token, count), fn(message: Str) -> IoError { causeOf(message, "") })
 }
 
 /// Write bytes through a writer.
+///
+/// The bracket that owns the writer flushes and closes it, so a successful write
+/// here does not yet promise the bytes reached the file — that is what the
+/// bracket's own answer reports.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeTo(&writer, &chunk)
+/// ```
 export fn writeTo(writer: &Writer, chunk: &Bytes) -> Result[(), IoError] {
   Result.mapErr(writeChunk(writer.token, *chunk), fn(message: Str) -> IoError { causeOf(message, "") })
 }
 
 /// Write text through a writer, as its UTF-8 encoding.
+///
+/// The encoding is fixed rather than taken from the environment, so a file written
+/// on one machine reads the same on another.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeTextTo(&writer, "a line\n")
+/// ```
 export fn writeTextTo(writer: &Writer, text: Str) -> Result[(), IoError] {
   writeTo(writer, &text.toBytes())
 }
@@ -307,6 +602,17 @@ export fn foldChunks[T](reader: &Reader, seed: T, step: fn(T, Bytes) -> T) -> Re
 }
 
 /// Run an action for every chunk, keeping nothing.
+///
+/// For an action that only reaches outside the program. A caller gathering the
+/// chunks wants `foldChunks`, because what this action assigns to a variable
+/// outside itself does not survive: a function literal carries a copy of what it
+/// captured.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.forEachChunk(&reader, fn(chunk: Bytes) -> () => send(chunk))
+/// ```
 export fn forEachChunk(reader: &Reader, action: fn(Bytes) -> ()) -> Result[(), IoError] {
   Result.map(
     foldChunks(reader, 0, fn(count: Int, chunk: Bytes) -> Int {
@@ -318,6 +624,15 @@ export fn forEachChunk(reader: &Reader, action: fn(Bytes) -> ()) -> Result[(), I
 }
 
 /// How many bytes a file holds, without holding any of them.
+///
+/// Reads the file in chunks and counts them, so the cost in memory does not depend
+/// on the file's size.
+///
+/// ## Examples
+///
+/// ```
+/// Io.countBytes("image.png")  // Ok(20481)
+/// ```
 export fn countBytes(path: Str) -> Result[Int, IoError] {
   withReader(path, fn(reader: Reader) -> Result[Int, IoError] {
       foldChunks(&reader, 0, fn(total: Int, chunk: Bytes) -> Int { total + chunk.length() })
@@ -337,12 +652,29 @@ export fn readAllBytes(path: Str) -> Result[Bytes, IoError] {
 }
 
 /// Write bytes to a file, replacing what it held.
+///
+/// The binary counterpart to `write`. The bytes are written exactly as given, with
+/// no encoding step.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.writeAllBytes("image.png", &contents)
+/// ```
 export fn writeAllBytes(path: Str, contents: &Bytes) -> Result[(), IoError] {
   let payload = *contents
   withWriter(path, fn(writer: Writer) -> Result[(), IoError] { writeTo(&writer, &payload) })
 }
 
 /// Add bytes after what a file already holds.
+///
+/// The binary counterpart to `append`, creating the file when it is absent.
+///
+/// ## Examples
+///
+/// ```
+/// let _ = Io.appendAllBytes("stream.bin", &chunk)
+/// ```
 export fn appendAllBytes(path: Str, contents: &Bytes) -> Result[(), IoError] {
   let payload = *contents
   withAppender(path, fn(writer: Writer) -> Result[(), IoError] { writeTo(&writer, &payload) })
