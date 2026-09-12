@@ -301,7 +301,7 @@ testRuntimeEvaluation = do
         (threads === Just "32")
     , counterexample
         "enterprise SSR compiles unboxed buffers, streams suspense chunks, and enforces 1-RTT resilience"
-        (enterpriseSsr === Just "90")
+        (enterpriseSsr === Just "107")
     , counterexample
         "RFC 7519 JSON Web Tokens encode, decode, and validate signatures and claims"
         (jwtApp === Just "18")
@@ -384,8 +384,17 @@ testRuntimeEvaluation = do
         (sequences === Just "14")
     , counterexample "drawing and parsing keep the caller's integer type"
         (widths === Just "8")
+    {-| A name belongs to the module that declared it, and that holds inside an
+        implementation as well as outside one. An implementation is reachable
+        from every module — it is a fact about a type and a trait, which is what
+        lets a library dispatch to a program's own type — and a method was
+        therefore the one body still reading names from wherever it was called.
+        Called from another module it found that module's `pick`; called from
+        its own it found the right one by luck, which is why it went unseen
+        until a helper of a different arity turned the wrong answer into an
+        abort. Both paths are checked, so neither can regress alone. -}
     , counterexample "a module calls the function it declared, not a stranger's"
-        (scoped === Just "2")
+        (scoped === Just "4")
     , counterexample "a dynamic type holds any implementation of its trait"
         (dynamic === Just "9")
     , counterexample "traits, dynamic values, and bounded generics compose"

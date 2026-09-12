@@ -14,4 +14,5 @@ part of the path so `stage` the function and `Stage` the type cannot collide on 
 filesystem.
 
 Resolved Grill Log: signatures are prominent, prose stays readable, and source-derived facts are not
-rewritten in the view layer.
+rewritten in the view layer. Missing-page HTML delegates to the bounded dynamic view so edge fallback
+and local routing use one no-index response.

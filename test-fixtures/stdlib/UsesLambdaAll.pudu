@@ -1,0 +1,255 @@
+module UsesLambdaAll
+
+import Std.Channel as Channel
+import Std.Concurrent as Concurrent
+import Std.Http as Http
+import Std.Http.Server.Lambda as Lambda
+import Std.Http.Server.Lambda {MalformedInvocation, NotUnderARuntime, RuntimeUnreachable}
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Http.Server as Server
+import Std.Json as Json
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// Every export of `Std.Http.Server.Lambda`, checked against a runtime
+/// interface served by this program rather than against a platform.
+///
+/// The interface is a value rather than something read from the environment at
+/// each call, which is what makes this possible: the loop can be pointed at a
+/// listener started here. What the stub records is what a platform would see —
+/// which paths were asked for, in what order, and what was posted back against
+/// which invocation. A loop that answered the right body against the wrong
+/// identifier would answer somebody else's request, and nothing that only read
+/// the body could tell.
+export fn main() -> Int {
+  var held = 0
+
+  // An interface is an address and the version of the protocol spoken to it.
+  // Both are values, so a program can reach one this module did not assume:
+  // another platform implementing the protocol, or a version after this one.
+  let runtime: Lambda.Runtime = Lambda.runtimeAt("127.0.0.1:9001")
+  if runtime.address == "127.0.0.1:9001" { held = held + 1 }
+  if runtime.version == Lambda.RUNTIME_VERSION { held = held + 1 }
+  if Lambda.RUNTIME_VERSION == "2018-06-01" { held = held + 1 }
+  if Lambda.RUNTIME_ADDRESS_VARIABLE == "AWS_LAMBDA_RUNTIME_API" { held = held + 1 }
+
+  // Paths are built from the interface rather than written out, which is what
+  // lets the version move without every path being found and edited.
+  if Lambda.runtimePath(&runtime, "/invocation/next")
+    == "http://127.0.0.1:9001/2018-06-01/runtime/invocation/next" {
+    held = held + 1
+  }
+  let later: Lambda.Runtime = Lambda.speaking(&runtime, "2030-01-01")
+  if Lambda.runtimePath(&later, "/init/error")
+    == "http://127.0.0.1:9001/2030-01-01/runtime/init/error" {
+    held = held + 1
+  }
+  // Saying a version changes the version and nothing else.
+  if later.address == runtime.address { held = held + 1 }
+
+  // Nothing started this test process, so asking the environment answers
+  // nothing — which is the whole of how a program tells a platform from a
+  // developer's machine, and what lets one program be both.
+  if !Lambda.underARuntime() { held = held + 1 }
+  if Option.isNone(&Lambda.fromEnvironment()) { held = held + 1 }
+  match Lambda.serveEnvironment(fn(_event: Json.Json) -> Result[Str, Str] { Ok("") }) {
+    case Err(NotUnderARuntime) => { held = held + 1 }
+    case _ => {}
+  }
+
+  // What each failure says, since a deployment log is where these are read: a
+  // program started outside a platform is a different fix from one that lost
+  // the interface, and a reader told only that it failed cannot tell which.
+  let outside: Lambda.LambdaError = NotUnderARuntime
+  if Lambda.explain(&outside).contains("started outside a platform") { held = held + 1 }
+  if Lambda.explain(&RuntimeUnreachable("connection refused")).contains("connection refused") {
+    held = held + 1
+  }
+  if Lambda.explain(&MalformedInvocation("no identifier")).contains("no identifier") {
+    held = held + 1
+  }
+
+  // An interface that is not there ends the loop rather than waiting for one: a
+  // function whose platform has gone is a process to be restarted.
+  match Lambda.nextInvocation(&Lambda.runtimeAt("127.0.0.1:1")) {
+    case Err(RuntimeUnreachable(_)) => { held = held + 1 }
+    case _ => {}
+  }
+
+  held = held + servedAgainstAnInterface()
+
+  held
+}
+
+/// The loop, against a runtime interface served here.
+///
+/// Served by `Std.Http.Server` rather than by writing replies onto a socket:
+/// what is under test is the loop, and a stub that framed a reply slightly
+/// wrongly would fail in a way that looks like the loop failing.
+fn servedAgainstAnInterface() -> Int {
+  let running = Server.start("127.0.0.1", 0)
+  if let Ok(live) = running {
+    let port = Server.portOf(&live)
+    let handed = Sync.cell(0)
+    let seen: Channel.Channel[Str] = Channel.channel(64)
+    let listening = Server.server(&interfaceRoutes(handed, seen))
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Server.run(&listening, &live, 20)
+        ()
+      })
+
+    var held = 0
+    let runtime = Lambda.runtimeAt("127.0.0.1:" + show(port))
+
+    // One invocation taken and answered by hand, which is the pair a program
+    // driving its own loop uses.
+    match Lambda.nextInvocation(&runtime) {
+      case Ok(taken) => {
+        let one: Lambda.Invocation = taken
+        if one.id == "request-1" { held = held + 1 }
+        // The event arrives decoded, so a handler reads a value rather than text.
+        if pathOf(&one.event) == "/search" { held = held + 1 }
+        if Result.isOk(&Lambda.answer(&runtime, &one, "\{\"statusCode\":200\}")) {
+          held = held + 1
+        }
+      }
+      case Err(_) => {}
+    }
+
+    // The rest through the loop, which takes the second invocation, answers it,
+    // and ends on the third — the stub answers that one without an identifier,
+    // which is an invocation nothing can be posted against.
+    match Lambda.serve(&runtime, fn(event: Json.Json) -> Result[Str, Str] {
+        Ok("\{\"seen\":\"" + pathOf(&event) + "\"\}")
+      }) {
+      case Err(MalformedInvocation(_)) => { held = held + 1 }
+      case _ => {}
+    }
+
+    // A handler that refuses is reported against the invocation it refused
+    // rather than left unanswered. An invocation nothing answers is retried
+    // until the platform gives up, so a failure said once costs one invocation
+    // and a failure not said costs every retry it is willing to make.
+    let _refused = Lambda.serve(&runtime, fn(_event: Json.Json) -> Result[Str, Str] {
+        Err("the catalogue could not be read")
+      })
+
+    // A refusal posted by hand, which is what a program driving its own loop
+    // does. Carried as an error rather than as a response, so the platform
+    // counts it as one and does not serve the body to whoever asked.
+    let byHand = Lambda.Invocation{id: "request-9", event: Json.Null}
+    if Result.isOk(&Lambda.fail(&runtime, &byHand, "a dependency was not ready")) {
+      held = held + 1
+    }
+
+    // And a failure to start at all, said before any invocation is taken. A
+    // platform told a function never started stops sending it work; one that
+    // starts and then fails every request reports a service that is up and
+    // broken, which is read as a fault in the application rather than in what it
+    // was given.
+    if Result.isOk(&Lambda.failedToStart(&runtime, "the catalogue was missing")) {
+      held = held + 1
+    }
+
+    // What the interface was asked, in order. The identifier an answer was
+    // posted against is part of the path, so this is what says each answer went
+    // back against the invocation it answered rather than against another.
+    //
+    // Closed before it is read, because reading it reads until it closes: the
+    // last thing recorded is followed by nothing, and a reader waiting for one
+    // more would wait for something nobody is going to send.
+    let _closed = Channel.close(&seen)
+    var saw = ""
+    for line in Result.unwrapOr(Channel.drain(&seen), []) { saw = saw + line + "\n" }
+
+    // Asked to stop rather than waited for. A server's own workers are what
+    // `run` is waiting on, so a caller that waited for it to return would be
+    // waiting for the thing it is about to stop.
+    let _stopped = Server.stop(&live)
+    let _worker = worker
+
+    if saw.contains("next 1\n") && saw.contains("next 2\n") { held = held + 1 }
+    if saw.contains("response request-1 \{\"statusCode\":200\}\n") { held = held + 1 }
+    if saw.contains("response request-2 \{\"seen\":\"/modules\"\}\n") { held = held + 1 }
+    // The second invocation's answer carries the second invocation's path, so
+    // the loop read each event rather than answering the first one twice.
+    if !saw.contains("response request-2 \{\"seen\":\"/search\"\}") { held = held + 1 }
+    // And the refusal went back as an error against its own invocation, with
+    // what went wrong in it, rather than as a response.
+    if saw.contains("error request-4") && saw.contains("the catalogue could not be read") {
+      held = held + 1
+    }
+    if saw.contains("error request-9") && saw.contains("a dependency was not ready") {
+      held = held + 1
+    }
+    // Said against the start rather than against an invocation, because there
+    // is no invocation to say it against.
+    if saw.contains("init-error") && saw.contains("the catalogue was missing") {
+      held = held + 1
+    }
+    held
+  } else {
+    0
+  }
+}
+
+/// The three paths a runtime interface serves, recording what it was asked.
+fn interfaceRoutes(handed: Sync.Cell[Int], seen: Channel.Channel[Str]) -> Route.Router {
+  Route.withFallback(&Route.routing(&[
+        Route.get("/2018-06-01/runtime/invocation/next",
+          fn(_asked: Route.Request) -> Http.Response {
+            let which = Result.unwrapOr(Sync.get(&handed), 0) + 1
+            let _counted = Sync.set(&handed, which)
+            let _noted = Channel.send(&seen, "next " + show(which))
+            // The third and fifth answers carry no identifier, which is an
+            // invocation a loop cannot act on and so ends it at once. Refusing
+            // the connection instead would take the poll's own deadline to
+            // notice, and that is a quarter of an hour: a long poll is held open
+            // by the platform deliberately, so the client cannot bound it
+            // tightly without reporting its own bound as a runtime that failed.
+            if which == 3 || which > 4 {
+              Reply.json(200, "\{\}")
+            } else {
+              let path = if which == 1 { "/search" } else { "/modules" }
+              carrying(
+                  &Reply.json(200, "\{\"rawPath\":\"" + path + "\"\}"),
+                "Lambda-Runtime-Aws-Request-Id",
+                "request-" + show(which)
+              )
+            }
+          }),
+        Route.post("/2018-06-01/runtime/invocation/:id/response",
+          fn(asked: Route.Request) -> Http.Response { recorded(&asked, "response", &seen) }),
+        Route.post("/2018-06-01/runtime/invocation/:id/error",
+          fn(asked: Route.Request) -> Http.Response { recorded(&asked, "error", &seen) }),
+        Route.post("/2018-06-01/runtime/init/error",
+          fn(asked: Route.Request) -> Http.Response {
+            let _noted = Channel.send(&seen, "init-error " + asked.message.body)
+            Reply.empty(202)
+          })
+      ]), fn(_asked: Route.Request) -> Http.Response { Reply.text(404, "no such path") })
+}
+
+fn recorded(asked: &Route.Request, kind: Str, seen: &Channel.Channel[Str]) -> Http.Response {
+  let _noted = Channel.send(seen,
+    kind + " " + Option.unwrapOr(Route.param(asked, "id"), "?") + " " + asked.message.body)
+  Reply.empty(202)
+}
+
+/// A response carrying one more header.
+///
+/// The identifier a platform hands out travels in a header rather than in the
+/// body, which is what a reader that decoded only the body would miss.
+fn carrying(response: &Http.Response, name: Str, value: Str) -> Http.Response {
+  Http.Response{..*response, headers: response.headers.push((name, value))}
+}
+
+/// The path an event asks for.
+fn pathOf(event: &Json.Json) -> Str {
+  match Json.field(event, "rawPath") {
+    case None => ""
+    case Some(held) => Option.unwrapOr(Json.asText(&held), "")
+  }
+}

@@ -36,6 +36,12 @@ fn textOf(b: &Bytes) -> Str {
   }
 }
 
+/// A longer code in a longer window that no clock drift is allowed in, set
+/// through a bound naming the configuring trait and nothing else.
+fn tightened[C: Totp.Configuring](base: &C) -> C {
+  base.digits(8).step(60).skew(0)
+}
+
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
   Route.Request {
     message: Http.Request{method: Get, target: "/", headers: headers, body: ""},
@@ -445,8 +451,8 @@ export fn main() -> Int {
   if srv.drainMillis == 7500 { passed = passed + 1 }
 
   // 30. Tenant: registry, quotas, noisy-neighbor concurrency bounding, and suspension
-  let tenantReg = Tenant.registry()
-  let tAlpha = Tenant.tenant("tenant-alpha", "Alpha Corp", Tenant.Free, Tenant.freeQuota())
+  let tenantReg: Tenant.TenantRegistry = Tenant.registry()
+  let tAlpha: Tenant.Tenant = Tenant.tenant("tenant-alpha", "Alpha Corp", Tenant.Free, Tenant.freeQuota())
   let tBeta = Tenant.tenant("tenant-beta", "Beta LLC", Tenant.Enterprise, Tenant.enterpriseQuota())
   Tenant.register(&tenantReg, tAlpha)
   Tenant.register(&tenantReg, tBeta)
@@ -489,6 +495,69 @@ export fn main() -> Int {
   let suspResp = tenantGuard(suspReq, fastHandler)
   if suspResp.status.code == 403 { passed = passed + 1 }
 
+  // A tier carries the bounds a tenant starts with, and each tier's are wider
+  // than the one below it. Written out rather than compared with themselves,
+  // since a tier whose quota was copied from the tier below would agree with
+  // any check that only asked whether it had one.
+  let middle: Tenant.Quota = Tenant.standardQuota()
+  if middle.maxInflight == 10 && middle.maxRequestsPerMinute == 600
+    && middle.maxPayloadBytes == 10485760 {
+    passed = passed + 1
+  }
+  if Tenant.freeQuota().maxInflight < middle.maxInflight
+    && middle.maxInflight < Tenant.enterpriseQuota().maxInflight {
+    passed = passed + 1
+  }
+  let tier: Tenant.Tier = tBeta.tier
+  match tier { case Tenant.Enterprise => { passed = passed + 1 } case _ => {} }
+
+  // A tenant's bounds can be changed while the service runs, which is what a
+  // support desk raising a limit during an incident actually does.
+  let widened = Tenant.tenant("tenant-gamma", "Gamma Ltd", Tenant.Standard, Tenant.standardQuota())
+  Tenant.register(&tenantReg, widened)
+  if Tenant.setQuota(&tenantReg, "tenant-gamma", Tenant.enterpriseQuota()) { passed = passed + 1 }
+  if Option.unwrapOr(Tenant.get(&tenantReg, "tenant-gamma"), widened).quota.maxInflight == 50 {
+    passed = passed + 1
+  }
+  // A tenant nobody registered is not quietly given bounds: the change says it
+  // did not happen, rather than creating the tenant the caller mistyped.
+  if !Tenant.setQuota(&tenantReg, "tenant-absent", Tenant.freeQuota()) { passed = passed + 1 }
+  if Option.isNone(&Tenant.get(&tenantReg, "tenant-absent")) { passed = passed + 1 }
+  if !Tenant.setActive(&tenantReg, "tenant-absent", true) { passed = passed + 1 }
+
+  // And an unregistered tenant is refused rather than admitted on default
+  // bounds, which is the answer that keeps an unknown caller from being served.
+  let strange: Tenant.Admission = Tenant.admit(&tenantReg, "tenant-absent", 1)
+  match strange { case Tenant.UnknownTenant => { passed = passed + 1 } case _ => {} }
+
+  // A payload above the bound is refused before any slot is taken, so a body
+  // too large cannot exhaust the concurrency it was never admitted to.
+  let chunky = Tenant.admit(&tenantReg, "tenant-gamma", 52428801)
+  match chunky {
+    case Tenant.PayloadTooLarge(who) => {
+      if who.id == "tenant-gamma" { passed = passed + 1 }
+    }
+    case _ => {}
+  }
+
+  // The rate bound is the other refusal, and it says how long to wait. A
+  // refusal without that leaves a caller to guess, and they retry at once.
+  let narrow = Tenant.Quota{maxInflight: 100, maxRequestsPerMinute: 1, maxPayloadBytes: 1024}
+  let _narrowed = Tenant.setQuota(&tenantReg, "tenant-gamma", narrow)
+  let first = Tenant.admit(&tenantReg, "tenant-gamma", 1)
+  let second = Tenant.admit(&tenantReg, "tenant-gamma", 1)
+  match (first, second) {
+    case (Tenant.Admitted(_), Tenant.RateExceeded(who, retry)) => {
+      if who.id == "tenant-gamma" && retry > 0 && retry <= 60 { passed = passed + 1 }
+    }
+    case _ => {}
+  }
+
+  // What is counted per tenant is a value, so a state can be written out and
+  // compared rather than only reached through the registry.
+  let fresh: Tenant.TenantState = Tenant.TenantState{inflight: 0, windowStart: 0, requestCount: 0}
+  if fresh.inflight == 0 && fresh.requestCount == 0 { passed = passed + 1 }
+
   // 31. Totp: Base32, RFC 6238 generation, constant-time verify, replay prevention, and clock skew
   let foobarBs = "foobar".toBytes()
   if Totp.encodeBase32(&foobarBs) == "MZXW6YTBOI" { passed = passed + 1 }
@@ -498,7 +567,7 @@ export fn main() -> Int {
   }
 
   let totpSec = "12345678901234567890".toBytes()
-  let totpCfg = Totp.config(totpSec, "Acme Corp", "alice@example.com")
+  let totpCfg: Totp.TotpConfig = Totp.config(totpSec, "Acme Corp", "alice@example.com")
   let totpUri = Totp.provisioningUri(&totpCfg)
   if totpUri.contains("otpauth://totp/Acme%20Corp:alice%40example.com")
     && totpUri.contains("algorithm=SHA256")
@@ -506,7 +575,7 @@ export fn main() -> Int {
     passed = passed + 1
   }
 
-  let totpSt = Totp.state()
+  let totpSt: Totp.TotpState = Totp.state()
   let codeT0 = Totp.generate(&totpCfg, 0)
   if codeT0.length() == 6 { passed = passed + 1 }
   if Totp.verify(&totpCfg, &totpSt, codeT0, 0) { passed = passed + 1 }
@@ -521,6 +590,24 @@ export fn main() -> Int {
   // Forward clock skew (+1 step) within skew allowance succeeds
   let codeT90 = Totp.generate(&totpCfg, 90)
   if Totp.verify(&totpCfg, &totpSt, codeT90, 60) { passed = passed + 1 }
+
+  // The three numbers set through a bound naming the trait alone, which is what
+  // checks they are usable as methods rather than only as functions.
+  let longer = tightened(&totpCfg)
+  if longer.digits == 8 && longer.stepSeconds == 60 && longer.skewSteps == 0 {
+    passed = passed + 1
+  }
+  // A longer code is longer, and the window it was made in is the only one it
+  // works in: no skew means the step before it is refused.
+  if Totp.generate(&longer, 0).length() == 8 { passed = passed + 1 }
+  let strictSt = Totp.state()
+  if !Totp.verify(&longer, &strictSt, Totp.generate(&longer, 0), 60) { passed = passed + 1 }
+  // Nothing asked for is the default rather than a code with no digits, which
+  // would be the same code for everybody.
+  if totpCfg.digits(0).digits == 6 && totpCfg.step(0).stepSeconds == 30 {
+    passed = passed + 1
+  }
+  if totpCfg.skew(0 - 1).skewSteps == 0 { passed = passed + 1 }
 
   passed
 }

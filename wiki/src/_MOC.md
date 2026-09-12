@@ -22,8 +22,10 @@ tags: [moc, module]
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
 - [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge and test-only C++ conformance
   surface.
-- [[src/website/_MOC|Website modules]] — Pudu SSR, generated API search, views, SEO, tests, and narrow platform adapters.
+- [[src/website/_MOC|Website modules]] — Pudu SSR, generated API search, views, SEO, tests, and Pudu-native deployment entries.
 - [[Website Linux Artifact Workflow]] — short-lived x86-64 Pudu website build for preview deployment.
+- [[Musl Runtime Workflow]] — portable x86-64 runtime proof across Alpine and Amazon Linux 2023.
+- [[Musl Toolchain Image]] · [[Musl Runtime Builder]] — reproducible local musl construction.
 
 - [[Runtime Collection Kernels]] — pure internal bulk construction and enumeration kernels.
 

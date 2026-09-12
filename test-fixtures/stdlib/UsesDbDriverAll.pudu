@@ -1,0 +1,290 @@
+module UsesDbDriverAll
+
+import Std.Db.Driver {DollarNumber, IntegerValue, Named, NullValue, QuestionMark, TextValue}
+import Std.Db.Driver as Driver
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// What a fake driver was asked, in the order it was asked.
+fn asked(into: Sync.Cell[Str], line: Str) -> () {
+  let _kept = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + line + "\n")
+}
+
+/// Everything one driver was asked.
+fn heard(from: &Sync.Cell[Str]) -> Str { Result.unwrapOr(Sync.get(from), "") }
+
+/// A result carrying one named column and one row.
+fn oneRow(command: Str, held: Driver.Value) -> Driver.Rows {
+  Driver.Rows {
+    columns: [Driver.Column{name: "answer", nativeType: Some("text")}],
+    rows: [[held]],
+    command: command
+  }
+}
+
+/// A driver that writes down what it is asked rather than reaching a database.
+///
+/// This is the module's own claim under test: a driver is an ordinary value, so
+/// a client that speaks to one can be checked without anything to connect to.
+/// What the fake records is how a caller's call arrived — which statement, with
+/// how many values, and on which of the two connections.
+fn recording(
+  into: Sync.Cell[Str],
+  name: Str,
+  schemes: Array[Str],
+  holes: Driver.Placeholders
+) -> Driver.Driver {
+  Driver.Driver {
+    name: name,
+    schemes: schemes,
+    placeholders: holes,
+    open: fn(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
+      asked(into, "open " + uri + " x" + show(size))
+      Ok(
+        Driver.Client {
+          query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+            asked(into, "client query " + sql + " with " + show(values.length()))
+            Ok(oneRow("SELECT 1", TextValue("client")))
+          },
+          execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+            asked(into, "client execute " + sql)
+            Ok(oneRow("UPDATE 1", NullValue))
+          },
+          transaction: fn(
+            action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]
+          ) -> Result[Driver.Rows, Driver.Error] {
+            asked(into, "begin")
+            let outcome = action(
+              Driver.Tx {
+                query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+                  asked(into, "tx query " + sql + " with " + show(values.length()))
+                  Ok(oneRow("SELECT 1", TextValue("tx")))
+                },
+                execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+                  asked(into, "tx execute " + sql)
+                  Ok(oneRow("UPDATE 2", IntegerValue(2i64)))
+                }
+              }
+            )
+            if Result.isOk(&outcome) { asked(into, "commit") } else { asked(into, "rollback") }
+            outcome
+          },
+          close: fn() -> Result[(), Driver.Error] {
+            asked(into, "close")
+            Ok(())
+          }
+        }
+      )
+    }
+  }
+}
+
+/// A driver that refuses to open, so a failure on the way in is reachable.
+fn refusing(name: Str, schemes: Array[Str]) -> Driver.Driver {
+  Driver.Driver {
+    name: name,
+    schemes: schemes,
+    placeholders: Named,
+    open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
+      Err(Driver.error(name, "connection", "the host refused the connection"))
+    }
+  }
+}
+
+/// The text a result's one value holds, or a mark no value produces.
+fn answerOf(rows: &Driver.Rows) -> Str {
+  if rows.rows.length() == 0 || rows.rows[0].length() == 0 {
+    "\u{0}"
+  } else {
+    match rows.rows[0][0] {
+      case TextValue(text) => text
+      case IntegerValue(number) => show(number)
+      case NullValue => "nothing"
+      case _ => "\u{0}"
+    }
+  }
+}
+
+/// Every export of `Std.Db.Driver`.
+///
+/// The module is an interface rather than an implementation: a driver is a
+/// record of functions, which is what lets a program choose which backends it
+/// admits. So it is checked against a driver written here that records what it
+/// was asked, and what is checked is that each call arrived where it was
+/// addressed — the client's own or the transaction's connection.
+///
+/// That distinction is the one the module exists for. A client's `query` takes
+/// whatever connection is free, so a caller writing `BEGIN` through it would put
+/// the begin on one connection and the work on another, and nothing would
+/// report it: the transaction holds nothing, commits nothing, and what is left
+/// is rows that should have been undone. Every call through a `Tx` is therefore
+/// checked to have been recorded as the transaction's rather than the client's.
+///
+/// Choosing a driver is checked for each way it can fail, and each failure is
+/// read for what it does *not* carry: a connection string holds the password,
+/// so an error naming the URI would put it wherever errors are logged.
+export fn main() -> Int {
+  var held = 0
+
+  let log = Sync.cell("")
+  let postgres = recording(log, "postgres", ["postgres", "postgresql"], DollarNumber)
+  let sqlite = recording(log, "sqlite", ["sqlite", "file"], QuestionMark)
+  let drivers = [postgres, sqlite]
+
+  // A driver says which schemes it accepts and how it writes the places values
+  // go. Both are read rather than assumed: a caller building a statement needs
+  // the second, and writing the wrong shape sends a statement the server reads
+  // as having no values at all.
+  let chosen: Driver.Driver = Result.unwrapOr(
+    Driver.select(&drivers, "postgres://user:secret@db.internal/app"),
+    refusing("none", [])
+  )
+  if chosen.name == "postgres" { held = held + 1 }
+  let holes: Driver.Placeholders = chosen.placeholders
+  match holes { case DollarNumber => { held = held + 1 } case _ => {} }
+  match Result.unwrapOr(Driver.select(&drivers, "file:local.db"), refusing("none", [])).placeholders {
+    case QuestionMark => { held = held + 1 }
+    case _ => {}
+  }
+  // A scheme is matched however it was written, since a URI's scheme is not
+  // case-sensitive and a program that lowered one and not the other would
+  // accept a connection string spelled one way and refuse the same one.
+  if Result.isOk(&Driver.select(&drivers, "POSTGRESQL://db.internal/app")) { held = held + 1 }
+
+  // Text with no scheme in it is a configuration mistake rather than a driver
+  // that is missing, because there is nothing to look for yet.
+  let unschemed: Result[Driver.Driver, Driver.Error] = Driver.select(&drivers, "db.internal/app")
+  match unschemed {
+    case Err(problem) => {
+      if problem.category == "configuration" { held = held + 1 }
+      // The text is not repeated back. A connection string carries the
+      // password, and an error naming it puts the password wherever errors go.
+      if !problem.message.contains("db.internal") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  // A scheme nothing admits is refused rather than guessed at. A program says
+  // which backends it accepts, so a URI naming another is a deployment pointed
+  // at the wrong thing.
+  match Driver.select(&drivers, "mysql://db.internal/app") {
+    case Err(problem) => {
+      if problem.category == "unsupported" { held = held + 1 }
+      if !problem.message.contains("db.internal") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  // Two drivers accepting one scheme is refused rather than settled by order.
+  // Settling it by order would make which backend a program talks to depend on
+  // how its driver list happened to be written.
+  let doubled = [postgres, recording(log, "other", ["postgres"], Named)]
+  match Driver.select(&doubled, "postgres://db.internal/app") {
+    case Err(problem) => {
+      if problem.category == "configuration" { held = held + 1 }
+      if problem.message.contains("multiple") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  // An error names the driver that said so, the kind of failure, and what
+  // happened — and carries no code unless a driver supplies one, since a code
+  // invented here would be a code nothing defines.
+  let failure: Driver.Error = Driver.error("postgres", "connection", "the host refused it")
+  if failure.driver == "postgres" && failure.category == "connection" { held = held + 1 }
+  if failure.message == "the host refused it" && Option.isNone(&failure.code) { held = held + 1 }
+
+  // Opening a client goes through the driver the scheme chose, carrying the
+  // capacity it was asked for.
+  let opened: Result[Driver.Client, Driver.Error] = Driver.connect(&drivers, "sqlite:local.db", 4)
+  if Result.isOk(&opened) { held = held + 1 }
+  if heard(&log).contains("open sqlite:local.db x4") { held = held + 1 }
+
+  // A capacity of nothing is refused before the driver is asked to open it, and
+  // the refusal names the driver that would have, so a reader knows which of
+  // several was misconfigured.
+  let before = heard(&log)
+  match Driver.connect(&drivers, "sqlite:local.db", 0) {
+    case Err(problem) => {
+      if problem.category == "configuration" && problem.driver == "sqlite" { held = held + 1 }
+      // Nothing was opened, which is what "before the driver is asked" means.
+      if heard(&log) == before { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  // A driver that cannot open says so as its own failure rather than as a
+  // missing driver: the scheme was admitted and the connection was not.
+  match Driver.connect(&[refusing("remote", ["remote"])], "remote://elsewhere/app", 1) {
+    case Err(problem) => {
+      if problem.driver == "remote" && problem.category == "connection" { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+
+  if let Ok(client) = opened {
+    // A statement with values, and one without. The values travel beside the
+    // statement rather than inside it, so the count is what a driver binds.
+    let answered = Driver.query(&client, "select answer from t where id = $1", &[IntegerValue(7i64)])
+    if Result.isOk(&answered) { held = held + 1 }
+    if let Ok(rows) = answered {
+      if answerOf(&rows) == "client" { held = held + 1 }
+      if rows.columns.length() == 1 && rows.columns[0].name == "answer" { held = held + 1 }
+      // What the database calls a column's type is the database's word, carried
+      // rather than translated, since a driver that renamed it would answer a
+      // name no database documents.
+      if Option.unwrapOr(rows.columns[0].nativeType, "") == "text" { held = held + 1 }
+      if rows.command == "SELECT 1" { held = held + 1 }
+    }
+    if heard(&log).contains("client query select answer from t where id = $1 with 1") {
+      held = held + 1
+    }
+    // A value that is absent is a value, so a statement may bind one.
+    let _nulled = Driver.query(&client, "select answer from t where id = $1", &[NullValue])
+    if heard(&log).contains("with 1\nclient query") { held = held + 1 }
+
+    let ran = Driver.execute(&client, "update t set answer = 'x'")
+    if Result.isOk(&ran) { held = held + 1 }
+    if heard(&log).contains("client execute update t set answer = 'x'") { held = held + 1 }
+    if Result.unwrapOr(ran, oneRow("", NullValue)).command == "UPDATE 1" { held = held + 1 }
+
+    // Everything asked of a transaction goes to the connection the transaction
+    // is running on, which is the whole difference between a `Tx` and a
+    // `Client`. Both calls are made inside one, and both are recorded as the
+    // transaction's: a driver routing either through the pool would put work
+    // outside the transaction meant to hold it, and nothing would report that.
+    let inside = Driver.transaction(&client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        let _first = Driver.ask(&open, "select answer from t where id = $1", &[IntegerValue(1i64)])
+        Driver.run(&open, "update t set answer = 'y'")
+      })
+    if Result.isOk(&inside) { held = held + 1 }
+    if Result.unwrapOr(inside, oneRow("", NullValue)).command == "UPDATE 2" { held = held + 1 }
+    let within = heard(&log)
+    if within.contains("begin\ntx query select answer from t where id = $1 with 1\n") {
+      held = held + 1
+    }
+    if within.contains("tx execute update t set answer = 'y'\ncommit\n") { held = held + 1 }
+    // Nothing inside the transaction reached the client's own calls, which is
+    // what would have happened had the driver handed out a pooled connection.
+    if !within.contains("begin\nclient") { held = held + 1 }
+
+    // An action that fails rolls the transaction back rather than committing
+    // what it managed. A driver that committed regardless would leave exactly
+    // the rows the caller refused.
+    let refused = Driver.transaction(&client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        let _first = Driver.run(&open, "update t set answer = 'z'")
+        Err(Driver.error("sqlite", "constraint", "the row already existed"))
+      })
+    if Result.isErr(&refused) { held = held + 1 }
+    if heard(&log).contains("update t set answer = 'z'\nrollback\n") { held = held + 1 }
+    if !heard(&log).contains("'z'\ncommit") { held = held + 1 }
+
+    // A client is closed once, and closing it is the driver's to do: it owns
+    // the connections and decides when admission stops.
+    if Result.isOk(&Driver.close(&client)) { held = held + 1 }
+    if heard(&log).endsWith("close\n") { held = held + 1 }
+  }
+
+  held
+}

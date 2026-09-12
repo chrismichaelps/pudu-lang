@@ -93,21 +93,35 @@ export fn robots(siteUrl: Str) -> Str {
   "User-agent: *\nAllow: /\nSitemap: " + siteUrl + "/sitemap.xml\n"
 }
 
-export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog) -> Str {
-  var urls = [siteUrl + "/", siteUrl + "/guide", siteUrl + "/about", siteUrl + "/donate", siteUrl + "/modules"]
+/// Every page the site has, as the paths a request arrives on.
+///
+/// One list rather than one per reader. The sitemap is built from it and so is
+/// the prerender, and those two disagreeing is not a small thing: a page in the
+/// sitemap that was not rendered is a crawler following a link to nothing, and a
+/// page rendered but absent from the sitemap is one nobody is told about.
+///
+/// A symbol can be reached by more than one declaration sharing a name, so the
+/// paths are deduplicated here: rendering one twice is work done twice, and
+/// listing it twice is a sitemap a crawler reports as containing duplicates.
+export fn paths(catalog: &Catalog.Catalog) -> Array[Str] {
+  var found = ["/", "/guide", "/about", "/donate", "/modules"]
   for moduleName in catalog.modules {
-    urls = urls.push(siteUrl + "/module/" + Url.encodeComponent(moduleName))
+    found = found.push("/module/" + Url.encodeComponent(moduleName))
   }
   var seen: Map[Str, Bool] = mapOf([])
   for entry in catalog.entries {
-    let url = siteUrl + symbolPath(&entry)
-    if !Map.containsKey(&seen, url) {
-      seen = seen.insert(url, true)
-      urls = urls.push(url)
+    let path = symbolPath(&entry)
+    if !Map.containsKey(&seen, path) {
+      seen = seen.insert(path, true)
+      found = found.push(path)
     }
   }
+  found
+}
+
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog) -> Str {
   var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
-  for url in urls { body = body + "  <url><loc>" + url + "</loc></url>\n" }
+  for path in paths(catalog) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
   body + "</urlset>\n"
 }
 

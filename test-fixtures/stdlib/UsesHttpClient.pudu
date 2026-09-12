@@ -7,6 +7,7 @@ import Std.Http as Http
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Http.Server as Server
+import Std.Net as Net
 import Std.Result as Result
 
 /// What a client promises.
@@ -25,14 +26,14 @@ export fn main() -> Int {
   if bounds.redirects > 0 { held = held + 1 }
   if bounds.bodyBytes > 0 { held = held + 1 }
   if bounds.followRedirects { held = held + 1 }
-  if Client.reading(&bounds, 100).bodyBytes == 100 { held = held + 1 }
-  if Client.following(&bounds, 2).redirects == 2 { held = held + 1 }
-  if Client.within(&bounds, 25).deadlineMillis == 25 { held = held + 1 }
-  if Client.within(&bounds, -1).deadlineMillis == 0 { held = held + 1 }
+  if bounds.reading(100).bodyBytes == 100 { held = held + 1 }
+  if bounds.following(2).redirects == 2 { held = held + 1 }
+  if bounds.within(25).deadlineMillis == 25 { held = held + 1 }
+  if bounds.within(0 - 1).deadlineMillis == 0 { held = held + 1 }
 
   // Following nothing is expressed by bounding the count at nothing, so there
   // is one way to say it rather than two that could disagree.
-  if !Client.following(&bounds, 0).followRedirects { held = held + 1 }
+  if !bounds.following(0).followRedirects { held = held + 1 }
 
   // An address a request named is refused when it is one the network trusts.
   // A client that fetches whatever it is handed is how a server is made to
@@ -46,7 +47,7 @@ export fn main() -> Int {
   // Permitted by naming the host, because a service that genuinely must reach
   // an internal one exists and a refusal it cannot lift would be worked around
   // outside this module, where nothing checks anything.
-  let reaching = Client.reaching(&bounds, &["127.0.0.1"])
+  let reaching = bounds.reaching(&["127.0.0.1"])
   if let Err(NotPermitted(_)) = Client.fetch("http://127.0.0.1:1/x", &reaching) {
     held = held + 0
   } else {
@@ -101,7 +102,8 @@ export fn main() -> Int {
           Route.get("/away", elsewhere),
           Route.get("/pause-away", pausedElsewhere),
           Route.get("/pause-hello", pausedGreeting),
-          Route.get("/loop", roundAndRound)
+          Route.get("/loop", roundAndRound),
+          Route.post("/echo", echoBody)
         ]),
       missing
     )
@@ -113,7 +115,7 @@ export fn main() -> Int {
     if Result.isOk(&worker) { held = held + 1 }
 
     let at = "http://127.0.0.1:" + show(port)
-    let permitted = Client.reaching(&bounds, &["127.0.0.1"])
+    let permitted = bounds.reaching(&["127.0.0.1"])
 
     // An ordinary request and its answer.
     let answered = Client.fetch(at + "/hello", &permitted)
@@ -121,6 +123,59 @@ export fn main() -> Int {
     if let Ok(response) = answered {
       if response.status.code == 200 { held = held + 1 }
       if response.body == "hello" { held = held + 1 }
+    }
+
+    // The bounds are a value, set through a bound naming the limiting trait alone
+    // — which is what checks they are usable as methods rather than only as a
+    // list of functions a caller has to wrap in one another.
+    let tightened: Client.Limits = bounded(&permitted)
+    if tightened.bodyBytes == 4096 && tightened.deadlineMillis == 250 { held = held + 1 }
+    if tightened.redirects == 1 && tightened.permittedHosts == ["127.0.0.1"] { held = held + 1 }
+    let refusal: Client.ClientError = Client.TooLarge(4096)
+    if Client.explain(&refusal).contains("4096") { held = held + 1 }
+
+    // A request carrying a body says how long it is.
+    //
+    // Without a length and without a chunked encoding the protocol says the
+    // request has no body, so a server reads none — and nothing fails: the
+    // request arrives, the server answers it, and the body is simply not there.
+    // Every POST this library made was silently empty, which is checked here by
+    // asking the server what it received rather than by reading what was sent.
+    let posted = Http.Request {
+      method: Http.Post,
+      target: at + "/echo",
+      headers: [("content-type", "text/plain")],
+      body: "one two"
+    }
+    if let Ok(response) = Client.send(&posted, &permitted) {
+      if response.body == "7:one two" { held = held + 1 }
+    }
+
+    // Measured in bytes rather than in characters, since the length counts what
+    // goes on the wire: a body carrying anything outside ASCII is longer than
+    // the text it was written as, and a length short by the difference
+    // truncates it.
+    let accented = Http.Request {
+      method: Http.Post,
+      target: at + "/echo",
+      headers: [("content-type", "text/plain")],
+      body: "café"
+    }
+    if let Ok(response) = Client.send(&accented, &permitted) {
+      if response.body == "5:café" { held = held + 1 }
+    }
+
+    // A caller that framed its own request is left alone, because a second
+    // length header makes a request ambiguous and a server is required to
+    // refuse one.
+    let framed = Http.Request {
+      method: Http.Post,
+      target: at + "/echo",
+      headers: [("content-type", "text/plain"), ("content-length", "3")],
+      body: "abcdef"
+    }
+    if let Ok(response) = Client.send(&framed, &permitted) {
+      if response.body == "3:abc" { held = held + 1 }
     }
 
     // A path nothing serves answers as such rather than failing to answer.
@@ -134,7 +189,7 @@ export fn main() -> Int {
       if response.status.code == 200 { held = held + 1 }
       if response.body == "hello" { held = held + 1 }
     }
-    if let Ok(response) = Client.fetch(at + "/chunks", &Client.reading(&permitted, 5)) {
+    if let Ok(response) = Client.fetch(at + "/chunks", &permitted.reading(5)) {
       if response.body == "hello" { held = held + 1 }
     }
 
@@ -146,33 +201,33 @@ export fn main() -> Int {
 
     // A redirect not followed is answered as the redirect it is, so a caller
     // that wants to see one can.
-    let unfollowed = Client.following(&permitted, 0)
+    let unfollowed = permitted.following(0)
     if let Ok(response) = Client.fetch(at + "/away", &unfollowed) {
       if response.status.code == 302 { held = held + 1 }
     }
 
     // A chain longer than the bound is refused rather than followed forever.
-    if let Err(TooManyRedirects(_)) = Client.fetch(at + "/loop", &Client.following(&permitted, 2)) {
+    if let Err(TooManyRedirects(_)) = Client.fetch(at + "/loop", &permitted.following(2)) {
       held = held + 1
     }
 
     // The limit covers waiting for an answer, not only opening the socket.
-    if let Err(TimedOut(10)) = Client.fetch(at + "/slow", &Client.within(&permitted, 10)) {
+    if let Err(TimedOut(10)) = Client.fetch(at + "/slow", &permitted.within(10)) {
       held = held + 1
     }
-    if let Err(TimedOut(0)) = Client.fetch(at + "/hello", &Client.within(&permitted, -1)) {
+    if let Err(TimedOut(0)) = Client.fetch(at + "/hello", &permitted.within(0 - 1)) {
       held = held + 1
     }
 
     // Redirects spend the original budget instead of receiving a fresh one.
     if let Err(TimedOut(150)) = Client.fetch(
       at + "/pause-away",
-        &Client.within(&permitted, 150)
+        &permitted.within(150)
     ) { held = held + 1 }
 
     // An answer larger than the caller will read is refused rather than
     // truncated: a truncated body parses to something the sender did not send.
-    if let Err(_) = Client.fetch(at + "/hello", &Client.reading(&permitted, 4)) { held = held + 1 }
+    if let Err(_) = Client.fetch(at + "/hello", &permitted.reading(4)) { held = held + 1 }
 
     let _stopped = Server.stop(&live)
     if let Ok(started) = worker {
@@ -181,10 +236,54 @@ export fn main() -> Int {
     }
   }
 
+  held = held + framedBeforeClose()
+
   held
 }
 
+/// A message ends where its framing says, not when its reusable transport closes.
+fn framedBeforeClose() -> Int {
+  match Net.listenLocal(0) {
+    case Err(_) => 0
+    case Ok(listener) => {
+      let port = Result.unwrapOr(Net.portOf(&listener), 0)
+      let worker = Concurrent.start(fn() -> () {
+          if let Ok(connection) = Net.accept(&listener) {
+            let _request = Net.receive(&connection, 65536)
+            let _sent = Net.sendText(
+                &connection,
+              "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\nhello"
+            )
+            let _heldOpen = Concurrent.sleep(200)
+            let _closed = Net.close(&connection)
+          }
+          ()
+        })
+      let limits = Client.limits().reaching(&["127.0.0.1"]).within(100)
+      let answer = Client.fetch("http://127.0.0.1:" + show(port) + "/framed", &limits)
+      let _closed = Net.closeListener(&listener)
+      if let Ok(startedWorker) = worker {
+        let _joined = Concurrent.join(&startedWorker)
+      }
+      match answer {
+        case Ok(response) => if response.status.code == 200 && response.body == "hello" { 1 } else { 0 }
+        case Err(_) => 0
+      }
+    }
+  }
+}
+
+/// Bounds set through a bound naming the limiting trait and nothing else.
+fn bounded[L: Client.Limiting](base: &L) -> L {
+  base.reading(4096).following(1).within(250)
+}
+
 fn greet(_request: Route.Request) -> Http.Response { Reply.text(200, "hello") }
+
+/// Answers the body it was sent, and how many bytes of it arrived.
+fn echoBody(request: Route.Request) -> Http.Response {
+  Reply.text(200, show(request.message.body.toBytes().length()) + ":" + request.message.body)
+}
 
 fn slowly(_request: Route.Request) -> Http.Response {
   let _waited = Concurrent.sleep(100)

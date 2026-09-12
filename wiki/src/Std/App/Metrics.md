@@ -16,6 +16,13 @@ A set of measurements. A counter that only rises, a gauge that moves either way,
 over stated boundaries. Declaring each with the unit it is in. Adding to, setting, and observing
 one. Reading a value back. The labels a measurement is broken down by, and the bound on how many
 combinations one metric may have. Rendering the set in the text form a collector reads.
+
+Two traits carry what answers a whole set, so both read as chains in the order a program writes
+them. `Declaring` — `counter`, `gauge`, `distribution`, `limitedTo` — builds the registry a program
+declares once, as a list of what it measures. `Recording` — `add`, `increment`, `set`, `observe` —
+measures one request, in the order the request measured it. The readers (`valueOf`, `valueOr`,
+`totalOf`, `countAt`, `seriesCount`, `refusedCount`, `declarationOf`, `names`, `render`) answer
+something other than a set and stay functions.
 ## Governance and algorithm
 **A set of measurements is a value.** Adding to a counter answers a new set. That is what lets the
 whole of this be checked by comparing values, and it is why a program holds its measurements

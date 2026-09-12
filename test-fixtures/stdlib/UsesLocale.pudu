@@ -70,17 +70,10 @@ export fn main() -> Int {
   }
 
   // A catalogue says things, in each language it says them.
-  let book = Locale.saying(
-      &Locale.saying(
-        &Locale.saying(&Locale.catalogue(Locale.language("en")), &Locale.language("en"), "greeting", "Hello"),
-        &Locale.language("en"),
-      "farewell",
-      "Goodbye"
-    ),
-      &Locale.language("fr"),
-    "greeting",
-    "Bonjour"
-  )
+  let book: Locale.Catalogue = Locale.catalogue(Locale.language("en"))
+    .saying(&Locale.language("en"), "greeting", "Hello")
+    .saying(&Locale.language("en"), "farewell", "Goodbye")
+    .saying(&Locale.language("fr"), "greeting", "Bonjour")
   if Locale.text(&book, &Locale.language("en"), "greeting") == "Hello" { held = held + 1 }
   if Locale.text(&book, &Locale.language("fr"), "greeting") == "Bonjour" { held = held + 1 }
 
@@ -107,7 +100,7 @@ export fn main() -> Int {
 
   // The parts a message leaves open are filled with text, and what comes out
   // stays text.
-  let named = Locale.saying(&book, &Locale.language("en"), "welcome", "Welcome, %name%")
+  let named = book.saying(&Locale.language("en"), "welcome", "Welcome, %name%")
   if Locale.filled(&named, &Locale.language("en"), "welcome", &[("name", "Ada")]) == "Welcome, Ada" {
     held = held + 1
   }
@@ -150,19 +143,14 @@ export fn main() -> Int {
   if Locale.quantityFor(&Locale.language("ja"), 5) == Other { held = held + 1 }
 
   // A message chosen by number, in a language with two forms.
-  let counted = Locale.counting(
-      &Locale.catalogue(Locale.language("en")),
-      &Locale.language("en"),
-    "items",
-      &[(One, "%count% item"), (Other, "%count% items")]
-  )
+  let counted = Locale.catalogue(Locale.language("en"))
+    .counting(&Locale.language("en"), "items", &[(One, "%count% item"), (Other, "%count% items")])
   if Locale.about(&counted, &Locale.language("en"), "items", 1) == "1 item" { held = held + 1 }
   if Locale.about(&counted, &Locale.language("en"), "items", 3) == "3 items" { held = held + 1 }
   if Locale.about(&counted, &Locale.language("en"), "items", 0) == "0 items" { held = held + 1 }
 
   // And in one with three, where a two-form catalogue would have been wrong.
-  let russian = Locale.counting(
-      &counted,
+  let russian = counted.counting(
       &Locale.language("ru"),
     "items",
       &[(One, "%count% predmet"), (Few, "%count% predmeta"), (Many, "%count% predmetov")]
@@ -173,12 +161,8 @@ export fn main() -> Int {
 
   // A form a catalogue does not write falls back to the general one rather
   // than showing the key.
-  let partial = Locale.counting(
-      &Locale.catalogue(Locale.language("en")),
-      &Locale.language("ru"),
-    "items",
-      &[(Other, "%count% things")]
-  )
+  let partial = Locale.catalogue(Locale.language("en"))
+    .counting(&Locale.language("ru"), "items", &[(Other, "%count% things")])
   if Locale.about(&partial, &Locale.language("ru"), "items", 3) == "3 things" { held = held + 1 }
 
   // A catalogue can be asked what it holds, so a program can report what it
@@ -186,5 +170,35 @@ export fn main() -> Int {
   if Locale.keys(&book).length() == 2 { held = held + 1 }
   if Locale.languages(&book).length() == 2 { held = held + 1 }
 
+  // A catalogue written through a bound naming the saying trait alone, which is
+  // what checks both calls are usable as methods rather than only as functions.
+  let written: Locale.Catalogue = translated(&Locale.catalogue(Locale.language("en")))
+  if Locale.text(&written, &Locale.language("en"), "greeting") == "Hi" { held = held + 1 }
+  if Locale.about(&written, &Locale.language("en"), "files", 1) == "1 file" { held = held + 1 }
+  if Locale.about(&written, &Locale.language("en"), "files", 4) == "4 files" { held = held + 1 }
+  // And in the language it was not written in, which is the fallback.
+  if Locale.text(&written, &Locale.language("de"), "greeting") == "Hi" { held = held + 1 }
+
+  // A place is part of a locale, and dropping it is how the fallback to the
+  // language alone is asked for by name.
+  let regional: Locale.Locale = Locale.locale("pt", "BR")
+  if Locale.placed(&regional) && Locale.render(&regional) == "pt-BR" { held = held + 1 }
+  let bare = Locale.withoutPlace(&regional)
+  if !Locale.placed(&bare) && Locale.render(&bare) == "pt" { held = held + 1 }
+  // Dropping a place a locale never had leaves it as it was.
+  if Locale.render(&Locale.withoutPlace(&Locale.language("pt"))) == "pt" { held = held + 1 }
+
+  // The forms a language has are a value, so a catalogue can be asked for one
+  // by name rather than by the number that chose it.
+  let plural: Locale.Quantity = Locale.quantityFor(&Locale.language("ru"), 5)
+  if plural == Many { held = held + 1 }
+
   held
+}
+
+/// A greeting and a message that differs by number, written through a bound
+/// naming the saying trait and nothing else.
+fn translated[C: Locale.Saying](base: &C) -> C {
+  base.saying(&Locale.language("en"), "greeting", "Hi")
+    .counting(&Locale.language("en"), "files", &[(One, "%count% file"), (Other, "%count% files")])
 }

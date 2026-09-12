@@ -7,12 +7,20 @@ aliases: [Vercel output builder]
 ---
 # Vercel Output Builder
 
-Produces a Build Output API v3 directory (`.vercel/output`) from the public catalogue, the lightweight
-Node.js search function, static CSS, Nunito fonts, logos, and 3,375 pre-rendered canonical HTML pages
-captured from a local Pudu server. Configures `"architecture": "x86_64"` and file permissions (`chmod 644`).
-Deploys efficiently using `vercel deploy --prebuilt --archive=tgz` to package output into a single archive,
-avoiding daily free-tier file count thresholds.
+Produces a Build Output API v3 directory (`.vercel/output`) from the public catalogue, a Pudu Lambda
+function, static CSS, Nunito fonts, logos, and canonical HTML pages rendered directly by Pudu. The
+function contains the Lambda-targeted musl runtime and its loader; no JavaScript adapter is included.
+The matching musl `libffi`, `zlib`, `ncursesw`, and `gmp` libraries are copied beside the
+function and named directly by its ELF dependencies.
+The build asks Pudu to derive a compact search index from `website/data/api.json` and packages that
+index for the function. The complete JSON catalogue remains the source for static generation and is
+not parsed during a serverless cold start.
 
-Resolved Grill Log: the script assembles deterministic deployment output without requiring an external
-Linux ELF binary or risking container GLIBC mismatches. Dynamic search reaches the lightweight serverless
-handler; all other routes resolve directly from Vercel's global static Edge CDN.
+Resolved Grill Log: dynamic search reaches the same Pudu ranking and result view as local requests
+and tests through a bounded dynamic router, while canonical pages resolve directly from Vercel's static edge output. The builder refuses
+to package a function unless both the Lambda runtime and its matching musl loader are present.
+It also refuses any missing shared dependency named by the runtime package contract.
+The emitted function uses Vercel's current custom-runtime target, `provided.al2023`.
+The function is named `dynamic.func`, avoiding the root-path shadowing caused by `index.func`.
+Its function configuration carries the build's validated canonical `PUDU_SITE_URL`, so dynamic
+no-index pages and social metadata never fall back to a local-development origin.

@@ -72,39 +72,47 @@ export fn config(secret: Bytes, issuer: Str, account: Str) -> TotpConfig {
   }
 }
 
-/// Configures output code length (typically 6 or 8 digits).
-export fn withDigits(cfg: &TotpConfig, digits: Int) -> TotpConfig {
-  TotpConfig {
-    secret: cfg.secret,
-    digits: if digits > 0 { digits } else { 6 },
-    stepSeconds: cfg.stepSeconds,
-    skewSteps: cfg.skewSteps,
-    issuer: cfg.issuer,
-    account: cfg.account
-  }
+/// The three numbers a code's shape is decided by, set one call at a time.
+///
+/// A configuration is built by naming the secret and who it belongs to, and
+/// then saying which of these three differ from the defaults. As methods they
+/// read down the page in the order they are decided, which is also the order an
+/// authenticator app's settings screen lists them.
+export trait Configuring {
+  fn digits(self: &Self, count: Int) -> Self
+  fn step(self: &Self, seconds: Int) -> Self
+  fn skew(self: &Self, steps: Int) -> Self
 }
 
-/// Configures interval duration (RFC 6238 default: 30 seconds).
-export fn withStep(cfg: &TotpConfig, stepSeconds: Int) -> TotpConfig {
-  TotpConfig {
-    secret: cfg.secret,
-    digits: cfg.digits,
-    stepSeconds: if stepSeconds > 0 { stepSeconds } else { 30 },
-    skewSteps: cfg.skewSteps,
-    issuer: cfg.issuer,
-    account: cfg.account
+impl Configuring for TotpConfig {
+  /// The same configuration producing codes of a different length.
+  ///
+  /// Six is what an authenticator app expects and eight is what a bank tends to
+  /// ask for. A count of nothing or fewer is the default rather than a code with
+  /// no digits in it, since a zero-digit code is the same code for everybody.
+  fn digits(self: &Self, count: Int) -> Self {
+    TotpConfig{..*self, digits: if count > 0 { count } else { 6 }}
   }
-}
 
-/// Configures clock skew allowance in steps (default: 1 step, covering +-30s drift).
-export fn withSkew(cfg: &TotpConfig, skewSteps: Int) -> TotpConfig {
-  TotpConfig {
-    secret: cfg.secret,
-    digits: cfg.digits,
-    stepSeconds: cfg.stepSeconds,
-    skewSteps: if skewSteps >= 0 { skewSteps } else { 0 },
-    issuer: cfg.issuer,
-    account: cfg.account
+  /// The same configuration with a different interval between codes.
+  ///
+  /// Thirty seconds is what the standard says and what every app assumes, so
+  /// changing it means changing both ends. An interval of nothing would make
+  /// the step a division by zero, so it is the default instead.
+  fn step(self: &Self, seconds: Int) -> Self {
+    TotpConfig{..*self, stepSeconds: if seconds > 0 { seconds } else { 30 }}
+  }
+
+  /// The same configuration accepting codes from this many intervals either
+  /// side of the current one.
+  ///
+  /// This is how much the two clocks are allowed to disagree, counted in
+  /// intervals rather than in seconds so it means the same thing whatever the
+  /// interval is. Every step of allowance is another code that is accepted, so
+  /// the number is a window an attacker gets as well as a clock a user gets
+  /// wrong. A negative allowance is none.
+  fn skew(self: &Self, steps: Int) -> Self {
+    TotpConfig{..*self, skewSteps: if steps >= 0 { steps } else { 0 }}
   }
 }
 

@@ -10,6 +10,7 @@ import Test.QuickCheck (Property, conjoin, counterexample, (===))
 testServiceEvaluation :: IO Property
 testServiceEvaluation = do
   database <- runEntry "test-fixtures/stdlib/UsesDb.pudu"
+  addressed <- runEntry "test-fixtures/stdlib/UsesDbDriverAll.pudu"
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
@@ -40,10 +41,53 @@ testServiceEvaluation = do
           apart from the statement rather than pasted into it, that the challenge
           is answered without the password crossing, that a server which cannot
           prove it knows the password is refused, and that a failed transaction
-          is undone rather than left open. -}
+          is undone rather than left open.
+
+          The transaction surface is driven by hand as well as through the
+          combinators, with the status read back at each step: a client that
+          sent the statements without reading it cannot tell a transaction it is
+          in from one the server closed under it. Returning to a savepoint is
+          checked to keep the transaction open, which is the whole difference
+          between it and a rollback, and the stub reports the status a real
+          server would so a client treating the two alike cannot pass. Each of
+          the four levels of protection is read off the wire, because a level
+          written as text and misspelled is given the server's default silently
+          — a server told an unknown level reports nothing until it matters.
+
+          The message layer under all of that is read by hand too: the messages
+          one query answers, in order, since a client reading them in the wrong
+          order agrees with itself and with nothing else. All three transaction
+          statuses are read from the letters a server sends, because a reader
+          answering idle for whatever it did not recognise would pass a check
+          that only asked about the status it was given. A lending ended by hand
+          shows the copy naming the old one refusing to write while the new one
+          writes, and a message larger than its budget is refused rather than
+          read — which is what stops something claiming to be a server from
+          naming a length this program then tries to hold. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "39")
+        (database === Just "81")
+    {-| The driver layer is an interface rather than an implementation — a
+        driver is a record of functions, which is what lets a program choose
+        which backends it admits — so it is checked against one written in the
+        fixture that records what it was asked. What is checked is that each
+        call arrived where it was addressed. That is the distinction the layer
+        exists for: a client's `query` takes whatever connection is free, so a
+        caller writing `BEGIN` through it puts the begin on one connection and
+        the work on another, and nothing reports it — the transaction holds
+        nothing, commits nothing, and what is left is rows that should have been
+        undone. Every call through a transaction is therefore checked to have
+        been recorded as the transaction's and not the client's, and an action
+        that fails is checked to roll back rather than commit what it managed.
+        Choosing a driver is checked at each way it can fail, and each failure
+        is read for what it does *not* carry: a connection string holds the
+        password, so an error naming the URI would put it wherever errors are
+        logged. Two drivers accepting one scheme is refused rather than settled
+        by order, which would make the backend a program talks to depend on how
+        its driver list happened to be written. -}
+    , counterexample
+        "a call addressed to a transaction reaches the connection it holds"
+        (addressed === Just "37")
     {-| The obligations [[ADR-0016]] places on an application: that a declared
         default is held like any other setting and can say where it came from,
         that a later layer wins over an earlier one, that a profile states its
@@ -114,19 +158,27 @@ testServiceEvaluation = do
         is declared; and that how many label combinations one metric may have
         is bounded, with the combination that would exceed it refused and
         counted rather than evicting a series — an evicted counter restarts at
-        zero, and a counter that falls is read as a restart. -}
+        zero, and a counter that falls is read as a restart. Declaring and
+        recording are each reached through a bound naming that trait alone,
+        which is what checks they are usable as methods: a registry is declared
+        in one chain and a request is measured in another, which is how a
+        program actually writes them. -}
     , counterexample
         "a metric cannot grow a series for every identifier it is handed"
-        (measured === Just "41")
+        (measured === Just "49")
     {-| That a route which decided nothing cannot be written: the requirement
         is given in the same call as the handler, so a route needing nothing
         and a route somebody forgot stop being the same line; that not knowing
         who is asking and not being permitted are different answers with
         different statuses; and that a denial does not name what was missing,
-        because doing that one route at a time maps the model. -}
+        because doing that one route at a time maps the model. Every method a
+        route can answer is written the same way, including one this module
+        names no call for, so a protocol gaining a method does not gain a way
+        to skip the check. The same pattern is decided under two methods, which
+        is the case a router that keyed only on the path gets wrong. -}
     , counterexample
         "a route states what it requires or it is not a route"
-        (permitted === Just "48")
+        (permitted === Just "58")
     {-| That everything wrong is reported at once rather than the first thing,
         since a person correcting a form wants the whole list; that a failure
         says what was expected and never repeats what was submitted, so a
@@ -249,20 +301,31 @@ testServiceEvaluation = do
         and the skipped turn is counted; a job that fails is recorded and stays
         scheduled, because one bad night must not leave a nightly job silently
         dead; and it waits for its next turn rather than retrying at once,
-        which would turn one failing dependency into a loop against it. -}
+        which would turn one failing dependency into a loop against it. The
+        schedule is put together through a bound naming the scheduling trait
+        alone, adding one job at a time rather than giving them all at once,
+        which is how a service whose modules each schedule their own work writes
+        it — and adding rather than setting is what keeps the last module from
+        replacing the rest. A job is also asked whether it is due on its own,
+        since that is what a scheduler handing jobs to workers asks of each. -}
     , counterexample
         "a job that fails is recorded and runs again"
-        (scheduled === Just "35")
+        (scheduled === Just "45")
     {-| That a number chooses among the forms a language actually has rather
         than by comparing with one — French counting zero with one, three
         Slavic forms where the rule is not about being one, Arabic's forms for
         none and for two, and the languages with no distinction at all, each of
         which a singular-and-plural catalogue gets wrong. And that a missing
         translation is reportable rather than silent, which is the whole reason
-        falling back to the original language is tolerable. -}
+        falling back to the original language is tolerable. The catalogue is
+        written through a bound naming the saying trait alone, which is what
+        checks a message and a counted message are both usable as methods — a
+        catalogue is as many calls as a program has things to say, and written
+        as wrapped calls the first message written read as the last one a
+        reader reached. -}
     , counterexample
         "a number chooses the form the language has, and a gap can be found"
-        (spoken === Just "60")
+        (spoken === Just "68")
     {-| That a lookup answers fresh, stale, or nothing rather than a value or
         nothing. Two answers force a caller to treat an expired entry as an
         absent one, which is what makes every request for a much-read key

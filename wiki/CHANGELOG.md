@@ -5,6 +5,38 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-12 — Adapter-free production website
+
+- Promoted the verified Pudu-native `provided.al2023` deployment to production without rebuilding
+  the Preview artifact; static pages, dynamic search, true 404s, SEO files, logos, and responsive
+  navigation were verified against the live domain.
+- Replaced the dynamic function's full JSON catalogue with the compact Pudu-generated search
+  database, bounded its route closure to search and no-index fallback, and unwrapped Vercel's
+  invocation body in Pudu.
+
+## 2026-09-11 — Adapter-free Vercel runtime build
+
+- Made the musl workflow resolve GHC and Cabal from GHCup explicitly before exporting their
+  directories to later steps, avoiding dependence on shell state that GitHub Actions discards.
+- Split the generated runtime into a normal Linux artifact and a Lambda-targeted copy, packaged the
+  matching musl loader beside the function, and added Alpine plus Amazon Linux 2023 execution proofs.
+- Restored the packaged loader's executable bit after cross-job artifact extraction.
+- Replaced ineffective static-link claims with dependency-driven packaging of the four musl shared
+  libraries and an `$ORIGIN` search path on the Lambda runtime.
+- Aligned the function metadata and execution proof with Vercel's current `provided.al2023` custom
+  runtime target.
+- Bound Lambda dependencies to their packaged `/var/task` paths and moved the function away from
+  `index.func` so static `/` is not shadowed.
+- Preserved the configured `website/data/api.json` catalogue path inside the Lambda package.
+- Made the HTTP client stop at complete `Content-Length`, chunked, `HEAD`, and bodyless responses
+  without waiting for socket closure; added a persistent-loopback regression so the Pudu Lambda
+  Runtime API cannot return to invocation timeouts unnoticed.
+- Regenerated the website catalogue from the current standard library: builder methods now appear
+  under their exported traits, the Lambda module is indexed, and `responseComplete` is documented.
+- Removed stale vault mirrors for the deleted Node adapter, Vercel platform folder, and Node
+  prerender script; added mirrors for the Pudu Lambda function and direct Pudu prerenderer.
+- Added the missing source mirrors for the musl workflow, toolchain image, and local runtime builder.
+
 ## 2026-09-10 — Pudu documentation website and private book validation
 
 - Built the documentation website in Pudu with one-way domain/service/view/route dependencies, typed server-rendered HTML, generated API data, ranked name and signature search, and thin build/runtime adapters for Vercel.

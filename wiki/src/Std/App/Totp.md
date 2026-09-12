@@ -22,12 +22,17 @@ Multi-factor authentication (MFA) implementing RFC 6238 Time-Based One-Time Pass
   Stateful replay prevention tracking `lastUsedStep: Sync.Cell[Int]` across validation attempts.
 - `config(secret: Bytes, issuer: Str, account: Str) -> TotpConfig`:
   Initializes standard configuration with 6-digit output, 30-second time interval, and $\pm 1$ step clock skew tolerance.
-- `withDigits(cfg: &TotpConfig, digits: Int) -> TotpConfig`:
-  Configures output code length (typically 6 or 8 digits).
-- `withStep(cfg: &TotpConfig, stepSeconds: Int) -> TotpConfig`:
-  Configures interval duration (RFC default: 30 seconds).
-- `withSkew(cfg: &TotpConfig, skewSteps: Int) -> TotpConfig`:
-  Configures clock skew allowance (default: 1 step, covering $\pm 30$ seconds of drift).
+- `trait Configuring`, implemented for `TotpConfig`:
+  The three numbers a code's shape is decided by, as methods so a configuration reads as one chain in
+  the order an authenticator app lists them.
+  - `digits(count: Int) -> Self`: output code length (typically 6 or 8). A count of nothing or fewer
+    is the default rather than a code with no digits, which would be the same code for everybody.
+  - `step(seconds: Int) -> Self`: interval duration (RFC default: 30 seconds). An interval of nothing
+    would make the step a division by zero, so it is the default instead.
+  - `skew(steps: Int) -> Self`: clock skew allowance (default: 1 step, covering $\pm 30$ seconds of
+    drift), counted in steps so it means the same thing whatever the interval is. Every step of
+    allowance is another accepted code, so it is a window an attacker gets as well as a clock a user
+    gets wrong. A negative allowance is none.
 - `state() -> TotpState`:
   Constructs replay prevention tracking state.
 - `generate(cfg: &TotpConfig, timestampSeconds: Int) -> Str`:

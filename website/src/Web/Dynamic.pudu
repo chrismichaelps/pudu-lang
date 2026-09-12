@@ -1,0 +1,33 @@
+module Web.Dynamic
+
+import Std.Http as Http
+import Std.Http.Server.Reply as Reply
+import Std.Http.Server.Route as Route
+import Std.Option as Option
+import Service.Catalog as Catalog
+import View.Dynamic as Dynamic
+
+/// Render only the requests that are not already static edge files.
+export fn render(siteUrl: Str, catalog: &Catalog.Catalog, target: Str) -> Http.Response {
+  let asked = Route.Request {
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: ""},
+    path: Route.pathOf(target),
+    params: mapOf([]),
+    query: Route.queryOf(target),
+    peer: "platform"
+  }
+  if asked.path == "/search" {
+    Reply.page(200, Dynamic.results(siteUrl, &catalog.entries, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
+  } else {
+    noIndex(Reply.page(404, Dynamic.missing(siteUrl, asked.path)))
+  }
+}
+
+fn noIndex(response: Http.Response) -> Http.Response {
+  Http.Response {
+    status: response.status,
+    headers: response.headers.push(("X-Robots-Tag", "noindex")),
+    body: response.body,
+    binaryBody: response.binaryBody
+  }
+}

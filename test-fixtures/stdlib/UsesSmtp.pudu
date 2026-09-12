@@ -4,20 +4,46 @@ import Std.Mail as Mail
 import Std.Mail.Smtp as Smtp
 import Std.Result as Result
 
+/// A client naming itself, proving itself and held to a deadline, set through a
+/// bound naming the configuring trait and nothing else.
+fn submitting[C: Smtp.Configuring](base: &C) -> C {
+  base.identifiedAs("my-app.internal").loggingIn("mailer-bot", "secret-password-123").within(5000)
+}
+
 export fn main() -> Int {
   var held = 0
 
   // 1. Client configuration and builders
-  let defaultClient = Smtp.client("smtp.example.com", 587, "sender.example.com")
-  let configuredClient = Smtp.withDomain(&defaultClient, "my-app.internal")
-  let withAuthClient = Smtp.withAuth(&configuredClient, "mailer-bot", "secret-password-123")
-  let withTimeoutClient = Smtp.withTimeout(&withAuthClient, 5000)
+  let settled: Smtp.SmtpClient = submitting(&Smtp.client("smtp.example.com", 587, "sender.example.com"))
 
-  if withTimeoutClient.host == "smtp.example.com" && withTimeoutClient.port == 587 {
-    held = held + 1
+  if settled.host == "smtp.example.com" && settled.port == 587 { held = held + 1 }
+  if settled.domain == "my-app.internal" && settled.timeoutMs == 5000 { held = held + 1 }
+  // The port decided the protection before anything was said about it: 465 is
+  // the one that is encrypted from the first byte, and every other port starts
+  // in the clear and has to be upgraded.
+  let implicit: Smtp.SmtpSecurity = Smtp.client("smtp.example.com", 465, "s.example.com").security
+  match implicit { case Smtp.ImplicitTls => { held = held + 1 } case _ => {} }
+  match settled.security { case Smtp.StartTlsRequired => { held = held + 1 } case _ => {} }
+  // And said outright it wins over what the port implied, which is the call a
+  // caller reaches for against a submission host on a port of its own.
+  match settled.protectedBy(Smtp.Plaintext).security {
+    case Smtp.Plaintext => { held = held + 1 }
+    case _ => {}
   }
-  if withTimeoutClient.domain == "my-app.internal" && withTimeoutClient.timeoutMs == 5000 {
-    held = held + 1
+  // The two mechanisms differ in the variant they hold rather than in anything
+  // else, so a client set up for one must not come back holding the other.
+  let login: Option[Smtp.SmtpAuth] = settled.credentials
+  match login {
+    case Some(Smtp.Login(user, secret)) => {
+      if user == "mailer-bot" && secret == "secret-password-123" { held = held + 1 }
+    }
+    case _ => {}
+  }
+  match settled.loggingInPlainly("alice", "pw").credentials {
+    case Some(Smtp.Plain(user, secret)) => {
+      if user == "alice" && secret == "pw" { held = held + 1 }
+    }
+    case _ => {}
   }
 
   // 2. Command formatting
@@ -54,7 +80,7 @@ export fn main() -> Int {
 
   // 4. Single-line reply parsing
   let greetingRaw = "220 smtp.example.com ESMTP Postfix\r\n"
-  let parsedGreeting = Smtp.parseReply(greetingRaw)
+  let parsedGreeting: Result[Smtp.SmtpReply, Smtp.SmtpError] = Smtp.parseReply(greetingRaw)
   match parsedGreeting {
     case Ok(r) => {
       if r.code == 220 && r.lines.length() == 1 && r.lines[0] == "smtp.example.com ESMTP Postfix" {
@@ -103,7 +129,7 @@ export fn main() -> Int {
   }
 
   // 8. Connection failure handling
-  let deadHostClient = Smtp.withTimeout(&Smtp.client("127.0.0.1", 1, "sender.example.com"), 50)
+  let deadHostClient = Smtp.client("127.0.0.1", 1, "sender.example.com").within(50)
   let sender = Result.unwrapOr(Mail.address("outbound@example.com"), Mail.Address{written: ""})
   let rcpt = Result.unwrapOr(Mail.address("inbound@example.com"), Mail.Address{written: ""})
   let testMsg = Result.unwrapOr(Mail.message(&sender, &rcpt, "Status update", "Everything is working."), Mail.Message {

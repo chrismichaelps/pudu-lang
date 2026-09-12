@@ -221,6 +221,102 @@ if (existsSync(guarded + ".pending")) {
   failures.push("a failed build left its partial file behind");
 }
 
+// A program can be attached to a runtime other than the one building it, which
+// is what lets one machine build an artefact for a platform it is not.
+//
+// The runtime named here is this same compiler, because what can be checked
+// anywhere is the mechanism rather than the crossing: a real cross-build names a
+// runtime for another kernel, and nothing that runs here could execute one to
+// confirm it. So what is checked is that naming a runtime goes through the same
+// path and produces a file that runs.
+//
+// Each artefact is removed as soon as the check that needed it is done. A bundle
+// is the size of the compiler, so holding four of them at once is most of a
+// gigabyte — enough to fail this gate on a machine that is merely low on space,
+// which would report a full disk as a fault in the build.
+const forget = (path) => {
+  try {
+    rmSync(path, { force: true });
+  } catch {
+    // A file that could not be removed is not a reason to fail the run.
+  }
+};
+
+const onto = join(directory, "onto-named-runtime");
+{
+  const namedRuntime = join(directory, "base-runtime");
+  copyFileSync(executable, namedRuntime);
+  execFileSync(executable, ["build", source, "-o", onto, "--runtime", namedRuntime], { stdio: "pipe" });
+  forget(namedRuntime);
+}
+const ontoSaid = run(onto);
+if (ontoSaid !== "Bundled true") {
+  failures.push(`built onto a named runtime it printed ${JSON.stringify(ontoSaid)}`);
+}
+
+// Naming a runtime that already carries a program replaces that program rather
+// than burying it. The trailer is read from the end of the file, so appending to
+// a built artefact would work and would keep the previous program's bytes for
+// ever — a whole copy of a program nothing can reach. Building twice would
+// double it, and a loop would grow it without bound, so the two are compared
+// byte for byte rather than merely both run.
+{
+  const again = join(directory, "onto-built-artefact");
+  execFileSync(executable, ["build", source, "-o", again, "--runtime", onto], { stdio: "pipe" });
+  const rebuiltSaid = run(again);
+  if (rebuiltSaid !== "Bundled true") {
+    failures.push(`rebuilt onto a built artefact it printed ${JSON.stringify(rebuiltSaid)}`);
+  }
+  if (readFileSync(onto).compare(readFileSync(again)) !== 0) {
+    failures.push("rebuilding onto a built artefact did not answer the same bytes");
+  }
+  forget(again);
+}
+
+// A runtime that is not there is said before the program is written, so the
+// target keeps what it held. Reported as what it is rather than as a failure to
+// write, because a reader told the write failed looks at the disk rather than at
+// the path they named. Aimed at the artefact built a moment ago, which must
+// still run afterwards.
+let runtimeRefusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", onto, "--runtime", join(directory, "no-runtime-here")], {
+    stdio: "pipe"
+  });
+  failures.push("a build onto a runtime that does not exist was not refused");
+} catch (problem) {
+  runtimeRefusal = String(problem.stderr ?? "");
+}
+if (!runtimeRefusal.includes("cannot attach the program to")) {
+  failures.push(`a missing runtime was not named: ${JSON.stringify(runtimeRefusal.slice(0, 160))}`);
+}
+if (run(onto) !== "Bundled true") {
+  failures.push("a build onto a missing runtime damaged the target it was aimed at");
+}
+forget(onto);
+
+// A flag that was misspelled is refused rather than skipped. Skipped, it would
+// produce a plausible artefact built to different settings than the ones asked
+// for, and the place that is discovered is the platform it was deployed to.
+//
+// Refused while reading the arguments, so nothing is written and this costs no
+// space at all.
+let unknownRefusal = "";
+try {
+  execFileSync(executable, ["build", source, "-o", join(directory, "never-written"), "--runtimes", onto], {
+    stdio: "pipe"
+  });
+  failures.push("a misspelled option was accepted");
+} catch (problem) {
+  unknownRefusal = String(problem.stderr ?? "");
+}
+if (!unknownRefusal.includes("unknown option")) {
+  failures.push(`a misspelled option was not named: ${JSON.stringify(unknownRefusal.slice(0, 160))}`);
+}
+if (existsSync(join(directory, "never-written"))) {
+  failures.push("a build refused for a misspelled option wrote a file anyway");
+}
+
 // A bundle is the size of the compiler, so a run that leaves two behind costs
 // a developer a gigabyte every few times they run the gates. Removed whatever
 // the outcome, since a failing run leaks just as much as a passing one.

@@ -105,6 +105,45 @@ export fn checkLength(headers: &Array[(Str, Str)], body: Str) -> Result[(), Mess
   }
 }
 
+/// Whether a complete response has arrived without waiting for its connection to close.
+///
+/// A declared length and a terminating chunk frame are message boundaries. `HEAD` and statuses
+/// that never carry a body end at the blank line after their headers. A response without one of
+/// those boundaries remains incomplete until its transport reports closure.
+export fn responseComplete(source: &Bytes, method: &Http.Method) -> Bool {
+  let split = source.indexOf("\r\n\r\n".toBytes())
+  if split < 0 { false } else {
+    match ByteSeq.toText(&source.take(split + 4)) {
+      case Err(_) => false
+      case Ok(head) => {
+        match parseResponse(head) {
+          case Err(_) => false
+          case Ok(response) => {
+            let body = source.drop(split + 4)
+            if Http.methodName(method) == "HEAD" || hasNoBody(response.status.code) {
+              true
+            } else if Http.isChunked(&response.headers) {
+              match decodeChunkedBytes(&body, body.length()) {
+                case Ok(_) => true
+                case Err(_) => false
+              }
+            } else {
+              match Http.contentLength(&response.headers) {
+                case Some(length) => body.length() >= length
+                case None => false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn hasNoBody(code: Int) -> Bool {
+  (code >= 100 && code < 200) || code == 204 || code == 304
+}
+
 /// A chunked body read back into the bytes it framed.
 /// Stops at the terminating chunk, ignoring any trailer, which is what a reader
 /// that only wants the body should do.

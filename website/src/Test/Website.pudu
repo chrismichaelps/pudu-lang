@@ -1,10 +1,19 @@
 module Test.Website
 
 import Std.Http as Http
+import Std.Json as Json
+import Std.Result as Result
 import Std.Test as Test
+import Function as Function
 import Service.Catalog as Catalog
 import Service.Search as Search
+import Web.Dynamic as DynamicWeb
 import Web.Routes as Web
+
+/// The path a function would dispatch on, for an event written as text.
+fn asked(event: Str) -> Str {
+  Function.pathIn(&Result.unwrapOr(Json.decode(event), Json.Null))
+}
 
 fn hasHeader(response: &Http.Response, name: Str, value: Str) -> Bool {
   Http.header(&response.headers, name) == Some(value)
@@ -30,12 +39,29 @@ export fn main() -> Int {
   let about = Web.render(origin, &catalog, "/about")
   let overloads = Web.render(origin, &catalog, "/docs/Std.Bits/fn/width")
   let hits = Search.find(&catalog.entries, "checksum", 10)
+  let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
+  let searchCatalog = match compact {
+    case Ok(value) => value
+    case Err(_) => { return 0 }
+  }
+  let compactHits = Search.find(&searchCatalog.entries, "checksum", 10)
+  let dynamicSearch = DynamicWeb.render(origin, &searchCatalog, "/search?q=checksum")
+  let dynamicMissing = DynamicWeb.render(origin, &searchCatalog, "/not-a-page")
+  let vercelEvent = Json.object(&[
+      ("body", Json.Text("\{\"method\":\"GET\",\"path\":\"/search?q=map\"\}")),
+      ("Action", Json.Text("Invoke"))
+    ])
 
   let suite = Test.suite("website", &[
       Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.0"),
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
       Test.that("ranked search returns a result", hits.length() > 0),
       Test.that("exact name ranks first", hits[0].entry.name == "checksum"),
+      Test.that("compact catalogue keeps every searchable declaration", searchCatalog.entries.length() == catalog.entries.length()),
+      Test.that("compact catalogue keeps the language version", searchCatalog.languageVersion == catalog.languageVersion),
+      Test.that("compact catalogue preserves ranked results", compactHits.length() == hits.length() && compactHits[0].entry.name == hits[0].entry.name),
+      Test.that("dynamic search uses the shared result view", dynamicSearch.status.code == 200 && dynamicSearch.body.contains("Std.Adler32.checksum")),
+      Test.that("dynamic fallback is a no-index 404", dynamicMissing.status.code == 404 && hasHeader(&dynamicMissing, "X-Robots-Tag", "noindex") && dynamicMissing.body.contains("noindex,follow")),
       Test.that("home renders", home.status.code == 200),
       Test.that("home has canonical metadata", home.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/\"")),
       Test.that("home has structured data", home.body.contains("application/ld+json")),
@@ -43,6 +69,12 @@ export fn main() -> Int {
       Test.that("home advertises the short logo as its icon", home.body.contains("rel=\"icon\" type=\"image/png\" href=\"/assets/pudu-lang-short.png\"")),
       Test.that("home links the repository", home.body.contains("https://github.com/chrismichaelps/pudu-lang/")),
       Test.that("home names the copyright holder", home.body.contains("© 2026 Chris M. Pérez Santiago")),
+      Test.that("home has one search field", home.body.split("name=\"q\"").length() == 2),
+      Test.that("header has no GitHub icon", !home.body.contains("github-icon")),
+      Test.that("mobile navigation uses a labelled disclosure", home.body.contains("<details class=\"mobile-nav\"") && home.body.contains("aria-label=\"Navigation menu\"")),
+      Test.that("navigation identifies the current API page", modulePage.body.contains("aria-current=\"page\">API")),
+      Test.that("home teaches through a complete program", home.body.contains("Write a complete program") && home.body.contains("module Hello")),
+      Test.that("home explains references", home.body.contains("&amp;mut T gives one temporary place permission")),
       Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
       Test.that("search is not indexed", search.body.contains("noindex,follow")),
       Test.not("query markup is escaped", hostile.body.contains("<script>alert(1)</script>")),
@@ -67,7 +99,35 @@ export fn main() -> Int {
       Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
       Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
       Test.that("same-name sitemap paths are unique", sitemap.body.split("https://pudu.example/docs/Std.Bits/fn/width").length() == 2),
-      Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage"))
+      Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage")),
+
+      // What a platform hands the function, read into the path a route is
+      // dispatched on. A reader that knew one shape would answer every request
+      // with the front page, which looks like working routing rather than like
+      // an event nothing understood.
+      Test.that("an event naming its raw path is routed on it", asked("\{\"rawPath\":\"/modules\"\}") == "/modules"),
+      Test.that("a query string is carried with the path", asked("\{\"rawPath\":\"/search\",\"rawQueryString\":\"q=map\"\}") == "/search?q=map"),
+      Test.that("an event naming a plain path is routed on it", asked("\{\"path\":\"/about\"\}") == "/about"),
+      Test.that("an event naming a whole url is routed on it", asked("\{\"url\":\"/donate\"\}") == "/donate"),
+      Test.that("the raw path is preferred to the others", asked("\{\"rawPath\":\"/a\",\"path\":\"/b\"\}") == "/a"),
+      // An event saying nothing is the front page rather than the empty path,
+      // which routes to nothing and answers 404 for the one address every
+      // visitor arrives at first.
+      Test.that("an event naming nothing is the front page", asked("\{\}") == "/"),
+      // A path that already carries its query is not given it twice, which
+      // would put the search term in the page as part of another term.
+      Test.that("a query already in the path is not repeated", asked("\{\"rawPath\":\"/search?q=map\",\"rawQueryString\":\"q=map\"\}") == "/search?q=map"),
+      Test.that("an empty query adds no question mark", asked("\{\"rawPath\":\"/search\",\"rawQueryString\":\"\"\}") == "/search"),
+      Test.that("a Vercel invocation unwraps its request body", Function.pathIn(&vercelEvent) == "/search?q=map"),
+
+      // And what goes back. A response that arrived without its headers would
+      // be served as text and indexed as a duplicate, since the pages state
+      // their own content type and their own canonical address.
+      Test.that("an answer carries the status the page answered", Function.answered(&home).contains("\"statusCode\":200")),
+      Test.that("an answer carries the page", Function.answered(&home).contains("<title>")),
+      Test.that("an answer carries the headers the page set", Function.answered(&home).contains("content-type")),
+      Test.that("an answer says its body is not encoded", Function.answered(&home).contains("\"isBase64Encoded\":false")),
+      Test.that("a page that was not found answers as not found", Function.answered(&missing).contains("\"statusCode\":404"))
     ])
   Test.report(&Test.run(&suite))
 }

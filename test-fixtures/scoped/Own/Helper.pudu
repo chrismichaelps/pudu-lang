@@ -6,3 +6,26 @@ fn pick(left: Int, right: Int) -> Int { left }
 
 /// Calls its own `pick`, whatever any other module declares.
 export fn useOwn() -> Int { pick(1, 2) }
+
+/// A value with a method, so the same question can be asked of an impl.
+export type Held = { value: Int }
+
+/// What the value can do.
+export trait Choosing {
+  fn chosen(self: &Self) -> Int
+}
+
+impl Choosing for Held {
+  /// Through this module's own `pick`, reached from inside an impl.
+  ///
+  /// An implementation is global so that a library can dispatch to a program's
+  /// own type, but its body belongs to the module that wrote it. A method that
+  /// read names where it was called from found the caller's `pick` instead of
+  /// this one — and a helper taking a different number of arguments made that
+  /// an abort on arity rather than a wrong answer.
+  fn chosen(self: &Self) -> Int { pick(self.value, 0 - 1) }
+}
+
+/// The same through a bound naming the trait, which is how a library reaches a
+/// method it did not write.
+export fn throughBound[C: Choosing](one: &C) -> Int { one.chosen() }

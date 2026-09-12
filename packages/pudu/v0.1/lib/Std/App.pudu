@@ -358,18 +358,9 @@ const REQUEST_MILLISECONDS: Str = "http.request.milliseconds"
 /// reports nothing about its own traffic is the ordinary failure, and the two
 /// measurements every service wants are the same two.
 export fn requestMeasurements() -> Metrics.Metrics {
-  Metrics.distribution(
-      &Metrics.counter(
-        &Metrics.empty(),
-      REQUESTS_MEASURED,
-      Metrics.Count,
-      "requests answered"
-    ),
-    REQUEST_MILLISECONDS,
-    Metrics.Milliseconds,
-    "how long answering took",
-      &[]
-  )
+  Metrics.empty()
+    .counter(REQUESTS_MEASURED, Metrics.Count, "requests answered")
+    .distribution(REQUEST_MILLISECONDS, Metrics.Milliseconds, "how long answering took", &[])
 }
 
 /// The application measuring its own traffic into a cell the program holds,
@@ -405,8 +396,8 @@ fn counting(into: Sync.Cell[Metrics.Metrics]) -> Route.Middleware {
       ("status", show(answer.status.code))
     ]
     let held = Result.unwrapOr(Sync.get(&store), Metrics.empty())
-    let counted = Metrics.increment(&held, REQUESTS_MEASURED, &labels)
-    let timed = Metrics.observe(&counted, REQUEST_MILLISECONDS, &labels, clock() - began)
+    let timed = held.increment(REQUESTS_MEASURED, &labels)
+      .observe(REQUEST_MILLISECONDS, &labels, clock() - began)
     let _kept = Sync.set(&store, timed)
     answer
   }

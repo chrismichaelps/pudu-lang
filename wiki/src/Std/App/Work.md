@@ -17,6 +17,11 @@ schedule, which is jobs. Which jobs are due at a moment, and the schedule that f
 What a schedule has recorded — how many times each job ran, how many times it failed, how long the
 last run took, and what it last said when it failed. Running a schedule once, and the stage that
 runs it until the program stops.
+
+The `Scheduling` trait carries what answers a schedule — `also`, `started`, `ended` — as methods, so a
+service adds its jobs and marks them in flight in one chain rather than wrapping each call in the
+next. `also` adds rather than sets, which is what lets each module schedule its own work without the
+last one replacing the rest.
 ## Governance and algorithm
 **Which jobs are due is a pure function of the schedule and the moment.** Nothing here reads a clock;
 the moment is given. So a schedule is checked by asking what is due at a time and comparing values,

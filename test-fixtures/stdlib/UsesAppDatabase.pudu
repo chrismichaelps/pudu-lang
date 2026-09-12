@@ -2,8 +2,13 @@ module UsesAppDatabase
 
 import Std.App.Config as Config
 import Std.App.Database as Database
+import Std.App.Database {DatabaseFailure, MappingFailure}
 import Std.Db.Driver as Driver
+import Std.Db.Driver {IntegerValue, Named, TextValue}
+import Std.Db.Row as Row
+import Std.Option as Option
 import Std.Result as Result
+import Std.Sync as Sync
 
 /// What preparing a database promises before anything is connected.
 ///
@@ -19,6 +24,100 @@ import Std.Result as Result
 /// that is missing where a deployment would have forgotten it.
 fn settings(pairs: Array[(Str, Str)]) -> Config.Config {
   Config.declaring(&pairs)
+}
+
+/// A result of the shape the fake driver answers: an identifier and a name.
+fn rowsOf(command: Str, people: &Array[(Int64, Str)]) -> Driver.Rows {
+  var values: Array[Array[Driver.Value]] = []
+  for one in people { values = values.push([IntegerValue(one[0]), TextValue(one[1])]) }
+  Driver.Rows {
+    columns: [
+      Driver.Column{name: "id", nativeType: Some("bigint")},
+      Driver.Column{name: "name", nativeType: Some("text")}
+    ],
+    rows: values,
+    command: command
+  }
+}
+
+/// What a statement answers, chosen by what it asks for, so one driver covers
+/// the cases a mapper has to tell apart: one row, none, several, and a result
+/// whose shape is not what the mapper expects.
+fn answerTo(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+  if sql.startsWith("select one") {
+    Ok(rowsOf("SELECT 1", &[(1i64, "ada")]))
+  } else if sql.startsWith("select none") {
+    Ok(rowsOf("SELECT 0", &[]))
+  } else if sql.startsWith("select many") {
+    Ok(rowsOf("SELECT 2", &[(1i64, "ada"), (2i64, "grace")]))
+  } else if sql.startsWith("select wrong") {
+    Ok(
+      Driver.Rows {
+        columns: [Driver.Column{name: "other", nativeType: Some("text")}],
+        rows: [[TextValue("x")]],
+        command: "SELECT 1"
+      }
+    )
+  } else if sql.startsWith("update") {
+    Ok(rowsOf("UPDATE 2", &[]))
+  } else {
+    Err(Driver.error("fake", "syntax", "the statement was not one this driver answers"))
+  }
+}
+
+/// A driver that answers without a database, recording what it was asked.
+///
+/// Preparing is separate from connecting, so checking the rest of this module
+/// needs something that opens. A driver is an ordinary value, which is what
+/// makes that possible without a database to install.
+fn fake(into: Sync.Cell[Str]) -> Driver.Driver {
+  Driver.Driver {
+    name: "fake",
+    schemes: ["fake"],
+    placeholders: Named,
+    open: fn(uri: Str, size: Int) -> Result[Driver.Client, Driver.Error] {
+      let _noted = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "open " + uri + " x" + show(size) + "\n")
+      Ok(
+        Driver.Client {
+          query: fn(sql: Str, values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+            let _said = Sync.set(&into,
+              Result.unwrapOr(Sync.get(&into), "") + "query " + sql + " with " + show(values.length()) + "\n")
+            answerTo(sql)
+          },
+          execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+            let _said = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "execute " + sql + "\n")
+            answerTo(sql)
+          },
+          transaction: fn(
+            action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]
+          ) -> Result[Driver.Rows, Driver.Error] {
+            let _began = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "begin\n")
+            action(
+              Driver.Tx {
+                query: fn(sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+                  let _said = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "tx query " + sql + "\n")
+                  answerTo(sql)
+                },
+                execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+                  let _said = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "tx execute " + sql + "\n")
+                  answerTo(sql)
+                }
+              }
+            )
+          },
+          close: fn() -> Result[(), Driver.Error] {
+            let _shut = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "close\n")
+            Ok(())
+          }
+        }
+      )
+    }
+  }
+}
+
+/// The name in one row, which is what every mapped query here reads.
+fn namedIn(rows: Driver.Rows, index: Int) -> Result[Str, Row.RowError] {
+  Row.text(&rows, index, "name")
 }
 
 export fn main() -> Int {
@@ -88,5 +187,160 @@ export fn main() -> Int {
     if step.name == "store" { held = held + 1 }
   }
 
+  // A connector the library does not bundle is admitted by naming it, which is
+  // what keeps the set of backends a program accepts in the program rather than
+  // in a registry something else can add to.
+  let log = Sync.cell("")
+  let driver = fake(log)
+  let made: Result[Database.Database, Driver.Error] = Database.withDriver(driver, "fake://here/app", 3)
+  if Result.isOk(&made) { held = held + 1 }
+  // Named or chosen from a set, the same connector is reached, and a scheme
+  // outside the set is still refused.
+  if Result.isOk(&Database.withDrivers(&[driver], "fake://here/app", 3)) { held = held + 1 }
+  if Result.isErr(&Database.withDrivers(&[driver], "sqlite::memory:", 3)) { held = held + 1 }
+  // A named connector given a scheme it does not accept is refused too, so
+  // naming one is not a way past the check.
+  if Result.isErr(&Database.withDriver(driver, "sqlite::memory:", 3)) { held = held + 1 }
+  // And from a setting, with the connector named rather than guessed.
+  let configuredFake = settings([("FAKE_URL", "fake://here/app")])
+  if Result.isOk(&Database.fromConfigWith(driver, &configuredFake, "FAKE_URL", 1)) { held = held + 1 }
+  if Result.isErr(&Database.fromConfigWith(driver, &configuredFake, "MISSING_URL", 1)) {
+    held = held + 1
+  }
+
+  if let Ok(database) = made {
+    // Nothing is open until the stage starts it, so a query before that is
+    // refused as closed rather than opening a connection nobody asked for.
+    match Database.query(&database, "select one", &[]) {
+      case Err(problem) => { if problem.category == "closed" { held = held + 1 } }
+      case Ok(_) => {}
+    }
+    if heard(&log).isEmpty() { held = held + 1 }
+
+    // Starting opens the connections, carrying the capacity it was prepared
+    // with.
+    if Result.isOk(&Database.start(&database)) { held = held + 1 }
+    if heard(&log).contains("open fake://here/app x3") { held = held + 1 }
+    // Starting twice is a mistake in the lifecycle rather than a second set of
+    // connections: two pools against one database is a limit breached by a
+    // program that believes it has one.
+    match Database.start(&database) {
+      case Err(problem) => { if problem.category == "lifecycle" { held = held + 1 } }
+      case Ok(_) => {}
+    }
+
+    // A statement with values, which travel beside it rather than inside it.
+    let answered = Database.query(&database, "select one where id = :id", &[IntegerValue(1i64)])
+    if Result.isOk(&answered) { held = held + 1 }
+    if heard(&log).contains("query select one where id = :id with 1") { held = held + 1 }
+    let ran = Database.execute(&database, "update people set name = 'x'")
+    if Result.unwrapOr(ran, rowsOf("", &[])).command == "UPDATE 2" { held = held + 1 }
+
+    // Every row a query answered, read by the mapper.
+    let all: Result[Array[Str], Database.QueryError] =
+    Database.queryAll(&database, "select many", &[], namedIn)
+    if Result.unwrapOr(all, []) == ["ada", "grace"] { held = held + 1 }
+    if Result.unwrapOr(Database.queryAll(&database, "select none", &[], namedIn), ["x"]) == [] {
+      held = held + 1
+    }
+
+    // Exactly one, which is a different question from the first of several: a
+    // statement that should identify one row and answers two has matched
+    // something the caller did not mean, and reading the first would act on it.
+    if Result.unwrapOr(Database.queryOne(&database, "select one", &[], namedIn), "") == "ada" {
+      held = held + 1
+    }
+    if Result.isErr(&Database.queryOne(&database, "select many", &[], namedIn)) { held = held + 1 }
+    if Result.isErr(&Database.queryOne(&database, "select none", &[], namedIn)) { held = held + 1 }
+
+    // One row or none, which is the question a lookup by identifier asks. None
+    // is an answer here rather than a failure, and several is still a failure.
+    let found = Database.queryOptional(&database, "select one", &[], namedIn)
+    if Option.unwrapOr(Result.unwrapOr(found, None), "") == "ada" { held = held + 1 }
+    if Option.isNone(&Result.unwrapOr(Database.queryOptional(&database, "select none", &[], namedIn), Some("x"))) {
+      held = held + 1
+    }
+    if Result.isErr(&Database.queryOptional(&database, "select many", &[], namedIn)) {
+      held = held + 1
+    }
+
+    // The two ways a mapped query fails stay apart. A statement the database
+    // refused and a result the mapper could not read are different faults with
+    // different fixes, and a caller told only that the query failed would look
+    // in the wrong place.
+    match Database.queryOne(&database, "select sideways", &[], namedIn) {
+      case Err(DatabaseFailure(problem)) => {
+        if problem.category == "syntax" { held = held + 1 }
+      }
+      case _ => {}
+    }
+    match Database.queryOne(&database, "select wrong", &[], namedIn) {
+      case Err(MappingFailure(_)) => { held = held + 1 }
+      case _ => {}
+    }
+
+    // A transaction holds one connection for the whole action, so both calls
+    // inside it are recorded as the transaction's rather than the pool's.
+    let inside = Database.transaction(&database, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        let _read = Driver.ask(&open, "select one", &[])
+        Driver.run(&open, "update people set name = 'y'")
+      })
+    if Result.isOk(&inside) { held = held + 1 }
+    if heard(&log).contains("begin\ntx query select one\ntx execute update people set name = 'y'\n") {
+      held = held + 1
+    }
+
+    // Stopping closes what was opened, and stopping again is harmless: a
+    // lifecycle that unwinds twice must not fail the second time, or a failure
+    // during shutdown becomes two failures.
+    if Result.isOk(&Database.stop(&database)) { held = held + 1 }
+    if heard(&log).contains("close\n") { held = held + 1 }
+    if Result.isOk(&Database.stop(&database)) { held = held + 1 }
+    // And a query after stopping is refused as closed rather than reaching a
+    // client that has been closed under it.
+    match Database.query(&database, "select one", &[]) {
+      case Err(problem) => { if problem.category == "closed" { held = held + 1 } }
+      case Ok(_) => {}
+    }
+    // Started again after a stop, since a stage that restarts is the ordinary
+    // case rather than an error.
+    if Result.isOk(&Database.start(&database)) { held = held + 1 }
+    let _shut = Database.stop(&database)
+  }
+
+  // A value is read out of a result by name or by position, and a mapper is an
+  // ordinary function over the two — which is what lets one be written for a
+  // type rather than for a query.
+  let sample = rowsOf("SELECT 1", &[(7i64, "ada")])
+  let reader: Row.Mapper[Str] = namedIn
+  if Result.unwrapOr(reader(sample, 0), "") == "ada" { held = held + 1 }
+  match Row.at(&sample, 0, 0) {
+    case Ok(IntegerValue(number)) => { if number == 7i64 { held = held + 1 } }
+    case _ => {}
+  }
+  // A position outside the row is an error rather than an absent value, because
+  // a column that is not there is not a column holding nothing.
+  if Result.isErr(&Row.at(&sample, 0, 9)) { held = held + 1 }
+  if Result.isErr(&Row.at(&sample, 9, 0)) { held = held + 1 }
+  match Row.value(&sample, 0, "name") {
+    case Ok(TextValue(text)) => { if text == "ada" { held = held + 1 } }
+    case _ => {}
+  }
+  if Result.isErr(&Row.value(&sample, 0, "absent")) { held = held + 1 }
+  // A column the database holds as bytes is read as bytes rather than as text,
+  // since text read out of arbitrary bytes is text the database never stored.
+  let binary = Driver.Rows {
+    columns: [Driver.Column{name: "blob", nativeType: Some("bytea")}],
+    rows: [[Driver.BytesValue(bytesOf([0u8, 255u8, 7u8]))]],
+    command: "SELECT 1"
+  }
+  if Result.unwrapOr(Row.bytes(&binary, 0, "blob"), bytesOf([])).length() == 3 { held = held + 1 }
+  // And a column holding text is not bytes, which a reader that handed back the
+  // encoding would answer instead.
+  if Result.isErr(&Row.bytes(&sample, 0, "name")) { held = held + 1 }
+
   held
 }
+
+/// Everything the fake driver was asked.
+fn heard(from: &Sync.Cell[Str]) -> Str { Result.unwrapOr(Sync.get(from), "") }

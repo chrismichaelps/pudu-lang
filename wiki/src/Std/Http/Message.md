@@ -11,13 +11,19 @@ aliases: [Std Http Message]
 ## Purpose
 Parse and render HTTP request/response text, validate declared body length, and decode chunked bodies.
 ## Interface
-Exports `MessageError`, request/response parsers and renderers, response constructors, `checkLength`, `decodeChunked`, and `explain`.
+Exports `MessageError`, request/response parsers and renderers, response constructors, framing
+completion, `checkLength`, chunk decoding, and `explain`.
 ## Governance and algorithm
 Protocol text accepts CRLF or LF, reports structural failures as `Result`, and never performs transport. Parsing separates head/body, validates lines and headers, then constructs [[Std Http]] values.
+Framing completion recognizes a complete declared-length body, terminating chunk stream, bodyless
+status, or response to `HEAD` without requiring transport closure.
 ## Grill Log
 - **Q:** Why accept LF? **A:** Hand-written fixtures remain useful without weakening network output, which still renders CRLF. _Rejected:_ transport-dependent parsing.
+- **Q:** Is connection closure the only complete-response signal? **A:** No. _Rationale:_ HTTP/1.1
+  length and chunk framing are complete while a reusable connection remains open. _Rejected:_ EOF as
+  the boundary for every response.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Http]]
+[[src/Std/_MOC]] · [[Std Http]] · [[Std Http Client]]
 
 ## UTF-8 length contract
 
@@ -39,4 +45,3 @@ Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot 
 `headLines` splits on the detected line separator (`\r\n` or `\n`) directly and trims any trailing empty slice via a single slice bounds check, avoiding $O(N)$ intermediate array pushes. `parseHeaders` scans colon delimiters and extracts name and value via `take` and `drop`, eliminating redundant `length()` traversals across UTF-16 Text slices. `parseHead` parses a head that has already been split from the body without rescanning for `\r\n\r\n`.
 
 Resolved Grill Log: header parsing must minimize heap allocations and avoid redundant Unicode length counting; array rebuilding on every line pays a linear interpreter penalty for every header carried.
-

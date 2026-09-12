@@ -16,6 +16,7 @@ testProtocolEvaluation = do
   htmlBuild <- runEntry "test-fixtures/stdlib/UsesHtmlBuild.pudu"
   httpAll <- runEntry "test-fixtures/stdlib/UsesHttpAll.pudu"
   routeAll <- runEntry "test-fixtures/stdlib/UsesRouteAll.pudu"
+  wireAll <- runEntry "test-fixtures/stdlib/UsesDbProtocolAll.pudu"
   cursorAll <- runEntry "test-fixtures/stdlib/UsesCursorAll.pudu"
   urlAll <- runEntry "test-fixtures/stdlib/UsesUrlAll.pudu"
   appDatabase <- runEntry "test-fixtures/stdlib/UsesAppDatabase.pudu"
@@ -66,6 +67,7 @@ testProtocolEvaluation = do
   xmlDocuments <- runEntry "test-fixtures/stdlib/UsesXml.pudu"
   zipArchives <- runEntry "test-fixtures/stdlib/UsesArchiveZip.pudu"
   clientRetries <- runEntry "test-fixtures/stdlib/UsesHttpRetry.pudu"
+  invoked <- runEntry "test-fixtures/stdlib/UsesLambdaAll.pudu"
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
@@ -105,10 +107,20 @@ testProtocolEvaluation = do
         (separated === Just "25")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
-        given, so nothing is assumed about what else the machine holds. -}
+        given, so nothing is assumed about what else the machine holds.
+
+        A connection is also taken one at a time rather than through `serve`,
+        carrying a message whose end is marked by the sender saying nothing more
+        is coming — the shape a protocol with no length ahead of its body has.
+        Both halves of that are checked: the sender finishes its write side
+        while still reading, since closing outright would discard the reply it
+        is waiting for, and the reader folds chunks until the stream ends rather
+        than reading once, which would answer whatever the first packet happened
+        to carry. The reply is read as exactly its stated length, and a read for
+        more than the peer will ever send ends rather than waiting. -}
     , counterexample
         "a connection carries a message and the reply comes back"
-        (endpoints === Just "14")
+        (endpoints === Just "22")
     {-| Routing, the chain of steps, and the method that carries its terms in
         its own body are checked by calling the handler directly; a request
         arriving and a reply going back are checked over a real socket. -}
@@ -123,7 +135,22 @@ testProtocolEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "45")
+        (fetched === Just "52")
+    {-| A platform that invokes a program rather than connecting to it, served
+        against a runtime interface the fixture serves itself — which is
+        possible because the interface is a value rather than something read
+        from the environment at each call. What is checked is that each answer
+        went back against the invocation it answered: a loop answering the right
+        body against the wrong identifier answers somebody else's request, and
+        nothing that only read the body could tell. A handler that refuses is
+        checked to report against its own invocation rather than leave it
+        unanswered, since an invocation nothing answers is retried until the
+        platform gives up. The loop is ended by an invocation carrying no
+        identifier rather than by refusing a connection, because the poll is a
+        long one by design and a refusal would take its deadline to notice. -}
+    , counterexample
+        "every answer goes back against the invocation it answered"
+        (invoked === Just "27")
     {-| That a lasting connection is not offered to whoever asks: it is not
         subject to the rule stopping one site reading another's answers, so a
         page on any site could otherwise open one carrying the viewer's
@@ -155,9 +182,17 @@ testProtocolEvaluation = do
     , counterexample
         "a message cannot carry more than it says"
         (posted === Just "46")
+    {-| What a client is set up with is said through a bound naming the
+        configuring trait alone, which is what checks those settings are usable
+        as methods. The protection is checked at the port that decides it and
+        at the call that overrides it, since which of the two wins decides
+        whether the secret above it goes out in the clear. The two
+        authentication mechanisms differ in the variant they hold and in
+        nothing else, so each is read back: a client set up for one holding the
+        other would send a proof the server did not ask for. -}
     , counterexample
         "SMTP client formats RFC 5321 commands, authenticates, parses replies, and rejects invalid states"
-        (smtping === Just "16")
+        (smtping === Just "21")
     , counterexample
         "GZIP compresses, streams multi-block DEFLATE, verifies CRC-32/ISIZE, and integrates HTTP middleware"
         (compressedGzip === Just "12")
@@ -320,10 +355,15 @@ testProtocolEvaluation = do
         own reader agrees however wrong both are. Two of these are about what
         is *not* sent: a span with no ending, which would be read as a
         measurement nothing measured, and a span the trace decided not to
-        record. -}
+        record. The settings are said through a bound naming the configuring
+        trait alone, which is what checks they are usable as methods; a header
+        is named twice to check that carrying adds rather than sets, since a
+        key and a tenant set in two calls must both travel. Each reason an
+        export failed is read for the sentence it gives, because a collector
+        that answered is a different thing to debug from one that never did. -}
     , counterexample
         "finished spans render as the document a collector reads, and unfinished ones do not"
-        (exportedSpans === Just "14")
+        (exportedSpans === Just "19")
     {-| Every form a person actually writes, because a reader that handles
         `--name value` and not `--name=value` is wrong for half of them. Two
         carry their own trap: `--` begins with a dash, so a reader dispatching
@@ -398,6 +438,22 @@ testProtocolEvaluation = do
     , counterexample
         "every protocol name answers the wire form it stands for"
         (httpAll === Just "91")
+    {-| Every export of the database wire module, each message checked against
+        the wire rather than against the reader beside it: the letter it starts
+        with, the length it states, and the bytes after that length. A writer
+        and a reader that agreed on the same wrong shape would agree with each
+        other and with nothing else, and a round trip is the one check that
+        cannot tell them apart. The stated length is checked on every message
+        because it is all a server has to go on — a byte short leaves a byte
+        behind that the next read takes for a letter, and a byte long waits for
+        one that never comes, and both look like a hang rather than like a
+        malformed message. A value that is absent is checked against one that
+        is empty, since the protocol spells them differently and a reader that
+        treated them alike would answer nothing where the column holds the
+        empty string. -}
+    , counterexample
+        "every database message states the length and the bytes the wire does"
+        (wireAll === Just "70")
     {-| Every export of the routing module, checked by dispatching a request
         rather than by reading a route's fields, so what is checked is what a
         request actually reaches. A path written for another method answers
@@ -428,10 +484,24 @@ testProtocolEvaluation = do
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same
-        program told at its first query, under load, cannot. -}
+        program told at its first query, under load, cannot.
+
+        The rest is driven against a connector written in the fixture, since a
+        driver is an ordinary value and nothing need be installed. A query
+        before the stage starts is refused as closed rather than opening a
+        connection nobody asked for, and the log confirms nothing opened;
+        starting twice is refused, because two pools against one database is a
+        limit breached by a program that believes it has one; and stopping twice
+        is harmless, or a failure during shutdown becomes two failures. Asking
+        for exactly one row is checked against a result holding two, which is a
+        different question from the first of several — a statement that should
+        identify one row and answers two has matched something the caller did
+        not mean, and reading the first would act on it. The two ways a mapped
+        query fails stay apart: a statement the database refused and a result
+        the mapper could not read are different faults with different fixes. -}
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
-        (appDatabase === Just "17")
+        (appDatabase === Just "56")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"

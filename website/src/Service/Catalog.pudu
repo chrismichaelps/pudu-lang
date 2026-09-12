@@ -5,6 +5,7 @@ import Std.Json as Json
 import Std.List as List
 import Std.Map as Map
 import Std.Option as Option
+import Std.Text as Text
 import Domain.Entry as Domain
 import Error as SiteError
 
@@ -46,6 +47,75 @@ export fn load(path: Str) -> Result[Catalog, SiteError.SiteError] {
   let entries = List.flatten(&groups)
   if entries.length() == 0 { return Err(SiteError.CatalogueEmpty) }
   Ok(Catalog{languageVersion: version, entries: entries, modules: moduleNames(&entries)})
+}
+
+/// Read the compact catalogue used by dynamic search.
+///
+/// Static pages need every documentation paragraph and the complete module
+/// index. A search request needs five fields per declaration. Keeping those
+/// inputs separate avoids decoding the full documentation document during a
+/// serverless cold start.
+export fn loadSearch(path: Str) -> Result[Catalog, SiteError.SiteError] {
+  let source = match Io.read(path) {
+    case Ok(content) => content
+    case Err(_) => { return Err(SiteError.CatalogueUnreadable(path)) }
+  }
+  readSearchIndex(source)
+}
+
+/// The compact search representation of one validated catalogue.
+///
+/// Each value carries its character length before its contents, so names,
+/// signatures, and documentation may contain any separator without changing
+/// where the next field begins.
+export fn searchIndex(catalog: &Catalog) -> Str {
+  var out = "PUDU-SEARCH-1\n" + field(catalog.languageVersion) + "\n"
+  out = out + field(show(catalog.entries.length())) + "\n"
+  for entry in catalog.entries {
+    let summary = if entry.documentation.length() == 0 { "" } else { entry.documentation[0] }
+    out = out + field(entry.moduleName) + field(entry.name) + field(entry.kind)
+      + field(entry.signature) + field(summary) + "\n"
+  }
+  out
+}
+
+/// Read a compact search representation.
+export fn readSearchIndex(source: Str) -> Result[Catalog, SiteError.SiteError] {
+  let header = "PUDU-SEARCH-1\n"
+  if !source.startsWith(header) { return Err(SiteError.CatalogueInvalid) }
+  var at = header.length()
+  let versionField = readField(source, at) ?
+  let version = versionField[0]
+  at = newlineAfter(source, versionField[1]) ?
+  let countField = readField(source, at) ?
+  let count = match Text.wholeOf(countField[0]) {
+    case Some(value) => value
+    case None => { return Err(SiteError.CatalogueInvalid) }
+  }
+  if count <= 0 { return Err(SiteError.CatalogueEmpty) }
+  at = newlineAfter(source, countField[1]) ?
+
+  var entries: Array[Domain.Entry] = []
+  var index = 0
+  while index < count {
+    let moduleField = readField(source, at) ?
+    let nameField = readField(source, moduleField[1]) ?
+    let kindField = readField(source, nameField[1]) ?
+    let signatureField = readField(source, kindField[1]) ?
+    let summaryField = readField(source, signatureField[1]) ?
+    at = newlineAfter(source, summaryField[1]) ?
+    let documentation = if summaryField[0].isEmpty() { [] } else { [summaryField[0]] }
+    entries = entries.push(Domain.Entry {
+        moduleName: moduleField[0],
+        name: nameField[0],
+        kind: kindField[0],
+        signature: signatureField[0],
+        documentation: documentation
+      })
+    index = index + 1
+  }
+  if at != source.length() { return Err(SiteError.CatalogueInvalid) }
+  Ok(Catalog{languageVersion: version, entries: entries, modules: []})
 }
 
 export fn moduleEntries(catalog: &Catalog, moduleName: Str) -> Array[Domain.Entry] {
@@ -94,4 +164,30 @@ fn moduleNames(entries: &Array[Domain.Entry]) -> Array[Str] {
   var named: Map[Str, Bool] = mapOf([])
   for entry in entries { named = named.insert(entry.moduleName, true) }
   List.sorted(&named.keys())
+}
+
+fn field(value: Str) -> Str { show(value.length()) + ":" + value }
+
+fn readField(source: Str, at: Int) -> Result[(Str, Int), SiteError.SiteError] {
+  if at < 0 || at >= source.length() { return Err(SiteError.CatalogueInvalid) }
+  let relative = source.drop(at).indexOf(":")
+  if relative < 1 { return Err(SiteError.CatalogueInvalid) }
+  let colon = at + relative
+  let length = match Text.wholeOf(source.slice(at, colon)) {
+    case Some(value) => value
+    case None => { return Err(SiteError.CatalogueInvalid) }
+  }
+  if length < 0 { return Err(SiteError.CatalogueInvalid) }
+  let begins = colon + 1
+  let ends = begins + length
+  if ends > source.length() { return Err(SiteError.CatalogueInvalid) }
+  Ok((source.slice(begins, ends), ends))
+}
+
+fn newlineAfter(source: Str, at: Int) -> Result[Int, SiteError.SiteError] {
+  if at < source.length() && source.slice(at, at + 1) == "\n" {
+    Ok(at + 1)
+  } else {
+    Err(SiteError.CatalogueInvalid)
+  }
 }

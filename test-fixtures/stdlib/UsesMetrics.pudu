@@ -12,18 +12,10 @@ import Std.Option as Option
 export fn main() -> Int {
   var held = 0
 
-  let declared = Metrics.distribution(
-      &Metrics.gauge(
-        &Metrics.counter(&Metrics.empty(), "requests", Count, "requests answered"),
-      "connections",
-      Count,
-      "connections open"
-    ),
-    "latency",
-    Milliseconds,
-    "how long an answer took",
-      &[10, 50, 100]
-  )
+  let declared: Metrics.Metrics = Metrics.empty()
+    .counter("requests", Count, "requests answered")
+    .gauge("connections", Count, "connections open")
+    .distribution("latency", Milliseconds, "how long an answer took", &[10, 50, 100])
 
   // Everything declared is there, in the order it was declared.
   if Metrics.names(&declared) == ["requests", "connections", "latency"] { held = held + 1 }
@@ -46,22 +38,22 @@ export fn main() -> Int {
 
   // Declaring the same metric twice leaves the first, so a module that
   // declares what it needs does not reset what another module measured.
-  let again = Metrics.counter(&declared, "requests", Bytes, "something else")
+  let again = declared.counter("requests", Bytes, "something else")
   if Option.unwrapOr(Metrics.declarationOf(&again, "requests"), missing()).unit == Count {
     held = held + 1
   }
 
   // Adding to a counter answers a new set, so the one before is still there to
   // compare against. That is what makes all of this checkable.
-  let counted = Metrics.increment(&Metrics.increment(&declared, "requests", &[]), "requests", &[])
+  let counted = declared.increment("requests", &[]).increment("requests", &[])
   if Metrics.valueOr(&counted, "requests", &[]) == 2 { held = held + 1 }
   if Metrics.valueOr(&declared, "requests", &[]) == 0 { held = held + 1 }
-  if Metrics.valueOr(&Metrics.add(&counted, "requests", &[], 5), "requests", &[]) == 7 {
+  if Metrics.valueOr(&counted.add("requests", &[], 5), "requests", &[]) == 7 {
     held = held + 1
   }
 
   // A gauge moves either way.
-  let moved = Metrics.set(&Metrics.set(&declared, "connections", &[], 9), "connections", &[], 4)
+  let moved = declared.set("connections", &[], 9).set("connections", &[], 4)
   if Metrics.valueOr(&moved, "connections", &[]) == 4 { held = held + 1 }
 
   // A series nothing measured is nothing rather than zero, because a caller
@@ -72,27 +64,24 @@ export fn main() -> Int {
   // A metric nothing declared is not measured and is not an error: a module
   // reporting something the program did not declare should not be able to stop
   // it.
-  if Metrics.valueOr(&Metrics.increment(&declared, "undeclared", &[]), "undeclared", &[]) == 0 {
+  if Metrics.valueOr(&declared.increment("undeclared", &[]), "undeclared", &[]) == 0 {
     held = held + 1
   }
-  if Metrics.names(&Metrics.increment(&declared, "undeclared", &[])).length() == 3 {
+  if Metrics.names(&declared.increment("undeclared", &[])).length() == 3 {
     held = held + 1
   }
 
   // Labels break a metric down, and two callers writing the same labels in
   // different orders name one series rather than two.
-  let labelled = Metrics.increment(
-      &Metrics.increment(&declared, "requests", &[("route", "/x"), ("method", "get")]),
-    "requests",
-      &[("method", "get"), ("route", "/x")]
-  )
+  let labelled = declared.increment("requests", &[("route", "/x"), ("method", "get")])
+    .increment("requests", &[("method", "get"), ("route", "/x")])
   if Metrics.valueOr(&labelled, "requests", &[("route", "/x"), ("method", "get")]) == 2 {
     held = held + 1
   }
   if Metrics.seriesCount(&labelled, "requests") == 1 { held = held + 1 }
 
   // Different labels are different series.
-  let split = Metrics.increment(&labelled, "requests", &[("route", "/y"), ("method", "get")])
+  let split = labelled.increment("requests", &[("route", "/y"), ("method", "get")])
   if Metrics.seriesCount(&split, "requests") == 2 { held = held + 1 }
   if Metrics.valueOr(&split, "requests", &[("route", "/y"), ("method", "get")]) == 1 {
     held = held + 1
@@ -101,11 +90,11 @@ export fn main() -> Int {
   // How many combinations a metric may have is bounded. A label carrying an
   // identifier turns one metric into millions, and the collector falls over
   // rather than the program that caused it.
-  let bounded = Metrics.limitedTo(&declared, "requests", 2)
+  let bounded = declared.limitedTo("requests", 2)
   var crowded = bounded
   var index = 0
   while index < 10 {
-    crowded = Metrics.increment(&crowded, "requests", &[("user", show(index))])
+    crowded = crowded.increment("requests", &[("user", show(index))])
     index = index + 1
   }
   if Metrics.seriesCount(&crowded, "requests") == 2 { held = held + 1 }
@@ -124,7 +113,7 @@ export fn main() -> Int {
 
   // A series already present is still updated after the bound is reached, so
   // reaching it stops new combinations rather than stopping measurement.
-  if Metrics.valueOr(&Metrics.increment(&crowded, "requests", &[("user", "0")]), "requests", &[("user", "0")])
+  if Metrics.valueOr(&crowded.increment("requests", &[("user", "0")]), "requests", &[("user", "0")])
     == 2
   {
     held = held + 1
@@ -134,7 +123,7 @@ export fn main() -> Int {
   // boundary, cumulatively, which is what makes a quantile computable from the
   // buckets alone.
   var timed = declared
-  for amount in [5, 20, 20, 200] { timed = Metrics.observe(&timed, "latency", &[], amount) }
+  for amount in [5, 20, 20, 200] { timed = timed.observe("latency", &[], amount) }
   if Metrics.countAt(&timed, "latency", &[], 10) == 1 { held = held + 1 }
   if Metrics.countAt(&timed, "latency", &[], 50) == 3 { held = held + 1 }
   if Metrics.countAt(&timed, "latency", &[], 100) == 3 { held = held + 1 }
@@ -145,13 +134,13 @@ export fn main() -> Int {
   if Metrics.totalOf(&timed, "latency", &[]) == 245 { held = held + 1 }
 
   // Boundaries are the ones stated, in order, whatever order they were given.
-  let jumbled = Metrics.distribution(&Metrics.empty(), "d", Count, "d", &[100, 10, 50])
+  let jumbled = Metrics.empty().distribution("d", Count, "d", &[100, 10, 50])
   if Option.unwrapOr(Metrics.declarationOf(&jumbled, "d"), missing()).bounds == [10, 50, 100] {
     held = held + 1
   }
 
   // A distribution that states no boundaries gets ones rather than none.
-  let defaulted = Metrics.distribution(&Metrics.empty(), "d", Count, "d", &[])
+  let defaulted = Metrics.empty().distribution("d", Count, "d", &[])
   if Option.unwrapOr(Metrics.declarationOf(&defaulted, "d"), missing()).bounds.length() > 0 {
     held = held + 1
   }
@@ -169,11 +158,53 @@ export fn main() -> Int {
   if Metrics.render(&split).contains("route=\"/x\"") { held = held + 1 }
 
   // A label value carrying a quote does not end the label and begin another.
-  let quoted = Metrics.increment(&declared, "requests", &[("note", "a \" b")])
+  let quoted = declared.increment("requests", &[("note", "a \" b")])
   if !Metrics.render(&quoted).contains("note=\"a \" b\"") { held = held + 1 }
   if Metrics.render(&quoted).contains("\\\"") { held = held + 1 }
 
+  // Both families reached through a bound naming the trait alone, which is what
+  // checks each is usable as one rather than only as a list of functions.
+  let service: Metrics.Metrics = traffic(&Metrics.empty())
+  if Metrics.names(&service) == ["answers", "queue", "took"] { held = held + 1 }
+  if Option.unwrapOr(Metrics.declarationOf(&service, "answers"), missing()).seriesLimit == 4 {
+    held = held + 1
+  }
+  let busy = request(&service, 40)
+  if Metrics.valueOr(&busy, "answers", &[]) == 1 && Metrics.valueOr(&busy, "queue", &[]) == 7 {
+    held = held + 1
+  }
+  if Metrics.countAt(&busy, "took", &[], 50) == 1 && Metrics.totalOf(&busy, "took", &[]) == 40 {
+    held = held + 1
+  }
+  // A distribution counts its observations in the same place a counter keeps
+  // its value, so one observation reads as a value of one.
+  let measured: Option[Int] = Metrics.valueOf(&busy, "took", &[])
+  if Option.unwrapOr(measured, 0) == 1 { held = held + 1 }
+  let kind: Metrics.Kind = Option.unwrapOr(Metrics.declarationOf(&service, "took"), missing()).kind
+  if kind == Distribution { held = held + 1 }
+  let unit: Metrics.Unit = Option.unwrapOr(Metrics.declarationOf(&service, "queue"), missing()).unit
+  if unit == Bytes { held = held + 1 }
+  // A series is a value like the rest of this, so one can be written out and
+  // compared rather than only read back out of a registry.
+  let one: Metrics.Series = Metrics.Series{labels: [("route", "/x")], value: 2, counts: [], total: 0}
+  if one.labels.length() == 1 && one.value == 2 { held = held + 1 }
+
   held
+}
+
+/// A service's own three measurements, declared through a bound naming the
+/// declaring trait and nothing else.
+fn traffic[M: Metrics.Declaring](base: &M) -> M {
+  base.counter("answers", Count, "answers sent")
+    .gauge("queue", Bytes, "bytes waiting")
+    .distribution("took", Milliseconds, "how long answering took", &[10, 50])
+    .limitedTo("answers", 4)
+}
+
+/// One request measured through a bound naming the recording trait and nothing
+/// else: one answer sent, a queue at its current depth, and how long it took.
+fn request[M: Metrics.Recording](base: &M, millis: Int) -> M {
+  base.increment("answers", &[]).set("queue", &[], 7).observe("took", &[], millis)
 }
 
 fn missing() -> Metrics.Declared {

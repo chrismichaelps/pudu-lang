@@ -48,6 +48,12 @@ to the caller and before its body is compared with the caller's limit. Returning
 delimiters in `Response.body` is not a merely inconvenient representation: a JSON parser sees text
 the server did not send as JSON, and a size check measures protocol overhead instead of the body.
 
+**A complete framed response ends before the connection does.** Once the response head and its
+declared `Content-Length` bytes, complete chunk stream, or bodyless status have arrived, receiving
+stops and the client closes its side. Waiting for EOF would time out against HTTP/1.1 peers that keep
+their connection reusable, including the Lambda Runtime API. A response without decisive framing
+continues to use closure as its boundary.
+
 **One deadline bounds the whole request, including redirects.** The default is thirty seconds and a
 caller may replace it with `within`. DNS resolution, connection, TLS handshake, sending, receiving,
 and every redirected hop all spend the same monotonic budget. Giving each operation or hop a fresh
@@ -97,6 +103,9 @@ the controlled fixture can, and remains the release-blocking behavioral evidence
 - **Q:** Reuse connections between requests? **A:** Not yet. _Rationale:_ it is a real cost and a
   real design — which requests may share a connection is a question about identity and about what
   the far end may infer. Not worth guessing at. _Rejected:_ an implicit pool.
+- **Q:** Wait for EOF after a complete length-framed or chunked response? **A:** No. _Rationale:_ EOF
+  is a transport event, while HTTP framing already states where the message ends. _Rejected:_ timing
+  out against a peer that keeps the connection open.
 - **Q:** Put a public endpoint in the ordinary suite? **A:** No. _Rationale:_ it proves external
   interoperability but makes an unrelated network or provider outage look like a code defect.
   _Rejected:_ no public-web evidence; a public fetch on every pull request.
@@ -104,7 +113,7 @@ the controlled fixture can, and remains the release-blocking behavioral evidence
   sequential timeouts multiply the duration the caller thought they bounded. _Rejected:_ one fresh
   timeout per operation; an unbounded default.
 ## Referenced by
-[[src/Std/_MOC]] · [[Std Http]] · [[Std Tls]] · [[Std Net]] · [[Std Http Safe]] · [[ADR-0017 What the Web Layer Refuses]]
+[[src/Std/_MOC]] · [[Std Http]] · [[Std Http Message]] · [[Std Http Server Lambda]] · [[Std Tls]] · [[Std Net]] · [[Std Http Safe]] · [[ADR-0017 What the Web Layer Refuses]]
 
 
 ## Binary response reading
