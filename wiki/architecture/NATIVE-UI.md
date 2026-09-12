@@ -74,7 +74,9 @@ supplied by an untrusted document cannot select an arbitrary allocation.
 
 1. Canvas rectangles and exact pixels.
 2. Lines, rounded rectangles, paths, and damage regions.
-3. Font-independent text layout contracts, then a Pudu-native rasterizer.
+3. Text: an original bitmap face with measuring, wrapping, and merged glyph rectangles
+   (`Std.Ui.Text`); then text views in layout, shaping and bidirectional runs, and a Pudu-native
+   outline-coverage rasterizer held to the same exact-pixel fixtures.
 4. Declarative layout with focus order, hit testing, an accessibility semantics tree, and damage
    regions (`Std.Ui.Layout`); press and key routing with state-driven damage repaint
    (`Std.Ui.Screen`). Text entry, scrolling, and a visible focus indicator follow text layout.

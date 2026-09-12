@@ -21,6 +21,7 @@ tags: [moc, module]
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 - [[Uses Ui Layout]] — exact-frame, accessibility, and repaint-equality coverage for layout.
 - [[Uses Ui Screen]] — input routing, focus, and incremental frames equal to fresh ones.
+- [[Uses Ui Text]] — exact measures, wrapping edges, and glyph pixels for bitmap text.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.

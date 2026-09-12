@@ -33,6 +33,12 @@ tags: [changelog]
   and activation, events name controls by tag, and each update repaints only layout damage with bytes
   equal to a fresh start. Layout gained tags with duplicate-tag refusal and single damage for a
   recolored node. 16 screen assertions; layout now 33.
+- Added `Std.Ui.Text`: an original 5×7 bitmap face for printable ASCII packed into a constant table,
+  whole-number scaling, exact measuring, greedy wrapping that always progresses, a visible box for
+  missing glyphs, and drawing that merges lit pixels into runs extended across rows. 21 assertions.
+- The canvas now finds a command's first span by halving and rebuilds only overlapped spans, reusing
+  encoded pixels for the last two colors: a 400-character paragraph (1,072 rectangles) went from
+  3.22 s to 1.40 s at -O2.
 
 ## 2026-09-12 — Adapter-free production website
 

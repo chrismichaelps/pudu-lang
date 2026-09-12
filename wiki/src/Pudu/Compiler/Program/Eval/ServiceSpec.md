@@ -21,7 +21,8 @@ the Haskell property attaches a contract-specific counterexample to that count.
 The UI fixture counts cover pure component state, structural differences, the Pudu-native canvas'
 exact pixels, repaint equality, and typed refusals, and declarative layout's exact frames,
 accessibility semantics, and damage that repaints to the same bytes as a full render, and interactive
-screens whose incremental frames after routed input equal a fresh start at the same state. Exact equality is intentional: adding a check without registering it
+screens whose incremental frames after routed input equal a fresh start at the same state, and bitmap
+text whose measures, wrapping, and glyph pixels are exact. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
 ## Grill Log

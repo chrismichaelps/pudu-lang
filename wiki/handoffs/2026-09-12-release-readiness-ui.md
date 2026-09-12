@@ -47,13 +47,17 @@ order, hit testing, painting, and damage regions.
 - `fd6cfd3` — band-and-span rasterizer and repaint; 512×512 frame 4.35 s → 0.10 s at -O2.
 - `a1cb1c5` — declarative layout; 1,001 nodes place in about 0.18 s and paint plus render in about
   0.56 s at -O2, which is interpreter cost and not yet an interactive frame.
-- Screen slice — `Std.Ui.Screen` routes presses and action keys to tagged controls and repaints only
+- `2b45bea` — `Std.Ui.Screen` routes presses and action keys to tagged controls and repaints only
   damage; layout gained tags. Layout 33 and screen 16 assertions.
+- Text slice — `Std.Ui.Text` original bitmap face, 21 assertions; canvas span search makes a
+  400-character paragraph draw and render in 1.40 s (from 3.22 s).
 
 ## Exact next action
 
-Text measurement and a Pudu-native glyph rasterizer, since labels are the next thing every
-application needs; then a visible focus indicator, text entry, and scrolling on `Std.Ui.Screen`. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
+Put text into layout as a leaf view whose intrinsic size is its measure and whose paint draws it, with
+the text as its accessible name; then a visible focus indicator, text entry, and scrolling on
+`Std.Ui.Screen`. Profile the remaining second of rendering many small rectangles before claiming any
+interactive frame rate. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
 the UI event slice. Keep every fixture as the semantic oracle for later optimization.
 
 ## Grill Log

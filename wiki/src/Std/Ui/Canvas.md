@@ -45,8 +45,10 @@ Rasterization works on bands and spans, never on individual pixels. Every comman
 a band edge, and rows between two consecutive edges are identical. Commands are swept by top edge;
 the active list holds the commands covering the current band in display-list order, so painter
 order is exact while commands above or below the band are not visited. Within a band a scanline is a
-list of spans; a command splits the spans it overlaps and blends into each span once, and adjacent
-spans of one color merge. The scanline's bytes are produced by doubling a four-byte pixel and the band
+list of spans; a command finds the first span it reaches by halving, splits only the spans it
+overlaps, blends into each once, and carries the spans before and after as slices of the persistent
+array; adjacent spans of one color merge. Encoding a span's pixel reuses the last two colors, since
+neighbouring spans differ and text alternates between ink and ground. The scanline's bytes are produced by doubling a four-byte pixel and the band
 by doubling the scanline, so the pixel payload is made by whole-run copies.
 
 `repaint` is the damage path: each region is clipped, rasterized alone, and spliced into the earlier
@@ -58,6 +60,11 @@ Measured at -O2 on the development host, a program rendering a 512×512 frame wi
 fill and a translucent 128×128 fill runs in 0.10 s, indistinguishable from one that renders
 nothing, and holds 96 MB resident. Writing each pixel into an immutable buffer took 4.35 s and
 267 MB for the same frame, because every write rebuilt the whole buffer.
+
+Many small commands are the harder case. A 400-character paragraph of 1,072 glyph rectangles at
+800×200 drew and rendered in 3.22 s while each command rebuilt every span, 1.46 s with the span search,
+and 1.40 s median (99 MB) with the pixel reuse. About a second of that is rendering, which remains
+the rasterizer's next performance target.
 
 ## Referenced archive material
 

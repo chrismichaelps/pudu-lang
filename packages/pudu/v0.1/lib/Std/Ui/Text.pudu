@@ -1,0 +1,334 @@
+module Std.Ui.Text
+
+import Std.Option as Option
+import Std.Ui.Canvas as Canvas
+
+/// A bitmap type face drawn by whole-number scaling.
+///
+/// Every glyph occupies five columns by seven rows of design units, followed by
+/// one unit of space, and lines are nine units apart. Whole-number scaling keeps
+/// every edge on a pixel, so text is as exact as the rectangles around it.
+export type Face = { scale: Int }
+
+/// Vertical and horizontal measures of a face, in pixels.
+export type Metrics = { advance: Int, ascent: Int, lineHeight: Int }
+
+/// Why text could not be measured, wrapped, or drawn.
+export type TextError
+  = InvalidScale(Int)
+  | NegativeWidth(Int)
+  | TextTooLong(Int)
+  | Drawing(Canvas.CanvasError)
+
+/// The largest scale a face may use.
+const MAX_SCALE: Int = 64
+
+/// The most characters one call measures, wraps, or draws.
+const MAX_CHARACTERS: Int = 1048576
+
+const GLYPH_COLUMNS: Int = 5
+
+const GLYPH_ROWS: Int = 7
+
+const ADVANCE_UNITS: Int = 6
+
+const LINE_UNITS: Int = 9
+
+/// Glyph bitmaps for the printable ASCII range from space to tilde, indexed by
+/// code minus 32. Each packs seven rows of five columns, top row and leftmost
+/// column in the highest bits.
+const GLYPHS: Array[UInt64] = [
+  0u64,
+  4433514500u64,
+  11072962560u64,
+  11788430314u64,
+  4819720132u64,
+  26610901603u64,
+  13510137421u64,
+  4429185024u64,
+  2290360450u64,
+  8726317192u64,
+  156718208u64,
+  139432064u64,
+  4232u64,
+  1015808u64,
+  396u64,
+  35791360u64,
+  15623448110u64,
+  4701950094u64,
+  15603929375u64,
+  32247317566u64,
+  2359917634u64,
+  33854359086u64,
+  6728664622u64,
+  33321787656u64,
+  15621113390u64,
+  15621129292u64,
+  415248768u64,
+  415248520u64,
+  2290622594u64,
+  32537600u64,
+  8726284424u64,
+  15603929092u64,
+  15627640335u64,
+  15621670449u64,
+  32801506878u64,
+  15620129326u64,
+  30687151708u64,
+  33840644639u64,
+  33840644624u64,
+  15620359727u64,
+  18842895921u64,
+  15170932878u64,
+  7585466956u64,
+  18879369809u64,
+  17734058527u64,
+  19182306865u64,
+  18850958897u64,
+  15621211694u64,
+  32801505808u64,
+  15621215821u64,
+  32801509969u64,
+  16660235326u64,
+  33424543876u64,
+  18842437166u64,
+  18842436932u64,
+  18842572458u64,
+  18834663985u64,
+  18834657412u64,
+  33321787935u64,
+  15309480206u64,
+  545392672u64,
+  15101659214u64,
+  4648337408u64,
+  31u64,
+  8724152320u64,
+  14728751u64,
+  17740645950u64,
+  15221294u64,
+  1121568303u64,
+  15269390u64,
+  6753755400u64,
+  521714734u64,
+  17740645937u64,
+  4307685518u64,
+  2153843276u64,
+  17736295058u64,
+  13023449230u64,
+  27973169u64,
+  23905841u64,
+  15255086u64,
+  32045584u64,
+  14269473u64,
+  23904784u64,
+  15218750u64,
+  8888000806u64,
+  18400877u64,
+  18400580u64,
+  18405034u64,
+  18157905u64,
+  18398254u64,
+  32575775u64,
+  2286162050u64,
+  4433514628u64,
+  8728416392u64,
+  9078784u64
+]
+
+/// The hollow box drawn for a character outside the table.
+const MISSING_GLYPH: UInt64 = 33874822719u64
+
+/// A face at a whole-number scale from 1 to 64.
+export fn face(scale: Int) -> Result[Face, TextError] {
+  if scale < 1 || scale > MAX_SCALE { Err(InvalidScale(scale)) } else { Ok(Face{scale: scale}) }
+}
+
+/// The measures of a face.
+export fn metrics(target: &Face) -> Metrics {
+  Metrics {
+    advance: ADVANCE_UNITS * target.scale,
+    ascent: GLYPH_ROWS * target.scale,
+    lineHeight: LINE_UNITS * target.scale
+  }
+}
+
+/// Whether a character has its own glyph rather than the missing-glyph box.
+export fn hasGlyph(character: Char) -> Bool {
+  character.code() >= 32 && character.code() < 127
+}
+
+/// The size text occupies, with each newline starting a line.
+///
+/// The width is the widest line without the space after its last glyph; the
+/// height runs from the top of the first line to the bottom of the last.
+export fn measure(target: &Face, text: Str) -> Result[Canvas.Size, TextError] {
+  let characters = admitted(text) ?
+  var widest = 0
+  var current = 0
+  var lineCount = 1
+  for character in characters {
+    if character == '\n' {
+      lineCount = lineCount + 1
+      current = 0
+    } else {
+      current = current + 1
+      if current > widest { widest = current }
+    }
+  }
+  Ok(Canvas.size(lineWidth(target, widest), textHeight(target, lineCount)))
+}
+
+/// Text broken into lines no wider than a width.
+///
+/// Newlines always break. Words are separated by spaces and placed greedily;
+/// the space where a line breaks is dropped. A word wider than the width is
+/// broken between characters, and at least one character is placed per line
+/// so a width narrower than one glyph still makes progress.
+export fn wrapped(target: &Face, text: Str, width: Int) -> Result[Array[Str], TextError] {
+  admitted(text) ?
+  if width < 0 {
+    Err(NegativeWidth(width))
+  } else {
+    let unit = ADVANCE_UNITS * target.scale
+    let fitting = (width + target.scale) / unit
+    let capacity = if fitting < 1 { 1 } else { fitting }
+    var lines: Array[Str] = []
+    for paragraph in text.split("\n") {
+      var current = ""
+      var used = 0
+      for word in paragraph.split(" ") {
+        var rest = word
+        var restLength = rest.length()
+        let needed = if used == 0 { restLength } else { used + 1 + restLength }
+        if needed <= capacity {
+          current = if used == 0 { rest } else { current + " " + rest }
+          used = needed
+        } else {
+          if used > 0 {
+            lines = lines.push(current)
+            current = ""
+            used = 0
+          }
+          while restLength > capacity {
+            lines = lines.push(rest.slice(0, capacity))
+            rest = rest.slice(capacity, restLength)
+            restLength = restLength - capacity
+          }
+          current = rest
+          used = restLength
+        }
+      }
+      lines = lines.push(current)
+    }
+    Ok(lines)
+  }
+}
+
+/// A canvas with text drawn from an origin at the top left of its first line.
+///
+/// Each glyph becomes the fewest rectangles its bitmap allows: lit columns in
+/// a row join into one run, and a run repeated in the rows below it joins into
+/// one taller rectangle, so a stem is one command rather than seven.
+export fn draw(
+  target: &Face,
+  onto: &Canvas.Canvas,
+  origin: Canvas.Point,
+  text: Str,
+  color: Canvas.Color
+) -> Result[Canvas.Canvas, TextError] {
+  let characters = admitted(text) ?
+  var held = *onto
+  var column = 0
+  var line = 0
+  for character in characters {
+    if character == '\n' {
+      line = line + 1
+      column = 0
+    } else {
+      let x = origin.x + column * ADVANCE_UNITS * target.scale
+      let y = origin.y + line * LINE_UNITS * target.scale
+      held = glyphDrawn(target, &held, glyphOf(character), x, y, color) ?
+      column = column + 1
+    }
+  }
+  Ok(held)
+}
+
+fn admitted(text: Str) -> Result[Array[Char], TextError] {
+  let characters = text.chars()
+  if characters.length() > MAX_CHARACTERS {
+    Err(TextTooLong(characters.length()))
+  } else {
+    Ok(characters)
+  }
+}
+
+fn lineWidth(target: &Face, characters: Int) -> Int {
+  if characters == 0 { 0 } else { (characters * ADVANCE_UNITS - 1) * target.scale }
+}
+
+fn textHeight(target: &Face, lines: Int) -> Int {
+  ((lines - 1) * LINE_UNITS + GLYPH_ROWS) * target.scale
+}
+
+fn glyphOf(character: Char) -> UInt64 {
+  if hasGlyph(character) { GLYPHS[character.code() - 32] } else { MISSING_GLYPH }
+}
+
+fn glyphDrawn(
+  target: &Face,
+  onto: &Canvas.Canvas,
+  glyph: UInt64,
+  x: Int,
+  y: Int,
+  color: Canvas.Color
+) -> Result[Canvas.Canvas, TextError] {
+  var held = *onto
+  var row = 0
+  while row < GLYPH_ROWS {
+    var start = 0
+    while start < GLYPH_COLUMNS {
+      if lit(glyph, row, start) {
+        var end = start + 1
+        while end < GLYPH_COLUMNS && lit(glyph, row, end) { end = end + 1 }
+        if !(row > 0 && isRun(glyph, row - 1, start, end)) {
+          var rows = 1
+          while row + rows < GLYPH_ROWS && isRun(glyph, row + rows, start, end) { rows = rows + 1 }
+          let area = Canvas.rect(
+            x + start * target.scale,
+            y + row * target.scale,
+            (end - start) * target.scale,
+            rows * target.scale
+          )
+          held = match Canvas.fill(&held, area, color) {
+            case Ok(next) => next
+            case Err(reason) => { return Err(Drawing(reason)) }
+          }
+        }
+        start = end
+      } else {
+        start = start + 1
+      }
+    }
+    row = row + 1
+  }
+  Ok(held)
+}
+
+fn lit(glyph: UInt64, row: Int, column: Int) -> Bool {
+  let shift = GLYPH_ROWS * GLYPH_COLUMNS - 1 - (row * GLYPH_COLUMNS + column)
+  ((glyph >> shift) & 1u64) == 1u64
+}
+
+/// Whether a row's lit columns from `start` up to `end` form exactly one
+/// maximal run, which is when a rectangle from the row above may continue.
+fn isRun(glyph: UInt64, row: Int, start: Int, end: Int) -> Bool {
+  var column = start
+  var all = true
+  while column < end && all {
+    all = lit(glyph, row, column)
+    column = column + 1
+  }
+  all && (start == 0 || !lit(glyph, row, start - 1)) &&
+  (end == GLYPH_COLUMNS || !lit(glyph, row, end))
+}

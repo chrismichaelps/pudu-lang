@@ -17,6 +17,7 @@ testServiceEvaluation = do
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
   layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
+  lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
   connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
@@ -126,6 +127,9 @@ testServiceEvaluation = do
     , counterexample
         "a screen routes input to tagged controls and repaints only what changed"
         (interaction === Just "16")
+    , counterexample
+        "bitmap text measures, wraps, and draws into exact pixels"
+        (lettering === Just "21")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two
