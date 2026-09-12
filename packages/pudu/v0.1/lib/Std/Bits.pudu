@@ -20,59 +20,176 @@ export trait Bits {
 }
 
 /// Both values' bits, kept where both are set.
+///
+/// The usual way to keep only the positions a mask names. Pair it with `complement`
+/// to clear them instead.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.and(&0b1100, &0b1010)  // 0b1000
+/// ```
 export fn and[T: Bits](left: &T, right: &T) -> T { left.bitAnd(right) }
 
 /// Both values' bits, kept where either is set.
+///
+/// The usual way to add flags to a value without disturbing the ones already
+/// there.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.or(&0b1100, &0b1010)  // 0b1110
+/// ```
 export fn or[T: Bits](left: &T, right: &T) -> T { left.bitOr(right) }
 
 /// Both values' bits, kept where exactly one is set.
+///
+/// Its own inverse: applying the same operand twice gives back the original, which
+/// is what makes it the operation behind toggling and behind simple checksums.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.xor(&0b1100, &0b1010)  // 0b0110
+/// ```
 export fn xor[T: Bits](left: &T, right: &T) -> T { left.bitXor(right) }
 
 /// Every bit inverted, over the type's own width.
+///
+/// The width is the type's, not a fixed sixty-four, so the result of inverting
+/// nought is every bit that type has.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.complement(&0u8)  // 255
+/// ```
 export fn complement[T: Bits](value: &T) -> T { value.bitNot() }
 
 /// The bits moved toward the high end, filling with noughts.
+///
 /// A count that is negative or not below the width has no defined answer and is
-/// refused by the operator itself.
+/// refused by the operator itself. Bits shifted past the high end are lost rather
+/// than wrapping; `rotateLeft` is the form that keeps them.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.shiftLeft(&0b0011, 2)  // 0b1100
+/// ```
 export fn shiftLeft[T: Bits](value: &T, places: Int) -> T { value.shiftedLeft(places) }
 
-/// The bits moved toward the low end. A signed type keeps its sign; an unsigned
-/// one brings in noughts.
+/// The bits moved toward the low end.
+///
+/// A signed type keeps its sign; an unsigned one brings in noughts. That difference
+/// is the reason the operation belongs to the type rather than to this module.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.shiftRight(&0b1100, 2)  // 0b0011
+/// ```
 export fn shiftRight[T: Bits](value: &T, places: Int) -> T { value.shiftedRight(places) }
 
 /// How many bits a value's type has.
+///
+/// Asked of the type through a value, because the answer belongs to the type. `Int`
+/// and `UInt` report the target's pointer width, which is the one place the target
+/// shows through into the library.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.width(&0u8)  // 8
+/// ```
 export fn width[T: Bits](value: &T) -> Int { value.width() }
 
 /// A value with only the bit at a position set, or nought when the position is
 /// outside the type.
+///
+/// Outside the type answers nought rather than failing, so building a mask from
+/// computed positions needs no bounds check.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.bit(&0u8, 3)  // 0b1000
+/// Bits.bit(&0u8, 9)  // 0
+/// ```
 export fn bit[T: Bits](example: &T, position: Int) -> T {
   if position < 0 || position >= example.width() { example.noBits() }
     else { example.lowBit().shiftedLeft(position) }
 }
 
 /// Whether the bit at a position is set. A position outside the type is not.
+///
+/// Positions count from nought at the low end.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.testBit(&0b1000, 3)  // true
+/// Bits.testBit(&0b1000, 0)  // false
+/// ```
 export fn testBit[T: Bits](value: &T, position: Int) -> Bool {
   if position < 0 || position >= value.width() { false }
     else { value.shiftedRight(position).bitAnd(&value.lowBit()) == value.lowBit() }
 }
 
 /// The value with one bit set.
+///
+/// A new value is returned. A position outside the type leaves the value unchanged,
+/// matching `bit`.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.setBit(&0b0000, 2)  // 0b0100
+/// ```
 export fn setBit[T: Bits](value: &T, position: Int) -> T {
   value.bitOr(&bit(value, position))
 }
 
 /// The value with one bit cleared.
+///
+/// The counterpart to `setBit`, and equally forgiving about a position outside the
+/// type.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.clearBit(&0b0100, 2)  // 0b0000
+/// ```
 export fn clearBit[T: Bits](value: &T, position: Int) -> T {
   if position < 0 || position >= value.width() { *value }
     else { value.bitAnd(&bit(value, position).bitNot()) }
 }
 
 /// The value with one bit inverted.
+///
+/// Applying it twice at the same position gives back the original, since it is
+/// `xor` at a single bit.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.flipBit(&0b0100, 2)  // 0b0000
+/// ```
 export fn flipBit[T: Bits](value: &T, position: Int) -> T {
   value.bitXor(&bit(value, position))
 }
 
 /// How many bits are set, counted over the type's own width.
+///
+/// The population count, which is the size of a set held as a bit mask and the
+/// building block of a Hamming distance.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.popCount(&0b1011)  // 3
+/// ```
 export fn popCount[T: Bits](value: &T) -> Int {
   var total = 0
   var position = 0
@@ -85,6 +202,16 @@ export fn popCount[T: Bits](value: &T) -> Int {
 }
 
 /// The position of the lowest set bit, or `None` when no bit is set.
+///
+/// Absent rather than a sentinel, so "no bits set" cannot be mistaken for position
+/// nought.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.lowestSetBit(&0b1100)  // Some(2)
+/// Bits.lowestSetBit(&0)       // None
+/// ```
 export fn lowestSetBit[T: Bits](value: &T) -> Option[Int] {
   var position = 0
   let size = value.width()
@@ -96,6 +223,14 @@ export fn lowestSetBit[T: Bits](value: &T) -> Option[Int] {
 }
 
 /// The position of the highest set bit, or `None` when no bit is set.
+///
+/// For a positive value this is its base-2 logarithm rounded down.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.highestSetBit(&0b1100)  // Some(3)
+/// ```
 export fn highestSetBit[T: Bits](value: &T) -> Option[Int] {
   var position = value.width() - 1
   while position >= 0 {
@@ -105,8 +240,17 @@ export fn highestSetBit[T: Bits](value: &T) -> Option[Int] {
   None
 }
 
-/// How many high positions are clear before the first set bit. A value with no
-/// bits set has the whole width.
+/// How many high positions are clear before the first set bit.
+///
+/// A value with no bits set has the whole width, which is the answer that keeps the
+/// count and the width consistent.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.countLeadingZeros(&0b0001u8)  // 7
+/// Bits.countLeadingZeros(&0u8)       // 8
+/// ```
 export fn countLeadingZeros[T: Bits](value: &T) -> Int {
   match highestSetBit(value) {
     case Some(position) => value.width() - 1 - position
@@ -115,6 +259,15 @@ export fn countLeadingZeros[T: Bits](value: &T) -> Int {
 }
 
 /// How many low positions are clear before the first set bit.
+///
+/// The mirror of `countLeadingZeros`, and the whole width for a value with no bits
+/// set. This is how many times a value divides evenly by two.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.countTrailingZeros(&0b1000u8)  // 3
+/// ```
 export fn countTrailingZeros[T: Bits](value: &T) -> Int {
   match lowestSetBit(value) {
     case Some(position) => position
@@ -123,6 +276,15 @@ export fn countTrailingZeros[T: Bits](value: &T) -> Int {
 }
 
 /// The bits of a value, lowest position first, over the type's own width.
+///
+/// Lowest first, so the array index is the bit position. That is the opposite of
+/// how the value is written in binary, which `toBinary` gives.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.bits(&0b0011u8)  // [true, true, false, false, false, false, false, false]
+/// ```
 export fn bits[T: Bits](value: &T) -> Array[Bool] {
   var out = []
   var position = 0
@@ -135,7 +297,16 @@ export fn bits[T: Bits](value: &T) -> Array[Bool] {
 }
 
 /// The value written in binary, without a sign or a prefix, over the type's own
-/// width. Nought is a single nought rather than empty text.
+/// width.
+///
+/// Nought is a single nought rather than empty text. High position first, the way a
+/// number is written and the reverse of `bits`.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.toBinary(&0b1010u8)  // "1010"
+/// ```
 export fn toBinary[T: Bits](value: &T) -> Str {
   match highestSetBit(value) {
     case None => "0"
@@ -152,6 +323,14 @@ export fn toBinary[T: Bits](value: &T) -> Str {
 }
 
 /// The value written in lower-case hexadecimal, without a prefix.
+///
+/// No prefix, so a caller adds `0x` only where the format wants one.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.toHex(&255u8)  // "ff"
+/// ```
 export fn toHex[T: Bits](value: &T) -> Str {
   let digits = "0123456789abcdef"
   match highestSetBit(value) {
@@ -324,13 +503,39 @@ impl Bits for UInt128 {
 }
 
 /// A value with no bits set, of the same type as the example given.
+///
+/// The example fixes the type; its value is not used. That is how a generic caller
+/// names a constant of a type it only has a value of.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.zero(&anyU8)  // 0u8
+/// ```
 export fn zero[T: Bits](example: &T) -> T { example.noBits() }
 
 /// A value with every bit set, of the same type as the example given.
+///
+/// The complement of `zero`, and the full-width mask.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.ones(&anyU8)  // 255u8
+/// ```
 export fn ones[T: Bits](example: &T) -> T { example.noBits().bitNot() }
 
-/// The bits moved toward the high end, with the ones that leave reappearing at
-/// the low end. Rotation is over the type's own width.
+/// The bits moved toward the high end, with the ones that leave reappearing at the
+/// low end.
+///
+/// Rotation is over the type's own width, so nothing is lost: rotating by the full
+/// width gives back the original. That is the difference from `shiftLeft`.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.rotateLeft(&0b1000_0001u8, 1)  // 0b0000_0011
+/// ```
 export fn rotateLeft[T: Bits](value: &T, places: Int) -> T {
   let size = value.width()
   let shift = ((places % size) + size) % size
@@ -339,14 +544,31 @@ export fn rotateLeft[T: Bits](value: &T, places: Int) -> T {
   }
 }
 
-/// The bits moved toward the low end, with the ones that leave reappearing at
-/// the high end.
+/// The bits moved toward the low end, with the ones that leave reappearing at the
+/// high end.
+///
+/// The mirror of `rotateLeft`, and equally lossless.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.rotateRight(&0b0000_0011u8, 1)  // 0b1000_0001
+/// ```
 export fn rotateRight[T: Bits](value: &T, places: Int) -> T {
   let size = value.width()
   rotateLeft(value, size - (((places % size) + size) % size))
 }
 
-/// The value with its low `width` bits kept and the rest cleared.
+/// The value with its low `keep` bits kept and the rest cleared.
+///
+/// The operation behind reading a field packed into the low end of a word. A count
+/// at or past the width keeps everything.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.mask(&0b1111, 2)  // 0b0011
+/// ```
 export fn mask[T: Bits](value: &T, keep: Int) -> T {
   if keep <= 0 { value.noBits() } else {
     if keep >= value.width() { *value } else { value.bitAnd(&lowMask(value, keep)) }
@@ -354,6 +576,16 @@ export fn mask[T: Bits](value: &T, keep: Int) -> T {
 }
 
 /// The bits at positions `from` up to but not including `to`, moved down.
+///
+/// A shift and a mask in one step, which is how a field packed anywhere in a word is
+/// read. Excluding the upper position makes the field's width the difference
+/// between the two bounds.
+///
+/// ## Examples
+///
+/// ```
+/// Bits.extract(&0b1101_0000, 4, 8)  // 0b1101
+/// ```
 export fn extract[T: Bits](value: &T, from: Int, to: Int) -> T {
   if to <= from { value.noBits() } else { mask(&value.shiftedRight(from), to - from) }
 }
