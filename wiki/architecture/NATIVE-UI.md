@@ -81,7 +81,8 @@ supplied by an untrusted document cannot select an arbitrary allocation.
    regions (`Std.Ui.Layout`); press and key routing with state-driven damage repaint
    (`Std.Ui.Screen`). Text entry, scrolling, and a visible focus indicator follow text layout.
 5. Exact PCM, frame-counted time, gain, mixing, bounded slices, and WAV in `Std.Audio`, and a
-   stateless pull-model render graph in `Std.Audio.Graph`; then resampling and channel layouts.
+   stateless pull-model render graph in `Std.Audio.Graph`, with exact resampling and channel maps;
+   then device presenters once native capability contracts exist.
 6. Exact fractional rates and timestamps, ordered picture tracks, and audio alignment in `Std.Video`;
    then color/HDR metadata, seeking, and a small uncompressed reference codec foundation.
 7. Per-platform window/input, speaker, camera, and display presenters after their native capability

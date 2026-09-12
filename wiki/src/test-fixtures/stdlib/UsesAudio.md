@@ -12,7 +12,13 @@ aliases: [Uses Audio]
 
 ## Purpose and interface
 
-Executable Pudu fixture for exact PCM audio. Its `main` returns 29 held assertions.
+Executable Pudu fixture for exact PCM audio. Its `main` returns 42 held assertions.
+
+Resampling and layout: doubling and tripling a ramp's rate interpolates and holds the last sample,
+halving keeps every other frame, a same-rate conversion is unchanged, an invalid target rate is
+refused, and negative steps round symmetrically; downmixing rounds half away from zero in both
+directions, remapping swaps channels, a missing source channel is refused, upmixing refuses a non-mono
+source and an invalid channel count, and mono upmixes into every channel.
 
 Formats and buffers: sample rates below 8,000 and channel counts of zero or nine are refused; silence
 has exactly the requested frames; a partial frame and a sample outside 16 bits are refused with their

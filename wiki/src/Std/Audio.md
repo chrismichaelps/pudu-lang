@@ -41,6 +41,13 @@ gain touch no samples.
 one little-endian 32-bit word through the buffer's native read, and write octets by table lookup
 instead of converting each one.
 
+**Resampling and channel layout are exact.** `resample` reads output frame `j` at the input position
+`j × from ÷ to`, interpolates linearly between the two surrounding frames by that exact fraction, rounds
+half away from zero, and holds the last sample past the end, so every host produces the same samples
+and the same rate returns the audio unchanged. `downmix` averages a frame's channels into mono with the
+same rounding, `upmix` copies mono into every channel of a wider format, and `remap` builds each output
+channel from a named source channel, refusing a name the source does not have.
+
 **A render slice returns exactly what was asked.** `slice` always yields the requested number of
 frames, padding with silence past the end, and refuses more than 4,096 frames per call so a renderer
 prepared for a bounded slice is never asked to allocate beyond it.

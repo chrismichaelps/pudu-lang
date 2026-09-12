@@ -155,5 +155,56 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  if let Ok(narrow) = Audio.format(8000, 1) {
+    if let Ok(ramp) = Audio.fromSamples(&narrow, [0, 1000]) {
+      if let Ok(up) = Audio.resample(&ramp, 16000) {
+        if up.format.sampleRate == 16000 && Audio.samples(&up) == [0, 500, 1000, 1000] {
+          held = held + 1
+        }
+      }
+      if let Ok(same) = Audio.resample(&ramp, 8000) {
+        if same == ramp { held = held + 1 }
+      }
+      if let Err(Audio.InvalidSampleRate(100)) = Audio.resample(&ramp, 100) { held = held + 1 }
+      if let Ok(thirds) = Audio.resample(&ramp, 24000) {
+        if Audio.samples(&thirds) == [0, 333, 667, 1000, 1000, 1000] { held = held + 1 }
+      }
+    }
+    if let Ok(steps) = Audio.fromSamples(&narrow, [-1, 1]) {
+      if let Ok(fine) = Audio.resample(&steps, 16000) {
+        if Audio.samples(&fine) == [-1, 0, 1, 1] { held = held + 1 }
+      }
+    }
+  }
+  if let Ok(wide) = Audio.format(16000, 1) {
+    if let Ok(dense) = Audio.fromSamples(&wide, [0, 100, 200, 300]) {
+      if let Ok(down) = Audio.resample(&dense, 8000) {
+        if Audio.samples(&down) == [0, 200] { held = held + 1 }
+      }
+    }
+  }
+  if let Ok(stereo) = Audio.format(8000, 2) {
+    if let Ok(pair) = Audio.fromSamples(&stereo, [100, -100, 3, 4, -3, -4]) {
+      if let Ok(mono) = Audio.downmix(&pair) {
+        if mono.format.channels == 1 && Audio.samples(&mono) == [0, 4, -4] { held = held + 1 }
+      }
+      if let Ok(swapped) = Audio.remap(&pair, &[1, 0]) {
+        if Audio.samples(&swapped) == [-100, 100, 4, 3, -4, -3] { held = held + 1 }
+      }
+      if let Err(Audio.InvalidChannelMap(2)) = Audio.remap(&pair, &[0, 2]) { held = held + 1 }
+      if let Err(Audio.FormatMismatch) = Audio.upmix(&pair, 4) { held = held + 1 }
+    }
+  }
+  if let Ok(single) = Audio.format(8000, 1) {
+    if let Ok(tone) = Audio.fromSamples(&single, [5, -6]) {
+      if let Ok(surround) = Audio.upmix(&tone, 3) {
+        if surround.format.channels == 3 && Audio.samples(&surround) == [5, 5, 5, -6, -6, -6] {
+          held = held + 1
+        }
+      }
+      if let Err(Audio.InvalidChannels(9)) = Audio.upmix(&tone, 9) { held = held + 1 }
+    }
+  }
+
   held
 }

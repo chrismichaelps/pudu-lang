@@ -71,6 +71,9 @@ tags: [changelog]
 - Screens deliver scrolling: `Scrolled(point, delta)` reaches the update as `ScrolledTo(tag, offset)`
   for the frontmost tagged scrolling node under the point, clamped to its range, and a scroll that
   cannot move changes nothing. Screen now 31 assertions.
+- `Std.Audio` resamples by linear interpolation in exact arithmetic with half-away-from-zero rounding,
+  downmixes to mono, upmixes mono, and remaps channels by name, refusing channels the source lacks.
+  Audio now 42 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

@@ -42,6 +42,7 @@ export type AudioError
   | SliceTooLarge(Int, Int)
   | MalformedWav(WavProblem)
   | UnsupportedWav(Int, Int)
+  | InvalidChannelMap(Int)
 
 /// The lowest sample rate a format may state.
 const MIN_SAMPLE_RATE: Int = 8000
@@ -388,6 +389,118 @@ export fn decodeWavWithin(document: &Bytes, maxSamples: Int) -> Result[Pcm, Audi
     offset = body + size + size % 2
   }
   Err(MalformedWav(MissingData))
+}
+
+/// Audio at another sample rate by linear interpolation in exact arithmetic.
+///
+/// Output frame `j` reads the input at position `j * from / to`, a fraction of
+/// frames; the sample between two input frames is interpolated by that fraction
+/// and rounded half away from zero, and a position past the last input frame
+/// holds the last sample. Every host produces the same samples, and converting
+/// to the same rate returns the audio unchanged.
+export fn resample(source: &Pcm, sampleRate: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let target = format(sampleRate, source.format.channels) ?
+  if sampleRate == source.format.sampleRate {
+    Ok(*source)
+  } else {
+    let channels = source.format.channels
+    let inputFrames = frameCount(source)
+    let outputFrames = inputFrames * sampleRate / source.format.sampleRate
+    if outputFrames * channels > DEFAULT_SAMPLE_BUDGET {
+      return Err(TooManySamples(outputFrames * channels, DEFAULT_SAMPLE_BUDGET))
+    }
+    let values = samples(source)
+    let from = source.format.sampleRate
+    var out: Array[Int] = []
+    var frame = 0
+    while frame < outputFrames {
+      let scaled = frame * from
+      let base = scaled / sampleRate
+      let remainder = scaled % sampleRate
+      let next = if base + 1 < inputFrames { base + 1 } else { base }
+      var channel = 0
+      while channel < channels {
+        let first = values[base * channels + channel]
+        let second = values[next * channels + channel]
+        out = out.push(first + roundedRatio((second - first) * remainder, sampleRate))
+        channel = channel + 1
+      }
+      frame = frame + 1
+    }
+    fromSamples(&target, out)
+  }
+}
+
+/// Mono audio averaging every channel of each frame, rounded half away from zero.
+export fn downmix(source: &Pcm) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let channels = source.format.channels
+  let mono = format(source.format.sampleRate, 1) ?
+  if channels == 1 {
+    Ok(*source)
+  } else {
+    let values = samples(source)
+    var out: Array[Int] = []
+    var at = 0
+    while at < values.length() {
+      var sum = 0
+      var channel = 0
+      while channel < channels {
+        sum = sum + values[at + channel]
+        channel = channel + 1
+      }
+      out = out.push(roundedRatio(sum, channels))
+      at = at + channels
+    }
+    fromSamples(&mono, out)
+  }
+}
+
+/// Mono audio copied into every channel of a wider format.
+export fn upmix(source: &Pcm, channels: Int) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let wide = format(source.format.sampleRate, channels) ?
+  if source.format.channels != 1 {
+    Err(FormatMismatch)
+  } else {
+    var out: Array[Int] = []
+    for sample in samples(source) {
+      var channel = 0
+      while channel < channels {
+        out = out.push(sample)
+        channel = channel + 1
+      }
+    }
+    fromSamples(&wide, out)
+  }
+}
+
+/// Audio whose channel `k` is the source's channel `order[k]`, so channels are
+/// reordered, duplicated, or dropped by naming them.
+export fn remap(source: &Pcm, order: &Array[Int]) -> Result[Pcm, AudioError] {
+  admitted(source) ?
+  let channels = source.format.channels
+  let shape = format(source.format.sampleRate, order.length()) ?
+  for picked in order {
+    if picked < 0 || picked >= channels { return Err(InvalidChannelMap(picked)) }
+  }
+  let values = samples(source)
+  var out: Array[Int] = []
+  var at = 0
+  while at < values.length() {
+    for picked in order { out = out.push(values[at + picked]) }
+    at = at + channels
+  }
+  fromSamples(&shape, out)
+}
+
+fn roundedRatio(numerator: Int, denominator: Int) -> Int {
+  if numerator >= 0 {
+    (numerator * 2 + denominator) / (denominator * 2)
+  } else {
+      -((-numerator * 2 + denominator) / (denominator * 2))
+  }
 }
 
 fn formatAdmitted(shape: &Format) -> Result[(), AudioError] {

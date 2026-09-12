@@ -135,7 +135,7 @@ testServiceEvaluation = do
         (lettering === Just "22")
     , counterexample
         "PCM audio keeps exact samples, time, and WAV bytes and refuses malformed input"
-        (sound === Just "30")
+        (sound === Just "42")
     , counterexample
         "an audio graph renders exact samples that do not depend on slice boundaries"
         (rendering === Just "21")

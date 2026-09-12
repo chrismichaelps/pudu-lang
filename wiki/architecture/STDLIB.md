@@ -294,7 +294,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Ui.Layout` | 46 | declarative views and text, two-pass placement, scrolling windows, accessibility, damage extents |
 | `Std.Ui.Screen` | 31 | routed input, text entry, clamped scrolling, focus rings, unchanged views skipped, damage repaint |
 | `Std.Ui.Text` | 22 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged and clipped glyphs |
-| `Std.Audio` | 30 | exact 16-bit PCM bytes, frame-counted time, Q15 gain, saturating mix, bounded slices and WAV |
+| `Std.Audio` | 42 | exact 16-bit PCM bytes, frame-counted time, gain, mix, resampling, channel maps, bounded WAV |
 | `Std.Audio.Graph` | 21 | stateless pull-model nodes: clips, integer tones, gain, mixes, sample-accurate ramps |
 | `Std.Video` | 19 | exact fractional rates and timestamps, non-overlapping picture tracks, audio alignment |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
