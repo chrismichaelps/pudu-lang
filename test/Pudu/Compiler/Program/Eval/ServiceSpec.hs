@@ -129,7 +129,7 @@ testServiceEvaluation = do
         (layout === Just "40")
     , counterexample
         "a screen routes input to tagged controls, rings focus, and repaints only what changed"
-        (interaction === Just "21")
+        (interaction === Just "27")
     , counterexample
         "bitmap text measures, wraps, and draws into exact pixels"
         (lettering === Just "21")

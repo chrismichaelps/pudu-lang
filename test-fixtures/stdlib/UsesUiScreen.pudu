@@ -30,6 +30,24 @@ fn counted(count: Int, event: Screen.Event) -> Int {
     case Screen.Activated("inc") => count + 1
     case Screen.Activated(_) => 0
     case Screen.Dismissed => 100
+    case _ => count
+  }
+}
+
+/// A form: a name field showing what was typed over a clear button.
+fn form(name: Str) -> Layout.View {
+  Layout.column([
+      Layout.column([Layout.text(name)]).tall(9).filled(WHITE).means(Layout.Field).named("Name"),
+      Layout.box().tall(2).filled(GRAY).means(Layout.Button).named("Clear")
+    ])
+}
+
+fn edit(name: Str, event: Screen.Event) -> Str {
+  match event {
+    case Screen.Typed("Name", text) => name + text
+    case Screen.Erased("Name") => if name.isEmpty() { name } else { name.slice(0, name.length() - 1) }
+    case Screen.Activated("Clear") => ""
+    case _ => name
   }
 }
 
@@ -218,6 +236,53 @@ export fn main() -> Int {
     if let Ok(dropped) = Screen.handleAll(&first, &focusReset) {
       if Screen.stateOf(&dropped) == 100 && Screen.focusOf(&dropped) == None &&
       shows(&dropped, reference(100, None, ring))
+      {
+        held = held + 1
+      }
+    }
+  }
+
+  let formSize = Canvas.size(20, 12)
+  if let Ok(blank) = Screen.start("", form, edit, formSize, WHITE) {
+    if let Ok(unfocused) = Screen.handle(&blank, Screen.TypedText("x")) {
+      if Screen.stateOf(&unfocused) == "" && Screen.damagedOf(&unfocused) == [] { held = held + 1 }
+    }
+    if let Ok(named) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Next),
+        Screen.TypedText("ab")
+      ])
+    {
+      if Screen.stateOf(&named) == "ab" && Screen.focusOf(&named) == Some("Name") &&
+      Screen.damagedOf(&named).length() > 0
+      {
+        held = held + 1
+      }
+      if let Ok(fresh) = Screen.start("ab", form, edit, formSize, WHITE) {
+        if let Ok(focused) = Screen.handle(&fresh, Screen.KeyPressed(Screen.Next)) {
+          let left = Screen.surfaceOf(&named)
+          let right = Screen.surfaceOf(&focused)
+          if Canvas.rgbaBytes(&left) == Canvas.rgbaBytes(&right) { held = held + 1 }
+        }
+      }
+      if let Ok(shorter) = Screen.handle(&named, Screen.KeyPressed(Screen.Erase)) {
+        if Screen.stateOf(&shorter) == "a" { held = held + 1 }
+      }
+    }
+    if let Ok(empty) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Next),
+        Screen.KeyPressed(Screen.Erase)
+      ])
+    {
+      if Screen.stateOf(&empty) == "" && Screen.damagedOf(&empty).length() == 1 { held = held + 1 }
+    }
+    if let Ok(onButton) = Screen.handleAll(&blank, &[
+        Screen.KeyPressed(Screen.Previous),
+        Screen.TypedText("z"),
+        Screen.TypedText("")
+      ])
+    {
+      if Screen.stateOf(&onButton) == "" && Screen.focusOf(&onButton) == Some("Clear") &&
+      Screen.damagedOf(&onButton).length() == 1
       {
         held = held + 1
       }

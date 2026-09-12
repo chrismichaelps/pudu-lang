@@ -47,6 +47,12 @@ left and the one it reached, clipped to the viewport and recorded once; an updat
 regions plus both rings. The fixture compares every such frame with a reference built from layout,
 canvas, and explicit ring edges rather than from the screen itself.
 
+**Text reaches only a focused field.** `TypedText` delivers `Typed(tag, text)` and the `Erase` key
+delivers `Erased(tag)`, but only when focus is on a control that means `Field`; with focus on a button,
+or nowhere, text changes nothing and damages nothing, and empty text is ignored. The screen never edits
+state itself: the update decides what typing and erasing mean, so a field's contents stay one value in
+state that the view shows.
+
 **An unchanged view stops the update.** A screen keeps the view it last placed. When an update gives
 a new state whose view equals that view and focus is unchanged, the state is kept and placement,
 painting, and repaint are skipped with no damage—the same rule a dependency graph uses to stop

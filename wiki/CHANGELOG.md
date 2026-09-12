@@ -61,6 +61,9 @@ tags: [changelog]
 - The canvas never composes commands hidden under an opaque command covering the rendered region: 300
   stacked fills followed by a full-frame cover render at 512×512 in 0.14 s instead of 4.38 s at -O2.
   Canvas now 43 assertions.
+- Screens accept text: `TypedText` and the `Erase` key reach the update as `Typed` and `Erased` events
+  only when focus is on a `Field`, so typing while a button holds focus changes nothing. Screen now 27
+  assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

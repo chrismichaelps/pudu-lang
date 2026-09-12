@@ -13,11 +13,13 @@ export type Key
   | Previous
   | Activate
   | Dismiss
+  | Erase
 
 /// Something a person did.
 export type Input
   = Pressed(Canvas.Point)
   | KeyPressed(Key)
+  | TypedText(Str)
 
 /// What an update is told happened.
 ///
@@ -26,6 +28,8 @@ export type Input
 export type Event
   = Activated(Str)
   | Dismissed
+  | Typed(Str, Str)
+  | Erased(Str)
 
 /// Why a screen could not be shown.
 export type ScreenError
@@ -99,6 +103,13 @@ export fn handle[S](target: &Screen[S], input: Input) -> Result[Screen[S], Scree
     case KeyPressed(Previous) => refocused(target, stepped(target, -1))
     case KeyPressed(Activate) => activated(target)
     case KeyPressed(Dismiss) => updated(target, Dismissed, target.focus)
+    case KeyPressed(Erase) => edited(target, fn(tag: Str) -> Event { Erased(tag) })
+    case TypedText(text) =>
+    if text.isEmpty() {
+      Ok(Screen{..*target, damaged: []})
+    } else {
+      edited(target, fn(tag: Str) -> Event { Typed(tag, text) })
+    }
   }
 }
 
@@ -152,6 +163,21 @@ fn pressed[S](target: &Screen[S], location: Canvas.Point) -> Result[Screen[S], S
     if Layout.isControlAt(&target.layout, node) {
       if let Some(tag) = Layout.tagOf(&target.layout, node) {
         return updated(target, Activated(tag), Some(tag))
+      }
+    }
+  }
+  Ok(Screen{..*target, damaged: []})
+}
+
+/// An edit delivered to the focused field, or nothing when focus is elsewhere.
+///
+/// Text goes only to a control that means `Field`, so typing while a button
+/// holds focus cannot reach state through a control that does not accept text.
+fn edited[S](target: &Screen[S], event: fn(Str) -> Event) -> Result[Screen[S], ScreenError] {
+  if let Some(tag) = target.focus {
+    if let Some(node) = Layout.nodeTagged(&target.layout, tag) {
+      if target.layout.nodes[node].role == Layout.Field {
+        return updated(target, event(tag), target.focus)
       }
     }
   }
