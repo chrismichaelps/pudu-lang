@@ -6,6 +6,7 @@ import Pudu.Compiler (CompileResult (..), runCompile)
 import Pudu.Doc
   ( DocEntry (..)
   , DocIndex (..)
+  , DocKind (..)
   , entriesFor
   )
 import Pudu.Doc.Json (encodeIndex, escapeJson)
@@ -67,6 +68,23 @@ testDocComments = do
     , "export fn shown(n: Int) -> Int { n }"
     , "/** A block form. */"
     , "fn blocked(n: Int) -> Int { n }"
+    , "trait Named {"
+    , "  /// Return the public name."
+    , "  fn name(self: &Self) -> Str"
+    , "}"
+    , "trait Labeled {"
+    , "  /// Return an unrelated label."
+    , "  fn name(self: &Self) -> Str"
+    , "}"
+    , "type Child = { value: Str }"
+    , "impl Named for Child {"
+    , "  fn name(self: &Self) -> Str { self.value }"
+    , "}"
+    , "type Adult = { value: Str }"
+    , "impl Named for Adult {"
+    , "  /// Return the verified adult name."
+    , "  fn name(self: &Self) -> Str { self.value }"
+    , "}"
     ]
   pure $ conjoin
     [ counterexample "every doc line is kept in order"
@@ -77,6 +95,10 @@ testDocComments = do
         (commentOf "blocked" index === ["A block form."])
     , counterexample "an export modifier does not detach the documentation"
         (commentOf "shown" index === ["Documented and exported."])
+    , counterexample "an implementation inherits its own trait member documentation"
+        (commentOfMethod "Child" "name" index === ["Return the public name."])
+    , counterexample "a direct implementation comment overrides inherited documentation"
+        (commentOfMethod "Adult" "name" index === ["Return the verified adult name."])
     ]
 
 {-| Search by shape, which is the question a reader with a type but no name
@@ -254,6 +276,18 @@ commentOf :: Text -> DocIndex -> [Text]
 commentOf name index = case entriesFor name index of
   entry : _ -> docComment entry
   [] -> ["missing"]
+
+commentOfMethod :: Text -> Text -> DocIndex -> [Text]
+commentOfMethod holder name index = case matching of
+  entry : _ -> docComment entry
+  [] -> ["missing"]
+ where
+  matching =
+    [ entry
+    | entry <- entriesFor name index
+    , DocMethod owner <- [docKind entry]
+    , owner == holder
+    ]
 
 namesOf :: [Match] -> [Text]
 namesOf = map (docName . matchEntry)

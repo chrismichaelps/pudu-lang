@@ -46,6 +46,10 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
   one's comment.
 - A member's bound is its enclosing declaration rather than the previous top-level one, so a
   trait's first member cannot claim the trait's own documentation.
+- An implementation member with no direct documentation inherits the matching local trait member's
+  documentation. A direct implementation comment always wins. The lookup uses the trait named by
+  the implementation and the member name, so documentation cannot cross between unrelated traits
+  that happen to use the same method name.
 
 - **A signature is never reconstructed from written syntax.** It comes from the scheme the checker
   ended with, so a declaration with no annotations is still described, and one with annotations is
@@ -76,16 +80,17 @@ renderEntryLinesWith :: Bool -> DocEntry -> [Text]
 
 ## Algorithm
 
-One pass over `moduleDeclarations`, expanding traits and implementations into their members;
-a lookup per entry into the checker's scheme table; a lookup per entry into a map of doc comments
-keyed by the offset of the token they lead.
+One pass over `moduleDeclarations` collects trait-member documentation by `(trait, member)`. A
+second declaration-order pass expands declarations into entries, looks up the checker's scheme,
+and attaches a direct comment or the matching inherited trait comment.
 
 ## Negative Logic (Prohibited Paths)
 
 - No type checking, no inference, and no evaluation: the index reports, it does not decide.
 - No signature invented for a name the checker had none for; the entry reports no signature instead.
 - No documentation attached across an intervening ordinary comment, and none attached to a
-  declaration that has none.
+  declaration that has none, except for the explicit trait-member inheritance rule.
+- No inheritance by member name alone and no inheritance over a direct implementation comment.
 
 ## Edge Cases
 
@@ -119,6 +124,14 @@ DEPTH 0.60 (MEDIUM). It joins three producers without owning any of their logic.
   documentation using qualified names (`:doc Std.Math.min`). Matching both unqualified and
   qualified names avoids false 'not in scope' errors while preserving unqualified lookup.
   _Rejected:_ requiring callers to strip module prefixes before querying.
+- **Q:** Should every implementation repeat the documentation already owned by its trait member?
+  **A:** No. _Rationale:_ repetition drifts and makes comprehensive standard-library documentation
+  expensive to maintain. The implementation already names its trait, so `(trait, member)` is a
+  precise fallback key. _Rejected:_ copying comments into every implementation; inheriting by
+  member name alone; replacing a direct implementation-specific comment.
+
+Resolved Grill Log: trait documentation is inherited only through the implementation's explicit
+trait identity, while direct implementation documentation remains authoritative.
 
 ## Referenced by
 

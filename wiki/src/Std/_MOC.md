@@ -30,6 +30,7 @@ tags: [moc, module, stdlib]
 
 - [[Std Random]] — deterministic generators and OS-backed secure bytes.
 - [[Std Order]] — equality, ordering, and hashing contracts.
+- [[Std Bits]] — fixed-width integer bit operations and generic width-aware helpers.
 - [[Std HashMap]] — persistent indexed lookup with deterministic insertion order.
 - [[Std Bytes]] — compact byte sequences, binary reads/writes, and text codecs.
 - [[Std Compress Gzip]] — RFC 1952 GZIP compression, multi-block DEFLATE streaming, IEEE 802.3 CRC-32, and HTTP middleware.

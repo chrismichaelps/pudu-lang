@@ -21,3 +21,5 @@ identify website behavior and do not depend on a free local port.
 Search checks assert rank position and exclusion for module intent, explicit scope, exact names,
 multi-term text, and generic-renamed Pudu type shapes.
 The rendered result page must expose the query syntax it accepts.
+The catalogue gate also requires every public declaration to carry at least one documentation line,
+including implementation members whose text is inherited from their trait contract.

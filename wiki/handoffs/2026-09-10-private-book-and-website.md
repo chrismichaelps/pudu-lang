@@ -36,7 +36,7 @@ example audit, full repository test suite, and live production verification. Fea
   and the author's LinkedIn and GitHub profiles. The footer carries the copyright notice.
 - Same-name function variants share a kind-qualified symbol page; type and function names remain
   distinct on case-insensitive filesystems. The final local capture produced 3,375 routes and files.
-- `pudu check`, `pudu fmt --check`, 36 website route assertions, 25 repository example checks, and
+- `pudu check`, `pudu fmt --check`, 72 website route assertions, 25 repository example checks, and
   the isolated full `cabal test all` run pass. Desktop and 390px browser checks pass without
   horizontal overflow.
 - The adapter-free Pudu deployment is live in production at
@@ -47,7 +47,7 @@ example audit, full repository test suite, and live production verification. Fea
 - Dynamic ranked search uses the same `Service.Search` implementation locally, in the website
   fixture, and in the production function. Preview and production checks returned correct static,
   dynamic, missing-page, sitemap, stylesheet, and logo responses. The mobile disclosure and a
-  `List` search were exercised in the Codex browser.
+  `List` search were exercised in a browser against the deployed site.
 - SEO endpoints (`robots.txt`, `sitemap.xml`, Open Graph assets) verified live with HTTP 200 OK.
 
 ## Blockers resolved
@@ -69,9 +69,11 @@ The first previews exposed and resolved host-library substitution, static-root s
 layout, HTTP framing, and Vercel invocation-envelope defects. The compact database reduced local
 dynamic startup from about 35 seconds to about 5 seconds. In production a new Lambda instance still
 takes about 22 seconds to answer its first dynamic request while warm requests take about
-0.7–1.2 seconds. The next exact action is to implement the parsed Pudu query model and deterministic
-ranking fixtures, then remove all 32 missing public `Std` summaries before expanding declaration
-pages and the remaining short comments in bounded module groups.
+0.7–1.2 seconds. Parsed query intent and deterministic ranking are in PR #231. The documentation
+indexer now inherits local trait-member comments, the catalogue has no undocumented public entries,
+and symbol pages teach the notation they display. The next exact action is to merge the two bounded
+slices, build one preview from their combined state, and verify desktop, mobile, accessibility, and
+dynamic-search behavior before production promotion.
 
 The catalogue was regenerated after the framing change. Its 3,243 entries reflect the current API:
 former standalone builder methods are represented by their exported traits, and the Lambda module

@@ -13,6 +13,8 @@ mobile disclosure navigation, code surfaces, result density, and footer. It rese
 high-contrast behavior.
 The home search keeps a compact lower margin so the first API guidance remains visually connected
 to the query field on desktop and mobile.
+Symbol details use compact declaration cards with visible heading hierarchy, readable signature
+guidance, and touch-safe module/search actions. The cards retain strong borders in forced-colour mode.
 
 Resolved Grill Log: the mobile menu is CSS plus native HTML disclosure, not a hidden checkbox or
 script-only control. Desktop and mobile navigation are mutually hidden from both layout and the

@@ -122,7 +122,10 @@ export trait Eq { fn equals(self: &Self, other: &Self) -> Bool }
 /// A type whose values are ordered.
 /// One method rather than three, because `before` is what a sort needs and the
 /// rest follow from it without a type having to keep them in step.
-export trait Ord { fn before(self: &Self, other: &Self) -> Bool }
+export trait Ord {
+  /// Return true when this value belongs strictly before `other` in the type's order.
+  fn before(self: &Self, other: &Self) -> Bool
+}
 
 /// A value's number, for a collection that reaches its entries by one.
 ///

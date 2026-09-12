@@ -37,6 +37,13 @@ fn everyResultHasKind(hits: &Array[Domain.Hit], kind: Str) -> Bool {
   true
 }
 
+fn everyEntryHasDocumentation(entries: &Array[Domain.Entry]) -> Bool {
+  for entry in entries {
+    if entry.documentation.length() == 0 { return false }
+  }
+  true
+}
+
 export fn main() -> Int {
   let loaded = Catalog.load("website/data/api.json")
   let catalog = match loaded {
@@ -80,6 +87,7 @@ export fn main() -> Int {
   let suite = Test.suite("website", &[
       Test.that("catalogue records its schema language", catalog.languageVersion == "0.1.0"),
       Test.that("catalogue has public declarations", catalog.entries.length() > 3000),
+      Test.that("every public declaration has documentation", everyEntryHasDocumentation(&catalog.entries)),
       Test.that("ranked search returns a result", hits.length() > 0),
       Test.that("exact name ranks first", hits[0].entry.name == "checksum"),
       Test.that("compact catalogue keeps every searchable declaration", searchCatalog.entries.length() == catalog.entries.length()),
@@ -114,6 +122,7 @@ export fn main() -> Int {
       Test.that("module page renders", modulePage.status.code == 200),
       Test.that("symbol page renders", symbol.status.code == 200),
       Test.that("symbol has TechArticle data", symbol.body.contains("TechArticle")),
+      Test.that("symbol explains its signature notation", symbol.body.contains("Read the signature") && symbol.body.contains("Read arrows from left to right") && symbol.body.contains("borrows a value")),
       Test.that("missing page is 404", missing.status.code == 404),
       Test.that("missing page is not indexed", missing.body.contains("noindex,follow")),
       Test.that("robots names the sitemap", robots.body.contains("https://pudu.example/sitemap.xml")),
@@ -131,6 +140,7 @@ export fn main() -> Int {
       Test.that("sitemap includes about", sitemap.body.contains("https://pudu.example/about")),
       Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
       Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
+      Test.that("method pages explain trait and concrete providers", overloads.body.contains("required by a trait") && overloads.body.contains("for one concrete type")),
       Test.that("same-name sitemap paths are unique", sitemap.body.split("https://pudu.example/docs/Std.Bits/fn/width").length() == 2),
       Test.that("type and function paths stay distinct", sitemap.body.contains("/docs/Std.App/fn/stage") && sitemap.body.contains("/docs/Std.App/type/Stage")),
 

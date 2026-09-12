@@ -12,6 +12,8 @@ aliases: [Doc Module Map]
 - [[Doc Search]] — ranks index entries against a query.
 - [[Doc Json]] — the encoding editors and a search server consume.
 - [[Doc Site]] — the self-contained browser projection of an index and its search contract.
+- [[Documentation Spec]] — end-to-end index, search, encoding, site, and documentation inheritance
+  regression coverage.
 
 Dependency direction: Signature → Index → Query/Search/Json → Site. Nothing here performs IO, and
 nothing re-derives a type from written syntax.
