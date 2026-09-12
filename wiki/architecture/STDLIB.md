@@ -290,7 +290,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Validate` | 18 | rules as values; every failure reported, none echoing its input |
 | `Std.Ui.Live` | 17 | a session, its differences, and what a viewer may send |
 | `Std.Ui` | 17 | components, paths, and the difference between two screens, provisional |
-| `Std.Ui.Canvas` | 41 | bounded exact-pixel application rendering by bands and spans, with damage repaint |
+| `Std.Ui.Canvas` | 43 | bounded exact-pixel rendering by bands and spans, opaque-cover culling, damage repaint |
 | `Std.Ui.Layout` | 40 | declarative views and text, two-pass placement, accessibility semantics, tags, damage extents |
 | `Std.Ui.Screen` | 21 | routed input, visible focus rings, unchanged views skipped, updates repainting only damage |
 | `Std.Ui.Text` | 21 | original 5×7 bitmap face, whole-number scaling, greedy wrapping, merged glyph rectangles |

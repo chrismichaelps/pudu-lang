@@ -123,7 +123,7 @@ testServiceEvaluation = do
         (screens === Just "37")
     , counterexample
         "a native canvas clips and blends into exact bounded pixels"
-        (canvas === Just "41")
+        (canvas === Just "43")
     , counterexample
         "declarative layout places exact frames, names every control, and repaints only damage"
         (layout === Just "40")

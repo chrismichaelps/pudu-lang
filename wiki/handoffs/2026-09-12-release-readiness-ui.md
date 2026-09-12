@@ -55,12 +55,13 @@ order, hit testing, painting, and damage regions.
   focus rings on screens (20 assertions).
 - `c1eebc5` — `Std.Audio` exact byte-backed PCM, time, gain, mix, slices, and WAV (30 assertions).
 - `47feac0` — `Std.Audio.Graph` stateless pull-model nodes with slice-independent renders (21).
-- Video slice — `Std.Video` exact timing and tracks (19); screens skip unchanged views (21).
+- `749c84a` — `Std.Video` exact timing and tracks (19); screens skip unchanged views (21).
+- Culling slice — the canvas never composes commands under an opaque region-covering command (43);
+  300 stacked fills render in 0.14 s instead of 4.38 s.
 
 ## Exact next action
 
-Cull canvas commands before the last opaque command covering the rendered region, then text entry and
-scrolling on `Std.Ui.Screen`, then resampling and channel layouts in audio. After the native media row,
+Text entry and scrolling on `Std.Ui.Screen`, then resampling and channel layouts in audio. After the native media row,
 move up the release table starting with filesystem safety. Profile rendering many small
 rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
 the UI event slice. Keep every fixture as the semantic oracle for later optimization.

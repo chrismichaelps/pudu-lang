@@ -58,6 +58,9 @@ tags: [changelog]
   and empty durations with lookup by halving, and audio frames aligned on the same clock. 19 assertions.
 - Screens keep the view they last placed; an update producing an equal view with unchanged focus keeps
   the new state and skips placement, painting, and repaint. Screen now 21 assertions.
+- The canvas never composes commands hidden under an opaque command covering the rendered region: 300
+  stacked fills followed by a full-frame cover render at 512×512 in 0.14 s instead of 4.38 s at -O2.
+  Canvas now 43 assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

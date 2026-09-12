@@ -12,7 +12,10 @@ aliases: [Uses Ui Canvas]
 
 ## Purpose and interface
 
-Executable Pudu fixture for the native software canvas. Its `main` returns 41 held assertions for
+Executable Pudu fixture for the native software canvas. Its `main` returns 43 held assertions. An
+opaque command covering the canvas hides earlier translucent and opaque fills, a translucent fill after
+it blends over its color, and a repaint of that canvas equals its full render. The remaining assertions
+cover
 valid construction, pixel/command/storage bounds, surface-shape validation, clipping on every edge,
 painter order, byte order, opaque replacement, repeated translucent blending, transparent no-op
 behavior, zero-area rectangles, and invalid geometry. Band and span cases cover a translucent span

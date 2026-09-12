@@ -265,5 +265,39 @@ export fn main() -> Int {
     }
   }
 
+  if let Ok(stack) = Canvas.canvas(3, 2, white) {
+    let halfRed = Canvas.rgba(255u8, 0u8, 0u8, 128u8)
+    if let Ok(a) = Canvas.fill(&stack, Canvas.rect(0, 0, 3, 2), halfRed) {
+      if let Ok(b) = Canvas.fill(&a, Canvas.rect(1, 0, 1, 1), red) {
+        if let Ok(covered) = Canvas.fill(&b, Canvas.rect(-5, -5, 20, 20), black) {
+          if let Ok(surface) = Canvas.render(&covered) {
+            if Canvas.pixelAt(&surface, Canvas.point(0, 0)) == Ok(Some(black)) &&
+            Canvas.pixelAt(&surface, Canvas.point(1, 0)) == Ok(Some(black)) &&
+            Canvas.pixelAt(&surface, Canvas.point(2, 1)) == Ok(Some(black))
+            {
+              held = held + 1
+            }
+          }
+          let halfWhite = Canvas.rgba(255u8, 255u8, 255u8, 128u8)
+          if let Ok(over) = Canvas.fill(&covered, Canvas.rect(0, 0, 1, 1), halfWhite) {
+            if let Ok(surface) = Canvas.render(&over) {
+              if let Ok(old) = Canvas.render(&b) {
+                if let Ok(patched) = Canvas.repaint(&over, &old, &[Canvas.rect(0, 0, 3, 2)]) {
+                  if Canvas.pixelAt(&surface, Canvas.point(0, 0)) ==
+                  Ok(Some(Canvas.rgb(128u8, 128u8, 128u8))) &&
+                  Canvas.pixelAt(&surface, Canvas.point(1, 1)) == Ok(Some(black)) &&
+                  Canvas.rgbaBytes(&patched) == Canvas.rgbaBytes(&surface)
+                  {
+                    held = held + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   held
 }

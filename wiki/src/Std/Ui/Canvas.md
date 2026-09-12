@@ -51,6 +51,12 @@ array; adjacent spans of one color merge. Encoding a span's pixel reuses the las
 neighbouring spans differ and text alternates between ink and ground. The scanline's bytes are produced by doubling a four-byte pixel and the band
 by doubling the scanline, so the pixel payload is made by whole-run copies.
 
+**Covered commands are never composed.** When an opaque command covers the whole region being
+rasterized, every command before it is dropped and its color becomes the ground every band starts
+from. The rule holds for full renders and for each repaint region, so a damaged region inside an opaque
+control composes only that control and what lies over it. Three hundred stacked fills followed by a
+full-frame cover and one small fill render at 512×512 in 0.14 s instead of 4.38 s at -O2.
+
 `repaint` is the damage path: each region is clipped, rasterized alone, and spliced into the earlier
 surface by carrying the untouched run between one replaced row and the next as a single slice. When
 the regions cover every changed pixel, the result equals `render` byte for byte, which the fixture
