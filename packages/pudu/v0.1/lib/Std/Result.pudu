@@ -1,6 +1,16 @@
 module Std.Result
 
 /// Whether the operation succeeded.
+///
+/// Borrows the result, so it can be asked without giving it up. Use a `match` when
+/// the value or the failure is wanted, since that gets it out in the same step.
+///
+/// ## Examples
+///
+/// ```
+/// Result.isOk(&Ok(1))       // true
+/// Result.isOk(&Err("bad"))  // false
+/// ```
 export fn isOk[T, E](value: &Result[T, E]) -> Bool {
   match value {
     case Ok(_) => true
@@ -9,6 +19,16 @@ export fn isOk[T, E](value: &Result[T, E]) -> Bool {
 }
 
 /// Whether the operation failed.
+///
+/// `isOk` negated, written out because a negated call reads poorly inside a larger
+/// condition.
+///
+/// ## Examples
+///
+/// ```
+/// Result.isErr(&Err("bad"))  // true
+/// Result.isErr(&Ok(1))       // false
+/// ```
 export fn isErr[T, E](value: &Result[T, E]) -> Bool {
   match value {
     case Ok(_) => false
@@ -17,8 +37,17 @@ export fn isErr[T, E](value: &Result[T, E]) -> Bool {
 }
 
 /// The value, or a fallback when the operation failed.
-/// The failure is discarded, which is why this is the only form that takes one:
-/// a caller who needs to know why should match, or propagate with `?`.
+///
+/// The failure is discarded, which is why this is the only form that takes one: a
+/// caller who needs to know why should match, or propagate with `?`. Use it where
+/// a sensible default genuinely exists, not to make an inconvenient failure quiet.
+///
+/// ## Examples
+///
+/// ```
+/// Result.unwrapOr(Ok(5), 0)       // 5
+/// Result.unwrapOr(Err("bad"), 0)  // 0
+/// ```
 export fn unwrapOr[T, E](value: Result[T, E], fallback: T) -> T {
   match value {
     case Ok(found) => found
@@ -27,6 +56,17 @@ export fn unwrapOr[T, E](value: Result[T, E], fallback: T) -> T {
 }
 
 /// The value if there is one, forgetting why there was not.
+///
+/// The step from "explains why" down to "might be absent". It is deliberately
+/// lossy, so take it only at a boundary where the reason has already been reported
+/// or genuinely does not matter.
+///
+/// ## Examples
+///
+/// ```
+/// Result.ok(Ok(5))       // Some(5)
+/// Result.ok(Err("bad"))  // None
+/// ```
 export fn ok[T, E](value: Result[T, E]) -> Option[T] {
   match value {
     case Ok(found) => Some(found)
@@ -35,6 +75,16 @@ export fn ok[T, E](value: Result[T, E]) -> Option[T] {
 }
 
 /// The failure if there was one.
+///
+/// The mirror of `ok`, for a caller that wants to inspect or log what went wrong
+/// without acting on the success.
+///
+/// ## Examples
+///
+/// ```
+/// Result.err(Err("bad"))  // Some("bad")
+/// Result.err(Ok(5))       // None
+/// ```
 export fn err[T, E](value: Result[T, E]) -> Option[E] {
   match value {
     case Ok(_) => None
@@ -43,6 +93,17 @@ export fn err[T, E](value: Result[T, E]) -> Option[E] {
 }
 
 /// The first result if it succeeded, otherwise the second.
+///
+/// The first failure is discarded. Both arguments are evaluated, so this is for
+/// results already held; when the alternative is expensive, match instead and
+/// build it only on the failing path.
+///
+/// ## Examples
+///
+/// ```
+/// Result.orElse(Ok(1), Ok(2))        // Ok(1)
+/// Result.orElse(Err("bad"), Ok(2))   // Ok(2)
+/// ```
 export fn orElse[T, E](first: Result[T, E], second: Result[T, E]) -> Result[T, E] {
   match first {
     case Ok(found) => Ok(found)
@@ -51,6 +112,16 @@ export fn orElse[T, E](first: Result[T, E], second: Result[T, E]) -> Result[T, E
 }
 
 /// The value as an array of nought or one element.
+///
+/// How a caller iterates over a maybe-failed value without matching on it. The
+/// failure is dropped, so this is for the paths where the reason is not needed.
+///
+/// ## Examples
+///
+/// ```
+/// Result.toArray(Ok(1))       // [1]
+/// Result.toArray(Err("bad"))  // []
+/// ```
 export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
   match value {
     case Ok(found) => [found]
@@ -59,13 +130,33 @@ export fn toArray[T, E](value: Result[T, E]) -> Array[T] {
 }
 
 /// The success transformed, if there was one.
+///
+/// A failure passes straight through untouched, carrying its reason, so the
+/// transform never has to consider it. Use `andThen` when the transform can itself
+/// fail.
+///
+/// ## Examples
+///
+/// ```
+/// Result.map(Ok(2), fn(n: Int) -> Int => n * 10)       // Ok(20)
+/// Result.map(Err("bad"), fn(n: Int) -> Int => n * 10)  // Err("bad")
+/// ```
 export fn map[T, E, U](value: Result[T, E], transform: fn(T) -> U) -> Result[U, E] {
   Ok(transform(value ?))
 }
 
 /// The failure transformed, if there was one.
+///
 /// This is how a caller adapts one module's failure vocabulary into its own
-/// without discarding what went wrong.
+/// without discarding what went wrong. Reach for it at a module boundary, so the
+/// failures crossing it are described in the terms that boundary owns.
+///
+/// ## Examples
+///
+/// ```
+/// Result.mapErr(Err("io"), fn(e: Str) -> Str => "load failed: " + e)
+/// // Err("load failed: io")
+/// ```
 export fn mapErr[T, E, F](value: Result[T, E], transform: fn(E) -> F) -> Result[T, F] {
   match value {
     case Ok(found) => Ok(found)
@@ -74,11 +165,32 @@ export fn mapErr[T, E, F](value: Result[T, E], transform: fn(E) -> F) -> Result[
 }
 
 /// The success transformed into another result, flattened.
+///
+/// The form for a transform that can itself fail: `map` would give back a nested
+/// result, and this keeps one level. Chaining it runs several fallible steps in
+/// order, stopping at the first failure and carrying its reason out.
+///
+/// ## Examples
+///
+/// ```
+/// Result.andThen(Ok("12"), fn(s: Str) -> Result[Int, Str] => parse(s))  // Ok(12)
+/// Result.andThen(Err("io"), fn(s: Str) -> Result[Int, Str] => parse(s))  // Err("io")
+/// ```
 export fn andThen[T, E, U](value: Result[T, E], transform: fn(T) -> Result[U, E]) -> Result[U, E] {
   transform(value ?)
 }
 
 /// The success, or a fallback computed from the failure.
+///
+/// Unlike `unwrapOr`, the reason is available to the recovery step, which is what
+/// lets the fallback depend on what actually went wrong.
+///
+/// ## Examples
+///
+/// ```
+/// Result.unwrapOrElse(Err("bad"), fn(e: Str) -> Int => e.length())  // 3
+/// Result.unwrapOrElse(Ok(5), fn(e: Str) -> Int => e.length())       // 5
+/// ```
 export fn unwrapOrElse[T, E](value: Result[T, E], recover: fn(E) -> T) -> T {
   match value {
     case Ok(found) => found
@@ -87,8 +199,17 @@ export fn unwrapOrElse[T, E](value: Result[T, E], recover: fn(E) -> T) -> T {
 }
 
 /// One of two transformations, whichever side the result holds.
-/// Success comes first, matching the order the cases are written everywhere
-/// else a result is inspected.
+///
+/// Success comes first, matching the order the cases are written everywhere else a
+/// result is inspected. Both paths end at the same type, which is how a result is
+/// left behind entirely.
+///
+/// ## Examples
+///
+/// ```
+/// Result.fold(Ok(2), fn(n: Int) -> Str => show(n), fn(e: Str) -> Str => e)  // "2"
+/// Result.fold(Err("bad"), fn(n: Int) -> Str => show(n), fn(e: Str) -> Str => e)  // "bad"
+/// ```
 export fn fold[T, E, A](value: Result[T, E], onOk: fn(T) -> A, onErr: fn(E) -> A) -> A {
   match value {
     case Ok(found) => onOk(found)
@@ -97,11 +218,32 @@ export fn fold[T, E, A](value: Result[T, E], onOk: fn(T) -> A, onErr: fn(E) -> A
 }
 
 /// A nested result flattened by one level.
+///
+/// What `map` produces when its transform also answers a result. Both levels must
+/// already describe failure the same way; reaching for `andThen` avoids building
+/// the nesting at all.
+///
+/// ## Examples
+///
+/// ```
+/// Result.flatten(Ok(Ok(1)))       // Ok(1)
+/// Result.flatten(Ok(Err("bad")))  // Err("bad")
+/// ```
 export fn flatten[T, E](value: Result[Result[T, E], E]) -> Result[T, E] {
   value ?
 }
 
 /// Every success, with the failures dropped.
+///
+/// The result says nothing about how many failed or why. When one failure should
+/// stop the whole operation, `all` reports that instead; when both sides matter,
+/// `partition` keeps them.
+///
+/// ## Examples
+///
+/// ```
+/// Result.successes(&[Ok(1), Err("bad"), Ok(3)])  // [1, 3]
+/// ```
 export fn successes[T, E](values: &Array[Result[T, E]]) -> Array[T] {
   var out = []
   for value in values {
@@ -114,6 +256,15 @@ export fn successes[T, E](values: &Array[Result[T, E]]) -> Array[T] {
 }
 
 /// Every failure, with the successes dropped.
+///
+/// The mirror of `successes`, and the form to reach for when reporting everything
+/// that went wrong rather than stopping at the first.
+///
+/// ## Examples
+///
+/// ```
+/// Result.failures(&[Ok(1), Err("bad"), Err("worse")])  // ["bad", "worse"]
+/// ```
 export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
   var out = []
   for value in values {
@@ -126,8 +277,22 @@ export fn failures[T, E](values: &Array[Result[T, E]]) -> Array[E] {
 }
 
 /// Every success, or the first failure.
-/// This is how a caller turns many fallible steps into one answer without
-/// deciding, at each step, whether to keep going.
+///
+/// This is how a caller turns many fallible steps into one answer without deciding,
+/// at each step, whether to keep going. All or nothing: one failure makes the whole
+/// answer that failure, and later failures are not reported.
+///
+/// ## Examples
+///
+/// ```
+/// Result.all(&[Ok(1), Ok(2)])            // Ok([1, 2])
+/// Result.all(&[Ok(1), Err("bad")])       // Err("bad")
+/// Result.all(&[])                        // Ok([])
+/// ```
+///
+/// ## See also
+///
+/// - `failures` — every reason rather than the first.
 export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
   var out = []
   for value in values {
@@ -137,6 +302,16 @@ export fn all[T, E](values: &Array[Result[T, E]]) -> Result[Array[T], E] {
 }
 
 /// The success, or `None` when there was a failure, keeping neither.
+///
+/// The same answer as `ok`, named for the type it lands in rather than the side it
+/// keeps.
+///
+/// ## Examples
+///
+/// ```
+/// Result.toOption(Ok(5))       // Some(5)
+/// Result.toOption(Err("bad"))  // None
+/// ```
 export fn toOption[T, E](value: Result[T, E]) -> Option[T] {
   match value {
     case Ok(found) => Some(found)
@@ -145,6 +320,16 @@ export fn toOption[T, E](value: Result[T, E]) -> Option[T] {
 }
 
 /// The failure, or a fallback when the operation succeeded.
+///
+/// The mirror of `unwrapOr`, useful when reporting on a batch where a success also
+/// needs something to say for itself.
+///
+/// ## Examples
+///
+/// ```
+/// Result.errOr(Err("bad"), "none")  // "bad"
+/// Result.errOr(Ok(1), "none")       // "none"
+/// ```
 export fn errOr[T, E](value: Result[T, E], fallback: E) -> E {
   match value {
     case Ok(_) => fallback
@@ -153,6 +338,16 @@ export fn errOr[T, E](value: Result[T, E], fallback: E) -> E {
 }
 
 /// The two sides separated: every success, and every failure.
+///
+/// One pass where `successes` and `failures` would be two, and the form to reach
+/// for when a batch should report what worked alongside what did not. Order is
+/// preserved within each side.
+///
+/// ## Examples
+///
+/// ```
+/// Result.partition(&[Ok(1), Err("bad"), Ok(3)])  // ([1, 3], ["bad"])
+/// ```
 export fn partition[T, E](values: &Array[Result[T, E]]) -> (Array[T], Array[E]) {
   var good = []
   var bad = []
@@ -166,6 +361,16 @@ export fn partition[T, E](values: &Array[Result[T, E]]) -> (Array[T], Array[E]) 
 }
 
 /// The sides exchanged, so a failure becomes a success and back.
+///
+/// Useful when the failing case is the one worth working on: swap, operate with
+/// the ordinary success-side functions, and swap back.
+///
+/// ## Examples
+///
+/// ```
+/// Result.swap(Ok(1))       // Err(1)
+/// Result.swap(Err("bad"))  // Ok("bad")
+/// ```
 export fn swap[T, E](value: Result[T, E]) -> Result[E, T] {
   match value {
     case Ok(found) => Err(found)
@@ -174,6 +379,16 @@ export fn swap[T, E](value: Result[T, E]) -> Result[E, T] {
 }
 
 /// Both successes combined, or the first failure.
+///
+/// Stops at the first failing side, so the second is not consulted once the first
+/// has failed. The counterpart to `Option.map2` where the reason is carried along.
+///
+/// ## Examples
+///
+/// ```
+/// Result.map2(Ok(1), Ok(2), fn(a: Int, b: Int) -> Int => a + b)       // Ok(3)
+/// Result.map2(Err("bad"), Ok(2), fn(a: Int, b: Int) -> Int => a + b)  // Err("bad")
+/// ```
 export fn map2[T, U, E, V](
   left: Result[T, E],
   right: Result[U, E],
@@ -183,6 +398,16 @@ export fn map2[T, U, E, V](
 }
 
 /// Whether the operation succeeded and the predicate accepts the value.
+///
+/// A failure answers false without running the predicate. The result is borrowed,
+/// so this is a question rather than a step that consumes it.
+///
+/// ## Examples
+///
+/// ```
+/// Result.holds(&Ok(4), fn(n: Int) -> Bool => n > 3)       // true
+/// Result.holds(&Err("bad"), fn(n: Int) -> Bool => n > 3)  // false
+/// ```
 export fn holds[T, E](value: &Result[T, E], predicate: fn(T) -> Bool) -> Bool {
   match value {
     case Ok(found) => predicate(found)
@@ -191,11 +416,33 @@ export fn holds[T, E](value: &Result[T, E], predicate: fn(T) -> Bool) -> Bool {
 }
 
 /// A success when a condition holds, and a named failure otherwise.
+///
+/// The way to turn a precondition into a result that can be chained with `?`, so a
+/// guard reads like the rest of the fallible steps around it rather than as an
+/// early return.
+///
+/// ## Examples
+///
+/// ```
+/// Result.require(true, "too small")   // Ok(())
+/// Result.require(false, "too small")  // Err("too small")
+/// ```
 export fn require[E](condition: Bool, failure: E) -> Result[(), E] {
   if condition { Ok(()) } else { Err(failure) }
 }
 
 /// Every result transformed and collected, stopping at the first failure.
+///
+/// `map` followed by `all` without building the intermediate array of results, and
+/// the form to reach for when each element must be converted and any one of them
+/// may fail.
+///
+/// ## Examples
+///
+/// ```
+/// Result.traverse(&["1", "2"], fn(s: Str) -> Result[Int, Str] => parse(s))  // Ok([1, 2])
+/// Result.traverse(&["1", "x"], fn(s: Str) -> Result[Int, Str] => parse(s))  // Err(...)
+/// ```
 export fn traverse[A, B, E](
   items: &Array[A],
   transform: fn(A) -> Result[B, E]
