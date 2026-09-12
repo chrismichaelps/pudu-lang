@@ -1,25 +1,95 @@
 module Std.Map
 
 /// A map with no entries.
+///
+/// The starting point for building a map up by insertion. A map keeps its entries
+/// in key order, so listing it twice gives the same order both times.
+///
+/// ## Examples
+///
+/// ```
+/// Map.size(&Map.empty())  // 0
+/// ```
 export fn empty[K, V]() -> Map[K, V] { mapOf([]) }
 
 /// A map with one entry.
+///
+/// Shorter than inserting into `empty`, and the form to reach for when folding
+/// entries together with `merge`.
+///
+/// ## Examples
+///
+/// ```
+/// Map.pairs(&Map.singleton("a", 1))  // [("a", 1)]
+/// ```
 export fn singleton[K, V](key: K, value: V) -> Map[K, V] { mapOf([(key, value)]) }
 
 /// A map built from key and value pairs.
-/// A later pair replaces an earlier one with the same key.
+///
+/// A later pair replaces an earlier one with the same key, which is the same rule
+/// insertion uses. When the duplicates should be combined rather than discarded,
+/// `fromPairsWith` takes the rule.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.fromPairs(&[("a", 1), ("a", 2)]), "a")  // Some(2)
+/// ```
 export fn fromPairs[K, V](entries: &Array[(K, V)]) -> Map[K, V] { mapOf(*entries) }
 
 /// The number of entries.
+///
+/// Counts distinct keys, so it is at most the length of the array a map was built
+/// from.
+///
+/// ## Examples
+///
+/// ```
+/// Map.size(&Map.fromPairs(&[("a", 1), ("a", 2)]))  // 1
+/// ```
 export fn size[K, V](value: &Map[K, V]) -> Int { value.size() }
 
 /// Whether the map has no entries.
+///
+/// Asks directly rather than comparing `size` against nought, which says at the
+/// call site what is being tested.
+///
+/// ## Examples
+///
+/// ```
+/// Map.isEmpty(&Map.empty())  // true
+/// ```
 export fn isEmpty[K, V](value: &Map[K, V]) -> Bool { value.isEmpty() }
 
 /// The value stored under a key, or `None`.
+///
+/// The lookup a map exists for. An absent key is an ordinary answer rather than a
+/// failure, so no caller has to check membership first.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.fromPairs(&[("a", 1)]), "a")  // Some(1)
+/// Map.get(&Map.fromPairs(&[("a", 1)]), "z")  // None
+/// ```
+///
+/// ## See also
+///
+/// - `getOr` — a fallback instead of an option.
 export fn get[K, V](value: &Map[K, V], key: K) -> Option[V] { value.get(key) }
 
 /// The value stored under a key, or a fallback.
+///
+/// The form to reach for when the map holds settings or counters and an absent key
+/// simply means the default. The fallback is evaluated either way, so keep it
+/// cheap.
+///
+/// ## Examples
+///
+/// ```
+/// Map.getOr(&Map.fromPairs(&[("a", 1)]), "a", 0)  // 1
+/// Map.getOr(&Map.fromPairs(&[("a", 1)]), "z", 0)  // 0
+/// ```
 export fn getOr[K, V](value: &Map[K, V], key: K, fallback: V) -> V {
   match value.get(key) {
     case Some(found) => found
@@ -28,37 +98,132 @@ export fn getOr[K, V](value: &Map[K, V], key: K, fallback: V) -> V {
 }
 
 /// Whether a key has an entry.
+///
+/// Use it when only presence matters; `get` answers presence and the value in one
+/// step, so prefer that when the value is wanted too.
+///
+/// ## Examples
+///
+/// ```
+/// Map.containsKey(&Map.fromPairs(&[("a", 1)]), "a")  // true
+/// ```
 export fn containsKey[K, V](value: &Map[K, V], key: K) -> Bool { value.containsKey(key) }
 
 /// The map with an entry added or replaced.
+///
+/// A new map is returned and the original is left as it was. An existing key is
+/// replaced rather than duplicated, so a map never holds two entries for one key.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.insert(&Map.fromPairs(&[("a", 1)]), "a", 2), "a")  // Some(2)
+/// ```
+///
+/// ## See also
+///
+/// - `insertIfAbsent` — keep the existing value instead.
+/// - `upsert` — combine with the existing value.
 export fn insert[K, V](value: &Map[K, V], key: K, held: V) -> Map[K, V] {
   value.insert(key, held)
 }
 
 /// The map with a key's entry removed, or unchanged when there is none.
+///
+/// Removing an absent key is not an error, which keeps the operation safe to repeat
+/// and removes the need to check first.
+///
+/// ## Examples
+///
+/// ```
+/// Map.size(&Map.remove(&Map.fromPairs(&[("a", 1)]), "a"))  // 0
+/// Map.size(&Map.remove(&Map.fromPairs(&[("a", 1)]), "z"))  // 1
+/// ```
 export fn remove[K, V](value: &Map[K, V], key: K) -> Map[K, V] { value.remove(key) }
 
 /// Every key, in order.
+///
+/// Key order, not insertion order, so two maps built differently from the same
+/// entries list their keys identically.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.fromPairs(&[("b", 2), ("a", 1)]))  // ["a", "b"]
+/// ```
 export fn keys[K, V](value: &Map[K, V]) -> Array[K] { value.keys() }
 
 /// Every value, in the order of its key.
+///
+/// Positionally matched with `keys`, so the two can be zipped back into the entries
+/// `pairs` would have given directly.
+///
+/// ## Examples
+///
+/// ```
+/// Map.values(&Map.fromPairs(&[("b", 2), ("a", 1)]))  // [1, 2]
+/// ```
 export fn values[K, V](value: &Map[K, V]) -> Array[V] { value.values() }
 
 /// Every entry as a pair, in key order.
+///
+/// The form to iterate a map when both the key and the value are wanted, and the
+/// inverse of `fromPairs`.
+///
+/// ## Examples
+///
+/// ```
+/// Map.pairs(&Map.fromPairs(&[("b", 2), ("a", 1)]))  // [("a", 1), ("b", 2)]
+/// ```
 export fn pairs[K, V](value: &Map[K, V]) -> Array[(K, V)] { value.entries() }
 
 /// Two maps combined, with the second map's entries winning.
-/// That is the order an override is written in, which is what merging is for.
+///
+/// That is the order an override is written in, which is what merging is for:
+/// defaults on the left, the specific settings on the right. Keys in only one map
+/// are carried over untouched.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.merge(&Map.fromPairs(&[("a", 1)]), &Map.fromPairs(&[("a", 2)])), "a")  // Some(2)
+/// ```
+///
+/// ## See also
+///
+/// - `mergeWith` — combine the two values rather than choosing one.
 export fn merge[K, V](left: &Map[K, V], right: &Map[K, V]) -> Map[K, V] {
   left.merge(*right)
 }
 
 /// An entry added only when its key has none.
+///
+/// The opposite choice from `insert` for a key already present: the existing value
+/// wins. Useful for filling in defaults over a map that may already be partly
+/// populated.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.insertIfAbsent(&Map.fromPairs(&[("a", 1)]), "a", 9), "a")  // Some(1)
+/// Map.get(&Map.insertIfAbsent(&Map.fromPairs(&[]), "a", 9), "a")          // Some(9)
+/// ```
 export fn insertIfAbsent[K, V](value: &Map[K, V], key: K, held: V) -> Map[K, V] {
   if value.containsKey(key) { *value } else { value.insert(key, held) }
 }
 
 /// An entry's value transformed, or the map unchanged when the key has none.
+///
+/// The transform does not run for an absent key, so nothing is invented. When an
+/// absent key should start from a value instead, `upsert` takes that starting
+/// value.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.adjust(&Map.fromPairs(&[("a", 1)]), "a", fn(n: Int) -> Int => n + 1), "a")
+/// // Some(2)
+/// ```
 export fn adjust[K, V](value: &Map[K, V], key: K, transform: fn(V) -> V) -> Map[K, V] {
   match value.get(key) {
     case Some(found) => value.insert(key, transform(found))
@@ -67,8 +232,17 @@ export fn adjust[K, V](value: &Map[K, V], key: K, transform: fn(V) -> V) -> Map[
 }
 
 /// An entry's value transformed, inserting a starting value when it is absent.
+///
 /// This is how a counter or an accumulator is kept in a map without the caller
-/// writing the same two-case match every time.
+/// writing the same two-case match every time. The transform runs on the starting
+/// value too, so it is applied exactly once either way.
+///
+/// ## Examples
+///
+/// ```
+/// let once = Map.upsert(&Map.empty(), "a", 0, fn(n: Int) -> Int => n + 1)
+/// Map.get(&Map.upsert(&once, "a", 0, fn(n: Int) -> Int => n + 1), "a")  // Some(2)
+/// ```
 export fn upsert[K, V](value: &Map[K, V], key: K, start: V, transform: fn(V) -> V) -> Map[K, V] {
   match value.get(key) {
     case Some(found) => value.insert(key, transform(found))
@@ -77,6 +251,15 @@ export fn upsert[K, V](value: &Map[K, V], key: K, start: V, transform: fn(V) -> 
 }
 
 /// Every value transformed.
+///
+/// Keys are untouched, so the map's size and order are unchanged and no entry can
+/// collide. `mapKeys` is the form that can.
+///
+/// ## Examples
+///
+/// ```
+/// Map.values(&Map.mapValues(&Map.fromPairs(&[("a", 1)]), fn(n: Int) -> Int => n * 10))  // [10]
+/// ```
 export fn mapValues[K, A, B](value: &Map[K, A], transform: fn(A) -> B) -> Map[K, B] {
   var out = mapOf([])
   for pair in value.entries() {
@@ -86,6 +269,16 @@ export fn mapValues[K, A, B](value: &Map[K, A], transform: fn(A) -> B) -> Map[K,
 }
 
 /// Only the entries whose value the predicate accepts.
+///
+/// Keys are carried along untouched. A predicate that accepts nothing gives an
+/// empty map rather than a failure.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.filterValues(&Map.fromPairs(&[("a", 1), ("b", 5)]),
+///   fn(n: Int) -> Bool => n > 3))  // ["b"]
+/// ```
 export fn filterValues[K, V](value: &Map[K, V], keep: fn(V) -> Bool) -> Map[K, V] {
   var out = mapOf([])
   for pair in value.entries() {
@@ -95,6 +288,16 @@ export fn filterValues[K, V](value: &Map[K, V], keep: fn(V) -> Bool) -> Map[K, V
 }
 
 /// Only the entries whose key the predicate accepts.
+///
+/// The mirror of `filterValues`. When the keys to keep are already known,
+/// `restrictTo` takes them as an array instead of a predicate.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.filterKeys(&Map.fromPairs(&[("a", 1), ("b", 2)]),
+///   fn(k: Str) -> Bool => k == "a"))  // ["a"]
+/// ```
 export fn filterKeys[K, V](value: &Map[K, V], keep: fn(K) -> Bool) -> Map[K, V] {
   var out = mapOf([])
   for pair in value.entries() {
@@ -104,6 +307,17 @@ export fn filterKeys[K, V](value: &Map[K, V], keep: fn(K) -> Bool) -> Map[K, V] 
 }
 
 /// Every entry combined into one value, in key order.
+///
+/// The combining step receives the running value, the key, and the value together,
+/// so it does not have to take a pair apart. Key order makes the answer
+/// reproducible for equal maps.
+///
+/// ## Examples
+///
+/// ```
+/// Map.fold(&Map.fromPairs(&[("a", 1), ("b", 2)]),
+///   fn(total: Int, k: Str, v: Int) -> Int => total + v, 0)  // 3
+/// ```
 export fn fold[K, V, A](value: &Map[K, V], combine: fn(A, K, V) -> A, start: A) -> A {
   var accumulated = start
   for pair in value.entries() {
@@ -113,6 +327,15 @@ export fn fold[K, V, A](value: &Map[K, V], combine: fn(A, K, V) -> A, start: A) 
 }
 
 /// The keys of one map that the other does not have.
+///
+/// Answers keys rather than a map, which is what comparing two configurations or
+/// two schemas usually needs. `without` answers the entries themselves.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keysNotIn(&Map.fromPairs(&[("a", 1), ("b", 2)]), &Map.fromPairs(&[("a", 9)]))  // ["b"]
+/// ```
 export fn keysNotIn[K, V](left: &Map[K, V], right: &Map[K, V]) -> Array[K] {
   var out = []
   for key in left.keys() {
@@ -122,6 +345,14 @@ export fn keysNotIn[K, V](left: &Map[K, V], right: &Map[K, V]) -> Array[K] {
 }
 
 /// How many values the predicate accepts.
+///
+/// The size `filterValues` would have produced, without building the filtered map.
+///
+/// ## Examples
+///
+/// ```
+/// Map.countValues(&Map.fromPairs(&[("a", 1), ("b", 5)]), fn(n: Int) -> Bool => n > 3)  // 1
+/// ```
 export fn countValues[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Int {
   var total = 0
   for pair in value.entries() {
@@ -131,8 +362,17 @@ export fn countValues[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Int {
 }
 
 /// How many times each value appears in an array.
-/// The common reason to reach for a map at all, so it is here rather than left
-/// for every caller to write again.
+///
+/// The common reason to reach for a map at all, so it is here rather than left for
+/// every caller to write again. Values that do not appear have no entry rather than
+/// an entry of nought.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.tally(&["a", "b", "a"]), "a")  // Some(2)
+/// Map.get(&Map.tally(&["a"]), "z")            // None
+/// ```
 export fn tally[T](items: &Array[T]) -> Map[T, Int] {
   var out = mapOf([])
   for item in items {
@@ -145,6 +385,16 @@ export fn tally[T](items: &Array[T]) -> Map[T, Int] {
 }
 
 /// Items collected under the key each one produces.
+///
+/// Every item lands in exactly one group, and within a group the items keep their
+/// original order. The key function decides both the grouping and the map's key
+/// type.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.groupBy(&[1, 2, 3, 4], fn(n: Int) -> Int => n % 2), 0)  // Some([2, 4])
+/// ```
 export fn groupBy[T, K](items: &Array[T], key: fn(T) -> K) -> Map[K, Array[T]] {
   var out = mapOf([])
   for item in items {
@@ -158,13 +408,32 @@ export fn groupBy[T, K](items: &Array[T], key: fn(T) -> K) -> Map[K, Array[T]] {
 }
 
 /// Whether a key has no entry.
+///
+/// `containsKey` negated, written out because a negated call reads poorly inside a
+/// larger condition.
+///
+/// ## Examples
+///
+/// ```
+/// Map.notContainsKey(&Map.fromPairs(&[("a", 1)]), "z")  // true
+/// ```
 export fn notContainsKey[K, V](value: &Map[K, V], key: K) -> Bool {
   !value.containsKey(key)
 }
 
 /// An entry inserted, replaced, or removed by one transformation.
+///
 /// The general form the others are special cases of: `None` in means the key is
-/// absent, and `None` out removes it.
+/// absent, and `None` out removes it. Reach for it when one call site needs to
+/// handle all four combinations without branching.
+///
+/// ## Examples
+///
+/// ```
+/// // Insert when absent, remove when present.
+/// Map.alter(&m, "a", fn(v: Option[Int]) -> Option[Int] =>
+///   match v { case Some(_) => None case None => Some(1) })
+/// ```
 export fn alter[K, V](
   value: &Map[K, V],
   key: K,
@@ -177,6 +446,16 @@ export fn alter[K, V](
 }
 
 /// An entry's value transformed, removing the entry when the result is absent.
+///
+/// `adjust` that may also delete. The transform does not run for an absent key, so
+/// this never creates an entry.
+///
+/// ## Examples
+///
+/// ```
+/// Map.size(&Map.update(&Map.fromPairs(&[("a", 1)]), "a", fn(n: Int) -> Option[Int] => None))
+/// // 0
+/// ```
 export fn update[K, V](
   value: &Map[K, V],
   key: K,
@@ -192,6 +471,17 @@ export fn update[K, V](
 }
 
 /// Two maps combined, with a caller-supplied rule for keys in both.
+///
+/// `merge` always takes the right-hand value; this decides instead, which is what
+/// adding counts or joining lists across two maps needs. Keys in only one map are
+/// carried over without consulting the rule.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.mergeWith(&Map.fromPairs(&[("a", 1)]), &Map.fromPairs(&[("a", 2)]),
+///   fn(l: Int, r: Int) -> Int => l + r), "a")  // Some(3)
+/// ```
 export fn mergeWith[K, V](
   left: &Map[K, V],
   right: &Map[K, V],
@@ -208,6 +498,16 @@ export fn mergeWith[K, V](
 }
 
 /// Only the keys both maps have, with their values combined.
+///
+/// Unlike `mergeWith`, keys present in just one map are dropped rather than carried
+/// over, so the result's keys are exactly the keys the two agree on.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.intersectWith(&Map.fromPairs(&[("a", 1), ("b", 2)]),
+///   &Map.fromPairs(&[("a", 9)]), fn(l: Int, r: Int) -> Int => l + r))  // ["a"]
+/// ```
 export fn intersectWith[K, V](
   left: &Map[K, V],
   right: &Map[K, V],
@@ -224,6 +524,16 @@ export fn intersectWith[K, V](
 }
 
 /// Only the keys the first map has and the second does not.
+///
+/// The values of the second map are never consulted; it names keys to drop. The
+/// entries themselves survive, which is the difference from `keysNotIn`.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.without(&Map.fromPairs(&[("a", 1), ("b", 2)]), &Map.fromPairs(&[("a", 9)])))
+/// // ["b"]
+/// ```
 export fn without[K, V](left: &Map[K, V], right: &Map[K, V]) -> Map[K, V] {
   var out = mapOf([])
   for pair in left.entries() {
@@ -233,6 +543,16 @@ export fn without[K, V](left: &Map[K, V], right: &Map[K, V]) -> Map[K, V] {
 }
 
 /// Only the keys the given array names.
+///
+/// Names that the map does not hold are ignored rather than added, so the result is
+/// never larger than the map it came from. The form to reach for when projecting a
+/// known subset of settings.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.restrictTo(&Map.fromPairs(&[("a", 1), ("b", 2)]), &["a", "z"]))  // ["a"]
+/// ```
 export fn restrictTo[K, V](value: &Map[K, V], wanted: &Array[K]) -> Map[K, V] {
   var out = mapOf([])
   for key in wanted {
@@ -245,6 +565,15 @@ export fn restrictTo[K, V](value: &Map[K, V], wanted: &Array[K]) -> Map[K, V] {
 }
 
 /// Every key the given array does not name.
+///
+/// The complement of `restrictTo`. Names the map does not hold are ignored, as they
+/// are for `remove`.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.withoutKeys(&Map.fromPairs(&[("a", 1), ("b", 2)]), &["a"]))  // ["b"]
+/// ```
 export fn withoutKeys[K, V](value: &Map[K, V], unwanted: &Array[K]) -> Map[K, V] {
   var out = *value
   for key in unwanted { out = out.remove(key) }
@@ -252,6 +581,16 @@ export fn withoutKeys[K, V](value: &Map[K, V], unwanted: &Array[K]) -> Map[K, V]
 }
 
 /// The entries the predicate accepts, and the entries it rejects.
+///
+/// Every entry lands in exactly one side, so the two rejoin by `merge` to the
+/// original. One pass where two filters would be two.
+///
+/// ## Examples
+///
+/// ```
+/// Map.partition(&Map.fromPairs(&[("a", 1), ("b", 5)]), fn(k: Str, v: Int) -> Bool => v > 3)
+/// // ({"b": 5}, {"a": 1})
+/// ```
 export fn partition[K, V](
   value: &Map[K, V],
   keep: fn(K, V) -> Bool
@@ -265,8 +604,17 @@ export fn partition[K, V](
   (kept, rejected)
 }
 
-/// Every key transformed. A transformation that sends two keys to one keeps the
-/// entry that comes later in key order, which is the same rule insertion uses.
+/// Every key transformed.
+///
+/// A transformation that sends two keys to one keeps the entry that comes later in
+/// key order, which is the same rule insertion uses. That makes the result possibly
+/// smaller than the input, unlike `mapValues`.
+///
+/// ## Examples
+///
+/// ```
+/// Map.size(&Map.mapKeys(&Map.fromPairs(&[("a", 1), ("b", 2)]), fn(k: Str) -> Int => 0))  // 1
+/// ```
 export fn mapKeys[K, L, V](value: &Map[K, V], transform: fn(K) -> L) -> Map[L, V] {
   var out = mapOf([])
   for pair in value.entries() { out = out.insert(transform(pair[0]), pair[1]) }
@@ -274,12 +622,29 @@ export fn mapKeys[K, L, V](value: &Map[K, V], transform: fn(K) -> L) -> Map[L, V
 }
 
 /// The smallest key and its value, or `None` for an empty map.
+///
+/// The first entry in key order, which a map can answer without searching.
+///
+/// ## Examples
+///
+/// ```
+/// Map.least(&Map.fromPairs(&[("b", 2), ("a", 1)]))  // Some(("a", 1))
+/// Map.least(&Map.empty())                           // None
+/// ```
 export fn least[K, V](value: &Map[K, V]) -> Option[(K, V)] {
   let entries = value.entries()
   if entries.length() == 0 { None } else { Some(entries[0]) }
 }
 
 /// The largest key and its value, or `None` for an empty map.
+///
+/// The mirror of `least`, and the last entry in key order.
+///
+/// ## Examples
+///
+/// ```
+/// Map.greatest(&Map.fromPairs(&[("b", 2), ("a", 1)]))  // Some(("b", 2))
+/// ```
 export fn greatest[K, V](value: &Map[K, V]) -> Option[(K, V)] {
   let entries = value.entries()
   let total = entries.length()
@@ -287,6 +652,15 @@ export fn greatest[K, V](value: &Map[K, V]) -> Option[(K, V)] {
 }
 
 /// The map without its smallest key.
+///
+/// An empty map comes back empty rather than failing, so repeated use drains a map
+/// safely. Pair it with `least` to take the entry and the remainder.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.removeLeast(&Map.fromPairs(&[("a", 1), ("b", 2)])))  // ["b"]
+/// ```
 export fn removeLeast[K, V](value: &Map[K, V]) -> Map[K, V] {
   match least(value) {
     case Some(pair) => value.remove(pair[0])
@@ -295,6 +669,14 @@ export fn removeLeast[K, V](value: &Map[K, V]) -> Map[K, V] {
 }
 
 /// The map without its largest key.
+///
+/// The mirror of `removeLeast`, and equally safe on an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// Map.keys(&Map.removeGreatest(&Map.fromPairs(&[("a", 1), ("b", 2)])))  // ["a"]
+/// ```
 export fn removeGreatest[K, V](value: &Map[K, V]) -> Map[K, V] {
   match greatest(value) {
     case Some(pair) => value.remove(pair[0])
@@ -303,6 +685,17 @@ export fn removeGreatest[K, V](value: &Map[K, V]) -> Map[K, V] {
 }
 
 /// Every map combined in order, with later maps' entries winning.
+///
+/// Folding `merge` over the array, which is what layering configuration sources
+/// looks like: the most general first, the most specific last. An empty array
+/// answers an empty map.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.mergeAll(&[Map.fromPairs(&[("a", 1)]), Map.fromPairs(&[("a", 2)])]), "a")
+/// // Some(2)
+/// ```
 export fn mergeAll[K, V](maps: &Array[Map[K, V]]) -> Map[K, V] {
   var out = mapOf([])
   for value in maps { out = out.merge(value) }
@@ -310,6 +703,17 @@ export fn mergeAll[K, V](maps: &Array[Map[K, V]]) -> Map[K, V] {
 }
 
 /// A map built from pairs, with a rule for keys that appear more than once.
+///
+/// `fromPairs` discards the earlier value; this combines them, which is what
+/// building a tally or gathering values under a key needs. The rule is only
+/// consulted for repeated keys.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.fromPairsWith(&[("a", 1), ("a", 2)], fn(l: Int, r: Int) -> Int => l + r), "a")
+/// // Some(3)
+/// ```
 export fn fromPairsWith[K, V](
   entries: &Array[(K, V)],
   combine: fn(V, V) -> V
@@ -325,9 +729,28 @@ export fn fromPairsWith[K, V](
 }
 
 /// The keys as a set.
+///
+/// The form to reach for when the keys are about to be compared with other keys,
+/// since a set answers membership, union, and difference directly.
+///
+/// ## Examples
+///
+/// ```
+/// Set.contains(&Map.keySet(&Map.fromPairs(&[("a", 1)])), "a")  // true
+/// ```
 export fn keySet[K, V](value: &Map[K, V]) -> Set[K] { setOf(value.keys()) }
 
 /// Whether every entry satisfies the predicate. True for an empty map.
+///
+/// The predicate receives the key and the value together. True for nothing is what
+/// makes the answer compose across a merge of two maps.
+///
+/// ## Examples
+///
+/// ```
+/// Map.all(&Map.fromPairs(&[("a", 2)]), fn(k: Str, v: Int) -> Bool => v > 1)  // true
+/// Map.all(&Map.empty(), fn(k: Str, v: Int) -> Bool => v > 1)                 // true
+/// ```
 export fn all[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
   for pair in value.entries() {
     if !holds(pair[0], pair[1]) { return false }
@@ -336,6 +759,15 @@ export fn all[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
 }
 
 /// Whether any entry satisfies the predicate. False for an empty map.
+///
+/// The complement of `all` under a negated predicate, and false for nothing for the
+/// matching reason.
+///
+/// ## Examples
+///
+/// ```
+/// Map.any(&Map.fromPairs(&[("a", 2)]), fn(k: Str, v: Int) -> Bool => v > 1)  // true
+/// ```
 export fn any[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
   for pair in value.entries() {
     if holds(pair[0], pair[1]) { return true }
@@ -344,9 +776,28 @@ export fn any[K, V](value: &Map[K, V], holds: fn(K, V) -> Bool) -> Bool {
 }
 
 /// The entries as an array, in key order.
+///
+/// The same answer as `pairs`, named for the type it lands in rather than what the
+/// elements are.
+///
+/// ## Examples
+///
+/// ```
+/// Map.toArray(&Map.fromPairs(&[("a", 1)]))  // [("a", 1)]
+/// ```
 export fn toArray[K, V](value: &Map[K, V]) -> Array[(K, V)] { value.entries() }
 
 /// The first key whose value the predicate accepts, or `None`.
+///
+/// First in key order, so the answer is reproducible for equal maps. This searches
+/// by value, which is the direction a map is not built for; an `invert`ed map
+/// answers repeated questions faster.
+///
+/// ## Examples
+///
+/// ```
+/// Map.findKey(&Map.fromPairs(&[("a", 1), ("b", 5)]), fn(v: Int) -> Bool => v > 3)  // Some("b")
+/// ```
 export fn findKey[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Option[K] {
   for pair in value.entries() {
     if holds(pair[1]) { return Some(pair[0]) }
@@ -355,8 +806,16 @@ export fn findKey[K, V](value: &Map[K, V], holds: fn(V) -> Bool) -> Option[K] {
 }
 
 /// The map with its keys and values exchanged.
+///
 /// Two keys sharing a value collapse into one entry, keeping the key that comes
-/// later in order.
+/// later in order, so inverting is not reversible unless the values were already
+/// distinct.
+///
+/// ## Examples
+///
+/// ```
+/// Map.get(&Map.invert(&Map.fromPairs(&[("a", 1)])), 1)  // Some("a")
+/// ```
 export fn invert[K, V](value: &Map[K, V]) -> Map[V, K] {
   var out = mapOf([])
   for pair in value.entries() { out = out.insert(pair[1], pair[0]) }
