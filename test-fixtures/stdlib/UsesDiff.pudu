@@ -109,5 +109,14 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // 11. With no context, a side holding no lines names the line the change
+  // follows, as patch reads it.
+  let inserted = Diff.unifiedDiff("a/f", "b/f", "a\nb\nc", "a\nb\nX\nY\nc", 0)
+  if inserted.contains("@@ -2,0 +3,2 @@\n+X\n+Y\n") { held = held + 1 }
+
+  // 12. The same rule on the new side when a line is only removed.
+  let removed = Diff.unifiedDiff("a/f", "b/f", "a\nb\nc", "a\nc", 0)
+  if removed.contains("@@ -2,1 +1,0 @@\n-b\n") { held = held + 1 }
+
   held
 }

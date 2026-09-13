@@ -17,6 +17,9 @@ tags: [changelog]
   each by position; at 120,000 bytes hex encoding fell from 2,299 ms to 423 ms and base64 decoding
   from 2,019 ms to 979 ms. Error positions are unchanged, and the bytes fixture now holds 54 claims,
   including exact digit positions and large round trips through every alphabet.
+- `Std.Diff.unifiedDiff` numbers a hunk side holding no lines by the line the change follows, so a
+  zero-context insertion renders `@@ -2,0 +3,2 @@` as `patch` expects instead of one line late. The
+  diff fixture now holds 12 claims.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

@@ -78,7 +78,9 @@ fn splitLines(text: Str) -> Array[Str] {
   lines
 }
 
-/// Computes the minimal edit script across token sequences using Myers O(ND) algorithm.
+/// Computes the minimal edit script across token sequences with Myers' greedy
+/// algorithm, whose work follows the size of the edit rather than the square of
+/// the input.
 export fn diffTokens(oldTokens: Array[Str], newTokens: Array[Str]) -> Array[DiffOp[Str]] {
   let n = oldTokens.length()
   let m = newTokens.length()
@@ -240,7 +242,7 @@ export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, co
   }
   hunkRanges = hunkRanges.push((rangeStart, rangeEnd))
 
-  var out = "--- " + oldPath + "\n+++ " + newPath + "\n"
+  var pieces: Array[Str] = ["--- " + oldPath + "\n+++ " + newPath + "\n"]
 
   var oldTracker = 1
   var newTracker = 1
@@ -264,8 +266,8 @@ export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, co
       opPos = opPos + 1
     }
 
-    let hunkOldStart = if oldLines.length() == 0 { 0 } else { oldTracker }
-    let hunkNewStart = if newLines.length() == 0 { 0 } else { newTracker }
+    let hunkOldFirst = oldTracker
+    let hunkNewFirst = newTracker
     var hunkOldCount = 0
     var hunkNewCount = 0
     var hunkLines: Array[Str] = []
@@ -295,16 +297,20 @@ export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, co
     }
     opPos = hEnd
 
-    out = out + "@@ -" + show(hunkOldStart) + "," + show(hunkOldCount)
-      + " +" + show(hunkNewStart) + "," + show(hunkNewCount) + " @@\n"
+    // A side with no lines in the hunk names the line the change follows,
+    // which is one before where it would begin; `patch` reads it that way.
+    let hunkOldStart = if hunkOldCount == 0 { hunkOldFirst - 1 } else { hunkOldFirst }
+    let hunkNewStart = if hunkNewCount == 0 { hunkNewFirst - 1 } else { hunkNewFirst }
+    pieces = pieces.push("@@ -" + show(hunkOldStart) + "," + show(hunkOldCount)
+        + " +" + show(hunkNewStart) + "," + show(hunkNewCount) + " @@\n")
     for hl in hunkLines {
-      out = out + hl + "\n"
+      pieces = pieces.push(hl + "\n")
     }
 
     hIdx = hIdx + 1
   }
 
-  out
+  pieces.join("")
 }
 
 /// Computes the minimum number of edits to transform s1 into s2.

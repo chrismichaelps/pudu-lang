@@ -12,7 +12,6 @@ aliases: [Std Diff]
 Compute line-by-line and sequence differences using Myers $O(ND)$ difference algorithm,
 generate standard Unified Diff formats with configurable context, and calculate Levenshtein edit distance metrics.
 Essential for assertion diffs, CLI tools, revision tracking, and text analytics.
-Inspired by Haskell `diff` and Java `diff-utils`.
 
 ## Interface
 
@@ -35,6 +34,10 @@ Uses Eugene Myers' $O((N + M) D)$ greedy longest common subsequence (LCS) algori
 where $N$ and $M$ are input sequence lengths and $D$ is the size of the minimal edit script.
 For near-identical texts (the common case in version control and testing), $D \ll N$, executing in near-linear time.
 Unified diff formatting aggregates modified spans with surrounding unchanged context lines into standard hunks.
+A hunk side that holds no lines — an insertion's old side or a deletion's new side, which occurs with
+zero context — names the line the change follows, one before where it would begin, so
+`@@ -2,0 +3,2 @@` inserts after old line 2 exactly as `patch` applies it. The rendered text is gathered
+as pieces and joined once.
 
 ## Grill Log
 
@@ -42,6 +45,10 @@ Unified diff formatting aggregates modified spans with surrounding unchanged con
   **A:** Myers diff is optimized for line-oriented structured text and source code with hunk rendering; Levenshtein distance provides character-level edit counts and similarity scoring for fuzzy matching and typo detection.
 - **Q:** How does `unifiedDiff` handle completely identical inputs?
   **A:** Returns an empty string `""`, allowing callers to test `diff.length() == 0` directly for equality.
+- **Q:** Start an empty hunk side at the position where the change begins?
+  **A:** No. _Rationale:_ the unified format numbers an empty side by the line it follows, and a
+  start one too high makes `patch` apply the change a line late. _Rejected:_ the tracker position as
+  written for non-empty sides.
 
 ## Referenced by
 
