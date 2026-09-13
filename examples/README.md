@@ -12,6 +12,26 @@ So these are here to be read and to be run once, not to be trusted as proof.
 The formatter still checks them, because an example that does not compile is
 worse than no example.
 
+## media/Studio.pudu
+
+A bounded Pudu-native media laboratory. It renders an 8 kHz mono audio graph,
+writes the result as a valid PCM WAV in the system temporary directory, aligns
+24 generated pictures to the same exact timeline, and presents those pictures
+through a real desktop window.
+
+```bash
+pudu run examples/media/Studio.pudu
+pudu run examples/media/Studio.pudu --config examples/media/studio.json
+```
+
+This run proves audio representation, graph rendering, WAV delivery, exact
+video timing, Canvas rendering, and native window presentation together. It
+does not play through a speaker, decode media, synchronize to a device clock,
+or test camera/microphone capture. Each successful run writes a JSON report of
+configuration, monotonic durations, observations, and capability states beside
+the WAV in the system temporary directory. Those gaps remain explicit in
+`wiki/architecture/DESKTOP-CONFORMANCE.md` rather than implied capabilities.
+
 ## raylib/Window.pudu
 
 A window, drawn by a library written elsewhere.
