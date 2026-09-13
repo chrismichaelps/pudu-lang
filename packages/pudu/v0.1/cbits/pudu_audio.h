@@ -13,7 +13,8 @@ enum pudu_audio_status {
   PUDU_AUDIO_ENQUEUE_FAILED = -5,
   PUDU_AUDIO_START_FAILED = -6,
   PUDU_AUDIO_RELEASE_FAILED = -7,
-  PUDU_AUDIO_DRAIN_FAILED = -8
+  PUDU_AUDIO_DRAIN_FAILED = -8,
+  PUDU_AUDIO_CANCELLED = -9
 };
 
 int32_t pudu_audio_play(
@@ -24,6 +25,9 @@ int32_t pudu_audio_play(
     int32_t frames_per_buffer,
     int32_t buffer_count,
     int32_t timeout_ms,
+    int32_t *cancel_token,
     uint64_t *completed_frames);
+
+void pudu_audio_request_cancel(int32_t *cancel_token);
 
 #endif

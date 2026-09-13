@@ -36,9 +36,11 @@ running-state query failure is `PUDU_AUDIO_DRAIN_FAILED`.
 - **Q:** Stop immediately when the last callback arrives? **A:** No. _Rationale:_ the final buffers
   may still be in the output path, and an immediate stop discards them audibly. _Accepted:_ flush,
   asynchronous stop, and a deadline-bounded wait for the queue's running state to clear.
-- **Q:** Let an interrupt cancel a play in progress? **A:** Not in the one-shot contract.
-  _Rationale:_ the 60-second deadline bounds how long a pending interrupt waits; cancellation belongs
-  to the persistent streaming session. _Rejected:_ treating any `EINTR` as cancellation, which
+- **Q:** Let an interrupt cancel a play in progress? **A:** Yes, through an explicit token.
+  _Rationale:_ waiting out a clip of up to a minute ignored Ctrl-C and a supervisor's stop request.
+  _Accepted:_ a four-byte token read atomically on every loop turn and set by
+  `pudu_audio_request_cancel`; a set token returns `PUDU_AUDIO_CANCELLED` through the same immediate
+  stop and dispose as every other outcome. _Rejected:_ treating any `EINTR` as cancellation, which
   unrelated signals would trigger.
 
 ## Referenced by

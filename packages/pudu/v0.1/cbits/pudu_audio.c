@@ -59,6 +59,18 @@ static int32_t enqueue_chunk(
       : PUDU_AUDIO_ENQUEUE_FAILED;
 }
 
+// The token is written by the controlling thread and read by the playing one,
+// so both sides go through the same atomic view of its four bytes.
+static bool cancel_requested(int32_t *cancel_token) {
+  return atomic_load_explicit((atomic_int_least32_t *)cancel_token, memory_order_acquire) != 0;
+}
+
+void pudu_audio_request_cancel(int32_t *cancel_token) {
+  if (cancel_token != NULL) {
+    atomic_store_explicit((atomic_int_least32_t *)cancel_token, 1, memory_order_release);
+  }
+}
+
 int32_t pudu_audio_play(
     int32_t sample_rate,
     int32_t channels,
@@ -67,11 +79,12 @@ int32_t pudu_audio_play(
     int32_t frames_per_buffer,
     int32_t buffer_count,
     int32_t timeout_ms,
+    int32_t *cancel_token,
     uint64_t *completed_frames) {
   if (sample_rate < 8000 || sample_rate > 384000 || channels < 1 || channels > 8 ||
       pcm == NULL || pcm_length == 0 || frames_per_buffer < 16 || frames_per_buffer > 4096 ||
       buffer_count < 2 || buffer_count > PUDU_AUDIO_MAX_BUFFERS || timeout_ms < 1 ||
-      completed_frames == NULL) {
+      cancel_token == NULL || completed_frames == NULL) {
     return PUDU_AUDIO_INVALID_ARGUMENT;
   }
 
@@ -147,6 +160,12 @@ int32_t pudu_audio_play(
   bool draining = false;
   bool seen_running = false;
   for (;;) {
+    // A cancelled play stops at once; the release below stops the queue
+    // immediately, which discards the buffers not yet heard.
+    if (cancel_requested(cancel_token)) {
+      status = PUDU_AUDIO_CANCELLED;
+      goto release;
+    }
     if (!draining && submitted == pcm_length) {
       if (AudioQueueFlush(queue) != noErr || AudioQueueStop(queue, false) != noErr) {
         status = PUDU_AUDIO_DRAIN_FAILED;

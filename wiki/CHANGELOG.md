@@ -36,6 +36,11 @@ tags: [changelog]
   leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
   passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
   handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
+- Device playback is cancellable. The native play runs on a worker thread while the evaluating thread
+  waits, so Ctrl-C during an 8-second clip stops the program in 0.07 s with exit 130 instead of after
+  the clip with exit 0 and a `PlatformFailure("user interrupt")`. A program watching for a stop
+  request receives the new `DeviceError.Cancelled`; in both cases the adapter's cancel token stops and
+  releases the Audio Queue before the answer.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

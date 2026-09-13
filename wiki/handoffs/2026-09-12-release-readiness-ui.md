@@ -124,8 +124,10 @@ order, hit testing, painting, and damage regions.
   transfer encoding not ending in `chunked` and a non-UTF-8 head or body. Every slice kept its exact
   fixtures and added claims for the defect it fixed; the optimized suite, formatter, checker,
   diagnostic-code, API-coverage, and LSP gates pass. `Std.Text` and `Std.Xml` gained missing mirrors.
-- Audit findings left open, each a named gap rather than a silent one: the one-shot device play is
-  not cancellable before its 60-second deadline; `Std.Http.Server` requests carry no byte body, so
+- Playback cancellation — device play runs on a worker thread behind an atomic cancel token; Ctrl-C
+  during an 8-second clip now stops the program in 0.07 s (exit 130) instead of after the clip, and a
+  program watching for stop receives `Cancelled`.
+- Audit findings left open, each a named gap rather than a silent one: `Std.Http.Server` requests carry no byte body, so
   binary uploads are refused rather than delivered; `Std.Toml.Read` still reads characters by
   position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
   per character on inputs that are normally short; a unified diff does not mark a missing final
@@ -135,8 +137,8 @@ order, hit testing, painting, and damage regions.
 ## Exact next action
 
 Give `Std.Http.Server` requests an exact byte body beside the text body so multipart uploads of
-binary files are delivered, then convert `Std.Toml.Read` to the cursor pattern `Std.Json` uses and
-add a cancellation path to device playback before the streaming session. After those, continue the
+binary files are delivered, then convert `Std.Toml.Read` to the cursor pattern `Std.Json` uses.
+After those, continue the
 native media roadmap: a persistent Pudu-owned stream with negotiated format, device change,
 interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
 presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and

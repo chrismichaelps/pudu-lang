@@ -23,6 +23,7 @@ export type DeviceError
   | MalformedAudio(Int, Int)
   | UnsupportedPlatform
   | DeadlineExceeded
+  | Cancelled
   | PlatformFailure(Str)
 
 /// Admit two to eight preallocated buffers of 16 through 4,096 frames each.
@@ -47,6 +48,10 @@ export fn plan(
 }
 
 /// Play one admitted interleaved signed-16 clip and await exact completion.
+///
+/// A program that watches for a stop request and receives one gets `Cancelled`
+/// within a few milliseconds rather than after the clip or its deadline; the
+/// queue is stopped at once and released before this answers.
 export fn play(target: &Plan, source: &Audio.Pcm) -> Result[Playback, DeviceError] {
   validatePlan(target) ?
   match Audio.format(source.format.sampleRate, source.format.channels) {
@@ -98,6 +103,8 @@ fn classified(message: Str) -> DeviceError {
     UnsupportedPlatform
   } else if message == "audio device playback deadline exceeded" {
     DeadlineExceeded
+  } else if message == "audio device playback was cancelled" {
+    Cancelled
   } else {
     PlatformFailure(message)
   }

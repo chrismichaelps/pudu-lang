@@ -13,8 +13,9 @@ aliases: [Pudu Audio Adapter Header, Pudu Audio Header]
 Declare the private, framework-neutral ABI for bounded PCM playback. The call accepts signed
 little-endian 16-bit interleaved bytes, format, queue quantum/count, and deadline, and writes exact
 completed frames. Stable integer outcomes are interpreted only by [[Eval Audio Device]]: success,
-invalid argument, deadline exceeded, queue creation, buffer allocation, enqueue, start, release, and
-drain failure (`0` through `-8`).
+invalid argument, deadline exceeded, queue creation, buffer allocation, enqueue, start, release,
+drain failure, and cancellation (`0` through `-9`). The caller passes a four-byte cancel token that
+`pudu_audio_request_cancel` sets from another thread; the adapter reads it atomically.
 
 ## Grill Log
 

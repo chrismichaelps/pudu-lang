@@ -16,7 +16,9 @@ the PCM representation, refuses an empty clip, invokes the language-owned device
 `Playback` with the exact frames acknowledged by the target adapter.
 
 `DeviceError` distinguishes plan mistakes, malformed or empty PCM, unsupported targets, deadline
-expiry, and platform failure. No operating-system type, callback, pointer, or status code enters the
+expiry, cancellation, and platform failure. A program that watches for a stop request and receives
+one during a play gets `Cancelled` within a few milliseconds; an interrupt the program does not
+handle stops the program as it would anywhere else, after the queue is released. No operating-system type, callback, pointer, or status code enters the
 public Pudu API.
 
 ## Performance and ownership
@@ -42,6 +44,10 @@ returning, including on start, enqueue, timeout, and disposal failures.
 - **Q:** Begin with a persistent streaming session? **A:** Not in this slice. _Rationale:_ device
   switching, interruption, underrun, and clock semantics must be designed together. _Accepted:_ one
   bounded acquisition whose cleanup can be proven now; streaming remains explicitly partial.
+- **Q:** Let a play hold a stop request or an interrupt until the clip or deadline ends? **A:** No.
+  _Rationale:_ a clip may be up to a minute long, a supervisor's grace period is shorter, and an
+  interrupt reported as a platform failure let the program continue. _Accepted:_ `Cancelled` for a
+  watched stop request and a re-raised interrupt, both after the queue is released.
 
 ## Referenced by
 
