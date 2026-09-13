@@ -117,6 +117,7 @@ tags: [moc, module, stdlib]
 - [[Std Process]] — subprocess results and convenience projections.
 - [[Std Time]] — instants, durations, calendar conversion, and clocks.
 - [[Std Json]] — deterministic JSON parsing, rendering, lookup, and updates.
+- [[Std Xml]] — XML elements, attributes, text, and CDATA with bounded nesting and refused DTDs.
 - [[Std Url]] — pure URL parsing, rendering, queries, and percent encoding.
 - [[Std Math]] — generic total numeric algorithms.
 - [[Std Math Float]] — high-performance IEEE-754 trigonometry, logarithms, exponentials, hyperbolic functions, and constants.

@@ -322,7 +322,7 @@ testProtocolEvaluation = do
         the machine it is running on. -}
     , counterexample
         "an envelope's names, entities, and CDATA survive, and a DTD is refused"
-        (xmlDocuments === Just "16")
+        (xmlDocuments === Just "18")
     {-| A round trip proves the two halves agree; the size proves they agree
         about a real archive rather than about storing everything, which would
         also round-trip. That an archive written here is read by an ordinary
@@ -379,7 +379,7 @@ testProtocolEvaluation = do
         sections, dotted keys, and a document written and read back. -}
     , counterexample
         "a configuration reads back what it was written as"
-        (configured === Just "44")
+        (configured === Just "47")
     {-| Every export of the configuration scanner. Each reading call answers a
         value and where it stopped, and the position is checked beside the
         value every time: a reader answering the right text and the wrong

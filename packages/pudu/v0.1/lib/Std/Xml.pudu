@@ -32,6 +32,16 @@ export type XmlError
   | UnexpectedEnd
   | NoRootElement
   | Malformed(Int, Str)
+  | TooDeep(Int)
+
+/// The most elements one document may nest.
+///
+/// Reading recurses once per open element, and the evaluator bounds how deep
+/// calls may go, so a document nested past that bound would stop the whole
+/// program rather than answer an error. Documents arriving from outside a
+/// program are where such nesting comes from; this bound refuses it as
+/// `TooDeep` well inside the evaluator's own limit.
+const MAX_DEPTH: Int = 512
 
 /// What this reads.
 ///
@@ -54,7 +64,7 @@ export fn decode(source: Str) -> Result[Tag, XmlError] {
   if index >= chars.length() {
     return Err(NoRootElement)
   }
-  let parsed = parseElement(&chars, index) ?
+  let parsed = parseElement(&chars, index, 1) ?
   Ok(parsed[0])
 }
 
@@ -124,7 +134,9 @@ fn isSpace(value: Char) -> Bool {
 }
 
 /// One element and everything inside it, answering where it ended.
-fn parseElement(chars: &Array[Char], from: Int) -> Result[(Tag, Int), XmlError] {
+///
+/// `depth` counts this element among the elements open around it.
+fn parseElement(chars: &Array[Char], from: Int, depth: Int) -> Result[(Tag, Int), XmlError] {
   if from >= chars.length() || chars[from] != '<' {
     return Err(Malformed(from, "an element starts with <"))
   }
@@ -212,7 +224,8 @@ fn parseElement(chars: &Array[Char], from: Int) -> Result[(Tag, Int), XmlError] 
     } else if startsWith(chars, index, "<?") {
       index = afterMarker(chars, index, "?>") ?
     } else if chars[index] == '<' {
-      let nested = parseElement(chars, index) ?
+      if depth >= MAX_DEPTH { return Err(TooDeep(index)) }
+      let nested = parseElement(chars, index, depth + 1) ?
       inside = inside.push(Element(nested[0]))
       index = nested[1]
     } else {
@@ -540,5 +553,7 @@ export fn explain(reason: &XmlError) -> Str {
     case UnexpectedEnd => "the document ends in the middle of an element"
     case NoRootElement => "the document has no element in it"
     case Malformed(at, what) => "at " + display(at) + ": " + what
+    case TooDeep(at) =>
+    "at " + display(at) + ": elements nest deeper than " + display(MAX_DEPTH) + " levels"
   }
 }

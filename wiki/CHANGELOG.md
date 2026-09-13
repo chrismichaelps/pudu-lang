@@ -28,6 +28,9 @@ tags: [changelog]
 - `Std.Csv` reads in linear time: the scanner walks one character array and joins each field once
   instead of reading by position and appending per character, so 200,000 characters of quoted rows
   take 0.87 s rather than 2.55 s. Rendering joins fields and lines once.
+- `Std.Xml` and `Std.Toml` bound nesting at 512 levels and answer the new `TooDeep` error at the
+  opening position, where a deeply nested document previously exhausted the evaluator's call limit
+  and stopped the program. `Std.Xml` gains its missing vault mirror.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

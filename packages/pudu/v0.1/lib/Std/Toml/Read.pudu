@@ -1,9 +1,17 @@
 module Std.Toml.Read
 
 import Std.Option as Option
-import Std.Toml {Boolean, Fractional, List, Malformed, Moment, Table, Text, Toml, TomlError, Unexpected, Unterminated, Whole}
+import Std.Toml {Boolean, Fractional, List, Malformed, Moment, Table, Text, Toml, TomlError, TooDeep, Unexpected, Unterminated, Whole}
 import Std.Toml as Document
 import Std.Toml.Scan as Scan
+
+/// The most lists and inline tables one value may nest.
+///
+/// Reading recurses once per level, and the evaluator bounds how deep calls
+/// may go, so a value nested past that bound would stop the whole program
+/// rather than answer an error. This bound refuses it as `TooDeep` well inside
+/// the evaluator's own limit.
+const MAX_DEPTH: Int = 512
 
 /// A configuration read from text.
 ///
@@ -42,7 +50,7 @@ export fn read(source: Str) -> Result[Toml, TomlError] {
           failure = failureOf(header, index)
         }
       } else {
-        let pairing = readPair(source, index)
+        let pairing = readPair(source, index, 0)
         if let Ok(found) = pairing {
           let whole = joinPath(&section, &found[0])
           if Option.isSome(&pathAt(&root, &whole)) {
@@ -85,14 +93,14 @@ fn readHeader(source: Str, start: Int) -> Result[(Array[Str], Bool, Int), TomlEr
 }
 
 /// A key and its value, and where the line ended.
-fn readPair(source: Str, start: Int) -> Result[(Array[Str], Toml, Int), TomlError] {
+fn readPair(source: Str, start: Int, depth: Int) -> Result[(Array[Str], Toml, Int), TomlError] {
   let named = readKeyPath(source, start) ?
   var index = Scan.skipInline(source, named[1])
   if source.slice(index, index + 1) != "=" {
     Err(Unexpected(index, "a key with no value"))
   } else {
     index = Scan.skipInline(source, index + 1)
-    let valued = readValue(source, index) ?
+    let valued = valueAt(source, index, depth) ?
     Ok((named[0], valued[0], valued[1]))
   }
 }
@@ -122,26 +130,29 @@ fn readKeyPath(source: Str, start: Int) -> Result[(Array[Str], Int), TomlError] 
 
 /// A value, and where it ended.
 export fn readValue(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+  valueAt(source, start, 0)
+}
+
+/// A value inside `depth` open lists and inline tables, and where it ended.
+fn valueAt(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
   let index = Scan.skipInline(source, start)
   let character = source.slice(index, index + 1)
   if character == "\"" || character == "'" {
     let quoted = Scan.readQuoted(source, index) ?
     Ok((Text(quoted[0]), quoted[1]))
+  } else if (character == "[" || character == "\{") && depth >= MAX_DEPTH {
+    Err(TooDeep(index))
+  } else if character == "[" {
+    readList(source, index, depth + 1)
+  } else if character == "\{" {
+    readInline(source, index, depth + 1)
   } else {
-    if character == "[" {
-      readList(source, index)
-    } else {
-      if character == "\{" {
-        readInline(source, index)
-      } else {
-        readBare(source, index)
-      }
-    }
+    readBare(source, index)
   }
 }
 
 /// A list of values, which may run over several lines and end with a comma.
-fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+fn readList(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
   var items: Array[Toml] = []
   var index = Scan.skipBlank(source, start + 1)
   var closed = false
@@ -154,7 +165,7 @@ fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
         closed = true
         index = index + 1
       } else {
-        let valued = readValue(source, index)
+        let valued = valueAt(source, index, depth)
         if let Ok(found) = valued {
           items = items.push(found[0])
           index = Scan.skipBlank(source, found[1])
@@ -169,7 +180,7 @@ fn readList(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
 }
 
 /// A table written between braces on one line.
-fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
+fn readInline(source: Str, start: Int, depth: Int) -> Result[(Toml, Int), TomlError] {
   var built = Document.table()
   var index = Scan.skipInline(source, start + 1)
   var closed = false
@@ -182,7 +193,7 @@ fn readInline(source: Str, start: Int) -> Result[(Toml, Int), TomlError] {
         closed = true
         index = index + 1
       } else {
-        let pairing = readPair(source, index)
+        let pairing = readPair(source, index, depth)
         if let Ok(found) = pairing {
           built = setAt(&built, &found[0], found[1])
           index = Scan.skipInline(source, found[2])

@@ -129,6 +129,16 @@ export fn main() -> Int {
   if Toml.renderKey("key with spaces") == "\"key with spaces\"" { held = held + 1 }
   if Toml.renderKey("plain_key") == "plain_key" { held = held + 1 }
 
+  // Nesting is read to its bound and refused past it where the list or inline
+  // table that passed it opens, rather than stopping the program.
+  if Result.isOk(&Read.read("a = " + "[".repeat(512) + "]".repeat(512) + "\n")) { held = held + 1 }
+  if let Err(Toml.TooDeep(516)) = Read.read("a = " + "[".repeat(100000) + "]".repeat(100000) + "\n") {
+    held = held + 1
+  }
+  if let Err(Toml.TooDeep(3076)) = Read.read("a = " + "\{ b = ".repeat(600) + "1" + " \}".repeat(600) + "\n") {
+    held = held + 1
+  }
+
   held
 }
 

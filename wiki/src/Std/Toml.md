@@ -24,9 +24,16 @@ value as a table, extending an inline table, malformed escapes, invalid numeric 
 table declarations, and invalid date/time shapes are typed failures with source positions. Arrays
 may contain mixed TOML values as allowed by TOML 1.0. Numeric and temporal values retain canonical
 source text so parsing never rounds or applies a host timezone.
+
+Nesting is bounded. Each open list or inline table costs a reader recursion and the evaluator bounds
+call depth, so a value that would open more than 512 levels deep answers `TooDeep` at the position
+of its opening bracket or brace instead of stopping the program.
 ## Grill Log
 - **Q:** Convert every number to `Float64` and time to a host instant? **A:** No. _Rationale:_ that
   loses exact configuration text and invents a zone for local values. _Rejected:_ JSON's smaller
   value model; last-key-wins duplicate handling; locale-sensitive parsing.
+- **Q:** Let list and inline-table nesting recurse until the evaluator's call limit? **A:** No.
+  _Rationale:_ that limit stops the whole program instead of answering an error. _Accepted:_ a
+  512-level bound answered as `TooDeep`, with the exported `readValue` unchanged.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Std Toml Read]] · [[Std Toml Scan]]

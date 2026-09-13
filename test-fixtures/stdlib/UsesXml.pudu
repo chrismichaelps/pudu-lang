@@ -172,5 +172,18 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // 17. Nesting to the bound is read, element by element
+  match Xml.decode("<a>".repeat(512) + "</a>".repeat(512)) {
+    case Ok(_) => { held = held + 1 }
+    case Err(_) => {}
+  }
+
+  // 18. Nesting past the bound is refused where the element that passed it opens,
+  // rather than stopping the program
+  match Xml.decode("<a>".repeat(100000) + "</a>".repeat(100000)) {
+    case Err(Xml.TooDeep(1536)) => { held = held + 1 }
+    case _ => {}
+  }
+
   held
 }

@@ -29,6 +29,7 @@ export type TomlError
   | Unterminated(Int)
   | Duplicate(Str)
   | Malformed(Int, Str)
+  | TooDeep(Int)
 
 /// The value under a key of a table, or nothing when there is none.
 export fn field(value: &Toml, name: Str) -> Option[Toml] {
