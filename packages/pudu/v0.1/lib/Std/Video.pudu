@@ -56,6 +56,7 @@ export fn timestamp(ticks: Int, scale: Int) -> Result[Timestamp, VideoError] {
 
 /// The time a frame begins, reduced to its smallest exact scale.
 export fn timeOfFrame(pace: &Rate, frame: Int) -> Result[Timestamp, VideoError] {
+  admittedRate(pace) ?
   if frame < 0 {
     Err(NegativeFrame(frame))
   } else {
@@ -65,6 +66,7 @@ export fn timeOfFrame(pace: &Rate, frame: Int) -> Result[Timestamp, VideoError] 
 
 /// The frame being shown at a time: the last frame beginning at or before it.
 export fn frameAt(pace: &Rate, time: &Timestamp) -> Result[Int, VideoError] {
+  admittedRate(pace) ?
   admittedTime(time) ?
   let exact = time.ticks.toBigInt() * pace.frames.toBigInt() /
   (time.scale.toBigInt() * pace.seconds.toBigInt())
@@ -154,6 +156,12 @@ export fn audioFrameAt(time: &Timestamp, shape: &Audio.Format) -> Result[Int, Vi
     case Ok(frame) => Ok(frame)
     case Err(reason) => Err(Sync(reason))
   }
+}
+
+/// A rate built as a record rather than by `rate` is checked before it divides.
+fn admittedRate(pace: &Rate) -> Result[(), VideoError] {
+  rate(pace.frames, pace.seconds) ?
+  Ok(())
 }
 
 fn admittedTime(time: &Timestamp) -> Result[(), VideoError] {

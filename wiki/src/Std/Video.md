@@ -25,7 +25,9 @@ duration; `track`, `appended`, and `pictureAt` build and query a `Track`. `audio
 **Time is exact fractions.** Rates like 30000/1001 are fractions, timestamps are ticks over a scale,
 and every conversion, sum, and comparison widens to arbitrary precision before reducing, so frame 107,892
 of an NTSC stream begins at exactly 8,999,991/2,500 seconds and maps back to the same frame. Scales and
-rate parts are bounded at 10⁹ so reduced results stay in machine integers.
+rate parts are bounded at 10⁹ so reduced results stay in machine integers. A `Rate` built as a record
+rather than through `rate` is admitted again before `timeOfFrame` or `frameAt` divides by it, so a
+zero rate is refused as `InvalidRate` instead of trapping.
 
 **A track never shows two pictures at once.** Appending requires a positive duration, a presentation
 no earlier than the previous picture's end, and the same surface size as the pictures before it.

@@ -12,7 +12,7 @@ aliases: [Uses Video]
 
 ## Purpose and interface
 
-Executable Pudu fixture for exact video timing and tracks. Its `main` returns 19 held assertions.
+Executable Pudu fixture for exact video timing and tracks. Its `main` returns 20 held assertions.
 
 Timing: zero rates, negative ticks, and zero scales are refused; rates reduce; NTSC frame 30 begins at
 1001/1000 seconds; the frame shown one second in is 29, at 1001/1000 it is 30, and an hour in it is

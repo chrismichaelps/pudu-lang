@@ -288,7 +288,7 @@ export fn slice(source: &Pcm, start: Int, frames: Int) -> Result[Pcm, AudioError
   } else {
     let width = 2 * source.format.channels
     let available = Bytes.length(&source.data)
-    let from = if start * width < available { start * width } else { available }
+    let from = if start < available / width { start * width } else { available }
     let wanted = frames * width
     let to = if from + wanted < available { from + wanted } else { available }
     let taken = Bytes.slice(&source.data, from, to)

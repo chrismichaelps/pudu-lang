@@ -18,7 +18,8 @@ output frame, a `Tone` of a `Wave` (`Square`, `Saw`, `Triangle`) with a period a
 `Gained` node, a `Mixed` set of nodes, or a `Ramp` that moves a node's gain linearly between two frames.
 `clip`, `tone`, `gained`, `mixed`, and `ramp` build them. `render` produces exactly the requested frames
 from a start frame in a format. `GraphError` carries audio refusals unchanged and names invalid periods,
-amplitudes, ramps, child counts, and nesting beyond the depth bound.
+amplitudes, ramps, child counts, nesting beyond the depth bound, and `PositionOutOfRange` for a render
+start or clip offset beyond 2⁶¹ frames in either direction.
 `KernelFailure` records the invariant breach if a fully admitted bounded request is nevertheless
 refused by the compiled byte kernel; it is never mislabeled as malformed caller PCM.
 
@@ -70,6 +71,9 @@ and replaces mutable per-unit state with nodes that are functions of frame posit
 - **Q:** Reuse a caller-facing audio error if a compiled kernel rejects an admitted request? **A:**
   No. _Rationale:_ that would blame valid PCM for an internal invariant breach. _Accepted:_ the
   explicit `KernelFailure` graph error.
+- **Q:** Let an extreme start or clip offset reach checked arithmetic? **A:** No. _Rationale:_ an
+  overflow traps the whole program, while a position is caller input that deserves a typed refusal.
+  _Accepted:_ a 2⁶¹-frame position bound that keeps every start, offset, and slice sum inside `Int`.
 
 Resolved Grill Log: stateless frame-addressed nodes, whole-graph admission, bounded exact slices, and
 integer waveforms and automation.

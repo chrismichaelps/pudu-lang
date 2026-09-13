@@ -141,10 +141,10 @@ testServiceEvaluation = do
         (lettering === Just "22")
     , counterexample
         "PCM audio keeps exact samples, time, and WAV bytes and refuses malformed input"
-        (sound === Just "42")
+        (sound === Just "43")
     , counterexample
         "an audio graph renders exact samples that do not depend on slice boundaries"
-        (rendering === Just "21")
+        (rendering === Just "24")
     , counterexample
         "device audio refuses invalid plans and PCM before hardware acquisition"
         (deviceAudio === Just "9")
@@ -153,7 +153,7 @@ testServiceEvaluation = do
         (studioConfiguration === Just "8")
     , counterexample
         "video timing stays exact across scales and tracks never overlap pictures"
-        (timing === Just "19")
+        (timing === Just "20")
     {-| The refusals [[ADR-0017]] requires, each supplied with the attack it
         exists for and each paired with the legitimate version of the same
         thing: a message framed both by a length and by a chunked encoding, two

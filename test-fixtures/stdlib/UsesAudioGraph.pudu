@@ -106,6 +106,19 @@ export fn main() -> Int {
   if let Ok(stereo) = Audio.format(8000, 2) {
     let square = Graph.tone(Graph.Square, 2, 7)
     if valuesOf(Graph.render(&square, &stereo, 1, 2)) == [-7, -7, 7, 7] { held = held + 1 }
+    if valuesOf(Graph.render(&square, &stereo, 2305843009213693952, 1)) == [7, 7] { held = held + 1 }
+    if let Err(Graph.PositionOutOfRange(2305843009213693953)) =
+    Graph.render(&square, &stereo, 2305843009213693953, 1)
+    {
+      held = held + 1
+    }
+    if let Ok(pair) = Audio.silence(&stereo, 1) {
+      if let Err(Graph.PositionOutOfRange(2305843009213693953)) =
+      Graph.render(&Graph.clip(pair, 2305843009213693953), &stereo, 0, 1)
+      {
+        held = held + 1
+      }
+    }
     if let Ok(mono) = Audio.format(8000, 1) {
       if let Ok(one) = Audio.silence(&mono, 1) {
         if let Err(Graph.Refused(Audio.FormatMismatch)) =

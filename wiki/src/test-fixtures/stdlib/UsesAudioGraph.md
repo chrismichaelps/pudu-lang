@@ -12,7 +12,7 @@ aliases: [Uses Audio Graph]
 
 ## Purpose and interface
 
-Executable Pudu fixture for the pull-model audio graph. Its `main` returns 21 held assertions.
+Executable Pudu fixture for the pull-model audio graph. Its `main` returns 24 held assertions.
 
 Rendering: silence of exactly the requested frames at any start; oversized and negative requests
 refused; exact square, saw, and triangle samples; a clip before, across, and after its placement; a

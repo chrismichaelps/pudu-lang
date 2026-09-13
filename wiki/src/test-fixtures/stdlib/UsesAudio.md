@@ -12,7 +12,7 @@ aliases: [Uses Audio]
 
 ## Purpose and interface
 
-Executable Pudu fixture for exact PCM audio. Its `main` returns 42 held assertions.
+Executable Pudu fixture for exact PCM audio. Its `main` returns 43 held assertions.
 
 Resampling and layout: doubling and tripling a ramp's rate interpolates and holds the last sample,
 halving keeps every other frame, a same-rate conversion is unchanged, an invalid target rate is

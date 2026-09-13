@@ -30,10 +30,19 @@ export type GraphError
   | InvalidRamp(Int, Int)
   | InvalidChild(Int)
   | TooDeep(Int)
+  | PositionOutOfRange(Int)
   | KernelFailure
 
 /// The deepest nesting a graph may reach.
 const MAX_DEPTH: Int = 64
+
+/// The furthest frame a render may start at or a clip may be placed at, in
+/// either direction.
+///
+/// 2⁶¹ frames is millions of years at the highest sample rate, and it keeps
+/// every sum and difference of a start, an offset, and a slice inside `Int`,
+/// so an extreme position is refused rather than trapping mid-render.
+const MAX_POSITION: Int = 2305843009213693952
 
 /// The most frames one render may request, matching the slice bound audio keeps.
 const MAX_SLICE_FRAMES: Int = 4096
@@ -69,6 +78,8 @@ export fn render(
   refused(Audio.format(shape.sampleRate, shape.channels)) ?
   if start < 0 {
     Err(Refused(Audio.NegativeFrames(start)))
+  } else if start > MAX_POSITION {
+    Err(PositionOutOfRange(start))
   } else if frames < 0 {
     Err(Refused(Audio.NegativeFrames(frames)))
   } else if frames > MAX_SLICE_FRAMES {
@@ -85,8 +96,14 @@ fn admitted(graph: &Node, shape: &Audio.Format, depth: Int) -> Result[(), GraphE
   }
   match graph {
     case Silent => Ok(())
-    case Clip(audio, _) =>
-    if audio.format != *shape { Err(Refused(Audio.FormatMismatch)) } else { Ok(()) }
+    case Clip(audio, offset) =>
+    if audio.format != *shape {
+      Err(Refused(Audio.FormatMismatch))
+    } else if offset < 0 - MAX_POSITION || offset > MAX_POSITION {
+      Err(PositionOutOfRange(offset))
+    } else {
+      Ok(())
+    }
     case Tone(_, period, amplitude) =>
     if period < 2 {
       Err(InvalidPeriod(period))

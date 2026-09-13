@@ -20,6 +20,13 @@ export fn main() -> Int {
 
   if Video.rate(60, 2) == Ok(Video.Rate{frames: 30, seconds: 1}) { held = held + 1 }
 
+  let unreduced = Video.Rate{frames: 0, seconds: 1}
+  if Video.frameAt(&unreduced, &at(1, 1)) == Err(Video.InvalidRate(0, 1)) &&
+  Video.timeOfFrame(&Video.Rate{frames: 0, seconds: 0}, 0) == Err(Video.InvalidRate(0, 0))
+  {
+    held = held + 1
+  }
+
   if let Ok(ntsc) = Video.rate(30000, 1001) {
     if Video.timeOfFrame(&ntsc, 30) == Ok(at(1001, 1000)) &&
     Video.timeOfFrame(&ntsc, 0) == Ok(at(0, 1))

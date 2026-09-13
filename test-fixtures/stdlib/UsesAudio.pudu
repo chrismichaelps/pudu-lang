@@ -203,6 +203,9 @@ export fn main() -> Int {
         }
       }
       if let Err(Audio.InvalidChannels(9)) = Audio.upmix(&tone, 9) { held = held + 1 }
+      if let Ok(far) = Audio.slice(&tone, 1152921504606846976, 2) {
+        if Audio.samples(&far) == [0, 0] { held = held + 1 }
+      }
     }
   }
 

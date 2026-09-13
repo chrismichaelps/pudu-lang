@@ -7,6 +7,13 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
+  trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
+  `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is
+  `InvalidRate` rather than a division trap. Audio, graph, and video fixtures now hold 43, 24, and 20.
+- Desktop event pumping now uses a safe foreign call, so a long pump no longer stalls garbage
+  collection for other evaluator threads.
+
 - Made the compiler source distribution installable: the production `pudu` package no longer points
   outside its root for Haskell tests. A separate repository-root `pudu-tests` package preserves all
   70 registered modules under `cabal test all`; both manifests pass `cabal check`, `cabal sdist pudu`
