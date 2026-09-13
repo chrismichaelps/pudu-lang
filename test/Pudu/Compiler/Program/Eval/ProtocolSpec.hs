@@ -104,7 +104,7 @@ testProtocolEvaluation = do
         newline that a quoted field swallows. -}
     , counterexample
         "a separated file survives quotes, newlines, and its own separator"
-        (separated === Just "25")
+        (separated === Just "26")
     {-| A listener on the loopback address, a client, and a round trip, all in
         one program: the listener binds port zero and asks which port it was
         given, so nothing is assumed about what else the machine holds.

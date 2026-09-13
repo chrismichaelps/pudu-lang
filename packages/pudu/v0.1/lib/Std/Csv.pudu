@@ -37,66 +37,64 @@ export fn parse(source: Str) -> Result[Array[Array[Str]], CsvError] {
 /// The same, for a text whose fields are separated by something else.
 /// A tab is the other common answer, and a file that chose one is not
 /// improved by a reader that assumes the other.
+///
+/// The characters are taken once as an array and walked by index, and each
+/// field is gathered as pieces joined when the field ends. Reading a character
+/// by position from the text walks the UTF-8 text before it, and appending to
+/// the field copied it each time; together they made reading grow with the
+/// square of the input.
 export fn parseWith(source: Str, delimiter: Str) -> Result[Array[Array[Str]], CsvError] {
-  if source.isEmpty() {
-    Ok([])
-  } else {
-    var rows: Array[Array[Str]] = []
-    var fields: Array[Str] = []
-    var current = ""
-    var quoted = false
-    var index = 0
-    var started = 0
-    var failure: Option[CsvError] = None
-    var pending = false
-    while index < source.length() && Option.isNone(&failure) {
-      let character = source.slice(index, index + 1)
-      if quoted {
-        if character == QUOTE {
-          // A doubled quote inside a quoted field is one quote, which is how
-          // the format writes a quote that does not end the field.
-          if index + 1 < source.length() && source.slice(index + 1, index + 2) == QUOTE {
-            current = current + QUOTE
-            index = index + 1
-          } else {
-            quoted = false
-          }
+  if source.isEmpty() { return Ok([]) }
+  let characters = source.chars()
+  let size = characters.length()
+  var rows: Array[Array[Str]] = []
+  var fields: Array[Str] = []
+  var current: Array[Str] = []
+  var quoted = false
+  var index = 0
+  var started = 0
+  var pending = false
+  while index < size {
+    let character = characters[index].toText()
+    if quoted {
+      if character == QUOTE {
+        // A doubled quote inside a quoted field is one quote, which is how
+        // the format writes a quote that does not end the field.
+        if index + 1 < size && characters[index + 1].toText() == QUOTE {
+          current = current.push(QUOTE)
+          index = index + 1
         } else {
-          current = current + character
+          quoted = false
         }
       } else {
-        if character == QUOTE {
-          quoted = true
-          started = index
-          pending = true
-        } else {
-          if character == delimiter {
-            fields = fields.push(current)
-            current = ""
-            pending = true
-          } else {
-            if character == "\n" {
-              fields = fields.push(trimReturn(current))
-              rows = rows.push(fields)
-              fields = []
-              current = ""
-              pending = false
-            } else {
-              current = current + character
-              pending = true
-            }
-          }
-        }
+        current = current.push(character)
       }
-      index = index + 1
-    }
-    if quoted { failure = Some(Unterminated(started)) }
-    if pending || current.length() > 0 {
-      fields = fields.push(trimReturn(current))
+    } else if character == QUOTE {
+      quoted = true
+      started = index
+      pending = true
+    } else if character == delimiter {
+      fields = fields.push(current.join(""))
+      current = []
+      pending = true
+    } else if character == "\n" {
+      fields = fields.push(trimReturn(current.join("")))
       rows = rows.push(fields)
+      fields = []
+      current = []
+      pending = false
+    } else {
+      current = current.push(character)
+      pending = true
     }
-    if let Some(reason) = failure { Err(reason) } else { Ok(rows) }
+    index = index + 1
   }
+  if quoted { return Err(Unterminated(started)) }
+  if pending || current.length() > 0 {
+    fields = fields.push(trimReturn(current.join("")))
+    rows = rows.push(fields)
+  }
+  Ok(rows)
 }
 
 /// A file written where a carriage return precedes each newline still holds
@@ -196,18 +194,13 @@ export fn render(rows: &Array[Array[Str]]) -> Str { renderWith(rows, COMMA) }
 
 /// The same, separated by something else.
 export fn renderWith(rows: &Array[Array[Str]], delimiter: Str) -> Str {
-  var out = ""
+  var lines: Array[Str] = []
   for row in rows {
-    var line = ""
-    var index = 0
-    while index < row.length() {
-      if index > 0 { line = line + delimiter }
-      line = line + renderField(row[index], delimiter)
-      index = index + 1
-    }
-    out = out + line + "\n"
+    var rendered: Array[Str] = []
+    for field in row { rendered = rendered.push(renderField(field, delimiter)) }
+    lines = lines.push(rendered.join(delimiter) + "\n")
   }
-  out
+  lines.join("")
 }
 
 /// A table written with its column names as the first row.

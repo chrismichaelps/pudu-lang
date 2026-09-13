@@ -71,6 +71,12 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // A large file reads back row for row, quoted separators and all.
+  let many = Csv.parse("alpha,\"quoted, field\",42\n".repeat(20000))
+  if let Ok(rows) = many {
+    if rows.length() == 20000 && rows[19999] == ["alpha", "quoted, field", "42"] { held = held + 1 }
+  }
+
   held
 }
 

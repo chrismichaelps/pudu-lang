@@ -25,6 +25,9 @@ tags: [changelog]
   characters in order and join gathered pieces once instead of reading by position and appending per
   character, so trimming, searching, grouping, comparison, and character maps are linear. The module
   gains its missing vault mirror, and the text fixture now holds 91 claims.
+- `Std.Csv` reads in linear time: the scanner walks one character array and joins each field once
+  instead of reading by position and appending per character, so 200,000 characters of quoted rows
+  take 0.87 s rather than 2.55 s. Rendering joins fields and lines once.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is
