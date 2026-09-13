@@ -30,7 +30,9 @@ updates cannot race drawing. The initial presenter accepts only the opaque, exac
 produced by Canvas; it does not redraw, scale, or reinterpret alpha.
 
 `pump` joins the platform event loop for at most the stated milliseconds and reports whether the
-person requested close. It does not run an ambient background loop. The later application-space
+person requested close. It does not run an ambient background loop. A long pump is served in native
+slices of at most 16 ms, so an interrupt stops the program within a slice rather than after the whole
+duration, and a program watching for a stop request sees the pump answer early. The later application-space
 layer will translate platform events into `Std.Ui.Screen.Input` while retaining this explicit
 session ownership.
 

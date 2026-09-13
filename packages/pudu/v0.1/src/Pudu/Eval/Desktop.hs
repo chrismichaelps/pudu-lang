@@ -13,7 +13,14 @@ module Pudu.Eval.Desktop
   ) where
 
 import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
-import Control.Exception (SomeException, displayException, try)
+import Control.Exception
+  ( SomeAsyncException
+  , SomeException
+  , displayException
+  , fromException
+  , throwIO
+  , try
+  )
 import qualified Data.ByteString as Bytes
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -24,9 +31,11 @@ import Pudu.Eval.Io (IoOutcome (..))
 
 #ifdef PUDU_DARWIN_DESKTOP
 import Data.Int (Int32)
-import Data.Word (Word8)
+import Data.Word (Word64, Word8)
 import Foreign.C.Types (CInt (..), CSize (..))
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
+import GHC.Clock (getMonotonicTimeNSec)
+import Pudu.Eval.Signal (stopRequested)
 #endif
 
 data DesktopStore = DesktopStore
@@ -96,11 +105,26 @@ pumpDesktop store token milliseconds
   | milliseconds < 0 = pure (IoFailed "desktop pump duration must not be negative")
   | milliseconds > fromIntegral (maxBound :: Int32) = pure (IoFailed "desktop pump duration exceeds the platform limit")
   | otherwise = withWindow store token $ \(NativeWindow pointer) -> guarded $ do
-      status <- cDesktopPump pointer (fromIntegral milliseconds)
-      pure $ case status of
-        0 -> IoDone False
-        1 -> IoDone True
-        _ -> IoFailed (statusMessage "pump" status)
+      started <- getMonotonicTimeNSec
+      pumpSlices pointer (started + fromIntegral milliseconds * 1000000)
+ where
+  {- A pump is made of native pumps of at most one slice each. A thread inside
+     a foreign call receives no interrupt until the call returns, so one long
+     native pump held Ctrl-C for the whole requested duration; between slices
+     this thread is back in the runtime, which delivers an interrupt within a
+     slice. A stop request the program is watching for ends the pump early too,
+     answering whatever the window last reported. -}
+  pumpSlices pointer deadline = do
+    now <- getMonotonicTimeNSec
+    let remaining = if now >= deadline then 0 else (deadline - now) `div` 1000000
+        slice = min pumpSliceMilliseconds remaining
+    status <- cDesktopPump pointer (fromIntegral slice)
+    stopping <- stopRequested
+    case status of
+      1 -> pure (IoDone True)
+      0 | remaining <= pumpSliceMilliseconds || stopping -> pure (IoDone False)
+        | otherwise -> pumpSlices pointer deadline
+      _ -> pure (IoFailed (statusMessage "pump" status))
 #else
 pumpDesktop _ _ _ = pure (IoFailed "desktop presentation is unsupported on this platform")
 #endif
@@ -142,12 +166,19 @@ withWindow store token action =
         outcome <- action window
         pure (windows, outcome)
 
+{-| A platform failure as a typed outcome.
+
+    An interrupt or other asynchronous exception is re-raised rather than
+    reported as a failure: turning Ctrl-C into `PlatformFailure` let the
+    program continue as though the window had merely misbehaved. -}
 guarded :: IO (IoOutcome a) -> IO (IoOutcome a)
 guarded action = do
   outcome <- try action
-  pure $ case outcome of
-    Left problem -> IoFailed (Text.pack (displayException (problem :: SomeException)))
-    Right value -> value
+  case outcome of
+    Left problem
+      | Just _ <- (fromException problem :: Maybe SomeAsyncException) -> throwIO problem
+      | otherwise -> pure (IoFailed (Text.pack (displayException (problem :: SomeException))))
+    Right value -> pure value
 
 #ifdef PUDU_DARWIN_DESKTOP
 castBytes :: Ptr a -> Ptr Word8
@@ -157,6 +188,12 @@ unitStatus :: Text -> CInt -> IoOutcome ()
 unitStatus operation status
   | status == 0 = IoDone ()
   | otherwise = IoFailed (statusMessage operation status)
+
+-- The longest single native pump. Short enough that an interrupt or a watched
+-- stop request is answered well inside a frame, long enough that an idle pump
+-- does not spin.
+pumpSliceMilliseconds :: Word64
+pumpSliceMilliseconds = 16
 
 statusMessage :: Text -> CInt -> Text
 statusMessage operation status = case status of

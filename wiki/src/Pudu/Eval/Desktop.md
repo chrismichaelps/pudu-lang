@@ -45,6 +45,13 @@ the token for retry; only confirmed native release removes it.
   caller-chosen duration, and an unsafe call holds every other capability out of garbage collection
   for that whole wait. _Accepted:_ a safe call, which keeps the bound main thread's OS thread; open,
   present, and close stay unsafe because they return without waiting.
+- **Q:** Make one native pump for the whole requested duration? **A:** No. _Rationale:_ a thread
+  inside a foreign call receives no interrupt until it returns, so Ctrl-C during a 10-second pump
+  waited the full 10 seconds, and `guarded` then reported it as `PlatformFailure("user interrupt")`
+  while the program continued and exited 0. _Accepted:_ native pumps of at most 16 ms against a
+  monotonic deadline, with the program's stop flag checked between them, and `guarded` re-raising
+  every asynchronous exception. _Rejected:_ pumping on a worker thread, because window-server calls
+  must stay on the main thread.
 
 ## Referenced by
 

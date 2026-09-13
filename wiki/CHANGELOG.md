@@ -43,6 +43,11 @@ tags: [changelog]
   matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
   `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
   exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- Desktop pumping answers interrupts. One native pump for the whole requested duration held Ctrl-C
+  until it ended, and the runtime then reported it as `PlatformFailure("user interrupt")` while the
+  program continued: a 10-second pump interrupted at 1.5 s ran to 10.28 s and exited 0. A pump now
+  runs in native slices of at most 16 ms against a monotonic deadline, a watched stop request ends it
+  early, and every asynchronous exception is re-raised rather than reported as a platform failure.
 - `Std.Ui.Layout.placeWithin` caps the nesting budget a caller may request at 512 and refuses a larger
   one as `InvalidBudget`, the way the node budget was already capped. With no ceiling, a budget of
   100,000 let 5,000 nested views exhaust the evaluator's call limit and stop the program; a view built
