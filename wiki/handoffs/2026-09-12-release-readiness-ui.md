@@ -127,6 +127,13 @@ order, hit testing, painting, and damage regions.
 - Playback cancellation — device play runs on a worker thread behind an atomic cancel token; Ctrl-C
   during an 8-second clip now stops the program in 0.07 s (exit 130) instead of after the clip, and a
   program watching for stop receives `Cancelled`.
+- Input-bound sweep — every standard reader of outside text was probed with deeply nested and
+  adversarial input. `7129952` bounds YAML block nesting; `39ce2b1` replaces the backtracking glob
+  matcher with one walk (a pattern that ran over a minute answers in 11 ms) and, found by a
+  980-pair differential run against the earlier matcher, corrects `**/` silently dropping its
+  separator; the Regex slice bounds group nesting at 256. `Std.Text.Parse` repetition, `Std.Http`
+  framing lengths, and regex searches were already bounded. `Std.Yaml`, `Std.Glob`, and `Std.Regex`
+  gained missing mirrors.
 - Audit findings left open, each a named gap rather than a silent one: `Std.Http.Server` requests carry no byte body, so
   binary uploads are refused rather than delivered; `Std.Toml.Read` still reads characters by
   position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
