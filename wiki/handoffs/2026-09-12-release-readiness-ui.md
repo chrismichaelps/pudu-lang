@@ -134,7 +134,16 @@ order, hit testing, painting, and damage regions.
   separator; the Regex slice bounds group nesting at 256. `Std.Text.Parse` repetition, `Std.Http`
   framing lengths, and regex searches were already bounded. `Std.Yaml`, `Std.Glob`, and `Std.Regex`
   gained missing mirrors.
-- Audit findings left open, each a named gap rather than a silent one: `Std.Http.Server` requests carry no byte body, so
+- Lifecycle and interrupt sweep — `4e84ac8` caps the layout nesting budget at 512 so a caller-chosen
+  budget cannot let a deep view stop the program; `995de2c` pumps desktop events in 16 ms native
+  slices, so Ctrl-C during a 10-second pump exits 130 at 1.57 s instead of running on and exiting 0;
+  `fab7bf7` routes every runtime catch of a host call through `Pudu.Eval.Io.trySynchronous`, so an
+  interrupt reaching a program blocked in `Net.accept` exits 130 within 80 ms (ten of ten runs)
+  instead of answering `user interrupt`. Studio still acknowledges 16,016 device frames and presents
+  30 pictures after both changes.
+- Audit findings left open, each a named gap rather than a silent one: one accept-interrupt run
+  signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
+  readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception; `Std.Http.Server` requests carry no byte body, so
   binary uploads are refused rather than delivered; `Std.Toml.Read` still reads characters by
   position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
   per character on inputs that are normally short; a unified diff does not mark a missing final
