@@ -415,7 +415,7 @@ testProtocolEvaluation = do
     , counterexample "the format modules parse and render"
         (formats === Just "8885")
     , counterexample "JSON strings decode, encode, and reject malformed escapes"
-        (jsonStrings === Just "16")
+        (jsonStrings === Just "20")
     {-| Rendering a page from a plan prepared once and filled per request,
         including the case that is not a rendering fault but a way into the
         page: text carrying markup must arrive as the characters it is made

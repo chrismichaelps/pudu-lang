@@ -7,6 +7,12 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- `Std.Json` decoding is linear and bounded. The reader walks a cursor over the unread remainder
+  instead of indexing UTF-8 text by position, so a 538-kilobyte document decodes in 2.4 s rather than
+  9.1 s and a 200,000-character string in 3 ms rather than 1,970 ms. Nesting deeper than 512 levels
+  answers the new `JsonError.TooDeep` instead of exhausting the evaluator's call limit and stopping
+  the program. The string fixture now holds 20 claims.
+
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

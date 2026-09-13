@@ -13,11 +13,22 @@ Decode, encode, inspect, and immutably transform JSON values with positioned par
 ## Interface
 Exports `Json`, `JsonError`, compact/pretty encoding, field/index/path lookup, typed projections, constructors, key updates, and error explanation.
 ## Governance and algorithm
-The recursive reader advances an explicit scalar index, rejects trailing or malformed input as `Result`, and the encoder escapes strings deterministically.
+The recursive reader advances a private cursor — the unread remainder of the source and the scalar
+position it begins at — rejects trailing or malformed input as `Result`, and the encoder escapes
+strings deterministically. Text is UTF-8, so reaching a character by position walks every character
+before it; the reader therefore examines only the front of the remainder and drops what it consumed.
+Whitespace, digits, and plain string runs are skipped with `spanOf`/`spanNotOf`, and decoded string
+pieces are joined once at the closing quote. Decoding is linear in the document: a 538-kilobyte
+array of small objects decodes in about 2.4 s at -O2 against 9.1 s when every character was reached
+by index, and a 200,000-character string in 3 ms against 1,970 ms.
+
+Nesting is bounded. Each open list or object costs a reader recursion, and the evaluator bounds call
+depth, so a value nested more than 512 levels deep answers `TooDeep` at the position of the opening
+bracket or brace that exceeded the bound instead of stopping the program.
 
 String decoding is divided at the escape boundary. `readText` owns only the quoted-string loop:
-it either finishes at a closing quote, appends an ordinary scalar, or delegates one backslash escape.
-The escape reader returns both decoded text and the first unread source position, so the loop never
+it either finishes at a closing quote, takes a run of ordinary scalars, or delegates one backslash
+escape. The escape reader returns both decoded text and the cursor after the escape, so the loop never
 has to compensate for one-character and six-character escape forms with shared index mutation.
 
 The admitted escape vocabulary is JSON's: quote, reverse solidus, solidus, backspace, form feed,
@@ -25,7 +36,7 @@ newline, carriage return, tab, and four-hex-digit Unicode escapes. An unrecognis
 `Unexpected` error at the escaped character. A high UTF-16 surrogate must be followed by a Unicode
 escape carrying a low surrogate; the pair is composed into one scalar. An isolated low surrogate,
 an incomplete pair, or a value that cannot form a scalar is rejected at the position that made the
-escape invalid. The public `Json`, `JsonError`, and function surface does not change.
+escape invalid.
 
 Encoding applies the inverse escape table without a nested conditional ladder. It always escapes
 quote, reverse solidus, backspace, form feed, newline, carriage return, and tab; every other control
@@ -37,7 +48,9 @@ prevents the encoder from emitting text outside JSON's grammar.
 
 - A focused executable fixture covers plain text; quote, slash, reverse-solidus, named and unnamed control, BMP,
   and surrogate-pair escapes; compact encode/decode round trips; invalid escapes; malformed hex;
-  isolated surrogates; and unterminated strings.
+  isolated surrogates; unterminated strings; 512-level nesting accepted; list and object nesting past
+  the bound refused as `TooDeep` at the exact opening position; and a long string with an escape
+  between two 20,000-character runs.
 - The standard-library program test runs that fixture through the ordinary compiler and evaluator,
   so private helpers are exercised through the exported `decode` and `encode` boundary.
 - Formatter, checker, O0 evaluation, O2 evaluation, and the full compiler suite form the delivery gate.
@@ -48,5 +61,13 @@ prevents the encoder from emitting text outside JSON's grammar.
 - **Q:** Why compose surrogate pairs when Pudu strings contain Unicode scalars? **A:** JSON's `\u` notation carries UTF-16 code units, not necessarily complete scalars. Combining the pair at the boundary preserves Pudu's scalar invariant. _Rejected:_ admitting surrogate code points; rejecting every supplementary escaped scalar.
 - **Q:** Why return the next source position from the escape helper? **A:** Escape forms consume different widths. Returning the cursor makes that fact part of the helper's result and removes compensating increments from the main loop. _Rejected:_ a mutable cursor shared between helpers; sentinel widths.
 - **Q:** Should escape helpers be exported as a new standard-library abstraction? **A:** No. They exist to enforce `Std.Json`'s wire-format contract and would expose UTF-16 details to ordinary Pudu programs. _Rejected:_ public `decodeEscape`; a second internal-looking module with public implementation details.
+- **Q:** Let nesting recurse until the evaluator's call limit? **A:** No. _Rationale:_ that limit
+  stops the whole program, and deeply nested text is ordinary hostile input to a server. _Accepted:_ a
+  512-level bound answered as `TooDeep`, far inside the evaluator's 4,096-frame limit. _Rejected:_ an
+  unbounded reader; an iterative reader with an explicit stack, which is more code for no admitted
+  document.
+- **Q:** Keep indexing the source by scalar position? **A:** No. _Rationale:_ UTF-8 positions are
+  reached by walking, which made decoding quadratic in document size. _Accepted:_ a private cursor
+  over the unread remainder. _Rejected:_ a byte-offset string API added to the language for one reader.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]
