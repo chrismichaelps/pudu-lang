@@ -32,6 +32,13 @@ extent, pixel-budget, and pump-duration paths before a platform effect is reache
 [[Launch Ui Desktop]] fixture is the macOS acceptance gate and must open an actual window; its
 success is not inferred from this pure count.
 
+The device-audio fixture likewise keeps CI display-independent: it covers every invalid plan and
+PCM refusal before native acquisition. [[Launch Audio Device]] is the separate hardware acceptance
+gate and must receive completion callbacks for the exact submitted frame count.
+
+The Media Studio configuration fixture is also evaluated here with an exact count of eight, so the
+example's device-queue fields cannot drift from its decoder or admitted bounds unnoticed.
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be

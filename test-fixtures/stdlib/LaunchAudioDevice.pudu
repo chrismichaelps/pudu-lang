@@ -1,0 +1,39 @@
+module LaunchAudioDevice
+
+import Std.Audio as Audio
+import Std.Audio.Device as Device
+import Std.Audio.Graph as Graph
+
+export fn main() -> Result[Int, Device.DeviceError] {
+  let shape = deviceOrAudio(Audio.format(16000, 1)) ?
+  let longSilence = deviceOrAudio(Audio.silence(&shape, 16000)) ?
+  let expiring = Device.plan(256, 3, 1) ?
+  match Device.play(&expiring, &longSilence) {
+    case Err(Device.DeadlineExceeded) => {}
+    case Err(problem) => { return Err(problem) }
+    case Ok(_) => { return Err(Device.PlatformFailure("audio deadline did not expire")) }
+  }
+  let node = Graph.tone(Graph.Triangle, 64, 5000)
+  let clip = deviceOrGraph(Graph.render(&node, &shape, 0, 4000)) ?
+  let target = Device.plan(256, 3, 3000) ?
+  let completed = Device.play(&target, &clip) ?
+  Ok(completed.frames)
+}
+
+fn deviceOrAudio[T](
+  value: Result[T, Audio.AudioError]
+) -> Result[T, Device.DeviceError] {
+  match value {
+    case Ok(shape) => Ok(shape)
+    case Err(problem) => Err(Device.InvalidFormat(problem))
+  }
+}
+
+fn deviceOrGraph(
+  value: Result[Audio.Pcm, Graph.GraphError]
+) -> Result[Audio.Pcm, Device.DeviceError] {
+  match value {
+    case Ok(clip) => Ok(clip)
+    case Err(_) => Err(Device.PlatformFailure("audio graph preparation failed"))
+  }
+}

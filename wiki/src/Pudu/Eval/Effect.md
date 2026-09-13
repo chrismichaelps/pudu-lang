@@ -63,6 +63,9 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
   `Std.Net` and `Std.Tls` classify as their operation-timeout variants.
 - Desktop open/present/pump/close effects delegate to an evaluation-local [[Eval Desktop]] store.
   They accept only explicit tokens and byte payloads, and remain forbidden during constant folding.
+- Bounded device playback delegates to [[Eval Audio Device]]. The effect receives an admitted PCM
+  format, exact bytes, queue bounds, and a finite deadline; it returns the acknowledged frame count
+  and owns no persistent evaluator token.
 
 ## Grill Log
 
@@ -75,6 +78,9 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - **Q:** Implement a one-off host demo outside the effect boundary? **A:** No. _Rationale:_ desktop
   resources need the same typed failure and constant-folding refusal as other device effects.
   _Rejected:_ a CLI-only window shortcut.
+- **Q:** Let audio playback bypass effect refusal because its input is already bytes? **A:** No.
+  _Rationale:_ device access is observable even when its samples are pure. _Rejected:_ dispatching
+  it with the pure byte primitives.
 
 ## Referenced by
 

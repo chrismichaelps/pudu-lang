@@ -12,6 +12,8 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
 - [[Pudu Desktop Header]] — framework-neutral private ABI for desktop target plumbing.
 - [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.
+- [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
+- [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.
 
 ## Referenced by
 

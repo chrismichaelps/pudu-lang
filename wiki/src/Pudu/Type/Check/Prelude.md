@@ -70,6 +70,20 @@ algorithm identity; no unchecked algorithm selector is admitted.
 Resolved Grill Log: the token is meaningful only to the evaluation-local owner; the public wrapper
 narrows its use to `Session`.
 
+## Device-audio capability signature
+
+`audioDevicePlay(Int, Int, Bytes, Int, Int, Int) -> Result[Int, Str]` carries sample rate, channel
+count, interleaved signed-16 PCM, frames per buffer, buffer count, and deadline milliseconds. The
+successful integer is the exact number of frames acknowledged by the device queue.
+
+Resolved Grill Log: keep the compiler signature representation-only; [[Std Audio Device]] owns the
+typed plan and error vocabulary while the runtime independently revalidates every bound.
+
+`audioToneBytes(Int, Int, Int, Int, Int, Int) -> Option[Bytes]` and
+`audioRampBytes(Bytes, Int, Int, Int, Int, Int, Int) -> Option[Bytes]` describe the pure bounded
+preparation kernels. Resolved Grill Log: `Option` records trust-boundary refusal without duplicating
+the graph's public error taxonomy in the compiler.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

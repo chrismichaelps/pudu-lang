@@ -14,7 +14,11 @@
     "period": 160,
     "amplitude": 6000,
     "waveform": "triangle",
-    "wavName": "pudu-enterprise-media.wav"
+    "wavName": "pudu-enterprise-media.wav",
+    "playToDevice": true,
+    "deviceFramesPerBuffer": 512,
+    "deviceBuffers": 4,
+    "deviceTimeoutMilliseconds": 4000
   },
   "video": {
     "rateFrames": 30000,

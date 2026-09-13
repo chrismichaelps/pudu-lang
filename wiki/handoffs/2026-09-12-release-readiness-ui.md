@@ -86,10 +86,16 @@ order, hit testing, painting, and damage regions.
   bounded JSON workload and writes machine-readable timing and capability evidence. The configured
   device run launched a real 480×270 window, presented 30 pictures at 30000/1001 timing, rendered
   16,016 stereo frames in 2,048-frame slices, wrote a structurally valid 16 kHz PCM WAV, and closed
-  cleanly. Audio preparation took about 13.5 seconds, exposing the append/interpreter path as a
-  concrete real-time blocker. Seven headless configuration assertions cover success, type, range,
-  path-containment, and duration failures. Speaker output, codecs, device clocks, and capture remain
-  explicitly missing.
+  cleanly. The initially measured 13.4-second audio preparation blocker was replaced with exact
+  compiled tone/ramp byte kernels; repeated configured runs now prepare the same 16,016 stereo frames
+  in 54–55 ms. Eight headless configuration assertions cover success, type, range, path-containment,
+  device-queue, and duration failures.
+- Device-audio slice — `Std.Audio.Device` admits bounded one-shot playback plans; its private macOS
+  Audio Queue adapter preallocates two to eight buffers, refills outside the callback, uses atomic
+  callback bookkeeping and a monotonic deadline, and disposes every queue. A 4,000-frame fixture and
+  the 16,016-frame Studio workload both returned exact callback-acknowledged counts through the real
+  default output device. The conformance state is `PARTIAL`: streaming sessions, discovery,
+  interruption/device-loss, underrun telemetry, volume, shared clocks, and other OS adapters remain.
 - Packaging repair — the installed compiler that first ran Studio was stale and lacked `renamePath`
   and desktop builtins; the ordinary reinstall then failed because the production package named
   `../../../test`. Tests now live in a separate root `pudu-tests` package while the compiler source
@@ -98,13 +104,21 @@ order, hit testing, painting, and damage regions.
   The refresh proof accepts the byte-identical `~/.cabal/bin` and `~/.local/bin` symlinks and proves
   the path-resolved compiler through language, REPL, and LSP runs. The installed compiler then ran
   the configured Studio, presented all 30 frames, and returned `Ok(30)`.
+- Device-audio and preparation repair — `Std.Audio.Device` now owns a bounded default-device clip
+  contract; the private macOS Audio Queue adapter preallocates every buffer, keeps the callback to
+  atomic bookkeeping, applies a monotonic deadline, and disposes on every outcome. The installed
+  compiler acknowledged 16,016 exact frames through the real device and presented all 30 pictures.
+  Pure compiled tone/ramp byte kernels reduced the same graph preparation from 13,401 ms to 52–55 ms
+  while the exact 21-check graph fixture remained unchanged. The unrestricted full suite passes;
+  the earlier `UsesNet` count of one was reproduced only under a sandbox that blocks loopback and
+  passes at its exact count of 22 under the release environment. PATH copies are byte-identical.
 
 ## Exact next action
 
-Continue exclusively with native UI, audio, and video. Implement the first real speaker/device-audio
-contract with bounded preallocated queues, explicit format negotiation, underrun and device-loss
-reporting, and a private target adapter; then synchronize picture presentation to the same device
-clock. In parallel sequencing after that, build the first Pudu **space** application
+Continue exclusively with native UI, audio, and video. Evolve bounded device playback into a
+persistent Pudu-owned stream with explicit negotiated format, device selection/change,
+interruption/device-loss, underrun telemetry, pause/resume/volume, and one observable media clock;
+then synchronize picture presentation to that clock. After that, build the first Pudu **space** application
 loop over [[Std Ui Desktop]] and [[Std Ui Screen]]: translate native pointer/key/text/close events into
 screen inputs, present only after state or focus changes, and expose lifecycle transitions without
 copying SwiftUI's protocol/property-wrapper graph. Then add menus, settings, documents, multiple

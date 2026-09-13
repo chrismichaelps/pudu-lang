@@ -22,6 +22,7 @@ import Pudu.Eval.Child
   , waitChild
   , waitChildWithin
   )
+import Pudu.Eval.AudioDevice (playAudioDevice)
 import Pudu.Eval.Clock
 import Pudu.Eval.Desktop (closeDesktop, openDesktop, presentDesktop, pumpDesktop)
 import Pudu.Eval.Signal (stopRequested, watchForStop)
@@ -203,6 +204,7 @@ effectBuiltins =
   , DesktopPresentBuiltin
   , DesktopPumpBuiltin
   , DesktopCloseBuiltin
+  , AudioDevicePlayBuiltin
   ]
 
 {-| Perform one effect.
@@ -397,6 +399,25 @@ callEffect spanValue builtin arguments = do
       (DesktopCloseBuiltin, [IntValue _ token]) -> do
         desktop <- currentDesktopStore
         effectUnit (closeDesktop desktop (fromInteger token))
+      ( AudioDevicePlayBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          , IntValue _ timeout
+          ]
+        ) ->
+        resultOf . fmap intValue
+          <$> lift refusal
+            ( playAudioDevice
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+                (fromInteger timeout)
+            )
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath

@@ -31,6 +31,16 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  let unsafeQueue = validText().replace(
+    "\"deviceFramesPerBuffer\":256",
+    "\"deviceFramesPerBuffer\":8"
+  )
+  if let Err(Config.InvalidRange("audio.deviceFramesPerBuffer", 8, 16, 4096)) =
+  Config.decode(unsafeQueue)
+  {
+    held = held + 1
+  }
+
   held
 }
 
@@ -39,7 +49,9 @@ fn validText() -> Str {
   "\"resizable\":false,\"maxPixels\":57600\},\"audio\":\{\"sampleRate\":8000," +
   "\"channels\":1,\"frames\":8000,\"sliceFrames\":4000,\"period\":80," +
   "\"amplitude\":5000,\"waveform\":\"triangle\",\"wavName\":" +
-  "\"pudu-media-studio.wav\"\},\"video\":\{\"rateFrames\":24,\"rateSeconds\":1," +
+  "\"pudu-media-studio.wav\",\"playToDevice\":true," +
+  "\"deviceFramesPerBuffer\":256,\"deviceBuffers\":3," +
+  "\"deviceTimeoutMilliseconds\":3000\},\"video\":\{\"rateFrames\":24,\"rateSeconds\":1," +
   "\"frames\":24,\"pumpMilliseconds\":42\},\"report\":\{\"fileName\":" +
   "\"pudu-media-studio-report.json\"\}\}"
 }

@@ -10,9 +10,10 @@ aliases: [Media Studio Configuration Checks]
 
 ## Purpose and interface
 
-Hold deterministic success, malformed-input, unsafe-path, boundary, and cross-media-duration checks
+Hold deterministic success, malformed-input, unsafe-path, device-queue boundary, and cross-media-duration checks
 for [[Media Studio Configuration]]. `main` returns the number of exact assertions held so `pudu test`
 can treat the example configuration contract as a repeatable suite without acquiring a device.
+The current exact count is eight, including a frames-per-buffer value below the admitted minimum.
 
 ## Negative logic
 

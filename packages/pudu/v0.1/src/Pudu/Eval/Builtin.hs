@@ -24,6 +24,7 @@ module Pudu.Eval.Builtin
 
 import qualified Data.Text as Text
 
+import qualified Pudu.Eval.AudioKernel as AudioKernel
 import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Eval.SwissTable as Swiss
@@ -168,6 +169,25 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
           ( BytesValue
               (pbkdf2Sha256 password salt (fromInteger rounds) (fromInteger wanted))
           )
+  (AudioToneBytesBuiltin,
+    [ IntValue _ wave
+    , IntValue _ period
+    , IntValue _ amplitude
+    , IntValue _ channels
+    , IntValue _ start
+    , IntValue _ frames
+    ]) ->
+      pure (optionalBytes (AudioKernel.toneBytes wave period amplitude channels start frames))
+  (AudioRampBytesBuiltin,
+    [ BytesValue source
+    , IntValue _ channels
+    , IntValue _ start
+    , IntValue _ fromFrame
+    , IntValue _ fromGain
+    , IntValue _ toFrame
+    , IntValue _ toGain
+    ]) ->
+      pure (optionalBytes (AudioKernel.rampBytes source channels start fromFrame fromGain toFrame toGain))
   (WordMapUnionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapUnion" Word.WordUnion values
   (WordMapIntersectionBuiltin, values) -> callWordMapAlgebra spanValue "wordMapIntersection" Word.WordIntersection values
   (WordMapDifferenceBuiltin, values) -> callWordMapAlgebra spanValue "wordMapDifference" Word.WordDifference values
@@ -246,6 +266,8 @@ isHashingBuiltin builtin = case builtin of
   OpenSealedBuiltin -> True
   HmacBuiltin -> True
   DeriveKeyBuiltin -> True
+  AudioToneBytesBuiltin -> True
+  AudioRampBytesBuiltin -> True
   WordMapUnionBuiltin -> True
   WordMapIntersectionBuiltin -> True
   WordMapDifferenceBuiltin -> True
@@ -299,4 +321,3 @@ isHashingBuiltin builtin = case builtin of
   ColumnGatherU64Builtin -> True
   ColumnGatherF64Builtin -> True
   _ -> False
-

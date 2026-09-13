@@ -1,0 +1,104 @@
+module Std.Audio.Device
+
+import Std.Audio as Audio
+import Std.Bytes as Bytes
+
+/// Queue bounds and the total monotonic deadline for one clip.
+export type Plan = {
+  framesPerBuffer: Int,
+  buffers: Int,
+  timeoutMilliseconds: Int
+}
+
+/// Completion reported by the native device queue.
+export type Playback = { frames: Int }
+
+/// Why a bounded clip could not be presented to the default output device.
+export type DeviceError
+  = InvalidFramesPerBuffer(Int)
+  | InvalidBufferCount(Int)
+  | InvalidTimeout(Int)
+  | InvalidFormat(Audio.AudioError)
+  | EmptyAudio
+  | MalformedAudio(Int, Int)
+  | UnsupportedPlatform
+  | DeadlineExceeded
+  | PlatformFailure(Str)
+
+/// Admit two to eight preallocated buffers of 16 through 4,096 frames each.
+export fn plan(
+  framesPerBuffer: Int,
+  buffers: Int,
+  timeoutMilliseconds: Int
+) -> Result[Plan, DeviceError] {
+  if framesPerBuffer < 16 || framesPerBuffer > 4096 {
+    Err(InvalidFramesPerBuffer(framesPerBuffer))
+  } else if buffers < 2 || buffers > 8 {
+    Err(InvalidBufferCount(buffers))
+  } else if timeoutMilliseconds < 1 || timeoutMilliseconds > 60000 {
+    Err(InvalidTimeout(timeoutMilliseconds))
+  } else {
+    Ok(Plan {
+        framesPerBuffer: framesPerBuffer,
+        buffers: buffers,
+        timeoutMilliseconds: timeoutMilliseconds
+      })
+  }
+}
+
+/// Play one admitted interleaved signed-16 clip and await exact completion.
+export fn play(target: &Plan, source: &Audio.Pcm) -> Result[Playback, DeviceError] {
+  validatePlan(target) ?
+  match Audio.format(source.format.sampleRate, source.format.channels) {
+    case Err(problem) => { return Err(InvalidFormat(problem)) }
+    case Ok(_) => {}
+  }
+  let byteCount = Bytes.length(&source.data)
+  let frameBytes = source.format.channels * 2
+  if byteCount == 0 {
+    return Err(EmptyAudio)
+  }
+  if byteCount % frameBytes != 0 {
+    return Err(MalformedAudio(byteCount, frameBytes))
+  }
+  match audioDevicePlay(
+    source.format.sampleRate,
+    source.format.channels,
+    source.data,
+    target.framesPerBuffer,
+    target.buffers,
+    target.timeoutMilliseconds
+  ) {
+    case Ok(frames) => {
+      let expected = byteCount / frameBytes
+      if frames == expected {
+        Ok(Playback{frames: frames})
+      } else {
+        Err(PlatformFailure("audio device acknowledged an incomplete clip"))
+      }
+    }
+    case Err(message) => Err(classified(message))
+  }
+}
+
+fn validatePlan(target: &Plan) -> Result[(), DeviceError] {
+  if target.framesPerBuffer < 16 || target.framesPerBuffer > 4096 {
+    Err(InvalidFramesPerBuffer(target.framesPerBuffer))
+  } else if target.buffers < 2 || target.buffers > 8 {
+    Err(InvalidBufferCount(target.buffers))
+  } else if target.timeoutMilliseconds < 1 || target.timeoutMilliseconds > 60000 {
+    Err(InvalidTimeout(target.timeoutMilliseconds))
+  } else {
+    Ok(())
+  }
+}
+
+fn classified(message: Str) -> DeviceError {
+  if message == "audio device playback is unsupported on this platform" {
+    UnsupportedPlatform
+  } else if message == "audio device playback deadline exceeded" {
+    DeadlineExceeded
+  } else {
+    PlatformFailure(message)
+  }
+}

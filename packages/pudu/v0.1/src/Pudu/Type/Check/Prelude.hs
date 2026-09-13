@@ -171,6 +171,20 @@ declareBuiltinConstructors = do
   bindName "hmacSha256Of" (monotype (FunctionTypeValue False [bytesType, bytesType] bytesType))
   bindName "deriveKey"
     (monotype (FunctionTypeValue False [bytesType, bytesType, integerType, integerType] bytesType))
+  bindName "audioToneBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [integerType, integerType, integerType, integerType, integerType, integerType]
+            (NominalType "Option" [bytesType])
+        )
+    )
+  bindName "audioRampBytes"
+    ( monotype
+        ( FunctionTypeValue False
+            [bytesType, integerType, integerType, integerType, integerType, integerType, integerType]
+            (NominalType "Option" [bytesType])
+        )
+    )
   mapM_ (\name -> bindName name
     (polytype [("K", 0)] [] (FunctionTypeValue False [wordMapType, wordMapType] wordMapType)))
     ["wordMapUnion", "wordMapIntersection", "wordMapDifference", "wordMapSymmetricDifference"]
@@ -392,6 +406,7 @@ effectSignatures =
   , ("desktopPresent", monotype (FunctionTypeValue False [integerType, integerType, integerType, bytesType] (resultOf unitTypeValue)))
   , ("desktopPump", monotype (FunctionTypeValue False [integerType, integerType] (resultOf boolType)))
   , ("desktopClose", monotype (FunctionTypeValue False [integerType] (resultOf unitTypeValue)))
+  , ("audioDevicePlay", monotype (FunctionTypeValue False [integerType, integerType, bytesType, integerType, integerType, integerType] (resultOf integerType)))
   , ("arguments", monotype (FunctionTypeValue False [] (arrayOf stringType)))
   , ("environment", monotype (FunctionTypeValue False [] (arrayOf (TupleTypeValue [stringType, stringType]))))
   , ("temporaryPath", monotype (FunctionTypeValue False [] stringType))

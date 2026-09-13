@@ -30,6 +30,7 @@ export type GraphError
   | InvalidRamp(Int, Int)
   | InvalidChild(Int)
   | TooDeep(Int)
+  | KernelFailure
 
 /// The deepest nesting a graph may reach.
 const MAX_DEPTH: Int = 64
@@ -174,37 +175,17 @@ fn toned(
   start: Int,
   frames: Int
 ) -> Result[Audio.Pcm, GraphError] {
-  var values: Array[Int] = []
-  var frame = start
-  while frame < start + frames {
-    let value = waveAt(wave, frame % period, period, amplitude)
-    var channel = 0
-    while channel < shape.channels {
-      values = values.push(value)
-      channel = channel + 1
-    }
-    frame = frame + 1
+  match audioToneBytes(waveTag(wave), period, amplitude, shape.channels, start, frames) {
+    case Some(data) => Ok(Audio.Pcm{format: *shape, data: data})
+    case None => Err(KernelFailure)
   }
-  refused(Audio.fromSamples(shape, values))
 }
 
-/// One sample of a waveform at a phase from zero up to `period`.
-///
-/// Square is high for the first half; saw rises from `-amplitude`; triangle
-/// rises from `-amplitude` to `amplitude` over the first half and falls back.
-/// Each is integer division of exact products, so every host agrees.
-fn waveAt(wave: Wave, phase: Int, period: Int, amplitude: Int) -> Int {
+fn waveTag(wave: Wave) -> Int {
   match wave {
-    case Square => if phase * 2 < period { amplitude } else { -amplitude }
-    case Saw => -amplitude + (2 * amplitude * phase) / period
-    case Triangle => {
-      let half = period / 2
-      if phase < half {
-          -amplitude + (2 * amplitude * phase) / half
-      } else {
-        amplitude - (2 * amplitude * (phase - half)) / (period - half)
-      }
-    }
+    case Square => 0
+    case Saw => 1
+    case Triangle => 2
   }
 }
 
@@ -216,31 +197,18 @@ fn ramped(
   toFrame: Int,
   toGain: Int
 ) -> Result[Audio.Pcm, GraphError] {
-  let channels = source.format.channels
-  let values = Audio.samples(source)
-  var scaled: Array[Int] = []
-  var index = 0
-  while index < values.length() {
-    let frame = start + index / channels
-    let amount = if frame <= fromFrame {
-      fromGain
-    } else if frame >= toFrame {
-      toGain
-    } else {
-      fromGain + ((toGain - fromGain) * (frame - fromFrame)) / (toFrame - fromFrame)
-    }
-    scaled = scaled.push(saturated(roundedQ15(values[index] * amount)))
-    index = index + 1
+  match audioRampBytes(
+    source.data,
+    source.format.channels,
+    start,
+    fromFrame,
+    fromGain,
+    toFrame,
+    toGain
+  ) {
+    case Some(data) => Ok(Audio.Pcm{format: source.format, data: data})
+    case None => Err(KernelFailure)
   }
-  refused(Audio.fromSamples(&source.format, scaled))
-}
-
-fn roundedQ15(product: Int) -> Int {
-  if product >= 0 { (product + 16384) / 32768 } else { -((16384 - product) / 32768) }
-}
-
-fn saturated(value: Int) -> Int {
-  if value > 32767 { 32767 } else if value < -32768 { -32768 } else { value }
 }
 
 fn refused[T](outcome: Result[T, Audio.AudioError]) -> Result[T, GraphError] {

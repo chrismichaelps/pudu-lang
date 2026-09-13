@@ -1,6 +1,7 @@
 module Studio
 
 import Std.Audio as Audio
+import Std.Audio.Device as Device
 import Std.Audio.Graph as Graph
 import Std.Env as Env
 import Std.Io as Io
@@ -24,6 +25,20 @@ export fn main() -> Result[Int, Str] {
   let audioPath = Io.join(temporary, configuration.audio.wavName)
   let reportPath = Io.join(temporary, configuration.report.fileName)
   io(Io.writeAllBytes(audioPath, &document)) ?
+
+  let deviceStarted = Env.elapsedMilliseconds()
+  let deviceFrames = if configuration.audio.playToDevice {
+    let devicePlan = device(Device.plan(
+        configuration.audio.deviceFramesPerBuffer,
+        configuration.audio.deviceBuffers,
+        configuration.audio.deviceTimeoutMilliseconds
+      )) ?
+    let completed = device(Device.play(&devicePlan, &sound)) ?
+    completed.frames
+  } else {
+      -1
+  }
+  let deviceMilliseconds = Env.elapsedMilliseconds() - deviceStarted
 
   let pace = video(Video.rate(configuration.video.rateFrames, configuration.video.rateSeconds)) ?
   let window = configuration.window
@@ -53,6 +68,8 @@ export fn main() -> Result[Int, Str] {
           &observed,
         audioPath,
         audioMilliseconds,
+        deviceFrames,
+        deviceMilliseconds,
         presentationMilliseconds,
         Audio.frameCount(&sound)
       )
@@ -62,6 +79,8 @@ export fn main() -> Result[Int, Str] {
       print("audio frames: " + show(Audio.frameCount(&sound))) ?
       print("video frames presented: " + show(observed.presented)) ?
       print("audio preparation ms: " + show(audioMilliseconds)) ?
+      print("device audio frames: " + show(deviceFrames)) ?
+      print("device audio ms: " + show(deviceMilliseconds)) ?
       print("presentation ms: " + show(presentationMilliseconds)) ?
       Ok(observed.presented)
     }
@@ -168,16 +187,20 @@ fn reportOf(
   playback: &Playback,
   audioPath: Str,
   audioMilliseconds: Int,
+  deviceFrames: Int,
+  deviceMilliseconds: Int,
   presentationMilliseconds: Int,
   audioFrames: Int
 ) -> Json.Json {
   Json.object(&[
-      ("schemaVersion", Json.Number(1)),
+      ("schemaVersion", Json.Number(2)),
       ("configuration", configurationJson(configuration)),
       ("artifacts", Json.object(&[("audioWav", Json.Text(audioPath))])),
       ("observed", Json.object(&[
             ("audioFrames", Json.Number(audioFrames)),
             ("audioPreparationMilliseconds", Json.Number(audioMilliseconds)),
+            ("deviceAudioFrames", Json.Number(deviceFrames)),
+            ("deviceAudioMilliseconds", Json.Number(deviceMilliseconds)),
             ("videoFramesRequested", Json.Number(configuration.video.frames)),
             ("videoFramesPresented", Json.Number(playback.presented)),
             ("lastAlignedAudioFrame", Json.Number(playback.lastAudioFrame)),
@@ -186,7 +209,15 @@ fn reportOf(
           ])),
       ("capabilities", Json.list(&[
             capability("audio.representation", "WORKING", "exact PCM graph and WAV"),
-            capability("audio.speaker", "MISSING", "no device contract"),
+            capability(
+              "audio.speaker",
+              "PARTIAL",
+              if configuration.audio.playToDevice {
+                "bounded default-device clip acknowledged exact frames"
+              } else {
+                "device playback explicitly disabled"
+              }
+            ),
             capability("video.timeline", "WORKING", "exact rational alignment"),
             capability("video.presentation", "PARTIAL", "window without display-link pacing"),
             capability("media.codecs", "MISSING", "PCM WAV only"),
@@ -213,7 +244,11 @@ fn configurationJson(configuration: &Config.Configuration) -> Json.Json {
             ("sliceFrames", Json.Number(configuration.audio.sliceFrames)),
             ("period", Json.Number(configuration.audio.period)),
             ("amplitude", Json.Number(configuration.audio.amplitude)),
-            ("waveform", Json.Text(Config.waveformName(configuration.audio.waveform)))
+            ("waveform", Json.Text(Config.waveformName(configuration.audio.waveform))),
+            ("playToDevice", Json.Boolean(configuration.audio.playToDevice)),
+            ("deviceFramesPerBuffer", Json.Number(configuration.audio.deviceFramesPerBuffer)),
+            ("deviceBuffers", Json.Number(configuration.audio.deviceBuffers)),
+            ("deviceTimeoutMilliseconds", Json.Number(configuration.audio.deviceTimeoutMilliseconds))
           ])),
       ("video", Json.object(&[
             ("rateFrames", Json.Number(configuration.video.rateFrames)),
@@ -258,6 +293,13 @@ fn graph[T](value: Result[T, Graph.GraphError]) -> Result[T, Str] {
   match value {
     case Ok(found) => Ok(found)
     case Err(problem) => Err("audio graph: " + show(problem))
+  }
+}
+
+fn device[T](value: Result[T, Device.DeviceError]) -> Result[T, Str] {
+  match value {
+    case Ok(found) => Ok(found)
+    case Err(problem) => Err("audio device: " + show(problem))
   }
 }
 

@@ -58,7 +58,7 @@ recovery, accessibility, and percentile performance evidence appropriate to the 
 | Printing and PDF | MISSING | none | pagination, preview, print settings, cancellation, vector output |
 | Localization and input direction | PARTIAL | server locale module and Unicode strings | desktop locale environment, pluralization, bidi layout mirroring, live change |
 | Audio representation and graph | WORKING | exact PCM, WAV, resampling, channel maps, bounded pull graph | remains working as pure media; device presentation is a separate row |
-| Speaker/device audio | MISSING | none | device discovery, format negotiation, real-time callback, underrun/device-loss tests |
+| Speaker/device audio | PARTIAL | bounded default-device PCM clip; two-to-eight preallocated buffers; callback-acknowledged exact frames; monotonic timeout; real macOS launch | persistent streaming session, device discovery/selection, format negotiation, interruption/device loss, underrun telemetry, pause/resume, volume, shared A/V clock, Windows/Linux adapters |
 | Video timing and picture tracks | WORKING | rational clocks, non-overlap, exact audio-frame alignment | remains working as pure media; codec/device presentation are separate rows |
 | Video presentation | PARTIAL | animated Canvas surfaces reach a real window | display-link pacing, frame queue/drop policy, resize, color/HDR, device loss |
 | Media codecs and containers | MISSING | PCM WAV only | bounded image/audio/video codecs, metadata, malformed corpus and fuzzing |
@@ -83,9 +83,10 @@ recovery, accessibility, and percentile performance evidence appropriate to the 
 6. writes a JSON conformance report with effective configuration, artifacts, observed counts,
    monotonic phase durations, and honest `WORKING`/`PARTIAL`/`MISSING` capability states.
 
-This proves a media pipeline, not media completeness. The WAV is not heard until the speaker row is
-implemented; the pictures are generated rather than decoded; event pumping currently observes only
-close; and timing requests a bounded delay rather than synchronizing to a display link.
+This proves a bounded media pipeline, not media completeness. PCM reaches the macOS default speaker
+and completion callbacks must acknowledge every frame, but the pictures are generated rather than
+decoded; event pumping observes only close; and timing is not synchronized to a shared device clock
+or display link.
 
 The current 480×270 configured run exposed a performance defect as intended: preparing 16,016
 stereo frames at 16 kHz through the interpreter took about 13.5 seconds. The graph representation is

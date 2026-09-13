@@ -29,6 +29,9 @@ compiler semantics through build metadata. Every new library module must be regi
 modules. The macOS desktop adapter and Cocoa/CoreGraphics framework linkage are conditional on
 `os(osx)`; other targets compile the typed unsupported implementation in [[Eval Desktop]].
 The framework-neutral desktop header is an explicit source-distribution input.
+The framework-neutral audio header is likewise distributed explicitly. On macOS the private audio
+adapter and AudioToolbox linkage are conditional on `os(osx)`; other targets compile [[Eval Audio
+Device]] with a stable unsupported result and no Apple headers.
 
 The production `pudu` package contains the compiler library and executable only. Repository tests
 belong to [[Pudu Test Cabal Manifest]], a sibling package rooted where `test/` and `test-fixtures/`
@@ -47,11 +50,24 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
 - **Q:** Keep the root test tree as `../../../test` in this package? **A:** No. _Rationale:_ Cabal
   emits an unsafe archive link and refuses to reinstall the compiler. _Accepted:_ a separate root
   test package in the same project, preserving `cabal test all` without copying sources.
+- **Q:** Put AudioToolbox types in the Haskell FFI declaration? **A:** No. _Rationale:_ the stable C
+  ABI uses fixed-width scalars and bytes only. _Accepted:_ link the target framework only where its
+  adapter is compiled.
 
 ## Referenced by
 
 [[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]] ·
 [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]]
+
+## Bounded device-audio adapter
+
+Register [[Eval Audio Device]], distribute [[Pudu Audio Header]], and compile [[Pudu Audio Adapter]]
+only on macOS with AudioToolbox. Resolved Grill Log: the public module exists on every target while
+native source and framework linkage remain target-conditional.
+
+Register [[Eval Audio Kernel]] as a portable Haskell module with no new package or native-library
+dependency. Resolved Grill Log: acceleration of pure sample arithmetic is cross-platform and must not
+be hidden under the macOS adapter condition.
 
 ## SQLite native adapter
 

@@ -69,6 +69,7 @@ tags: [moc, module, stdlib]
 - [[Std Ui Desktop]] — bounded plans and explicit sessions for real desktop window presentation.
 - [[Std Audio]] — exact 16-bit PCM, rational time, Q15 gain, saturating mix, and bounded WAV.
 - [[Std Audio Graph]] — a stateless pull-model render graph over bounded, slice-independent renders.
+- [[Std Audio Device]] — bounded PCM playback plans with exact completion and typed target failures.
 - [[Std Video]] — exact fractional rates and timestamps, ordered picture tracks, and audio alignment.
 - [[Std Fs]] — atomic replacement, claimed temporary names, permissions, and link-aware containment.
 - [[Std Crypto]] — named digest families, keyed digests, constant-time comparison, and sealing.

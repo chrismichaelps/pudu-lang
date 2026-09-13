@@ -13,6 +13,7 @@ homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
 extra-source-files: cbits/pudu_desktop.h
+                    cbits/pudu_audio.h
 data-files:         lib/Std/*.pudu
                     lib/Std/App/*.pudu
                     lib/Std/Audio/*.pudu
@@ -78,6 +79,8 @@ library
     Pudu.Eval.Clock
     Pudu.Eval.Concurrent
     Pudu.Eval.Desktop
+    Pudu.Eval.AudioDevice
+    Pudu.Eval.AudioKernel
     Pudu.Eval.Effect
     Pudu.Eval.Aead
     Pudu.Eval.Child
@@ -257,9 +260,10 @@ library
     cpp-options:    -DPUDU_POSIX_SIGNALS
   if os(osx)
     c-sources:      cbits/pudu_desktop.m
+                    cbits/pudu_audio.c
     cc-options:     -fobjc-arc
-    cpp-options:    -DPUDU_DARWIN_DESKTOP
-    frameworks:     AppKit CoreGraphics
+    cpp-options:    -DPUDU_DARWIN_DESKTOP -DPUDU_DARWIN_AUDIO
+    frameworks:     AppKit AudioToolbox CoreGraphics
 
 executable pudu
   import:           warnings

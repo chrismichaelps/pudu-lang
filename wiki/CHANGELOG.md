@@ -19,10 +19,19 @@ tags: [changelog]
   JSON configuration, checked resource limits, monotonic phase metrics, and a machine-readable
   capability report. A real configured run rendered 16,016 stereo frames in bounded slices to a
   valid 16-bit 16 kHz PCM WAV, aligned and presented 30 generated pictures at 30000/1001 timing
-  through a native 480×270 window, pumped events, and closed the session. Seven headless
-  configuration assertions cover malformed, unsafe, and cross-media cases. The run also exposed a
-  13.5-second audio preparation path that is exact but unsuitable for real-time device use; speaker
-  output, codecs, device-clock synchronization, capture, and native input remain named gaps.
+  through a native 480×270 window, pumped events, and closed the session. Eight headless
+  configuration assertions cover malformed, unsafe, device-queue, and cross-media cases.
+- Added `Std.Audio.Device` bounded default-speaker playback and a private macOS Audio Queue adapter.
+  Queue buffers are all allocated before start, the callback performs atomic completion bookkeeping
+  only, refill and byte copies remain outside it, the queue is flushed and drained before success so
+  the final buffers are heard, the monotonic deadline bounds the whole play, and every return
+  disposes the queue. A real-device gate forces a one-millisecond timeout, then
+  reacquires the device and acknowledges exactly 4,000 frames; Studio acknowledged 16,016 frames.
+- Added pure compiled tone and Q15-ramp byte kernels beneath `Std.Audio.Graph`. Existing exact graph
+  tests remain the semantic oracle. The same 16,016-frame stereo Studio preparation fell from
+  13,401 ms to 54–55 ms while retaining exact PCM, removing the exposed real-time preparation blocker.
+  Persistent streaming, device discovery/switching, underrun reporting, codecs, shared device-clock
+  synchronization, capture, native input, and Windows/Linux adapters remain explicit gaps.
 
 ## 2026-09-12 — Native application-media foundation
 

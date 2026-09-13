@@ -19,6 +19,8 @@ output frame, a `Tone` of a `Wave` (`Square`, `Saw`, `Triangle`) with a period a
 `clip`, `tone`, `gained`, `mixed`, and `ramp` build them. `render` produces exactly the requested frames
 from a start frame in a format. `GraphError` carries audio refusals unchanged and names invalid periods,
 amplitudes, ramps, child counts, and nesting beyond the depth bound.
+`KernelFailure` records the invariant breach if a fully admitted bounded request is nevertheless
+refused by the compiled byte kernel; it is never mislabeled as malformed caller PCM.
 
 ## Governance and algorithm
 
@@ -41,6 +43,10 @@ integer division of exact products. Ramp gain is interpolated per frame by integ
 with the same half-away-from-zero Q15 rounding and saturation as audio gain, so automation is
 sample-accurate.
 
+The dense tone-generation and ramp-application loops delegate to [[Eval Audio Kernel]]. Graph
+composition, whole-node admission, bounds, and typed errors remain Pudu code; existing exact and
+slice-equivalence fixtures hold the compiled byte kernels to the same semantics.
+
 ## Referenced archive material
 
 The archived audio unit guides describe a host pulling rendered slices from the end of a processing
@@ -58,6 +64,12 @@ and replaces mutable per-unit state with nodes that are functions of frame posit
 - **Q:** Box single children directly in the variant? **A:** Not in this slice. _Rationale:_ the
   one-element array form is the recursive shape the language admits today; its length is checked.
   _Rejected:_ unchecked child arrays.
+- **Q:** Keep exact sample loops interpreted for implementation purity? **A:** No. _Rationale:_ the
+  public semantics remain Pudu-native while repeated dynamic dispatch made preparation more than ten
+  times slower than playback. _Accepted:_ exact bounded runtime kernels with byte-equality tests.
+- **Q:** Reuse a caller-facing audio error if a compiled kernel rejects an admitted request? **A:**
+  No. _Rationale:_ that would blame valid PCM for an internal invariant breach. _Accepted:_ the
+  explicit `KernelFailure` graph error.
 
 Resolved Grill Log: stateless frame-addressed nodes, whole-graph admission, bounded exact slices, and
 integer waveforms and automation.

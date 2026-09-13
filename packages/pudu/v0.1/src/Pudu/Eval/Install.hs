@@ -113,6 +113,8 @@ installBuiltinConstructors = do
   bind "openSealedBytes" (BuiltinValue OpenSealedBuiltin)
   bind "hmacSha256Of" (BuiltinValue HmacBuiltin)
   bind "deriveKey" (BuiltinValue DeriveKeyBuiltin)
+  bind "audioToneBytes" (BuiltinValue AudioToneBytesBuiltin)
+  bind "audioRampBytes" (BuiltinValue AudioRampBytesBuiltin)
   bind "wordMapUnion" (BuiltinValue WordMapUnionBuiltin)
   bind "wordMapIntersection" (BuiltinValue WordMapIntersectionBuiltin)
   bind "wordMapDifference" (BuiltinValue WordMapDifferenceBuiltin)

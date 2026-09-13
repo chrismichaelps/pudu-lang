@@ -101,6 +101,9 @@ data Builtin
   | DesktopPresentBuiltin
   | DesktopPumpBuiltin
   | DesktopCloseBuiltin
+  | AudioDevicePlayBuiltin
+  | AudioToneBytesBuiltin
+  | AudioRampBytesBuiltin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
@@ -287,6 +290,9 @@ builtinName value = case value of
   DesktopPresentBuiltin -> "desktopPresent"
   DesktopPumpBuiltin -> "desktopPump"
   DesktopCloseBuiltin -> "desktopClose"
+  AudioDevicePlayBuiltin -> "audioDevicePlay"
+  AudioToneBytesBuiltin -> "audioToneBytes"
+  AudioRampBytesBuiltin -> "audioRampBytes"
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"

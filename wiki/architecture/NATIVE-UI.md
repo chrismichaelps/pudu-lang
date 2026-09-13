@@ -131,6 +131,20 @@ supplied by an untrusted document cannot select an arbitrary allocation.
    dialogs, pointer/keyboard/IME input, accessibility export, display-scale/color changes, and
    device-loss recovery.
 
+## Device audio boundary
+
+The first device presenter is bounded clip playback, not graph execution on the hardware callback.
+`Std.Audio.Device` validates exact PCM plus buffer count, quantum, and monotonic deadline before one
+runtime effect. The private target adapter preallocates every hardware queue buffer, refills them
+outside the callback, and lets the callback perform only bounded atomic completion bookkeeping. It
+returns the exact frames acknowledged by the device or a typed timeout/platform failure, and tears
+down the queue on every path.
+
+This gives ordinary applications an audible, owned capability without pretending the interpreted
+graph is real-time. It remains `PARTIAL` until streaming sessions expose device discovery and format
+negotiation, interruptions/device loss, pause/resume, volume, underrun telemetry, and a shared clock
+for picture presentation. Other targets must implement the same behavior or report unsupported.
+
 ## Comparative release gates
 
 The package may claim next-generation quality only after evidence exists for keyboard-only and

@@ -94,6 +94,16 @@ public wrappers while these remain language-runtime primitives.
 Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
 standard-library wrapper is the public contract.
 
+## Device-audio capability name
+
+`audioDevicePlay` is a discoverable effect value consumed by [[Std Audio Device]]. Resolved Grill
+Log: expose one target-neutral primitive name; queue ownership and target framework names remain
+behind the runtime boundary.
+
+`audioToneBytes` and `audioRampBytes` are discoverable pure values used by [[Std Audio Graph]].
+Resolved Grill Log: their low-level spelling makes them representation primitives, while graph nodes
+and errors remain the documented public API.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

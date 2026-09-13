@@ -21,6 +21,8 @@ testServiceEvaluation = do
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
+  deviceAudio <- runEntry "test-fixtures/stdlib/UsesAudioDevice.pudu"
+  studioConfiguration <- runEntry "examples/media/ConfigChecks.pudu"
   timing <- runEntry "test-fixtures/stdlib/UsesVideo.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
@@ -143,6 +145,12 @@ testServiceEvaluation = do
     , counterexample
         "an audio graph renders exact samples that do not depend on slice boundaries"
         (rendering === Just "21")
+    , counterexample
+        "device audio refuses invalid plans and PCM before hardware acquisition"
+        (deviceAudio === Just "9")
+    , counterexample
+        "the Media Studio configuration admits bounded device playback"
+        (studioConfiguration === Just "8")
     , counterexample
         "video timing stays exact across scales and tracks never overlap pictures"
         (timing === Just "19")

@@ -90,6 +90,23 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]
 
+## Device-audio effect tag
+
+`AudioDevicePlayBuiltin` names the single bounded device-playback effect. Its public spelling is
+`audioDevicePlay`; the tag carries no target framework or persistent native handle.
+
+Resolved Grill Log: keep bounded playback as one explicit effect tag so constant folding refuses it
+and malformed dynamic calls follow the ordinary effect-arity diagnostic path.
+
+## Audio preparation kernels
+
+`audioToneBytes` and `audioRampBytes` are pure closed primitives delegated to [[Eval Audio Kernel]].
+They are admitted during constant evaluation, return optional bytes on boundary failure, and do not
+reach a device.
+
+Resolved Grill Log: keep these in pure dispatch, distinct from `audioDevicePlay`; deterministic byte
+generation is not an effect merely because its result may later reach a speaker.
+
 ## Cryptographic primitive dispatch
 
 Pure dispatch covers SHA3-256/512, BLAKE2b-256/512, HMAC-SHA512, and constant-time byte equality.
@@ -189,4 +206,3 @@ Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`
 `SwissTableSizeBuiltin` through pure built-in evaluators in [[Eval Buffer]] and [[Eval SwissTable]].
 
 Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.
-

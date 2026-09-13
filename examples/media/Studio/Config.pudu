@@ -24,7 +24,11 @@ export type AudioPlan = {
   period: Int,
   amplitude: Int,
   waveform: Waveform,
-  wavName: Str
+  wavName: Str,
+  playToDevice: Bool,
+  deviceFramesPerBuffer: Int,
+  deviceBuffers: Int,
+  deviceTimeoutMilliseconds: Int
 }
 
 export type VideoPlan = {
@@ -70,7 +74,11 @@ export fn defaults() -> Configuration {
       period: 80,
       amplitude: 5000,
       waveform: Triangle,
-      wavName: "pudu-media-studio.wav"
+      wavName: "pudu-media-studio.wav",
+      playToDevice: true,
+      deviceFramesPerBuffer: 256,
+      deviceBuffers: 3,
+      deviceTimeoutMilliseconds: 3000
     },
     video: VideoPlan{rateFrames: 24, rateSeconds: 1, frames: 24, pumpMilliseconds: 42},
     report: ReportPlan{fileName: "pudu-media-studio-report.json"}
@@ -110,7 +118,11 @@ export fn decode(source: Str) -> Result[Configuration, ConfigError] {
       period: integer(&audioValue, "audio.period") ?,
       amplitude: integer(&audioValue, "audio.amplitude") ?,
       waveform: waveform(waveName) ?,
-      wavName: text(&audioValue, "audio.wavName") ?
+      wavName: text(&audioValue, "audio.wavName") ?,
+      playToDevice: boolean(&audioValue, "audio.playToDevice") ?,
+      deviceFramesPerBuffer: integer(&audioValue, "audio.deviceFramesPerBuffer") ?,
+      deviceBuffers: integer(&audioValue, "audio.deviceBuffers") ?,
+      deviceTimeoutMilliseconds: integer(&audioValue, "audio.deviceTimeoutMilliseconds") ?
     },
     video: VideoPlan {
       rateFrames: integer(&videoValue, "video.rateFrames") ?,
@@ -140,6 +152,9 @@ export fn validate(configuration: &Configuration) -> Result[Configuration, Confi
   range("audio.period", configuration.audio.period, 2, 65536) ?
   range("audio.amplitude", configuration.audio.amplitude, 0, 32767) ?
   leaf("audio.wavName", configuration.audio.wavName) ?
+  range("audio.deviceFramesPerBuffer", configuration.audio.deviceFramesPerBuffer, 16, 4096) ?
+  range("audio.deviceBuffers", configuration.audio.deviceBuffers, 2, 8) ?
+  range("audio.deviceTimeoutMilliseconds", configuration.audio.deviceTimeoutMilliseconds, 1, 60000) ?
 
   range("video.rateFrames", configuration.video.rateFrames, 1, 120000) ?
   range("video.rateSeconds", configuration.video.rateSeconds, 1, 1001) ?
