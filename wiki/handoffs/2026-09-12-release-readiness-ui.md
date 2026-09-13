@@ -147,6 +147,14 @@ order, hit testing, painting, and damage regions.
   exact output, path, post-patch, and invalid-path claims. Replacing repeated indentation concatenation with the
   bounded native string repeat reduced its 5.1 MB pretty output run from about 30 seconds to about
   6 seconds; the unrestricted full suite passes.
+- Project bootstrap — `pudu init` preserves existing regular files and stages missing content under
+  an atomically acquired serialized lock, with competing creators receiving a typed refusal and the
+  manifest committed last. Package identities follow the documented
+  lowercase ASCII grammar. A generated application contains only Pudu and begins as the acyclic
+  graph `Main -> App.Greeting -> Domain.Greeting`; seven filesystem properties and the now-mandatory
+  scaffold gate cover refusals plus check/run/test/format/build/bundle behavior outside the checkout.
+  The text audit retains `Std.Text.Builder`, shared `Str` remainders, and `Std.Text.Source` rather
+  than adding an alias-only `StringBuilder` or an unmeasured view with ambiguous coordinates.
 - Audit findings left open, each a named gap rather than a silent one: one accept-interrupt run
   signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
   readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
@@ -158,11 +166,11 @@ order, hit testing, painting, and damage regions.
 
 ## Exact next action
 
-Audit and production-harden the CLI project generator so a newly generated project checks, runs,
-tests, and packages without repository-only state; at the same time establish whether the existing
-`Std.Text.Builder`, native string repeat, and source-buffer surfaces leave a demonstrated need for a
-distinct string view rather than adding a speculative public type. Then continue the native media
-roadmap: a persistent Pudu-owned stream with negotiated format, device change,
+Specify and implement a native `pudu lint` over Pudu's lossless syntax and semantic information,
+using HLint only as a public behavioral reference. It must have stable Pudu diagnostic codes,
+configuration and suppression rules, machine-readable output, safe fix applicability, false-positive
+fixtures, and measured linear traversal before it enters the mandatory gates. Then continue the
+native media roadmap: a persistent Pudu-owned stream with negotiated format, device change,
 interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
 presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and
 [[Std Ui Screen]], translating native pointer/key/text/close events into screen inputs. Keep every

@@ -24,6 +24,8 @@ Separating this package makes the compiler's source distribution self-contained:
 - Test sources remain single-copy under `test/`; the package layout changes, not test behavior.
 - The suite depends on `pudu == 0.1.0` so it cannot silently validate a different compiler version.
 - The native C++ fixture remains test-only and uses the same platform export flags.
+- [[Pudu CLI Init Spec]] is registered explicitly and uses `temporary` for isolated filesystem
+  evidence and `filepath` for portable project paths.
 
 ## Grill Log
 
@@ -35,6 +37,9 @@ Separating this package makes the compiler's source distribution self-contained:
 - **Q:** Publish the test package as part of the compiler install? **A:** No. _Rationale:_ users need
   the compiler source archive, not repository fixtures. _Accepted:_ explicit installation and sdist
   gates target `pudu`, while repository CI targets `all`.
+- **Q:** Exercise initialization in a developer's checkout directory? **A:** No. _Rationale:_ a
+  refusal test deliberately creates collisions. _Accepted:_ per-property temporary directories
+  deleted after the property completes.
 
 ## Referenced by
 

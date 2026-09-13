@@ -33,6 +33,10 @@ The framework-neutral audio header is likewise distributed explicitly. On macOS 
 adapter and AudioToolbox linkage are conditional on `os(osx)`; other targets compile [[Eval Audio
 Device]] with a stable unsupported result and no Apple headers.
 
+[[Pudu CLI Init]] is a compiler-library module so both the executable and repository tests exercise
+one initialization contract. Its filesystem and text needs are already production dependencies; no
+new runtime package is introduced.
+
 The production `pudu` package contains the compiler library and executable only. Repository tests
 belong to [[Pudu Test Cabal Manifest]], a sibling package rooted where `test/` and `test-fixtures/`
 actually live. No component may escape this package through `..`: Cabal source archives reject such
@@ -53,6 +57,10 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
 - **Q:** Put AudioToolbox types in the Haskell FFI declaration? **A:** No. _Rationale:_ the stable C
   ABI uses fixed-width scalars and bytes only. _Accepted:_ link the target framework only where its
   adapter is compiled.
+- **Q:** Keep project initialization private inside the executable entry point? **A:** No.
+  _Rationale:_ then filesystem safety can only be tested by spawning a separately located binary,
+  and the command dispatcher retains another responsibility. _Accepted:_ one focused library module
+  consumed by the thin CLI and its tests.
 
 ## Referenced by
 

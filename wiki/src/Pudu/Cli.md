@@ -78,7 +78,12 @@ pudu help            print usage
 - Missing, unreadable, or non-file roots flow through [[Compiler Program]] as structured `E2014` diagnostics and produce a non-zero status; the CLI does not race a separate existence probe against the authoritative read. Unknown commands remain stderr usage failures.
 
 - `pudu test` discovers `.pudu` test files under `test/`, `tests/`, or the paths provided on the command line. It compiles and evaluates each file, tallying assertions and failures. It reports a clean test suite summary and exits with code 0 on all pass, or code 1 on any failure.
-- `pudu init` initializes a new project directory with a canonical `pudu.toml` adhering to [[architecture/PACKAGES]], creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore`. If `pudu.toml` already exists, it safely refuses to overwrite it.
+- `pudu init` delegates project creation to [[Pudu CLI Init]]. It initializes a canonical
+  `pudu.toml`, runnable source, an executable test, README, and ignore file. Existing regular
+  scaffold files are preserved, while an existing manifest, symlink, or incompatible filesystem
+  object is refused before managed content is written.
+  Generated application code is Pudu-only and forms the graph `Main → App.Greeting →
+  Domain.Greeting`; the effectful composition root depends inward on pure policy, never the reverse.
 - `pudu watch` watches the project root enclosing the specified file, automatically restarting the program on source changes:
   - Scopes child process lifetime using `bracket`, ensuring that terminating or re-spawning a process terminates the running handle and reaps the exit status before launching the next iteration.
   - Debounces rapid saves using a 100ms settling loop until both file modification times and file sizes stabilize.
@@ -106,6 +111,10 @@ Read arguments, detect the render style once, dispatch to the session, checker, 
 - `pudu check` with no files is a usage error rather than a silent success.
 - `pudu test` with no matching test files reports that zero test suites were discovered and exits with an informative message.
 - `pudu init` on an existing package reports that `pudu.toml` already exists and refuses modification.
+- Directory-derived package names are normalized to the lowercase ASCII/hyphen grammar; a name
+  with no admissible characters or one claiming the reserved `std` or `core` namespace is refused.
+- A concurrent initializer cannot interleave scaffold writes. The manifest is committed last, so
+  it never marks a project complete before every newly managed file has reached its destination.
 - `pudu doc --html` with no files is the same explicit usage error as the other documentation
   formats; an intentionally empty site can still be rendered by the pure [[Doc Site]] interface.
 - A path may exist and still be unreadable; `check` trusts the loader's diagnostic result, so this cannot become a zero-error summary.
@@ -135,6 +144,14 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 - **Q:** What does `pudu init` generate?
   **A:** It creates a canonical `pudu.toml` (with package name, version "0.1.0", language version, source directory "src"), creates `src/Main.pudu` if absent, creates `test/` directory, and scaffolds `.gitignore` if absent. It never overwrites an existing `pudu.toml`.
   _Rationale:_ Protects existing project configurations while providing immediate onboarding.
+- **Q:** Refuse a directory merely because it already contains `src/Main.pudu` or a test?
+  **A:** No. _Rationale:_ `init` is also how an existing source directory becomes a canonical
+  project; regular files are preserved and only missing scaffold pieces are created. _Rejected:_
+  overwriting source; requiring an empty directory.
+- **Q:** Require a new Pudu developer to edit Haskell? **A:** No. The generated manifest, source
+  graph, and tests contain Pudu only. Haskell remains an implementation language of the current
+  bootstrap compiler until the separately governed self-hosting milestone; it is not part of an
+  initialized project's source or build workflow.
 
 ## Referenced by
 
@@ -142,8 +159,10 @@ DEPTH 0.35 (SHALLOW by intent). It is the presentation boundary; deepening it wo
 
 ## Manifest string escaping
 
-Project initialization escapes backslash, quotes and ASCII controls in the directory-derived
-TOML name. Existing files remain preserved. This is code-only delivery with readiness unproven.
+Project initialization normalizes its directory-derived package name to the package grammar rather
+than merely escaping arbitrary text into TOML. Existing regular files remain preserved. The
+initialization module's focused filesystem properties and the end-to-end generated-project gate are
+the readiness evidence.
 
 ## Initialization path validation and bundle isolation
 
@@ -156,4 +175,3 @@ TOML name. Existing files remain preserved. This is code-only delivery with read
 - **Q:** Why scope watched child processes using `bracket`? **A:** Unhandled watcher exits, signals, or rapid crashes could leave orphaned zombie background processes holding TCP ports or file locks. `bracket` guarantees `terminateProcess` and `waitForProcess` run on every restart and exit.
 - **Q:** Why debounce with a 100ms settling loop in `pudu watch`? **A:** Editors and build tools frequently write temporary files, touch files, or perform multi-stage saves. Checking that timestamps and file sizes remain unchanged across 100ms prevents spurious mid-save recompilation.
 - **Q:** Why track symlink ancestors during watch directory walks? **A:** Recursive directory symlinks can induce infinite loops and stack exhaustion in tree walkers. Canonicalizing paths and maintaining an ancestor `Set` stops circular traversals immediately.
-

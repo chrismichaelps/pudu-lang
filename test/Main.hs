@@ -11,6 +11,7 @@ import Pudu.Lsp.JsonSpec (jsonProperties)
 import Pudu.Lsp.ServerSpec (serverProperties)
 import Pudu.Diagnostic.RenderSpec (renderProperties)
 import Pudu.Compiler.ProgramSpec (programProperties)
+import Pudu.Cli.InitSpec (initProperties)
 import Pudu.Foreign.SlotSpec (slotProperties)
 import Pudu.Foreign.OwnershipSpec (ownershipProperties)
 import Pudu.Eval.Foreign.ResultSpec (resultProperties)
@@ -81,6 +82,7 @@ main = do
   lspOutcomes <- traverse (uncurry check) serverProperties
   renderOutcomes <- traverse (uncurry check) renderProperties
   programOutcomes <- traverse (uncurry check) programProperties
+  initOutcomes <- traverse (uncurry check) initProperties
   tokenOutcomes <- traverse (uncurry check) tokenProperties
   cursorOutcomes <- traverse (uncurry check) cursorProperties
   scannerOutcomes <- traverse (uncurry check) scannerProperties
@@ -110,7 +112,7 @@ main = do
   slotOutcomes <- traverse (uncurry check) slotProperties
   ownershipOutcomes <- traverse (uncurry check) ownershipProperties
   resultOutcomes <- traverse (uncurry check) resultProperties
-  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> renderOutcomes <> programOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
+  unless (and (sourceOutcomes <> decimalOutcomes <> diagnosticOutcomes <> formatOutcomes <> jsonOutcomes <> lspOutcomes <> renderOutcomes <> programOutcomes <> initOutcomes <> tokenOutcomes <> cursorOutcomes <> scannerOutcomes <> numberSymbolOutcomes <> quotedOutcomes <> lexerOutcomes <> expandOutcomes <> syntaxOutcomes <> parserStateNameOutcomes <> parserImportOutcomes <> parserBindingOutcomes <> parserBlockOutcomes <> parserFunctionOutcomes <> parserModuleOutcomes <> parserPatternOutcomes <> parserTypeDeclarationOutcomes <> resolveOutcomes <> evalOutcomes <> typeOutcomes <> importTypeOutcomes <> interfaceOutcomes <> replOutcomes <> answerOutcomes <> docOutcomes <> parserTypeOutcomes <> parserExpressionOutcomes <> slotOutcomes <> ownershipOutcomes <> resultOutcomes)) exitFailure
 check :: String -> IO Property -> IO Bool
 check label loadProperty = do
   putStrLn ("[test] " <> label)

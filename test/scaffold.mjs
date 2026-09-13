@@ -40,8 +40,25 @@ execFileSync(executable, ["init", project], { stdio: "pipe" });
 // A project is the files somebody expects to find, and one that leaves out the
 // suite leaves `pudu test` with nothing to find in a project that has just
 // been told to run it.
-for (const expected of ["pudu.toml", ".gitignore", "README.md", "src/Main.pudu", "test/MainTest.pudu"]) {
+for (const expected of [
+  "pudu.toml",
+  ".gitignore",
+  "README.md",
+  "src/Main.pudu",
+  "src/App/Greeting.pudu",
+  "src/Domain/Greeting.pudu",
+  "test/App/GreetingTest.pudu",
+]) {
   if (!existsSync(join(project, expected))) failures.push(`init did not write ${expected}`);
+}
+
+const mainSource = readFileSync(join(project, "src/Main.pudu"), "utf8");
+const applicationSource = readFileSync(join(project, "src/App/Greeting.pudu"), "utf8");
+const domainSource = readFileSync(join(project, "src/Domain/Greeting.pudu"), "utf8");
+if (!mainSource.includes("import App.Greeting")) failures.push("Main does not depend on the application layer");
+if (!applicationSource.includes("import Domain.Greeting")) failures.push("App does not depend on the domain layer");
+if (domainSource.includes("import App.") || domainSource.includes("import Main")) {
+  failures.push("the domain layer depends outward");
 }
 
 // Running it says something. A program that prints nothing has not told the
@@ -59,7 +76,7 @@ if (!tested.includes("1/1 suites passed")) {
 
 // The project is formatted the way the formatter formats. A new project that
 // fails its own `fmt --check` teaches that the check is noise.
-inProject("fmt --check", ["fmt", "--check", "src/Main.pudu", "test/MainTest.pudu"]);
+inProject("fmt --check", ["fmt", "--check", "src", "test"]);
 
 // It compiles to one file that runs.
 inProject("build", ["build", "src/Main.pudu", "-o", "app"]);
@@ -74,7 +91,7 @@ if (existsSync(join(project, "app"))) {
 
 // A suite that stops holding must say so. A starting project whose test cannot
 // fail has given the person a test that means nothing.
-const suite = join(project, "test", "MainTest.pudu");
+const suite = join(project, "test", "App", "GreetingTest.pudu");
 writeFileSync(suite, readFileSync(suite, "utf8").replace("Hello, Ada.", "Hello, Grace."));
 let broke = "";
 try {
@@ -101,4 +118,11 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(JSON.stringify({ initialized: true, ran: true, tested: true, formatted: true, built: true }));
+console.log(JSON.stringify({
+  initialized: true,
+  layered: true,
+  ran: true,
+  tested: true,
+  formatted: true,
+  built: true,
+}));

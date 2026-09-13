@@ -5,6 +5,8 @@ tags: [moc, module]
 
 # Pudu Module Map
 
+- [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
+- [[Pudu CLI Init]] — additive, staged, typed creation of canonical projects.
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
 - [[Integer Literal]] — shared arbitrary-precision integer decoding, suffix vocabulary, and concrete-type fit laws.

@@ -7,6 +7,19 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- `pudu init` now creates a Pudu-only inward dependency graph: `Main` composes effects,
+  `App.Greeting` owns the use case, and `Domain.Greeting` owns pure policy. The generator preserves
+  existing regular source and support files, refuses links and incompatible paths before writes,
+  normalizes directory names to the package identity grammar, rejects reserved/empty identities,
+  acquires its serialization lock atomically, maps competing creators to a typed refusal, stages
+  new files, and commits `pudu.toml` last. Seven
+  filesystem properties cover success and refusals. The previously unregistered scaffold script is
+  now a mandatory release gate and proves check, run, test, formatter, build, bundled execution, and
+  an intentionally failing generated test from outside the repository.
+- The string construction/view audit found no missing public type: `Std.Text.Builder` already holds
+  persistent chunks and joins once; native `Str` remainders share storage for Unicode parsing, and
+  `Std.Text.Source` supplies explicit byte-coordinate views. A separate `StringView` would duplicate
+  those contracts without a measured caller while adding unresolved retention and coordinate rules.
 - HTML rendering, compact and pretty JSON encoding, UI tree comparison, and UI patch application
   no longer consume one evaluator frame per value level. Explicit work stacks preserve document
   and change order; patch application descends iteratively and rebuilds immutable ancestors from the
