@@ -139,7 +139,10 @@ order, hit testing, painting, and damage regions.
   position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
   per character on inputs that are normally short; a unified diff does not mark a missing final
   newline; and `Str.charAt` walks the UTF-8 prefix, so any positional scanner a program writes grows
-  with the square of its text.
+  with the square of its text. `Std.Html.render`, `Std.Ui.changes`, `Std.Json.encode`, and
+  `encodePretty` recurse once per nesting level with no error channel, so a value a program builds
+  about 1,500 levels deep stops the program; values decoded from outside are bounded at 512 and stay
+  inside the limit, and removing the limit means rendering with an explicit stack.
 
 ## Exact next action
 
