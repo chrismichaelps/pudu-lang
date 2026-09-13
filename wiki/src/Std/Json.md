@@ -44,6 +44,15 @@ below U+0020 uses `\u00XX`, and remaining scalars are written directly. Decoding
 controls when they occur unescaped. This keeps `decode(encode(value))` stable for string values and
 prevents the encoder from emitting text outside JSON's grammar.
 
+Encoding has no input-nesting refusal because it writes trusted `Json` values already held by the
+program. Compact and pretty encoders therefore traverse with an explicit `Writing` stack rather
+than consuming one evaluator call frame per container. Opening text is emitted immediately;
+children and closing text enter the stack in reverse order and are emitted in source order. Both
+forms collect output fragments and join once, preserving the established byte-for-byte formatting
+without repeated whole-prefix concatenation. Pretty indentation uses the native bounded string
+repeat operation, so producing an indentation run allocates it once instead of repeatedly copying
+every prefix on the way to its required width.
+
 ## Evidence
 
 - A focused executable fixture covers plain text; quote, slash, reverse-solidus, named and unnamed control, BMP,
@@ -69,5 +78,14 @@ prevents the encoder from emitting text outside JSON's grammar.
 - **Q:** Keep indexing the source by scalar position? **A:** No. _Rationale:_ UTF-8 positions are
   reached by walking, which made decoding quadratic in document size. _Accepted:_ a private cursor
   over the unread remainder. _Rejected:_ a byte-offset string API added to the language for one reader.
+- **Q:** Give program-built values the decoder's 512-level limit? **A:** No. _Rationale:_ the decoder
+  rejects hostile external syntax before allocating an admitted value; the encoder operates on a
+  value the program already owns, and its infallible signature promises to write it. _Accepted:_ an
+  explicit work stack for both compact and pretty forms. _Rejected:_ silently truncating output;
+  stopping the evaluator; changing encoding to an error solely because traversal was recursive.
+- **Q:** Build indentation two spaces at a time in Pudu? **A:** No. _Rationale:_ repeated immutable
+  concatenation copies every prefix and turns one indentation run quadratic in its width.
+  _Accepted:_ the checked native `Str.repeat` operation. _Rejected:_ a local loop; adding another
+  public builder abstraction when `Str.repeat` and `Std.Text.Builder` already cover the two needs.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

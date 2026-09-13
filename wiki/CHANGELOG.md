@@ -7,6 +7,14 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- HTML rendering, compact and pretty JSON encoding, UI tree comparison, and UI patch application
+  no longer consume one evaluator frame per value level. Explicit work stacks preserve document
+  and change order; patch application descends iteratively and rebuilds immutable ancestors from the
+  leaf. A Pudu fixture builds 1,600-level values and holds 15 exact claims across serialized lengths
+  and boundaries, edit path depth, the rendered post-patch tree, and a deep invalid patch path.
+  Native repeated indentation
+  reduced that 5.1 MB pretty-JSON regression from about 30 seconds to about 6 seconds. The full
+  70-module Cabal suite passes.
 - `Std.Json` decoding is linear and bounded. The reader walks a cursor over the unread remainder
   instead of indexing UTF-8 text by position, so a 538-kilobyte document decodes in 2.4 s rather than
   9.1 s and a 200,000-character string in 3 ms rather than 1,970 ms. Nesting deeper than 512 levels

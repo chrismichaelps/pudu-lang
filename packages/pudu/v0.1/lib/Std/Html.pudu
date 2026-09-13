@@ -319,24 +319,55 @@ export fn render(view: &Html) -> Str { renderChunks(view).join("") }
 /// Buffered output fragments, in document order, without joining child subtrees.
 export fn renderChunks(view: &Html) -> Array[Str] { appendRendered(view, []) }
 
+/// One step of writing a view: a node still to write, or text already decided.
+type Writing
+  = Pending(Html)
+  | Written(Str)
+
+/// A view's markup appended to what was written before it.
+///
+/// Written with its own stack rather than by recursion, because nesting depth
+/// is decided by whatever data a page was built from, and recursing once per
+/// level let a deep enough document stop the program.
 fn appendRendered(view: &Html, pieces: Array[Str]) -> Array[Str] {
-  match view {
-    case Text(content) => pieces.push(escape(content))
-    case Trusted(markup) => pieces.push(markup)
-    case Fragment(children) => appendChildren(&children, pieces)
-    case Element(name, attributes, children) => {
-      let opened = appendAttributes(&attributes, pieces.push("<" + name))
-      if VOID_ELEMENTS.contains(name) { opened.push(" />") } else {
-        appendChildren(&children, opened.push(">")).push("</" + name + ">")
+  var out = pieces
+  var pending: Array[Writing] = [Pending(*view)]
+  while pending.length() > 0 {
+    let last = pending.length() - 1
+    let step = pending[last]
+    pending = pending.slice(0, last)
+    match step {
+      case Written(piece) => { out = out.push(piece) }
+      case Pending(node) => {
+        match node {
+          case Text(content) => { out = out.push(escape(content)) }
+          case Trusted(markup) => { out = out.push(markup) }
+          case Fragment(children) => { pending = withChildren(pending, &children) }
+          case Element(name, attributes, children) => {
+            out = appendAttributes(&attributes, out.push("<" + name))
+            if VOID_ELEMENTS.contains(name) {
+              out = out.push(" />")
+            } else {
+              out = out.push(">")
+              pending = withChildren(pending.push(Written("</" + name + ">")), &children)
+            }
+          }
+        }
       }
     }
   }
+  out
 }
 
-fn appendChildren(children: &Array[Html], pieces: Array[Str]) -> Array[Str] {
-  var out = pieces
-  for child in children { out = appendRendered(&child, out) }
-  out
+/// Children placed on the stack so the first is written first.
+fn withChildren(pending: Array[Writing], children: &Array[Html]) -> Array[Writing] {
+  var held = pending
+  var index = children.length() - 1
+  while index >= 0 {
+    held = held.push(Pending(children[index]))
+    index = index - 1
+  }
+  held
 }
 
 /// A whole document, with the declaration that says which one it is.

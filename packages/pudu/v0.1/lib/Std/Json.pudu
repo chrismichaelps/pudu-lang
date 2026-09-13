@@ -44,20 +44,14 @@ export fn decode(source: Str) -> Result[Json, JsonError] {
 }
 
 /// A value written as compact text, with no spaces between its parts.
-export fn encode(value: &Json) -> Str {
-  match value {
-    case Null => "null"
-    case Boolean(flag) => if flag { "true" } else { "false" }
-    case Number(number) => show(number)
-    case Fractional(digits) => digits
-    case Text(content) => quote(content)
-    case List(members) => encodeList(&members)
-    case Object(entries) => encodeObject(&entries)
-  }
-}
+///
+/// Written with its own stack and joined once: recursing once per level let a
+/// value built deeply enough stop the program, and appending each part to the
+/// text so far copied it every time.
+export fn encode(value: &Json) -> Str { written(value, false) }
 
 /// A value written across lines, each level indented by two spaces.
-export fn encodePretty(value: &Json) -> Str { prettyAt(value, 0) }
+export fn encodePretty(value: &Json) -> Str { written(value, true) }
 
 /// The value stored under a key, or `None` when the value is not an object or
 /// has no such key.
@@ -188,67 +182,88 @@ export fn explain(problem: &JsonError) -> Str {
   }
 }
 
-fn encodeList(members: &Array[Json]) -> Str {
-  var out = "["
-  var index = 0
-  while index < members.length() {
-    if index > 0 { out = out + "," }
-    out = out + encode(&members[index])
-    index = index + 1
+/// One step of writing a value: a value still to write at an indentation depth,
+/// or text already decided.
+type Writing
+  = Pending(Json, Int)
+  | Written(Str)
+
+fn written(value: &Json, pretty: Bool) -> Str {
+  var out: Array[Str] = []
+  var pending: Array[Writing] = [Pending(*value, 0)]
+  while pending.length() > 0 {
+    let last = pending.length() - 1
+    let step = pending[last]
+    pending = pending.slice(0, last)
+    match step {
+      case Written(fragment) => { out = out.push(fragment) }
+      case Pending(held, depth) => {
+        match held {
+          case List(members) => {
+            if members.length() == 0 {
+              out = out.push("[]")
+            } else {
+              out = out.push("[")
+              pending = pending.push(Written(closing(pretty, depth, "]")))
+              var index = members.length() - 1
+              while index >= 0 {
+                pending = pending.push(Pending(members[index], depth + 1))
+                pending = pending.push(Written(opening(pretty, depth, index > 0)))
+                index = index - 1
+              }
+            }
+          }
+          case Object(entries) => {
+            if entries.length() == 0 {
+              out = out.push(openBrace() + closeBrace())
+            } else {
+              out = out.push(openBrace())
+              pending = pending.push(Written(closing(pretty, depth, closeBrace())))
+              var index = entries.length() - 1
+              while index >= 0 {
+                pending = pending.push(Pending(entries[index][1], depth + 1))
+                let separator = if pretty { ": " } else { ":" }
+                pending = pending.push(
+                  Written(opening(pretty, depth, index > 0) + quote(entries[index][0]) + separator)
+                )
+                index = index - 1
+              }
+            }
+          }
+          case _ => { out = out.push(scalarText(&held)) }
+        }
+      }
+    }
   }
-  out + "]"
+  out.join("")
 }
 
-fn encodeObject(entries: &Array[(Str, Json)]) -> Str {
-  var out = "" + openBrace()
-  var index = 0
-  while index < entries.length() {
-    if index > 0 { out = out + "," }
-    out = out + quote(entries[index][0]) + ":" + encode(&entries[index][1])
-    index = index + 1
-  }
-  out + closeBrace()
+/// What precedes a member: a comma after the first, and in the pretty form a
+/// line break indented one level deeper than its container.
+fn opening(pretty: Bool, depth: Int, afterFirst: Bool) -> Str {
+  let comma = if afterFirst { "," } else { "" }
+  if pretty { comma + "\n" + indent(depth + 1) } else { comma }
 }
 
-fn prettyAt(value: &Json, depth: Int) -> Str {
+/// What closes a non-empty container.
+fn closing(pretty: Bool, depth: Int, bracket: Str) -> Str {
+  if pretty { "\n" + indent(depth) + bracket } else { bracket }
+}
+
+fn scalarText(value: &Json) -> Str {
   match value {
-    case List(members) => {
-      if members.length() == 0 { "[]" } else {
-        var out = "["
-        var index = 0
-        while index < members.length() {
-          if index > 0 { out = out + "," }
-          out = out + "\n" + indent(depth + 1) + prettyAt(&members[index], depth + 1)
-          index = index + 1
-        }
-        out + "\n" + indent(depth) + "]"
-      }
-    }
-    case Object(entries) => {
-      if entries.length() == 0 { openBrace() + closeBrace() } else {
-        var out = "" + openBrace()
-        var index = 0
-        while index < entries.length() {
-          if index > 0 { out = out + "," }
-          out = out + "\n" + indent(depth + 1) + quote(entries[index][0]) + ": "
-          out = out + prettyAt(&entries[index][1], depth + 1)
-          index = index + 1
-        }
-        out + "\n" + indent(depth) + closeBrace()
-      }
-    }
-    case _ => encode(value)
+    case Null => "null"
+    case Boolean(flag) => if flag { "true" } else { "false" }
+    case Number(number) => show(number)
+    case Fractional(digits) => digits
+    case Text(content) => quote(content)
+    case List(_) => "[]"
+    case Object(_) => openBrace() + closeBrace()
   }
 }
 
 fn indent(depth: Int) -> Str {
-  var out = ""
-  var remaining = depth
-  while remaining > 0 {
-    out = out + "  "
-    remaining = remaining - 1
-  }
-  out
+  "  ".repeat(depth)
 }
 
 /// Text written as a JSON string, with the escapes the format requires.
@@ -364,10 +379,10 @@ fn readNumber(cursor: &Cursor) -> Result[(Json, Cursor), JsonError] {
     if sign.startsWith("+") || sign.startsWith("-") { width = width + 1 }
     width = width + rest.drop(width).spanOf(DIGITS)
   }
-  let written = rest.take(width)
-  if written.isEmpty() || written == "-" { return Err(Unexpected(cursor.at, "a number")) }
-  if fractional { return Ok((Fractional(written), advanced(cursor, width))) }
-  let Some(number) = Reading.wholeOf(written) else {
+  let numeral = rest.take(width)
+  if numeral.isEmpty() || numeral == "-" { return Err(Unexpected(cursor.at, "a number")) }
+  if fractional { return Ok((Fractional(numeral), advanced(cursor, width))) }
+  let Some(number) = Reading.wholeOf(numeral) else {
     return Err(Unexpected(cursor.at, "a number"))
   }
   Ok((Number(number), advanced(cursor, width)))
@@ -449,8 +464,8 @@ fn readUnicodeEscape(marker: &Cursor) -> Result[(Str, Cursor), JsonError] {
   if second < 56320 || second > 57343 {
     return Err(Unexpected(lowAt, "a low surrogate"))
   }
-  let scalar = 65536 + (first - 55296) * 1024 + (second - 56320)
-  scalarEscape(scalar, advanced(marker, 11), lowAt)
+  let codepoint = 65536 + (first - 55296) * 1024 + (second - 56320)
+  scalarEscape(codepoint, advanced(marker, 11), lowAt)
 }
 
 fn scalarEscape(code: Int, next: Cursor, position: Int) -> Result[(Str, Cursor), JsonError] {

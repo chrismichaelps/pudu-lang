@@ -82,16 +82,18 @@ functions already are, and they compose without a second mechanism to learn.
 ## Fragment rendering
 
 `renderChunks` collects rendered text fragments in document order; render joins them once.
-Element recursion appends opening, child fragments and closing markup to one persistent array
-instead of materializing each child subtree. `document` streams the `<!DOCTYPE html>\n` prefix
+An explicit `Writing` stack appends opening, child fragments and closing markup to one persistent
+array instead of recursing once per element or materializing each child subtree. Children enter the
+stack in reverse order so they leave it in document order. `document` streams the `<!DOCTYPE html>\n` prefix
 directly into `appendRendered` before joining. `appendAttributes` streams formatted attribute
 strings directly into the active chunk array, eliminating intermediate attribute arrays and joins.
 `escape(content)` delegates directly to the native `content.escapeHtml()` builder-backed built-in,
 eliminating intermediate string loops and replacements. Attribute rendering, escaping, void-element
 syntax and trusted markup behavior are unchanged. This is buffered rendering, not socket streaming;
-recursive traversal depth remains proportional to HTML depth.
+view depth no longer consumes evaluator call frames.
 
 Resolved Grill Log:
 - **Q:** Keep the existing serialized output while removing repeated subtree joins? **A:** Yes; expose fragments for SSR composition without promising bounded-memory transport.
 - **Q:** Why delegate `escape` to `content.escapeHtml()`? **A:** Pudu's native string `escapeHtml()` uses a builder fast path in Haskell that skips unescaped text in blocks, avoiding repeated string scans, regexes, or five sequential `.replace()` calls in Pudu script.
 - **Q:** Why stream attributes directly into the chunk array with `appendAttributes`? **A:** Every HTML element previously allocated a separate `pieces: Array[Str]`, formatted attributes into it, and called `.join("")` to create an intermediate attribute string. Appending directly to the document chunk stream removes two allocations and one string concatenation per element.
+- **Q:** Keep recursive traversal because ordinary pages are shallow? **A:** No. Page depth can come from program data, and a renderer must not stop the application merely because a valid value is deeply nested. An explicit work stack preserves exact output order without consuming one evaluator frame per node. _Rejected:_ a documentation-only nesting limit; catching the evaluator failure after it occurs.

@@ -141,24 +141,28 @@ order, hit testing, painting, and damage regions.
   interrupt reaching a program blocked in `Net.accept` exits 130 within 80 ms (ten of ten runs)
   instead of answering `user interrupt`. Studio still acknowledges 16,016 device frames and presents
   30 pictures after both changes.
+- Deep value traversal — HTML rendering, compact and pretty JSON encoding, UI change discovery, and
+  immutable UI patch application use explicit work state instead of evaluator recursion. A new
+  fixture crosses the former failure boundary with 1,600-level program-built values and holds 15
+  exact output, path, post-patch, and invalid-path claims. Replacing repeated indentation concatenation with the
+  bounded native string repeat reduced its 5.1 MB pretty output run from about 30 seconds to about
+  6 seconds; the unrestricted full suite passes.
 - Audit findings left open, each a named gap rather than a silent one: one accept-interrupt run
   signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
-  readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception; `Std.Http.Server` requests carry no byte body, so
-  binary uploads are refused rather than delivered; `Std.Toml.Read` still reads characters by
+  readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
+  `Std.Toml.Read` still reads characters by
   position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
   per character on inputs that are normally short; a unified diff does not mark a missing final
   newline; and `Str.charAt` walks the UTF-8 prefix, so any positional scanner a program writes grows
-  with the square of its text. `Std.Html.render`, `Std.Ui.changes`, `Std.Json.encode`, and
-  `encodePretty` recurse once per nesting level with no error channel, so a value a program builds
-  about 1,500 levels deep stops the program; values decoded from outside are bounded at 512 and stay
-  inside the limit, and removing the limit means rendering with an explicit stack.
+  with the square of its text.
 
 ## Exact next action
 
-Give `Std.Http.Server` requests an exact byte body beside the text body so multipart uploads of
-binary files are delivered, then convert `Std.Toml.Read` to the cursor pattern `Std.Json` uses.
-After those, continue the
-native media roadmap: a persistent Pudu-owned stream with negotiated format, device change,
+Audit and production-harden the CLI project generator so a newly generated project checks, runs,
+tests, and packages without repository-only state; at the same time establish whether the existing
+`Std.Text.Builder`, native string repeat, and source-buffer surfaces leave a demonstrated need for a
+distinct string view rather than adding a speculative public type. Then continue the native media
+roadmap: a persistent Pudu-owned stream with negotiated format, device change,
 interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
 presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and
 [[Std Ui Screen]], translating native pointer/key/text/close events into screen inputs. Keep every

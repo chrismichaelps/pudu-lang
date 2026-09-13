@@ -27,6 +27,11 @@ bytes are exact, audio graphs whose split renders equal whole ones, and video ti
 exact over long streams. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
+[[Deep Renderer Fixture]] crosses the former evaluator-frame failure boundary with program-built
+HTML, JSON, and UI values. It checks compact and pretty serialization, deep change discovery, and
+deep immutable patch application—including refusal of a deep invalid path—through their public
+Pudu APIs, with an exact count like every other service fixture.
+
 The desktop fixture keeps the standard suite display-independent by checking unsafe caption,
 extent, pixel-budget, and pump-duration paths before a platform effect is reached. The separate
 [[Launch Ui Desktop]] fixture is the macOS acceptance gate and must open an actual window; its
@@ -46,6 +51,10 @@ example's device-queue fields cannot drift from its decoder or admitted bounds u
 - **Q:** Put UI patch validation only in Haskell? **A:** No. _Rationale:_ the public API is written
   in Pudu and must be exercised as its callers exercise it. _Rejected:_ duplicating its semantics in
   the host test language.
+- **Q:** Treat a renderer process exit as sufficient depth evidence? **A:** No. _Rationale:_ an
+  iterative traversal may survive while emitting wrong order or incomplete output. _Accepted:_ a
+  Pudu fixture with exact semantic assertions registered in this host property. _Rejected:_ an
+  unregistered manual stress script.
 
 Resolved Grill Log: exact counts keep every Pudu-level assertion observable while named Haskell
 counterexamples identify the failed service contract.
@@ -53,4 +62,4 @@ counterexamples identify the failed service contract.
 ## Referenced by
 
 [[Std Ui]] · [[Std Ui Canvas]] · [[Std Ui Layout]] · [[Std Ui Screen]] ·
-[[Std Ui Desktop]] · [[2026-09-12-release-readiness-ui]]
+[[Std Ui Desktop]] · [[Deep Renderer Fixture]] · [[2026-09-12-release-readiness-ui]]

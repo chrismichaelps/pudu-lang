@@ -14,6 +14,7 @@ testServiceEvaluation = do
   wired <- runEntry "test-fixtures/stdlib/UsesApp.pudu"
   markup <- runEntry "test-fixtures/stdlib/UsesHtml.pudu"
   screens <- runEntry "test-fixtures/stdlib/UsesUi.pudu"
+  deepRenderers <- runEntry "test-fixtures/stdlib/UsesDeepRenderers.pudu"
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
   layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
@@ -124,6 +125,9 @@ testServiceEvaluation = do
     , counterexample
         "two screens differ in what their state differs in"
         (screens === Just "37")
+    , counterexample
+        "deep HTML, JSON, and UI values render, differ, and patch exactly"
+        (deepRenderers === Just "15")
     , counterexample
         "a native canvas clips and blends into exact bounded pixels"
         (canvas === Just "43")
