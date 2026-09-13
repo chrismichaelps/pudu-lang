@@ -313,7 +313,7 @@ testProtocolEvaluation = do
         one of them cannot be written. -}
     , counterexample
         "versions order by number and globs stop at separators"
-        (versionsAndGlobs === Just "24")
+        (versionsAndGlobs === Just "29")
     {-| A SOAP envelope, because the parts that break a reader arrive together
         in one: a prefixed name, a self-closing element, an entity in text,
         and a CDATA section whose content must not be read as either. The

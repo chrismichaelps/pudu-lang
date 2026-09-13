@@ -1,5 +1,18 @@
 module Std.Glob
 
+import Std.List as List
+
+/// One piece of a pattern, read once before any path is compared.
+///
+/// `Class` holds where its set opens in the pattern, and `GlobStar` whether a
+/// separator follows it, which lets it match no segments at all.
+type Piece
+  = Literal(Char)
+  | One
+  | Class(Int)
+  | Star
+  | GlobStar(Bool)
+
 /// Whether a path matches a pattern written the way a shell writes one.
 ///
 /// The vocabulary is small and fixed, which is the point: a glob is written by
@@ -21,8 +34,24 @@ module Std.Glob
 /// For matching text rather than paths, use `Std.Regex`.
 
 /// Whether a path matches a pattern.
+///
+/// The pattern is read into pieces, and the path is walked once while holding
+/// every piece the text so far could have reached. Each character advances all
+/// of them together, so no choice is ever retried: the work is the path's
+/// length times the pattern's, whatever the pattern holds. Trying each length
+/// a `*` could take and backtracking made `*a*a*a*a*a*a*a*b` against forty
+/// `a`s run for over a minute, and recursed once per `*`.
 export fn matches(pattern: Str, path: Str) -> Bool {
-  matchFrom(&pattern.chars(), 0, &path.chars(), 0)
+  let written = pattern.chars()
+  let pieces = piecesOf(&written)
+  var reached = closed(&pieces, started(pieces.length()))
+  for character in path.chars() {
+    reached = closed(&pieces, advanced(&written, &pieces, &reached, character))
+    if !reached.fresh.contains(true) && !reached.looped.contains(true) {
+      return false
+    }
+  }
+  reached.fresh[pieces.length()]
 }
 
 /// Whether any of several patterns matches, which is how an include list reads.
@@ -101,71 +130,122 @@ export fn literalPrefix(pattern: Str) -> Str {
   pattern.take(lastSeparator)
 }
 
-/// Match a pattern from one position against a path from another.
+/// The pieces a pattern is made of, in order.
 ///
-/// Written as a walk with backtracking rather than as a program, because the
-/// vocabulary has one construct that needs it — `*` — and the length it can
-/// consume is bounded by the segment it is inside.
-fn matchFrom(pattern: &Array[Char], patternAt: Int, path: &Array[Char], pathAt: Int) -> Bool {
-  var p = patternAt
-  var s = pathAt
-  while p < pattern.length() {
-    let here = pattern[p]
-    if here == '*' {
-      // `**` crosses separators; a single `*` stops at one.
-      let crossing = p + 1 < pattern.length() && pattern[p + 1] == '*'
-      var rest = if crossing { p + 2 } else { p + 1 }
-      // `**/` matches nothing at all as well as whole segments, so a pattern
-      // written `**/x` matches a bare `x`.
-      if crossing && rest < pattern.length() && pattern[rest] == '/' {
-        if matchFrom(pattern, rest + 1, path, s) {
-          return true
-        }
-        rest = rest + 1
-      }
-      var take = s
-      while take <= path.length() {
-        if matchFrom(pattern, rest, path, take) {
-          return true
-        }
-        if take < path.length() && path[take] == '/' && !crossing {
-          break
-        }
-        take = take + 1
-      }
-      return false
-    }
-    if s >= path.length() {
-      return false
-    }
-    if here == '?' {
-      if path[s] == '/' {
-        return false
-      }
-      p = p + 1
-      s = s + 1
+/// `**` crosses separators and a single `*` stops at one. `**` followed by a
+/// separator also matches nothing at all, so `**/x` matches a bare `x`. A set
+/// nobody closed is a literal `[`, and a trailing `\` is itself.
+fn piecesOf(pattern: &Array[Char]) -> Array[Piece] {
+  var pieces: Array[Piece] = []
+  var at = 0
+  while at < pattern.length() {
+    let here = pattern[at]
+    if here == '*' && at + 1 < pattern.length() && pattern[at + 1] == '*' {
+      pieces = pieces.push(GlobStar(at + 2 < pattern.length() && pattern[at + 2] == '/'))
+      at = at + 2
+    } else if here == '*' {
+      pieces = pieces.push(Star)
+      at = at + 1
+    } else if here == '?' {
+      pieces = pieces.push(One)
+      at = at + 1
     } else if here == '[' {
-      let decided = matchSet(pattern, p, path[s])
-      if !decided[0] {
-        return false
+      let closes = matchSet(pattern, at, here)[1]
+      if closes == at + 1 {
+        pieces = pieces.push(Literal(here))
+      } else {
+        pieces = pieces.push(Class(at))
       }
-      p = decided[1]
-      s = s + 1
-    } else if here == '\\' && p + 1 < pattern.length() {
-      if path[s] != pattern[p + 1] {
-        return false
-      }
-      p = p + 2
-      s = s + 1
+      at = closes
+    } else if here == '\\' && at + 1 < pattern.length() {
+      pieces = pieces.push(Literal(pattern[at + 1]))
+      at = at + 2
     } else {
-      if path[s] != here {
-        return false
-      }
-      p = p + 1
-      s = s + 1
+      pieces = pieces.push(Literal(here))
+      at = at + 1
     }
   }
-  s == path.length()
+  pieces
+}
+
+/// The pattern positions the path so far could have reached.
+///
+/// A position is `fresh` when the walk has just arrived at it, and `looped`
+/// when a `*` or `**` there has consumed a character and stayed. The two are
+/// kept apart for one rule: `**` before a separator may match no segments,
+/// which skips past the separator only while the `**` has consumed nothing.
+type Reach = { fresh: Array[Bool], looped: Array[Bool] }
+
+/// Nothing reached but the start of the pattern.
+fn started(count: Int) -> Reach {
+  Reach{fresh: List.set(&unreached(count), 0, true), looped: unreached(count)}
+}
+
+/// No position reached, for a pattern of `count` pieces and its end.
+fn unreached(count: Int) -> Array[Bool] {
+  var positions: Array[Bool] = []
+  var at = 0
+  while at <= count {
+    positions = positions.push(false)
+    at = at + 1
+  }
+  positions
+}
+
+/// Reached positions extended across every piece that can match nothing.
+///
+/// Those moves only go forward, so one pass in order reaches all of them.
+fn closed(pieces: &Array[Piece], reached: Reach) -> Reach {
+  var fresh = reached.fresh
+  let looped = reached.looped
+  var at = 0
+  while at < pieces.length() {
+    if fresh[at] || looped[at] {
+      match pieces[at] {
+        case Star => { fresh = List.set(&fresh, at + 1, true) }
+        case GlobStar(beforeSeparator) => {
+          fresh = List.set(&fresh, at + 1, true)
+          if beforeSeparator && fresh[at] { fresh = List.set(&fresh, at + 2, true) }
+        }
+        case _ => {}
+      }
+    }
+    at = at + 1
+  }
+  Reach{fresh: fresh, looped: looped}
+}
+
+/// The positions reached after one more character of the path.
+fn advanced(
+  pattern: &Array[Char],
+  pieces: &Array[Piece],
+  reached: &Reach,
+  character: Char
+) -> Reach {
+  var fresh = unreached(pieces.length())
+  var looped = unreached(pieces.length())
+  var at = 0
+  while at < pieces.length() {
+    if reached.fresh[at] || reached.looped[at] {
+      match pieces[at] {
+        case Star => {
+          if character != '/' { looped = List.set(&looped, at, true) }
+        }
+        case GlobStar(_) => { looped = List.set(&looped, at, true) }
+        case One => {
+          if character != '/' { fresh = List.set(&fresh, at + 1, true) }
+        }
+        case Literal(expected) => {
+          if character == expected { fresh = List.set(&fresh, at + 1, true) }
+        }
+        case Class(open) => {
+          if matchSet(pattern, open, character)[0] { fresh = List.set(&fresh, at + 1, true) }
+        }
+      }
+    }
+    at = at + 1
+  }
+  Reach{fresh: fresh, looped: looped}
 }
 
 /// Whether a character is in the set starting at `open`, and where the set ends.

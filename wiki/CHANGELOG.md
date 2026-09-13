@@ -36,6 +36,13 @@ tags: [changelog]
   leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
   passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
   handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
+- `Std.Glob.matches` decides a path in one walk that advances every reachable pattern position per
+  character, instead of trying each length a `*` could take and backtracking. `*a*a*a*a*a*a*a*b`
+  against forty `a`s, which ran for over a minute, answers in 11 ms, and a pattern of thousands of
+  stars no longer recurses once per star. The rewrite also corrects a dropped separator: `**/b`
+  matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
+  `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
+  exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
 - `Std.Yaml` bounds block nesting at 512 levels and answers the new `YamlError.TooDeep` at the line
   that opened the block too deep, where 3,000 nested mappings exhausted the evaluator's call limit and
   stopped the program. The YAML fixture holds 20 claims.

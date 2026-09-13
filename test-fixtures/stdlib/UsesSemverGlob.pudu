@@ -147,5 +147,34 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // 25. A pattern of many stars is decided in one walk rather than by trying
+  // every length each star could take, which ran for minutes
+  if !Glob.matches("*a*a*a*a*a*a*a*b", "a".repeat(40)) {
+    held = held + 1
+  }
+
+  // 26. A crossing star followed by a separator also matches no segments
+  if Glob.matches("a/**/b", "a/b") && Glob.matches("a/**/b", "a/x/y/b") && !Glob.matches("a/**/b", "a/xb") {
+    held = held + 1
+  }
+
+  // 27. A set nobody closed is a literal bracket
+  if Glob.matches("a[b", "a[b") && !Glob.matches("a[b", "ab") {
+    held = held + 1
+  }
+
+  // 28. A pattern with thousands of stars neither recurses nor stalls
+  if Glob.matches("*".repeat(2000) + "b", "a".repeat(200) + "b") {
+    held = held + 1
+  }
+
+  // 29. A crossing star stops at a separator's boundary, so an ignore list
+  // naming a directory does not catch a name that merely ends the same way
+  if Glob.matches("**/node_modules", "node_modules") && Glob.matches("**/node_modules", "a/node_modules") &&
+  !Glob.matches("**/node_modules", "my_node_modules")
+  {
+    held = held + 1
+  }
+
   held
 }
