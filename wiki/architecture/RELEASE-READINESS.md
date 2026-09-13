@@ -41,7 +41,9 @@ resource lifetime, limits, focused regressions, full gate, and mirror review agr
   working directory, and `withStarted`, which stops a program when the scope that started it returns.
 - `Std.Random.secureBytes` is separated from deterministic generators. `Std.Crypto` includes
   SHA-256, SHA-512, HMAC-SHA256, constant-time comparisons, password derivation, and authenticated
-  encryption. SHA-3 and BLAKE3 are breadth additions rather than release blockers.
+  encryption. SHA3-256, SHA3-512, BLAKE2b, HMAC-SHA512, constant-time byte
+  comparison, and fresh key and nonce generation now ship as well; BLAKE3 is deferred until it can be
+  checked against its reference vectors.
 - `Std.Tls` provides verified transport with no insecure switch.
 - HTTP server routing, middleware, limits, bounded connection workers, response deadlines, and a
   graceful draining deadline exist. Handler cancellation remains part of the concurrency blocker.

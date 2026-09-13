@@ -90,6 +90,15 @@ Dispatch on the built-in tag and the argument shapes, answering with a value or 
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Semantic Prelude]]
 
+## Cryptographic primitive dispatch
+
+Pure dispatch covers SHA3-256/512, BLAKE2b-256/512, HMAC-SHA512, and constant-time byte equality.
+Argument shape is checked at the same runtime boundary as SHA-2; no effect capability or algorithm
+name string participates in selection.
+
+Resolved Grill Log: use closed builtin tags and exact byte arguments so algorithm identity remains
+visible to typing and a malformed dynamic call cannot fall through to effect dispatch.
+
 ## Sequence-native higher-order operations
 
 Array map traverses the sequence directly and returns that result sequence. Filter folds the
@@ -180,5 +189,4 @@ Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`
 `SwissTableSizeBuiltin` through pure built-in evaluators in [[Eval Buffer]] and [[Eval SwissTable]].
 
 Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.
-
 

@@ -156,7 +156,7 @@ testRuntimeEvaluation = do
         and each answers nothing rather than saying which. -}
     , counterexample
         "every digest agrees with its published answer and nothing changed opens"
-        (digested === Just "48")
+        (digested === Just "59")
     {-| Every export of the test, printing and generator modules. The test
         module is checked by making it fail: a suite where everything holds
         exercises none of the reporting that exists for the case a reader

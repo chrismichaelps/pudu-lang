@@ -63,6 +63,15 @@ builtinName :: Builtin -> Text
 
 [[src/Pudu/Eval/_MOC]] · [[Eval Value]] · [[Eval Builtin]] · [[Eval Effect]]
 
+## Cryptographic builtin vocabulary
+
+The closed vocabulary adds `Sha3_256Builtin`, `Sha3_512Builtin`, `Blake2b256Builtin`,
+`Blake2b512Builtin`, `HmacSha512Builtin`, and `ConstantTimeEqualBuiltin`, each with one exact
+source-level name.
+
+Resolved Grill Log: keep algorithm families as separate constructors rather than a string-selected
+digest builtin, preserving total naming and exhaustive dispatch.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

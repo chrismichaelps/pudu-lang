@@ -26,6 +26,12 @@ data Builtin
   | AppendFileBuiltin
   | FileExistsBuiltin
   | Sha512Builtin
+  | Sha3_256Builtin
+  | Sha3_512Builtin
+  | Blake2b256Builtin
+  | Blake2b512Builtin
+  | HmacSha512Builtin
+  | ConstantTimeEqualBuiltin
   | SpawnBuiltin
   | SpawnWithBuiltin
   | ChildReadBuiltin
@@ -202,6 +208,12 @@ builtinName value = case value of
   AppendFileBuiltin -> "appendFile"
   FileExistsBuiltin -> "fileExists"
   Sha512Builtin -> "sha512Of"
+  Sha3_256Builtin -> "sha3_256Of"
+  Sha3_512Builtin -> "sha3_512Of"
+  Blake2b256Builtin -> "blake2b256Of"
+  Blake2b512Builtin -> "blake2b512Of"
+  HmacSha512Builtin -> "hmacSha512Of"
+  ConstantTimeEqualBuiltin -> "constantTimeEqual"
   SpawnBuiltin -> "spawnProgram"
   SpawnWithBuiltin -> "spawnProgramWith"
   ChildReadBuiltin -> "childReadChunk"

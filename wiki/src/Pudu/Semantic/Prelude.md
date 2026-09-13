@@ -77,6 +77,15 @@ DEPTH 0.30 (SHALLOW by intent). It is a single normative list; deepening it befo
 
 [[src/Pudu/Semantic/_MOC]] · [[Name Resolution]] · [[grammar/pudu]]
 
+## Cryptographic primitive names
+
+The pure value vocabulary includes `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`,
+`hmacSha512Of`, and `constantTimeEqual`, allowing `Std.Crypto` to resolve them without a foreign or
+effect capability.
+
+Resolved Grill Log: expose only exact algorithm names; the standard library owns the documented
+public wrappers while these remain language-runtime primitives.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

@@ -49,7 +49,19 @@ import Pudu.Eval.Env (Evaluator (..), abortAt)
 import qualified Data.ByteString as ByteString
 import Pudu.Eval.Aead (openBytes, sealBytes)
 import Pudu.Eval.Verify (verifyEcdsaP256Sha256, verifyRsaSha256)
-import Pudu.Eval.Hash (hashOfValue, hmacSha256, pbkdf2Sha256, sha256, sha512)
+import Pudu.Eval.Hash
+  ( blake2b256
+  , blake2b512
+  , constantTimeEqual
+  , hashOfValue
+  , hmacSha256
+  , hmacSha512
+  , pbkdf2Sha256
+  , sha256
+  , sha3_256
+  , sha3_512
+  , sha512
+  )
 import Pudu.Eval.HashMap (mixKey)
 import Pudu.Eval.Render (renderValue)
 import Pudu.Eval.Value
@@ -128,6 +140,14 @@ callHashing :: Span -> Builtin -> [Value] -> Evaluator Value
 callHashing spanValue builtin arguments = case (builtin, arguments) of
   (Sha256Builtin, [BytesValue message]) -> pure (BytesValue (sha256 message))
   (Sha512Builtin, [BytesValue message]) -> pure (BytesValue (sha512 message))
+  (Sha3_256Builtin, [BytesValue message]) -> pure (BytesValue (sha3_256 message))
+  (Sha3_512Builtin, [BytesValue message]) -> pure (BytesValue (sha3_512 message))
+  (Blake2b256Builtin, [BytesValue message]) -> pure (BytesValue (blake2b256 message))
+  (Blake2b512Builtin, [BytesValue message]) -> pure (BytesValue (blake2b512 message))
+  (HmacSha512Builtin, [BytesValue key, BytesValue message]) ->
+    pure (BytesValue (hmacSha512 key message))
+  (ConstantTimeEqualBuiltin, [BytesValue left, BytesValue right]) ->
+    pure (BoolValue (constantTimeEqual left right))
   (VerifyRsaBuiltin, [BytesValue modulus, BytesValue power, BytesValue message, BytesValue signature]) ->
     pure (BoolValue (verifyRsaSha256 modulus power message signature))
   (VerifyEcdsaBuiltin, [BytesValue x, BytesValue y, BytesValue message, BytesValue signature]) ->
@@ -214,6 +234,12 @@ isHashingBuiltin :: Builtin -> Bool
 isHashingBuiltin builtin = case builtin of
   Sha256Builtin -> True
   Sha512Builtin -> True
+  Sha3_256Builtin -> True
+  Sha3_512Builtin -> True
+  Blake2b256Builtin -> True
+  Blake2b512Builtin -> True
+  HmacSha512Builtin -> True
+  ConstantTimeEqualBuiltin -> True
   VerifyRsaBuiltin -> True
   VerifyEcdsaBuiltin -> True
   SealBuiltin -> True

@@ -391,6 +391,47 @@ export fn hmacSha256Text(key: Str, message: Str) -> Bytes {
 /// other side will compute.
 export fn sha512(message: &Bytes) -> Bytes { sha512Of(*message) }
 
+/// The SHA3-256 digest of bytes.
+///
+/// A sponge construction unrelated to SHA-2, so a weakness found in one family
+/// does not carry to the other. A protocol that names SHA3-256 cannot be
+/// answered with SHA-256.
+export fn sha3_256(message: &Bytes) -> Bytes { sha3_256Of(*message) }
+
+/// The SHA3-512 digest of bytes.
+export fn sha3_512(message: &Bytes) -> Bytes { sha3_512Of(*message) }
+
+/// The BLAKE2b digest of bytes at 32 bytes.
+///
+/// Faster than SHA-2 in software at the same security margin, which is why
+/// content addressing and integrity checks over large files reach for it.
+export fn blake2b256(message: &Bytes) -> Bytes { blake2b256Of(*message) }
+
+/// The BLAKE2b digest of bytes at 64 bytes.
+export fn blake2b512(message: &Bytes) -> Bytes { blake2b512Of(*message) }
+
+/// The keyed digest over SHA-512, for protocols defined over it.
+export fn hmacSha512(key: &Bytes, message: &Bytes) -> Bytes { hmacSha512Of(*key, *message) }
+
+/// Whether two byte sequences are equal, in time that depends only on their
+/// lengths.
+///
+/// For a tag, a token, or a digest received from outside and compared with one
+/// computed here. A comparison that returned at the first differing byte would
+/// tell a guesser how many leading bytes were right.
+export fn bytesMatch(left: &Bytes, right: &Bytes) -> Bool { constantTimeEqual(*left, *right) }
+
+/// A fresh key of the length `seal` needs, from the operating system's secure
+/// source.
+export fn newKey() -> Result[Bytes, Str] { secureRandomBytes(keyLength()) }
+
+/// A fresh nonce of the length `seal` needs, from the same secure source.
+///
+/// Drawn rather than counted, so a program sealing many messages under one key
+/// repeats a nonce only with vanishing probability instead of by a bookkeeping
+/// mistake.
+export fn newNonce() -> Result[Bytes, Str] { secureRandomBytes(nonceLength()) }
+
 /// A key derived from a password, slowly and on purpose.
 ///
 /// Slowness is the property: a password is short enough to guess, and this is

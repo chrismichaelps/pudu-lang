@@ -84,6 +84,14 @@ against it, then evaluate each constant in declaration order.
 
 [[src/Pudu/Eval/_MOC]] · [[Evaluator]] · [[Name Resolution]]
 
+## Cryptographic builtin installation
+
+Installs `sha3_256Of`, `sha3_512Of`, `blake2b256Of`, `blake2b512Of`, `hmacSha512Of`, and
+`constantTimeEqual` as pure builtin values beside the existing SHA-2 primitives.
+
+Resolved Grill Log: installation uses the canonical names from [[Eval Builtin Definition]] and does
+not add aliases whose spelling could obscure the selected algorithm.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by
@@ -166,7 +174,6 @@ Each name maps directly to its `BuiltinValue` in the runtime environment.
 ### Resolved Grill Log
 - **Q:** Require manual import of columnar and hardware memory builtins? **A:** No; install them directly in the runtime environment matching existing buffer builtins for zero-cost primitive execution.
 - **Q:** How are permutation sort and binary search installed? **A:** Registered in `builtinValues` with their direct names (`columnSortIndicesU64`, etc.) so `Std.Column` delegates without intermediate shims.
-
 
 
 

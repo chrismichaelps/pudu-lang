@@ -299,6 +299,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Video` | 19 | exact fractional rates and timestamps, non-overlapping picture tracks, audio alignment |
 | `Std.Fs` | 19 | atomic replacement, claimed temporary names, permissions, metadata, link-aware containment |
 | `Std.Process` | 47 | runs, streams, deadlines, pipelines, stated environments and directories, scoped programs |
+| `Std.Crypto` | 59 | SHA-2, SHA-3, BLAKE2b, HMAC, constant-time comparison, derivation, sealing, fresh key material |
 | `Std.Mail` | 17 | messages that refuse header injection and never disclose blind copies |
 | `Std.App.Cache` | 20 | fresh, stale, or missing; bounded, with absence remembered |
 | `Std.App.Locale` | 26 | locale negotiation by weight, catalogues, real plural rules |

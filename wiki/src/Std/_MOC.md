@@ -70,6 +70,7 @@ tags: [moc, module, stdlib]
 - [[Std Audio Graph]] — a stateless pull-model render graph over bounded, slice-independent renders.
 - [[Std Video]] — exact fractional rates and timestamps, ordered picture tracks, and audio alignment.
 - [[Std Fs]] — atomic replacement, claimed temporary names, permissions, and link-aware containment.
+- [[Std Crypto]] — named digest families, keyed digests, constant-time comparison, and sealing.
 - [[Std Mail]] — a message a program sends, which cannot carry more than it says.
 - [[Std Mail Smtp]] — native RFC 5321 client transport over streaming TCP with AUTH LOGIN/PLAIN and multi-line reply parsing.
 - [[Std App Cache]] — keeping an answer for a while, and saying when it is old.

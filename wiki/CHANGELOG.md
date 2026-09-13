@@ -83,6 +83,11 @@ tags: [changelog]
   environment and working directory a program starts with, `begin` refuses invalid variable names before
   starting, `runLaunch` reads both streams at once, and `withStarted` stops a program when the scope that
   started it returns. Process now 47 assertions.
+- `Std.Crypto` gains SHA3-256, SHA3-512, BLAKE2b-256, BLAKE2b-512, and HMAC-SHA512 through the runtime's
+  audited implementations, `bytesMatch` for constant-time equality, and `newKey` and `newNonce` from the
+  secure source. Every new digest is checked against values from an independent implementation and RFC
+  4231; BLAKE3 is deferred until it can be checked against its reference vectors. Crypto now 59
+  assertions.
 
 ## 2026-09-12 — Adapter-free production website
 

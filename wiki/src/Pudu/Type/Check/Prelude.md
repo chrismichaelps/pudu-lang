@@ -50,6 +50,14 @@ effectSignatures           :: [(Text, Scheme)]
 
 [[src/Pudu/Type/_MOC]]
 
+## Cryptographic primitive signatures
+
+SHA3-256/512 and BLAKE2b-256/512 each have `fn(Bytes) -> Bytes`; HMAC-SHA512 has
+`fn(Bytes, Bytes) -> Bytes`; constant-time equality has `fn(Bytes, Bytes) -> Bool`.
+
+Resolved Grill Log: the type layer states byte shape and arity while the distinct names carry
+algorithm identity; no unchecked algorithm selector is admitted.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

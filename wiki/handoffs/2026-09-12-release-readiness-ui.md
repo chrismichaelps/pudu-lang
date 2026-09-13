@@ -1,6 +1,6 @@
 ---
 type: handoff
-status: IMPLEMENTING
+status: ACTIVE
 issue: 193
 tags: [handoff, release, stdlib, ui]
 ---
@@ -23,9 +23,8 @@ committed directly to `dev` at the user's explicit direction; no branch or PR is
    `packages/pudu/v0.1/lib/Std/Ui/Layout.pudu`, `test-fixtures/stdlib/UsesUiCanvas.pudu`,
    `test-fixtures/stdlib/UsesUiLayout.pudu`, their mirrors, and the exact-count service fixture
    registrations.
-3. **Independent Reviewer:** reviews the completed diff without editing and classifies findings P0–P3.
-4. **Forensic Guardian:** checks mirror fidelity, MOC links, changelog evidence, and the private-input
-   boundary before delivery.
+3. **Validation:** focused fixtures and `test/gates.sh` protect each slice. Further review sub-agents
+   are disabled at the user's explicit direction.
 
 Other work exists in the repository. This slice does not alter the preserved untracked website probe
 or the commits on `feature/228-std-prose`.
@@ -63,16 +62,17 @@ order, hit testing, painting, and damage regions.
   text 22).
 - `1405cbb` — clamped `ScrolledTo` events for the tagged scrolling node under the pointer (screen 31).
 - Resampling slice — exact resampling, downmix, upmix, and channel maps (audio 42).
+- Crypto breadth slice — SHA3-256/512, BLAKE2b-256/512, HMAC-SHA512, constant-time byte comparison,
+  and secure key/nonce generation; crypto 59 assertions and the optimized full gate pass.
 
 ## Exact next action
 
-Filesystem safety is delivered in `Std.Fs` and process launches with scoped lifetimes in `Std.Process`.
-Next up the release table: crypto breadth (SHA-3 and BLAKE3) beside the shipped hashes, HMAC, AEAD, and
-constant-time comparison, then a device flush for durable replacement. After the native media row,
-move up the release table starting with filesystem safety. After the native media row,
-move up the release table starting with filesystem safety. Profile rendering many small
-rectangles and per-sample processing before claiming interactive or real-time rates. Audio (`Std.Audio`: PCM frames, pull-model render slices, rational time) follows
-the UI event slice. Keep every fixture as the semantic oracle for later optimization.
+Return exclusively to native UI, audio, and video. First, revise [[Native Application UI]] against
+SwiftUI's public application, scene, state, layout, input, accessibility, rendering, and lifecycle
+contracts, then define the smallest Pudu-native desktop presenter slice. That slice must launch a real
+desktop application during testing; a headless framebuffer is not sufficient evidence. Keep every
+existing exact fixture as the semantic oracle and add percentile latency/memory gates before claiming
+interactive or real-time performance.
 
 ## Grill Log
 

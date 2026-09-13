@@ -21,6 +21,12 @@ module Pudu.Eval.Hash
   , pbkdf2Sha256
   , sha256
   , sha512
+  , sha3_256
+  , sha3_512
+  , blake2b256
+  , blake2b512
+  , hmacSha512
+  , constantTimeEqual
   ) where
 
 import qualified Crypto.Hash as Hash
@@ -54,6 +60,39 @@ sha256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA256
     the digest they happen to have. -}
 sha512 :: ByteString.ByteString -> ByteString.ByteString
 sha512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA512)
+
+{-| The SHA3-256 digest of bytes, as its thirty-two bytes.
+
+    A sponge construction unrelated to SHA-2, so a weakness found in one family
+    does not carry to the other, and a protocol that names it cannot be served
+    by SHA-256. -}
+sha3_256 :: ByteString.ByteString -> ByteString.ByteString
+sha3_256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA3_256)
+
+{-| The SHA3-512 digest of bytes, as its sixty-four bytes. -}
+sha3_512 :: ByteString.ByteString -> ByteString.ByteString
+sha3_512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.SHA3_512)
+
+{-| The BLAKE2b digest of bytes at thirty-two bytes.
+
+    Faster than SHA-2 in software at the same security margin, which is why
+    content addressing and integrity checks over large files reach for it. -}
+blake2b256 :: ByteString.ByteString -> ByteString.ByteString
+blake2b256 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.Blake2b_256)
+
+{-| The BLAKE2b digest of bytes at sixty-four bytes. -}
+blake2b512 :: ByteString.ByteString -> ByteString.ByteString
+blake2b512 message = ByteArray.convert (Hash.hash message :: Hash.Digest Hash.Blake2b_512)
+
+{-| The keyed digest over SHA-512, for protocols defined over it. -}
+hmacSha512 :: ByteString.ByteString -> ByteString.ByteString -> ByteString.ByteString
+hmacSha512 key message =
+  ByteArray.convert (Hmac.hmac key message :: Hmac.HMAC Hash.SHA512)
+
+{-| Whether two byte strings are equal, in time that depends only on their
+    lengths rather than on where they first differ. -}
+constantTimeEqual :: ByteString.ByteString -> ByteString.ByteString -> Bool
+constantTimeEqual = ByteArray.constEq
 
 {-| The keyed digest, which is what proves a message came from someone holding
     the key rather than only that it was not altered.

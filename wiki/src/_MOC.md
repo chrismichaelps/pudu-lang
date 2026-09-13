@@ -18,6 +18,7 @@ tags: [moc, module]
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
 - [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.
+- [[Runtime Evaluation Spec]] — exact-count language, runtime, concurrency, filesystem, process, and cryptography fixture contracts.
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 - [[Uses Ui Layout]] — exact-frame, accessibility, and repaint-equality coverage for layout.
 - [[Uses Ui Screen]] — input routing, focus, and incremental frames equal to fresh ones.
@@ -26,6 +27,7 @@ tags: [moc, module]
 - [[Uses Audio Graph]] — exact waveforms, ramps, and mixes, with split renders equal to whole ones.
 - [[Uses Video]] — exact NTSC timing over an hour, cross-scale arithmetic, and track ordering refusals.
 - [[Uses Fs]] — atomic replacement, temporary names, permissions, containment, and non-following removal.
+- [[Uses Crypto All]] — digests against independent vectors, RFC 4231 keyed digests, and sealing refusals.
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
