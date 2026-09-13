@@ -135,7 +135,7 @@ testProtocolEvaluation = do
         read are refused rather than followed or truncated. -}
     , counterexample
         "a client is bounded in what it will fetch and where"
-        (fetched === Just "52")
+        (fetched === Just "53")
     {-| A platform that invokes a program rather than connecting to it, served
         against a runtime interface the fixture serves itself — which is
         possible because the interface is a value rather than something read

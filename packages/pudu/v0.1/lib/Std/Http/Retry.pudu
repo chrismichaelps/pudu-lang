@@ -192,7 +192,7 @@ export fn fetch(
   base: &Backoff,
   seed: Int
 ) -> Result[Http.Response, Client.ClientError] {
-  send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held, base, seed)
+  send(&Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None}, held, base, seed)
 }
 
 /// How many attempts a plan makes, and how long it may spend waiting.

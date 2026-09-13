@@ -35,11 +35,16 @@ export type Status = { code: Int, reason: Str }
 /// Transport is not here because it needs the foreign interface; everything a
 /// caller decides before sending is, so a request can be built, inspected, and
 /// tested without one.
+///
+/// `binaryBody`, when present, is the exact bytes carried, and takes precedence
+/// over `body`, the way a response's does: a body that is not UTF-8 text — an
+/// uploaded image, a compressed payload — has no honest text form.
 export type Request = {
   method: Method,
   target: Str,
   headers: Array[(Str, Str)],
-  body: Str
+  body: Str,
+  binaryBody: Option[Bytes]
 }
 
 /// A response, with nothing about how it arrived.
@@ -215,27 +220,36 @@ export fn reasonFor(code: Int) -> Str {
 
 /// A request with a method and a target and nothing else.
 export fn request(method: Method, target: Str) -> Request {
-  Request{method: method, target: target, headers: [], body: ""}
+  Request{method: method, target: target, headers: [], body: "", binaryBody: None}
 }
 
 /// A request with one header added, keeping any it already had.
 export fn withHeader(value: &Request, name: Str, held: Str) -> Request {
-  Request {
-    method: value.method,
-    target: value.target,
-    headers: value.headers.push((name, held)),
-    body: value.body
-  }
+  Request{..*value, headers: value.headers.push((name, held))}
 }
 
-/// A request with a body, and the length header that goes with it.
+/// A request with a text body, and the length header that goes with it.
+///
+/// The length counts the body's UTF-8 bytes, which is what goes on the wire.
+/// A byte body set earlier is replaced.
 export fn withBody(value: &Request, body: Str) -> Request {
-  let sized = withHeader(value, "content-length", show(body.length()))
-  Request {
-    method: sized.method,
-    target: sized.target,
-    headers: sized.headers,
-    body: body
+  let sized = withHeader(value, "content-length", show(body.toBytes().length()))
+  Request{..sized, body: body, binaryBody: None}
+}
+
+/// A request carrying exact bytes as its body, and the length header that goes
+/// with them.
+export fn withBytes(value: &Request, payload: &Bytes) -> Request {
+  let sized = withHeader(value, "content-length", show(payload.length()))
+  Request{..sized, body: "", binaryBody: Some(*payload)}
+}
+
+/// A request's body as bytes, with a byte body taking precedence over the text
+/// one.
+export fn requestBytes(value: &Request) -> Bytes {
+  match value.binaryBody {
+    case Some(payload) => payload
+    case None => value.body.toBytes()
   }
 }
 

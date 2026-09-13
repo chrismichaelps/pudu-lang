@@ -43,6 +43,12 @@ tags: [changelog]
   matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
   `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
   exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- HTTP requests carry exact byte bodies. `Http.Request` gains `binaryBody: Option[Bytes]`, matching
+  `Response`, with `Http.withBytes` and `Http.requestBytes`. `Std.Http.Server` delivers a body that is
+  not UTF-8 as its bytes instead of refusing it, `Route.bodyBytes` reads them, and `Route.formOf`
+  hands the multipart reader those bytes, so a binary file upload arrives intact. `Std.Http.Client`
+  renders and sends requests as bytes, and a redirect that keeps its body keeps a byte body too. The
+  server fixture holds 37 claims and the client fixture 53.
 - Runtime effects no longer turn interrupts into failures. Sockets, TLS, entropy, compression, desktop
   teardown, and thread teardown each caught every exception, including Ctrl-C: a server blocked in
   `Net.accept` answered `Err(Other("user interrupt"))` and a serving loop would keep running. They now

@@ -110,17 +110,12 @@ fn readRequest(
     if let Err(_) = more { return Err(badRequest("the body did not arrive")) }
     payload = carried.concat(Result.unwrapOr(more, ByteSeq.empty()))
   }
-  // A request carries its body as text. A body that is not UTF-8 is refused
-  // rather than handed on as empty text, which a handler could not tell apart
-  // from a request that sent nothing.
-  let Ok(body) = ByteSeq.toText(&payload) else {
-    return Err(badRequest("the body is not UTF-8 text"))
-  }
-  let whole = Http.Request {
-    method: message.method,
-    target: message.target,
-    headers: message.headers,
-    body: body
+  // A body that is UTF-8 text arrives as text; any other body — an uploaded
+  // image, a compressed payload — arrives as its exact bytes, with the text body
+  // empty. `Route.bodyBytes` answers the bytes either way.
+  let whole = match ByteSeq.toText(&payload) {
+    case Ok(body) => Http.Request{..message, body: body, binaryBody: None}
+    case Err(_) => Http.Request{..message, body: "", binaryBody: Some(payload)}
   }
   Ok(
     Route.Request {
@@ -399,7 +394,7 @@ fn badRequest(reason: Str) -> Http.Response { text(400, reason) }
 fn tooLarge() -> Http.Response { text(413, "the body is larger than this server accepts") }
 
 fn emptyRequest() -> Http.Request {
-  Http.Request{method: Http.Get, target: "/", headers: [], body: ""}
+  Http.Request{method: Http.Get, target: "/", headers: [], body: "", binaryBody: None}
 }
 
 fn emptyServerRequest() -> Route.Request {

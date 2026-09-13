@@ -150,7 +150,7 @@ fn requestOf(
 ) -> Route.Request {
   let headers = if mediaType.isEmpty() { [] } else { [("Content-Type", mediaType)] }
   Route.Request {
-    message: Http.Request{method: Http.Post, target: "/x", headers: headers, body: body},
+    message: Http.Request{method: Http.Post, target: "/x", headers: headers, body: body, binaryBody: None},
     path: "/x",
     params: mapOf(*params),
     query: mapOf(*query),

@@ -4,6 +4,7 @@ import Std.Concurrent as Concurrent
 import Std.Http.Client {BadUrl, NotPermitted, TimedOut, TooManyRedirects}
 import Std.Http.Client as Client
 import Std.Http as Http
+import Std.Http.Message as Message
 import Std.Http.Server.Reply as Reply
 import Std.Http.Server.Route as Route
 import Std.Http.Server as Server
@@ -145,7 +146,8 @@ export fn main() -> Int {
       method: Http.Post,
       target: at + "/echo",
       headers: [("content-type", "text/plain")],
-      body: "one two"
+      body: "one two",
+      binaryBody: None
     }
     if let Ok(response) = Client.send(&posted, &permitted) {
       if response.body == "7:one two" { held = held + 1 }
@@ -159,7 +161,8 @@ export fn main() -> Int {
       method: Http.Post,
       target: at + "/echo",
       headers: [("content-type", "text/plain")],
-      body: "café"
+      body: "café",
+      binaryBody: None
     }
     if let Ok(response) = Client.send(&accented, &permitted) {
       if response.body == "5:café" { held = held + 1 }
@@ -172,7 +175,8 @@ export fn main() -> Int {
       method: Http.Post,
       target: at + "/echo",
       headers: [("content-type", "text/plain"), ("content-length", "3")],
-      body: "abcdef"
+      body: "abcdef",
+      binaryBody: None
     }
     if let Ok(response) = Client.send(&framed, &permitted) {
       if response.body == "3:abc" { held = held + 1 }
@@ -237,6 +241,7 @@ export fn main() -> Int {
   }
 
   held = held + framedBeforeClose()
+  held = held + bytesRendered()
 
   held
 }
@@ -330,3 +335,20 @@ fn roundAndRound(_request: Route.Request) -> Http.Response {
 }
 
 fn missing(_request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }
+
+/// A request carrying bytes renders them exactly, states their length in bytes,
+/// and gives them up when a text body replaces them.
+fn bytesRendered() -> Int {
+  let payload = bytesOf([255u8, 0u8, 254u8])
+  let uploaded = Http.withBytes(&Http.request(Http.Post, "/upload"), &payload)
+  let rendered = Message.renderRequestBytes(&uploaded)
+  if Http.requestBytes(&uploaded) == payload &&
+  Http.header(&uploaded.headers, "content-length") == Some("3") &&
+  rendered.length() == Http.renderHead(&uploaded).toBytes().length() + 3 &&
+  Http.requestBytes(&Http.withBody(&uploaded, "\u{E9}")) == "\u{E9}".toBytes()
+  {
+    1
+  } else {
+    0
+  }
+}

@@ -43,6 +43,11 @@ allowance has arrived; checking only after an unbounded `receiveAll` would repor
 the peer had already selected the caller's memory use. The body bound is checked again after HTTP
 framing is removed.
 
+**A request goes out as bytes.** The request is rendered with `Message.renderRequestBytes` and sent
+with the byte form of the transport, and an absent `Content-Length` is filled from the byte length of
+`Http.requestBytes`, so a byte body is transmitted exactly and a text body is measured in UTF-8
+octets. A redirect that keeps its body keeps a byte body as well.
+
 **HTTP transfer framing is not response content.** A chunked answer is decoded before it is handed
 to the caller and before its body is compared with the caller's limit. Returning chunk sizes and
 delimiters in `Response.body` is not a merely inconvenient representation: a JSON parser sees text

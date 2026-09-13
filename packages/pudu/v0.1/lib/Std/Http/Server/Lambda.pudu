@@ -143,7 +143,8 @@ export fn nextInvocation(runtime: &Runtime) -> Result[Invocation, LambdaError] {
     method: Http.Get,
     target: runtimePath(runtime, "/invocation/next"),
     headers: [],
-    body: ""
+    body: "",
+    binaryBody: None
   }
   let answered = Result.mapErr(Client.send(&asked, &runtimeLimits(runtime)),
     fn(problem: Client.ClientError) -> LambdaError { RuntimeUnreachable(Client.explain(&problem)) }) ?
@@ -202,7 +203,8 @@ fn postTo(runtime: &Runtime, rest: Str, body: Str) -> Result[(), LambdaError] {
     method: Http.Post,
     target: runtimePath(runtime, rest),
     headers: [("content-type", "application/json")],
-    body: body
+    body: body,
+    binaryBody: None
   }
   Result.map(
     Result.mapErr(Client.send(&asked, &runtimeLimits(runtime)),

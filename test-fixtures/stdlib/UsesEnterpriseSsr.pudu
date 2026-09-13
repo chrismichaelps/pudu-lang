@@ -44,7 +44,7 @@ fn tightened[C: Totp.Configuring](base: &C) -> C {
 
 fn testRequest(headers: Array[(Str, Str)], peer: Str) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: Get, target: "/", headers: headers, body: ""},
+    message: Http.Request{method: Get, target: "/", headers: headers, body: "", binaryBody: None},
     path: "/",
     params: mapOf([]),
     query: mapOf([]),

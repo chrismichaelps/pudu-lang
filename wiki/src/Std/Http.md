@@ -95,6 +95,12 @@ original character.
 
 Response adds binaryBody: Option[Bytes]. None transmits UTF-8 body; Some transmits those exact bytes, including an empty byte payload. responseBytes centralizes selection. Text construction initializes None; header-only transformations preserve the complete record. Existing direct response literals must add binaryBody: None.
 
+Request carries the same field with the same precedence, so a body that is not UTF-8 text — an
+uploaded image, a compressed payload — has an exact representation in both directions. `request`
+initializes it to `None`; `withHeader` keeps the whole record; `withBody` sets a text body, states its
+length in UTF-8 bytes, and clears any byte body; `withBytes` sets a byte body with its length in
+bytes and an empty text body. `requestBytes` answers the body as bytes whichever form holds it.
+
 Resolved Grill Log: protocol bytes must remain bytes; verified transport cannot downgrade. Errors remain explicit and resource ownership transfers once. Implementation is code-only; no validation or readiness claim.
 
 

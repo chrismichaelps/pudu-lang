@@ -323,7 +323,7 @@ fn wrapped(routed: &Route.Router, step: Route.Middleware) -> Route.Handler {
 }
 
 fn requestFor(method: Http.Method, path: Str, headers: &Array[(Str, Str)]) -> Route.Request {
-  let message = Http.Request{method: method, target: path, headers: *headers, body: ""}
+  let message = Http.Request{method: method, target: path, headers: *headers, body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: path,

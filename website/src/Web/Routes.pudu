@@ -86,7 +86,7 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog) -> Route.Router {
 
 export fn requestFor(target: Str) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: Http.Get, target: target, headers: [], body: ""},
+    message: Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None},
     path: Route.pathOf(target),
     params: mapOf([]),
     query: Route.queryOf(target),

@@ -132,7 +132,7 @@ impl Limiting for Limits {
 
 /// Request a URL, within the given limits.
 export fn fetch(target: Str, held: &Limits) -> Result[Http.Response, ClientError] {
-  send(&Http.Request{method: Http.Get, target: target, headers: [], body: ""}, held)
+  send(&Http.Request{method: Http.Get, target: target, headers: [], body: "", binaryBody: None}, held)
 }
 
 /// Send a request and read what comes back.
@@ -183,7 +183,7 @@ fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Resp
     return Err(NotPermitted(Safe.explain(&problem)))
   }
   let port = Option.unwrapOr(Url.effectivePort(&place), if secured(&place) { 443 } else { 80 })
-  let written = Message.renderRequest(&addressed(request, &place))
+  let written = Message.renderRequestBytes(&addressed(request, &place))
   if secured(&place) {
     overSecured(&place, port, written, held, expires, &request.method)
   } else {
@@ -193,10 +193,9 @@ fn once(request: &Http.Request, held: &Limits, expires: Int) -> Result[Http.Resp
 
 fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
   Http.Request {
-    method: request.method,
+    ..*request,
     target: pathAndQuery(place),
-    headers: withLength(&withHost(&request.headers, place), request.body),
-    body: request.body
+    headers: withLength(&withHost(&request.headers, place), &Http.requestBytes(request))
   }
 }
 
@@ -217,12 +216,12 @@ fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
 /// some other way — a chunked upload written by hand — is that caller's to
 /// frame, and a second length header would make the request ambiguous, which is
 /// the shape a server is required to refuse.
-fn withLength(headers: &Array[(Str, Str)], body: Str) -> Array[(Str, Str)] {
-  if body.isEmpty() || Option.isSome(&Http.header(headers, "content-length"))
+fn withLength(headers: &Array[(Str, Str)], body: &Bytes) -> Array[(Str, Str)] {
+  if body.length() == 0 || Option.isSome(&Http.header(headers, "content-length"))
     || Option.isSome(&Http.header(headers, "transfer-encoding")) {
       *headers
   } else {
-    headers.push(("content-length", show(body.toBytes().length())))
+    headers.push(("content-length", show(body.length())))
   }
 }
 
@@ -245,7 +244,7 @@ fn secured(place: &Url.Url) -> Bool { place.scheme.toLower() == SECURE_SCHEME }
 fn overSecured(
   place: &Url.Url,
   port: Int,
-  written: Str,
+  written: Bytes,
   held: &Limits,
   expires: Int,
   method: &Http.Method
@@ -253,7 +252,7 @@ fn overSecured(
   let opened = Tls.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return securedFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Tls.Secured{token: 0})
-  let outcome = Result.andThen(Tls.sendTextWithin(&connection, written, remaining(expires)),
+  let outcome = Result.andThen(Tls.sendWithin(&connection, &written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Tls.TlsError] {
       receiveSecured(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
@@ -274,7 +273,7 @@ fn overSecured(
 fn overPlain(
   place: &Url.Url,
   port: Int,
-  written: Str,
+  written: Bytes,
   held: &Limits,
   expires: Int,
   method: &Http.Method
@@ -282,7 +281,7 @@ fn overPlain(
   let opened = Net.connectWithin(place.host, port, remaining(expires))
   if let Err(problem) = opened { return plainFailure(problem, held.deadlineMillis) }
   let connection = Result.unwrapOr(opened, Net.Connection{token: 0})
-  let outcome = Result.andThen(Net.sendTextWithin(&connection, written, remaining(expires)),
+  let outcome = Result.andThen(Net.sendWithin(&connection, &written, remaining(expires)),
     fn(_sent: ()) -> Result[Received, Net.NetError] {
       receivePlain(&connection, held.bodyBytes + RESPONSE_FRAMING_BYTES, expires, method)
     }
@@ -420,7 +419,8 @@ fn redirected(request: &Http.Request, answer: &Http.Response) -> Result[Http.Req
       method: methodAfter(&request.method, answer.status.code),
       target: destination,
       headers: if sameOrigin { request.headers } else { withoutCredentials(&request.headers) },
-      body: if keepsBody(answer.status.code) { request.body } else { "" }
+      body: if keepsBody(answer.status.code) { request.body } else { "" },
+      binaryBody: if keepsBody(answer.status.code) { request.binaryBody } else { None }
     }
   )
 }

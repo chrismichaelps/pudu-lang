@@ -125,7 +125,8 @@ export fn send(base: &Exporter, spans: &Array[Trace.Span]) -> Result[Int, Export
     method: Http.Post,
     target: base.endpoint,
     headers: [("content-type", "application/json")] + base.headers,
-    body: render(base, &sendable)
+    body: render(base, &sendable),
+    binaryBody: None
   }
   let limits = Client.limits().within(base.deadlineMillis)
   let answer = Result.mapErr(Client.send(&request, &limits), unreachable) ?

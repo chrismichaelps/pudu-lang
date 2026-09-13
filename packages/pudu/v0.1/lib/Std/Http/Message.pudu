@@ -26,7 +26,8 @@ export fn parseRequest(source: Str) -> Result[Http.Request, MessageError] {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
         headers: headers,
-        body: split[1]
+        body: split[1],
+        binaryBody: None
       })
   }
 }
@@ -41,7 +42,8 @@ export fn parseHead(head: Str) -> Result[Http.Request, MessageError] {
         method: Http.methodFrom(parts[0]),
         target: parts[1],
         headers: headers,
-        body: ""
+        body: "",
+        binaryBody: None
       })
   }
 }
@@ -59,7 +61,14 @@ export fn parseResponse(source: Str) -> Result[Http.Response, MessageError] {
 
 /// A request written as the protocol writes it, head and body together.
 export fn renderRequest(value: &Http.Request) -> Str {
+  if let Some(_) = value.binaryBody { panic("binary requests require renderRequestBytes") }
   Http.renderHead(value) + value.body
+}
+
+/// A request written as the protocol writes it, as the exact bytes sent, so a
+/// byte body goes out unchanged.
+export fn renderRequestBytes(value: &Http.Request) -> Bytes {
+  ByteSeq.concat(&ByteSeq.fromText(Http.renderHead(value)), &Http.requestBytes(value))
 }
 
 /// A response written as the protocol writes it.

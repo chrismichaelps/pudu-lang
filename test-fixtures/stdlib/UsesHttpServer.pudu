@@ -35,7 +35,8 @@ export fn main() -> Int {
         Route.get("/health", health),
         Route.get("/users/:id", showUser),
         Route.get("/files/*rest", showFile),
-        Route.post("/users", createUser)
+        Route.post("/users", createUser),
+        Route.post("/bytes", countBytes)
       ]),
     nothingHere
   )
@@ -152,16 +153,16 @@ export fn main() -> Int {
     if posted.contains("201") { held = held + 1 }
     if posted.contains("hello") { held = held + 1 }
 
-    // A body that is not UTF-8 is refused rather than handed to the handler as
-    // empty text, which it could not tell apart from a request that sent none.
+    // A body that is not UTF-8 reaches the handler as its exact bytes, so an
+    // uploaded file arrives intact rather than as empty text.
     let binary = fetchBytes(
       port,
         &ByteSeq.join(&[
-          ByteSeq.fromText("POST /users HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 2\r\n\r\n"),
-          ByteSeq.fromArray(&[255u8, 254u8])
+          ByteSeq.fromText("POST /bytes HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 3\r\n\r\n"),
+          ByteSeq.fromArray(&[255u8, 0u8, 254u8])
         ])
     )
-    if binary.contains("400") && !binary.contains("201") { held = held + 1 }
+    if binary.contains("201") && binary.contains("3 bytes ending 254") { held = held + 1 }
 
     let _stopped = Server.stop(&live)
     if let Ok(started) = worker {
@@ -190,6 +191,16 @@ fn createUser(request: Route.Request) -> Http.Response {
   Reply.text(201, Route.body(&request))
 }
 
+/// How many bytes a request body carried, and its last byte.
+fn countBytes(request: Route.Request) -> Http.Response {
+  let payload = Route.bodyBytes(&request)
+  let last = match payload.at(payload.length() - 1) {
+    case Some(value) => show(value)
+    case None => "none"
+  }
+  Reply.text(201, show(payload.length()) + " bytes ending " + last)
+}
+
 fn nothingHere(_request: Route.Request) -> Http.Response { Reply.text(404, "nothing here") }
 
 fn runSearch(request: Route.Request) -> Http.Response {
@@ -204,7 +215,8 @@ fn bodied(method: Http.Method, target: Str, content: Str) -> Route.Request {
       method: base.message.method,
       target: base.message.target,
       headers: base.message.headers.push(("Content-Type", "application/sql")),
-      body: content
+      body: content,
+      binaryBody: None
     },
     path: base.path,
     params: base.params,
@@ -227,7 +239,7 @@ fn stamping(name: Str) -> Route.Middleware {
 }
 
 fn requestFor(method: Http.Method, target: Str) -> Route.Request {
-  let message = Http.Request{method: method, target: target, headers: [], body: ""}
+  let message = Http.Request{method: method, target: target, headers: [], body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: pathOf(target),
@@ -262,7 +274,8 @@ fn withHeader(request: Route.Request, name: Str, value: Str) -> Route.Request {
       method: request.message.method,
       target: request.message.target,
       headers: request.message.headers.push((name, value)),
-      body: request.message.body
+      body: request.message.body,
+      binaryBody: None
     },
     path: request.path,
     params: request.params,

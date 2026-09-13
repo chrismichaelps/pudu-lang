@@ -17,6 +17,9 @@ completion, `checkLength`, chunk decoding, and `explain`.
 Protocol text accepts CRLF or LF, reports structural failures as `Result`, and never performs transport. Parsing separates head/body, validates lines and headers, then constructs [[Std Http]] values.
 Framing completion recognizes a complete declared-length body, terminating chunk stream, bodyless
 status, or response to `HEAD` without requiring transport closure.
+`renderRequestBytes` writes a request as the exact bytes sent, head then `Http.requestBytes`, so a
+byte body goes out unchanged. `renderRequest` writes text and refuses a request holding a byte body,
+as `renderResponse` refuses a byte response, rather than dropping the bytes.
 ## Grill Log
 - **Q:** Why accept LF? **A:** Hand-written fixtures remain useful without weakening network output, which still renders CRLF. _Rejected:_ transport-dependent parsing.
 - **Q:** Is connection closure the only complete-response signal? **A:** No. _Rationale:_ HTTP/1.1

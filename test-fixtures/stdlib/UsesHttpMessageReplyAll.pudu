@@ -123,7 +123,8 @@ export fn main() -> Int {
     method: Http.Get,
     target: "/here",
     headers: [("host", "example.com")],
-    body: ""
+    body: "",
+    binaryBody: None
   }
   let written = Message.renderRequest(&asked)
   if written == "GET /here HTTP/1.1\r\nhost: example.com\r\n\r\n" { held = held + 1 }

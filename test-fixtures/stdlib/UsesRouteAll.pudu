@@ -11,7 +11,7 @@ import Std.Option as Option
 /// makes one checkable without a socket.
 fn asking(method: Http.Method, target: Str, headers: Array[(Str, Str)], body: Str) -> Route.Request {
   Route.Request {
-    message: Http.Request{method: method, target: target, headers: headers, body: body},
+    message: Http.Request{method: method, target: target, headers: headers, body: body, binaryBody: None},
     path: Route.pathOf(target),
     params: mapOf([]),
     query: Route.queryOf(target),

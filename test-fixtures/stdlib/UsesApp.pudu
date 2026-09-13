@@ -280,7 +280,7 @@ fn recording(ledger: Sync.Cell[Str], name: Str) -> App.Stage {
 }
 
 fn requestFor(path: Str) -> Route.Request {
-  let message = Http.Request{method: Http.Get, target: path, headers: [], body: ""}
+  let message = Http.Request{method: Http.Get, target: path, headers: [], body: "", binaryBody: None}
   Route.Request {
     message: message,
     path: path,
