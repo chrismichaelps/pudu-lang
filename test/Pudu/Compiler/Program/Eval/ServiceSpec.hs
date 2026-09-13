@@ -17,6 +17,7 @@ testServiceEvaluation = do
   canvas <- runEntry "test-fixtures/stdlib/UsesUiCanvas.pudu"
   layout <- runEntry "test-fixtures/stdlib/UsesUiLayout.pudu"
   interaction <- runEntry "test-fixtures/stdlib/UsesUiScreen.pudu"
+  desktop <- runEntry "test-fixtures/stdlib/UsesUiDesktop.pudu"
   lettering <- runEntry "test-fixtures/stdlib/UsesUiText.pudu"
   sound <- runEntry "test-fixtures/stdlib/UsesAudio.pudu"
   rendering <- runEntry "test-fixtures/stdlib/UsesAudioGraph.pudu"
@@ -130,6 +131,9 @@ testServiceEvaluation = do
     , counterexample
         "a screen routes input to tagged controls, rings focus, and repaints only what changed"
         (interaction === Just "31")
+    , counterexample
+        "a desktop window plan rejects unsafe extents before opening a device"
+        (desktop === Just "8")
     , counterexample
         "bitmap text measures, wraps, and draws into exact pixels"
         (lettering === Just "22")

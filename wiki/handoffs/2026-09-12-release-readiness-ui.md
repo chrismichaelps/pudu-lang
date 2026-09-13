@@ -23,6 +23,8 @@ committed directly to `dev` at the user's explicit direction; no branch or PR is
    `packages/pudu/v0.1/lib/Std/Ui/Layout.pudu`, `test-fixtures/stdlib/UsesUiCanvas.pudu`,
    `test-fixtures/stdlib/UsesUiLayout.pudu`, their mirrors, and the exact-count service fixture
    registrations.
+   The current presenter slice additionally owns `Std/Ui/Desktop.pudu`, `Pudu/Eval/Desktop.hs`,
+   the private macOS adapter, launch fixtures, and their complete mirrors.
 3. **Validation:** focused fixtures and `test/gates.sh` protect each slice. Further review sub-agents
    are disabled at the user's explicit direction.
 
@@ -64,15 +66,25 @@ order, hit testing, painting, and damage regions.
 - Resampling slice — exact resampling, downmix, upmix, and channel maps (audio 42).
 - Crypto breadth slice — SHA3-256/512, BLAKE2b-256/512, HMAC-SHA512, constant-time byte comparison,
   and secure key/nonce generation; crypto 59 assertions and the optimized full gate pass.
+- Native desktop slice — `Std.Ui.Desktop` owns checked window plans and explicit open/present/pump/
+  close sessions; the evaluation-local store serializes use against close and tears down leaks. A
+  private macOS AppKit/CoreGraphics adapter exposes no framework value to Pudu and links no foreign
+  UI toolkit. `LaunchUiDesktop.pudu` opened, displayed, pumped, and closed a real 480×280 titled
+  desktop window with `Ok(1)`. The full Cabal suite passed after integration.
+- Packaging observation — `cabal check` still rejects a source archive because the existing test
+  suite uses `hs-source-dirs: ../../../test`, outside the nested package root. This predates the
+  presenter and does not affect its build or launch, but it remains a serious-release packaging gap.
+  It is recorded rather than expanded here because the active user direction is UI/audio/video only.
 
 ## Exact next action
 
-Return exclusively to native UI, audio, and video. First, revise [[Native Application UI]] against
-SwiftUI's public application, scene, state, layout, input, accessibility, rendering, and lifecycle
-contracts, then define the smallest Pudu-native desktop presenter slice. That slice must launch a real
-desktop application during testing; a headless framebuffer is not sufficient evidence. Keep every
-existing exact fixture as the semantic oracle and add percentile latency/memory gates before claiming
-interactive or real-time performance.
+Continue exclusively with native UI, audio, and video. Build the first Pudu **space** application
+loop over [[Std Ui Desktop]] and [[Std Ui Screen]]: translate native pointer/key/text/close events into
+screen inputs, present only after state or focus changes, and expose lifecycle transitions without
+copying SwiftUI's protocol/property-wrapper graph. Then add menus, settings, documents, multiple
+windows, IME, and platform accessibility export in independently grilled slices. Keep every exact
+fixture as the semantic oracle and add percentile latency/memory gates before claiming interactive or
+real-time performance.
 
 ## Grill Log
 
@@ -85,6 +97,10 @@ interactive or real-time performance.
 - **Q:** Optimize before exact output exists? **A:** No. _Rationale:_ pixel conformance is the oracle
   against which later batching and damage-region optimizations are checked. _Rejected:_ speed without
   a stable result.
+- **Q:** Does avoiding foreign UI integration forbid calling the operating system? **A:** No.
+  _Rationale:_ a real window must connect to a window server. _Accepted:_ a private target adapter
+  whose pointers and framework types never cross the Pudu boundary. _Rejected:_ raylib, SDL,
+  SwiftUI, AppKit-shaped public APIs, and program-authored foreign declarations.
 
 ## Referenced by
 

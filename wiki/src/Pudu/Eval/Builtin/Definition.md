@@ -72,6 +72,16 @@ source-level name.
 Resolved Grill Log: keep algorithm families as separate constructors rather than a string-selected
 digest builtin, preserving total naming and exhaustive dispatch.
 
+## Desktop capability vocabulary
+
+`DesktopOpenBuiltin`, `DesktopPresentBuiltin`, `DesktopPumpBuiltin`, and `DesktopCloseBuiltin`
+name the four resource operations beneath [[Std Ui Desktop]]. Separate constructors keep arity and
+failure attribution exhaustive; no string-selected operation or framework symbol enters the
+language.
+
+Resolved Grill Log: expose a resource lifecycle rather than a blocking demo primitive, so later
+application spaces can reuse the same presenter without changing the effect ABI.
+
 ## Word-map cardinality kernel
 
 `wordMapPopCount[K](Map[K, UInt64]) -> UInt128` is a pure wired-in reduction consumed by

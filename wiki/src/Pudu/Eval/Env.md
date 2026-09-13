@@ -28,7 +28,7 @@ The exported signatures are the module header's export list; [[Evaluator]] is th
 - The environment carries a frame stack and, separately, the program's implementations. A name is found lexically first and among implementations second. They are separate because their scoping rules are opposite: a function belongs to the module that declared it, and an implementation belongs to the whole program.
 
 - The environment also carries one runtime resource set allocated for the evaluation. Foreign
-  resources, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
+  resources, desktop, file, socket, thread, channel, mutex, and cell tokens are resolved only inside that set. Captured closures and
   child host threads retain the same set; a different program evaluated in the same host process
   receives a different set.
 
@@ -76,6 +76,9 @@ DEPTH 0.45 (MEDIUM). It keeps one concern out of [[Evaluator]], which would othe
 - **Q:** Store foreign ownership outside the environment? **A:** No. _Rationale:_ captured closures
   and child threads need the same claims, while independent evaluations need disjoint teardown.
   _Rejected:_ a global foreign-address registry.
+- **Q:** Reuse an integer desktop token across evaluations? **A:** No. _Rationale:_ each environment
+  owns a distinct [[Eval Desktop]] registry, so teardown and stale-token checks cannot affect another
+  program. _Rejected:_ a process-global window table.
 - **Q:** Why introduce `updateExisting` alongside `update`?
   **A:** Updating a mutable binding previously required searching the frame hierarchy with `lookupName` to check existence and then searching again to write the new value; `updateExisting` performs the traversal and mutation in a single pass, returning a boolean indicating whether the binding was present.
 

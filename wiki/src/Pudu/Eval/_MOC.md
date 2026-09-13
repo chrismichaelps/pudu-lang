@@ -20,6 +20,7 @@ tags: [moc, module]
 - [[Eval Compress]] — bounded gzip compression and decompression through zlib.
 - [[Eval Tls]] — secured connections held for one evaluation.
 - [[Eval Concurrent]] — thread, channel, mutex, and atomic-cell tables.
+- [[Eval Desktop]] — evaluation-owned desktop windows and serialized present/pump/close lifetimes.
 - [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.
 - [[Eval Effect]] — the operations that reach outside the program, and the refusal that keeps them out of constant folding.

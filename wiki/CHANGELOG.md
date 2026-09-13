@@ -7,6 +7,22 @@ tags: [changelog]
 
 ## 2026-09-12 — Native application-media foundation
 
+- Added `Std.Ui.Desktop`, an independently designed Pudu API for bounded window plans and explicit
+  open/present/pump/close sessions. Tokens belong to one evaluation, concurrent use is serialized
+  against close, failed close remains retryable, malformed surfaces and unsafe dimensions are typed,
+  and runtime teardown closes leaks.
+- Added the first real macOS presenter as private language-runtime plumbing over public AppKit and
+  CoreGraphics entry points. No platform object or pointer crosses into Pudu, and no SwiftUI,
+  raylib, SDL, or foreign UI toolkit is linked. A Pudu launch fixture displayed its exact 480×280
+  Canvas surface in a titled desktop window, pumped the event loop for 1.8 seconds, and returned
+  `Ok(1)` after closing. Headless validation remains separate.
+- Made SwiftUI the primary behavioral benchmark while defining Pudu's distinct model: applications
+  will own typed models and named spaces rather than copy protocols, property wrappers, builders,
+  delegates, or one-for-one renamed framework declarations. Added official application, scene,
+  window, document, settings, focus, AppKit event, and Metal presentation references.
+- Included nested `Std.Audio` modules in package data so `Std.Audio.Graph` ships in source
+  distributions.
+
 - Corrected the serious-release table against the standard library that actually ships, separating
   missing lifecycle, package, large-input, HTTP-client, filesystem, and concurrency evidence from
   optional ecosystem breadth.

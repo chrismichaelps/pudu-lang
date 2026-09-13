@@ -61,6 +61,8 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - Network connect/send/receive effects carry a millisecond operation timeout; negative retains the
   unbounded low-level primitive and non-negative expiry returns the stable host failure text that
   `Std.Net` and `Std.Tls` classify as their operation-timeout variants.
+- Desktop open/present/pump/close effects delegate to an evaluation-local [[Eval Desktop]] store.
+  They accept only explicit tokens and byte payloads, and remain forbidden during constant folding.
 
 ## Grill Log
 
@@ -70,6 +72,9 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - **Q:** Leave a timed-out stream token usable? **A:** No. _Rationale:_ a partial write or interrupted
   TLS record leaves the next operation unable to know its position. _Rejected:_ retrying on an
   indeterminate stream.
+- **Q:** Implement a one-off host demo outside the effect boundary? **A:** No. _Rationale:_ desktop
+  resources need the same typed failure and constant-folding refusal as other device effects.
+  _Rejected:_ a CLI-only window shortcut.
 
 ## Referenced by
 

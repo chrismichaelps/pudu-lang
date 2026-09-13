@@ -25,6 +25,10 @@ nowhere and runs never, so the suite reports success without it.
 
 Do not introduce runtime behavior, implicit network setup, private governance inputs, or alternate
 compiler semantics through build metadata. Every new library module must be registered explicitly.
+`Std/Audio/*.pudu` and `Std/Ui/*.pudu` are both source-distribution data, including their nested
+modules. The macOS desktop adapter and Cocoa/CoreGraphics framework linkage are conditional on
+`os(osx)`; other targets compile the typed unsupported implementation in [[Eval Desktop]].
+The framework-neutral desktop header is an explicit source-distribution input.
 
 ## Grill Log
 
@@ -32,10 +36,13 @@ compiler semantics through build metadata. Every new library module must be regi
   keeps source distributions and builds aware of the implementation dependency.
 - **Q:** Add a dependency for ownership cleanup? **A:** No; the existing base, STM, containers, and
   text dependencies supply the required primitives.
+- **Q:** Link Apple frameworks on every target? **A:** No; target-only linkage belongs under Cabal's
+  operating-system condition. The public Pudu module remains present and reports unsupported where
+  no presenter exists.
 
 ## Referenced by
 
-[[src/_MOC]] · [[Eval Foreign Resource]] and [[Eval Foreign Result]]
+[[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]]
 
 ## SQLite native adapter
 

@@ -43,6 +43,43 @@ platform module using language-owned capabilities available on that target; unti
 exists, the portable result can be tested, encoded, streamed, or written without claiming that a
 device was opened.
 
+The public model is intentionally familiar without being framework-shaped. An application owns a
+model and reduces input into a new model; a **space** describes one independently managed piece of
+desktop UI; a **window plan** describes a family of windows; and a **desktop session** is the
+linear, runtime-owned connection to one platform window. These are Pudu value types and functions,
+not subclasses, delegates, property wrappers, opaque result builders, or an imitation of Apple's
+protocol graph. The first presenter exposes the session beneath the later declarative application
+layer so its lifetime, failure, and pixel transfer can be tested directly.
+
+On macOS the language-owned runtime adapter may call the operating system's public AppKit and
+CoreGraphics entry points. That is platform plumbing, not a foreign integration exposed by the UI
+package: no AppKit value, callback, selector, memory rule, or framework type crosses into Pudu.
+Raylib, SDL, SwiftUI, and other third-party or foreign UI toolkits are not linked. Other targets
+must implement the same presenter contract or answer `UnsupportedPlatform`; a successful no-op is
+forbidden.
+
+## SwiftUI benchmark, Pudu contract
+
+SwiftUI is the primary behavioral reference for the application layer. Pudu keeps the useful
+human model while making ownership, cost, and failure more explicit:
+
+| Reference capability | Pudu-native contract | Required improvement |
+| --- | --- | --- |
+| App and scene composition | model-driven application containing named spaces | plain values and functions; no hidden global application object |
+| A reusable window scene | a window plan instantiated as independently owned sessions | per-window state identity and resource limits are explicit |
+| State and environment propagation | immutable model input plus typed, explicit dependencies | no string keys, ambient mutable environment, or wrapper-specific lifetime rules |
+| View layout and modifiers | one `View` value with deterministic measure/place and named fields | modifier order cannot silently change unrelated semantics |
+| Focus and accessibility focus | separate keyboard and assistive focus channels over the same semantics tree | focus movement is inspectable and headlessly reproducible |
+| Commands, settings, and documents | typed command routes and specialized spaces | unsupported platform behavior is a typed failure, never omitted silently |
+| Platform rendering | bounded surface presenter below a portable display list | exact CPU reference output, damage information, and measured transfer cost |
+| Lifecycle phases | explicit transitions delivered as input | transition order and shutdown ownership are fixture-testable |
+
+The similarity ends at the problem model. Pudu will not reproduce SwiftUI spellings, generic
+signatures, protocol conformances, property-wrapper conventions, builder syntax, or AppKit's
+responder/delegate hierarchy. Public documentation supplies expected desktop behavior; Pudu's API
+is independently designed from the language's values, `Result`, exhaustive sums, capabilities,
+and structured resource lifetimes.
+
 ## Performance and quality constitution
 
 - A frame has separate update, render, and present phases. Present targets are acquired late,
@@ -85,8 +122,10 @@ supplied by an untrusted document cannot select an arbitrary allocation.
    then device presenters once native capability contracts exist.
 6. Exact fractional rates and timestamps, ordered picture tracks, and audio alignment in `Std.Video`;
    then color/HDR metadata, seeking, and a small uncompressed reference codec foundation.
-7. Per-platform window/input, speaker, camera, and display presenters after their native capability
-   contracts exist.
+7. A bounded desktop session that opens, presents, pumps, and closes a real platform window; then
+   application spaces, multiple windows, menus, settings, documents, clipboard, drag/drop,
+   dialogs, pointer/keyboard/IME input, accessibility export, display-scale/color changes, and
+   device-loss recovery.
 
 ## Comparative release gates
 
@@ -129,6 +168,24 @@ release gates, not deferred aspirations.
 - [OpenAttributeGraph](https://github.com/OpenSwiftUIProject/OpenAttributeGraph) (MIT) — dependency
   propagation that stops when a recomputed value equals the old one; screens skip an update whose view
   is unchanged. No code is used.
+- [SwiftUI App](https://developer.apple.com/documentation/swiftui/app),
+  [Scene](https://developer.apple.com/documentation/swiftui/scene), and
+  [WindowGroup](https://developer.apple.com/documentation/swiftui/windowgroup) — application
+  composition, system-managed lifecycle, and repeatable per-window state. Pudu restates these as
+  model-driven spaces and owned sessions rather than protocols and property wrappers.
+- [SwiftUI DocumentGroup](https://developer.apple.com/documentation/swiftui/documentgroup) and
+  [Settings](https://developer.apple.com/documentation/swiftui/settings) — the minimum specialized
+  desktop spaces a complete application layer must eventually cover.
+- [SwiftUI AccessibilityFocusState](https://developer.apple.com/documentation/swiftui/accessibilityfocusstate)
+  — keyboard focus and assistive focus are separate channels, both derived from semantics.
+- [NSApplication](https://developer.apple.com/documentation/appkit/nsapplication),
+  [NSWindow](https://developer.apple.com/documentation/appkit/nswindow), and
+  [AppKit input](https://developer.apple.com/documentation/appkit/mouse-keyboard-and-trackpad) —
+  macOS event-loop and window-server obligations used only inside the target adapter.
+- [Creating a custom Metal view](https://developer.apple.com/documentation/metal/creating-a-custom-metal-view)
+  and [smooth frame rates with a Metal display link](https://developer.apple.com/documentation/metal/achieving-smooth-frame-rates-with-a-metal-display-link)
+  — later accelerated presentation must track the window's display, synchronize with it, and keep
+  the portable render contract independent of the GPU API.
 
 Apple references are the developer documentation archive and the public SwiftUI and Metal
 documentation. Every contract above is restated
@@ -154,6 +211,14 @@ in Pudu's own terms; no API names, type hierarchies, or code are carried over.
 - **Q:** Promise superiority before benchmarks and accessibility trials? **A:** No. _Rationale:_ the
   comparison is useful only as a falsifiable bar. _Rejected:_ branding without percentile latency,
   correctness, recovery, and assistive-technology evidence.
+- **Q:** Reproduce SwiftUI's public declaration graph with renamed identifiers? **A:** No.
+  _Rationale:_ cosmetic renaming would retain hidden lifetime and composition constraints while
+  creating unnecessary intellectual-property risk. _Rejected:_ one-for-one renamed protocols,
+  property wrappers, builders, and modifiers.
+- **Q:** Can a Pudu desktop application avoid every operating-system call? **A:** No. _Rationale:_ a
+  real window must join the target's window server and event loop. _Accepted boundary:_ a private,
+  language-owned adapter to public OS entry points whose handles and types never cross into Pudu.
+  _Rejected:_ binding a foreign UI toolkit or exposing AppKit/SwiftUI types as the Pudu API.
 
 ## Referenced by
 

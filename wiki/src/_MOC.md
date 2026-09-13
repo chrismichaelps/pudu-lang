@@ -22,6 +22,8 @@ tags: [moc, module]
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
 - [[Uses Ui Layout]] — exact-frame, accessibility, and repaint-equality coverage for layout.
 - [[Uses Ui Screen]] — input routing, focus, and incremental frames equal to fresh ones.
+- [[Uses Ui Desktop]] — safe window plans and the typed desktop-session boundary.
+- [[Launch Ui Desktop]] — explicit real-window launch, presentation, event-pump, and close evidence.
 - [[Uses Ui Text]] — exact measures, wrapping edges, and glyph pixels for bitmap text.
 - [[Uses Audio]] — exact samples, time, gain, mixing, slicing, and WAV bytes and refusals.
 - [[Uses Audio Graph]] — exact waveforms, ramps, and mixes, with split renders equal to whole ones.
@@ -31,8 +33,8 @@ tags: [moc, module]
 
 - [[src/Pudu/_MOC|Pudu modules]] — validated source, diagnostic, lexical-vocabulary, and strict-cursor foundations.
 - [[src/Std/_MOC|Standard library modules]] — mirrored Pudu modules shipped under `Std`.
-- [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge and test-only C++ conformance
-  surface.
+- [[src/cbits/_MOC|Native boundary modules]] — the libffi bridge, private desktop target adapter,
+  and test-only C++ conformance surface.
 - [[src/website/_MOC|Website modules]] — Pudu SSR, generated API search, views, SEO, tests, and Pudu-native deployment entries.
 - [[Website Linux Artifact Workflow]] — short-lived x86-64 Pudu website build for preview deployment.
 - [[Musl Runtime Workflow]] — portable x86-64 runtime proof across Alpine and Amazon Linux 2023.

@@ -23,6 +23,7 @@ import Pudu.Eval.Child
   , waitChildWithin
   )
 import Pudu.Eval.Clock
+import Pudu.Eval.Desktop (closeDesktop, openDesktop, presentDesktop, pumpDesktop)
 import Pudu.Eval.Signal (stopRequested, watchForStop)
 import Pudu.Eval.Handle
   ( closeHandleAt
@@ -79,6 +80,7 @@ import Pudu.Eval.Entropy (secureBytes)
 import Pudu.Eval.Env
   ( effectsAdmitted
   , currentConcurrentStore
+  , currentDesktopStore
   , currentHandleStore
   , currentChildStore
   , currentSocketStore
@@ -197,6 +199,10 @@ effectBuiltins =
   , CellGetBuiltin
   , CellSwapBuiltin
   , SecureBytesBuiltin
+  , DesktopOpenBuiltin
+  , DesktopPresentBuiltin
+  , DesktopPumpBuiltin
+  , DesktopCloseBuiltin
   ]
 
 {-| Perform one effect.
@@ -377,6 +383,20 @@ callEffect spanValue builtin arguments = do
         resultOf <$> lift refusal (cellSwap concurrent (fromInteger token) value)
       (SecureBytesBuiltin, [IntValue _ count]) ->
         resultOf . fmap BytesValue <$> lift refusal (secureBytes count)
+      (DesktopOpenBuiltin, [StrValue title, IntValue _ width, IntValue _ height, BoolValue resizable]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap intValue
+          <$> lift refusal (openDesktop desktop title (fromInteger width) (fromInteger height) resizable)
+      (DesktopPresentBuiltin, [IntValue _ token, IntValue _ width, IntValue _ height, BytesValue rgba]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (presentDesktop desktop (fromInteger token) (fromInteger width) (fromInteger height) rgba)
+      (DesktopPumpBuiltin, [IntValue _ token, IntValue _ milliseconds]) -> do
+        desktop <- currentDesktopStore
+        resultOf . fmap BoolValue
+          <$> lift refusal (pumpDesktop desktop (fromInteger token) (fromInteger milliseconds))
+      (DesktopCloseBuiltin, [IntValue _ token]) -> do
+        desktop <- currentDesktopStore
+        effectUnit (closeDesktop desktop (fromInteger token))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath

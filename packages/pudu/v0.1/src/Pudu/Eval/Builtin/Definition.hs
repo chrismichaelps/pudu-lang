@@ -97,6 +97,10 @@ data Builtin
   | CellGetBuiltin
   | CellSwapBuiltin
   | SecureBytesBuiltin
+  | DesktopOpenBuiltin
+  | DesktopPresentBuiltin
+  | DesktopPumpBuiltin
+  | DesktopCloseBuiltin
   | Sha256Builtin
   | HmacBuiltin
   | DeriveKeyBuiltin
@@ -279,6 +283,10 @@ builtinName value = case value of
   CellGetBuiltin -> "cellGet"
   CellSwapBuiltin -> "cellSwap"
   SecureBytesBuiltin -> "secureRandomBytes"
+  DesktopOpenBuiltin -> "desktopOpen"
+  DesktopPresentBuiltin -> "desktopPresent"
+  DesktopPumpBuiltin -> "desktopPump"
+  DesktopCloseBuiltin -> "desktopClose"
   Sha256Builtin -> "sha256Of"
   HmacBuiltin -> "hmacSha256Of"
   DeriveKeyBuiltin -> "deriveKey"

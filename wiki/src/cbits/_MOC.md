@@ -10,6 +10,8 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu FFI C++ Fixture]] — the test-only C++ resource surface exported through a stable C ABI.
 
 - [[Pudu SQLite Bridge]] — on-demand SQLite loading, statement ownership, and exact byte transport.
+- [[Pudu Desktop Header]] — framework-neutral private ABI for desktop target plumbing.
+- [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.
 
 ## Referenced by
 

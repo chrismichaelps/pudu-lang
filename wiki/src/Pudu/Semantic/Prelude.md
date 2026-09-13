@@ -44,6 +44,8 @@ isPreludeModule :: ModuleName -> Bool
 - Names only. No arities, kinds, signatures, or definitions — those enter with typing, and a placeholder here would be a second source of truth.
 - Both compatibility network effect names and their `Within` variants are present; this module owns
   discoverability only, while [[Type Check Prelude]] owns their different signatures.
+- The four desktop effect names are compiler-owned capability operations consumed by
+  [[Std Ui Desktop]]. They expose no platform-framework identifiers.
 
 ### Linkage
 
@@ -85,6 +87,12 @@ effect capability.
 
 Resolved Grill Log: expose only exact algorithm names; the standard library owns the documented
 public wrappers while these remain language-runtime primitives.
+
+## Desktop capability names
+
+`desktopOpen`, `desktopPresent`, `desktopPump`, and `desktopClose` are discoverable effect values.
+Resolved Grill Log: keep the low-level names out of ordinary application documentation; the typed
+standard-library wrapper is the public contract.
 
 ## Word-map cardinality kernel
 

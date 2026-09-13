@@ -1,0 +1,48 @@
+module UsesUiDesktop
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Desktop as Desktop
+
+export fn main() -> Int {
+  var checked = 0
+
+  if let Err(Desktop.EmptyCaption) = Desktop.plan("", 20, 10, false, 200) {
+    checked = checked + 1
+  }
+  if let Err(Desktop.InvalidExtent(0, 10)) = Desktop.plan("Pudu", 0, 10, false, 200) {
+    checked = checked + 1
+  }
+  if let Err(Desktop.InvalidExtent(20, -1)) = Desktop.plan("Pudu", 20, -1, false, 200) {
+    checked = checked + 1
+  }
+  if let Err(Desktop.InvalidPixelBudget(-1)) = Desktop.plan("Pudu", 20, 10, false, -1) {
+    checked = checked + 1
+  }
+  if let Err(Desktop.PixelBudgetExceeded(20, 10, 199)) =
+  Desktop.plan("Pudu", 20, 10, false, 199)
+  {
+    checked = checked + 1
+  }
+  if let Ok(plan) = Desktop.plan("Pudu", 20, 10, true, 200) {
+    if plan.caption == "Pudu" && plan.extent.width == 20 && plan.extent.height == 10 &&
+    plan.resizable && plan.maxPixels == 200
+    {
+      checked = checked + 1
+    }
+  }
+
+  let fake = Desktop.Session{token: -1, extent: Canvas.size(20, 10)}
+  if let Err(Desktop.InvalidPumpDuration(-1)) = Desktop.pump(&fake, -1) {
+    checked = checked + 1
+  }
+  let malformed = Desktop.WindowPlan {
+    caption: "Pudu",
+    extent: Canvas.size(50, 50),
+    resizable: false,
+    maxPixels: 100
+  }
+  if let Err(Desktop.PixelBudgetExceeded(50, 50, 100)) = Desktop.open(&malformed) {
+    checked = checked + 1
+  }
+  checked
+}

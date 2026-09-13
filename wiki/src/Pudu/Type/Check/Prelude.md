@@ -34,6 +34,8 @@ effectSignatures           :: [(Text, Scheme)]
 - Existing TCP/TLS effects retain their original signatures; separately named `Within` connect,
   send, receive, and TLS-close signatures carry the millisecond operation timeout consumed by the
   runtime boundary. `Std.Net` and `Std.Tls` own the typed public spelling.
+- Desktop effects take plain strings, integers, booleans, and bytes and return `Result` values;
+  opaque native pointers are not expressible in their signatures.
 
 ### Linkage
 
@@ -57,6 +59,16 @@ SHA3-256/512 and BLAKE2b-256/512 each have `fn(Bytes) -> Bytes`; HMAC-SHA512 has
 
 Resolved Grill Log: the type layer states byte shape and arity while the distinct names carry
 algorithm identity; no unchecked algorithm selector is admitted.
+
+## Desktop capability signatures
+
+- `desktopOpen(Str, Int, Int, Bool) -> Result[Int, Str]`
+- `desktopPresent(Int, Int, Int, Bytes) -> Result[(), Str]`
+- `desktopPump(Int, Int) -> Result[Bool, Str]`
+- `desktopClose(Int) -> Result[(), Str]`
+
+Resolved Grill Log: the token is meaningful only to the evaluation-local owner; the public wrapper
+narrows its use to `Session`.
 
 ## Word-map cardinality kernel
 

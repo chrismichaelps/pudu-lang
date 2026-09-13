@@ -83,6 +83,7 @@ effectValueNames =
   , "mutexOpen", "mutexAcquire", "mutexRelease"
   , "cellOpen", "cellGet", "cellSwap"
   , "secureRandomBytes"
+  , "desktopOpen", "desktopPresent", "desktopPump", "desktopClose"
   , "arguments", "environment", "temporaryPath", "userHome"
   , "pathSeparators", "searchSeparator", "exit", "clock"
   , "now", "zoneOffset", "formatTime", "parseTime", "runProgram"

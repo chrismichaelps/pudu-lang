@@ -27,6 +27,11 @@ bytes are exact, audio graphs whose split renders equal whole ones, and video ti
 exact over long streams. Exact equality is intentional: adding a check without registering it
 or skipping a branch changes the count and fails the host suite.
 
+The desktop fixture keeps the standard suite display-independent by checking unsafe caption,
+extent, pixel-budget, and pump-duration paths before a platform effect is reached. The separate
+[[Launch Ui Desktop]] fixture is the macOS acceptance gate and must open an actual window; its
+success is not inferred from this pure count.
+
 ## Grill Log
 
 - **Q:** Accept a count greater than a minimum? **A:** No. _Rationale:_ a skipped refusal could be
@@ -41,4 +46,4 @@ counterexamples identify the failed service contract.
 ## Referenced by
 
 [[Std Ui]] · [[Std Ui Canvas]] · [[Std Ui Layout]] · [[Std Ui Screen]] ·
-[[2026-09-12-release-readiness-ui]]
+[[Std Ui Desktop]] · [[2026-09-12-release-readiness-ui]]

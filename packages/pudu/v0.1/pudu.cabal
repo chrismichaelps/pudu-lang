@@ -12,8 +12,10 @@ copyright:          (c) 2026 Chris M. Perez Santiago
 homepage:           https://github.com/chrismichaelps/pudu-lang
 bug-reports:        https://github.com/chrismichaelps/pudu-lang/issues
 build-type:         Simple
+extra-source-files: cbits/pudu_desktop.h
 data-files:         lib/Std/*.pudu
                     lib/Std/App/*.pudu
+                    lib/Std/Audio/*.pudu
                     lib/Std/Archive/*.pudu
                     lib/Std/Bytes/*.pudu
                     lib/Std/Compress/*.pudu
@@ -75,6 +77,7 @@ library
     Pudu.Eval.Call.Path
     Pudu.Eval.Clock
     Pudu.Eval.Concurrent
+    Pudu.Eval.Desktop
     Pudu.Eval.Effect
     Pudu.Eval.Aead
     Pudu.Eval.Child
@@ -252,6 +255,11 @@ library
   if !os(windows)
     build-depends:  unix >=2.8 && <2.9
     cpp-options:    -DPUDU_POSIX_SIGNALS
+  if os(osx)
+    c-sources:      cbits/pudu_desktop.m
+    cc-options:     -fobjc-arc
+    cpp-options:    -DPUDU_DARWIN_DESKTOP
+    frameworks:     AppKit CoreGraphics
 
 executable pudu
   import:           warnings

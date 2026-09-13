@@ -20,6 +20,7 @@ module Pudu.Eval.Env
   , currentMethods
   , replaceMethods
   , currentConcurrentStore
+  , currentDesktopStore
   , currentForeignStore
   , currentHandleStore
   , currentChildStore
@@ -53,6 +54,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Eval.Concurrent (ConcurrentStore)
+import Pudu.Eval.Desktop (DesktopStore)
 import Pudu.Eval.Child (ChildStore)
 import Pudu.Eval.Handle (HandleStore)
 import Pudu.Diagnostic
@@ -90,6 +92,7 @@ data Env = Env
   , envSocketStore :: !SocketStore
   , envTlsStore :: !TlsStore
   , envConcurrentStore :: !ConcurrentStore
+  , envDesktopStore :: !DesktopStore
   , envForeignStore :: !ForeignStore
   }
 
@@ -107,6 +110,9 @@ currentTlsStore = Evaluator $ \env -> pure (Done (envTlsStore env) env)
 
 currentConcurrentStore :: Evaluator ConcurrentStore
 currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env) env)
+
+currentDesktopStore :: Evaluator DesktopStore
+currentDesktopStore = Evaluator $ \env -> pure (Done (envDesktopStore env) env)
 
 currentForeignStore :: Evaluator ForeignStore
 currentForeignStore = Evaluator $ \env -> pure (Done (envForeignStore env) env)
@@ -266,9 +272,10 @@ emptyEnv
   -> SocketStore
   -> TlsStore
   -> ConcurrentStore
+  -> DesktopStore
   -> ForeignStore
   -> Env
-emptyEnv handles children sockets secured concurrent foreignStore =
+emptyEnv handles children sockets secured concurrent desktop foreignStore =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
@@ -283,6 +290,7 @@ emptyEnv handles children sockets secured concurrent foreignStore =
     , envSocketStore = sockets
     , envTlsStore = secured
     , envConcurrentStore = concurrent
+    , envDesktopStore = desktop
     , envForeignStore = foreignStore
     }
 

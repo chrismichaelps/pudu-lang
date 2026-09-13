@@ -1,0 +1,46 @@
+module LaunchUiDesktop
+
+import Std.Ui.Canvas as Canvas
+import Std.Ui.Desktop as Desktop
+
+export fn main() -> Result[Int, Desktop.DesktopError] {
+  let background = Canvas.rgb(18u8, 22u8, 32u8)
+  var drawing = canvasOrDesktop(Canvas.canvas(480, 280, background)) ?
+  drawing = canvasOrDesktop(
+    Canvas.fill(&drawing, Canvas.rect(32, 30, 416, 220), Canvas.rgb(36u8, 45u8, 66u8))
+  ) ?
+  drawing = canvasOrDesktop(
+    Canvas.fill(&drawing, Canvas.rect(56, 58, 368, 42), Canvas.rgb(70u8, 180u8, 168u8))
+  ) ?
+  drawing = canvasOrDesktop(
+    Canvas.fill(&drawing, Canvas.rect(56, 124, 256, 24), Canvas.rgb(236u8, 196u8, 92u8))
+  ) ?
+  drawing = canvasOrDesktop(
+    Canvas.fill(&drawing, Canvas.rect(56, 164, 320, 18), Canvas.rgb(132u8, 148u8, 184u8))
+  ) ?
+  drawing = canvasOrDesktop(
+    Canvas.fill(&drawing, Canvas.rect(56, 198, 176, 28), Canvas.rgb(102u8, 116u8, 244u8))
+  ) ?
+  let surface = surfaceOrDesktop(Canvas.render(&drawing)) ?
+  let window = Desktop.plan("Pudu Native Desktop", 480, 280, false, 134400) ?
+  let _requested = Desktop.showFor(&window, &surface, 1800) ?
+  Ok(1)
+}
+
+fn canvasOrDesktop(
+  value: Result[Canvas.Canvas, Canvas.CanvasError]
+) -> Result[Canvas.Canvas, Desktop.DesktopError] {
+  match value {
+    case Ok(canvas) => Ok(canvas)
+    case Err(problem) => Err(Desktop.SurfaceMalformed(problem))
+  }
+}
+
+fn surfaceOrDesktop(
+  value: Result[Canvas.Surface, Canvas.CanvasError]
+) -> Result[Canvas.Surface, Desktop.DesktopError] {
+  match value {
+    case Ok(surface) => Ok(surface)
+    case Err(problem) => Err(Desktop.SurfaceMalformed(problem))
+  }
+}
