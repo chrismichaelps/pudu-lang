@@ -43,6 +43,10 @@ tags: [changelog]
   matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
   `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
   exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- `Std.Ui.Layout.placeWithin` caps the nesting budget a caller may request at 512 and refuses a larger
+  one as `InvalidBudget`, the way the node budget was already capped. With no ceiling, a budget of
+  100,000 let 5,000 nested views exhaust the evaluator's call limit and stop the program; a view built
+  from data reaches that depth without anyone writing it. The layout fixture holds 49 claims.
 - `Std.Regex.compile` bounds group nesting at 256 levels and answers the new `RegexError.TooDeep` at
   the opening bracket, where a pattern of 5,000 nested groups exhausted the evaluator's call limit and
   stopped the program. Searches were already bounded by `stepLimit`. `Std.Regex` gains its missing

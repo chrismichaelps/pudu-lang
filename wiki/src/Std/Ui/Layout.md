@@ -50,6 +50,9 @@ not shrunk; it overflows visibly and is clipped by the canvas.
 **Bounded arithmetic without widening on the hot path.** Lengths, grow weights, and viewport edges
 are refused above 2³⁰ and the node budget is capped at 2²⁴, so every sum of lengths in an admitted tree
 stays inside a 64-bit integer. Only the grow share, a product of two potentially large values, widens.
+The nesting budget is capped at 512: measuring and placing recurse once or more per level, and a
+larger budget would let a deep enough view exhaust the evaluator's call limit and stop the program
+rather than answer `DepthBudgetExceeded`. A budget above the cap is `InvalidBudget`.
 
 **Accessibility by construction.** Every role other than `Decoration` and `Group` requires a name,
 and placement refuses a tree that omits one. The semantics tree is derived from placement, so a frame
@@ -116,6 +119,9 @@ node is measured exactly once.
   pixel. _Rejected:_ per-child rounding; cumulative division is exact.
 - **Q:** Name the lookup `named` like the modifier? **A:** No. _Rationale:_ a module function and a
   trait method of one name invite ambiguity at call sites. _Rejected:_ `named` for both.
+- **Q:** Accept any nesting budget a caller names? **A:** No. _Rationale:_ with no ceiling, a budget
+  of 100,000 let 5,000 nested views stop the program, and views built from data reach such depths.
+  _Accepted:_ a 512 cap refused as `InvalidBudget`, beside the node budget's cap.
 
 Resolved Grill Log: placement is two passes with exact integer distribution, every refusal is typed,
 accessibility is derived from placement, and damage feeds canvas repaint with equality checked.

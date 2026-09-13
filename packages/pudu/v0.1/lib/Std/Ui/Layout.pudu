@@ -145,6 +145,15 @@ const MAX_TEXT: Int = 1048576
 /// The largest node budget a caller may request.
 const MAX_NODE_BUDGET: Int = 16777216
 
+/// The deepest nesting budget a caller may request.
+///
+/// Measuring and placing recurse once or more per level, and the evaluator
+/// bounds how deep calls may go, so a budget past that bound would let a deep
+/// enough view stop the whole program instead of answering
+/// `DepthBudgetExceeded`. A view built from data — a document rendered as nested
+/// views — reaches such depths without anyone writing them.
+const MAX_DEPTH_BUDGET: Int = 512
+
 /// Damage lists longer than this are merged into their bounding rectangle,
 /// because repainting one region is cheaper than clearing many.
 const DAMAGE_LIMIT: Int = 16
@@ -323,7 +332,7 @@ export fn placeWithin(
     Err(InvalidViewport(viewport.width, viewport.height))
   } else if maxNodes < 1 || maxNodes > MAX_NODE_BUDGET {
     Err(InvalidBudget(maxNodes))
-  } else if maxDepth < 0 {
+  } else if maxDepth < 0 || maxDepth > MAX_DEPTH_BUDGET {
     Err(InvalidBudget(maxDepth))
   } else {
     let limits = Limits{maxNodes: maxNodes, maxDepth: maxDepth}

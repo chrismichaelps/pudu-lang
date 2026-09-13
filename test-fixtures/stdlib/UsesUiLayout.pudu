@@ -402,5 +402,31 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // The nesting budget a caller may ask for is capped where placing stays inside
+  // the evaluator's call limit: the cap is accepted, one past it is refused, and a
+  // view nested deeper than the cap answers the budget error instead of stopping.
+  if let Ok(_) = Layout.placeWithin(&Layout.column([Layout.box()]), tenByTen, 16, 512) {
+    held = held + 1
+  }
+  if let Err(Layout.InvalidBudget(513)) = Layout.placeWithin(&Layout.box(), tenByTen, 16, 513) {
+    held = held + 1
+  }
+  if let Err(Layout.DepthBudgetExceeded(512)) =
+  Layout.placeWithin(&nested(5000), tenByTen, 65536, 512)
+  {
+    held = held + 1
+  }
+
   held
+}
+
+/// A box wrapped in `levels` columns.
+fn nested(levels: Int) -> Layout.View {
+  var view = Layout.box()
+  var level = 0
+  while level < levels {
+    view = Layout.column([view])
+    level = level + 1
+  }
+  view
 }
