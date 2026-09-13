@@ -20,6 +20,11 @@ tags: [changelog]
 - `Std.Diff.unifiedDiff` numbers a hunk side holding no lines by the line the change follows, so a
   zero-context insertion renders `@@ -2,0 +3,2 @@` as `patch` expects instead of one line late. The
   diff fixture now holds 12 claims.
+- `Std.Text` padding with an empty filler returns the text instead of looping forever: `padLeft`,
+  `padRight`, and `center` compute a whole-copy count. Scans and builders across the module walk
+  characters in order and join gathered pieces once instead of reading by position and appending per
+  character, so trimming, searching, grouping, comparison, and character maps are linear. The module
+  gains its missing vault mirror, and the text fixture now holds 91 claims.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

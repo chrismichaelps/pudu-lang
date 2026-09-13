@@ -84,7 +84,7 @@ testRuntimeEvaluation = do
         found to refuse rather than answer nothing. -}
     , counterexample
         "every text operation answers what it says it answers"
-        (textual === Just "82")
+        (textual === Just "91")
     {-| Every export of the option and result modules, each asked of a value
         that is there and one that is not. These two exist for the absent
         case, so a check that only covered the present one would be the half
