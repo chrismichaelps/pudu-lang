@@ -52,3 +52,35 @@ Resolved Grill Log:
 - **Q:** How are fallible transforms handled? **A:** Both pure and fallible mapping are supported:
   mapBounded collects arbitrary typed values U, while mapResultBounded unpacks Result[U, E] to
   preserve the first typed failure in input order.
+
+## Cancellation, scopes, and deadlines
+
+`cancel(worker)` stops a thread wherever it is, including while it sleeps or waits on a channel, and
+answers only once the thread has stopped, so anything it was using may be released afterwards. Joining
+a cancelled thread answers `Cancelled`; cancelling a thread that already finished changes nothing, and
+cancelling a token that names no thread answers `Missing`. A thread is started masked and unmasked only
+inside the handler that records its outcome, so a thread cancelled before its body begins still reports,
+and a join after a cancellation cannot wait forever.
+
+`scope(body)` gives a body a `Scope` to start threads into with `spawnIn`. Threads are recorded under a
+lock, so threads started into one scope from several threads are all kept. When the body succeeds, every
+thread is joined in start order and the first failure among them is the answer; when the body fails,
+every thread still running is cancelled and the body's failure is the answer. No thread started into a
+scope keeps running after `scope` returns.
+
+`withDeadline(millis, action)` races the action against a timer on two threads and cancels the loser. An
+action that answers in time answers its value, one that overruns answers `DeadlineExceeded(millis)`, one
+that failed before the deadline answers its failure, and a deadline below one millisecond is refused.
+
+Blocking waits inside the runtime are interruptible, so cancellation reaches sleeps, channel waits, and
+socket and file reads; a call held inside foreign code is not interrupted until it returns.
+
+Resolved Grill Log:
+- **Q:** Leave cancellation cooperative, with threads polling a flag? **A:** No. _Rationale:_ a thread
+  blocked in a sleep or a wait never reaches a poll, which is exactly the thread a caller needs to stop.
+  _Rejected:_ polling flags as the only mechanism.
+- **Q:** Keep running children when a scope's body fails? **A:** No. _Rationale:_ their results have no
+  consumer once the body has given up, and running on holds resources past the work's end. _Rejected:_
+  detached children.
+- **Q:** Report every child failure from a scope? **A:** The first, in start order. _Rationale:_ the same
+  deterministic rule `joinAll` uses. _Rejected:_ completion-order reporting.

@@ -155,6 +155,17 @@ dispatching via pure builtin dispatch without effect capabilities.
 Resolved Grill Log: Include WordMapMembersBuiltin in `isHashingBuiltin` so it dispatches through
 pure primitive dispatch rather than falling through to effect dispatch with E7012.
 
+## Masked thread start
+
+`spawnThread` forks its thread with asynchronous exceptions masked and unmasks them only inside the
+`try` that records the thread's outcome. A thread cancelled in the instant between being forked and
+entering its body therefore still writes its outcome slot, which is what lets `threadCancel` wait on
+that slot and a later join answer rather than wait forever.
+
+Resolved Grill Log: Fork unmasked and install the handler first thing in the body? No. _Rationale:_ an
+interrupt delivered before the handler is installed kills the thread without a report, and a join on
+it never returns. _Rejected:_ unmasked fork.
+
 ## Buffer and SwissTable call dispatch
 
 Include `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `BufferScanU64Builtin`,

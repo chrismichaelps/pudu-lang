@@ -19,7 +19,10 @@ concurrency resources in that evaluation's store at teardown.
 Tables use never-reused tokens. Channels use a `Seq`, so enqueue, dequeue, and pending-count remain
 constant-time while STM enforces capacity and close conditions. A mutex records the owning host
 thread; only that thread may release it, and an unlocked or foreign release is an `IoOutcome`
-failure. Cell swaps are atomic and joined outcomes are replayable. Host exceptions become
+failure. Cell swaps are atomic and joined outcomes are replayable. `threadCancel` interrupts a thread
+and waits on its outcome slot before answering, so cancellation is complete rather than requested;
+cancelling a finished thread is a no-op and an unknown token is an `IoOutcome` failure. Blocking runtime
+waits are interruptible, while a call held inside foreign code stops only once it returns. Host exceptions become
 `IoOutcome` failures at the evaluator boundary. Stores are isolated per evaluation, and teardown
 cannot invalidate another embedded program's tokens.
 ## Grill Log
