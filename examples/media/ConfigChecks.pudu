@@ -1,0 +1,45 @@
+module ConfigChecks
+
+import Studio.Config as Config
+
+export fn main() -> Int {
+  var held = 0
+  let baseline = Config.defaults()
+
+  if Config.load(None) == Ok(baseline) { held = held + 1 }
+  if Config.decode(validText()) == Ok(baseline) { held = held + 1 }
+  if let Err(Config.MissingField("window")) = Config.decode("\{\}") { held = held + 1 }
+
+  let wrongWidth = validText().replace("\"width\":320", "\"width\":\"wide\"")
+  if let Err(Config.WrongType("window.width", "whole number")) = Config.decode(wrongWidth) {
+    held = held + 1
+  }
+
+  let narrow = validText().replace("\"width\":320", "\"width\":159")
+  if let Err(Config.InvalidRange("window.width", 159, 160, 1920)) = Config.decode(narrow) {
+    held = held + 1
+  }
+
+  let escaping = validText().replace(
+    "pudu-media-studio.wav",
+    "../pudu-media-studio.wav"
+  )
+  if let Err(Config.InvalidText("audio.wavName")) = Config.decode(escaping) { held = held + 1 }
+
+  let tooShort = validText().replace("\"frames\":8000", "\"frames\":100")
+  if let Err(Config.AudioTooShort(100, 8000)) = Config.decode(tooShort) {
+    held = held + 1
+  }
+
+  held
+}
+
+fn validText() -> Str {
+  "\{\"window\":\{\"caption\":\"Pudu Media Studio\",\"width\":320,\"height\":180," +
+  "\"resizable\":false,\"maxPixels\":57600\},\"audio\":\{\"sampleRate\":8000," +
+  "\"channels\":1,\"frames\":8000,\"sliceFrames\":4000,\"period\":80," +
+  "\"amplitude\":5000,\"waveform\":\"triangle\",\"wavName\":" +
+  "\"pudu-media-studio.wav\"\},\"video\":\{\"rateFrames\":24,\"rateSeconds\":1," +
+  "\"frames\":24,\"pumpMilliseconds\":42\},\"report\":\{\"fileName\":" +
+  "\"pudu-media-studio-report.json\"\}\}"
+}
