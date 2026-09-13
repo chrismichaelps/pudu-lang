@@ -43,6 +43,12 @@ tags: [changelog]
   matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
   `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
   exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- Runtime effects no longer turn interrupts into failures. Sockets, TLS, entropy, compression, desktop
+  teardown, and thread teardown each caught every exception, including Ctrl-C: a server blocked in
+  `Net.accept` answered `Err(Other("user interrupt"))` and a serving loop would keep running. They now
+  share `Pudu.Eval.Io.trySynchronous`, which reports an action's own failures and re-raises
+  asynchronous exceptions, replacing two private copies of the same filter. Ten runs interrupted
+  while blocked in accept each exited 130 within 80 ms of the signal.
 - Desktop pumping answers interrupts. One native pump for the whole requested duration held Ctrl-C
   until it ended, and the runtime then reported it as `PlatformFailure("user interrupt")` while the
   program continued: a 10-second pump interrupted at 1.5 s ran to 10.28 s and exited 0. A pump now

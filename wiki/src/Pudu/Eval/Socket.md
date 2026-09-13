@@ -30,6 +30,11 @@ the peer may already have received a prefix, so no later operation can safely re
   close another program's listener. _Rejected:_ global teardown.
 - **Q:** Set a process-wide or socket-wide timeout? **A:** No. _Rationale:_ one operation's budget
   must not alter another operation on the same runtime resource. _Rejected:_ ambient timeout state.
+- **Q:** Catch every exception around a socket operation? **A:** No. _Rationale:_ Ctrl-C delivered to
+  a program blocked in accept came back as `Err(Other("user interrupt"))`, and a serving loop would
+  retry it. _Accepted:_ `trySynchronous` from [[Eval Io]] at every resolver, listen, accept, connect,
+  query, and close, so an interrupt stops the program; ten runs interrupted inside accept each exited
+  130 within 80 ms. _Rejected:_ a local exception filter per module.
 ## Referenced by
 [[src/Pudu/Eval/_MOC]] · [[Std Net]] · [[Eval Effect]]
 

@@ -13,21 +13,14 @@ module Pudu.Eval.Desktop
   ) where
 
 import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
-import Control.Exception
-  ( SomeAsyncException
-  , SomeException
-  , displayException
-  , fromException
-  , throwIO
-  , try
-  )
+import Control.Exception (displayException)
 import qualified Data.ByteString as Bytes
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as TextEncoding
-import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
 
 #ifdef PUDU_DARWIN_DESKTOP
 import Data.Int (Int32)
@@ -151,7 +144,7 @@ closeDesktopStore store = do
   mapM_ closeOne windows
  where
   closeOne (NativeWindow pointer) = do
-    _ <- try (cDesktopClose pointer) :: IO (Either SomeException CInt)
+    _ <- trySynchronous (cDesktopClose pointer)
     pure ()
 #else
 closeDesktopStore _ = pure ()
@@ -173,12 +166,10 @@ withWindow store token action =
     program continue as though the window had merely misbehaved. -}
 guarded :: IO (IoOutcome a) -> IO (IoOutcome a)
 guarded action = do
-  outcome <- try action
-  case outcome of
-    Left problem
-      | Just _ <- (fromException problem :: Maybe SomeAsyncException) -> throwIO problem
-      | otherwise -> pure (IoFailed (Text.pack (displayException (problem :: SomeException))))
-    Right value -> pure value
+  outcome <- trySynchronous action
+  pure $ case outcome of
+    Left problem -> IoFailed (Text.pack (displayException problem))
+    Right value -> value
 
 #ifdef PUDU_DARWIN_DESKTOP
 castBytes :: Ptr a -> Ptr Word8

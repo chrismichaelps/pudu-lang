@@ -24,7 +24,9 @@ and waits on its outcome slot before answering, so cancellation is complete rath
 cancelling a finished thread is a no-op and an unknown token is an `IoOutcome` failure. Blocking runtime
 waits are interruptible, while a call held inside foreign code stops only once it returns. Host exceptions become
 `IoOutcome` failures at the evaluator boundary. Stores are isolated per evaluation, and teardown
-cannot invalidate another embedded program's tokens.
+cannot invalidate another embedded program's tokens. Teardown stops remaining threads through
+`trySynchronous` from [[Eval Io]], so an interrupt arriving while threads are stopped still ends the
+program rather than being absorbed as a failed stop.
 ## Grill Log
 - **Q:** Copy host resources inside `Value`? **A:** No. _Rationale:_ copying identity-bearing
   resources would create multiple owners of one state. _Rejected:_ unbounded queues; swallowed worker

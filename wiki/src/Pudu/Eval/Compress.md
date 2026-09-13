@@ -24,7 +24,8 @@ API reference: https://hackage.haskell.org/package/zlib-0.7.1.0/docs/Codec-Compr
 - Resolved: reuse zlib rather than implement Huffman decoding and LZ matching in Pudu.
 - Resolved: enforce output limits during incremental decoding, never after full allocation.
 - Resolved: reject extra members/trailing bytes so parsing cannot silently discard input.
-- Resolved: propagate asynchronous exceptions; translate synchronous host failures only.
+- Resolved: propagate asynchronous exceptions; translate synchronous host failures only, through
+  the shared `trySynchronous` in [[Eval Io]] rather than a private copy of the filter.
 
 ## Referenced by
 

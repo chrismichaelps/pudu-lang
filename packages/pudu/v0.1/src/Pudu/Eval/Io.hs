@@ -27,6 +27,7 @@ module Pudu.Eval.Io
   , temporaryDirectoryPath
   , testDirectoryExists
   , testFileExists
+  , trySynchronous
   , writeStandardError
   , writeStandardErrorPart
   , writeStandardOutput
@@ -35,7 +36,14 @@ module Pudu.Eval.Io
   ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (IOException, try)
+import Control.Exception
+  ( IOException
+  , SomeAsyncException
+  , SomeException
+  , fromException
+  , try
+  , tryJust
+  )
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as TextIO
@@ -72,6 +80,20 @@ import System.Exit (ExitCode (ExitFailure), exitSuccess)
 import qualified System.Exit
 import System.IO (hClose, hFlush, hIsEOF, hPutStrLn, openBinaryTempFile, stderr, stdin, stdout)
 import System.IO.Error (doesNotExistErrorType, mkIOError)
+
+{-| An action's failure as a value, for every failure the action itself raised.
+
+    An asynchronous exception — an interrupt, a thread being killed, a timeout
+    firing — is re-raised instead. It did not come from the action, and turning
+    it into a value is how Ctrl-C became an ordinary failure a server loop
+    retried: a process blocked in accept answered `user interrupt` as though a
+    connection had failed, and kept running. -}
+trySynchronous :: IO a -> IO (Either SomeException a)
+trySynchronous = tryJust synchronousOnly
+ where
+  synchronousOnly problem = case fromException problem :: Maybe SomeAsyncException of
+    Just _ -> Nothing
+    Nothing -> Just problem
 
 {-| @Eval.Io.Outcome — what an effect produced, or why it did not.
 

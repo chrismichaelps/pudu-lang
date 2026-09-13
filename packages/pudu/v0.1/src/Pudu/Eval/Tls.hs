@@ -29,7 +29,7 @@ module Pudu.Eval.Tls
   , upgradeTlsWithin
   ) where
 
-import Control.Exception (SomeAsyncException, SomeException, bracketOnError, fromException, mask, mask_, onException, try, tryJust)
+import Control.Exception (SomeException, bracketOnError, mask, mask_, onException)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LazyByteString
 import Data.Default.Class (def)
@@ -41,7 +41,7 @@ import qualified Data.Text as Text
 import qualified Network.Socket as Net
 import qualified Network.TLS as Tls
 import qualified Network.TLS.Extra.Cipher as Cipher
-import Pudu.Eval.Io (IoOutcome (..))
+import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
 import Pudu.Eval.Socket (SocketStore, takeSocket)
 import qualified System.Timeout as Timeout
 import qualified System.X509 as X509
@@ -190,7 +190,7 @@ closeTlsAtWithin store token millis = do
     Nothing -> pure (IoDone ())
     Just secured -> do
       farewell <- attemptWithin millis (Tls.bye (securedContext secured))
-      _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
+      _ <- trySynchronous (Net.close (securedSocket secured))
       pure $ case farewell of
         Right Nothing -> IoFailed timeoutMessage
         _ -> IoDone ()
@@ -202,7 +202,7 @@ closeTlsStore store = do
   mapM_ stopQuietly (IntMap.elems table)
  where
   stopQuietly secured = do
-    _ <- try (releaseQuietly secured) :: IO (Either SomeException ())
+    _ <- trySynchronous (releaseQuietly secured)
     pure ()
 
 {-| A goodbye that cannot itself fail the close.
@@ -212,8 +212,8 @@ closeTlsStore store = do
     fault. The socket is closed either way. -}
 releaseQuietly :: Secured -> IO ()
 releaseQuietly secured = do
-  _ <- try (Tls.bye (securedContext secured)) :: IO (Either SomeException ())
-  _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
+  _ <- trySynchronous (Tls.bye (securedContext secured))
+  _ <- trySynchronous (Net.close (securedSocket secured))
   pure ()
 
 withSecured :: TlsStore -> Int -> (Secured -> IO (IoOutcome a)) -> IO (IoOutcome a)
@@ -225,8 +225,8 @@ withSecured store token action = do
 
 attemptWithin :: Integer -> IO a -> IO (Either SomeException (Maybe a))
 attemptWithin millis action
-  | millis < 0 = fmap (fmap Just) (tryJust synchronousOnly action)
-  | otherwise = tryJust synchronousOnly (Timeout.timeout (microseconds millis) action)
+  | millis < 0 = fmap (fmap Just) (trySynchronous action)
+  | otherwise = trySynchronous (Timeout.timeout (microseconds millis) action)
 
 microseconds :: Integer -> Int
 microseconds millis =
@@ -243,7 +243,7 @@ invalidateTls store token = do
   case taken of
     Nothing -> pure ()
     Just secured -> do
-      _ <- try (Net.close (securedSocket secured)) :: IO (Either SomeException ())
+      _ <- trySynchronous (Net.close (securedSocket secured))
       pure ()
 
 {-| Upgrade only after the application protocol has agreed to TLS. Ownership
@@ -267,15 +267,10 @@ upgradeTlsWithin sockets store token host millis = mask $ \restore -> do
             Tls.handshake context
             pure Secured{securedContext = context, securedSocket = socket, securedHost = host}
           discard = do
-            _ <- try (Net.close socket) :: IO (Either SomeException ())
+            _ <- trySynchronous (Net.close socket)
             pure ()
       attempted <- restore (attemptWithin millis handshake) `onException` discard
       case attempted of
         Left problem -> discard >> pure (IoFailed (Text.pack (show problem)))
         Right Nothing -> discard >> pure (IoFailed timeoutMessage)
         Right (Just secured) -> (IoDone <$> remember store secured) `onException` discard
-
-synchronousOnly :: SomeException -> Maybe SomeException
-synchronousOnly problem = case fromException problem :: Maybe SomeAsyncException of
-  Just _ -> Nothing
-  Nothing -> Just problem
