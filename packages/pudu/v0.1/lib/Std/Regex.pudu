@@ -66,8 +66,18 @@ export type RegexError
   | TrailingBackslash
   | UnknownEscape(Int)
   | NegatedShorthandInClass(Int)
+  | TooDeep(Int)
 /// The search gave up before deciding. See `stepLimit`.
   | StepLimit
+
+/// The most groups a pattern may nest.
+///
+/// Compiling recurses through several readers for each open group, and the
+/// evaluator bounds how deep calls may go, so a pattern nested past that bound
+/// would stop the whole program rather than answer an error. A pattern is often
+/// written by someone other than whoever runs it, so this bound refuses deeper
+/// nesting as `TooDeep`, at the group that passed it.
+const MAX_GROUP_DEPTH: Int = 256
 
 /// How many instructions one search may run before it gives up.
 ///
@@ -116,7 +126,7 @@ type Build = { pos: Int, groups: Int, classes: Array[CharClass] }
 /// A pattern read from a file or a form needs none of that.
 export fn compile(pattern: Str) -> Result[Regex, RegexError] {
   let chars = pattern.chars()
-  let built = parseAlternation(&chars, Build{pos: 0, groups: 0, classes: []}) ?
+  let built = parseAlternation(&chars, Build{pos: 0, groups: 0, classes: []}, 0) ?
   let body = built[0]
   let state = built[1]
   if state.pos < chars.length() {
@@ -152,8 +162,14 @@ export fn unmatchable() -> Regex {
 }
 
 /// `a|b|c`, the widest thing a pattern can be.
-fn parseAlternation(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
-  let firstPair = parseConcat(chars, state) ?
+///
+/// `depth` counts the groups open around this alternation.
+fn parseAlternation(
+  chars: &Array[Char],
+  state: Build,
+  depth: Int
+) -> Result[(Array[Inst], Build), RegexError] {
+  let firstPair = parseConcat(chars, state, depth) ?
   var branches = [firstPair[0]]
   var current = firstPair[1]
   while current.pos < chars.length() && chars[current.pos] == '|' {
@@ -161,7 +177,7 @@ fn parseAlternation(chars: &Array[Char], state: Build) -> Result[(Array[Inst], B
         pos: current.pos + 1,
         groups: current.groups,
         classes: current.classes
-      }) ?
+      }, depth) ?
     branches = branches.push(next[0])
     current = next[1]
   }
@@ -199,11 +215,15 @@ fn joinBranches(branches: &Array[Array[Inst]]) -> Array[Inst] {
 }
 
 /// A run of repeated pieces, one after another.
-fn parseConcat(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+fn parseConcat(
+  chars: &Array[Char],
+  state: Build,
+  depth: Int
+) -> Result[(Array[Inst], Build), RegexError] {
   var emitted: Array[Inst] = []
   var current = state
   while current.pos < chars.length() && chars[current.pos] != '|' && chars[current.pos] != ')' {
-    let piece = parseRepeat(chars, current) ?
+    let piece = parseRepeat(chars, current, depth) ?
     let instructions = piece[0]
     var i = 0
     while i < instructions.length() {
@@ -216,8 +236,12 @@ fn parseConcat(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build)
 }
 
 /// One piece, and whatever repetition was written after it.
-fn parseRepeat(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
-  let atom = parseAtom(chars, state) ?
+fn parseRepeat(
+  chars: &Array[Char],
+  state: Build,
+  depth: Int
+) -> Result[(Array[Inst], Build), RegexError] {
+  let atom = parseAtom(chars, state, depth) ?
   var body = atom[0]
   var current = atom[1]
   if current.pos >= chars.length() {
@@ -376,13 +400,17 @@ fn appendAll(left: &Array[Inst], right: &Array[Inst]) -> Array[Inst] {
 }
 
 /// One indivisible piece: a group, a set, a wildcard, an anchor, or a literal.
-fn parseAtom(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+fn parseAtom(
+  chars: &Array[Char],
+  state: Build,
+  depth: Int
+) -> Result[(Array[Inst], Build), RegexError] {
   if state.pos >= chars.length() {
     return Ok(([], state))
   }
   let head = chars[state.pos]
   if head == '(' {
-    return parseGroup(chars, state)
+    return parseGroup(chars, state, depth)
   }
   if head == '[' {
     return parseClass(chars, state)
@@ -413,8 +441,15 @@ fn advanced(state: Build, by: Int) -> Build {
 }
 
 /// `(...)` and `(?:...)`.
-fn parseGroup(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build), RegexError] {
+fn parseGroup(
+  chars: &Array[Char],
+  state: Build,
+  depth: Int
+) -> Result[(Array[Inst], Build), RegexError] {
   let open = state.pos
+  if depth >= MAX_GROUP_DEPTH {
+    return Err(TooDeep(open))
+  }
   var inner = state.pos + 1
   var capturing = true
   if inner + 1 < chars.length() && chars[inner] == '?' && chars[inner + 1] == ':' {
@@ -431,7 +466,7 @@ fn parseGroup(chars: &Array[Char], state: Build) -> Result[(Array[Inst], Build),
       pos: inner,
       groups: opened,
       classes: state.classes
-    }) ?
+    }, depth + 1) ?
   let after = parsed[1]
   if after.pos >= chars.length() || chars[after.pos] != ')' {
     return Err(UnbalancedParen(open))
@@ -932,6 +967,8 @@ export fn explain(reason: &RegexError) -> Str {
     case UnknownEscape(at) => "the escape at " + display(at) + " means nothing here"
     case NegatedShorthandInClass(at) =>
     "the shorthand at " + display(at) + " is already negated; write it outside the set"
+    case TooDeep(at) =>
+    "the group at " + display(at) + " nests deeper than " + display(MAX_GROUP_DEPTH) + " levels"
     case StepLimit => "the search gave up before deciding"
   }
 }

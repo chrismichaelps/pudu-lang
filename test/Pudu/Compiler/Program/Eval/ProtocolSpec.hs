@@ -270,7 +270,7 @@ testProtocolEvaluation = do
         up and says so rather than running. -}
     , counterexample
         "patterns compile, match, capture, replace, and refuse to run away"
-        (regexEngine === Just "24")
+        (regexEngine === Just "27")
     {-| What can be checked from inside one process: that the platform can hear
         a request to stop, and that a program nobody has asked to stop says so.
         Whether an actual signal reaches a running program is checked by

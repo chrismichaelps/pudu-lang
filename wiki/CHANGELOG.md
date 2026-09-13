@@ -43,6 +43,10 @@ tags: [changelog]
   matched `ab`, `a/**/b` matched `a/xb`, and a bare `**/` matched every path, so an ignore entry
   `**/node_modules` caught `my_node_modules`. A differential run over 980 pattern and path pairs found
   exactly those cases, now `false`, and nothing newly accepted. The fixture holds 29 claims.
+- `Std.Regex.compile` bounds group nesting at 256 levels and answers the new `RegexError.TooDeep` at
+  the opening bracket, where a pattern of 5,000 nested groups exhausted the evaluator's call limit and
+  stopped the program. Searches were already bounded by `stepLimit`. `Std.Regex` gains its missing
+  vault mirror.
 - `Std.Yaml` bounds block nesting at 512 levels and answers the new `YamlError.TooDeep` at the line
   that opened the block too deep, where 3,000 nested mappings exhausted the evaluator's call limit and
   stopped the program. The YAML fixture holds 20 claims.

@@ -39,6 +39,7 @@ tags: [moc, module, stdlib]
 - [[Std Toml]] — TOML 1.0 configuration with exact numeric/time spellings.
 - [[Std Yaml]] — the configuration subset of YAML, refusing anchors, tags, and merge keys, with bounded nesting.
 - [[Std Glob]] — path patterns with segment-bound `*`, crossing `**`, sets, and a linear matcher.
+- [[Std Regex]] — compiled regular expressions with a step bound and bounded group nesting.
 - [[Std Toml Read]] — turning configuration text into that model.
 - [[Std Toml Scan]] — the lexical layer beneath the reader.
 - [[Std Path]] — host-aware lexical path construction and decomposition.
