@@ -91,7 +91,7 @@ fn readRequest(
   let split = Read.until(connection, &ByteSeq.fromText("\r\n\r\n"), headLimit, expires)
   if let Err(_) = split { return Err(badRequest("the head did not arrive")) }
   let pair = Result.unwrapOr(split, (ByteSeq.empty(), ByteSeq.empty()))
-  let head = Result.unwrapOr(ByteSeq.toText(&pair[0]), "")
+  let Ok(head) = ByteSeq.toText(&pair[0]) else { return Err(badRequest("the head is not UTF-8 text")) }
   let parsed = Message.parseHead(head)
   if let Err(problem) = parsed { return Err(badRequest(Message.explain(&problem))) }
   let message = Result.unwrapOr(parsed, emptyRequest())
@@ -110,11 +110,17 @@ fn readRequest(
     if let Err(_) = more { return Err(badRequest("the body did not arrive")) }
     payload = carried.concat(Result.unwrapOr(more, ByteSeq.empty()))
   }
+  // A request carries its body as text. A body that is not UTF-8 is refused
+  // rather than handed on as empty text, which a handler could not tell apart
+  // from a request that sent nothing.
+  let Ok(body) = ByteSeq.toText(&payload) else {
+    return Err(badRequest("the body is not UTF-8 text"))
+  }
   let whole = Http.Request {
     method: message.method,
     target: message.target,
     headers: message.headers,
-    body: Result.unwrapOr(ByteSeq.toText(&payload), "")
+    body: body
   }
   Ok(
     Route.Request {

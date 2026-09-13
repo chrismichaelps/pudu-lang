@@ -31,6 +31,11 @@ tags: [changelog]
 - `Std.Xml` and `Std.Toml` bound nesting at 512 levels and answer the new `TooDeep` error at the
   opening position, where a deeply nested document previously exhausted the evaluator's call limit
   and stopped the program. `Std.Xml` gains its missing vault mirror.
+- `Std.Http.Safe.framing` refuses a transfer encoding whose final coding is not exactly `chunked` as
+  the new `UnsupportedEncoding`. A `gzip` or `chunked, gzip` request was framed as an empty body,
+  leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
+  passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
+  handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

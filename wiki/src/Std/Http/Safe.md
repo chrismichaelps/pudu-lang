@@ -25,6 +25,12 @@ lengths that disagree, is not an ambiguity to resolve: it is a message built to 
 by two things in a chain, and adopting a precedence rule is how the two readers come to disagree.
 There is no rule, so there is nothing for an attacker to exploit the difference between.
 
+**A transfer encoding must end in chunked.** The codings of every `Transfer-Encoding` header are read
+in order, and anything whose final coding is not exactly `chunked` answers `UnsupportedEncoding`. A
+message encoded some other way states no end for its body; a reader that took it as empty would read
+the body's bytes as the next request, which is one request smuggled inside another. A coding that
+merely contains the word, such as `notchunked`, is not chunked.
+
 **A line break in a header is refused rather than escaped.** Escaping guesses what the sender meant;
 no legitimate value contains one, so refusing loses nothing and admits nothing.
 
@@ -58,10 +64,14 @@ fetch is a way to reach what only the server can reach.
   _Rationale:_ a service that genuinely must reach an internal host exists, and a refusal it cannot
   lift would be worked around outside this module, where nothing checks anything. _Rejected:_ an
   absolute prohibition.
+- **Q:** Treat a transfer encoding without chunked as a body of no length? **A:** No. _Rationale:_ its
+  bytes stay on the connection and are read as the next request. _Accepted:_ `UnsupportedEncoding`
+  unless the final coding is exactly `chunked`. _Rejected:_ a substring test for the word.
 
 ## Single-pass framing header inspection
 
-`bodyLength` and `isChunked` inspect headers in a consolidated traversal, avoiding repeated lowercasing passes across all header names.
+`bodyLength` and `isChunked` inspect headers in a consolidated traversal that collects every stated
+length and every transfer coding at once, avoiding repeated lowercasing passes across header names.
 
 Resolved Grill Log: framing validation must not multiply string allocations by scanning the header list independently for every property; one traversal extracts Content-Length and Transfer-Encoding simultaneously.
 

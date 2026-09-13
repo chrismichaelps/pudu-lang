@@ -163,7 +163,7 @@ testServiceEvaluation = do
         encoded ascent, and an address only the server can reach. -}
     , counterexample
         "the web layer refuses what it is supposed to refuse"
-        (refused === Just "82")
+        (refused === Just "86")
     {-| That what a schema change should do is decided without a database: a
         migration edited after it was applied stops everything, because both
         databases report the same version from then on and nothing later can

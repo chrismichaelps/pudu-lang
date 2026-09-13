@@ -126,7 +126,7 @@ testProtocolEvaluation = do
         arriving and a reply going back are checked over a real socket. -}
     , counterexample
         "a server routes, wraps, and answers over a connection"
-        (serving === Just "36")
+        (serving === Just "37")
     {-| That a client bounds what a request may cost and where it may go: an
         address the network trusts is refused unless the caller named it, and
         refused again at every redirect rather than only at the first, since a

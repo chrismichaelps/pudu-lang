@@ -130,7 +130,7 @@ export fn main() -> Int {
 
     let listening = Server.server(&routed)
     let worker = Concurrent.start(fn() -> () {
-        let _served = Server.run(&listening, &live, 2)
+        let _served = Server.run(&listening, &live, 3)
         ()
       })
     if Result.isOk(&worker) { held = held + 1 }
@@ -151,6 +151,17 @@ export fn main() -> Int {
     )
     if posted.contains("201") { held = held + 1 }
     if posted.contains("hello") { held = held + 1 }
+
+    // A body that is not UTF-8 is refused rather than handed to the handler as
+    // empty text, which it could not tell apart from a request that sent none.
+    let binary = fetchBytes(
+      port,
+        &ByteSeq.join(&[
+          ByteSeq.fromText("POST /users HTTP/1.1\r\nHost: x\r\nConnection: close\r\nContent-Length: 2\r\n\r\n"),
+          ByteSeq.fromArray(&[255u8, 254u8])
+        ])
+    )
+    if binary.contains("400") && !binary.contains("201") { held = held + 1 }
 
     let _stopped = Server.stop(&live)
     if let Ok(started) = worker {
@@ -274,6 +285,16 @@ fn headerOf(answer: &Http.Response, name: Str) -> Str {
     if entry[0] == name { found = entry[1] }
   }
   found
+}
+
+/// Send raw request bytes and read everything that comes back.
+fn fetchBytes(port: Int, request: &Bytes) -> Str {
+  let outcome = Net.withConnection("127.0.0.1", port, fn(connection: Net.Connection) -> Result[Str, Net.NetError] {
+      Net.send(&connection, request) ?
+      let whole = Net.receiveAll(&connection) ?
+      Ok(Result.unwrapOr(ByteSeq.toText(&whole), ""))
+    })
+  Result.unwrapOr(outcome, "")
 }
 
 /// Send a raw request and read everything that comes back.
