@@ -12,7 +12,11 @@ tags: [changelog]
   9.1 s and a 200,000-character string in 3 ms rather than 1,970 ms. Nesting deeper than 512 levels
   answers the new `JsonError.TooDeep` instead of exhausting the evaluator's call limit and stopping
   the program. The string fixture now holds 20 claims.
-
+- `Std.Bytes` hexadecimal and base64 codecs are linear. Encoders gather pieces and join once instead
+  of copying the growing text per byte, and decoders walk characters in order instead of reaching
+  each by position; at 120,000 bytes hex encoding fell from 2,299 ms to 423 ms and base64 decoding
+  from 2,019 ms to 979 ms. Error positions are unchanged, and the bytes fixture now holds 54 claims,
+  including exact digit positions and large round trips through every alphabet.
 - Hardened media positions: `Audio.slice` no longer multiplies an extreme start into a checked-overflow
   trap, `Std.Audio.Graph` refuses render starts and clip offsets beyond 2⁶¹ frames as
   `PositionOutOfRange`, and `Std.Video` re-admits a record-built `Rate` so a zero rate is

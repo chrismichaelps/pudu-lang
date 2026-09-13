@@ -98,7 +98,7 @@ testProtocolEvaluation = do
         agrees with itself however wrong both halves are. -}
     , counterexample
         "bytes slice, search, and carry the published base64 and hex vectors"
-        (byteSequences === Just "49")
+        (byteSequences === Just "54")
     {-| The three things that make a separated file harder than splitting on
         the separator: a quoted field, a quote inside one, and a separator or
         newline that a quoted field swallows. -}

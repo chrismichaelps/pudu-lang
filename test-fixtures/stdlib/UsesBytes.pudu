@@ -74,6 +74,19 @@ export fn main() -> Int {
   if let Err(BadLength(_)) = B.decodeHex("abc") { held = held + 1 }
   if let Err(BadDigit(_)) = B.decodeHex("zz") { held = held + 1 }
 
+  // A bad digit is reported where its pair or group begins, and large inputs
+  // round trip through both codecs unchanged.
+  if let Err(BadDigit(2)) = B.decodeHex("00zz") { held = held + 1 }
+  if let Err(BadDigit(4)) = B.decodeBase64("Zm9v!A==") { held = held + 1 }
+  held = held + decodesTo("Zm8=", "fo")
+  let large = B.repeat(&B.fromArray(&[0u8, 127u8, 128u8, 255u8, 61u8]), 6000)
+  if B.decodeHex(B.encodeHex(&large)) == Ok(large) { held = held + 1 }
+  if B.decodeBase64(B.encodeBase64(&large)) == Ok(large) &&
+  B.decodeBase64Url(B.encodeBase64Url(&large)) == Ok(large)
+  {
+    held = held + 1
+  }
+
   // A number written and read back is the number, at every width and both
   // orders, and the two orders disagree about the same bytes.
   held = held + readsBack32Be(B.putU32Be(305419896u32), 305419896u32)
