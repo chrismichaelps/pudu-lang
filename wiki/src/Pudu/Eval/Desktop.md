@@ -41,6 +41,10 @@ the token for retry; only confirmed native release removes it.
   already blocking that queue.
 - **Q:** Keep native handles after close for idempotence? **A:** No. _Rationale:_ stale tokens must
   fail deterministically and cannot alias a later resource. _Rejected:_ pointer reuse as identity.
+- **Q:** Pump events through an unsafe foreign call? **A:** No. _Rationale:_ a pump waits up to a
+  caller-chosen duration, and an unsafe call holds every other capability out of garbage collection
+  for that whole wait. _Accepted:_ a safe call, which keeps the bound main thread's OS thread; open,
+  present, and close stay unsafe because they return without waiting.
 
 ## Referenced by
 

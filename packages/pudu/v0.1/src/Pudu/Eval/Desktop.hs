@@ -171,7 +171,10 @@ foreign import ccall unsafe "pudu_desktop_open"
 foreign import ccall unsafe "pudu_desktop_present"
   cDesktopPresent :: Ptr () -> CInt -> CInt -> Ptr Word8 -> CSize -> IO CInt
 
-foreign import ccall unsafe "pudu_desktop_pump"
+-- Pumping waits for events up to a caller-chosen duration, so it is a safe
+-- call: an unsafe one would hold every other capability out of collection
+-- for that whole wait. A bound main thread keeps its OS thread either way.
+foreign import ccall safe "pudu_desktop_pump"
   cDesktopPump :: Ptr () -> CInt -> IO CInt
 
 foreign import ccall unsafe "pudu_desktop_close"
