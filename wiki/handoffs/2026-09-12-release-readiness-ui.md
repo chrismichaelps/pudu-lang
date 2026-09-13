@@ -112,19 +112,37 @@ order, hit testing, painting, and damage regions.
   while the exact 21-check graph fixture remained unchanged. The unrestricted full suite passes;
   the earlier `UsesNet` count of one was reproduced only under a sandbox that blocks loopback and
   passes at its exact count of 22 under the release environment. PATH copies are byte-identical.
+- Release hardening — the active role transitions to **Validation** for a first-release audit of
+  media, UI, and the standard library, committed directly to `dev` in reviewable slices:
+  `1a1bbc3` device playback lands with pure kernels classified as pure, and the queue flushed and
+  drained before success so the final buffers are heard; `63397f3` desktop pumping becomes a safe
+  foreign call; `376a493` extreme audio positions and record-built zero video rates are refused rather
+  than trapping; `367365c` JSON decoding is linear and nesting past 512 levels is `TooDeep`; `74c5a4d`
+  hex and base64 codecs are linear; `aa5c766` empty unified-diff hunk sides are numbered as `patch`
+  reads them; `fb728db` empty-filler padding no longer hangs and `Std.Text` scans are linear;
+  `5a92c0e` CSV reading is linear; `ae945e2` XML and TOML nesting is bounded. The HTTP slice refuses a
+  transfer encoding not ending in `chunked` and a non-UTF-8 head or body. Every slice kept its exact
+  fixtures and added claims for the defect it fixed; the optimized suite, formatter, checker,
+  diagnostic-code, API-coverage, and LSP gates pass. `Std.Text` and `Std.Xml` gained missing mirrors.
+- Audit findings left open, each a named gap rather than a silent one: the one-shot device play is
+  not cancellable before its 60-second deadline; `Std.Http.Server` requests carry no byte body, so
+  binary uploads are refused rather than delivered; `Std.Toml.Read` still reads characters by
+  position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
+  per character on inputs that are normally short; a unified diff does not mark a missing final
+  newline; and `Str.charAt` walks the UTF-8 prefix, so any positional scanner a program writes grows
+  with the square of its text.
 
 ## Exact next action
 
-Continue exclusively with native UI, audio, and video. Evolve bounded device playback into a
-persistent Pudu-owned stream with explicit negotiated format, device selection/change,
-interruption/device-loss, underrun telemetry, pause/resume/volume, and one observable media clock;
-then synchronize picture presentation to that clock. After that, build the first Pudu **space** application
-loop over [[Std Ui Desktop]] and [[Std Ui Screen]]: translate native pointer/key/text/close events into
-screen inputs, present only after state or focus changes, and expose lifecycle transitions without
-copying SwiftUI's protocol/property-wrapper graph. Then add menus, settings, documents, multiple
-windows, IME, and platform accessibility export in independently grilled slices. Keep every exact
-fixture as the semantic oracle and add percentile latency/memory gates before claiming interactive or
-real-time performance.
+Give `Std.Http.Server` requests an exact byte body beside the text body so multipart uploads of
+binary files are delivered, then convert `Std.Toml.Read` to the cursor pattern `Std.Json` uses and
+add a cancellation path to device playback before the streaming session. After those, continue the
+native media roadmap: a persistent Pudu-owned stream with negotiated format, device change,
+interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
+presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and
+[[Std Ui Screen]], translating native pointer/key/text/close events into screen inputs. Keep every
+exact fixture as the semantic oracle and add percentile latency/memory gates before claiming
+interactive or real-time performance.
 
 ## Grill Log
 
