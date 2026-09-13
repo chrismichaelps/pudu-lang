@@ -30,6 +30,11 @@ modules. The macOS desktop adapter and Cocoa/CoreGraphics framework linkage are 
 `os(osx)`; other targets compile the typed unsupported implementation in [[Eval Desktop]].
 The framework-neutral desktop header is an explicit source-distribution input.
 
+The production `pudu` package contains the compiler library and executable only. Repository tests
+belong to [[Pudu Test Cabal Manifest]], a sibling package rooted where `test/` and `test-fixtures/`
+actually live. No component may escape this package through `..`: Cabal source archives reject such
+links, which made a clean `cabal install exe:pudu` fail even though in-tree builds worked.
+
 ## Grill Log
 
 - **Q:** Leave an extracted runtime module outside the library module list? **A:** No. Registration
@@ -39,10 +44,14 @@ The framework-neutral desktop header is an explicit source-distribution input.
 - **Q:** Link Apple frameworks on every target? **A:** No; target-only linkage belongs under Cabal's
   operating-system condition. The public Pudu module remains present and reports unsupported where
   no presenter exists.
+- **Q:** Keep the root test tree as `../../../test` in this package? **A:** No. _Rationale:_ Cabal
+  emits an unsafe archive link and refuses to reinstall the compiler. _Accepted:_ a separate root
+  test package in the same project, preserving `cabal test all` without copying sources.
 
 ## Referenced by
 
-[[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]]
+[[src/_MOC]] · [[Eval Foreign Resource]] · [[Eval Foreign Result]] · [[Eval Desktop]] ·
+[[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]]
 
 ## SQLite native adapter
 

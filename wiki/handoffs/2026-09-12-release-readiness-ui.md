@@ -34,6 +34,9 @@ shared compiler or standard-library contract; it exercises the already committed
 surface and records every missing desktop domain it exposes.
 After implementation, the active role transitions to **Validation** for formatter, focused fixture,
 WAV structure, real-window launch, and full-suite evidence.
+The installed-command failure transitions the active role to **Build/Release Engineer**, owning
+`packages/pudu/v0.1/pudu.cabal`, root `pudu-tests.cabal`, `cabal.project`, their mirrors, and install/
+source-archive gates. This bounded repair does not alter compiler or media semantics.
 
 Other work exists in the repository. This slice does not alter the preserved untracked website probe
 or the commits on `feature/228-std-prose`.
@@ -87,10 +90,14 @@ order, hit testing, painting, and damage regions.
   concrete real-time blocker. Seven headless configuration assertions cover success, type, range,
   path-containment, and duration failures. Speaker output, codecs, device clocks, and capture remain
   explicitly missing.
-- Packaging observation — `cabal check` still rejects a source archive because the existing test
-  suite uses `hs-source-dirs: ../../../test`, outside the nested package root. This predates the
-  presenter and does not affect its build or launch, but it remains a serious-release packaging gap.
-  It is recorded rather than expanded here because the active user direction is UI/audio/video only.
+- Packaging repair — the installed compiler that first ran Studio was stale and lacked `renamePath`
+  and desktop builtins; the ordinary reinstall then failed because the production package named
+  `../../../test`. Tests now live in a separate root `pudu-tests` package while the compiler source
+  archive is self-contained. Both manifests pass `cabal check`, `cabal sdist pudu` and
+  `cabal install exe:pudu` succeed, all 70 Haskell test modules compile and the full suite passes.
+  The refresh proof accepts the byte-identical `~/.cabal/bin` and `~/.local/bin` symlinks and proves
+  the path-resolved compiler through language, REPL, and LSP runs. The installed compiler then ran
+  the configured Studio, presented all 30 frames, and returned `Ok(30)`.
 
 ## Exact next action
 

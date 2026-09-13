@@ -50,13 +50,17 @@ if [ -z "$resolved" ]; then
 fi
 
 if [ "${#found[@]}" -gt 1 ] && [ "$resolved" != "$install_dir/pudu" ]; then
-  cat >&2 <<EOF
+  if cmp -s "$resolved" "$install_dir/pudu"; then
+    printf '  %s and %s are byte-identical\n' "$resolved" "$install_dir/pudu"
+  else
+    cat >&2 <<EOF
 
 $resolved comes before $install_dir/pudu on PATH, so the shell and editor keep
 running the older copy. Remove it, or put $install_dir first in PATH, then run
 this script again.
 EOF
-  exit 1
+    exit 1
+  fi
 fi
 
 # Every check below runs the resolved path rather than a worktree binary: what

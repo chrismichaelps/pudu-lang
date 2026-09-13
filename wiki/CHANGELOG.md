@@ -7,6 +7,11 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- Made the compiler source distribution installable: the production `pudu` package no longer points
+  outside its root for Haskell tests. A separate repository-root `pudu-tests` package preserves all
+  70 registered modules under `cabal test all`; both manifests pass `cabal check`, `cabal sdist pudu`
+  succeeds, and `cabal install exe:pudu` completes from the archive. The PATH-aware refresh proof now
+  accepts multiple byte-identical installs while still rejecting divergent stale binaries.
 - Added a desktop capability conformance ledger derived from user-visible AppKit responsibilities,
   with `WORKING`, `PARTIAL`, `MISSING`, and `EXCLUDED` evidence states. It intentionally measures
   complete application behavior rather than copying framework symbols or deprecated machinery.

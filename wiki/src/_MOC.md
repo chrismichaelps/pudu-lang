@@ -23,6 +23,11 @@ tags: [moc, module]
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 
 - [[Pudu Cabal Manifest]] — package components and explicit runtime module registration.
+- [[Pudu Cabal Project]] · [[Pudu Test Cabal Manifest]] — self-contained compiler packaging and the
+  repository-only regression package that preserves `cabal test all`.
+- [[Refresh Pudu Installation]] — PATH-aware installed-compiler replacement and behavior proof.
+- [[Pudu Test Cabal Manifest]] · [[Pudu Cabal Project]] — repository test ownership separated from
+  the installable compiler archive while preserving the full Cabal gate.
 - [[Service Evaluation Spec]] — exact-count application, database, HTML, and UI fixture contracts.
 - [[Runtime Evaluation Spec]] — exact-count language, runtime, concurrency, filesystem, process, and cryptography fixture contracts.
 - [[Uses Ui Canvas]] — exact-pixel and typed-refusal coverage for native software rendering.
