@@ -37,6 +37,7 @@ tags: [moc, module, stdlib]
 - [[Std Compress Gzip]] — RFC 1952 GZIP compression, multi-block DEFLATE streaming, IEEE 802.3 CRC-32, and HTTP middleware.
 - [[Std Csv]] — quoted separated-row and header-table parsing/rendering.
 - [[Std Toml]] — TOML 1.0 configuration with exact numeric/time spellings.
+- [[Std Yaml]] — the configuration subset of YAML, refusing anchors, tags, and merge keys, with bounded nesting.
 - [[Std Toml Read]] — turning configuration text into that model.
 - [[Std Toml Scan]] — the lexical layer beneath the reader.
 - [[Std Path]] — host-aware lexical path construction and decomposition.

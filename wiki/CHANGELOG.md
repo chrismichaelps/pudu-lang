@@ -36,6 +36,9 @@ tags: [changelog]
   leaving its bytes on a kept-alive connection to be read as the next request; `notchunked` no longer
   passes as chunked. `Std.Http.Server` refuses a head or body that is not UTF-8 with 400 instead of
   handing the handler empty text. The guard fixture holds 86 claims and the server fixture 37.
+- `Std.Yaml` bounds block nesting at 512 levels and answers the new `YamlError.TooDeep` at the line
+  that opened the block too deep, where 3,000 nested mappings exhausted the evaluator's call limit and
+  stopped the program. The YAML fixture holds 20 claims.
 - Device playback is cancellable. The native play runs on a worker thread while the evaluating thread
   waits, so Ctrl-C during an 8-second clip stops the program in 0.07 s with exit 130 instead of after
   the clip with exit 0 and a `PlatformFailure("user interrupt")`. A program watching for a stop

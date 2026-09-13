@@ -305,7 +305,7 @@ testProtocolEvaluation = do
         version string into a number. -}
     , counterexample
         "a manifest's mappings, sequences, block scalars, and quoting all survive"
-        (yamlDocuments === Just "18")
+        (yamlDocuments === Just "20")
     {-| The two orderings each have one case that a plausible implementation
         gets wrong and no ordinary use would reveal: `1.10.0` after `1.9.0`,
         which comparing as text reverses, and a `*` that stops at a separator,

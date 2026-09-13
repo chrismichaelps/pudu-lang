@@ -1,6 +1,7 @@
 module UsesYaml
 
 import Std.Option as Option
+import Std.Result as Result
 import Std.Yaml {TabIndent}
 import Std.Yaml as Yaml
 
@@ -178,5 +179,25 @@ fn main() -> Int {
     case Err(_) => {}
   }
 
+  // Nesting is read to its bound and refused past it, at the line that opened
+  // the block too deep, rather than stopping the program.
+  if Result.isOk(&Yaml.decode(nested(512))) {
+    held = held + 1
+  }
+  if let Err(Yaml.TooDeep(513)) = Yaml.decode(nested(3000)) {
+    held = held + 1
+  }
+
   held
+}
+
+/// A document of mappings nested `levels` deep, one key a line.
+fn nested(levels: Int) -> Str {
+  var lines: Array[Str] = []
+  var level = 0
+  while level < levels {
+    lines = lines.push(" ".repeat(level) + "k" + show(level) + ":")
+    level = level + 1
+  }
+  lines.join("\n") + " leaf\n"
 }
