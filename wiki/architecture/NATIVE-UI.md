@@ -20,6 +20,10 @@ them where language design can help: typed failures, capability-visible device a
 headless behavior, platform-neutral conformance fixtures, explicit memory/latency budgets, and one
 coherent ownership model across UI, audio, and video.
 
+[[Desktop Capability Conformance]] is the executable coverage ledger for this architecture. A gap
+in that ledger is an implementation obligation unless it is explicitly excluded as framework
+machinery rather than an application capability.
+
 ## Lessons taken from raylib
 
 Raylib is a reference for small explicit layers rather than a dependency. Its useful decisions are a

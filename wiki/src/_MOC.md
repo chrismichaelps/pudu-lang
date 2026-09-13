@@ -5,6 +5,12 @@ tags: [moc, module]
 
 # Module Map
 
+- [[Examples]] — human-run programs and the boundary between demonstrations and release evidence.
+- [[Media Studio Example]] — real-window integration of exact video timing, generated Canvas frames,
+  bounded audio graph rendering, and WAV delivery.
+- [[Media Studio Configuration]] · [[Media Studio Example Configuration]] — checked nested workload
+  configuration and its representative device-run preset.
+- [[Media Studio Configuration Checks]] — headless success and refusal coverage for the workload.
 - [[Notes Web Application]] — database-backed HTML and JSON application composition.
 
 - [[Runtime Word Kernels]] — native-word reductions over existing containers.

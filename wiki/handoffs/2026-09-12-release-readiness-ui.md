@@ -28,6 +28,13 @@ committed directly to `dev` at the user's explicit direction; no branch or PR is
 3. **Validation:** focused fixtures and `test/gates.sh` protect each slice. Further review sub-agents
    are disabled at the user's explicit direction.
 
+The active role returns to **Language Architect** for [[Desktop Capability Conformance]], then to
+**Stdlib Implementer** for `examples/media/Studio.pudu` and its mirror. This iteration changes no
+shared compiler or standard-library contract; it exercises the already committed UI/audio/video
+surface and records every missing desktop domain it exposes.
+After implementation, the active role transitions to **Validation** for formatter, focused fixture,
+WAV structure, real-window launch, and full-suite evidence.
+
 Other work exists in the repository. This slice does not alter the preserved untracked website probe
 or the commits on `feature/228-std-prose`.
 
@@ -71,6 +78,15 @@ order, hit testing, painting, and damage regions.
   private macOS AppKit/CoreGraphics adapter exposes no framework value to Pudu and links no foreign
   UI toolkit. `LaunchUiDesktop.pudu` opened, displayed, pumped, and closed a real 480×280 titled
   desktop window with `Ok(1)`. The full Cabal suite passed after integration.
+- Media laboratory slice — [[Desktop Capability Conformance]] records desktop behavior as observable
+  capabilities rather than an AppKit symbol clone. `examples/media/Studio.pudu` now accepts a nested,
+  bounded JSON workload and writes machine-readable timing and capability evidence. The configured
+  device run launched a real 480×270 window, presented 30 pictures at 30000/1001 timing, rendered
+  16,016 stereo frames in 2,048-frame slices, wrote a structurally valid 16 kHz PCM WAV, and closed
+  cleanly. Audio preparation took about 13.5 seconds, exposing the append/interpreter path as a
+  concrete real-time blocker. Seven headless configuration assertions cover success, type, range,
+  path-containment, and duration failures. Speaker output, codecs, device clocks, and capture remain
+  explicitly missing.
 - Packaging observation — `cabal check` still rejects a source archive because the existing test
   suite uses `hs-source-dirs: ../../../test`, outside the nested package root. This predates the
   presenter and does not affect its build or launch, but it remains a serious-release packaging gap.
@@ -78,7 +94,10 @@ order, hit testing, painting, and damage regions.
 
 ## Exact next action
 
-Continue exclusively with native UI, audio, and video. Build the first Pudu **space** application
+Continue exclusively with native UI, audio, and video. Implement the first real speaker/device-audio
+contract with bounded preallocated queues, explicit format negotiation, underrun and device-loss
+reporting, and a private target adapter; then synchronize picture presentation to the same device
+clock. In parallel sequencing after that, build the first Pudu **space** application
 loop over [[Std Ui Desktop]] and [[Std Ui Screen]]: translate native pointer/key/text/close events into
 screen inputs, present only after state or focus changes, and expose lifecycle transitions without
 copying SwiftUI's protocol/property-wrapper graph. Then add menus, settings, documents, multiple
