@@ -26,7 +26,7 @@ import Pudu.Compiler
   , runFrontend
   )
 import Pudu.Compiler.Manifest (manifestVersionDiagnostics)
-import Pudu.Compiler.Library (isStandardModule, searchRoots)
+import Pudu.Compiler.Library (isStandardModule, searchRoots, triedRoots)
 import Pudu.Doc (DocIndex)
 import Pudu.Diagnostic
   ( Diagnostic
@@ -190,9 +190,10 @@ discover sourceRoot frontends sources diagnostics pending = case pending of
         roots <- searchRoots sourceRoot requested
         loaded <- readFirst [modulePath root requested | root <- roots]
         case loaded of
-          Left _ ->
+          Left _ -> do
+            tried <- triedRoots sourceRoot requested
             discover sourceRoot frontends sources
-              (diagnostics <> missingModule requested roots locatedImport) rest
+              (diagnostics <> missingModule requested tried locatedImport) rest
           Right source -> do
             let frontend = runFrontend source
             case frontendModule frontend of
@@ -288,7 +289,7 @@ readSource path = do
     Left problem -> pure (Left problem)
     Right contents -> Right <$> newSource (SourceName (Text.pack path)) contents
 
-missingModule :: ModuleName -> [FilePath] -> Located Import -> [Diagnostic]
+missingModule :: ModuleName -> [Text.Text] -> Located Import -> [Diagnostic]
 missingModule requested roots locatedImport = do
   code <- maybe [] pure (mkDiagnosticCode "E2014")
   value <- maybe [] pure
@@ -315,7 +316,7 @@ missingModule requested roots locatedImport = do
 
   searched
     | null roots = "; nothing was searched"
-    | otherwise = "; looked in " <> Text.intercalate ", " (map Text.pack roots)
+    | otherwise = "; looked in " <> Text.intercalate ", " roots
 
 pathMismatch :: ModuleName -> Located ModuleName -> [Diagnostic]
 pathMismatch requested actual = do

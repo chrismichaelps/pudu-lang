@@ -199,6 +199,14 @@ order, hit testing, painting, and damage regions.
   sits inside the platform guard. Verified from macOS by removing the darwin `cpp-options` in a
   scratch worktree and type-checking all 181 library modules with `-fno-code -Werror`. Windows and
   Linux media adapters themselves remain unimplemented; those targets answer `UnsupportedPlatform`.
+- Source archive — `cabal sdist pudu` declares every C source and header, including the audio-stream
+  adapter. Unpacked outside the checkout it builds `pudu` with its own project file; with
+  `pudu_datadir` pointing at the unpacked tree, that binary ran `UsesToml` from an unrelated
+  directory and all 49 claims held. Without an install or `PUDU_LIB` an uninstalled build finds no
+  library, which is expected, but its `E2014` help had read `looked in ` with nothing after it:
+  the help was built from existing library locations only. With no library it now names
+  `PUDU_LIB`, the installed layout, the package data directory, and the walk up from the executable
+  in one phrase; with a library present it still names the roots searched.
 - CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
   `signal-drain`, `build-bundle`, `foreign-third-party`, `bench/request`, and both refusing
   `pudu doc` invocations — all pass locally against the optimized binary (2026-09-14).

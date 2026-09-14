@@ -26,8 +26,10 @@ standard library shipped with the compiler.
 
 ```haskell
 isStandardModule :: ModuleName -> Bool
+candidateRoots :: IO [FilePath]
 libraryRoots :: IO [FilePath]
 searchRoots :: FilePath -> ModuleName -> IO [FilePath]
+triedRoots :: FilePath -> ModuleName -> IO [FilePath]
 ```
 
 ### Governance
@@ -54,8 +56,16 @@ searchRoots :: FilePath -> ModuleName -> IO [FilePath]
 ## Algorithm
 
 Prepend the program's source root to the library roots when the module's first segment is `Std`;
-otherwise return the program's source root alone. Roots that do not exist are dropped, so a search
-never reports a failure against a directory that was never there.
+otherwise return the program's source root alone. Roots that do not exist are dropped from the
+search, so reading a module never tries a directory that was never there.
+
+Reporting a module that was not found is written for a reader by `triedRoots`. When a library root
+exists it names the program's roots and the library roots found, because the module is most likely
+misspelled. When none exists, the search alone names nothing, so it names the locations that were
+empty instead: `PUDU_LIB` when set, the installed `lib/pudu` beside the executable's `bin`, the
+package data directory, and the walk up from the executable described once — "that directory and
+every directory above it" — rather than spelled out for each ancestor, which ran to some forty
+paths.
 
 ## Negative Logic (Prohibited Paths)
 

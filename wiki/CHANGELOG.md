@@ -72,6 +72,15 @@ tags: [changelog]
   adapter each store is now an empty constructor and adapter-only code sits inside the platform
   guard; all 181 library modules type-check with the macOS flags removed. The audio-device and
   desktop error classifiers are module-constant tables rather than comparison chains.
+- A missing standard module's help says where the library was looked for when none was found. It
+  was built from only the locations that exist, so with no library installed it read `looked in `
+  followed by nothing, or by an empty source root. With a library present it still names the
+  program's roots and the library found; with none it names `PUDU_LIB`, the installed layout, the
+  package data directory, and the walk up from the executable in one phrase, with `.` for a program
+  in the working directory.
+- The `cabal sdist` archive is self-contained: unpacked outside the checkout it builds `pudu`, and
+  that binary, given its data directory, runs a standard-library program from an unrelated
+  directory with every claim holding.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 

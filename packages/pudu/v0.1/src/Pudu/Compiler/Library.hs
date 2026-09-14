@@ -4,6 +4,7 @@ module Pudu.Compiler.Library
   , candidateRoots
   , libraryRoots
   , searchRoots
+  , triedRoots
   ) where
 
 import Control.Exception (IOException, try)
@@ -11,6 +12,7 @@ import qualified Data.Set as Set
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Version (versionBranch)
 import qualified Paths_pudu as Package
 import Pudu.Compiler.Manifest (projectSearchRoots)
@@ -108,6 +110,43 @@ searchRoots sourceRoot name = do
   if isStandardModule name
     then ((sourceRoot : declared) <>) <$> libraryRoots
     else pure (sourceRoot : declared)
+
+{-| Where a module that was not found was looked for, written for a reader.
+
+    When the library is present the places searched are the answer, because the
+    module is most likely misspelled. When no library location exists at all,
+    the search alone names nothing, and the empty locations are the whole
+    explanation: those are named instead, with the walk up from the executable
+    described once rather than spelled out for every directory above it. -}
+triedRoots :: FilePath -> ModuleName -> IO [Text]
+triedRoots sourceRoot name = do
+  declared <- dependencyRoots sourceRoot
+  let own = map shown (sourceRoot : declared)
+  if not (isStandardModule name)
+    then pure own
+    else do
+      found <- libraryRoots
+      if not (null found)
+        then pure (own <> map shown found)
+        else do
+          configured <- lookupEnv "PUDU_LIB"
+          installed <- installedRoot
+          packaged <- Package.getDataFileName "lib"
+          executable <- try getExecutablePath :: IO (Either IOException FilePath)
+          let walked = case executable of
+                Left _ -> []
+                Right path ->
+                  [ Text.pack (takeDirectory path)
+                      <> " and every directory above it (lib/pudu, or a checkout's packages/pudu/"
+                      <> versionDirectory
+                      <> "/lib)"
+                  ]
+          pure (own <> map shown (catMaybes [configured, installed]) <> walked <> [shown packaged])
+ where
+  shown root = if null root then "." else Text.pack root
+  versionDirectory = case versionBranch Package.version of
+    major : minor : _ -> Text.pack ("v" <> show major <> "." <> show minor)
+    _ -> "v<version>"
 
 {-| The directories this project's manifest says its code also lives in.
 

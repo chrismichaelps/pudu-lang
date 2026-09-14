@@ -23,6 +23,7 @@ testStandardLibrary = do
   shadows <- codes "test-fixtures/stdshadow/ShadowsStd.pudu"
   missing <- codes "test-fixtures/stdlib/MissingStd.pudu"
   missingHelp <- messages "test-fixtures/stdlib/MissingStd.pudu"
+  missingLocations <- helps "test-fixtures/stdlib/MissingStd.pudu"
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
   floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
   missingMember <- codes "test-fixtures/stdlib/RejectsMissingMember.pudu"
@@ -38,6 +39,16 @@ testStandardLibrary = do
     , counterexample "an unknown standard module is a missing module" (missing === ["E2014"])
     , counterexample "the diagnostic names the module that could not be read"
         (any (Text.isInfixOf "Std.NotAThing") missingHelp === True)
+    , counterexample "the help names every library location it looked in, none of them empty"
+        ( any
+            (\help -> Text.isInfixOf "PUDU_LIB" help
+              && Text.isInfixOf "looked in " help
+              && Text.isInfixOf ", " help
+              && not (Text.isInfixOf ", ," help)
+              && not (Text.isSuffixOf "looked in " help))
+            missingLocations
+            === True
+        )
     , counterexample "an unknown ordinary module is still a missing module" (ordinary === ["E2014"])
     , counterexample "a numeric range still requires a whole-number type"
         (floatRangeDiagnostics === ["E3012"])
