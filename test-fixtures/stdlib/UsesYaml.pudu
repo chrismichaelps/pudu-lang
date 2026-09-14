@@ -188,6 +188,13 @@ fn main() -> Int {
     held = held + 1
   }
 
+  // A whole number too large for an Int is text rather than a stopped program.
+  if let Ok(Yaml.Mapping(entries)) = Yaml.decode("replicas: 99999999999999999999\n") {
+    if entries.length() == 1 {
+      if let Yaml.Text(_) = entries[0][1] { held = held + 1 }
+    }
+  }
+
   held
 }
 

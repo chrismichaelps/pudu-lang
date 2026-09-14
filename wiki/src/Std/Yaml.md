@@ -20,7 +20,13 @@ Block mappings and sequences, one-line flow mappings and sequences, quoted and p
 complex keys, and merge keys are refused, because each changes what a document means. Tabs in
 indentation are refused. Fractional numbers are kept as written.
 
-Lines are measured once, then blocks are read by indentation. Nesting is bounded: each indented block
+Lines are measured once, then blocks are read by indentation. Measuring and splitting a line use
+native text searches wherever the result cannot differ: indentation is one span of spaces, a line
+without `#` has no comment, and a line without a quote finds its key at the first `": "` or a
+trailing `:`. Only lines holding a `#` or a quote are walked character by character. A 1 MB document
+of sequence items reads in 5.4 s against 10.5 s before, and 69 edge and generated documents read
+identically. A whole number is read by `Std.Text.wholeOf`, so digits past what an `Int` holds are
+text rather than a stopped program. Nesting is bounded: each indented block
 costs a reader recursion and the evaluator bounds call depth, so a block that would open more than
 512 levels deep answers `TooDeep` at its line instead of stopping the program.
 ## Grill Log

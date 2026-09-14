@@ -212,7 +212,7 @@ export fn partition(value: Str, keep: fn(Char) -> Bool) -> (Str, Str) {
 }
 
 /// Whitespace removed from the start.
-export fn trimStart(value: Str) -> Str { dropWhile(value, isSpace) }
+export fn trimStart(value: Str) -> Str { value.drop(value.spanOf(" \t\r\n")) }
 
 /// Whitespace removed from the end.
 export fn trimEnd(value: Str) -> Str {

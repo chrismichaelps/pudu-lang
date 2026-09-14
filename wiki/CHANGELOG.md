@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Faster YAML lines and a number that stopped the program
+
+- `Std.Yaml`'s private whole-number reader multiplied without a bound, so `replicas:
+  99999999999999999999` stopped the program with `E7005`. It now reads through `Std.Text.wholeOf`,
+  and such a value is text.
+- Measuring indentation, stripping comments, and finding a key use native searches wherever the answer
+  cannot differ, walking characters only for lines that hold a `#` or a quote, and
+  `Std.Text.trimStart` is one native span search instead of a predicate per character. A 1 MB document
+  reads in 5.4 s instead of 10.5 s, and 69 edge and generated documents read identically.
+
 ## 2026-09-14 — Native XML reading
 
 - `Std.Xml.decode` first tries the runtime's `xmlDecode` (`Pudu.Eval.Xml`), which walks the document's

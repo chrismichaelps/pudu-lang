@@ -124,19 +124,14 @@ fn significantLines(source: Str) -> Result[Array[Line], YamlError] {
 /// indentation is not a narrower or wider indent — it is a file that means
 /// different things in different editors, which is why the format refuses it.
 fn measureIndent(line: Str) -> (Int, Int) {
-  let chars = line.chars()
-  var width = 0
-  while width < chars.length() && (chars[width] == ' ' || chars[width] == '\t') {
-    if chars[width] == '\t' {
-      return (width, 0 - 1)
-    }
-    width = width + 1
-  }
-  (width, width)
+  let width = line.spanOf(" ")
+  if line.drop(width).startsWith("\t") { (width, 0 - 1) } else { (width, width) }
 }
 
 /// A line with a trailing comment removed, leaving quoted text alone.
+/// A line without `#` has no comment to remove, and most lines are that line.
 fn withoutComment(line: Str) -> Str {
+  if !line.contains("#") { return line }
   let chars = line.chars()
   var index = 0
   var quote = ' '
@@ -340,7 +335,12 @@ fn parseBlockScalar(lines: &Array[Line], from: Int, indent: Int, marker: Str) ->
 }
 
 /// Whether a line is `key: value` rather than a bare scalar.
+///
+/// Only a quote can hide a colon, so a line without one is decided by native
+/// searches and the walk below is left to the lines that quote something.
 fn isKeyLine(value: Str) -> Bool {
+  if !value.contains(":") { return false }
+  if !value.contains("\"") && !value.contains("'") { return value.contains(": ") || value.endsWith(":") }
   let chars = value.chars()
   var index = 0
   var quote = ' '
@@ -363,6 +363,12 @@ fn isKeyLine(value: Str) -> Bool {
 }
 
 fn splitKey(value: Str) -> (Str, Str) {
+  if !value.contains("\"") && !value.contains("'") {
+    let spaced = value.indexOf(": ")
+    let colon = if spaced >= 0 { spaced } else if value.endsWith(":") { value.length() - 1 } else { 0 - 1 }
+    if colon < 0 { return (unquote(value), "") }
+    return (unquote(Reading.trimEnd(Reading.take(value, colon))), Reading.trimStart(Reading.drop(value, colon + 1)))
+  }
   let chars = value.chars()
   var index = 0
   var quote = ' '
@@ -483,31 +489,13 @@ fn unquote(value: Str) -> Str {
   value
 }
 
-fn wholeOf(value: Str) -> Option[Int] {
-  let chars = value.chars()
-  if chars.length() == 0 {
-    return None
-  }
-  var index = 0
-  var negative = false
-  if chars[0] == '-' || chars[0] == '+' {
-    negative = chars[0] == '-'
-    index = 1
-  }
-  if index >= chars.length() {
-    return None
-  }
-  var total = 0
-  while index < chars.length() {
-    let here = chars[index]
-    if here < '0' || here > '9' {
-      return None
-    }
-    total = total * 10 + (here.code() - '0'.code())
-    index = index + 1
-  }
-  if negative { Some(0 - total) } else { Some(total) }
-}
+/// A whole number written as one, with an optional sign.
+///
+/// Read by `Std.Text`, which answers nothing for digits past what an `Int`
+/// holds, so `replicas: 99999999999999999999` is text rather than a stopped
+/// program. A scalar reaches here already trimmed, so its trimming changes
+/// nothing.
+fn wholeOf(value: Str) -> Option[Int] { Reading.wholeOf(value) }
 
 fn looksFractional(value: Str) -> Bool {
   let chars = value.chars()

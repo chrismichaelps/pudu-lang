@@ -22,6 +22,8 @@ is `None`, a slice clamps, and padding with an empty filler returns the text unc
 number of empty copies can reach a width. `wholeOf` and `countOf` answer `None` for digits that spell
 more than an `Int` holds, checking before each multiplication: text arriving from outside a program
 must not be able to stop it with one oversized number, and `Std.Json` reads its whole numbers here.
+`trimStart` and `trimEnd` each find their run of space, tab, carriage return, and newline with one
+native span search rather than a predicate called per character.
 
 Text is UTF-8, so reaching a character by position walks every character before it. Scans therefore
 walk characters in order, or index the character array once, instead of calling `charAt` per
