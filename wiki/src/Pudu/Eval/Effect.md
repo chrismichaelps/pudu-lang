@@ -66,6 +66,9 @@ Check that the context admits effects, dispatch on the built-in tag, perform the
 - Bounded device playback delegates to [[Eval Audio Device]]. The effect receives an admitted PCM
   format, exact bytes, queue bounds, and a finite deadline; it returns the acknowledged frame count
   and owns no persistent evaluator token.
+- Persistent audio effects delegate to the evaluation-local [[Eval Audio Stream]] store. They keep
+  native identity out of values, preserve Pudu token values exactly until lookup, bound writes
+  and draining close, and project negotiated format plus telemetry as scalar arrays.
 
 ## Grill Log
 

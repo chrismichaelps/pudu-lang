@@ -73,8 +73,9 @@ links, which made a clean `cabal install exe:pudu` fail even though in-tree buil
 
 ## Bounded device-audio adapter
 
-Register [[Eval Audio Device]], distribute [[Pudu Audio Header]], and compile [[Pudu Audio Adapter]]
-only on macOS with AudioToolbox. Resolved Grill Log: the public module exists on every target while
+Register [[Eval Audio Device]] and [[Eval Audio Stream]], distribute [[Pudu Audio Header]] plus
+[[Pudu Audio Stream Header]], and compile [[Pudu Audio Adapter]] plus [[Pudu Audio Stream Adapter]]
+only on macOS with AudioToolbox. Resolved Grill Log: the public modules exist on every target while
 native source and framework linkage remain target-conditional.
 
 Register [[Eval Audio Kernel]] as a portable Haskell module with no new package or native-library

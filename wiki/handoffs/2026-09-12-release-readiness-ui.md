@@ -96,6 +96,22 @@ order, hit testing, painting, and damage regions.
   the 16,016-frame Studio workload both returned exact callback-acknowledged counts through the real
   default output device. The conformance state is `PARTIAL`: streaming sessions, discovery,
   interruption/device-loss, underrun telemetry, volume, shared clocks, and other OS adapters remain.
+- Persistent device-stream slice — `Std.Audio.Device` now opens an evaluation-owned persistent
+  stream with the adapter-accepted format, bounded writes with explicit partial acceptance,
+  pause/resume/volume, drain-or-immediate close, and snapshots carrying submitted media, a
+  content-bounded hardware queue clock, state, underruns, interruptions, device changes, and timeline
+  failures. The private macOS adapter preallocates two to eight buffers and keeps its callback to
+  bounded atomic bookkeeping; the runtime serializes each token independently and tears abandoned
+  streams down. `LaunchAudioStream.pudu` twice opened real hardware, fed 4,096 frames, exercised
+  controls and stale-token refusal, and returned a positive hardware position. The configured Studio
+  launch submitted all 16,016 frames, presented 27 of 30 pictures against the audio clock by dropping
+  late pictures, recorded zero underruns/interruptions/device changes, wrote WAV and version-three
+  JSON artifacts, and closed its real 480×270 window and queue.
+- Qualified-pattern repair — the corrected audio fixture exposed that a misspelled dotted
+  constructor was silently accepted. Pattern typing no longer falls from an exact qualified value or
+  known type owner into the global bare-variant table. A missing module constructor is one `E3033`, a
+  missing type-owned variant is one `E3034`, and named-field recovery avoids cascades. Isolated and
+  loaded-`Std.Audio` regressions preserve the distinction.
 - Packaging repair — the installed compiler that first ran Studio was stale and lacked `renamePath`
   and desktop builtins; the ordinary reinstall then failed because the production package named
   `../../../test`. Tests now live in a separate root `pudu-tests` package while the compiler source
@@ -166,12 +182,12 @@ order, hit testing, painting, and damage regions.
 
 ## Exact next action
 
-Continue the native media roadmap: implement a persistent Pudu-owned stream with negotiated format, device change,
-interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
-presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and
+Continue the native media roadmap with the first Pudu **space** application loop over [[Std Ui Desktop]] and
 [[Std Ui Screen]], translating native pointer/key/text/close events into screen inputs. Keep every
-exact fixture as the semantic oracle and add percentile latency/memory gates before claiming
-interactive or real-time performance.
+exact fixture as the semantic oracle. In parallel with that UI contract, add audio device
+discovery/selection and active route-change recovery, then Windows and Linux target adapters; add
+percentile latency/memory and hour-scale A/V drift gates before claiming interactive or real-time
+performance.
 
 ## 2026-09-13 native lint transition
 

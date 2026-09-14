@@ -8,6 +8,7 @@ import Pudu.Diagnostic (Diagnostic)
 import Pudu.Eval.Child (closeChildStore, newChildStore)
 import Pudu.Eval.Concurrent (closeConcurrentStore, newConcurrentStore)
 import Pudu.Eval.Desktop (closeDesktopStore, newDesktopStore)
+import Pudu.Eval.AudioStream (closeAudioStreamStore, newAudioStreamStore)
 import Pudu.Eval.Env (Env, emptyEnv)
 import Pudu.Eval.Handle (closeHandleStore, newHandleStore)
 import Pudu.Eval.Socket (closeSocketStore, newSocketStore)
@@ -29,7 +30,8 @@ withRuntimeEnv action =
           result <- bracket newChildStore closeChildStore $ \children ->
             bracket newConcurrentStore closeConcurrentStore $ \concurrent ->
               bracket newDesktopStore closeDesktopStore $ \desktop ->
-                action (emptyEnv handles children sockets secured concurrent desktop foreignStore)
+                bracket newAudioStreamStore closeAudioStreamStore $ \audioStreams ->
+                  action (emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore)
           closeForeignStore foreignStore
           problems <- takeForeignDiagnostics foreignStore
           pure (result, problems)

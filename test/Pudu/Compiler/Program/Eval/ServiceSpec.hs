@@ -151,7 +151,7 @@ testServiceEvaluation = do
         (rendering === Just "24")
     , counterexample
         "device audio refuses invalid plans and PCM before hardware acquisition"
-        (deviceAudio === Just "9")
+        (deviceAudio === Just "23")
     , counterexample
         "the Media Studio configuration admits bounded device playback"
         (studioConfiguration === Just "8")

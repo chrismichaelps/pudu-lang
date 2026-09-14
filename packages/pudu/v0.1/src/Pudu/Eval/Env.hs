@@ -21,6 +21,7 @@ module Pudu.Eval.Env
   , replaceMethods
   , currentConcurrentStore
   , currentDesktopStore
+  , currentAudioStreamStore
   , currentForeignStore
   , currentHandleStore
   , currentChildStore
@@ -54,6 +55,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import Pudu.Eval.Concurrent (ConcurrentStore)
+import Pudu.Eval.AudioStream (AudioStreamStore)
 import Pudu.Eval.Desktop (DesktopStore)
 import Pudu.Eval.Child (ChildStore)
 import Pudu.Eval.Handle (HandleStore)
@@ -93,6 +95,7 @@ data Env = Env
   , envTlsStore :: !TlsStore
   , envConcurrentStore :: !ConcurrentStore
   , envDesktopStore :: !DesktopStore
+  , envAudioStreamStore :: !AudioStreamStore
   , envForeignStore :: !ForeignStore
   }
 
@@ -113,6 +116,9 @@ currentConcurrentStore = Evaluator $ \env -> pure (Done (envConcurrentStore env)
 
 currentDesktopStore :: Evaluator DesktopStore
 currentDesktopStore = Evaluator $ \env -> pure (Done (envDesktopStore env) env)
+
+currentAudioStreamStore :: Evaluator AudioStreamStore
+currentAudioStreamStore = Evaluator $ \env -> pure (Done (envAudioStreamStore env) env)
 
 currentForeignStore :: Evaluator ForeignStore
 currentForeignStore = Evaluator $ \env -> pure (Done (envForeignStore env) env)
@@ -273,9 +279,10 @@ emptyEnv
   -> TlsStore
   -> ConcurrentStore
   -> DesktopStore
+  -> AudioStreamStore
   -> ForeignStore
   -> Env
-emptyEnv handles children sockets secured concurrent desktop foreignStore =
+emptyEnv handles children sockets secured concurrent desktop audioStreams foreignStore =
   Env
     { envFrames = [Map.empty]
     , envMethods = Map.empty
@@ -291,6 +298,7 @@ emptyEnv handles children sockets secured concurrent desktop foreignStore =
     , envTlsStore = secured
     , envConcurrentStore = concurrent
     , envDesktopStore = desktop
+    , envAudioStreamStore = audioStreams
     , envForeignStore = foreignStore
     }
 

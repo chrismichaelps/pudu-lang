@@ -22,6 +22,7 @@ tags: [moc, module]
 - [[Eval Concurrent]] — thread, channel, mutex, and atomic-cell tables.
 - [[Eval Desktop]] — evaluation-owned desktop windows and serialized present/pump/close lifetimes.
 - [[Eval Audio Device]] — validated bounded PCM playback through a private target adapter.
+- [[Eval Audio Stream]] — evaluation-owned persistent playback, controls, telemetry, and media clock.
 - [[Eval Audio Kernel]] — compiled exact waveform and automation loops for bounded PCM slices.
 - [[Eval Hash]] — digest, password-derivation, and collection-mixing primitives.
 - [[Eval Install]] — a module's declarations into the environment, functions before constants.

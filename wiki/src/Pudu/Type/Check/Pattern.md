@@ -26,6 +26,12 @@ Own checking patterns against the type they match for [[Type Check]].
 - Every rule is the one [[grammar/pudu]] states for that construct; nothing here invents a coercion the language does not have.
 - A name is instantiated at every use, so a declared generic serves several types without leaking one use's solution into another.
 - A shape the rules cannot type produces a diagnostic naming the type it found, never a silent error type without explanation.
+- A qualified constructor path is authoritative. The checker first uses the exact qualified value
+  binding, then a known type owner when the qualifier itself names a type; it never falls back to
+  the global bare-variant table after either qualified lookup misses. A missing module export is
+  `E3033`, while a known type without the written variant is `E3034`. A record pattern whose full
+  path names a declared record type, such as `Audio.Format { sampleRate, .. }`, is a record type's
+  own pattern and is never reported as a missing constructor.
 - These rules never recurse into sub-expressions; the walk in [[Type Check]] owns that, which is what keeps the two modules free of a cycle.
 - Record-pattern owner annotations are formed through `declaredNames` using their full qualified path, so imported nominal identity is canonical and two equal basenames from different modules cannot unify accidentally. Constructor patterns continue to resolve through the variant table because the AST carries the constructor spelling rather than an owner path.
 - Literal patterns register the same deferred integer constraints as expressions. A range checks both endpoints against the subject, so suffix selection and exact fit cannot be bypassed through the upper bound.
@@ -51,6 +57,10 @@ Dispatch on the operator, the receiver's type, or the pattern's shape, unifying 
 
 - An unsolved receiver produces a fresh variable rather than a diagnostic, so a member access on a not-yet-known type is not prematurely rejected.
 - Integer pattern endpoints remain arbitrary precision until the match subject or enclosing literal finalization selects their type; both endpoints receive the selected type's fit check.
+- An unknown unqualified constructor stays silent in typing because resolution already reports
+  `E2010`; only a qualified tail needs the type checker to diagnose the missing member.
+- Recovery after a qualified named-field miss binds its nested patterns at `ErrorType` without
+  also reporting every written field as absent; the missing constructor is the single root error.
 
 ## Depth
 
@@ -59,6 +69,11 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 ## Grill Log
 
 - **Q:** Resolve a constructor pattern by its bare name against the table of every loaded module's variants? **A:** No; resolve the written name through the scope first, then read the shape under the type that owns it. _Rationale:_ two modules may each declare a variant called `Text`, and a bare-name table holds one of them — so a pattern matched whichever module was loaded last, which is not a property of the module being checked. It also meant a module imported only qualified put its constructors into a scope that never named them, and the same program checked one way alone and another way as part of a larger graph. The bare-name lookup remains as a fallback, so a wired-in variant reached without an import still matches. _Rejected:_ keeping the flat table; making the qualifier significant only when written.
+- **Q:** What if the path is qualified but its final constructor is absent? **A:** Report the
+  missing module member or type variant at the pattern. _Rationale:_ resolution can establish the
+  head but deliberately does not interpret later segments; silently dropping into the bare table
+  accepts misspellings and can select another module's variant. _Rejected:_ error-type recovery
+  without a diagnostic; qualified-to-bare fallback.
 
 - **Q:** Why refuse a positional pattern rather than make it work? **A:** Because making it work needs the field order where the match runs, and the declaration is the only place that has it. _Rationale:_ admitting both spellings without one representation is what let a type-correct program find no arm; refusing one spelling removes the divergence at its source instead of reconciling it downstream. _Rejected:_ carrying the field order into matching; normalising the value at construction.
 - **Q:** Why not inline these into the walk? **A:** The walk would exceed the reviewable size, and these rules are the part a reader checks against the grammar. _Rationale:_ they are a table, and a table is easier to audit alone. _Rejected:_ inlining; a generic operator-table abstraction.

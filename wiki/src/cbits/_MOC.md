@@ -14,6 +14,9 @@ tags: [moc, module, foreign, ffi]
 - [[Pudu Desktop Adapter]] — macOS window, bitmap presentation, event pumping, and release.
 - [[Pudu Audio Header]] — framework-neutral bounded device-playback ABI and stable statuses.
 - [[Pudu Audio Adapter]] — macOS Audio Queue ownership, preallocation, refill, deadline, and release.
+- [[Pudu Audio Stream Header]] — framework-neutral persistent-output ABI, snapshot layout, and stable statuses.
+- [[Pudu Audio Stream Adapter]] — macOS persistent Audio Queue sessions, bounded writes, controls,
+  hardware timeline, telemetry, and release.
 
 ## Referenced by
 

@@ -102,6 +102,13 @@ data Builtin
   | DesktopPumpBuiltin
   | DesktopCloseBuiltin
   | AudioDevicePlayBuiltin
+  | AudioStreamOpenBuiltin
+  | AudioStreamWriteBuiltin
+  | AudioStreamPauseBuiltin
+  | AudioStreamResumeBuiltin
+  | AudioStreamVolumeBuiltin
+  | AudioStreamSnapshotBuiltin
+  | AudioStreamCloseBuiltin
   | AudioToneBytesBuiltin
   | AudioRampBytesBuiltin
   | Sha256Builtin
@@ -291,6 +298,13 @@ builtinName value = case value of
   DesktopPumpBuiltin -> "desktopPump"
   DesktopCloseBuiltin -> "desktopClose"
   AudioDevicePlayBuiltin -> "audioDevicePlay"
+  AudioStreamOpenBuiltin -> "audioStreamOpen"
+  AudioStreamWriteBuiltin -> "audioStreamWrite"
+  AudioStreamPauseBuiltin -> "audioStreamPause"
+  AudioStreamResumeBuiltin -> "audioStreamResume"
+  AudioStreamVolumeBuiltin -> "audioStreamVolume"
+  AudioStreamSnapshotBuiltin -> "audioStreamSnapshot"
+  AudioStreamCloseBuiltin -> "audioStreamClose"
   AudioToneBytesBuiltin -> "audioToneBytes"
   AudioRampBytesBuiltin -> "audioRampBytes"
   Sha256Builtin -> "sha256Of"

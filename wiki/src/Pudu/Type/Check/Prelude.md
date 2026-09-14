@@ -79,6 +79,19 @@ successful integer is the exact number of frames acknowledged by the device queu
 Resolved Grill Log: keep the compiler signature representation-only; [[Std Audio Device]] owns the
 typed plan and error vocabulary while the runtime independently revalidates every bound.
 
+Persistent stream capabilities are representation-only as well:
+
+- `audioStreamOpen(Int, Int, Int, Int) -> Result[Array[Int], Str]`
+- `audioStreamWrite(Int, Int, Int, Bytes, Int) -> Result[Array[Int], Str]`
+- pause/resume take one token and return `Result[(), Str]`
+- volume takes one token plus `Float64` and returns `Result[(), Str]`
+- snapshot returns `Result[Array[Int], Str]`
+- close takes token, drain flag, and deadline and returns `Result[(), Str]`
+
+The two arrays have closed lengths interpreted only by [[Std Audio Device]]; no platform type or
+pointer enters the type graph. Tokens remain mathematical integers in the runtime lookup instead of
+being narrowed a second time, so a forged large target-width value cannot wrap into a valid token.
+
 `audioToneBytes(Int, Int, Int, Int, Int, Int) -> Option[Bytes]` and
 `audioRampBytes(Bytes, Int, Int, Int, Int, Int, Int) -> Option[Bytes]` describe the pure bounded
 preparation kernels. Resolved Grill Log: `Option` records trust-boundary refusal without duplicating

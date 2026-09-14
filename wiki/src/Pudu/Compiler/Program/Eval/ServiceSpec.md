@@ -37,9 +37,10 @@ extent, pixel-budget, and pump-duration paths before a platform effect is reache
 [[Launch Ui Desktop]] fixture is the macOS acceptance gate and must open an actual window; its
 success is not inferred from this pure count.
 
-The device-audio fixture likewise keeps CI display-independent: it covers every invalid plan and
-PCM refusal before native acquisition. [[Launch Audio Device]] is the separate hardware acceptance
-gate and must receive completion callbacks for the exact submitted frame count.
+The device-audio fixture likewise keeps CI display-independent: it covers every invalid one-shot and
+persistent plan, PCM refusal, volume bound, close bound, and stale large capability before
+native acquisition. [[Launch Audio Device]] and [[Launch Audio Stream]] are separate hardware
+acceptance gates; the latter must also prove controls, telemetry, and a progressing queue timeline.
 
 The Media Studio configuration fixture is also evaluated here with an exact count of eight, so the
 example's device-queue fields cannot drift from its decoder or admitted bounds unnoticed.

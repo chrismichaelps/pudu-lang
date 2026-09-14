@@ -21,6 +21,15 @@ one during a play gets `Cancelled` within a few milliseconds; an interrupt the p
 handle stops the program as it would anywhere else, after the queue is released. No operating-system type, callback, pointer, or status code enters the
 public Pudu API.
 
+The persistent surface is separate from bounded `play`. `streamPlan` admits a requested format,
+queue quantum/count, and per-write deadline. `openStream` returns a `Stream` containing an
+evaluation-local token and the adapter's negotiated `Audio.Format`. `write`, `pause`, `resume`,
+`setVolume`, `snapshot`, and `closeStream` preserve that identity. `StreamSnapshot` exposes
+submitted frames, content-bounded hardware-timeline frames and nanoseconds, underruns, interruptions, device
+changes, timeline query failures, and a nominal `StreamState`; these values form the audio master
+clock for video. Clock zero is valid before the first hardware sample; a timeline failure never
+falls back to buffer-acquisition counts.
+
 ## Performance and ownership
 
 The full clip is already byte-backed PCM. The target adapter copies bounded chunks into preallocated
@@ -30,7 +39,8 @@ returning, including on start, enqueue, timeout, and disposal failures.
 
 ## Negative logic
 
-- Clip playback is not a streaming graph, mixer, codec, capture API, or shared A/V clock.
+- Persistent output accepts prepared PCM; it is not a codec, capture API, or callback-time
+  interpreted graph.
 - A successful unsupported-target no-op is forbidden.
 - The deadline is not silently extended, and a partial play is never reported as complete.
 
@@ -41,9 +51,9 @@ returning, including on start, enqueue, timeout, and disposal failures.
   exact PCM first; add a compiled native-word graph kernel before callback rendering.
 - **Q:** Expose Audio Queue or Audio Unit concepts? **A:** No. _Rationale:_ they are one target's
   mechanism. _Accepted:_ quantum, capacity, deadline, and exact completion are portable obligations.
-- **Q:** Begin with a persistent streaming session? **A:** Not in this slice. _Rationale:_ device
-  switching, interruption, underrun, and clock semantics must be designed together. _Accepted:_ one
-  bounded acquisition whose cleanup can be proven now; streaming remains explicitly partial.
+- **Q:** Make the old one-shot call secretly persistent? **A:** No. _Rationale:_ its completion and
+  cleanup contract is already public. _Accepted:_ a separate session capability whose state,
+  backpressure, telemetry, and close are explicit.
 - **Q:** Let a play hold a stop request or an interrupt until the clip or deadline ends? **A:** No.
   _Rationale:_ a clip may be up to a minute long, a supervisor's grace period is shorter, and an
   interrupt reported as a platform failure let the program continue. _Accepted:_ `Cancelled` for a

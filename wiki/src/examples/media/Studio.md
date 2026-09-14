@@ -13,25 +13,27 @@ aliases: [Media Studio Example]
 Run one configurable end-to-end Pudu media probe against a real desktop session. `main` loads and
 validates an optional nested JSON configuration through [[Media Studio Configuration]], renders the
 selected bounded audio graph in fixed-size slices, writes a WAV under the system temporary directory,
-submits that exact PCM to the configured bounded device queue when enabled,
-calculates video and audio positions on one exact clock, renders moving Canvas pictures, presents
+feeds that exact PCM to one persistent configured device stream when enabled, uses its negotiated
+format and hardware queue timeline as the audio-master media clock, renders moving Canvas pictures, presents
 them through one window, pumps close events between frames, and closes the session on every returned
 path.
 
 The run measures audio preparation and presentation duration on a monotonic clock and writes a
-machine-readable version-two conformance report containing configuration, artifact locations, observed counts,
+machine-readable version-three conformance report containing configuration, artifact locations, observed counts,
 and honest capability states. Default settings keep the visible smoke run short; the checked
 configuration admits larger workloads without allowing unbounded allocation or waits.
 
 The example accepts no foreign capability and declares no platform API. It demonstrates the current
-portable public packages while making persistent speaker streaming, codecs, native input, display-link
-pacing, and accessibility export visible through [[Desktop Capability Conformance]].
+portable public packages while making codecs, native input, display-link pacing, and accessibility
+export visible through [[Desktop Capability Conformance]]. The device clock is clamped to submitted
+media so hardware time spent starved cannot advance video. Streaming telemetry retains underruns,
+interruptions, device changes, and timeline query failures instead of hiding recovery.
 
 ## Negative logic
 
 - No raylib, SDL, AppKit declaration, external media process, bundled media asset, or network input.
-- No claim that writing a WAV means speaker playback worked; enabled device playback must return the
-  exact callback-acknowledged frame count.
+- No claim that writing a WAV means speaker playback worked; enabled streaming must accept every
+  frame, advance its independent queue timeline, and close with an explicit drain.
 - No unbounded loop; frame count, audio slice, Canvas allocation, and event wait are bounded.
 - No leaked desktop session after an ordinary Pudu error.
 - No status is upgraded from `MISSING` or `PARTIAL` merely because the example ran.

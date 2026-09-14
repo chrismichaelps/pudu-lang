@@ -1,0 +1,10 @@
+module AcceptsQualifiedRecordPattern
+
+import Std.Audio as Audio
+
+export fn main() -> Int {
+  match Audio.format(48000, 2) {
+    case Ok(Audio.Format{sampleRate, channels}) => sampleRate + channels
+    case Err(_) => 0
+  }
+}

@@ -26,6 +26,8 @@ testStandardLibrary = do
   ordinary <- codes "test-fixtures/stdlib/MissingOwn.pudu"
   floatRangeDiagnostics <- codes "test-fixtures/stdlib/RejectsFloatRange.pudu"
   missingMember <- codes "test-fixtures/stdlib/RejectsMissingMember.pudu"
+  missingConstructor <- codes "test-fixtures/stdlib/RejectsMissingConstructorPattern.pudu"
+  qualifiedRecord <- codes "test-fixtures/stdlib/AcceptsQualifiedRecordPattern.pudu"
   missingMemberHelp <- helps "test-fixtures/stdlib/RejectsMissingMember.pudu"
   unqualifiedHelp <- helps "test-fixtures/stdlib/RejectsUnqualifiedMember.pudu"
   unknownHelp <- helps "test-fixtures/stdlib/RejectsUnknownMember.pudu"
@@ -41,6 +43,10 @@ testStandardLibrary = do
         (floatRangeDiagnostics === ["E3012"])
     , counterexample "a member the module does not export is reported once"
         (missingMember === ["E3033"])
+    , counterexample "a missing qualified pattern constructor is reported once"
+        (missingConstructor === ["E3033"])
+    , counterexample "a record type reached through its module is a pattern, not a missing constructor"
+        (qualifiedRecord === [])
     , counterexample "a built-in method written as a module function says so"
         (any (Text.isInfixOf "built-in method") missingMemberHelp === True)
     , counterexample "a prelude binding reached through a module says so instead"

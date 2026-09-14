@@ -225,11 +225,42 @@ testVariants = do
     , "  }"
     , "}"
     ]
+  qualified <- codes
+    [ "module M"
+    , "type Outcome = | Ok(Int) | Err(Str)"
+    , "fn run(value: Outcome) -> Int {"
+    , "  match value {"
+    , "    case Outcome.Ok(inner) => inner"
+    , "    case Outcome.Err(_) => 0"
+    , "  }"
+    , "}"
+    ]
+  missingQualified <- codes
+    [ "module M"
+    , "type First = | Shared(Int) | Empty"
+    , "type Second = | Other(Int)"
+    , "fn run(value: First) -> Int {"
+    , "  if let Second.Shared(inner) = value { inner } else { 0 }"
+    , "}"
+    ]
+  missingNamedQualified <- codes
+    [ "module M"
+    , "type First = | Shared{ value: Int } | Empty"
+    , "type Second = | Other{ value: Int }"
+    , "fn run(subject: First) -> Int {"
+    , "  if let Second.Shared{value} = subject { value } else { 0 }"
+    , "}"
+    ]
   pure $ conjoin
     [ constructed === []
     , wrongPayload === ["E3001"]
     , matched === []
     , counterexample "arms unify to one type" (wrongArm === ["E3001"])
+    , counterexample "a valid type-qualified pattern keeps its owner" (qualified === [])
+    , counterexample "a missing type-qualified positional variant is E3034"
+        (missingQualified === ["E3034"])
+    , counterexample "a missing type-qualified named variant is one E3034"
+        (missingNamedQualified === ["E3034"])
     ]
 
 testNamedVariants :: IO Property

@@ -96,9 +96,10 @@ standard-library wrapper is the public contract.
 
 ## Device-audio capability name
 
-`audioDevicePlay` is a discoverable effect value consumed by [[Std Audio Device]]. Resolved Grill
-Log: expose one target-neutral primitive name; queue ownership and target framework names remain
-behind the runtime boundary.
+`audioDevicePlay`, `audioStreamOpen`, `audioStreamWrite`, `audioStreamPause`, `audioStreamResume`,
+`audioStreamVolume`, `audioStreamSnapshot`, and `audioStreamClose` are discoverable effect values
+consumed by [[Std Audio Device]]. Resolved Grill Log: expose target-neutral primitive names; queue
+ownership and target framework names remain behind the runtime boundary.
 
 `audioToneBytes` and `audioRampBytes` are discoverable pure values used by [[Std Audio Graph]].
 Resolved Grill Log: their low-level spelling makes them representation primitives, while graph nodes

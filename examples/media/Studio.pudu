@@ -11,7 +11,17 @@ import Std.Ui.Desktop as Desktop
 import Std.Video as Video
 import Studio.Config as Config
 
-type Playback = { presented: Int, closeRequested: Bool, lastAudioFrame: Int }
+type Playback = {
+  presented: Int,
+  closeRequested: Bool,
+  lastAudioFrame: Int,
+  deviceFrames: Int,
+  clockNanoseconds: Int,
+  underruns: Int,
+  interruptions: Int,
+  deviceChanges: Int
+  , timelineFailures: Int
+}
 
 export fn main() -> Result[Int, Str] {
   let configuration = config(Config.load(Env.option("--config"))) ?
@@ -27,19 +37,6 @@ export fn main() -> Result[Int, Str] {
   io(Io.writeAllBytes(audioPath, &document)) ?
 
   let deviceStarted = Env.elapsedMilliseconds()
-  let deviceFrames = if configuration.audio.playToDevice {
-    let devicePlan = device(Device.plan(
-        configuration.audio.deviceFramesPerBuffer,
-        configuration.audio.deviceBuffers,
-        configuration.audio.deviceTimeoutMilliseconds
-      )) ?
-    let completed = device(Device.play(&devicePlan, &sound)) ?
-    completed.frames
-  } else {
-      -1
-  }
-  let deviceMilliseconds = Env.elapsedMilliseconds() - deviceStarted
-
   let pace = video(Video.rate(configuration.video.rateFrames, configuration.video.rateSeconds)) ?
   let window = configuration.window
   let plan = desktop(Desktop.plan(
@@ -50,25 +47,36 @@ export fn main() -> Result[Int, Str] {
       window.maxPixels
     )) ?
   let session = desktop(Desktop.open(&plan)) ?
+  let output = openOutput(&configuration.audio, &shape)
+  let stream = match output {
+    case Ok(opened) => opened
+    case Err(problem) => {
+      match desktop(Desktop.close(&session)) {
+        case Ok(_) => { return Err(problem) }
+        case Err(closeProblem) => { return Err(problem + "; " + closeProblem) }
+      }
+    }
+  }
   let presentationStarted = Env.elapsedMilliseconds()
-  let playback = presentFrames(&session, &pace, &shape, &configuration)
+  let playback = presentFrames(&session, &pace, &shape, &configuration, &sound, &stream)
   let presentationMilliseconds = Env.elapsedMilliseconds() - presentationStarted
-  let released = desktop(Desktop.close(&session))
+  let audioReleased = releaseOutput(&stream, configuration.audio.deviceTimeoutMilliseconds)
+  let deviceMilliseconds = Env.elapsedMilliseconds() - deviceStarted
+  let desktopReleased = desktop(Desktop.close(&session))
 
   match playback {
     case Err(problem) =>
-    match released {
+    match cleanupResult(audioReleased, desktopReleased) {
       case Ok(_) => Err("presentation failed: " + problem)
       case Err(closeProblem) => Err("presentation failed: " + problem + "; " + closeProblem)
     }
     case Ok(observed) => {
-      released ?
+      cleanupResult(audioReleased, desktopReleased) ?
       let report = reportOf(
           &configuration,
           &observed,
         audioPath,
         audioMilliseconds,
-        deviceFrames,
         deviceMilliseconds,
         presentationMilliseconds,
         Audio.frameCount(&sound)
@@ -79,7 +87,12 @@ export fn main() -> Result[Int, Str] {
       print("audio frames: " + show(Audio.frameCount(&sound))) ?
       print("video frames presented: " + show(observed.presented)) ?
       print("audio preparation ms: " + show(audioMilliseconds)) ?
-      print("device audio frames: " + show(deviceFrames)) ?
+      print("device audio frames: " + show(observed.deviceFrames)) ?
+      print("device clock ns: " + show(observed.clockNanoseconds)) ?
+      print("device underruns: " + show(observed.underruns)) ?
+      print("device interruptions: " + show(observed.interruptions)) ?
+      print("device changes: " + show(observed.deviceChanges)) ?
+      print("device timeline failures: " + show(observed.timelineFailures)) ?
       print("device audio ms: " + show(deviceMilliseconds)) ?
       print("presentation ms: " + show(presentationMilliseconds)) ?
       Ok(observed.presented)
@@ -105,28 +118,152 @@ fn renderAudio(plan: &Config.AudioPlan, shape: &Audio.Format) -> Result[Audio.Pc
   Ok(rendered)
 }
 
+fn openOutput(
+  plan: &Config.AudioPlan,
+  shape: &Audio.Format
+) -> Result[Option[Device.Stream], Str] {
+  if !plan.playToDevice { return Ok(None) }
+  let target = device(Device.streamPlan(
+        *shape,
+      plan.deviceFramesPerBuffer,
+      plan.deviceBuffers,
+      plan.deviceTimeoutMilliseconds
+    )) ?
+  let stream = device(Device.openStream(&target)) ?
+  Ok(Some(stream))
+}
+
+fn releaseOutput(
+  stream: &Option[Device.Stream],
+  timeoutMilliseconds: Int
+) -> Result[(), Str] {
+  match stream {
+    case None => Ok(())
+    case Some(opened) => device(Device.closeStream(&opened, true, timeoutMilliseconds))
+  }
+}
+
+fn cleanupResult(
+  audioResult: Result[(), Str],
+  desktopResult: Result[(), Str]
+) -> Result[(), Str] {
+  match audioResult {
+    case Err(audioProblem) =>
+    match desktopResult {
+      case Err(desktopProblem) => Err(audioProblem + "; " + desktopProblem)
+      case Ok(_) => Err(audioProblem)
+    }
+    case Ok(_) => desktopResult
+  }
+}
+
 fn presentFrames(
   session: &Desktop.Session,
   pace: &Video.Rate,
   shape: &Audio.Format,
-  configuration: &Config.Configuration
+  configuration: &Config.Configuration,
+  sound: &Audio.Pcm,
+  output: &Option[Device.Stream]
 ) -> Result[Playback, Str] {
-  var index = 0
+  var presented = 0
+  var lastPicture = -1
   var requestedClose = false
   var lastAudioFrame = 0
-  while index < configuration.video.frames && !requestedClose {
-    let time = video(Video.timeOfFrame(pace, index)) ?
-    lastAudioFrame = video(Video.audioFrameAt(&time, shape)) ?
-    let picture = frame(index, lastAudioFrame, configuration) ?
-    desktop(Desktop.present(session, &picture)) ?
+  var submitted = -1
+  var clockNanoseconds = -1
+  var underruns = -1
+  var interruptions = -1
+  var deviceChanges = -1
+  var timelineFailures = -1
+  let started = Env.elapsedMilliseconds()
+  let audioDuration = (configuration.audio.frames * 1000 + shape.sampleRate - 1) /
+  shape.sampleRate
+  let deadline = started + audioDuration + configuration.audio.deviceTimeoutMilliseconds * 2
+
+  match output {
+    case None => {}
+    case Some(stream) => {
+      submitted = 0
+      var primed = 0
+      while primed < configuration.audio.deviceBuffers && submitted < configuration.audio.frames {
+        submitted = feed(&stream, sound, submitted, configuration.audio.deviceFramesPerBuffer) ?
+        primed = primed + 1
+      }
+    }
+  }
+
+  while lastPicture < configuration.video.frames - 1 && !requestedClose {
+    var pictureIndex = presented
+    match output {
+      case None => {
+        let time = video(Video.timeOfFrame(pace, pictureIndex)) ?
+        lastAudioFrame = video(Video.audioFrameAt(&time, shape)) ?
+      }
+      case Some(stream) => {
+        let observed = device(Device.snapshot(&stream)) ?
+        lastAudioFrame = observed.clockFrames
+        clockNanoseconds = observed.clockNanoseconds
+        underruns = observed.underruns
+        interruptions = observed.interruptions
+        deviceChanges = observed.deviceChanges
+        timelineFailures = observed.timelineFailures
+        let time = video(Video.timestamp(observed.clockNanoseconds, 1000000000)) ?
+        let aligned = video(Video.frameAt(pace, &time)) ?
+        pictureIndex = if aligned >= configuration.video.frames {
+          configuration.video.frames - 1
+        } else {
+          aligned
+        }
+      }
+    }
+    if pictureIndex > lastPicture {
+      let picture = frame(pictureIndex, lastAudioFrame, configuration) ?
+      desktop(Desktop.present(session, &picture)) ?
+      lastPicture = pictureIndex
+      presented = presented + 1
+    }
     requestedClose = desktop(Desktop.pump(session, configuration.video.pumpMilliseconds)) ?
-    index = index + 1
+    match output {
+      case None => {}
+      case Some(stream) => {
+        if submitted < configuration.audio.frames {
+          submitted = feed(&stream, sound, submitted, configuration.audio.deviceFramesPerBuffer) ?
+        }
+        if Env.elapsedMilliseconds() > deadline {
+          return Err("audio device: persistent stream did not reach the final picture before its deadline")
+        }
+      }
+    }
   }
   Ok(Playback {
-      presented: index,
+      presented: presented,
       closeRequested: requestedClose,
-      lastAudioFrame: lastAudioFrame
+      lastAudioFrame: lastAudioFrame,
+      deviceFrames: submitted,
+      clockNanoseconds: clockNanoseconds,
+      underruns: underruns,
+      interruptions: interruptions,
+      deviceChanges: deviceChanges
+      , timelineFailures: timelineFailures
     })
+}
+
+fn feed(
+  stream: &Device.Stream,
+  sound: &Audio.Pcm,
+  start: Int,
+  wanted: Int
+) -> Result[Int, Str] {
+  let remaining = Audio.frameCount(sound) - start
+  if remaining <= 0 { return Ok(start) }
+  let count = if remaining < wanted { remaining } else { wanted }
+  let chunk = audio(Audio.slice(sound, start, count)) ?
+  let accepted = device(Device.write(stream, &chunk)) ?
+  if accepted != count {
+    Err("audio device: persistent stream accepted an incomplete slice")
+  } else {
+    Ok(start + accepted)
+  }
 }
 
 fn frame(
@@ -187,20 +324,24 @@ fn reportOf(
   playback: &Playback,
   audioPath: Str,
   audioMilliseconds: Int,
-  deviceFrames: Int,
   deviceMilliseconds: Int,
   presentationMilliseconds: Int,
   audioFrames: Int
 ) -> Json.Json {
   Json.object(&[
-      ("schemaVersion", Json.Number(2)),
+      ("schemaVersion", Json.Number(3)),
       ("configuration", configurationJson(configuration)),
       ("artifacts", Json.object(&[("audioWav", Json.Text(audioPath))])),
       ("observed", Json.object(&[
             ("audioFrames", Json.Number(audioFrames)),
             ("audioPreparationMilliseconds", Json.Number(audioMilliseconds)),
-            ("deviceAudioFrames", Json.Number(deviceFrames)),
+            ("deviceAudioFrames", Json.Number(playback.deviceFrames)),
             ("deviceAudioMilliseconds", Json.Number(deviceMilliseconds)),
+            ("deviceClockNanoseconds", Json.Number(playback.clockNanoseconds)),
+            ("deviceUnderruns", Json.Number(playback.underruns)),
+            ("deviceInterruptions", Json.Number(playback.interruptions)),
+            ("deviceChanges", Json.Number(playback.deviceChanges)),
+            ("deviceTimelineFailures", Json.Number(playback.timelineFailures)),
             ("videoFramesRequested", Json.Number(configuration.video.frames)),
             ("videoFramesPresented", Json.Number(playback.presented)),
             ("lastAlignedAudioFrame", Json.Number(playback.lastAudioFrame)),
@@ -213,7 +354,7 @@ fn reportOf(
               "audio.speaker",
               "PARTIAL",
               if configuration.audio.playToDevice {
-                "bounded default-device clip acknowledged exact frames"
+                "persistent default-device stream accepted exact frames with observable recovery telemetry"
               } else {
                 "device playback explicitly disabled"
               }
@@ -221,7 +362,15 @@ fn reportOf(
             capability("video.timeline", "WORKING", "exact rational alignment"),
             capability("video.presentation", "PARTIAL", "window without display-link pacing"),
             capability("media.codecs", "MISSING", "PCM WAV only"),
-            capability("media.deviceClock", "MISSING", "no shared device clock"),
+            capability(
+              "media.deviceClock",
+              if configuration.audio.playToDevice { "WORKING" } else { "DISABLED" },
+              if configuration.audio.playToDevice {
+                "video presentation follows the hardware queue timeline"
+              } else {
+                "device streaming explicitly disabled"
+              }
+            ),
             capability("desktop.nativeInput", "PARTIAL", "close request only"),
             capability("desktop.accessibility", "PARTIAL", "no native semantic export")
           ]))

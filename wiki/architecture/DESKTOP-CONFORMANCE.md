@@ -58,11 +58,11 @@ recovery, accessibility, and percentile performance evidence appropriate to the 
 | Printing and PDF | MISSING | none | pagination, preview, print settings, cancellation, vector output |
 | Localization and input direction | PARTIAL | server locale module and Unicode strings | desktop locale environment, pluralization, bidi layout mirroring, live change |
 | Audio representation and graph | WORKING | exact PCM, WAV, resampling, channel maps, bounded pull graph | remains working as pure media; device presentation is a separate row |
-| Speaker/device audio | PARTIAL | bounded default-device PCM clip; two-to-eight preallocated buffers; callback-acknowledged exact frames; monotonic timeout; real macOS launch | persistent streaming session, device discovery/selection, format negotiation, interruption/device loss, underrun telemetry, pause/resume, volume, shared A/V clock, Windows/Linux adapters |
+| Speaker/device audio | PARTIAL | bounded clip plus persistent default-device stream; adapter-accepted format; two-to-eight preallocated buffers; bounded partial writes; pause/resume/volume; hardware-clock, underrun, interruption, device-change, and timeline-failure telemetry; real macOS launches | device discovery/selection, active route-change recovery, latency calibration, long-run percentile evidence, Windows/Linux adapters |
 | Video timing and picture tracks | WORKING | rational clocks, non-overlap, exact audio-frame alignment | remains working as pure media; codec/device presentation are separate rows |
-| Video presentation | PARTIAL | animated Canvas surfaces reach a real window | display-link pacing, frame queue/drop policy, resize, color/HDR, device loss |
+| Video presentation | PARTIAL | animated Canvas surfaces reach a real window; late pictures drop against the audio clock | display-link pacing, bounded presentation queue, resize, color/HDR, device loss |
 | Media codecs and containers | MISSING | PCM WAV only | bounded image/audio/video codecs, metadata, malformed corpus and fuzzing |
-| A/V device synchronization | MISSING | exact conversion predicts aligned positions | shared device clock, drift correction, pause/seek/rate, hour-scale measurement |
+| A/V device synchronization | PARTIAL | picture selection follows the content-bounded hardware audio-queue clock; configured launch submitted all 16,016 audio frames and presented 27 of 30 pictures by dropping late pictures | output-latency calibration, drift correction, pause/seek/rate, display clock correlation, hour-scale measurement |
 | Capture devices | MISSING | none | permission, camera/microphone discovery, bounded queues, interruption handling |
 | GPU acceleration | MISSING | exact CPU renderer is the oracle | Metal/D3D/Vulkan-or-native target backend, frame pacing, fallback parity |
 | Objective-C/AppKit class compatibility | EXCLUDED | not an application capability | never reproduce framework inheritance, delegates, selectors, cells, or NIB ABI |
@@ -84,15 +84,16 @@ recovery, accessibility, and percentile performance evidence appropriate to the 
    monotonic phase durations, and honest `WORKING`/`PARTIAL`/`MISSING` capability states.
 
 This proves a bounded media pipeline, not media completeness. PCM reaches the macOS default speaker
-and completion callbacks must acknowledge every frame, but the pictures are generated rather than
-decoded; event pumping observes only close; and timing is not synchronized to a shared device clock
-or display link.
+through one persistent stream, and pictures follow its content-bounded hardware timeline. The latest
+480×270 configured run prepared and submitted all 16,016 stereo frames at 16 kHz, presented 27 of 30
+pictures by intentionally dropping late pictures, reported no underruns, interruptions, or device
+changes, and closed cleanly. One transient timeline query before the queue established time was
+retained as telemetry rather than treated as playback failure.
 
-The current 480×270 configured run exposed a performance defect as intended: preparing 16,016
-stereo frames at 16 kHz through the interpreter took about 13.5 seconds. The graph representation is
-exact, but the present append-based accumulation cannot be used on a real-time callback. Device audio
-therefore requires preallocated buffers plus a compiled/native-word render path with percentile
-deadline and underrun evidence; increasing the example's limits would only disguise that obligation.
+Pictures are generated rather than decoded; event pumping observes only close; and no display-link,
+latency calibration, route recovery, or hour-scale drift gate exists. Exact compiled tone/ramp byte
+kernels keep preparation near 55 ms, while callbacks perform bounded atomic bookkeeping only; graph
+evaluation still never runs on the real-time callback.
 
 ## Reference-derived obligations
 

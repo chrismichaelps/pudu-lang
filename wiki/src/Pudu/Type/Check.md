@@ -129,7 +129,7 @@ Collect declared shapes and signatures, check trait implementation ownership and
 
 ## Edge Cases
 
-- A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape.
+- A pattern that names an unknown variant binds its sub-patterns at the error type, so the arm still checks without inventing a shape. Resolution diagnoses an unqualified miss as `E2010`; typing diagnoses a qualified missing module export as `E3033` or a missing variant on a known type as `E3034`.
 - A call with fewer arguments than parameters is accepted here because a parameter may declare a default; arity is only rejected when there are too many.
 - `?` unwraps a `Result` and requires the enclosing function to return a `Result` carrying the same failure type; `E3011` reports the case where it does not. Conversion through `From` waits for trait resolution.
 - `.await` reports `E3016` outside an async function and `E3017` for a non-task operand. A task failure uses `E3011` when the enclosing return cannot propagate it; a mismatched `Result` failure type remains ordinary `E3001`.

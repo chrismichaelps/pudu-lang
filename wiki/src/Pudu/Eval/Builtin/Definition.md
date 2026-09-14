@@ -36,6 +36,8 @@ builtinName :: Builtin -> Text
 - Every constructor has exactly one source-level name in the total `builtinName` match.
 - Adding a wired-in function requires corresponding evaluator and prelude work; a constructor here
   does not by itself expose a language feature.
+- Persistent audio has seven explicit tags—open, write, pause, resume, volume, snapshot, and close—
+  rather than one selector-driven primitive, so arity and carrier shape remain statically visible.
 
 ## Linkage
 

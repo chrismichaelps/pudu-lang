@@ -23,6 +23,16 @@ import Pudu.Eval.Child
   , waitChildWithin
   )
 import Pudu.Eval.AudioDevice (playAudioDevice)
+import Pudu.Eval.AudioStream
+  ( AudioStreamSnapshot (..)
+  , closeAudioStream
+  , openAudioStream
+  , pauseAudioStream
+  , readAudioStreamSnapshot
+  , resumeAudioStream
+  , setAudioStreamVolume
+  , writeAudioStream
+  )
 import Pudu.Eval.Clock
 import Pudu.Eval.Desktop (closeDesktop, openDesktop, presentDesktop, pumpDesktop)
 import Pudu.Eval.Signal (stopRequested, watchForStop)
@@ -82,6 +92,7 @@ import Pudu.Eval.Env
   ( effectsAdmitted
   , currentConcurrentStore
   , currentDesktopStore
+  , currentAudioStreamStore
   , currentHandleStore
   , currentChildStore
   , currentSocketStore
@@ -205,6 +216,13 @@ effectBuiltins =
   , DesktopPumpBuiltin
   , DesktopCloseBuiltin
   , AudioDevicePlayBuiltin
+  , AudioStreamOpenBuiltin
+  , AudioStreamWriteBuiltin
+  , AudioStreamPauseBuiltin
+  , AudioStreamResumeBuiltin
+  , AudioStreamVolumeBuiltin
+  , AudioStreamSnapshotBuiltin
+  , AudioStreamCloseBuiltin
   ]
 
 {-| Perform one effect.
@@ -418,6 +436,58 @@ callEffect spanValue builtin arguments = do
                 (fromInteger bufferCount)
                 (fromInteger timeout)
             )
+      ( AudioStreamOpenBuiltin
+        , [ IntValue _ sampleRate
+          , IntValue _ channels
+          , IntValue _ framesPerBuffer
+          , IntValue _ bufferCount
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap openStreamValue
+          <$> lift refusal
+            ( openAudioStream
+                streams
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                (fromInteger framesPerBuffer)
+                (fromInteger bufferCount)
+            )
+      ( AudioStreamWriteBuiltin
+        , [ IntValue _ token
+          , IntValue _ sampleRate
+          , IntValue _ channels
+          , BytesValue pcm
+          , IntValue _ timeout
+          ]
+        ) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap writeStreamValue
+          <$> lift refusal
+            ( writeAudioStream
+                streams
+                token
+                (fromInteger sampleRate)
+                (fromInteger channels)
+                pcm
+                (fromInteger timeout)
+            )
+      (AudioStreamPauseBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (pauseAudioStream streams token)
+      (AudioStreamResumeBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (resumeAudioStream streams token)
+      (AudioStreamVolumeBuiltin, [IntValue _ token, FloatValue _ volume]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (setAudioStreamVolume streams token volume)
+      (AudioStreamSnapshotBuiltin, [IntValue _ token]) -> do
+        streams <- currentAudioStreamStore
+        resultOf . fmap streamSnapshotValue
+          <$> lift refusal (readAudioStreamSnapshot streams token)
+      (AudioStreamCloseBuiltin, [IntValue _ token, BoolValue drain, IntValue _ timeout]) -> do
+        streams <- currentAudioStreamStore
+        effectUnit (closeAudioStream streams token drain (fromInteger timeout))
       (ArgumentsBuiltin, []) -> textArray <$> lift refusal programArguments
       (EnvironmentBuiltin, []) -> pairArray <$> lift refusal environmentPairs
       (TemporaryDirectoryBuiltin, []) -> StrValue <$> lift refusal temporaryDirectoryPath
@@ -517,6 +587,25 @@ callEffect spanValue builtin arguments = do
   textArray = ArrayValue . Seq.fromList . map StrValue
   pairArray pairs =
     ArrayValue (Seq.fromList [TupleValue [StrValue name, StrValue value] | (name, value) <- pairs])
+
+  openStreamValue (token, sampleRate, channels) =
+    ArrayValue (Seq.fromList (map intOf [token, toInteger sampleRate, toInteger channels]))
+
+  writeStreamValue (accepted, status) =
+    ArrayValue (Seq.fromList (map intOf [accepted, toInteger status]))
+
+  streamSnapshotValue snapshot =
+    ArrayValue . Seq.fromList . map intOf $
+      [ snapshotSubmittedFrames snapshot
+      , snapshotAcquiredFrames snapshot
+      , snapshotClockFrames snapshot
+      , snapshotClockNanoseconds snapshot
+      , snapshotUnderruns snapshot
+      , snapshotInterruptions snapshot
+      , snapshotDeviceChanges snapshot
+      , snapshotTimelineFailures snapshot
+      , toInteger (snapshotState snapshot)
+      ]
   intValue = intOf . toInteger
   optionalBytesValue found = case found of
     Just bytes -> VariantValue "Some" [BytesValue bytes]
