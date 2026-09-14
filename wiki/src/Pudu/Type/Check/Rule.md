@@ -111,6 +111,12 @@ DEPTH 0.50 (MEDIUM). It isolates the closed rules from the walk that applies the
 - The same membership test includes the implicit prelude's type-only names. `Sync.cell` without an
   import is therefore a member on the prelude trait `Sync`, not a module access that may be deferred;
   it receives the same `E3034` as a member written through a wired-in or locally declared type.
+- **A type that shares its name with a standard-library module is usually that module unimported.**
+  For `Bool`, `Bytes`, `Char`, `Decimal`, `Map`, `Option`, `Result`, and `Set`, the `E3034` help names
+  the import (`import Std.Result as Result`) instead of explaining variants; every other type keeps
+  the variant help. `typesNamingModules` is that list, and a program spec checks that
+  `test-fixtures/stdlib/TypesNamingModules.pudu` imports exactly those modules under those names and
+  compiles without a diagnostic.
 
 ## Grill Log
 

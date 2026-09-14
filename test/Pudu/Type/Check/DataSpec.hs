@@ -390,6 +390,15 @@ testPreludeData = do
     , "type Mine = | Ok(Str) | Err(Str)"
     , "fn run() -> Mine { Ok(\"text\") }"
     ]
+  unimported <- compile $ Text.unlines
+    [ "module M"
+    , "fn run(parsed: Result[Int, Str]) -> Int { Result.unwrapOr(parsed, 0) }"
+    ]
+  throughType <- compile $ Text.unlines
+    [ "module M"
+    , "fn run(value: Int) -> Int { Int.toInt32(value) }"
+    ]
+  let helpsOf compiled = map diagnosticHelp (compileDiagnostics compiled)
   pure $ conjoin
     [ counterexample "Some builds an Option" (option === "Option[Int]")
     , counterexample "None needs no declaration" (none === [])
@@ -397,6 +406,20 @@ testPreludeData = do
     , counterexample "a constructor checks its payload" (wrongPayload === ["E3001"])
     , counterexample "a generic sum instantiates per use" (generic === [])
     , counterexample "a module may declare its own Ok" (shadowed === [])
+    , counterexample "a member through Result is E3034"
+        (codesOf unimported === ["E3034"])
+    , counterexample "a type named like a module advises importing the module"
+        ( helpsOf unimported
+            === [Just "Std.Result is a module; to call its functions, import it under this name: import Std.Result as Result"]
+        )
+    , counterexample "a type with no module keeps the variant help"
+        ( helpsOf throughType
+            === [ Just
+                    ( "a type is written before a dot only to name a variant it declares; "
+                        <> "a method is called on the value rather than through its type"
+                    )
+                ]
+        )
     ]
 
 testDiscardedResult :: IO Property

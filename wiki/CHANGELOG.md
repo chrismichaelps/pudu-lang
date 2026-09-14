@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Missing-import advice for types named like modules
+
+- `Result.unwrapOr(...)` written without `import Std.Result as Result` drew `E3034` with help about
+  variants, which never names the actual mistake. For the eight types that share a name with a
+  standard-library module (`Bool`, `Bytes`, `Char`, `Decimal`, `Map`, `Option`, `Result`, `Set`), the
+  help now names the import. A fixture writes exactly those imports, and a spec checks that they are
+  the advised ones, resolve without a diagnostic, and run.
+
 ## 2026-09-14 — Streaming CSV rows and bounded record updates
 
 - `Std.Csv.foldRows` and `foldRowsWith` fold a file's rows holding one chunk and one record at a

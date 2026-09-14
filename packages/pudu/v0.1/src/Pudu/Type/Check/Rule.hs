@@ -16,6 +16,7 @@ module Pudu.Type.Check.Rule
   , qualifiedMemberType
   , selfName
   , tryType
+  , typesNamingModules
   , unaryType
   ) where
 
@@ -175,15 +176,31 @@ qualifiedMemberType declared spanValue target member = case target of
             if selfIsValue == Nothing && namesType declared owner
                  && not (declaresVariant declared owner member)
               then do
-                report "E3034" spanValue (owner <> " has no " <> member)
-                  ( Just
-                      ( "a type is written before a dot only to name a variant it declares; "
-                          <> "a method is called on the value rather than through its type"
-                      )
-                  )
+                report "E3034" spanValue (owner <> " has no " <> member) (Just (typeMemberHelp owner))
                 pure (Just ErrorType)
               else pure Nothing
   _ -> pure Nothing
+
+{-| What to do about a member written after a type.
+
+    A type that shares its name with a standard-library module is almost
+    always that module left unimported: `Result.unwrapOr` is a call into
+    `Std.Result` once `import Std.Result as Result` is written, and without it
+    `Result` names the type. The help says so rather than explaining variants
+    to somebody who never meant one. -}
+typeMemberHelp :: Text -> Text
+typeMemberHelp owner
+  | owner `elem` typesNamingModules =
+      "Std." <> owner <> " is a module; to call its functions, import it under this name: import Std."
+        <> owner <> " as " <> owner
+  | otherwise =
+      "a type is written before a dot only to name a variant it declares; "
+        <> "a method is called on the value rather than through its type"
+
+{-| The types the language provides whose names are also standard-library
+    modules. -}
+typesNamingModules :: [Text]
+typesNamingModules = ["Bool", "Bytes", "Char", "Decimal", "Map", "Option", "Result", "Set"]
 
 {-| Whether this name is a type this program knows.
 

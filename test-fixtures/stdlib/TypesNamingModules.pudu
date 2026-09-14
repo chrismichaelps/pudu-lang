@@ -1,0 +1,19 @@
+module TypesNamingModules
+
+import Std.Bool as Bool
+import Std.Bytes as Bytes
+import Std.Char as Char
+import Std.Decimal as Decimal
+import Std.Map as Map
+import Std.Option as Option
+import Std.Result as Result
+import Std.Set as Set
+
+/// Each type that shares its name with a standard-library module, imported
+/// under that name as the diagnostic for a missing import advises: the import
+/// resolves and draws no warning.
+export fn main() -> Int {
+  let parsed: Result[Int, Str] = Ok(3)
+  let found: Option[Int] = Some(1)
+  Result.unwrapOr(parsed, 0) + Option.unwrapOr(found, 0)
+}
