@@ -43,6 +43,8 @@ test-suite pudu-test
     ghc-options:    -optl-Wl,--export-dynamic
   other-modules:
     Pudu.Cli.InitSpec
+    Pudu.Cli.LintSpec
+    Pudu.LintSpec
     Pudu.DecimalLiteralSpec
     Pudu.DiagnosticSpec
     Pudu.FormatSpec

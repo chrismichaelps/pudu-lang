@@ -37,6 +37,10 @@ Device]] with a stable unsupported result and no Apple headers.
 one initialization contract. Its filesystem and text needs are already production dependencies; no
 new runtime package is introduced.
 
+[[Pudu Lint]], [[Pudu Lint Config]], and [[Pudu CLI Lint]] are compiler-library modules. They reuse existing syntax,
+typing, diagnostic, JSON, directory, text, and filepath dependencies; linting introduces no foreign
+tool, plugin runtime, or package dependency.
+
 The production `pudu` package contains the compiler library and executable only. Repository tests
 belong to [[Pudu Test Cabal Manifest]], a sibling package rooted where `test/` and `test-fixtures/`
 actually live. No component may escape this package through `..`: Cabal source archives reject such

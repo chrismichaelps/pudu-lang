@@ -7,6 +7,15 @@ tags: [changelog]
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
+- `pudu lint` now analyzes files or directories through the ordinary typed compiler. Existing
+  compiler warnings become named lint rules; native `W7101` detects four equivalent redundant
+  Boolean-comparison shapes and carries an exact source-verified safe edit. Human and stable JSON
+  output, closed project and file/next-line suppression, unknown-code rejection, deterministic
+  discovery/deduplication, permission-preserving staged replacement, post-fix recompilation, and a
+  live CLI gate ship together. The analyzer exposes structural work counts; a 1,000-comparison
+  property proves one visit per expression without substituting a machine-dependent timing claim.
+  Eight CLI properties, four analyzer properties, the full compiler suite, both package checks, the
+  diagnostic-identity gate, and live four-finding/fix/clean execution pass.
 - `pudu init` now creates a Pudu-only inward dependency graph: `Main` composes effects,
   `App.Greeting` owns the use case, and `Domain.Greeting` owns pure policy. The generator preserves
   existing regular source and support files, refuses links and incompatible paths before writes,
@@ -14,7 +23,7 @@ tags: [changelog]
   acquires its serialization lock atomically, maps competing creators to a typed refusal, stages
   new files, and commits `pudu.toml` last. Seven
   filesystem properties cover success and refusals. The previously unregistered scaffold script is
-  now a mandatory release gate and proves check, run, test, formatter, build, bundled execution, and
+  now a mandatory release gate and proves check, run, test, lint, formatter, build, bundled execution, and
   an intentionally failing generated test from outside the repository.
 - The string construction/view audit found no missing public type: `Std.Text.Builder` already holds
   persistent chunks and joins once; native `Str` remainders share storage for Unicode parsing, and

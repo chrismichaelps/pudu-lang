@@ -13,14 +13,15 @@ aliases: [Generated Project Gate]
 ## Purpose and interface
 
 Given the path to a freshly built `pudu` executable, create a project outside the repository and
-exercise the commands its README promises: check, run, test, formatter check, build, and bundled
+exercise the commands its README promises: check, run, test, lint, formatter check, build, and bundled
 execution. It also changes one assertion and requires `pudu test` to fail visibly.
 
 ## Governance and algorithm
 
 The gate checks every expected Pudu layer and reads their imports to prove the generated graph is
 `Main -> App.Greeting -> Domain.Greeting`, with no outward import from the domain. Running outside
-the checkout catches distribution-only standard-library failures. The temporary project and large
+the checkout catches distribution-only standard-library failures. Linting proves the template
+starts with no policy debt. The temporary project and large
 bundle are removed on both successful and failing assertions.
 
 ## Grill Log

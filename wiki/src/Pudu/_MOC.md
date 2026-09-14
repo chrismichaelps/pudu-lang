@@ -7,6 +7,9 @@ tags: [moc, module]
 
 - [[Pudu CLI]] — the `pudu` executable and its exit-status contract.
 - [[Pudu CLI Init]] — additive, staged, typed creation of canonical projects.
+- [[Pudu CLI Lint]] — project discovery, suppression, output, atomic safe fixes, and lint status.
+- [[Pudu Lint]] — typed linear analysis and source-verified safe edits.
+- [[Pudu Lint Config]] — closed project and source suppression policy.
 - [[Source]] — immutable source identity, cached scalar length, positions, and spans.
 - [[Diagnostic Model]] — phase-independent structured diagnostics, deterministic ordering, and error gating.
 - [[Integer Literal]] — shared arbitrary-precision integer decoding, suffix vocabulary, and concrete-type fit laws.

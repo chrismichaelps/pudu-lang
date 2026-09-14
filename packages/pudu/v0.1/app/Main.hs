@@ -9,6 +9,7 @@ import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
 import Pudu.Version (versionText)
 import Pudu.Cli.Init (createProject, renderInitError)
+import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
 import Data.Text (Text)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -335,6 +336,7 @@ runCommand = do
     [] -> startRepl style Nothing
     ("repl" : rest) -> startRepl style (listToPath rest)
     ("check" : paths) -> checkPaths style paths
+    ("lint" : rest) -> runLint style rest
     ("run" : "--watch" : path : carried) -> watchProgram style path carried
     ("run" : path : "--watch" : carried) -> watchProgram style path carried
     {-| What follows the program's path belongs to the program.
@@ -384,6 +386,14 @@ listToPath :: [String] -> Maybe FilePath
 listToPath values = case values of
   path : _ -> Just path
   [] -> Nothing
+
+runLint :: RenderStyle -> [String] -> IO ()
+runLint style arguments = do
+  result <- lintCommand style arguments
+  unless (Text.null (lintCommandStdout result)) (TextIO.putStr (lintCommandStdout result))
+  unless (Text.null (lintCommandStderr result))
+    (TextIO.hPutStr stderr (lintCommandStderr result))
+  if lintCommandSuccess result then exitSuccess else exitFailure
 
 startRepl :: RenderStyle -> Maybe FilePath -> IO ()
 startRepl style initial =
@@ -971,6 +981,8 @@ usage =
     , "  pudu                 start the puduci interactive session"
     , "  pudu repl [file]     start puduci, optionally loading a file"
     , "  pudu check <file>... compile files and report diagnostics"
+    , "  pudu lint [--json] [--fix] [--allow CODE] <path>..."
+    , "                       analyze Pudu files or directories"
     , "  pudu run <file>      compile a program and run its main function"
   , "  pudu run --watch <file>  the same, run again whenever a source file"
   , "                       under it changes"

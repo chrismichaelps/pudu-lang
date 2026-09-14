@@ -26,6 +26,8 @@ Separating this package makes the compiler's source distribution self-contained:
 - The native C++ fixture remains test-only and uses the same platform export flags.
 - [[Pudu CLI Init Spec]] is registered explicitly and uses `temporary` for isolated filesystem
   evidence and `filepath` for portable project paths.
+- [[Pudu Lint Spec]] and [[Pudu CLI Lint Spec]] are registered explicitly; CLI filesystem evidence
+  uses the existing isolated `temporary` dependency.
 
 ## Grill Log
 

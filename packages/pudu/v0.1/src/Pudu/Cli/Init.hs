@@ -325,6 +325,7 @@ readmeTemplate name = Text.unlines
   , "pudu run --watch src/Main.pudu  # run it again on every save"
   , "pudu test                       # run the suites under test/"
   , "pudu check src/Main.pudu        # compile without running"
+  , "pudu lint src test               # find unsafe or needlessly complex code"
   , "pudu fmt --check .              # verify committed formatting"
   , "pudu build src/Main.pudu        # create a portable bundle"
   , "```"

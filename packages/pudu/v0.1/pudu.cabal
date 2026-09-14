@@ -58,6 +58,9 @@ library
   other-modules:     Paths_pudu
   exposed-modules:
     Pudu.Cli.Init
+    Pudu.Cli.Lint
+    Pudu.Lint
+    Pudu.Lint.Config
     Pudu.Version
     Pudu.Bundle
     Pudu.Compiler

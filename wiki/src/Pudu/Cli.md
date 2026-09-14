@@ -27,6 +27,7 @@ Provide the `pudu` executable: start `puduci`, check files, and report version a
 pudu                 start the puduci interactive session
 pudu repl [file]     start puduci, optionally loading a file
 pudu check <file>... compile files and report diagnostics
+pudu lint [--json] [--fix] [--allow CODE] <path>...  analyze files or directories
 pudu run <file>      compile a program and run its main function
 pudu watch <file>    watch project sources and restart program on change
 pudu test [path]...  discover and execute test fixtures, reporting assertion summaries
@@ -48,6 +49,9 @@ pudu help            print usage
   LSP session against that same surface. The documented refresh puts that directory first on
   `PATH` and asserts the resolved path before either behavioral check.
 - `pudu fmt` rewrites files in place, `--check` reports which would change and exits non-zero without touching any, and `--stdout` writes the result for a caller that wants to diff it. The check form is the shape a continuous-integration step needs.
+- `pudu lint` delegates to [[Pudu CLI Lint]]. It reuses the typed compiler result, includes existing
+  compiler warnings as native rules, supports deterministic human/JSON output and narrow explicit
+  suppression, and applies only source-verified safe edits before recompiling.
 
 - `main`'s answer decides what the run does. A whole number becomes the exit status, because that is
   what a shell reads and a program returning one meant it as a status. Unit prints nothing. Anything
@@ -102,7 +106,9 @@ Read arguments, detect the render style once, dispatch to the session, checker, 
 
 ## Negative Logic (Prohibited Paths)
 
-- No compilation logic, no configuration files, no environment-driven behaviour beyond `NO_COLOR`, and no output that a script cannot interpret from the exit status.
+- No compilation logic or environment-driven behaviour beyond `NO_COLOR`, and no output that a
+  script cannot interpret from the exit status. Project lint policy is owned by [[Pudu CLI Lint]],
+  not parsed in this entry point.
 - No direct dependency-path construction; [[Compiler Program]] owns source-root and module-name policy.
 - `pudu init` must never overwrite an existing `pudu.toml`.
 

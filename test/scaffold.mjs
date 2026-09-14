@@ -78,6 +78,10 @@ if (!tested.includes("1/1 suites passed")) {
 // fails its own `fmt --check` teaches that the check is noise.
 inProject("fmt --check", ["fmt", "--check", "src", "test"]);
 
+// The project begins without lint debt, so enabling the release policy later
+// does not start by suppressing generated code.
+inProject("lint", ["lint", "src", "test"]);
+
 // It compiles to one file that runs.
 inProject("build", ["build", "src/Main.pudu", "-o", "app"]);
 if (existsSync(join(project, "app"))) {
@@ -124,5 +128,6 @@ console.log(JSON.stringify({
   ran: true,
   tested: true,
   formatted: true,
+  linted: true,
   built: true,
 }));

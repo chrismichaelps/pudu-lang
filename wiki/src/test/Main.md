@@ -23,6 +23,9 @@ rather than failing early, and exits unsuccessfully when any result failed. Regi
 [[Pudu Test Cabal Manifest]] are both mandatory: one makes a property execute and the other makes
 its module compile in the suite.
 
+Lint analysis and command properties are separate families: [[Pudu Lint Spec]] proves pure typed
+analysis, while [[Pudu CLI Lint Spec]] proves filesystem, configuration, JSON, and fix boundaries.
+
 ## Grill Log
 
 - **Q:** Stop at the first failure? **A:** No. _Rationale:_ independent compiler phases can report

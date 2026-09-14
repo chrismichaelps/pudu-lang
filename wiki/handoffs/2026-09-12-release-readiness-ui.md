@@ -166,16 +166,25 @@ order, hit testing, painting, and damage regions.
 
 ## Exact next action
 
-Specify and implement a native `pudu lint` over Pudu's lossless syntax and semantic information,
-using HLint only as a public behavioral reference. It must have stable Pudu diagnostic codes,
-configuration and suppression rules, machine-readable output, safe fix applicability, false-positive
-fixtures, and measured linear traversal before it enters the mandatory gates. Then continue the
-native media roadmap: a persistent Pudu-owned stream with negotiated format, device change,
+Continue the native media roadmap: implement a persistent Pudu-owned stream with negotiated format, device change,
 interruption, underrun telemetry, pause/resume/volume, and one observable media clock that picture
 presentation follows; then the first Pudu **space** application loop over [[Std Ui Desktop]] and
 [[Std Ui Screen]], translating native pointer/key/text/close events into screen inputs. Keep every
 exact fixture as the semantic oracle and add percentile latency/memory gates before claiming
 interactive or real-time performance.
+
+## 2026-09-13 native lint transition
+
+Role moved **Design → Construction → Validation** for [[Pudu Lint]] and [[Pudu CLI Lint]]. Public HLint
+documentation is a behavioral reference only: Pudu keeps stable named findings, suppression, and
+structured output, but fixes remain in the same typed compiler process and require exact source-span
+proof. The construction slice owns the two lint modules, their two focused specs, CLI registration,
+build/test registration, a live command gate, and matching vault pages. No review agent is used.
+Validation passes eight CLI properties, four analyzer properties including a 3,001-visit structural
+linearity oracle, the unrestricted full compiler suite, a warning-as-error build, both Cabal package
+checks, the diagnostic identity registry, the Pudu-only generated-project workflow, and live JSON,
+four-finding, fix, recompile, and clean-lint execution. Active ownership returns to **Stdlib
+Implementer** for the persistent native media stream named above.
 
 ## Grill Log
 

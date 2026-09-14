@@ -41,6 +41,14 @@ const shared = new Map([
   ["E7008", "await used where it cannot be, from the evaluator and from its builtins"],
   ["E7009", "an effect refused while a constant is folded, from the effects and from starting a thread"],
   ["E7012", "a built-in given arguments it does not accept, from the builtins and the effects"],
+  ["W2001", "an unused import, reported by resolution and retained by lint policy and output"],
+  ["W2002", "a shadowed name, reported by resolution and retained by lint policy and output"],
+  ["W3001", "an unsafe operation outside an unsafe block, retained by lint policy and output"],
+  ["W3002", "an unreachable statement, retained by lint policy and output"],
+  ["W3003", "an unused failure channel, retained by lint policy and output"],
+  ["W5001", "an unreachable match arm, retained by lint policy and output"],
+  ["W7027", "a resource released by teardown, retained by lint policy and output"],
+  ["W7101", "a redundant Boolean comparison, reported by lint and retained by its policy registry"],
 ]);
 
 const sources = [];

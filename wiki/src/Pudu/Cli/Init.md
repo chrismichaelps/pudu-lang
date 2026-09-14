@@ -27,6 +27,8 @@ Existing source, test, README, and ignore files are preserved. The generated pro
 only Pudu source: `Main` is the composition root, `App.Greeting` is the application layer, and
 `Domain.Greeting` is the pure domain layer. Dependencies point inward only. The test root exercises
 both public layers through the manifest's `src` search root.
+The README includes the native lint command, and the generated graph is clean under it without an
+initial suppression list.
 
 A private directory lock serializes Pudu initializers. Lock acquisition is the atomic filesystem
 operation; a competing creator maps the operating system's already-exists result to the stable

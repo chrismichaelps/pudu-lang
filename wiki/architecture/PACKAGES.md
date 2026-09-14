@@ -76,6 +76,8 @@ Published `(name, version)` records are immutable.
 ## Commands
 
 - `pudu init [path]` creates a manifest and source skeleton without overwriting files.
+- `pudu lint [--json] [--fix] [--allow CODE] <path>...` analyzes typed project source, reads the
+  closed `[lint]` policy, and applies only source-verified safe edits.
 - `pudu lock` resolves and atomically updates `pudu.lock`.
 - `pudu fetch [--locked|--frozen|--offline]` fills the cache without compiling.
 - `pudu check|run|test|build` discover the manifest, require the selected lock policy, and compile
