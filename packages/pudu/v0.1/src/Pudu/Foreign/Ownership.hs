@@ -31,7 +31,16 @@ import Control.Concurrent.STM
   , retry
   , writeTVar
   )
-import Control.Exception (SomeException, finally, mask, mask_, try)
+import Control.Exception
+  ( SomeAsyncException
+  , SomeException
+  , finally
+  , fromException
+  , mask
+  , mask_
+  , throwIO
+  , try
+  )
 import Pudu.Diagnostic (Diagnostic)
 import Data.Maybe (isJust)
 import Data.Int (Int64)
@@ -114,7 +123,7 @@ claimOwnedGeneration (ForeignStore table closing _ counter _) address cleanup = 
           pure (Just generation, False)
   case outcome of
     (accepted, dispose) -> do
-      if dispose then cleanupQuietly (ForeignResource cleanup 0 0) else pure ()
+      if dispose then cleanupOnce (ForeignResource cleanup 0 0) else pure ()
       pure accepted
 
 {-| Claim another reference to something already referenced.
@@ -137,7 +146,7 @@ claimCountedGeneration (ForeignStore _ closing _ counter counted) address cleanu
         pure (Just generation)
   case outcome of
     Nothing -> do
-      cleanupQuietly (ForeignResource cleanup 0 0)
+      cleanupOnce (ForeignResource cleanup 0 0)
       pure Nothing
     Just generation -> pure (Just generation)
 
@@ -231,7 +240,7 @@ releaseLeases (ForeignStore table closing _ _ counted) leases = mask_ $ do
           then Map.elems idle <> map snd (Map.elems idleCounted)
           else []
       )
-  mapM_ cleanupQuietly finished
+  cleanupAll finished
  where
   decrementOwned lease = case lease of
     OwnedLease address -> Map.adjust idler address
@@ -283,7 +292,7 @@ discardOwnedGenerations store claims = mask_ $ mapM_ discard claims
  where
   discard (address, generation) = do
     found <- takeOwnedGeneration store address generation
-    maybe (pure ()) cleanupQuietly found
+    maybe (pure ()) cleanupOnce found
 
 {-| Restore a claim when the explicit destructor was never entered. -}
 restoreOwned :: ForeignStore -> Int64 -> ForeignResource -> IO ()
@@ -296,7 +305,7 @@ restoreOwned (ForeignStore table closing _ _ _) address resource = mask_ $ do
       else if closed
         then pure True
         else writeTVar table (Map.insert address resource held) >> pure False
-  if dispose then cleanupQuietly resource else pure ()
+  if dispose then cleanupOnce resource else pure ()
 
 {-| How long teardown waits for native calls still inside a library.
 
@@ -328,7 +337,7 @@ closeForeignStore (ForeignStore table closing _ _ counted) = mask_ $ do
                        if expired then drainUnleasedCounted counted else retry
                    )
       )
-  mapM_ cleanupQuietly (resources <> references)
+  cleanupAll (resources <> references)
 
 drain :: TVar (Map Int64 ForeignResource) -> STM [ForeignResource]
 drain table = do
@@ -363,7 +372,27 @@ drainUnleasedCounted counted = do
   writeTVar counted busy
   pure (map snd (Map.elems idle))
 
-cleanupQuietly :: ForeignResource -> IO ()
-cleanupQuietly resource = do
-  _ <- try (resourceCleanup resource) :: IO (Either SomeException ())
-  pure ()
+{-| Run every cleanup, whatever an earlier one raised.
+
+    A cleanup's own failure is dropped: teardown has nowhere to report it, and
+    the resources after it still owe their release. An asynchronous exception
+    is different: an interrupt or a kill that lands while a cleanup runs did not
+    come from the cleanup, and answering it as a failed release is how Ctrl-C
+    during teardown was ignored. It is held until every cleanup has run and
+    then raised, so nothing leaks and the program still stops. -}
+{-| One resource's cleanup, under the same rule as teardown's. -}
+cleanupOnce :: ForeignResource -> IO ()
+cleanupOnce resource = cleanupAll [resource]
+
+cleanupAll :: [ForeignResource] -> IO ()
+cleanupAll resources = do
+  interruptions <- mapM cleanupOne resources
+  case [problem | Just problem <- interruptions] of
+    problem : _ -> throwIO problem
+    [] -> pure ()
+ where
+  cleanupOne resource = do
+    outcome <- try (resourceCleanup resource) :: IO (Either SomeException ())
+    pure $ case outcome of
+      Left problem | Just _ <- (fromException problem :: Maybe SomeAsyncException) -> Just problem
+      _ -> Nothing

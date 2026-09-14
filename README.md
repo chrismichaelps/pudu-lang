@@ -55,7 +55,7 @@ else notices.
 Run it again after any change to the compiler, and restart the editor's language
 server so it picks up the new executable.
 
-Development builds currently share version `0.1.0.0`, so the checks above prove the installed
+Development builds currently share version `0.1.0` (`pudu --version` prints `pudu 0.1.0`), so the checks above prove the installed
 binary by behavior instead of trusting the version string.
 
 ## Contributing

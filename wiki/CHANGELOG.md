@@ -41,6 +41,16 @@ tags: [changelog]
   module-constant tables and join once; escapes that do not spell UTF-8 leave the text unchanged.
   `Std.Http` form fields reuse the component codec with a plus for a space. `UsesUrlAll.pudu` holds
   53 claims and `UsesHttpAll.pudu` 93.
+- `charAt`, `length`, and `slice` on long text no longer walk from the start on every call. A
+  two-entry cursor keyed by the text's buffer remembers the last scalar position and the counted
+  length, so a positional scan walks only the distance it moves, in either direction. At -O2 a
+  `charAt` scan of 640,000 ASCII characters fell from 11.0 s to 0.94 s and 160,000 mixed-width
+  characters from 0.97 s to 0.27 s. Forward, backward, interleaved, shared-buffer, and past-the-end
+  evaluator cases guard the answers.
+- Foreign-resource teardown no longer swallows an interrupt. Every cleanup still runs and a
+  cleanup's own failure is still dropped, but an asynchronous exception raised during one is held
+  until the rest have released and is then re-raised, so Ctrl-C during teardown stops the program.
+- The README states the version development builds report, `0.1.0`.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 
