@@ -1,3 +1,5 @@
+{-# LANGUAGE MagicHash #-}
+
 {-| @Program.Eval.Builtin.String — text method dispatch and scalar manipulation -}
 module Pudu.Eval.Builtin.String
   ( callStringMethod
@@ -7,6 +9,8 @@ module Pudu.Eval.Builtin.String
   , indexOfText
   ) where
 
+import Data.Bits ((.&.))
+import Data.IORef (IORef, atomicWriteIORef, newIORef, readIORef)
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -15,11 +19,15 @@ import qualified Data.Text.Lazy as LazyText
 import qualified Data.Text.Lazy.Builder as Builder
 import qualified Data.Text.Array as Array
 import Data.Text.Internal (Text (..))
+import Data.Text.Internal.Encoding.Utf8 (utf8LengthByLeader)
+import Data.Text.Unsafe (Iter (..), iterArray)
+import GHC.Exts (isTrue#, sameByteArray#)
 
 import Pudu.Eval.Bytes (bytesFromText)
-import Pudu.Eval.Env (Evaluator (..), abortAt)
+import Pudu.Eval.Env (Eval (..), Evaluator (..), abortAt)
 import Pudu.Eval.Value (StringMethod (..), Value (..), boolValue, intOf, stringMethodName)
 import Pudu.Source (Span)
+import System.IO.Unsafe (unsafePerformIO)
 
 {-| Apply a built-in text method.
     Every one answers with a new value: text is a value, and a method that
@@ -35,7 +43,7 @@ callStringMethod spanValue method receiver arguments = case receiver of
   _ -> abortAt (Just spanValue) "E7001" "not text" Nothing
  where
   apply text = case (method, arguments) of
-    (StringLength, []) -> pure (intOf (fromIntegral (Text.length text)))
+    (StringLength, []) -> intOf . fromIntegral <$> liftCursor (scalarCount text)
     (StringIsEmpty, []) -> pure (boolValue (Text.null text))
     (StringCharAt, [IntValue _ index]) -> charAtFast spanValue text index
     (StringIndexOf, [StrValue needle]) -> pure (intOf (indexOfText text needle))
@@ -88,17 +96,13 @@ callStringMethod spanValue method receiver arguments = case receiver of
       two kinds of sequence behaved differently: `List.rest` of an empty array
       answered an empty array, and `Text.rest` of empty text stopped the
       program. -}
-  slice text from to =
-    let size = toInteger (Text.length text)
-        start = max 0 (min from size)
+  slice text@(Text array offset _) from to = do
+    size <- toInteger <$> liftCursor (scalarCount text)
+    let start = max 0 (min from size)
         end = max start (min to size)
-     in pure
-          ( StrValue
-              ( Text.take
-                  (textCount text (end - start))
-                  (dropText (textCount text start) text)
-              )
-          )
+    startByte <- liftCursor (scalarOffset text (fromInteger start))
+    endByte <- liftCursor (scalarOffset text (fromInteger end))
+    pure (StrValue (Text array (offset + startByte) (endByte - startByte)))
 
   outOfRange message = abortAt (Just spanValue) "E7004" message Nothing
 
@@ -165,7 +169,7 @@ callStringMethodFast spanValue member text arguments = case member of
     [] -> pure (boolValue (Text.null text))
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for isEmpty" Nothing
   "length" -> Just $ case arguments of
-    [] -> pure (intOf (fromIntegral (Text.length text)))
+    [] -> intOf . fromIntegral <$> liftCursor (scalarCount text)
     _ -> abortAt (Just spanValue) "E7012" "wrong arguments for length" Nothing
   "charAt" -> Just $ case arguments of
     [IntValue _ index] -> charAtFast spanValue text index
@@ -206,13 +210,125 @@ callStringMethodFast spanValue member text arguments = case member of
   direct method = Just (callStringMethod spanValue method (StrValue text) arguments)
 
 charAtFast :: Span -> Text -> Integer -> Evaluator Value
-charAtFast spanValue text@(Text _ _ byteLength) index
+charAtFast spanValue text@(Text array offset byteLength) index
   | index < 0 || index >= fromIntegral byteLength = outOfRange
-  | otherwise = case Text.uncons (dropText (fromInteger index) text) of
-      Nothing -> outOfRange
-      Just (character, _) -> pure (CharValue character)
+  | otherwise = do
+      position <- liftCursor (scalarOffset text (fromInteger index))
+      if position < 0 || position >= byteLength
+        then outOfRange
+        else let Iter character _ = iterArray array (offset + position) in pure (CharValue character)
  where
   outOfRange = abortAt (Just spanValue) "E7004" "index out of range" Nothing
+
+{-| Where the last positional reads of long texts landed.
+
+    Indices count scalars and UTF-8 gives a scalar no fixed width, so reaching
+    index n from the start of a text walks n scalars, and so does counting its
+    length. A program scanning text by position asks for n, then n + 1, and its
+    loop asks for the length each turn; answering every one from the start made
+    the scan grow with the square of the text, and 640,000 ASCII characters
+    took 11.0 s at -O2. Remembering the last scalar index, its byte offset, and
+    the counted length turns each step into a walk of the distance moved.
+
+    Two entries, most recent first, so a loop comparing two texts position by
+    position keeps both. Each entry is an immutable record and the pair is
+    replaced whole, so a read on another thread sees an old pair or a new one,
+    each correct for its own text. An entry is keyed by the text's buffer,
+    offset, and byte length: a different string, including a slice sharing the
+    buffer, never answers from another's entry. -}
+data TextCursor = TextCursor
+  { cursorArray :: !Array.Array
+  , cursorOffset :: !Int
+  , cursorBytes :: !Int
+  , cursorScalar :: !Int
+  , cursorByte :: !Int
+  , cursorLength :: !Int
+  }
+
+data TextCursors = TextCursors !TextCursor !TextCursor
+
+textCursors :: IORef TextCursors
+textCursors = unsafePerformIO (newIORef (TextCursors unused unused))
+ where
+  unused = TextCursor Array.empty 0 (-1) 0 0 (-1)
+{-# NOINLINE textCursors #-}
+
+{-| Texts shorter than this many bytes are walked from their start: the walk
+    is shorter than consulting and replacing the cursors. -}
+cursorThreshold :: Int
+cursorThreshold = 256
+
+liftCursor :: IO a -> Evaluator a
+liftCursor action = Evaluator $ \env -> (`Done` env) <$> action
+
+sameText :: Text -> TextCursor -> Bool
+sameText (Text (Array.ByteArray array) offset bytes) cursor =
+  cursorBytes cursor == bytes
+    && cursorOffset cursor == offset
+    && case cursorArray cursor of
+      Array.ByteArray known -> isTrue# (sameByteArray# known array)
+
+{-| The entry this text already has, or a fresh one, with the entry to keep
+    beside it. -}
+findCursor :: Text -> IO (TextCursor, TextCursor)
+findCursor text@(Text array offset bytes) = do
+  TextCursors first second <- readIORef textCursors
+  pure $
+    if sameText text first
+      then (first, second)
+      else
+        if sameText text second
+          then (second, first)
+          else (TextCursor array offset bytes 0 0 (-1), first)
+
+{-| The number of scalars in a text, counted once per long text. -}
+scalarCount :: Text -> IO Int
+scalarCount text@(Text _ _ bytes)
+  | bytes < cursorThreshold = pure (Text.length text)
+  | otherwise = do
+      (cursor, other) <- findCursor text
+      if cursorLength cursor >= 0
+        then pure (cursorLength cursor)
+        else do
+          let counted = Text.length text
+          atomicWriteIORef textCursors (TextCursors cursor{cursorLength = counted} other)
+          pure counted
+
+{-| The byte offset, from the text's start, of scalar `index`: the byte length
+    when `index` is the scalar length, and -1 past that. A long text walks from
+    its remembered position, backwards when that is nearer than the start. -}
+scalarOffset :: Text -> Int -> IO Int
+scalarOffset text@(Text array offset bytes) index
+  | index < 0 = pure (-1)
+  | bytes < cursorThreshold = pure (relative (forward offset index))
+  | otherwise = do
+      (cursor, other) <- findCursor text
+      let known = cursorScalar cursor
+          position
+            | cursorLength cursor >= 0 && index > cursorLength cursor = -1
+            | index >= known = forward (offset + cursorByte cursor) (index - known)
+            | index * 2 >= known = backward (offset + cursorByte cursor) (known - index)
+            | otherwise = forward offset index
+      if position < 0
+        then pure (-1)
+        else do
+          atomicWriteIORef textCursors
+            (TextCursors cursor{cursorScalar = index, cursorByte = position - offset} other)
+          pure (position - offset)
+ where
+  end = offset + bytes
+  relative position = if position < 0 then -1 else position - offset
+  forward !position !remaining
+    | remaining == 0 = position
+    | position >= end = -1
+    | otherwise =
+        forward (position + utf8LengthByLeader (Array.unsafeIndex array position)) (remaining - 1)
+  backward !position !remaining
+    | remaining == 0 = position
+    | otherwise = backward (leader (position - 1)) (remaining - 1)
+  leader position
+    | Array.unsafeIndex array position .&. 0xC0 == 0x80 = leader (position - 1)
+    | otherwise = position
 
 indexOfText :: Text -> Text -> Integer
 indexOfText text needle = case Text.breakOn needle text of

@@ -175,10 +175,14 @@ order, hit testing, painting, and damage regions.
   signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
   readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
   `Std.Toml.Read` still reads characters by
-  position; `Std.Mime`, `Std.Log`, `Std.Url.decodeComponent`, and `Std.Http.formDecode` still append
-  per character on inputs that are normally short; a unified diff does not mark a missing final
-  newline; and `Str.charAt` walks the UTF-8 prefix, so any positional scanner a program writes grows
-  with the square of its text.
+  position; `Std.Mime` and `Std.Log` still append per character on inputs that are normally short.
+- First-release sweep, 2026-09-14 — all ten gates pass after each slice. A qualified record type
+  pattern (`Audio.Format { .. }`) wrongly drew `E3033` from the qualified-constructor check and is
+  accepted again; `Std.Diff.unifiedDiff` reported a final-newline-only change as no change and now
+  emits `\ No newline at end of file`; `Std.Url` and `Std.Http` form fields escaped scalar values
+  instead of UTF-8 bytes (`€` became `%20%AC`) and now walk bytes through constant tables; and
+  `charAt`, `length`, and `slice` read long text through a two-entry position cursor, so positional
+  scans are linear (640,000 characters: 11.0 s to 0.94 s at -O2).
 
 ## Exact next action
 
