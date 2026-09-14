@@ -107,6 +107,14 @@ export fn main() -> Int {
   if Url.decodeComponent("100%") == "100%" { held = held + 1 }
   if Url.decodeComponent("%zz") == "%zz" { held = held + 1 }
   if Url.decodeComponent(Url.encodeComponent("a b&c=d#e")) == "a b&c=d#e" { held = held + 1 }
+  // An escape names a UTF-8 byte, so text beyond ASCII is written as its bytes
+  // and read back as the characters they spell, in either case of hex.
+  if Url.encodeComponent("é") == "%C3%A9" { held = held + 1 }
+  if Url.decodeComponent("%C3%A9") == "é" { held = held + 1 }
+  if Url.decodeComponent("%e2%82%ac") == "€" { held = held + 1 }
+  if Url.decodeComponent(Url.encodeComponent("€ naïve 😀")) == "€ naïve 😀" { held = held + 1 }
+  // Escapes that do not spell UTF-8 leave the text as it arrived.
+  if Url.decodeComponent("%FF") == "%FF" { held = held + 1 }
 
   // A query on its own, written and read.
   if Url.renderQuery(&[("a", "1"), ("b", "x y")]) == "a=1&b=x%20y" { held = held + 1 }

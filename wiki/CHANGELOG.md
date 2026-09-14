@@ -35,6 +35,12 @@ tags: [changelog]
   The unterminated side's last line compares as distinct and is followed by
   `\ No newline at end of file`; line splitting no longer re-walks the text per character.
   `UsesDiff.pudu` holds 14 claims.
+- `Std.Url.encodeComponent` and `decodeComponent` escape UTF-8 bytes. A character above ASCII was
+  escaped from its scalar value, so `€` became `%20%AC` and read back as a space and `¬`, and a
+  standard `%C3%A9` decoded to two characters instead of `é`. Both directions now walk bytes through
+  module-constant tables and join once; escapes that do not spell UTF-8 leave the text unchanged.
+  `Std.Http` form fields reuse the component codec with a plus for a space. `UsesUrlAll.pudu` holds
+  53 claims and `UsesHttpAll.pudu` 93.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 

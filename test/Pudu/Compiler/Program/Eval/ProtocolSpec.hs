@@ -437,7 +437,7 @@ testProtocolEvaluation = do
         wrong and nowhere else. -}
     , counterexample
         "every protocol name answers the wire form it stands for"
-        (httpAll === Just "91")
+        (httpAll === Just "93")
     {-| Every export of the database wire module, each message checked against
         the wire rather than against the reader beside it: the letter it starts
         with, the length it states, and the bytes after that length. A writer
@@ -480,7 +480,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "48")
+        (urlAll === Just "53")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

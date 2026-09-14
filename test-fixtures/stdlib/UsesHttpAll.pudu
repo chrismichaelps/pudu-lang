@@ -170,6 +170,8 @@ export fn main() -> Int {
   // A space is a plus in a form body, which is what a form encoding is.
   if Http.renderForm(&[("a", "1"), ("b", "x y")]) == "a=1&b=x+y" { held = held + 1 }
   if Http.parseForm("a=1&b=2") == [("a", "1"), ("b", "2")] { held = held + 1 }
+  if Http.renderForm(&[("n", "é x")]) == "n=%C3%A9+x" { held = held + 1 }
+  if Http.parseForm("n=%C3%A9+x") == [("n", "é x")] { held = held + 1 }
   let posted = Http.withForm(&Http.request(Http.Post, "/f"), &[("a", "1")])
   if posted.body == "a=1" { held = held + 1 }
   let sent = Http.withJson(&Http.request(Http.Post, "/j"), "\{\}")
