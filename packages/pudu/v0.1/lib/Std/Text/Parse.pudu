@@ -700,14 +700,21 @@ fn hexValue(found: Char) -> Int {
   }
 }
 
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
+
 /// A whole hexadecimal number, at least one digit.
+///
+/// Digits past what an `Int` holds fail to parse rather than stopping the
+/// program; `bigInteger` is the reader for numbers of any size.
 export fn hexadecimal() -> Parser[Int] {
-  map(some(hexDigit()), fn(digits: Array[Int]) -> Int => {
+  andThen(some(hexDigit()), fn(digits: Array[Int]) -> Parser[Int] => {
       var total = 0
+      var fits = true
       for place in digits {
-        total = total * 16 + place
+        if total > (INT_MAX - place) / 16 { fits = false } else if fits { total = total * 16 + place }
       }
-      total
+      if fits { pure(total) } else { fail("a hexadecimal number an Int holds") }
     })
 }
 

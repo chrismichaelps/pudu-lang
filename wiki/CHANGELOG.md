@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Oversized numbers from outside a program no longer stop it
+
+- Eight readers accumulated digits without a bound, so twenty digits raised `E7005` and ended the
+  program: `Std.Semver.parse` (now `NotANumber`), `Std.Args.numberOf` (now nothing),
+  `Std.Regex.compile` for a repeat count (now `BadRepeat`), `Std.Text.Parse.hexadecimal` (now a parse
+  failure), `Std.Http.Message` chunk sizes (now not a size), `Std.Http.Safe.framing` for a content
+  length (now refused), `Std.Http.Server.Resilience` for an `rtt` hint (now held at the largest
+  `Int`), and the internal readers of `Std.App.Trace` and `Std.Time`. Each checks before multiplying.
+  `UsesOverflowGuards` drives the seven reachable from outside; each stopped the program before.
+
 ## 2026-09-14 — A TOML number that stopped the program
 
 - `Std.Toml.Scan.digitsIn` multiplied without a bound, so `size = 99999999999999999999` stopped the

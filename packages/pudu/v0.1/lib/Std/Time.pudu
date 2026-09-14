@@ -210,17 +210,23 @@ export fn describe(value: &Duration) -> Str {
 /// Two readings may be subtracted; one alone means nothing.
 export fn elapsed() -> Int { clock() }
 
-/// A whole number read from text, or a fallback.
+/// A whole number read from text, or a fallback when the text is not one or
+/// spells more than an `Int` holds.
 fn wholeOr(text: Str, fallback: Int) -> Int {
   if text.isEmpty() { fallback } else {
     var total = 0
     for character in text.chars() {
       if character < '0' || character > '9' { return fallback }
-      total = total * 10 + (character.code() - 48)
+      let digit = character.code() - 48
+      if total > (INT_MAX - digit) / 10 { return fallback }
+      total = total * 10 + digit
     }
     total
   }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// A whole number written with at least a given number of digits.
 fn pad(value: Int, width: Int) -> Str {

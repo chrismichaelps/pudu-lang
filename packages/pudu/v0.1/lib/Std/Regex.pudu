@@ -283,12 +283,20 @@ fn parseRepeat(
   Ok((repeated, Build{pos: after, groups: current.groups, classes: current.classes}))
 }
 
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
+
 /// `{n}`, `{n,}` and `{n,m}`, answering the bounds and where the brace ended.
 fn parseCount(chars: &Array[Char], open: Int) -> Result[(Int, Int, Int), RegexError] {
   var index = open + 1
   var low = 0
   var sawLow = false
   while index < chars.length() && Char.isDigit(chars[index]) {
+    // A count past what an Int holds is a malformed repeat, not a stopped
+    // program: a pattern is often written by someone other than its caller.
+    if low > (INT_MAX - digitValue(chars[index])) / 10 {
+      return Err(BadRepeat(open))
+    }
     low = low * 10 + digitValue(chars[index])
     sawLow = true
     index = index + 1
@@ -310,6 +318,9 @@ fn parseCount(chars: &Array[Char], open: Int) -> Result[(Int, Int, Int), RegexEr
   var sawHigh = false
   var counted = 0
   while index < chars.length() && Char.isDigit(chars[index]) {
+    if counted > (INT_MAX - digitValue(chars[index])) / 10 {
+      return Err(BadRepeat(open))
+    }
     counted = counted * 10 + digitValue(chars[index])
     sawHigh = true
     index = index + 1

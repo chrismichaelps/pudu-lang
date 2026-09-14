@@ -25,6 +25,8 @@ instructions: `search` reports `StepLimit`, and `find` and `isMatch` answer no m
 direction for a filter. Compiling recurses through its readers once per open group, so a group that
 would nest more than 256 levels deep answers `TooDeep` at its opening bracket instead of exhausting
 the evaluator's call limit. A bounded repetition is written out, capped at 1,000 optional copies.
+A repeat count whose digits spell more than an `Int` holds is `BadRepeat` at its brace, checked before
+each multiplication, rather than an overflow that stops the program.
 ## Grill Log
 - **Q:** Walk the pattern as a tree while matching? **A:** No. _Rationale:_ the call stack would then
   depend on the pattern. _Accepted:_ a flat program with its own resume stack.

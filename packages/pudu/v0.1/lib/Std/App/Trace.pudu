@@ -203,17 +203,22 @@ fn recordedIn(flags: Str) -> Bool {
   if let Some(value) = hexValue(flags.toLower()) { value % 2 == 1 } else { false }
 }
 
+/// Hexadecimal digits as a whole number, or nothing, including for digits past
+/// what an `Int` holds: trace context arrives in a request header.
 fn hexValue(text: Str) -> Option[Int] {
   var total = 0
   var index = 0
   var good = true
   while index < text.length() && good {
     let digit = "0123456789abcdef".indexOf(text.slice(index, index + 1))
-    if digit < 0 { good = false } else { total = total * 16 + digit }
+    if digit < 0 || total > (INT_MAX - digit) / 16 { good = false } else { total = total * 16 + digit }
     index = index + 1
   }
   if good && text.length() > 0 { Some(total) } else { None }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 fn isHex(text: Str, digits: Int) -> Bool {
   if text.length() != digits {

@@ -47,6 +47,10 @@ happened by the time a segment exists, so there is nothing left for it to hide i
 **An address a request named is refused when it is one the network trusts.** Loopback, link-local,
 and the private ranges are refused by default, because a server that fetches what it was told to
 fetch is a way to reach what only the server can reach.
+
+**A length too large to hold is refused, not an overflow.** Digits spelling more than an `Int` holds
+in a content length are not a whole number, checked before each multiplication, so a request cannot
+stop the server by naming one.
 ## Grill Log
 - **Q:** Resolve a conflicting body length by preferring one field? **A:** No. _Rationale:_ a rule
   only helps when everything in the chain shares it, and the attack exists precisely because they do

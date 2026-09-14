@@ -1,0 +1,44 @@
+module UsesOverflowGuards
+
+import Std.Args as Args
+import Std.Http.Message as Message
+import Std.Http.Safe as Safe
+import Std.Http.Server.Resilience as Resilience
+import Std.Regex as Regex
+import Std.Semver as Semver
+import Std.Text.Parse as Parse
+
+/// Digits spelling more than an `Int` holds, arriving wherever a program reads
+/// text it did not write: a version, a command line, a pattern, a parser's
+/// input, a chunked body, a client hint, and a content length. Each is refused
+/// or held at a bound where it is read rather than stopping the program.
+const HUGE: Str = "99999999999999999999"
+
+export fn main() -> Int {
+  var held = 0
+
+  if let Err(_) = Semver.parse(HUGE + ".0.0") { held = held + 1 }
+
+  let spec = Args.value(&Args.spec("probe", "overflow"), "count", "c", "how many")
+  if let Ok(found) = Args.parse(&spec, &["--count", HUGE]) {
+    match Args.numberOf(&found, "count") {
+      case None => { held = held + 1 }
+      case Some(_) => {}
+    }
+  }
+
+  if let Err(_) = Regex.compile("a\{" + HUGE + "\}") { held = held + 1 }
+
+  if let Err(_) = Parse.run(Parse.hexadecimal(), "ffffffffffffffffffff") { held = held + 1 }
+
+  if Message.decodeChunked("ffffffffffffffffffff\r\nabc\r\n0\r\n\r\n").length() == 0 { held = held + 1 }
+
+  match Resilience.inspectClientNetwork(&[("rtt", HUGE)]) {
+    case Resilience.ConstrainedCellular(_) => { held = held + 1 }
+    case _ => {}
+  }
+
+  if let Err(_) = Safe.framing(&[("content-length", HUGE)]) { held = held + 1 }
+
+  held
+}

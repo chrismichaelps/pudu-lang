@@ -8,6 +8,11 @@ export type NetworkProfile
   | ConstrainedCellular(Str)
   | SaveDataActive
 
+/// The digits of a header value as a whole number.
+///
+/// The value arrives from a client, so digits past what an `Int` holds hold at
+/// the largest one instead of stopping the server: a round trip that long is
+/// as slow as any other that long.
 fn parseDecimal(text: Str) -> Int {
   var value = 0
   var index = 0
@@ -27,12 +32,15 @@ fn parseDecimal(text: Str) -> Int {
         case "9" => 9
         case _ => 0
       }
-      value = value * 10 + digit
+      value = if value > (INT_MAX - digit) / 10 { INT_MAX } else { value * 10 + digit }
     }
     index = index + 1
   }
   value
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// Inspects request headers for Client Hints and data-saving directives.
 export fn inspectClientNetwork(headers: &Array[(Str, Str)]) -> NetworkProfile {

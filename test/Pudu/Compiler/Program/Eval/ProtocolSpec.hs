@@ -71,6 +71,7 @@ testProtocolEvaluation = do
   childProcesses <- runEntry "test-fixtures/stdlib/UsesProcessStream.pudu"
   exportedSpans <- runEntry "test-fixtures/stdlib/UsesOtlp.pudu"
   commandLines <- runEntry "test-fixtures/stdlib/UsesArgs.pudu"
+  overflowGuards <- runEntry "test-fixtures/stdlib/UsesOverflowGuards.pudu"
   pure $ conjoin
     [ {-| The five lookup tables at both ends and past the end, where a
           mistranscribed table would show. These held as nested if ladders and
@@ -506,4 +507,10 @@ testProtocolEvaluation = do
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"
         (realFormats === Just "16383")
+    {-| Digits past what an Int holds, in a version, a command line, a pattern,
+        a parser's input, a chunked body, a client hint, and a content length.
+        Each stopped the program with E7005 and is now refused or held at a
+        bound where it is read. -}
+    , counterexample "an oversized number read from outside refuses rather than stopping the program"
+        (overflowGuards === Just "7")
     ]

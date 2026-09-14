@@ -335,11 +335,20 @@ fn wholeOf(text: Str) -> Option[Int] {
     if here < '0' || here > '9' {
       return None
     }
-    total = total * 10 + (here.code() - '0'.code())
+    // An argument past what an Int holds is not a whole number, and a typed
+    // command line must not stop the program reading it.
+    let digit = here.code() - '0'.code()
+    if total > (INT_MAX - digit) / 10 {
+      return None
+    }
+    total = total * 10 + digit
     index = index + 1
   }
   if negative { Some(0 - total) } else { Some(total) }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// Every value a repeated option was given, in the order they were written.
 export fn allOf(found: &Args, long: Str) -> Array[Str] {

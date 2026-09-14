@@ -20,6 +20,8 @@ status, or response to `HEAD` without requiring transport closure.
 `renderRequestBytes` writes a request as the exact bytes sent, head then `Http.requestBytes`, so a
 byte body goes out unchanged. `renderRequest` writes text and refuses a request holding a byte body,
 as `renderResponse` refuses a byte response, rather than dropping the bytes.
+A chunk size arrives from the peer, so hexadecimal digits spelling more than an `Int` holds are not a
+size, checked before each multiplication, rather than an overflow that stops the program.
 ## Grill Log
 - **Q:** Why accept LF? **A:** Hand-written fixtures remain useful without weakening network output, which still renders CRLF. _Rejected:_ transport-dependent parsing.
 - **Q:** Is connection closure the only complete-response signal? **A:** No. _Rationale:_ HTTP/1.1

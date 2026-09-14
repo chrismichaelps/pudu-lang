@@ -78,11 +78,20 @@ fn numberOf(text: Str) -> Result[Int, VersionError] {
     if here < '0' || here > '9' {
       return Err(NotANumber(text))
     }
-    total = total * 10 + (here.code() - '0'.code())
+    // A version part past what an Int holds is not a number this reads, and
+    // a version string arriving from a registry must not stop the program.
+    let digit = here.code() - '0'.code()
+    if total > (INT_MAX - digit) / 10 {
+      return Err(NotANumber(text))
+    }
+    total = total * 10 + digit
     index = index + 1
   }
   Ok(total)
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// A version written back out, which reads back as the same version.
 export fn render(value: &Version) -> Str {

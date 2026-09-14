@@ -272,17 +272,24 @@ fn parseHeaders(lines: &Array[Str]) -> Result[Array[(Str, Str)], MessageError] {
 
 fn min(left: Int, right: Int) -> Int { if left < right { left } else { right } }
 
+/// Hexadecimal digits as a whole number, or nothing.
+///
+/// A chunk size arrives from the peer, so digits past what an `Int` holds are
+/// refused as not a size rather than stopping the program reading them.
 fn hexOf(text: Str) -> Option[Int] {
   if text.isEmpty() { None } else {
     var total = 0
     for character in text.toLower().chars() {
       let found = "0123456789abcdef".indexOf(character.toText())
-      if found < 0 { return None }
+      if found < 0 || total > (INT_MAX - found) / 16 { return None }
       total = total * 16 + found
     }
     Some(total)
   }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
 
 /// Serialize binary payloads without a text or base64 conversion.
 export fn renderResponseBytes(value: &Http.Response) -> Bytes {
