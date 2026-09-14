@@ -46,6 +46,12 @@ export fn main() -> Int {
   if Option.isNone(&Text.wholeOf("-")) { held = held + 1 }
   if Option.isNone(&Text.wholeOf("   ")) { held = held + 1 }
 
+  // Digits spelling more than an Int holds are not one of these numbers, and
+  // answering nothing keeps an oversized field from stopping the program.
+  if Option.unwrapOr(Text.wholeOf("9223372036854775807"), 0) == 9223372036854775807 { held = held + 1 }
+  if Option.isNone(&Text.wholeOf("9223372036854775808")) { held = held + 1 }
+  if Option.isNone(&Text.countOf("99999999999999999999")) { held = held + 1 }
+
   // Joining is one pass rather than an append per piece, which is what makes
   // assembling a page, a statement, or a report cost what it should.
   if ["a", "b", "c"].join("") == "abc" { held = held + 1 }

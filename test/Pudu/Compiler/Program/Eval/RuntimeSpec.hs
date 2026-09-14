@@ -336,7 +336,7 @@ testRuntimeEvaluation = do
         this and they did not agree, silently. -}
     , counterexample
         "a count and a whole number are read differently"
-        (numbers === Just "25")
+        (numbers === Just "28")
     {-| That a record may be written as another record with some fields
         different. Without it, changing one field of a ten-field record means
         writing the other nine out — nine chances to copy one wrong, with the

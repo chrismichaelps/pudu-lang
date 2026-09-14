@@ -576,6 +576,11 @@ export fn wholeOf(value: Str) -> Option[Int] {
 export fn countOf(value: Str) -> Option[Int] { digitsOf(value.trim()) }
 
 /// The digits of text that is nothing but digits.
+///
+/// Digits spelling more than an `Int` holds answer nothing. The text comes from
+/// outside the program as often as not, and a number too large to hold is text
+/// that does not spell one of these numbers; stopping the program over it would
+/// let one oversized field end a service.
 fn digitsOf(body: Str) -> Option[Int] {
   if body.isEmpty() {
     None
@@ -585,9 +590,12 @@ fn digitsOf(body: Str) -> Option[Int] {
     var good = true
     while index < body.length() && good {
       let digit = "0123456789".indexOf(body.slice(index, index + 1))
-      if digit < 0 { good = false } else { total = total * 10 + digit }
+      if digit < 0 || total > (INT_MAX - digit) / 10 { good = false } else { total = total * 10 + digit }
       index = index + 1
     }
     if good { Some(total) } else { None }
   }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807
