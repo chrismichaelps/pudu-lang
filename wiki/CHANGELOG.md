@@ -61,6 +61,11 @@ tags: [changelog]
   the built-in methods. `UsesMime.pudu` holds 11 claims.
 - `Std.Log` reads `show`'s source escapes back in one pass and returns text holding no backslash
   unchanged, instead of appending each character to the text built so far.
+- `Std.Toml.Read` builds documents through drafts addressed by position, so placing a key no longer
+  rebuilds and searches the table it lands in. At -O2 a 5,000-key table reads in 0.87 s instead of
+  43.2 s. A key written through a value and a repeated section over a value are refused as
+  `Duplicate` rather than silently replacing the value with a table. `Std.Toml.field` stops at the
+  first match. `UsesToml.pudu` holds 49 claims.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 

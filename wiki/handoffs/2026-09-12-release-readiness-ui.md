@@ -187,10 +187,12 @@ order, hit testing, painting, and damage regions.
   release. CI's standard-library compile step searched a nonexistent root `lib` and compiled only
   the examples; it now names `packages/pudu/v0.1/lib` (201 modules clean). `Std.Mime.negotiate`
   reordered offers of equal quality through a swapping sort and now keeps the client's order, with
-  constant extension maps; `Std.Log` reads `show` escapes back in one pass.
+  constant extension maps; `Std.Log` reads `show` escapes back in one pass. `Std.Toml.Read` took
+  43.2 s for a 5,000-key table because each key rebuilt its path and searched its siblings; drafts
+  addressed by position read it in 0.87 s, and writing a key through a value is now refused.
 - CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
-  `signal-drain`, `build-bundle`, `foreign-third-party`, and `bench/request` — are the next local
-  verification to run before calling the tree release-ready.
+  `signal-drain`, `build-bundle`, `foreign-third-party`, `bench/request`, and both refusing
+  `pudu doc` invocations — all pass locally against the optimized binary (2026-09-14).
 
 ## Exact next action
 

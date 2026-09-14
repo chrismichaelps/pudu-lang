@@ -379,7 +379,7 @@ testProtocolEvaluation = do
         sections, dotted keys, and a document written and read back. -}
     , counterexample
         "a configuration reads back what it was written as"
-        (configured === Just "47")
+        (configured === Just "49")
     {-| Every export of the configuration scanner. Each reading call answers a
         value and where it stopped, and the position is checked beside the
         value every time: a reader answering the right text and the wrong
