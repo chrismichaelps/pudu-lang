@@ -199,6 +199,7 @@ data Builtin
   | ColumnBinarySearchF64Builtin
   | ColumnGatherU64Builtin
   | ColumnGatherF64Builtin
+  | CsvRecordsBuiltin
   deriving stock (Eq, Show)
 
 {-| The source-level binding for a built-in tag. -}
@@ -395,3 +396,4 @@ builtinName value = case value of
   ColumnBinarySearchF64Builtin -> "columnBinarySearchF64"
   ColumnGatherU64Builtin -> "columnGatherU64"
   ColumnGatherF64Builtin -> "columnGatherF64"
+  CsvRecordsBuiltin -> "csvRecords"

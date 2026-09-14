@@ -170,6 +170,8 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
 - `swissTableDelete: fn[V](&FlatMap[V], UInt64) -> FlatMap[V]`
 - `swissTableEntries: fn[V](&FlatMap[V]) -> Array[(UInt64, V)]`
 - `swissTableSize: fn[V](&FlatMap[V]) -> Int`
+- `csvRecords: fn(Bytes, Str) -> Option[(Array[Array[Str]], Int, Int)]`, the native record scan
+  [[Std Csv]] reads through ([[Eval Csv]])
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 

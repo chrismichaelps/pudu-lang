@@ -62,6 +62,13 @@ PROBES = {
     }
     case Err(_) => 2
   }""",
+    "foldRows": """  match Csv.foldRows(path, 0, fn(count: Int, _row: Array[Str]) -> Int { count + 1 }) {
+    case Ok(count) => {
+      let _w = Io.writeLine("counted " + show(count))
+      0
+    }
+    case Err(_) => 2
+  }""",
     "readAllLinesOf": """  match Io.readAllLinesOf(path) {
     case Ok(lines) => {
       let _w = Io.writeLine("counted " + show(lines.length()))
@@ -84,7 +91,7 @@ def write_input(path, megabytes):
 
 def program(reader, data_path):
     return (
-        "module Probe\n\nimport Std.Io as Io\n\nexport fn main() -> Int {\n"
+        "module Probe\n\nimport Std.Csv as Csv\nimport Std.Io as Io\n\nexport fn main() -> Int {\n"
         f'  let path = "{data_path}"\n'
         f"{PROBES[reader]}\n}}\n"
     )
@@ -123,6 +130,7 @@ def main():
         expected = {
             "foldLines": (small_lines, large_lines),
             "countBytes": (small_bytes, large_bytes),
+            "foldRows": (small_lines, large_lines),
             "readAllLinesOf": (small_lines, large_lines),
         }
         for reader in PROBES:

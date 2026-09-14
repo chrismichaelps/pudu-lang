@@ -1,7 +1,10 @@
 module UsesCsv
 
+import Std.Bytes as ByteSeq
 import Std.Csv as Csv
-import Std.Csv {Ragged, Unterminated}
+import Std.Csv {Malformed, Ragged, Unreadable, Unterminated}
+import Std.Env as Env
+import Std.Io as Io
 import Std.Option as Option
 import Std.Result as Result
 
@@ -76,6 +79,31 @@ export fn main() -> Int {
   if let Ok(rows) = many {
     if rows.length() == 20000 && rows[19999] == ["alpha", "quoted, field", "42"] { held = held + 1 }
   }
+
+  // A file read a record at a time gives the rows its whole text gives,
+  // including a quoted field that holds a newline and a doubled quote.
+  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-csv")
+  let _made = Io.makeDirectory(target)
+  let path = Io.join(target, "rows.csv")
+  let text = "name,note\r\nada,\"first\r\nline\"\r\nalan,\"say \"\"hi\"\"\"\r\n"
+  let wrote = Io.writeAllBytes(path, &ByteSeq.fromText(text))
+  if Result.isOk(&wrote) { held = held + 1 }
+  let folded = Csv.foldRows(path, [], fn(rows: Array[Array[Str]], row: Array[Str]) -> Array[Array[Str]] { rows.push(row) })
+  if Result.unwrapOr(folded, []) == rowsOf(text) { held = held + 1 }
+  if rowsOf(text) == [["name", "note"], ["ada", "first\r\nline"], ["alan", "say \"hi\""]] { held = held + 1 }
+
+  // A field left open names where it began, and a file that cannot be read is
+  // a read failure rather than a malformed one.
+  let open = Io.join(target, "open.csv")
+  let _wroteOpen = Io.writeAllBytes(open, &ByteSeq.fromText("a,\"b\n"))
+  if let Err(Malformed(Unterminated(2))) = Csv.foldRows(open, 0, fn(count: Int, _row: Array[Str]) -> Int { count + 1 }) {
+    held = held + 1
+  }
+  if let Err(Unreadable(_)) = Csv.foldRows(Io.join(target, "absent.csv"), 0, fn(count: Int, _row: Array[Str]) -> Int { count + 1 }) {
+    held = held + 1
+  }
+  let _removed = Io.removeIfPresent(path)
+  let _removedOpen = Io.removeIfPresent(open)
 
   held
 }

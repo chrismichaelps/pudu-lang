@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Streaming CSV rows and bounded record updates
+
+- `Std.Csv.foldRows` and `foldRowsWith` fold a file's rows holding one chunk and one record at a
+  time, answering `CsvReadError` (`Unreadable(IoError)` or `Malformed(CsvError)`) so existing
+  matches on `CsvError` keep compiling. Rows equal those `parse` gives for the whole text, and an
+  unterminated field names the same position: checked against the character scanner on 69 MB of
+  generated files with quoted newlines, doubled quotes, CRLF, empty lines, multi-byte characters,
+  and 70 KB fields, plus tab delimiters, invalid text, and a missing file.
+- A new runtime scan, `csvRecords` in `Pudu.Eval.Csv`, reads one-byte delimiters by searching for
+  structural bytes and decoding each field once. On 20 MB of rows holding a quoted field, `parse`
+  takes 0.59 s instead of 272 s and `foldRows` 1.53 s; unquoted rows fold in 0.68 s. Other
+  delimiters keep the character scanner.
+- A record update now decides every field before it returns. A field left pending held the record
+  it came from, so a state record updated once per line kept every earlier version: the fold peaked
+  at 275 MB for 20 MB of input and now stays at 98 MB. `test/residency.py` gains a `foldRows` probe
+  that must hold the same peak at ten times the input.
+
 ## 2026-09-14 — Line streaming splits natively
 
 - `Std.Io.foldLines`, and `forEachLine` and `readAllLinesOf` above it, look for the last newline in

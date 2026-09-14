@@ -293,6 +293,22 @@ declareBuiltinConstructors = do
     (polytype [("V", 0)] [] (FunctionTypeValue False [] (NominalType "Buckets" [RigidType "V"])))
   bindName "bytesOf"
     (monotype (FunctionTypeValue False [NominalType "Array" [byteType]] bytesType))
+  {-| The complete separated records at the front of a buffer, with the bytes
+      and characters they span, or nothing when a record is not valid text.
+      `Std.Csv` reads through it; see `Pudu.Eval.Csv`. -}
+  bindName "csvRecords"
+    ( monotype
+        ( FunctionTypeValue False [bytesType, NominalType "Str" []]
+            ( NominalType "Option"
+                [ TupleTypeValue
+                    [ NominalType "Array" [NominalType "Array" [NominalType "Str" []]]
+                    , integerType
+                    , integerType
+                    ]
+                ]
+            )
+        )
+    )
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []

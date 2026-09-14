@@ -11,19 +11,33 @@ aliases: [Std Csv]
 ## Purpose
 Parse and render separated rows without losing quoted separators, quotes, or embedded newlines.
 ## Interface
-Exports row parsing/rendering, caller-selected delimiters, header tables, named-column lookup, and
-record projection.
+Exports row parsing/rendering, caller-selected delimiters, header tables, named-column lookup,
+record projection, and `foldRows`/`foldRowsWith`, which fold a file's rows holding one 64 KiB chunk
+and one record at a time and answer `CsvReadError` (`Unreadable(IoError)` or `Malformed(CsvError)`).
 ## Governance and algorithm
-The scanner is a single stateful pass over text; malformed quotes are typed `CsvError` values and a
-table refuses row/header width disagreement.
+Malformed quotes are typed `CsvError` values and a table refuses row/header width disagreement.
 
-The pass takes the text's characters once as an array and walks them by index, and each field is
-gathered as pieces joined when the field ends; rendering joins fields and lines once. Reading a
-character by position from UTF-8 text walks the text before it, and appending to a field copied it,
-so the earlier scanner grew with the square of the input: 200,000 characters of quoted rows took
-2.55 s at -O2 and now take 0.87 s, four times the 50,000-character time.
+A one-byte delimiter other than a quote or line ending is read by the runtime's `csvRecords`
+([[Eval Csv]]), which searches bytes for the next structural character and answers finished rows,
+the bytes they span, and the characters they span. `parseWith` hands it the whole text with a final
+newline; `foldRows` hands it each chunk joined to the remainder of the last, carries what no newline
+completed, and counts characters so an open field reports the position `parse` reports for the whole
+text. The interpreted work is one step per row.
+
+The character scanner (`scanWith`) reads any other delimiter and names where an unterminated field
+began. It walks the characters once as an array and gathers each field as pieces, so no character is
+found by walking the text before it. For such a delimiter `foldRows` gathers lines into records by
+quote count, because every quote opens or closes a quoted field or pairs with its neighbour, so a
+record is complete exactly when it holds an even number of them.
+
+Measured at -O2 on 20 MB of rows that each hold a quoted field: `parse` takes 0.59 s, where the
+character scanner takes 272 s and holds 711 MB; `foldRows` takes 1.53 s at a 99 MB peak; unquoted
+rows fold in 0.68 s. Rows before a failure have already reached the step function.
 ## Grill Log
-- **Q:** Split each line and then each separator? **A:** No. _Rationale:_ both may occur inside a
-  quoted field. _Rejected:_ permissively accepting an unclosed quote.
+- **Q:** Split each line and then each separator? **A:** Only after gathering lines into records by
+  quote count. _Rationale:_ both may occur inside a quoted field, and an odd count is exactly an open
+  field. _Rejected:_ permissively accepting an unclosed quote.
+- **Q:** Report a read failure through `CsvError`? **A:** No. _Rationale:_ adding a variant would
+  break every exhaustive match on the text parser's errors. _Accepted:_ a separate `CsvReadError`.
 ## Referenced by
 [[src/Std/_MOC]] · [[architecture/STDLIB]]

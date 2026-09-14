@@ -19,6 +19,7 @@ tags: [moc, module]
 - [[Eval Buffer]] — evaluator adapters for buffer builtins.
 - [[Runtime SwissTable Kernels]] — flat hash table with 1-byte control metadata.
 - [[Eval SwissTable]] — evaluator adapters for flat map builtins.
+- [[Eval Csv]] — native separated-record scan behind `Std.Csv`.
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 

@@ -276,7 +276,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Bool` | 10 | the operators as functions, `select`, array folds |
 | `Std.Tuple` | 10 | projection, exchange, per-side transformation, currying |
 | `Std.Bytes` | 45 | compact bytes, binary reads/writes, slicing, hex, and base64 |
-| `Std.Csv` | 12 | quoted separated rows, tables, records, and rendering |
+| `Std.Csv` | 15 | quoted separated rows, streamed file rows, tables, records, and rendering |
 | `Std.Path` | 23 | host-aware lexical construction, decomposition, and containment |
 | `Std.Uuid` | 12 | byte-backed v4/v7 identifiers with explicit entropy and time |
 | `Std.Bench` | 12 | repeated measurements, summaries, ratios, and rendering |
@@ -728,7 +728,8 @@ missing modules from existing surfaces that still lack lifetime, limit, or valid
   standard library remains shipped and cannot be shadowed by dependency resolution.
 - **Large-input evidence.** File, network, CSV/TOML/JSON, HTTP, and database readers need streaming
   fixtures whose maximum residency is bounded independently of input size; a buffered convenience
-  wrapper never serves as that evidence.
+  wrapper never serves as that evidence. `test/residency.py` provides it for `Std.Io.foldLines`,
+  `Std.Io.countBytes`, and `Std.Csv.foldRows`; network, TOML, JSON, HTTP, and database readers remain.
 
 ## The library is a gate
 
