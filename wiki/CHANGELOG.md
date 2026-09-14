@@ -78,6 +78,10 @@ tags: [changelog]
   program's roots and the library found; with none it names `PUDU_LIB`, the installed layout, the
   package data directory, and the walk up from the executable in one phrase, with `.` for a program
   in the working directory.
+- `test/residency.py` is a gate and a CI step: `Std.Io.foldLines` and `countBytes` must reach the
+  same peak memory on a 20 MB file as on a 2 MB one, and buffered `readAllLinesOf` must grow, proving
+  the measurement sees memory at all. At 10 MB and 100 MB, `foldLines` peaked at 87 and 86 MB,
+  `countBytes` at 82 and 82 MB, and the buffered reader at 119 and 527 MB.
 - The `cabal sdist` archive is self-contained: unpacked outside the checkout it builds `pudu`, and
   that binary, given its data directory, runs a standard-library program from an unrelated
   directory with every claim holding.

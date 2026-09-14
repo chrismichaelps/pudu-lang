@@ -54,6 +54,8 @@ run 'every committed Pudu file is formatted' \
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
+run 'a streaming reader holds as much at ten times the input' \
+  bash -c 'python3 test/residency.py "$PUDU"'
 run 'a generated project works outside the repository' \
   bash -c 'node test/scaffold.mjs "$PUDU"'
 run 'typed lint findings and safe fixes work through the real CLI' \

@@ -215,6 +215,15 @@ order, hit testing, painting, and damage regions.
   readiness rows — package lock/fetch/update/publish, lexically owned workers with cancellation,
   HTTP cancellation and pooling, residency-bounded large-input fixtures, and Windows/Linux media
   adapters — are feature programs rather than defects.
+- Large-input evidence scope — `Std.Csv` exposes only whole-text `parse`, `parseWith`, and
+  `parseTable`, and `Std.Json` only whole-text `decode`; neither has a reader- or path-based entry.
+  The readiness row's CSV and JSON residency fixtures therefore cannot exist until incremental readers
+  do, and a buffered wrapper is explicitly not evidence. File streaming (`Std.Io.foldLines`,
+  `foldChunks`) is the measurable base. Measured at -O2 through a process's peak resident memory:
+  `foldLines` 87 MB at 10 MB and 86 MB at 100 MB, `countBytes` 82 and 82 MB, buffered
+  `readAllLinesOf` 119 and 527 MB. `test/residency.py` makes that a gate at 2 and 20 MB. `foldLines`
+  reads about 7.7 MB/s against `countBytes` at about 1 GB/s, so line splitting, not memory, is its
+  remaining cost.
 - CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
   `signal-drain`, `build-bundle`, `foreign-third-party`, `bench/request`, and both refusing
   `pudu doc` invocations — all pass locally against the optimized binary (2026-09-14).

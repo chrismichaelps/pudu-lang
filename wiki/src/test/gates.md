@@ -14,8 +14,9 @@ aliases: [Repository Gates]
 
 Run the production release checks in a fixed order and report every failing gate: warning-free
 optimized build, optimized full suite, Pudu formatting, diagnostic identities, API coverage, live
-language-server sessions, documentation parity, the generated-project workflow, and a real lint
-command whose clean and failing exit statuses plus JSON output are checked outside the test runner.
+language-server sessions, documentation parity, the generated-project workflow, a real lint
+command whose clean and failing exit statuses plus JSON output are checked outside the test runner,
+and the peak memory of the file-streaming readers at ten times the input.
 
 ## Governance and algorithm
 
@@ -23,6 +24,9 @@ Build products are removed before the warning gate so Cabal cannot answer from a
 optimized executable path is resolved once and passed to behavioral scripts, including [[Generated
 Project Gate]]. Independent checks continue after one fails; the script exits unsuccessfully when
 any gate failed.
+
+[[Streaming Residency Gate]] runs the file-streaming readers on a small and a ten-times-larger input
+against the same binary and requires the same peak, with a buffered control that must grow.
 
 [[Live Lint Gate]] runs against that same optimized binary and proves failing findings, stable JSON,
 safe fixing, compiler acceptance, and a clean second lint without modifying repository source.
@@ -41,4 +45,4 @@ Resolved Grill Log: every release-relevant boundary runs against the same freshl
 
 ## Referenced by
 
-[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Pudu CLI]]
+[[architecture/DELIVERY]] · [[Diagnostic Code Gate]] · [[Generated Project Gate]] · [[Streaming Residency Gate]] · [[Pudu CLI]]

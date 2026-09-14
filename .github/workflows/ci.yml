@@ -104,6 +104,11 @@ jobs:
       # to be deliberate.
       - name: Verify the fixtures still reach as much of the library
         run: node test/api-coverage.mjs "$PUDU"
+      # Peak memory is a property of the whole process, which a program cannot
+      # observe, so it is measured from outside: a streaming reader must hold
+      # as much at ten times the input, and a buffered control must not.
+      - name: Verify a streaming reader holds as much at ten times the input
+        run: python3 test/residency.py "$PUDU"
       - name: Verify documentation site browser and CLI contracts
         run: |
           cabal run -v0 pudu -- doc --html test-fixtures/stdlib/UsesAll.pudu | node test/doc-site-parity.mjs
