@@ -23,12 +23,14 @@ reader's two peaks in megabytes as one JSON object.
 A process cannot observe its own peak, so each probe runs as the single child of a small wrapper
 whose `getrusage(RUSAGE_CHILDREN)` peak is therefore that program's alone; macOS reports bytes and
 Linux kilobytes. Each probe's count must equal the lines or bytes written. A streaming reader may
-reach at most 1.25 times its small-input peak plus 8 MB. The buffered control must reach at least 1.5
-times its small-input peak: if it does not, the measurement is not seeing memory and a flat streaming
-result would prove nothing. The temporary files and probes are removed on every outcome.
+reach at most 1.25 times its small-input peak plus 8 MB. The buffered control's peak must rise by at
+least the extra input it was given: if it does not, the measurement is not seeing memory and a flat
+streaming result would prove nothing. The rise is compared with the input rather than as a ratio of
+peaks, because most of a small peak is the runtime itself and lines that share their decoded block
+are held compactly. The temporary files and probes are removed on every outcome.
 
-Measured through the same peak at 10 MB and 100 MB: `foldLines` 87 → 86 MB, `countBytes` 82 → 82 MB,
-buffered `readAllLinesOf` 119 → 527 MB. At the gate's 2 MB and 20 MB the whole run takes about 6 s.
+Measured through the same peak at 10 MB and 100 MB: `foldLines` 87 → 88 MB, `countBytes` 82 → 82 MB,
+buffered `readAllLinesOf` 104 → 359 MB. At the gate's 2 MB and 20 MB the whole run takes about 6 s.
 
 ## Grill Log
 

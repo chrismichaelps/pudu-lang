@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Line streaming splits natively
+
+- `Std.Io.foldLines`, and `forEachLine` and `readAllLinesOf` above it, look for the last newline in
+  each new 64 KiB chunk, join pending chunks once, decode each newline-terminated block once, and
+  divide it with one native split. On a 20 MB file of 83-byte lines the optimised build folds in
+  0.49 s instead of 2.39 s, and a line longer than a chunk is no longer rescanned per chunk. Lines
+  from one block share its decoded text, so holding every line of 20 MB peaks at 124 MiB instead
+  of 173 MiB.
+- Output is unchanged: a 6.7 MB mixed file of CRLF lines, empty lines, multi-byte characters across
+  read boundaries, a 150 KB line, and no final newline yields the same lines as before, and invalid
+  text still reports `NotText`. `UsesStreams` adds a character straddling the read boundary and
+  CRLF lines as regressions.
+- The residency gate's buffered control now requires the peak to rise by at least the extra input
+  rather than by half of a peak that is mostly the runtime itself.
+- The root README is now a short introduction that links to the reference, standard library,
+  examples, and contributing guide.
+
 ## 2026-09-14 — Persistent native audio stream and qualified-pattern correctness
 
 - `Std.Audio.Device` now owns persistent output sessions in addition to bounded one-shot clips.

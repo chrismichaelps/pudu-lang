@@ -29,8 +29,9 @@ LARGE_MEGABYTES = 20
 # chunk, allocator rounding — but not in proportion to it.
 STREAMING_RATIO = 1.25
 STREAMING_SLACK_BYTES = 8 * 1024 * 1024
-# The control holds every line, so ten times the input must show clearly.
-BUFFERED_GROWTH = 1.5
+# The control holds every line, so its peak must rise by at least the extra
+# input. A ratio of peaks would instead depend on how much of the peak is the
+# runtime itself, and on how compactly the held lines are stored.
 
 # Runs one child and reports only that child's peak: a wrapper process has
 # exactly one child, so its children's peak is the program's own.
@@ -136,7 +137,7 @@ def main():
                     f"{reader} counted {(small_count, large_count)}, expected {expected[reader]}"
                 )
             if reader == "readAllLinesOf":
-                if large_peak < small_peak * BUFFERED_GROWTH:
+                if large_peak - small_peak < large_bytes - small_bytes:
                     failures.append(
                         f"the buffered control did not grow ({small_peak} -> {large_peak} bytes), "
                         "so the measurement cannot see memory"

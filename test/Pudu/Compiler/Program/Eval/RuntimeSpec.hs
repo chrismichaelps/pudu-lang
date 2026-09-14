@@ -276,7 +276,7 @@ testRuntimeEvaluation = do
         boundary is still one line. -}
     , counterexample
         "a stream reads and writes without holding the whole file"
-        (streams === Just "21")
+        (streams === Just "27")
     {-| A path is decided by reading it rather than by asking the file system,
         so it needs nothing to exist and does not follow a link. -}
     , counterexample
