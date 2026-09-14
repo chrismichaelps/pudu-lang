@@ -57,7 +57,13 @@ const MAX_DEPTH: Int = 512
 /// reads a file off the machine — is not a failure worth having.
 
 /// Read a document, answering its root element.
+///
+/// The runtime's `xmlDecode` reads the document first, natively. It answers
+/// only documents it reads exactly as the reader below does and leaves every
+/// other document, including every malformed one, to that reader, so a refusal
+/// is described at the same position and in the same words either way.
 export fn decode(source: Str) -> Result[Tag, XmlError] {
+  if let Some(tag) = xmlDecode(source) { return Ok(tag) }
   let chars = source.chars()
   var index = skipProlog(&chars, 0) ?
   index = skipSpace(&chars, index)

@@ -29,6 +29,7 @@ import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Eval.Csv as Csv
 import qualified Pudu.Eval.Json as Json
+import qualified Pudu.Eval.Xml as Xml
 import qualified Pudu.Eval.SwissTable as Swiss
 import qualified Pudu.Runtime.Word as Word
 
@@ -245,6 +246,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (CsvRecordsBuiltin, values) -> Csv.callCsvRecords spanValue values
   (JsonDecodeBuiltin, values) -> Json.callJsonDecode spanValue values
   (JsonEncodeBuiltin, values) -> Json.callJsonEncode spanValue values
+  (XmlDecodeBuiltin, values) -> Xml.callXmlDecode spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing
@@ -328,4 +330,5 @@ isHashingBuiltin builtin = case builtin of
   CsvRecordsBuiltin -> True
   JsonDecodeBuiltin -> True
   JsonEncodeBuiltin -> True
+  XmlDecodeBuiltin -> True
   _ -> False

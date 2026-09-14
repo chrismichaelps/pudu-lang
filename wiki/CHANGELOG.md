@@ -5,6 +5,17 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Native XML reading
+
+- `Std.Xml.decode` first tries the runtime's `xmlDecode` (`Pudu.Eval.Xml`), which walks the document's
+  UTF-8 bytes, finds each run of text and attribute value by searching for its end, and builds
+  `Std.Xml.Tag` values directly. It answers only documents it reads exactly as the library's reader
+  does and leaves every other document, including every malformed one, to that reader. A 1 MB document
+  of records decodes in 0.10 s instead of 14.65 s. 84 documents — entities and numeric references at
+  their edges, attribute quoting, CDATA, comments and instructions before and inside the root,
+  document type declarations, mismatched closes, non-ASCII names, 511 to 513 levels of nesting, and
+  thirty generated documents — give identical trees and identical errors either way.
+
 ## 2026-09-14 — Native JSON encoding
 
 - `Std.Json.encode` and `encodePretty` are written by the runtime's `jsonEncode` in one walk into UTF-8

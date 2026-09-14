@@ -204,7 +204,7 @@ Dispatches `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
 `SwissTableSizeBuiltin` through pure built-in evaluators in [[Eval Buffer]] and [[Eval SwissTable]].
-`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, and `JsonEncodeBuiltin` are dispatched the same way to
-[[Eval Csv]] and [[Eval Json]].
+`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, `JsonEncodeBuiltin`, and `XmlDecodeBuiltin` are dispatched
+the same way to [[Eval Csv]], [[Eval Json]], and [[Eval Xml]].
 
 Resolved Grill Log: Dispatch through pure primitives without granting effect capabilities.

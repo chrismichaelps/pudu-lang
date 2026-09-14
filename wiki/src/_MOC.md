@@ -20,7 +20,8 @@ tags: [moc, module]
 - [[Runtime SwissTable Kernels]] — flat hash table with 1-byte control metadata.
 - [[Eval SwissTable]] — evaluator adapters for flat map builtins.
 - [[Eval Csv]] — native separated-record scan behind `Std.Csv`.
-- [[Eval Json]] — native JSON decoder behind `Std.Json`.
+- [[Eval Json]] — native JSON decoder and encoder behind `Std.Json`.
+- [[Eval Xml]] — native XML reader behind `Std.Xml`.
 - [[Runtime Column Kernels]] — vectorized columnar database storage layouts.
 - [[Eval Column]] — evaluator adapters for vectorized columnar operations.
 

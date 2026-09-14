@@ -176,6 +176,8 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
   ([[Eval Json]])
 - `jsonEncode: fn(&Std.Json.Json, Bool) -> Str`, the native encoder behind [[Std Json]]'s `encode`
   and `encodePretty`
+- `xmlDecode: fn(Str) -> Option[Std.Xml.Tag]`, the native reader [[Std Xml]] tries first
+  ([[Eval Xml]])
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 

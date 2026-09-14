@@ -172,8 +172,8 @@ Include `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`, `
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
 `SwissTableSizeBuiltin` in `isHashingBuiltin` so they are routed through pure primitive dispatch.
-`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, and `JsonEncodeBuiltin` are included on the same grounds:
-each answer depends only on the arguments.
+`CsvRecordsBuiltin`, `JsonDecodeBuiltin`, `JsonEncodeBuiltin`, and `XmlDecodeBuiltin` are included on
+the same grounds: each answer depends only on the arguments.
 
 Resolved Grill Log: Route buffer and flat map operations through the pure builtin dispatcher
 before effect handling to preserve compiler constant-folding and effect isolation.

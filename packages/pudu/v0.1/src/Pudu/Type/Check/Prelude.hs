@@ -321,11 +321,16 @@ declareBuiltinConstructors = do
             (NominalType "Str" [])
         )
     )
+  {-| A document's root element, or nothing when the native reader leaves the
+      document to `Std.Xml.decode`'s own reading; see `Pudu.Eval.Xml`. -}
+  bindName "xmlDecode"
+    (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdXmlTagId []])))
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
   stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
+  stdXmlTagId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Xml"]))) "Tag"
   flatMapType v = NominalType stdFlatMapId [v]
   borrowFlatMap v = ReferenceTypeValue False (flatMapType v)
   optionOf = NominalType "Option" [RigidType "T"]
