@@ -171,9 +171,11 @@ order, hit testing, painting, and damage regions.
   scaffold gate cover refusals plus check/run/test/format/build/bundle behavior outside the checkout.
   The text audit retains `Std.Text.Builder`, shared `Str` remainders, and `Std.Text.Source` rather
   than adding an alias-only `StringBuilder` or an unmeasured view with ambiguous coordinates.
-- Audit findings left open, each a named gap rather than a silent one: one accept-interrupt run
-  signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
-  readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
+- Audit findings left open, each a named gap rather than a silent one: the accept-interrupt run
+  that once stayed alive past 3 s is closed as not reproduced — a program printing readiness and then
+  blocked in `Net.accept` stopped on SIGINT within 15 ms in 40 of 40 runs on 2026-09-14, twenty
+  signalled as the call began and twenty 50 ms into it, after ten earlier readiness-gated runs; the
+  original run was signalled at a fixed delay right after a rebuild, which measured startup; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
   `Std.Toml.Read` still reads characters by
   position; no per-character appender from the earlier audit remains open.
 - First-release sweep, 2026-09-14 — all ten gates pass after each slice. A qualified record type
@@ -190,6 +192,13 @@ order, hit testing, painting, and damage regions.
   constant extension maps; `Std.Log` reads `show` escapes back in one pass. `Std.Toml.Read` took
   43.2 s for a 5,000-key table because each key rebuilt its path and searched its siblings; drafts
   addressed by position read it in 0.87 s, and writing a key through a value is now refused.
+- Non-macOS build — CI runs on Linux, where the macOS media adapters are not compiled. The desktop,
+  audio-stream, and audio-device runtimes kept store fields, helpers, and imports used only by the
+  adapter branch, which fail a Linux build with warnings as errors; no local gate compiles that
+  configuration. Without an adapter each store is now an empty constructor and adapter-only code
+  sits inside the platform guard. Verified from macOS by removing the darwin `cpp-options` in a
+  scratch worktree and type-checking all 181 library modules with `-fno-code -Werror`. Windows and
+  Linux media adapters themselves remain unimplemented; those targets answer `UnsupportedPlatform`.
 - CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
   `signal-drain`, `build-bundle`, `foreign-third-party`, `bench/request`, and both refusing
   `pudu doc` invocations — all pass locally against the optimized binary (2026-09-14).

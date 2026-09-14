@@ -30,6 +30,11 @@ independently while use and close of one pointer are serialized. Close removes o
 once; stale and double-close operations fail. Teardown first detaches the map and then closes each
 entry, preventing new lookup from racing released native memory.
 
+On a target without a stream adapter the store is an empty constructor: every operation answers
+the stable unsupported-platform message, teardown does nothing, and the registry, entry locks,
+lookup helper, and their imports sit inside the platform guard, so that target builds with warnings
+as errors.
+
 ## Grill Log
 
 - **Q:** Expose the native pointer as the Pudu token? **A:** No. _Rationale:_ pointer reuse would let

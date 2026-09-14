@@ -284,21 +284,21 @@ fn validatePlan(target: &Plan) -> Result[(), DeviceError] {
   }
 }
 
+/// The error each fixed runtime message names. Any other message is a platform
+/// failure carrying the text the adapter reported.
+const RUNTIME_ERRORS: Map[Str, DeviceError] = mapOf([
+    ("audio device playback is unsupported on this platform", UnsupportedPlatform),
+    ("audio device playback deadline exceeded", DeadlineExceeded),
+    ("audio device playback was cancelled", Cancelled),
+    ("audio device streaming is unsupported on this platform", UnsupportedPlatform),
+    ("audio stream is closed or unknown", ClosedStream),
+    ("audio stream operation deadline exceeded", DeadlineExceeded)
+  ])
+
 fn classified(message: Str) -> DeviceError {
-  if message == "audio device playback is unsupported on this platform" {
-    UnsupportedPlatform
-  } else if message == "audio device playback deadline exceeded" {
-    DeadlineExceeded
-  } else if message == "audio device playback was cancelled" {
-    Cancelled
-  } else if message == "audio device streaming is unsupported on this platform" {
-    UnsupportedPlatform
-  } else if message == "audio stream is closed or unknown" {
-    ClosedStream
-  } else if message == "audio stream operation deadline exceeded" {
-    DeadlineExceeded
-  } else {
-    PlatformFailure(message)
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
   }
 }
 

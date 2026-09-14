@@ -12,38 +12,44 @@ module Pudu.Eval.Desktop
   , pumpDesktop
   ) where
 
-import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
-import Control.Exception (displayException)
 import qualified Data.ByteString as Bytes
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
 import Data.Text (Text)
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as TextEncoding
-import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
+import Pudu.Eval.Io (IoOutcome (..))
 
 #ifdef PUDU_DARWIN_DESKTOP
+import Control.Concurrent.MVar (MVar, modifyMVar, modifyMVar_, newMVar)
+import Control.Exception (displayException)
 import Data.Int (Int32)
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as TextEncoding
 import Data.Word (Word64, Word8)
 import Foreign.C.Types (CInt (..), CSize (..))
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import GHC.Clock (getMonotonicTimeNSec)
+import Pudu.Eval.Io (trySynchronous)
 import Pudu.Eval.Signal (stopRequested)
 #endif
 
+#ifdef PUDU_DARWIN_DESKTOP
 data DesktopStore = DesktopStore
   { desktopNextToken :: !(MVar Int)
   , desktopWindows :: !(MVar (Map Int NativeWindow))
   }
 
-#ifdef PUDU_DARWIN_DESKTOP
 newtype NativeWindow = NativeWindow (Ptr ())
-#else
-data NativeWindow = NativeWindow
-#endif
 
 newDesktopStore :: IO DesktopStore
 newDesktopStore = DesktopStore <$> newMVar 1 <*> newMVar Map.empty
+#else
+{-| A target with no desktop adapter opens no windows, so its store holds
+    nothing and every operation refuses. -}
+data DesktopStore = DesktopStore
+
+newDesktopStore :: IO DesktopStore
+newDesktopStore = pure DesktopStore
+#endif
 
 openDesktop :: DesktopStore -> Text -> Int -> Int -> Bool -> IO (IoOutcome Int)
 #ifdef PUDU_DARWIN_DESKTOP
@@ -150,6 +156,7 @@ closeDesktopStore store = do
 closeDesktopStore _ = pure ()
 #endif
 
+#ifdef PUDU_DARWIN_DESKTOP
 withWindow :: DesktopStore -> Int -> (NativeWindow -> IO (IoOutcome a)) -> IO (IoOutcome a)
 withWindow store token action =
   modifyMVar (desktopWindows store) $ \windows ->
@@ -171,7 +178,6 @@ guarded action = do
     Left problem -> IoFailed (Text.pack (displayException problem))
     Right value -> value
 
-#ifdef PUDU_DARWIN_DESKTOP
 castBytes :: Ptr a -> Ptr Word8
 castBytes = castPtr
 

@@ -15,8 +15,10 @@ registry; `openDesktop`, `presentDesktop`, `pumpDesktop`, and `closeDesktop` val
 against it; `closeDesktopStore` releases every remaining native window during runtime teardown.
 
 On macOS, a private adapter calls public window-server APIs. On other targets every open answers
-the stable `unsupported platform` failure without manufacturing a token. Platform handles never
-become Pudu values. The runtime copies presented bytes before returning and performs all adapter
+the stable `unsupported platform` failure without manufacturing a token. There the store is an
+empty constructor: it owns no registry, teardown does nothing, and every import and helper that
+only the adapter uses sits inside the platform guard, so a target without the adapter builds with
+warnings as errors. Platform handles never become Pudu values. The runtime copies presented bytes before returning and performs all adapter
 calls on the main OS thread.
 
 The registry lock remains held while a native present, pump, or close uses a handle. This makes a

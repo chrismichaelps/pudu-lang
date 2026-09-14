@@ -170,12 +170,16 @@ fn validate(target: &WindowPlan) -> Result[(), DesktopError] {
   }
 }
 
+/// The error each fixed runtime message names. Any other message is a platform
+/// failure carrying the text the adapter reported.
+const RUNTIME_ERRORS: Map[Str, DesktopError] = mapOf([
+    ("desktop presentation is unsupported on this platform", UnsupportedPlatform),
+    ("desktop session is closed or unknown", SessionClosed)
+  ])
+
 fn classified(message: Str) -> DesktopError {
-  if message == "desktop presentation is unsupported on this platform" {
-    UnsupportedPlatform
-  } else if message == "desktop session is closed or unknown" {
-    SessionClosed
-  } else {
-    PlatformFailure(message)
+  match RUNTIME_ERRORS.get(message) {
+    case Some(known) => known
+    case None => PlatformFailure(message)
   }
 }

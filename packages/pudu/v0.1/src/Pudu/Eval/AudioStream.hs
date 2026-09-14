@@ -16,6 +16,10 @@ module Pudu.Eval.AudioStream
   , writeAudioStream
   ) where
 
+import qualified Data.ByteString as Bytes
+import Pudu.Eval.Io (IoOutcome (..))
+
+#ifdef PUDU_DARWIN_AUDIO
 import Control.Concurrent.MVar
   ( MVar
   , modifyMVar
@@ -24,22 +28,20 @@ import Control.Concurrent.MVar
   , readMVar
   )
 import Control.Exception (displayException)
-import qualified Data.ByteString as Bytes
+import Data.Int (Int32)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Pudu.Eval.Io (IoOutcome (..), trySynchronous)
-
-#ifdef PUDU_DARWIN_AUDIO
-import Data.Int (Int32)
 import Data.Word (Word64, Word8)
 import Foreign.C.Types (CDouble (..), CInt (..), CSize (..))
 import Foreign.Marshal.Alloc (alloca, allocaBytes)
 import Foreign.Ptr (Ptr, castPtr, nullPtr)
 import Foreign.Storable (peek, peekByteOff)
+import Pudu.Eval.Io (trySynchronous)
 #endif
 
+#ifdef PUDU_DARWIN_AUDIO
 data AudioStreamStore = AudioStreamStore
   { streamNextToken :: !(MVar Integer)
   , streamEntries :: !(MVar (Map Integer StreamEntry))
@@ -47,11 +49,12 @@ data AudioStreamStore = AudioStreamStore
 
 newtype StreamEntry = StreamEntry (MVar (Maybe NativeAudioStream))
 
-#ifdef PUDU_DARWIN_AUDIO
 data NativeAudioStreamHandle
 newtype NativeAudioStream = NativeAudioStream (Ptr NativeAudioStreamHandle)
 #else
-data NativeAudioStream = NativeAudioStream
+{-| A target with no audio stream adapter opens no streams, so its store holds
+    nothing and every operation refuses. -}
+data AudioStreamStore = AudioStreamStore
 #endif
 
 data AudioStreamSnapshot = AudioStreamSnapshot
@@ -68,7 +71,11 @@ data AudioStreamSnapshot = AudioStreamSnapshot
   deriving stock (Eq, Show)
 
 newAudioStreamStore :: IO AudioStreamStore
+#ifdef PUDU_DARWIN_AUDIO
 newAudioStreamStore = AudioStreamStore <$> newMVar 1 <*> newMVar Map.empty
+#else
+newAudioStreamStore = pure AudioStreamStore
+#endif
 
 openAudioStream
   :: AudioStreamStore
@@ -241,20 +248,21 @@ closeAudioStream _ _ _ _ = pure (IoFailed "audio device streaming is unsupported
 #endif
 
 closeAudioStreamStore :: AudioStreamStore -> IO ()
+#ifdef PUDU_DARWIN_AUDIO
 closeAudioStreamStore store = do
   entries <- modifyMVar (streamEntries store) $ \held -> pure (Map.empty, Map.elems held)
   mapM_ closeEntry entries
  where
   closeEntry (StreamEntry entry) = modifyMVar_ entry $ \current -> case current of
     Nothing -> pure Nothing
-#ifdef PUDU_DARWIN_AUDIO
     Just (NativeAudioStream pointer) -> do
       _ <- trySynchronous (cAudioStreamClose pointer 0 1)
       pure Nothing
 #else
-    Just NativeAudioStream -> pure Nothing
+closeAudioStreamStore _ = pure ()
 #endif
 
+#ifdef PUDU_DARWIN_AUDIO
 withStream
   :: AudioStreamStore
   -> Integer
@@ -280,7 +288,6 @@ guarded action = do
     Left problem -> IoFailed (Text.pack (displayException problem))
     Right value -> value
 
-#ifdef PUDU_DARWIN_AUDIO
 unitStatus :: CInt -> IoOutcome ()
 unitStatus status
   | status == 0 = IoDone ()

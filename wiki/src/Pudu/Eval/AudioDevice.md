@@ -16,7 +16,8 @@ frame range, and deadline again at the trust boundary. It maps stable adapter st
 effect outcomes and returns exact completed frames.
 
 On targets without an adapter it reports the stable unsupported-platform message without allocating
-a token or claiming playback.
+a token or claiming playback. Imports only the adapter path uses sit inside the platform guard, so
+that target builds with warnings as errors.
 
 ## Negative logic
 

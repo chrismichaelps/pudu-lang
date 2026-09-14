@@ -66,6 +66,12 @@ tags: [changelog]
   43.2 s. A key written through a value and a repeated section over a value are refused as
   `Duplicate` rather than silently replacing the value with a table. `Std.Toml.field` stops at the
   first match. `UsesToml.pudu` holds 49 claims.
+- The compiler builds again on targets without the macOS media adapters, which is where CI runs.
+  `Pudu.Eval.Desktop`, `AudioStream`, and `AudioDevice` defined store fields, helpers, and imports
+  that only the adapter branch used, so a Linux build with warnings as errors failed. Without an
+  adapter each store is now an empty constructor and adapter-only code sits inside the platform
+  guard; all 181 library modules type-check with the macOS flags removed. The audio-device and
+  desktop error classifiers are module-constant tables rather than comparison chains.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 

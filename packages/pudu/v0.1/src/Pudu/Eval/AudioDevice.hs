@@ -7,10 +7,10 @@ module Pudu.Eval.AudioDevice
   ) where
 
 import qualified Data.ByteString as Bytes
-import Data.Text (Text)
 import Pudu.Eval.Io (IoOutcome (..))
 
 #ifdef PUDU_DARWIN_AUDIO
+import Data.Text (Text)
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, takeMVar, tryTakeMVar)
 import Control.Exception
