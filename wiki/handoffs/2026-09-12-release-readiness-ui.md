@@ -207,6 +207,14 @@ order, hit testing, painting, and damage regions.
   the help was built from existing library locations only. With no library it now names
   `PUDU_LIB`, the installed layout, the package data directory, and the walk up from the executable
   in one phrase; with a library present it still names the roots searched.
+- Open-issue sweep, 2026-09-14 — #218 (too few arguments passed the checker) reproduces as fixed:
+  `add(1)` is `E3003` at the check and a defaulted parameter is still omitted directly and through a
+  function value, guarded by `FunctionGenericSpec` (PR #221). #219 (wrapped parameter list moved to
+  column zero) reproduces as fixed and is guarded by `FormatSpec` (PR #222). Both remain open on
+  GitHub because their commits say `refs`, not `fixes`. The other open issues and the remaining
+  readiness rows — package lock/fetch/update/publish, lexically owned workers with cancellation,
+  HTTP cancellation and pooling, residency-bounded large-input fixtures, and Windows/Linux media
+  adapters — are feature programs rather than defects.
 - CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
   `signal-drain`, `build-bundle`, `foreign-third-party`, `bench/request`, and both refusing
   `pudu doc` invocations — all pass locally against the optimized binary (2026-09-14).
