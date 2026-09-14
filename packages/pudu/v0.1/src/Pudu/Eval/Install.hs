@@ -136,6 +136,7 @@ installBuiltinConstructors = do
   bind "swissTableEntries" (BuiltinValue SwissTableEntriesBuiltin)
   bind "swissTableSize" (BuiltinValue SwissTableSizeBuiltin)
   bind "csvRecords" (BuiltinValue CsvRecordsBuiltin)
+  bind "jsonDecode" (BuiltinValue JsonDecodeBuiltin)
   bind "bufferReadI64" (BuiltinValue BufferReadI64Builtin)
   bind "bufferWriteI64" (BuiltinValue BufferWriteI64Builtin)
   bind "bufferReadF64" (BuiltinValue BufferReadF64Builtin)

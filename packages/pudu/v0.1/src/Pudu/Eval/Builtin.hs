@@ -28,6 +28,7 @@ import qualified Pudu.Eval.AudioKernel as AudioKernel
 import qualified Pudu.Eval.Buffer as Buffer
 import qualified Pudu.Eval.Column as Column
 import qualified Pudu.Eval.Csv as Csv
+import qualified Pudu.Eval.Json as Json
 import qualified Pudu.Eval.SwissTable as Swiss
 import qualified Pudu.Runtime.Word as Word
 
@@ -242,6 +243,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (ColumnGatherU64Builtin, values) -> Column.callColumnGatherU64 spanValue values
   (ColumnGatherF64Builtin, values) -> Column.callColumnGatherF64 spanValue values
   (CsvRecordsBuiltin, values) -> Csv.callCsvRecords spanValue values
+  (JsonDecodeBuiltin, values) -> Json.callJsonDecode spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing
@@ -323,4 +325,5 @@ isHashingBuiltin builtin = case builtin of
   ColumnGatherU64Builtin -> True
   ColumnGatherF64Builtin -> True
   CsvRecordsBuiltin -> True
+  JsonDecodeBuiltin -> True
   _ -> False

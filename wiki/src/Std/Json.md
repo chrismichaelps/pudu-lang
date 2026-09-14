@@ -12,7 +12,17 @@ aliases: [Std Json]
 Decode, encode, inspect, and immutably transform JSON values with positioned parse errors.
 ## Interface
 Exports `Json`, `JsonError`, compact/pretty encoding, field/index/path lookup, typed projections, constructors, key updates, and error explanation.
+`foldLines(file, seed, step)` folds a JSON Lines file one value to a line, skipping blank lines, and
+answers `JsonLinesError`: `Unreadable(IoError)` or `Malformed(line, JsonError)` with the line counted
+from one.
 ## Governance and algorithm
+`decode` first asks the runtime's `jsonDecode` ([[Eval Json]]), which reads the text's bytes in one
+pass and builds these same values. It answers only text it reads exactly as the reader below does and
+leaves everything else, including every invalid text, to that reader, so a failure keeps its position
+and wording. A 3.26 MB array of 20,000 objects decodes in 0.17 s this way against 17.5 s through the
+reader below. `foldLines` runs over `Std.Io.foldLines`, so it holds one chunk of the file at a time:
+199,415 values in 20 MB fold in 1.7 s at a 100 MB peak.
+
 The recursive reader advances a private cursor — the unread remainder of the source and the scalar
 position it begins at — rejects trailing or malformed input as `Result`, and the encoder escapes
 strings deterministically. Text is UTF-8, so reaching a character by position walks every character
@@ -62,6 +72,12 @@ every prefix on the way to its required width.
   between two 20,000-character runs.
 - The standard-library program test runs that fixture through the ordinary compiler and evaluator,
   so private helpers are exercised through the exported `decode` and `encode` boundary.
+- The same fixture reads the largest `Int`, refuses one past it where the number begins, folds a JSON
+  Lines file with blank, whitespace-only, and CRLF lines, and names a malformed third line.
+- 88 documents — every edge above plus numbers at and past `Int`'s bounds, leading zeros, `1.` and
+  `1e`, trailing commas, 511- and 512-level nesting, a byte-order mark, and thirty generated nested
+  documents — encode to identical text or explain identical errors through the native path and
+  through the library reader alone.
 - Formatter, checker, O0 evaluation, O2 evaluation, and the full compiler suite form the delivery gate.
 
 ## Grill Log
@@ -87,5 +103,9 @@ every prefix on the way to its required width.
   concatenation copies every prefix and turns one indentation run quadratic in its width.
   _Accepted:_ the checked native `Str.repeat` operation. _Rejected:_ a local loop; adding another
   public builder abstraction when `Str.repeat` and `Std.Text.Builder` already cover the two needs.
+- **Q:** Let the native decoder report errors? **A:** No. _Rationale:_ positions and wording would
+  then have two sources that must agree forever. _Accepted:_ the native decoder answers only what it
+  reads exactly as the library does, and every other text takes the library's reader. _Rejected:_ a
+  native error vocabulary.
 ## Referenced by
-[[src/Std/_MOC]] · [[architecture/STDLIB]]
+[[src/Std/_MOC]] · [[architecture/STDLIB]] · [[Eval Json]]

@@ -309,10 +309,15 @@ declareBuiltinConstructors = do
             )
         )
     )
+  {-| The value a JSON text holds, or nothing when the native decoder leaves
+      the text to `Std.Json.decode`'s own reading; see `Pudu.Eval.Json`. -}
+  bindName "jsonDecode"
+    (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdJsonId []])))
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
   stdFlatMapId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["FlatMap"]))) "FlatMap"
+  stdJsonId = NominalId (Just (ModuleName ("Std" NonEmpty.:| ["Json"]))) "Json"
   flatMapType v = NominalType stdFlatMapId [v]
   borrowFlatMap v = ReferenceTypeValue False (flatMapType v)
   optionOf = NominalType "Option" [RigidType "T"]

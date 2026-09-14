@@ -5,6 +5,22 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Native JSON decoding, JSON Lines, and number overflow
+
+- `Std.Text.wholeOf` and `countOf` stopped the program with `E7005` when digits spelled more than an
+  `Int` holds, and `Std.Json.decode` inherited it: one oversized number in untrusted JSON ended the
+  program. They now answer nothing, and `decode` reports `expected a number` where the number
+  begins.
+- `Std.Json.decode` first tries the runtime's `jsonDecode` (`Pudu.Eval.Json`), which reads the text's
+  bytes in one pass and builds `Std.Json` values directly. It answers only text it reads exactly as
+  the library's reader does and leaves every other text, including every invalid one, to that
+  reader, so errors keep their positions and wording. A 3.26 MB document decodes in 0.17 s instead of
+  17.5 s. 88 edge and generated documents decode to identical values and identical errors either
+  way.
+- `Std.Json.foldLines` folds a JSON Lines file one value to a line over `Std.Io.foldLines`, skipping
+  blank lines and answering `JsonLinesError` (`Unreadable(IoError)` or `Malformed(line, JsonError)`).
+  199,415 values in 20 MB fold in 1.7 s at a 100 MB peak.
+
 ## 2026-09-14 — Missing-import advice for types named like modules
 
 - `Result.unwrapOr(...)` written without `import Std.Result as Result` drew `E3034` with help about

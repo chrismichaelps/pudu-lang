@@ -259,7 +259,7 @@ resource-lifetime audit, mirror review, and delivery split recorded in
 | `Std.Http.Message` | 11 | the wire format: parsing and rendering requests and responses, chunked bodies |
 | `Std.Option` | 24 | transforming, filtering, collecting, and bridging to `Result` |
 | `Std.Result` | 24 | transforming either side, collecting many results into one |
-| `Std.Json` | 19 | a `Json` value, a decoder with positions in its errors, compact and pretty encoding |
+| `Std.Json` | 21 | a `Json` value, a native-first decoder with positions in its errors, JSON Lines folding, compact and pretty encoding |
 | `Std.Url` | 16 | parsing, rendering, query handling, percent encoding, scheme ports |
 | `Std.Order` | 27 | the `Ordering` type and comparisons built from it |
 | `Std.Function` | 14 | identity, composition both ways, repeated and bounded application |

@@ -1,6 +1,10 @@
 module UsesJsonStrings
 
+import Std.Bytes as ByteSeq
+import Std.Env as Env
+import Std.Io as Io
 import Std.Json as Json
+import Std.Result as Result
 
 fn decodesTo(source: Str, expected: Str) -> Bool {
   let Ok(value) = Json.decode(source) else { return false }
@@ -60,6 +64,29 @@ export fn main() -> Int {
   if position != 2560 { return 0 - 1 }
   let long = "x".repeat(20000) + "\\n" + "y".repeat(20000)
   if !decodesTo("\"" + long + "\"", "x".repeat(20000) + "\n" + "y".repeat(20000)) { return 0 - 1 }
+
+  // The largest whole number is read, and one past it is refused where it
+  // begins rather than stopping the program.
+  let Ok(Json.Number(largest)) = Json.decode("9223372036854775807") else { return 0 - 1 }
+  if largest != 9223372036854775807 { return 0 - 1 }
+  if !rejectsAt("9223372036854775808", 0) { return 0 - 1 }
+  if !rejectsAt("[1, 99999999999999999999]", 4) { return 0 - 1 }
+
+  // A JSON Lines file is read one value per line, skipping blank lines, and a
+  // line that does not hold a value is named by its number.
+  let target = Io.join(Env.temporaryDirectory(), "pudu-fixture-json-lines")
+  let _made = Io.makeDirectory(target)
+  let values = Io.join(target, "values.jsonl")
+  let _wroteValues = Io.writeAllBytes(values, &ByteSeq.fromText("\{\"n\":1\}\n\n  \n[2,3]\r\n4"))
+  let counted = Json.foldLines(values, 0, fn(total: Int, _value: Json.Json) -> Int { total + 1 })
+  if Result.unwrapOr(counted, 0) != 3 { return 0 - 1 }
+  let broken = Io.join(target, "broken.jsonl")
+  let _wroteBroken = Io.writeAllBytes(broken, &ByteSeq.fromText("1\n2\n[3,\n4"))
+  let Err(Json.Malformed(3, _)) = Json.foldLines(broken, 0, fn(total: Int, _value: Json.Json) -> Int { total + 1 }) else {
+    return 0 - 1
+  }
+  let _removedValues = Io.removeIfPresent(values)
+  let _removedBroken = Io.removeIfPresent(broken)
   // A suite answers what held. Every claim above stops the run when it does
   // not, so reaching here means all of them did.
   20

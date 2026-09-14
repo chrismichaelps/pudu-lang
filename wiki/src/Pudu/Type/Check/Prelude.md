@@ -172,6 +172,8 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
 - `swissTableSize: fn[V](&FlatMap[V]) -> Int`
 - `csvRecords: fn(Bytes, Str) -> Option[(Array[Array[Str]], Int, Int)]`, the native record scan
   [[Std Csv]] reads through ([[Eval Csv]])
+- `jsonDecode: fn(Str) -> Option[Std.Json.Json]`, the native decoder [[Std Json]] tries first
+  ([[Eval Json]])
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 

@@ -1,5 +1,8 @@
 module Std.Json
 
+import Std.Io as Io
+import Std.Io {IoError}
+import Std.Option as Option
 /// Aliased away from `Text` because this module declares a variant of that
 /// name, and a qualifier and a constructor cannot share one.
 import Std.Text as Reading
@@ -35,11 +38,47 @@ export type JsonError
 const MAX_DEPTH: Int = 512
 
 /// A value read from text, or what stopped the reader.
+///
+/// The runtime's `jsonDecode` reads the text first, natively. It answers only
+/// for text it reads exactly as the reader below does, and leaves everything
+/// else, including every text that is not JSON, to that reader, so a failure is
+/// described at the same position and in the same words either way.
 export fn decode(source: Str) -> Result[Json, JsonError] {
+  if let Some(value) = jsonDecode(source) { return Ok(value) }
   if source.trim().isEmpty() { Err(Empty) } else {
     let read = readValue(Cursor{rest: source, at: 0}, 0) ?
     let after = skipSpace(read[1])
     if !after.rest.isEmpty() { Err(Trailing(after.at)) } else { Ok(read[0]) }
+  }
+}
+
+/// Why the values of a JSON Lines file could not all be read.
+/// A file that cannot be read and a line that does not hold a value call for
+/// different answers, and the second names the line, counting from one.
+export type JsonLinesError
+  = Unreadable(IoError)
+  | Malformed(Int, JsonError)
+
+/// Combine every value of a JSON Lines file, one value to a line, holding one
+/// chunk of the file at a time.
+///
+/// A line holding only whitespace is skipped, so a file that ends with a blank
+/// line is still read. Values before a malformed line have already reached
+/// `step`; after it, the rest of the file is read without further work.
+export fn foldLines[T](file: Str, seed: T, step: fn(T, Json) -> T) -> Result[T, JsonLinesError] {
+  let folded = Io.foldLines(file, (seed, 0, None), fn(state: (T, Int, Option[JsonLinesError]), line: Str) -> (T, Int, Option[JsonLinesError]) {
+      let number = state[1] + 1
+      if Option.isSome(&state[2]) || line.trim().isEmpty() { return (state[0], number, state[2]) }
+      match decode(line) {
+        case Ok(value) => (step(state[0], value), number, None)
+        case Err(problem) => (state[0], number, Some(Malformed(number, problem)))
+      }
+    })
+  match folded {
+    case Err(reason) => Err(Unreadable(reason))
+    case Ok(state) => {
+      if let Some(reason) = state[2] { Err(reason) } else { Ok(state[0]) }
+    }
   }
 }
 
