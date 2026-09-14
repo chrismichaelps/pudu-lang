@@ -30,8 +30,11 @@ independently while use and close of one pointer are serialized. Close removes o
 once; stale and double-close operations fail. Teardown first detaches the map and then closes each
 entry, preventing new lookup from racing released native memory.
 
-On a target without a stream adapter the store is an empty constructor: every operation answers
-the stable unsupported-platform message, teardown does nothing, and the registry, entry locks,
+On a target without a stream adapter the store is an empty constructor: opening answers the stable
+unsupported-platform message, and every operation on a token answers the closed-or-unknown message a
+forged or closed token receives where streams exist (after close's own deadline check), because no
+token there can name a stream. A program therefore reads the same refusal for a bad token on every
+target. Teardown does nothing, and the registry, entry locks,
 lookup helper, and their imports sit inside the platform guard, so that target builds with warnings
 as errors.
 

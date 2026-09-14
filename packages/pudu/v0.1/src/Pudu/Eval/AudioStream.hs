@@ -156,7 +156,7 @@ writeAudioStream store token sampleRate channels pcm timeout
  where
   invalid = pure . IoFailed
 #else
-writeAudioStream _ _ _ _ _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+writeAudioStream _ _ _ _ _ _ = pure unknownStream
 #endif
 
 pauseAudioStream :: AudioStreamStore -> Integer -> IO (IoOutcome ())
@@ -165,7 +165,7 @@ pauseAudioStream store token =
   withStream store token $ \(NativeAudioStream pointer) -> guarded $
     unitStatus <$> cAudioStreamPause pointer
 #else
-pauseAudioStream _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+pauseAudioStream _ _ = pure unknownStream
 #endif
 
 resumeAudioStream :: AudioStreamStore -> Integer -> IO (IoOutcome ())
@@ -174,7 +174,7 @@ resumeAudioStream store token =
   withStream store token $ \(NativeAudioStream pointer) -> guarded $
     unitStatus <$> cAudioStreamResume pointer
 #else
-resumeAudioStream _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+resumeAudioStream _ _ = pure unknownStream
 #endif
 
 setAudioStreamVolume :: AudioStreamStore -> Integer -> Double -> IO (IoOutcome ())
@@ -185,7 +185,7 @@ setAudioStreamVolume store token volume
   | otherwise = withStream store token $ \(NativeAudioStream pointer) -> guarded $
       unitStatus <$> cAudioStreamSetVolume pointer (realToFrac volume)
 #else
-setAudioStreamVolume _ _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+setAudioStreamVolume _ _ _ = pure unknownStream
 #endif
 
 readAudioStreamSnapshot
@@ -224,7 +224,7 @@ readAudioStreamSnapshot store token =
   wordAt pointer offset = peekByteOff pointer offset :: IO Word64
   snapshotBytes = 72
 #else
-readAudioStreamSnapshot _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+readAudioStreamSnapshot _ _ = pure unknownStream
 #endif
 
 closeAudioStream :: AudioStreamStore -> Integer -> Bool -> Int -> IO (IoOutcome ())
@@ -244,7 +244,20 @@ closeAudioStream store token drain timeout
               cAudioStreamClose pointer (if drain then 1 else 0) (fromIntegral timeout)
             pure (Nothing, result)
 #else
-closeAudioStream _ _ _ _ = pure (IoFailed "audio device streaming is unsupported on this platform")
+closeAudioStream _ _ _ timeout
+  | timeout < 1 || timeout > 60000 =
+      pure (IoFailed "audio stream close deadline is outside 1 through 60000 milliseconds")
+  | otherwise = pure unknownStream
+
+{-| What every operation on a stream answers where no stream can be opened.
+
+    Only `openAudioStream` names the platform as unsupported: it is the one
+    call that could have created a stream. A token handed to anything else
+    names a stream that does not exist here, which is the answer a closed or
+    forged token receives where streams do exist, so a program reads the same
+    refusal on every target. -}
+unknownStream :: IoOutcome a
+unknownStream = IoFailed "audio stream is closed or unknown"
 #endif
 
 closeAudioStreamStore :: AudioStreamStore -> IO ()

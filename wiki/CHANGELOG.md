@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — One refusal for a bad audio stream token on every target
+
+- CI on Linux had failed since device audio streaming landed: on a target without a stream adapter,
+  pausing, resuming, writing, setting the volume of, snapshotting, or closing a stream answered
+  `UnsupportedPlatform`, where macOS answers `ClosedStream` for the same forged token, so
+  `UsesAudioDevice` counted 21 of 23. Opening still answers `UnsupportedPlatform`, because it is the
+  only call that could create a stream; every call on a token now answers `ClosedStream`, after close's
+  own deadline check. Checked by building with the macOS audio and desktop definitions removed and
+  warnings as errors, and running the full suite on that build.
+
 ## 2026-09-14 — URL user information, IPv6 hosts, and faster query decoding
 
 - `Std.Url.parse` split the authority at its first colon, so `https://user:pw@host:8443/` was
