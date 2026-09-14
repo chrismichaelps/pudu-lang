@@ -170,8 +170,8 @@ Adds the 12 primitive names to `preludeSymbols`:
 `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
 `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
 and `swissTableSize`. They are resolved in user code and STD modules without qualified import prefixes.
-`csvRecords`, the native record scan behind [[Std Csv]], and `jsonDecode`, the native decoder behind
-[[Std Json]], are prelude names on the same terms.
+`csvRecords`, the native record scan behind [[Std Csv]], and `jsonDecode` and `jsonEncode`, the native
+decoder and encoder behind [[Std Json]], are prelude names on the same terms.
 
 Resolved Grill Log: Register symbols directly in prelude symbol tables alongside existing hashing and memory primitives.
 

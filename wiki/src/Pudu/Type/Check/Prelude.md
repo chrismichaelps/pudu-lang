@@ -174,6 +174,8 @@ Wires type schemes for all 12 primitives into `preludeTypes`:
   [[Std Csv]] reads through ([[Eval Csv]])
 - `jsonDecode: fn(Str) -> Option[Std.Json.Json]`, the native decoder [[Std Json]] tries first
   ([[Eval Json]])
+- `jsonEncode: fn(&Std.Json.Json, Bool) -> Str`, the native encoder behind [[Std Json]]'s `encode`
+  and `encodePretty`
 
 Resolved Grill Log: Type buffers as `Bytes` and tables as `FlatMap[V]` with full type-safety and polymorphic value variables.
 

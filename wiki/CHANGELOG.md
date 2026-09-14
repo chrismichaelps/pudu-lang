@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Native JSON encoding
+
+- `Std.Json.encode` and `encodePretty` are written by the runtime's `jsonEncode` in one walk into UTF-8
+  bytes, each string as runs between the characters that need an escape. The 3.26 MB document is
+  written in 0.12 s instead of 12.2 s. Compact and pretty output for 91 documents, covering every
+  control character, empty and nested containers, and generated values, is byte-for-byte the former
+  encoder's. The Pudu `Writing` stack and its per-character string builder are removed.
+
 ## 2026-09-14 — Native JSON decoding, JSON Lines, and number overflow
 
 - `Std.Text.wholeOf` and `countOf` stopped the program with `E7005` when digits spelled more than an

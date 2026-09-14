@@ -52,7 +52,7 @@ preludeValueNames =
   , "columnSortIndicesU64", "columnSortIndicesF64", "columnBinarySearchU64", "columnBinarySearchF64"
   , "columnGatherU64", "columnGatherF64"
   , "swissTableEmpty", "swissTableLookup", "swissTableInsert", "swissTableDelete", "swissTableEntries", "swissTableSize"
-  , "csvRecords", "jsonDecode"
+  , "csvRecords", "jsonDecode", "jsonEncode"
 
   , "decimalOf", "decimalFromInt", "decimalScale", "decimalToInt", "decimalToFloat"
   , "decimalDivide", "decimalRound"

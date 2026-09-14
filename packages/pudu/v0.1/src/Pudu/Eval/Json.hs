@@ -1,16 +1,22 @@
-{-| @Eval.Json — decodes JSON text into `Std.Json` values natively. -}
+{-| @Eval.Json — decodes JSON text into `Std.Json` values and writes them back natively. -}
 module Pudu.Eval.Json
   ( callJsonDecode
+  , callJsonEncode
   , decodeDocument
+  , encodeValue
   ) where
 
 import Control.Monad (guard)
 import Data.Bits (shiftL, (.|.))
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.ByteString.Unsafe as Unsafe
+import Data.Foldable (toList)
 import qualified Data.Sequence as Seq
 import Data.Char (chr)
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import Data.Word (Word8)
@@ -32,6 +38,81 @@ callJsonDecode spanValue arguments = case arguments of
     Just value -> VariantValue "Some" [value]
     Nothing -> VariantValue "None" []
   _ -> abortAt (Just spanValue) "E7012" "wrong arguments for jsonDecode" Nothing
+
+{-| `jsonEncode(value, pretty)`: a `Std.Json` value written as text, compact or
+    across indented lines, exactly as the library's own encoder wrote it. -}
+callJsonEncode :: Span -> [Value] -> Evaluator Value
+callJsonEncode spanValue arguments = case arguments of
+  [value, BoolValue pretty] -> case encodeValue pretty value of
+    Just built ->
+      pure (StrValue (Encoding.decodeUtf8Lenient (LazyByteString.toStrict (Builder.toLazyByteString built))))
+    Nothing -> abortAt (Just spanValue) "E7001" "jsonEncode expects a Json value" Nothing
+  _ -> abortAt (Just spanValue) "E7012" "wrong arguments for jsonEncode" Nothing
+
+{-| A value's text as UTF-8 bytes, or nothing when it is not a `Std.Json` value.
+
+    Compact text has no spaces between parts. The pretty form puts each member
+    of a non-empty list or object on its own line, indented two spaces per level
+    below its container, writes `": "` after a key, and closes the container on
+    a line at its own indentation. An empty container is `[]` or `{}` in both. -}
+encodeValue :: Bool -> Value -> Maybe Builder.Builder
+encodeValue pretty = valueAt 0
+ where
+  valueAt depth value = case value of
+    VariantValue "Null" [] -> Just (Builder.string7 "null")
+    VariantValue "Boolean" [BoolValue flag] -> Just (Builder.string7 (if flag then "true" else "false"))
+    VariantValue "Number" [IntValue _ number] -> Just (Builder.integerDec number)
+    VariantValue "Fractional" [StrValue digits] -> Just (Encoding.encodeUtf8Builder digits)
+    VariantValue "Text" [StrValue content] -> Just (quoted content)
+    VariantValue "List" [ArrayValue members]
+      | Seq.null members -> Just (Builder.string7 "[]")
+      | otherwise -> container depth '[' ']' <$> traverse (valueAt (depth + 1)) (toList members)
+    VariantValue "Object" [ArrayValue entries]
+      | Seq.null entries -> Just (Builder.string7 "{}")
+      | otherwise -> container depth '{' '}' <$> traverse (entryAt (depth + 1)) (toList entries)
+    _ -> Nothing
+
+  entryAt depth entry = case entry of
+    TupleValue [StrValue key, held] -> do
+      body <- valueAt depth held
+      Just (quoted key <> Builder.string7 (if pretty then ": " else ":") <> body)
+    _ -> Nothing
+
+  container depth open close parts =
+    Builder.char7 open
+      <> mconcat (zipWith member [0 :: Int ..] parts)
+      <> (if pretty then lineAt depth else mempty)
+      <> Builder.char7 close
+   where
+    member index part =
+      (if index > 0 then Builder.char7 ',' else mempty)
+        <> (if pretty then lineAt (depth + 1) else mempty)
+        <> part
+
+  lineAt depth = Builder.char7 '\n' <> mconcat (replicate depth (Builder.string7 "  "))
+
+{-| Text written as a JSON string. The characters that need no escape are
+    written as one run up to the next that does. -}
+quoted :: Text -> Builder.Builder
+quoted content = Builder.char7 '"' <> runs content <> Builder.char7 '"'
+ where
+  runs remaining = case Text.break needsEscape remaining of
+    (plain, rest) ->
+      Encoding.encodeUtf8Builder plain <> case Text.uncons rest of
+        Nothing -> mempty
+        Just (character, after) -> escaped character <> runs after
+
+  needsEscape character = character < ' ' || character == '"' || character == '\\'
+
+  escaped character = case character of
+    '\b' -> Builder.string7 "\\b"
+    '\f' -> Builder.string7 "\\f"
+    '\n' -> Builder.string7 "\\n"
+    '\r' -> Builder.string7 "\\r"
+    '\t' -> Builder.string7 "\\t"
+    '"' -> Builder.string7 "\\\""
+    '\\' -> Builder.string7 "\\\\"
+    _ -> Builder.string7 "\\u00" <> Builder.word8HexFixed (fromIntegral (fromEnum character))
 
 {-| The most lists and objects one value may nest, as `Std.Json` bounds them. -}
 maxDepth :: Int

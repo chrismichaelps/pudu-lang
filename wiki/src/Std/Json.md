@@ -55,13 +55,11 @@ controls when they occur unescaped. This keeps `decode(encode(value))` stable fo
 prevents the encoder from emitting text outside JSON's grammar.
 
 Encoding has no input-nesting refusal because it writes trusted `Json` values already held by the
-program. Compact and pretty encoders therefore traverse with an explicit `Writing` stack rather
-than consuming one evaluator call frame per container. Opening text is emitted immediately;
-children and closing text enter the stack in reverse order and are emitted in source order. Both
-forms collect output fragments and join once, preserving the established byte-for-byte formatting
-without repeated whole-prefix concatenation. Pretty indentation uses the native bounded string
-repeat operation, so producing an indentation run allocates it once instead of repeatedly copying
-every prefix on the way to its required width.
+program. Both forms are written by the runtime's `jsonEncode` ([[Eval Json]]) in one walk into UTF-8
+bytes, with no evaluator frame per container and nothing interpreted per character, preserving the
+established byte-for-byte formatting. Writing the 3.26 MB document takes 0.12 s where the former
+`Writing`-stack encoder, which built each string one character at a time, took 12.2 s; 91 documents
+encode to identical compact and pretty text either way, including every control character.
 
 ## Evidence
 

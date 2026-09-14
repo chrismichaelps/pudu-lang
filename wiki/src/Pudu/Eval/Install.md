@@ -162,7 +162,8 @@ Binds the 12 primitive names in the initial evaluation environment:
 `bufferAlloc`, `bufferReadU64`, `bufferWriteU64`, `bufferScanU64`, `bufferCopy`, `bufferSize`,
 `swissTableEmpty`, `swissTableLookup`, `swissTableInsert`, `swissTableDelete`, `swissTableEntries`,
 and `swissTableSize`. Each name maps to its corresponding `Builtin` constructor. `csvRecords` binds
-`CsvRecordsBuiltin` and `jsonDecode` binds `JsonDecodeBuiltin` the same way.
+`CsvRecordsBuiltin`, `jsonDecode` binds `JsonDecodeBuiltin`, and `jsonEncode` binds `JsonEncodeBuiltin` the
+same way.
 
 Resolved Grill Log: Install all 12 primitives as first-class builtin values available at top-level scope without dynamic handle allocation.
 

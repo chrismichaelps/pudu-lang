@@ -84,13 +84,14 @@ export fn foldLines[T](file: Str, seed: T, step: fn(T, Json) -> T) -> Result[T, 
 
 /// A value written as compact text, with no spaces between its parts.
 ///
-/// Written with its own stack and joined once: recursing once per level let a
-/// value built deeply enough stop the program, and appending each part to the
-/// text so far copied it every time.
-export fn encode(value: &Json) -> Str { written(value, false) }
+/// The runtime's `jsonEncode` writes it: one walk over the value into UTF-8
+/// bytes, each string written as runs between the characters that need an
+/// escape, so the cost is the size of the text and nothing interpreted per
+/// character.
+export fn encode(value: &Json) -> Str { jsonEncode(value, false) }
 
 /// A value written across lines, each level indented by two spaces.
-export fn encodePretty(value: &Json) -> Str { written(value, true) }
+export fn encodePretty(value: &Json) -> Str { jsonEncode(value, true) }
 
 /// The value stored under a key, or `None` when the value is not an object or
 /// has no such key.
@@ -218,132 +219,6 @@ export fn explain(problem: &JsonError) -> Str {
     case Empty => "no value at all"
     case TooDeep(position) =>
     "nesting deeper than " + show(MAX_DEPTH) + " levels at " + show(position)
-  }
-}
-
-/// One step of writing a value: a value still to write at an indentation depth,
-/// or text already decided.
-type Writing
-  = Pending(Json, Int)
-  | Written(Str)
-
-fn written(value: &Json, pretty: Bool) -> Str {
-  var out: Array[Str] = []
-  var pending: Array[Writing] = [Pending(*value, 0)]
-  while pending.length() > 0 {
-    let last = pending.length() - 1
-    let step = pending[last]
-    pending = pending.slice(0, last)
-    match step {
-      case Written(fragment) => { out = out.push(fragment) }
-      case Pending(held, depth) => {
-        match held {
-          case List(members) => {
-            if members.length() == 0 {
-              out = out.push("[]")
-            } else {
-              out = out.push("[")
-              pending = pending.push(Written(closing(pretty, depth, "]")))
-              var index = members.length() - 1
-              while index >= 0 {
-                pending = pending.push(Pending(members[index], depth + 1))
-                pending = pending.push(Written(opening(pretty, depth, index > 0)))
-                index = index - 1
-              }
-            }
-          }
-          case Object(entries) => {
-            if entries.length() == 0 {
-              out = out.push(openBrace() + closeBrace())
-            } else {
-              out = out.push(openBrace())
-              pending = pending.push(Written(closing(pretty, depth, closeBrace())))
-              var index = entries.length() - 1
-              while index >= 0 {
-                pending = pending.push(Pending(entries[index][1], depth + 1))
-                let separator = if pretty { ": " } else { ":" }
-                pending = pending.push(
-                  Written(opening(pretty, depth, index > 0) + quote(entries[index][0]) + separator)
-                )
-                index = index - 1
-              }
-            }
-          }
-          case _ => { out = out.push(scalarText(&held)) }
-        }
-      }
-    }
-  }
-  out.join("")
-}
-
-/// What precedes a member: a comma after the first, and in the pretty form a
-/// line break indented one level deeper than its container.
-fn opening(pretty: Bool, depth: Int, afterFirst: Bool) -> Str {
-  let comma = if afterFirst { "," } else { "" }
-  if pretty { comma + "\n" + indent(depth + 1) } else { comma }
-}
-
-/// What closes a non-empty container.
-fn closing(pretty: Bool, depth: Int, bracket: Str) -> Str {
-  if pretty { "\n" + indent(depth) + bracket } else { bracket }
-}
-
-fn scalarText(value: &Json) -> Str {
-  match value {
-    case Null => "null"
-    case Boolean(flag) => if flag { "true" } else { "false" }
-    case Number(number) => show(number)
-    case Fractional(digits) => digits
-    case Text(content) => quote(content)
-    case List(_) => "[]"
-    case Object(_) => openBrace() + closeBrace()
-  }
-}
-
-fn indent(depth: Int) -> Str {
-  "  ".repeat(depth)
-}
-
-/// Text written as a JSON string, with the escapes the format requires.
-fn quote(content: Str) -> Str {
-  var out = "\""
-  for character in content.chars() { out = out + quotedCharacter(character) }
-  out + "\""
-}
-
-fn quotedCharacter(character: Char) -> Str {
-  let code = character.code()
-  if code == 8 { return "\\b" }
-  if code == 12 { return "\\f" }
-  if code < 32 && code != 9 && code != 10 && code != 13 {
-    return "\\u00" + hexDigit(code / 16) + hexDigit(code % 16)
-  }
-  match character {
-    case '"' => "\\\""
-    case '\\' => "\\\\"
-    case '\n' => "\\n"
-    case '\r' => "\\r"
-    case '\t' => "\\t"
-    case _ => character.toText()
-  }
-}
-
-fn hexDigit(value: Int) -> Str { "0123456789abcdef".charAt(value).toText() }
-
-/// The brace characters, built from their scalar values because a brace inside
-/// a string literal is reserved for interpolation.
-fn openBrace() -> Str {
-  match charFromCode(123) {
-    case Some(found) => found.toText()
-    case None => ""
-  }
-}
-
-fn closeBrace() -> Str {
-  match charFromCode(125) {
-    case Some(found) => found.toText()
-    case None => ""
   }
 }
 

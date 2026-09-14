@@ -244,6 +244,7 @@ callHashing spanValue builtin arguments = case (builtin, arguments) of
   (ColumnGatherF64Builtin, values) -> Column.callColumnGatherF64 spanValue values
   (CsvRecordsBuiltin, values) -> Csv.callCsvRecords spanValue values
   (JsonDecodeBuiltin, values) -> Json.callJsonDecode spanValue values
+  (JsonEncodeBuiltin, values) -> Json.callJsonEncode spanValue values
   _ ->
     abortAt (Just spanValue) "E7012"
       ("wrong arguments for " <> builtinName builtin) Nothing
@@ -326,4 +327,5 @@ isHashingBuiltin builtin = case builtin of
   ColumnGatherF64Builtin -> True
   CsvRecordsBuiltin -> True
   JsonDecodeBuiltin -> True
+  JsonEncodeBuiltin -> True
   _ -> False

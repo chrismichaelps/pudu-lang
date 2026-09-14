@@ -150,8 +150,8 @@ Registers `BufferAllocBuiltin`, `BufferReadU64Builtin`, `BufferWriteU64Builtin`,
 `BufferCopyBuiltin`, `BufferSizeBuiltin`, `SwissTableEmptyBuiltin`, `SwissTableLookupBuiltin`,
 `SwissTableInsertBuiltin`, `SwissTableDeleteBuiltin`, `SwissTableEntriesBuiltin`, and
 `SwissTableSizeBuiltin` in the closed builtin enumeration. `CsvRecordsBuiltin` names `csvRecords`,
-the native record scan in [[Eval Csv]], and `JsonDecodeBuiltin` names `jsonDecode`, the native
-decoder in [[Eval Json]].
+the native record scan in [[Eval Csv]], `JsonDecodeBuiltin` names `jsonDecode`, the native
+decoder, and `JsonEncodeBuiltin` names `jsonEncode`, the native encoder, both in [[Eval Json]].
 
 Resolved Grill Log: Register explicit enum tags for low-level memory buffers and flat hash tables
 to enable direct O(1) builtin dispatch without runtime string lookups.

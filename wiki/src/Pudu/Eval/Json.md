@@ -16,6 +16,12 @@ native work rather than an interpreted step per character.
 
 - `jsonDecode(source: Str) -> Option[Std.Json.Json]` answers the value a text holds, or `None`.
 - `decodeDocument` is the pure decoder behind it.
+- `jsonEncode(value: &Std.Json.Json, pretty: Bool) -> Str` writes a value as text, and `encodeValue`
+  is the builder behind it. The output is the library encoder's, byte for byte: compact with no
+  spaces, or each member of a non-empty container on its own line indented two spaces per level with
+  `": "` after keys and the closing bracket at the container's indentation; `\b \f \n \r \t \" \\`
+  escaped, every other control below U+0020 as lowercase `\u00xx`, and every other character as it
+  is. A string is written as runs between the characters that need an escape.
 
 `None` is not a verdict that the text is invalid. It is answered for every text this decoder cannot
 read exactly as `Std.Json.decode` reads it, and `decode` then reads the text itself, so a refusal keeps

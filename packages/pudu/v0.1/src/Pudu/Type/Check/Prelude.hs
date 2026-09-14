@@ -313,6 +313,14 @@ declareBuiltinConstructors = do
       the text to `Std.Json.decode`'s own reading; see `Pudu.Eval.Json`. -}
   bindName "jsonDecode"
     (monotype (FunctionTypeValue False [NominalType "Str" []] (NominalType "Option" [NominalType stdJsonId []])))
+  {-| A `Std.Json` value written as text, compact or pretty; see `Pudu.Eval.Json`. -}
+  bindName "jsonEncode"
+    ( monotype
+        ( FunctionTypeValue False
+            [ReferenceTypeValue False (NominalType stdJsonId []), boolType]
+            (NominalType "Str" [])
+        )
+    )
  where
   wordMapType = NominalType "Map" [RigidType "K", NominalType "UInt64" []]
   byteType = NominalType "UInt8" []
