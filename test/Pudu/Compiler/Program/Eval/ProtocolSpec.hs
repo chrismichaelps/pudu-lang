@@ -213,7 +213,7 @@ testProtocolEvaluation = do
         (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
-        (mimeType === Just "10")
+        (mimeType === Just "11")
     , counterexample
         "BitVector dense 64-bit word packed bitwise AND/OR/XOR/NOT, popcount, and trailing-zero scan"
         (bitVector === Just "10")

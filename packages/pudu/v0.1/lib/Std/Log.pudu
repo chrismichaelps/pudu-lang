@@ -69,27 +69,33 @@ fn unshown(value: Str) -> Str {
 }
 
 /// Text with the source escapes produced by `show` read back as characters.
+///
+/// Text with no backslash is answered as it arrived. Otherwise the characters
+/// are walked once and the pieces joined once; appending each character to the
+/// text built so far copied that text every time. A backslash that ends the
+/// text, or one before a character `show` never escapes, is kept as written.
 fn unescapeShown(value: Str) -> Str {
-  var out = ""
-  var index = 0
-  while index < value.length() {
-    let character = value.charAt(index)
-    if character != '\\' || index + 1 >= value.length() {
-      out = out + character.toText()
-      index = index + 1
+  if !value.contains("\\") { return value }
+  var pieces: Array[Str] = []
+  var pending = false
+  for character in value.chars() {
+    if pending {
+      pieces = pieces.push(match character {
+          case 'n' => "\n"
+          case 't' => "\t"
+          case '"' => "\""
+          case '\\' => "\\"
+          case _ => "\\" + character.toText()
+        })
+      pending = false
+    } else if character == '\\' {
+      pending = true
     } else {
-      let escapedValue = value.charAt(index + 1)
-      out = out + match escapedValue {
-        case 'n' => "\n"
-        case 't' => "\t"
-        case '"' => "\""
-        case '\\' => "\\"
-        case _ => "\\" + escapedValue.toText()
-      }
-      index = index + 2
+      pieces = pieces.push(character.toText())
     }
   }
-  out
+  if pending { pieces = pieces.push("\\") }
+  pieces.join("")
 }
 
 // -- Building a logger -------------------------------------------------------

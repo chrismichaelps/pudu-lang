@@ -107,5 +107,12 @@ export fn main() -> Int {
     held = held + 1
   }
 
+  // 11. Offers of equal quality keep the order the client wrote them in.
+  let avail4 = ["application/json", "text/html"]
+  let chosen4 = Mime.negotiate("text/html;q=0.5, application/json;q=0.5, image/png;q=0.9", avail4)
+  if chosen4 == Some("text/html") {
+    held = held + 1
+  }
+
   held
 }

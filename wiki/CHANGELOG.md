@@ -51,6 +51,16 @@ tags: [changelog]
   cleanup's own failure is still dropped, but an asynchronous exception raised during one is held
   until the rest have released and is then re-raised, so Ctrl-C during teardown stops the program.
 - The README states the version development builds report, `0.1.0`.
+- CI's "standard library and examples compile" step searched a root `lib` directory that does not
+  exist, so it compiled only the examples. It now names `packages/pudu/v0.1/lib`, and all 201
+  library and example modules check clean.
+- `Std.Mime.negotiate` keeps offers of equal quality in the order the client wrote them: its
+  swapping selection sort turned `text/html;q=0.5, application/json;q=0.5` into a JSON answer, and a
+  stable `List.sortOn` replaces it. The extension registry is two module-constant maps instead of
+  comparison chains, and the per-character lower-casing, trimming, and splitting helpers give way to
+  the built-in methods. `UsesMime.pudu` holds 11 claims.
+- `Std.Log` reads `show`'s source escapes back in one pass and returns text holding no backslash
+  unchanged, instead of appending each character to the text built so far.
 
 ## 2026-09-13 — Configurable desktop media laboratory
 

@@ -175,14 +175,22 @@ order, hit testing, painting, and damage regions.
   signalled at a fixed 1.5 s right after a rebuild stayed alive past 3 s and did not reproduce in ten
   readiness-gated runs; `Pudu.Foreign.Ownership` teardown cleanup still catches every exception;
   `Std.Toml.Read` still reads characters by
-  position; `Std.Mime` and `Std.Log` still append per character on inputs that are normally short.
+  position; no per-character appender from the earlier audit remains open.
 - First-release sweep, 2026-09-14 — all ten gates pass after each slice. A qualified record type
   pattern (`Audio.Format { .. }`) wrongly drew `E3033` from the qualified-constructor check and is
   accepted again; `Std.Diff.unifiedDiff` reported a final-newline-only change as no change and now
   emits `\ No newline at end of file`; `Std.Url` and `Std.Http` form fields escaped scalar values
   instead of UTF-8 bytes (`€` became `%20%AC`) and now walk bytes through constant tables; and
   `charAt`, `length`, and `slice` read long text through a two-entry position cursor, so positional
-  scans are linear (640,000 characters: 11.0 s to 0.94 s at -O2).
+  scans are linear (640,000 characters: 11.0 s to 0.94 s at -O2). Foreign teardown held no
+  interrupt: every cleanup still runs, and an asynchronous exception is re-raised after the rest
+  release. CI's standard-library compile step searched a nonexistent root `lib` and compiled only
+  the examples; it now names `packages/pudu/v0.1/lib` (201 modules clean). `Std.Mime.negotiate`
+  reordered offers of equal quality through a swapping sort and now keeps the client's order, with
+  constant extension maps; `Std.Log` reads `show` escapes back in one pass.
+- CI gates `test/gates.sh` does not run — `api-lifecycle.py check`, the library compile step,
+  `signal-drain`, `build-bundle`, `foreign-third-party`, and `bench/request` — are the next local
+  verification to run before calling the tree release-ready.
 
 ## Exact next action
 
