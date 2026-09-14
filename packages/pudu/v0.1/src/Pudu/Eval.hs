@@ -275,13 +275,20 @@ evaluateHere (Located spanValue expression) = case expression of
       The base is evaluated first and its fields kept in the order it declared
       them, so an update does not reorder what it did not mention — two records
       of one type compare and render the same whether either was written
-      whole or as a change to the other. -}
+      whole or as a change to the other.
+
+      Every field of the result is decided before the record is returned. A
+      field left as a pending choice would hold both the record it came from
+      and this update's written fields, so a record updated in a loop would
+      keep every earlier version, and everything those versions held, alive. -}
   RecordUpdateExpression path source fields -> do
     base <- evaluate source
     written <- mapM (evaluateFieldInit spanValue) fields
     case base of
-      RecordValue heldName held ->
-        pure (RecordValue heldName [(name, maybe value id (lookup name written)) | (name, value) <- held])
+      RecordValue heldName held -> do
+        let updated = [(name, maybe value id (lookup name written)) | (name, value) <- held]
+        foldr (\(_, value) rest -> value `seq` rest) () updated
+          `seq` pure (RecordValue heldName updated)
       _ ->
         abortAt (Just spanValue) "E7001"
           (lastPathSegment path <> " can only be updated from a record of the same type")
