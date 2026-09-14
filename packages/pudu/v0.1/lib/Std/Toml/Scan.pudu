@@ -241,7 +241,11 @@ export fn wholeOf(word: Str) -> Option[Int] {
 }
 
 /// The number a run of digits names in a base, or nothing when a character is
-/// not a digit of it.
+/// not a digit of it or the digits name more than an `Int` holds.
+///
+/// A configuration file is read on behalf of whoever wrote it, and one value
+/// too large to hold must not stop the program reading it; the word is then
+/// kept as written, as every other word that is not a whole number is.
 export fn digitsIn(text: Str, alphabet: Str, base: Int) -> Option[Int] {
   if text.isEmpty() {
     None
@@ -251,9 +255,12 @@ export fn digitsIn(text: Str, alphabet: Str, base: Int) -> Option[Int] {
     var good = true
     while index < text.length() && good {
       let place = alphabet.indexOf(text.slice(index, index + 1).toLower())
-      if place < 0 { good = false } else { total = total * base + place }
+      if place < 0 || total > (INT_MAX - place) / base { good = false } else { total = total * base + place }
       index = index + 1
     }
     if good { Some(total) } else { None }
   }
 }
+
+/// The largest value an `Int` holds.
+const INT_MAX: Int = 9223372036854775807

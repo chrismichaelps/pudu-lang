@@ -5,6 +5,12 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — A TOML number that stopped the program
+
+- `Std.Toml.Scan.digitsIn` multiplied without a bound, so `size = 99999999999999999999` stopped the
+  program with `E7005`. It now answers nothing for digits past what an `Int` holds, in every base, and
+  such a word is kept as written, as every other word that is not a whole number is.
+
 ## 2026-09-14 — JSON Lines residency evidence
 
 - `test/residency.py` runs `Std.Json.foldLines` over JSON Lines files of 2 MB and 20 MB and requires

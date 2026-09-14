@@ -204,6 +204,15 @@ export fn main() -> Int {
   if Option.isNone(&Scan.wholeOf("")) { held = held + 1 }
   if Option.isNone(&Scan.wholeOf("-")) { held = held + 1 }
 
+  // The largest whole number is read, and digits past it are not a whole
+  // number: the word is kept as written rather than stopping the program.
+  if Option.unwrapOr(Scan.wholeOf("9223372036854775807"), 0) == 9223372036854775807 { held = held + 1 }
+  if Option.isNone(&Scan.wholeOf("99999999999999999999")) { held = held + 1 }
+  match Scan.valueOf("99999999999999999999") {
+    case Fractional(written) => { if written == "99999999999999999999" { held = held + 1 } }
+    case _ => {}
+  }
+
   // The digits themselves, in a base named by the alphabet they are written
   // in. A character outside that alphabet answers nothing rather than a
   // number missing a digit.

@@ -391,7 +391,7 @@ testProtocolEvaluation = do
         a number from recognising that a word is one. -}
     , counterexample
         "every scan says where it stopped and a literal string keeps its backslash"
-        (scanned === Just "83")
+        (scanned === Just "86")
     {-| Every export of the message, reply and rendering modules. A message is
         written and read back from the same value, and the written text is also
         compared against what the protocol says, ending and all — a writer and
