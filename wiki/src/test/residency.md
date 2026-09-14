@@ -14,7 +14,8 @@ aliases: [Streaming Residency Gate]
 
 Given the path to a freshly built `pudu` executable, prove that the file-streaming readers hold as
 much memory at ten times the input as at one. It writes a 2 MB and a 20 MB line file, runs
-`Std.Io.foldLines`, `Std.Io.countBytes`, and `Std.Csv.foldRows` over each in a separate process, and compares their peak
+`Std.Io.foldLines`, `Std.Io.countBytes`, and `Std.Csv.foldRows` over each in a separate process, and
+`Std.Json.foldLines` over JSON Lines files of the same two sizes, and compares their peak
 resident memory. Buffered `Std.Io.readAllLinesOf` runs the same way as a control. Success prints each
 reader's two peaks in megabytes as one JSON object.
 

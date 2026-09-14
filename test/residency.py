@@ -22,6 +22,7 @@ import tempfile
 executable = sys.argv[1] if len(sys.argv) > 1 else "pudu"
 
 LINE = b"2026-09-14T10:00:00Z,sensor-0042,21.375,ok,the quick brown fox jumps over the lazy dog\n"
+JSON_LINE = b'{"at":"2026-09-14T10:00:00Z","sensor":"sensor-0042","value":21.375,"ok":true,"note":"the quick brown fox"}\n'
 SMALL_MEGABYTES = 2
 LARGE_MEGABYTES = 20
 
@@ -69,6 +70,13 @@ PROBES = {
     }
     case Err(_) => 2
   }""",
+    "jsonFoldLines": """  match Json.foldLines(path, 0, fn(count: Int, _value: Json.Json) -> Int { count + 1 }) {
+    case Ok(count) => {
+      let _w = Io.writeLine("counted " + show(count))
+      0
+    }
+    case Err(_) => 2
+  }""",
     "readAllLinesOf": """  match Io.readAllLinesOf(path) {
     case Ok(lines) => {
       let _w = Io.writeLine("counted " + show(lines.length()))
@@ -79,19 +87,19 @@ PROBES = {
 }
 
 
-def write_input(path, megabytes):
-    lines = megabytes * 1024 * 1024 // len(LINE)
+def write_input(path, megabytes, line):
+    lines = megabytes * 1024 * 1024 // len(line)
     with open(path, "wb") as out:
-        block = LINE * 1000
+        block = line * 1000
         for _ in range(lines // 1000):
             out.write(block)
-        out.write(LINE * (lines % 1000))
-    return lines, lines * len(LINE)
+        out.write(line * (lines % 1000))
+    return lines, lines * len(line)
 
 
 def program(reader, data_path):
     return (
-        "module Probe\n\nimport Std.Csv as Csv\nimport Std.Io as Io\n\nexport fn main() -> Int {\n"
+        "module Probe\n\nimport Std.Csv as Csv\nimport Std.Io as Io\nimport Std.Json as Json\n\nexport fn main() -> Int {\n"
         f'  let path = "{data_path}"\n'
         f"{PROBES[reader]}\n}}\n"
     )
@@ -125,17 +133,26 @@ def main():
     with tempfile.TemporaryDirectory(prefix="pudu-residency-") as directory:
         small = os.path.join(directory, "small.txt")
         large = os.path.join(directory, "large.txt")
-        small_lines, small_bytes = write_input(small, SMALL_MEGABYTES)
-        large_lines, large_bytes = write_input(large, LARGE_MEGABYTES)
+        small_lines, small_bytes = write_input(small, SMALL_MEGABYTES, LINE)
+        large_lines, large_bytes = write_input(large, LARGE_MEGABYTES, LINE)
+        # JSON Lines needs a value on every line, so its reader gets its own
+        # files of the same sizes.
+        small_json = os.path.join(directory, "small.jsonl")
+        large_json = os.path.join(directory, "large.jsonl")
+        small_json_lines, _ = write_input(small_json, SMALL_MEGABYTES, JSON_LINE)
+        large_json_lines, _ = write_input(large_json, LARGE_MEGABYTES, JSON_LINE)
         expected = {
             "foldLines": (small_lines, large_lines),
             "countBytes": (small_bytes, large_bytes),
             "foldRows": (small_lines, large_lines),
+            "jsonFoldLines": (small_json_lines, large_json_lines),
             "readAllLinesOf": (small_lines, large_lines),
         }
+        inputs = {"jsonFoldLines": (small_json, large_json)}
         for reader in PROBES:
-            small_count, small_peak = measure(directory, reader, small)
-            large_count, large_peak = measure(directory, reader, large)
+            small_path, large_path = inputs.get(reader, (small, large))
+            small_count, small_peak = measure(directory, reader, small_path)
+            large_count, large_peak = measure(directory, reader, large_path)
             report[reader] = {
                 "smallMegabytes": round(small_peak / 1048576),
                 "largeMegabytes": round(large_peak / 1048576),

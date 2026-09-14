@@ -5,6 +5,11 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — JSON Lines residency evidence
+
+- `test/residency.py` runs `Std.Json.foldLines` over JSON Lines files of 2 MB and 20 MB and requires
+  the same peak, as it already does for `Std.Io.foldLines`, `countBytes`, and `Std.Csv.foldRows`.
+
 ## 2026-09-14 — Faster YAML lines and a number that stopped the program
 
 - `Std.Yaml`'s private whole-number reader multiplied without a bound, so `replicas:
