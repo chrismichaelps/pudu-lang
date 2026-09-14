@@ -128,5 +128,16 @@ export fn main() -> Int {
   if Url.parseQuery("") == [] { held = held + 1 }
   if Url.parseQuery("a=x+y") == [("a", "x y")] { held = held + 1 }
 
+  // User information is not the host, and its colon is not a port.
+  let credentialed = read("https://user:pw@api.example.com:8443/items")
+  if credentialed.host == "api.example.com" && credentialed.port == Some(8443) { held = held + 1 }
+  if read("https://user@api.example.com/").host == "api.example.com" { held = held + 1 }
+
+  // An IPv6 host keeps its brackets, and only what follows them is the port.
+  let bracketed = read("http://[::1]:8080/x")
+  if bracketed.host == "[::1]" && bracketed.port == Some(8080) { held = held + 1 }
+  if read("http://[::1]/").port == None { held = held + 1 }
+  if Url.render(&bracketed) == "http://[::1]:8080/x" { held = held + 1 }
+
   held
 }

@@ -481,7 +481,7 @@ testProtocolEvaluation = do
         decoder treating them alike turns one name into another silently. -}
     , counterexample
         "an address reads decoded, renders encoded, and survives the round trip"
-        (urlAll === Just "53")
+        (urlAll === Just "58")
     {-| Preparing a database refuses what it can already see is wrong: a scheme
         nobody bundled, a pool that cannot hold a connection, a setting a
         deployment forgot. A program told at start-up can stop; the same

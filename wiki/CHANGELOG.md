@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — URL user information, IPv6 hosts, and faster query decoding
+
+- `Std.Url.parse` split the authority at its first colon, so `https://user:pw@host:8443/` was
+  `BadPort("pw@host:8443")`, `https://user@host/` gave the host `user@host`, and
+  `http://[::1]:8080/` was `BadPort`. User information before the last `@` is now not part of the host
+  and is not kept, and a bracketed IPv6 host keeps its brackets with the port read after them.
+- `decodeComponent` returns text holding neither `%` nor `+` unchanged without rebuilding it byte by
+  byte, and finding where the authority and path end is one native search per delimiter. A five-pair
+  query decodes in 179 µs instead of 452 µs.
+- Over 473 fuzz inputs, `decodeComponent` and `parseQuery` answer identically to before, and `parse`
+  differs only for the 24 inputs holding user information, each now reading the host and port.
+
 ## 2026-09-14 — Oversized numbers from outside a program no longer stop it
 
 - Eight readers accumulated digits without a bound, so twenty digits raised `E7005` and ended the
