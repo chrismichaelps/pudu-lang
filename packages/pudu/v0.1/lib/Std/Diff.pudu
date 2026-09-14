@@ -52,30 +52,34 @@ fn intToFloat(x: Int) -> Float {
 /// Splits text into lines, handling LF and CRLF line endings.
 fn splitLines(text: Str) -> Array[Str] {
   if text.isEmpty() { return [] }
+  let pieces = text.split("\n")
+  // A break that ends the text closes the last line rather than opening one.
+  let count = if text.endsWith("\n") { pieces.length() - 1 } else { pieces.length() }
   var lines: Array[Str] = []
-  var start = 0
-  let len = text.length()
   var i = 0
-  while i < len {
-    let ch = text.charAt(i)
-    if ch == '\n' {
-      var lineEnd = i
-      if lineEnd > start && text.charAt(lineEnd - 1) == '\r' {
-        lineEnd = lineEnd - 1
-      }
-      lines = lines.push(text.slice(start, lineEnd))
-      start = i + 1
-    }
+  while i < count {
+    let piece = pieces[i]
+    lines = lines.push(if piece.endsWith("\r") { piece.slice(0, piece.length() - 1) } else { piece })
     i = i + 1
   }
-  if start < len {
-    var end = len
-    if end > start && text.charAt(end - 1) == '\r' {
-      end = end - 1
-    }
-    lines = lines.push(text.slice(start, end))
-  }
   lines
+}
+
+/// Marks a last line that no break follows with a trailing "\n", which no split
+/// line can hold, so it differs from the same text with a break after it.
+fn markUnterminated(text: Str, lines: Array[Str]) -> Array[Str] {
+  if lines.length() == 0 || text.endsWith("\n") { return lines }
+  List.set(&lines, lines.length() - 1, lines[lines.length() - 1] + "\n")
+}
+
+/// One hunk line; a line marked unterminated is followed by the marker `patch`
+/// reads as "this side has no final newline".
+fn hunkLine(prefix: Str, line: Str) -> Str {
+  if line.endsWith("\n") {
+    prefix + line + "\\ No newline at end of file\n"
+  } else {
+    prefix + line + "\n"
+  }
 }
 
 /// Computes the minimal edit script across token sequences with Myers' greedy
@@ -199,8 +203,8 @@ export fn diffLines(oldText: Str, newText: Str) -> Array[DiffOp[Str]] {
 export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, contextLines: Int) -> Str {
   if oldText == newText { return "" }
 
-  let oldLines = splitLines(oldText)
-  let newLines = splitLines(newText)
+  let oldLines = markUnterminated(oldText, splitLines(oldText))
+  let newLines = markUnterminated(newText, splitLines(newText))
   let ops = diffTokens(oldLines, newLines)
   if ops.length() == 0 { return "" }
 
@@ -278,18 +282,18 @@ export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, co
         case Keep(l) => {
           hunkOldCount = hunkOldCount + 1
           hunkNewCount = hunkNewCount + 1
-          hunkLines = hunkLines.push(" " + l)
+          hunkLines = hunkLines.push(hunkLine(" ", l))
           oldTracker = oldTracker + 1
           newTracker = newTracker + 1
         }
         case Delete(l) => {
           hunkOldCount = hunkOldCount + 1
-          hunkLines = hunkLines.push("-" + l)
+          hunkLines = hunkLines.push(hunkLine("-", l))
           oldTracker = oldTracker + 1
         }
         case Insert(l) => {
           hunkNewCount = hunkNewCount + 1
-          hunkLines = hunkLines.push("+" + l)
+          hunkLines = hunkLines.push(hunkLine("+", l))
           newTracker = newTracker + 1
         }
       }
@@ -304,7 +308,7 @@ export fn unifiedDiff(oldPath: Str, newPath: Str, oldText: Str, newText: Str, co
     pieces = pieces.push("@@ -" + show(hunkOldStart) + "," + show(hunkOldCount)
         + " +" + show(hunkNewStart) + "," + show(hunkNewCount) + " @@\n")
     for hl in hunkLines {
-      pieces = pieces.push(hl + "\n")
+      pieces = pieces.push(hl)
     }
 
     hIdx = hIdx + 1

@@ -38,6 +38,10 @@ A hunk side that holds no lines — an insertion's old side or a deletion's new 
 zero context — names the line the change follows, one before where it would begin, so
 `@@ -2,0 +3,2 @@` inserts after old line 2 exactly as `patch` applies it. The rendered text is gathered
 as pieces and joined once.
+Lines are split once on the break character, so the scan does not re-walk the text per character.
+For `unifiedDiff`, a last line with no break after it is compared as a distinct line: adding or
+removing only the final newline is a change, and the unterminated side's line is followed by
+`\ No newline at end of file`, as `patch` reads it. `diffLines` still returns the plain lines.
 
 ## Grill Log
 
@@ -49,6 +53,10 @@ as pieces and joined once.
   **A:** No. _Rationale:_ the unified format numbers an empty side by the line it follows, and a
   start one too high makes `patch` apply the change a line late. _Rejected:_ the tracker position as
   written for non-empty sides.
+- **Q:** Treat `"a"` and `"a\n"` as the same lines in a unified diff? **A:** No. _Rationale:_ the
+  texts differ, and an empty diff tells a caller they are equal while `patch` would leave the file
+  unchanged. _Rejected:_ returning `""` for a final-newline-only change; a marker without a distinct
+  compared line, which cannot place the change in a hunk.
 
 ## Referenced by
 

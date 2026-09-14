@@ -5,6 +5,37 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Persistent native audio stream and qualified-pattern correctness
+
+- `Std.Audio.Device` now owns persistent output sessions in addition to bounded one-shot clips.
+  A stream opens with the target adapter's accepted format, accepts bounded PCM writes with explicit
+  partial progress, pauses, resumes, changes volume, snapshots state and telemetry, and closes by
+  draining or immediately. Tokens belong to one evaluation, operations on one session serialize
+  without blocking unrelated streams, and runtime teardown closes leaks. The private macOS Audio
+  Queue adapter preallocates two to eight buffers; callbacks do bounded atomic bookkeeping only.
+- Stream snapshots expose submitted frames, a hardware queue position clamped to submitted media,
+  clock nanoseconds, underruns, interruptions, device changes, timeline-query failures, and state.
+  A temporarily unavailable initial timeline is retained as telemetry rather than aborting playback,
+  while starvation cannot advance pictures beyond media actually submitted.
+- `examples/media/Studio.pudu` uses the audio stream as its master presentation clock and writes a
+  version-three report. The real configured 480×270 launch submitted all 16,016 stereo frames,
+  presented 27 of 30 pictures by dropping late frames, reported zero underruns, interruptions, and
+  device changes, wrote valid WAV and JSON artifacts, and closed the window and queue. Two real
+  `LaunchAudioStream.pudu` runs fed 4,096 frames apiece and exercised pause, resume, volume, timeline,
+  drain, and stale-token refusal.
+- Qualified constructor patterns no longer discard their qualifier and fall back to the global
+  bare-variant table. A missing exported module constructor now reports exactly one `E3033`; a known
+  type without the written variant reports exactly one `E3034`; named-field recovery binds nested
+  patterns at the error type without cascading field diagnostics. The exact `Std.Audio` typo that
+  exposed the defect and local type-owned positional/named cases are permanent regressions.
+- A record type destructured through its module, such as `Audio.Format { sampleRate, channels }`, is
+  again a record pattern: the qualified-constructor diagnostic first asks whether the full path names
+  a declared type, and `AcceptsQualifiedRecordPattern.pudu` holds it at zero diagnostics.
+- `Std.Diff.unifiedDiff` no longer reports texts that differ only in their final newline as equal.
+  The unterminated side's last line compares as distinct and is followed by
+  `\ No newline at end of file`; line splitting no longer re-walks the text per character.
+  `UsesDiff.pudu` holds 14 claims.
+
 ## 2026-09-13 — Configurable desktop media laboratory
 
 - `pudu lint` now analyzes files or directories through the ordinary typed compiler. Existing

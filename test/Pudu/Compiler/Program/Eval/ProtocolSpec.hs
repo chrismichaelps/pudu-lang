@@ -210,7 +210,7 @@ testProtocolEvaluation = do
         (bloomFilter === Just "10")
     , counterexample
         "Diff Myers O(ND) line/token differences, unified diff headers and hunks, and Levenshtein metrics"
-        (diffOps === Just "12")
+        (diffOps === Just "14")
     , counterexample
         "Mime parses media types, parameters, 60+ extensions, and negotiates HTTP Accept headers"
         (mimeType === Just "10")

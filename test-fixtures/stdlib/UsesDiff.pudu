@@ -118,5 +118,18 @@ export fn main() -> Int {
   let removed = Diff.unifiedDiff("a/f", "b/f", "a\nb\nc", "a\nc", 0)
   if removed.contains("@@ -2,1 +1,0 @@\n-b\n") { held = held + 1 }
 
+  // 13. Adding only a final newline is a change, and the side without one is
+  // marked the way patch reads it.
+  let terminated = Diff.unifiedDiff("a/f", "b/f", "a\nb", "a\nb\n", 3)
+  if terminated.contains("@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b\n") {
+    held = held + 1
+  }
+
+  // 14. A kept last line that neither side ends with a newline keeps the marker.
+  let unterminated = Diff.unifiedDiff("a/f", "b/f", "x\nend", "y\nend", 1)
+  if unterminated.contains("@@ -1,2 +1,2 @@\n-x\n+y\n end\n\\ No newline at end of file\n") {
+    held = held + 1
+  }
+
   held
 }
