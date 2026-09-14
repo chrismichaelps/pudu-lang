@@ -37,6 +37,11 @@ testPackageNames = conjoin
   [ packageNameFrom "My Product" === Right "my-product"
   , packageNameFrom "two---parts" === Right "two-parts"
   , packageNameFrom "  V2_report  " === Right "v2-report"
+  , counterexample "a doubled letter is part of the name, not a separator run"
+      ( map packageNameFrom ["hello", "letter", "book-keeper", "app2", "aabbcc"]
+          === map Right ["hello", "letter", "book-keeper", "app2", "aabbcc"]
+      )
+  , packageNameFrom "my  app" === Right "my-app"
   , packageNameFrom "---" === Left (InvalidPackageName "---")
   , packageNameFrom "CORE" === Left (ReservedPackageName "core")
   ]

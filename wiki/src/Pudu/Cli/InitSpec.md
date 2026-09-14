@@ -14,6 +14,9 @@ aliases: [Pudu CLI Init Spec]
 ## Purpose and evidence
 
 Exercises package-name normalization and project initialization in isolated temporary directories.
+Normalization cases include names with doubled letters (`hello`, `letter`, `book-keeper`, `app2`,
+`aabbcc`), which must survive unchanged: grouping every repeated character rather than only
+separators once turned `hello` into `helo`.
 Properties cover a fresh complete layered Pudu scaffold, its exact inward imports, preservation of existing source and tests, existing
 manifest refusal, incompatible object refusal without partial managed files, reserved/empty package
 name refusal, and a concurrent lock refusal. Exact file contents and typed errors are compared.

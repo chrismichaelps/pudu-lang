@@ -16,7 +16,9 @@ aliases: [Pudu CLI Init]
 Create a canonical Pudu project without overwriting user content. `createProject` returns either a
 typed `InitError` or the canonical initialized root; `renderInitError` provides the CLI message.
 `packageNameFrom` normalizes a directory name to the package-name grammar for focused testing and
-other project tooling.
+other project tooling. Letters are lowercased, every character outside ASCII letters and digits
+becomes a separator, and a run of separators becomes one; only separators collapse, so a doubled
+letter stays part of the name (`hello`, `book-keeper`, `app2`).
 
 ## Governance and algorithm
 

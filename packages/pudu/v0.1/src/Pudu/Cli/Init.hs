@@ -61,11 +61,15 @@ renderInitError problem = case problem of
     Text.pack path <> " appeared while the project was being initialized"
   InitIoFailure message -> message
 
-{-| Normalize a human directory name to the package identity grammar. -}
+{-| Normalize a human directory name to the package identity grammar.
+
+    Every character outside lowercase ASCII letters and digits becomes a
+    separator, and a run of separators becomes one. Only separators collapse:
+    a doubled letter is part of the name, so `hello` stays `hello`. -}
 packageNameFrom :: String -> Either InitError Text
 packageNameFrom directoryName =
   let mapped = map normalize directoryName
-      collapsed = concatMap firstCharacter (group mapped)
+      collapsed = concatMap separatorsOnce (group mapped)
       packageName = Text.dropAround (== '-') (Text.pack collapsed)
    in if Text.null packageName
         then Left (InvalidPackageName directoryName)
@@ -77,9 +81,9 @@ packageNameFrom directoryName =
     normalize character
       | isAscii character && isAlphaNum character = toLower character
       | otherwise = '-'
-    firstCharacter characters = case characters of
-      [] -> []
-      character : _ -> [character]
+    separatorsOnce run = case run of
+      '-' : _ -> "-"
+      _ -> run
 
 {-| Create a project or return one typed refusal. Host failures are translated at
     this boundary; expected collisions never travel as exceptions. -}

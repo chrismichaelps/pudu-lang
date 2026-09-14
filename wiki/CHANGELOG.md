@@ -72,6 +72,10 @@ tags: [changelog]
   adapter each store is now an empty constructor and adapter-only code sits inside the platform
   guard; all 181 library modules type-check with the macOS flags removed. The audio-device and
   desktop error classifiers are module-constant tables rather than comparison chains.
+- `pudu init` no longer drops doubled letters from the package name it writes: `hello` became
+  `helo`, `book-keeper` became `bok-keper`, and `app2` became `ap2`, because every run of a repeated
+  character was collapsed rather than only runs of separators. Only separators collapse now, and the
+  names that failed are regression cases.
 - A missing standard module's help says where the library was looked for when none was found. It
   was built from only the locations that exist, so with no library installed it read `looked in `
   followed by nothing, or by an empty source root. With a library present it still names the
