@@ -79,7 +79,7 @@ testServiceEvaluation = do
           naming a length this program then tries to hold. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "81")
+        (database === Just "84")
     {-| The driver layer is an interface rather than an implementation — a
         driver is a record of functions, which is what lets a program choose
         which backends it admits — so it is checked against one written in the

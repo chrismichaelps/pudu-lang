@@ -202,6 +202,23 @@ export fn main() -> Int {
       count
     })
 
+  // A pool whose connection is lost keeps its place and opens a fresh one for
+  // the next borrower. The stub answers one query on each connection and then
+  // hangs up, so the second request finds the socket gone and the third is
+  // answered by a second connection the pool opened in its place. A pool that
+  // closed itself when a socket dropped refuses the third as closed, and every
+  // request after it, until the program restarts.
+  held = held + runAgainstTimes(2, answerThenListen, fn(settings: Session.Config) -> Int {
+      var count = 0
+      if let Ok(pooled) = Db.pool(&settings, 1) {
+        if Result.unwrapOr(firstName(&pooled), "") == "ada" { count = count + 1 }
+        if Result.isErr(&firstName(&pooled)) { count = count + 1 }
+        if Result.unwrapOr(firstName(&pooled), "") == "ada" { count = count + 1 }
+        let _shut = Db.closePool(&pooled)
+      }
+      count
+    })
+
   // A connection kept past the transaction that lent it is refused rather than
   // used. The copy the callback keeps names a lending that has ended, and the
   // connection it points at is back in the pool by then — writing through it
@@ -556,6 +573,48 @@ export fn main() -> Int {
 
 /// Start a stub on a port the machine chooses, run a client against it, and
 /// answer what the client counted.
+/// The same, against a stub that serves several connections one after another.
+///
+/// When the client is done the listener is sent one empty connection, so a
+/// client that opened fewer connections than the stub waits for fails its
+/// checks rather than leaving the stub waiting forever.
+fn runAgainstTimes(times: Int, stub: fn(Net.Connection) -> Bool, client: fn(Session.Config) -> Int) -> Int {
+  let opened = Net.listenLocal(0)
+  if let Ok(listener) = opened {
+    let port = Result.unwrapOr(Net.portOf(&listener), 0)
+    let worker = Concurrent.start(fn() -> () {
+        let _served = Net.serve(&listener, times, stub)
+        let _closed = Net.closeListener(&listener)
+        ()
+      })
+    let counted = client(
+      Session.at(&Session.config("people", "ada", "secret"), "127.0.0.1", port)
+    )
+    if let Ok(nudge) = Net.connect("127.0.0.1", port) { let _hung = Net.close(&nudge) }
+    if let Ok(started) = worker { let _joined = Concurrent.join(&started) }
+    counted
+  } else {
+    0
+  }
+}
+
+/// A server that answers one query, hangs up, and keeps listening for the next
+/// connection, which is what a restarted server looks like to a pool.
+fn answerThenListen(connection: Net.Connection) -> Bool {
+  let _answered = trustServer(connection)
+  true
+}
+
+/// The name in the first row the stub answers, through a pooled connection.
+fn firstName(pooled: &Db.Pool) -> Result[Str, Session.DbError] {
+  Db.withConnection(pooled, fn(open: Session.Connection) -> (Result[Str, Session.DbError], Session.Connection) {
+      match Db.simple(open, "select id, name from people") {
+        case Ok(pair) => (Ok(Option.unwrapOr(Db.value(&pair[0], 0, "name"), "")), pair[1])
+        case Err(reason) => (Err(reason), open)
+      }
+    })
+}
+
 fn runAgainst(stub: fn(Net.Connection) -> Bool, client: fn(Session.Config) -> Int) -> Int {
   let opened = Net.listenLocal(0)
   if let Ok(listener) = opened {

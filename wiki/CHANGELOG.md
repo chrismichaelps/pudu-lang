@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — A PostgreSQL pool survives a dropped connection
+
+- `Std.Db.withConnection` closed the whole pool when an action failed with anything other than a
+  server error, so a dropped socket, an idle timeout or a server restart made every later query on
+  every thread answer `Closed` until the program restarted. Reproduced against a live PostgreSQL 14
+  server by terminating a pool's backends. A connection that cannot be lent again is now closed and its
+  place kept empty, and the next borrower opens a fresh connection there, so the pool keeps its size.
+  Against the same server, each dead connection failed one request and the following requests were
+  answered by new backends. `UsesDb` rises to 84 with a stub that hangs up after each answer.
+
 ## 2026-09-14 — Header lines another reader would take differently are refused
 
 - `Std.Http.Message` trimmed a header name before using it, so the server read `Content-Length : 5`

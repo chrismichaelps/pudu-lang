@@ -27,10 +27,17 @@ export type Rows = {
 }
 
 /// A set of connections shared between threads.
+///
+/// Each place in `ready` holds a connection, or nothing where one was lost. A
+/// lost connection keeps its place, and the next borrower opens a fresh one
+/// with `reopen`, so a dropped socket costs one request rather than the pool.
+/// `reopen` is a function rather than the settings themselves so that showing a
+/// pool cannot show its password.
 export type Pool = {
-  ready: Channel.Channel[Session.Connection],
+  ready: Channel.Channel[Option[Session.Connection]],
   size: Int,
-  closing: Sync.Cell[Bool]
+  closing: Sync.Cell[Bool],
+  reopen: fn() -> Result[Session.Connection, Session.DbError]
 }
 
 /// Run text the server plans and executes in one step.
@@ -376,15 +383,21 @@ export fn withSavepoint[T](
 /// is the whole reason a database wants one.
 export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbError] {
   if size < 1 { return Err(Other("a database pool must contain at least one connection")) }
-  let ready: Channel.Channel[Session.Connection] = Channel.channel(size)
-  let building = Pool{ready: ready, size: size, closing: Sync.cell(false)}
+  let ready: Channel.Channel[Option[Session.Connection]] = Channel.channel(size)
+  let held = *settings
+  let building = Pool {
+    ready: ready,
+    size: size,
+    closing: Sync.cell(false),
+    reopen: fn() -> Result[Session.Connection, Session.DbError] { Session.connect(&held) }
+  }
   var opened = 0
   var failure: Option[Session.DbError] = None
   while opened < size && Option.isNone(&failure) {
     match Session.connect(settings) {
       case Err(reason) => { failure = Some(reason) }
       case Ok(stream) => {
-        match Channel.send(&ready, stream) {
+        match Channel.send(&ready, Some(stream)) {
           case Ok(_) => { opened = opened + 1 }
           case Err(reason) => {
             let failed: Result[(), Session.DbError] = Err(asChannel(reason))
@@ -412,36 +425,54 @@ export fn pool(settings: &Session.Config, size: Int) -> Result[Pool, Session.DbE
 /// the pool has lost, and a pool that has lost all of them stops every thread
 /// waiting on it — a failure that appears only under load and looks like the
 /// database being slow.
+///
+/// A connection that cannot be lent again — its socket dropped, the server
+/// restarted, the protocol went wrong — is closed and its place kept empty, so
+/// the next borrower opens a fresh one. Closing the whole pool instead would
+/// turn one lost socket into every later request failing until the program
+/// restarts.
 export fn withConnection[T](
   target: &Pool,
   action: fn(Session.Connection) -> (Result[T, Session.DbError], Session.Connection)
 ) -> Result[T, Session.DbError] {
   let taken = Result.mapErr(Channel.receive(&target.ready), asChannel) ?
-  let stream = match taken {
+  let slot = match taken {
     case Some(found) => found
     case None => { return Err(Closed) }
   }
   match Sync.get(&target.closing) {
     case Err(problem) => {
       let failed: Result[T, Session.DbError] = Err(Other(show(problem)))
-      return afterCleanup(afterCleanup(failed, Session.close(&stream)), closePool(target))
+      return afterCleanup(afterCleanup(failed, closeSlot(&slot)), closePool(target))
     }
     case Ok(true) => {
       let failed: Result[T, Session.DbError] = Err(Closed)
-      return afterCleanup(failed, Session.close(&stream))
+      return afterCleanup(failed, closeSlot(&slot))
     }
     case Ok(false) => {}
+  }
+  let stream = match slot {
+    case Some(found) => found
+    case None => {
+      match (target.reopen)() {
+        case Ok(opened) => opened
+        case Err(reason) => {
+          let failed: Result[T, Session.DbError] = Err(reason)
+          return afterCleanup(failed, vacate(target))
+        }
+      }
+    }
   }
   let lent = Session.renew(stream)
   if let Err(reason) = lent {
     let failed: Result[T, Session.DbError] = Err(reason)
-    return afterCleanup(failed, Session.close(&stream))
+    return afterCleanup(failed, discard(target, &stream))
   }
   let acted = action(Result.unwrapOr(lent, stream))
   let ended = Session.renew(acted[1])
   if let Err(reason) = ended {
     let cleanup: Result[(), Session.DbError] = Err(reason)
-    return afterCleanup(afterCleanup(acted[0], cleanup), Session.close(&acted[1]))
+    return afterCleanup(afterCleanup(acted[0], cleanup), discard(target, &acted[1]))
   }
   let outcome = (acted[0], Result.unwrapOr(ended, acted[1]))
   match Sync.get(&target.closing) {
@@ -458,17 +489,16 @@ export fn withConnection[T](
     case Err(_) => false
   }
   if !reusable {
-    return afterCleanup(afterCleanup(outcome[0], Session.close(&outcome[1])), closePool(target))
+    return afterCleanup(outcome[0], discard(target, &outcome[1]))
   }
   match settled(outcome[1]) {
     case Err(problem) => {
       let cleanup: Result[(), Session.DbError] = Err(problem)
       let failed = afterCleanup(outcome[0], cleanup)
-      let discarded = afterCleanup(failed, Session.close(&outcome[1]))
-      return afterCleanup(discarded, closePool(target))
+      return afterCleanup(failed, discard(target, &outcome[1]))
     }
     case Ok(returning) => {
-      match Channel.send(&target.ready, returning) {
+      match Channel.send(&target.ready, Some(returning)) {
         case Ok(_) => outcome[0]
         case Err(problem) => {
           let cleanup: Result[(), Session.DbError] = Err(asChannel(problem))
@@ -551,10 +581,32 @@ export fn closePool(target: &Pool) -> Result[(), Session.DbError] {
         going = false
       }
       case Ok(None) => { going = false }
-      case Ok(Some(stream)) => { outcome = afterCleanup(outcome, Session.close(&stream)) }
+      case Ok(Some(slot)) => { outcome = afterCleanup(outcome, closeSlot(&slot)) }
     }
   }
   outcome
+}
+
+/// Close a connection that cannot be lent again and keep its place, so the
+/// pool stays the size it was opened at.
+///
+/// The place is returned before the close is reported, because a close that
+/// fails on a socket already gone must not also cost the pool a connection.
+fn discard(target: &Pool, stream: &Session.Connection) -> Result[(), Session.DbError] {
+  let kept = vacate(target)
+  afterCleanup(kept, Session.close(stream))
+}
+
+/// Return an empty place to the pool, for the next borrower to fill.
+fn vacate(target: &Pool) -> Result[(), Session.DbError] {
+  Result.mapErr(Channel.send(&target.ready, None), asChannel)
+}
+
+fn closeSlot(slot: &Option[Session.Connection]) -> Result[(), Session.DbError] {
+  match slot {
+    case Some(stream) => Session.close(&stream)
+    case None => Ok(())
+  }
 }
 
 /// Keep the operation's failure first while retaining cleanup failures beside it.
