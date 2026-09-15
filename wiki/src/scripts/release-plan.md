@@ -19,8 +19,9 @@ Decides what a push does for [[Release Workflow]], printing `build`, `release`, 
 - a release whose notes file is missing is refused rather than published without notes.
 
 The command reads the version through `scripts/package_info.py`, the tags from `git`, and the changed
-paths from the push's previous commit, or from where the branch left `origin/main` when the push
-created it.
+paths from the push's previous commit on `main`. A `release/` branch, and a push that created its
+branch, is compared with where it left `origin/main`, because a release branch proves everything its
+merge will bring rather than only its latest push.
 
 `test/release-plan.test.py` holds the decision: a compiler change on `main` at a new version releases
 as a pre-release; README, website, example, and wiki changes never build or release; an existing tag

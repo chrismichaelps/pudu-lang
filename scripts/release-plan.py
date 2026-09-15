@@ -47,10 +47,11 @@ def git(*arguments):
   return subprocess.run(["git", *arguments], check=True, text=True, capture_output=True).stdout
 
 
-def changed_paths(before, after, base):
-  """The paths a push changed. A push that created its branch has no previous
-  commit, so it is compared with where it left `base`."""
-  if not before or set(before) == {"0"}:
+def changed_paths(ref, before, after, base):
+  """The paths a push changed. A release branch is compared with where it left
+  `base` as a whole, because what it proves is everything its merge will bring;
+  so is a push that created its branch and has no previous commit."""
+  if ref.startswith("release/") or not before or set(before) == {"0"}:
     before = git("merge-base", base, after).strip()
   return [line for line in git("diff", "--name-only", before, after).splitlines() if line]
 
@@ -66,7 +67,7 @@ def main():
   try:
     package, version, _ = load_package(root)
     tags = set(git("tag", "--list").split())
-    changed = changed_paths(args.before, args.after, args.base)
+    changed = changed_paths(args.ref, args.before, args.after, args.base)
     decision = plan(args.ref, version, tags, changed, notes_path(package, version).is_file())
   except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as problem:
     parser.error(str(problem))
