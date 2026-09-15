@@ -22,7 +22,17 @@ byte body goes out unchanged. `renderRequest` writes text and refuses a request 
 as `renderResponse` refuses a byte response, rather than dropping the bytes.
 A chunk size arrives from the peer, so hexadecimal digits spelling more than an `Int` holds are not a
 size, checked before each multiplication, rather than an overflow that stops the program.
+
+**A header another reader could take differently is refused, not trimmed.** A name is a token —
+letters, digits, and ``!#$%&'*+-.^_`|~`` — with nothing between it and its colon. A line beginning
+with a space or tab (a folded continuation) and a line still holding a carriage return or line feed
+are refused. Each answers `AmbiguousHeader(line)`, in requests and responses alike, and the server
+answers 400. The value is still trimmed of surrounding whitespace, which every reader agrees on.
 ## Grill Log
+- **Q:** Trim whitespace before a header's colon, as the parser once did? **A:** No. _Rationale:_ a
+  proxy following the protocol rejects `Content-Length : 5` or ignores it, and a server behind it that
+  obeys it reads a different body length from the same bytes — the remainder becomes a request only
+  the server saw. _Rejected:_ trimming the name; joining folded lines.
 - **Q:** Why accept LF? **A:** Hand-written fixtures remain useful without weakening network output, which still renders CRLF. _Rejected:_ transport-dependent parsing.
 - **Q:** Is connection closure the only complete-response signal? **A:** No. _Rationale:_ HTTP/1.1
   length and chunk framing are complete while a reusable connection remains open. _Rejected:_ EOF as

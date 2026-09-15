@@ -403,10 +403,14 @@ testProtocolEvaluation = do
         declares as well as the body it carries, over a body carrying a
         character wider than one byte, where counting characters and counting
         bytes part company and a client reading the declared number stops in
-        the middle. -}
+        the middle. A header another reader could take differently — whitespace
+        before its colon, an empty or spaced name, a folded line, a stray line
+        break inside a value — is refused rather than trimmed, in requests and
+        responses alike, because that disagreement is how a proxy and a server
+        come to see different requests in the same bytes. -}
     , counterexample
         "a message survives being written and read, and declares its body in bytes"
-        (messaged === Just "93")
+        (messaged === Just "97")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}

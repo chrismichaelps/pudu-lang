@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Header lines another reader would take differently are refused
+
+- `Std.Http.Message` trimmed a header name before using it, so the server read `Content-Length : 5`
+  as a body length, accepted an empty name, a name with a space in it, and a folded continuation line,
+  and kept a bare line break inside a value. A proxy that follows the protocol rejects or reads each of
+  those differently, and a proxy and a server that disagree about where a body ends see different
+  requests in the same bytes. Each is now refused as `AmbiguousHeader`, in requests and responses
+  alike, and the server answers 400. A name is a token with nothing between it and its colon; a
+  value is still trimmed.
+- `UsesHttpMessageReplyAll` rises to 97. Against a running server, an ordinary request answered 200
+  while whitespace before a colon and a folded line each answered 400.
+
 ## 2026-09-14 — Kept values through any driver
 
 - `Std.Db.Store` built backend-neutral statements but could only run them on a PostgreSQL session, so a

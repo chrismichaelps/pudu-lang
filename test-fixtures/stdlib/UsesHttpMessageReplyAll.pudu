@@ -5,7 +5,7 @@ import Std.Html as Html
 import Std.Html.Ssr {MissingSlot}
 import Std.Html.Ssr as Ssr
 import Std.Http as Http
-import Std.Http.Message {BadHeader, BadRequestLine, NoRequestLine, ShortBody}
+import Std.Http.Message {AmbiguousHeader, BadHeader, BadRequestLine, NoRequestLine, ShortBody}
 import Std.Http.Message as Message
 import Std.Http.Server.Reply as Reply
 import Std.Json as Json
@@ -93,6 +93,44 @@ export fn main() -> Int {
   match Message.parseHead("GET /x HTTP/1.1\r\nbroken\r\n") {
     case Err(BadHeader(line)) => { if line == "broken" { held = held + 1 } }
     case _ => {}
+  }
+
+  // A header a proxy in front would read differently is refused rather than
+  // trimmed into agreement. Whitespace before the colon, an empty or spaced
+  // name, a folded continuation, and a bare line break inside a value are each
+  // how two readers of one message come to disagree about where its body ends.
+  let ambiguous = [
+    "GET /x HTTP/1.1\r\nContent-Length : 5\r\n",
+    "GET /x HTTP/1.1\r\n: 5\r\n",
+    "GET /x HTTP/1.1\r\nContent Length: 5\r\n",
+    "GET /x HTTP/1.1\r\nhost: a\r\n  folded: b\r\n",
+    "GET /x HTTP/1.1\r\nx-note: a\nContent-Length: 5\r\n",
+    "GET /x HTTP/1.1\r\nx-note: a\rb\r\n",
+    "GET /x HTTP/1.1\r\n\tfolded: b\r\n"
+  ]
+  var refusedAmbiguous = 0
+  for head in ambiguous {
+    if let Err(AmbiguousHeader(_)) = Message.parseHead(head) { refusedAmbiguous = refusedAmbiguous + 1 }
+  }
+  if refusedAmbiguous == ambiguous.length() { held = held + 1 }
+  match Message.parseHead("GET /x HTTP/1.1\r\nContent-Length : 5\r\n") {
+    case Err(problem) => {
+      if Message.explain(&problem).contains("Content-Length : 5") { held = held + 1 }
+    }
+    case Ok(_) => {}
+  }
+  // What is ordinary stays accepted: whitespace around a value, punctuation a
+  // name may hold, and an empty value.
+  match Message.parseHead("GET /x HTTP/1.1\r\nX-Custom_Name.v2!: \t spaced \t\r\nx-empty:\r\n") {
+    case Ok(request) => {
+      if request.headers == [("X-Custom_Name.v2!", "spaced"), ("x-empty", "")] { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  // A response is read by the same rule, since a client behind a proxy has the
+  // same problem in the other direction.
+  if let Err(AmbiguousHeader(_)) = Message.parseResponse("HTTP/1.1 200 OK\r\nContent-Length : 5\r\n\r\nhello") {
+    held = held + 1
   }
 
   // A response read from what a connection carried.
