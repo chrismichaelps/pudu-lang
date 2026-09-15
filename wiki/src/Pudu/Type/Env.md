@@ -93,3 +93,7 @@ DEPTH 0.5 (MEDIUM). It keeps one concern out of [[Type Check]], which the delive
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Places
+
+`DeclaredTypes` records `declaredMutableFields`. The state holds the resolver's `var` use spans, the spans of `&mut` expressions a call admitted as its arguments, and the untyped function literal parameters awaiting judgement, with small accessors for [[Check Place]]. See [[ADR-0022-lending-a-place]].

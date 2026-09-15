@@ -78,3 +78,7 @@ checking.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[grammar/pudu]]
+
+## Places
+
+`checkCalleeLending` answers the callee type and, when the method takes `self: &mut Self`, the receiver, which [[Check Place]] requires to be writable; `checkCallee` is its first half. See [[ADR-0022-lending-a-place]].

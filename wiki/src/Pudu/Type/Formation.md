@@ -98,3 +98,7 @@ DEPTH 0.55 (MEDIUM). It keeps one concern out of [[Type Check]], which the deliv
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]]
+
+## Places
+
+Collecting a record also records which of its fields are declared `mut`, for local and imported types alike. See [[ADR-0022-lending-a-place]].

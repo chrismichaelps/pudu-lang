@@ -284,7 +284,7 @@ fn changedAt(
     depth = depth + 1
   }
   if !found {
-      *base
+    *base
   } else {
     var rebuilt = change(held)
     var index = ancestors.length() - 1
@@ -300,7 +300,7 @@ fn changedAt(
 fn replacedChild(base: &Html.Html, index: Int, replacement: Html.Html) -> Html.Html {
   let children = childrenOf(base)
   if index < 0 || index >= children.length() {
-      *base
+    *base
   } else {
     var built: Array[Html.Html] = []
     var position = 0

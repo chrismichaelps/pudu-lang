@@ -88,7 +88,7 @@ export fn weekdayOf(millis: Int) -> Int {
 export fn dayOfYear(millis: Int) -> Int {
   let parts = partsOf(millis)
   daysFromCivil(parts.year, parts.month, parts.day)
-    -daysFromCivil(parts.year, 1, 1)
+  -daysFromCivil(parts.year, 1, 1)
     + 1
 }
 

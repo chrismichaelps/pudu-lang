@@ -13,7 +13,6 @@ module Pudu.Eval
   , scopeTo
   ) where
 
-import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Sequence as Seq
@@ -32,7 +31,6 @@ import Pudu.Eval.Env
   , lookupName
   , unwind
   , Unwind (..)
-  , updateExisting
   , withFrame
   , withNewFrame
   )
@@ -57,6 +55,7 @@ import Pudu.Eval.Match (integerLiteralValue, literalValue, matchPattern)
 import Pudu.Eval.Keyed (setContains, setFromMembers)
 import Pudu.Eval.Operator (applyUnary, combine, readIndex, readMember, unwrapTry)
 import Pudu.Eval.Order (comparableValue)
+import Pudu.Eval.Place (placeOf, storePlace)
 import Pudu.Eval.Render (renderValue, valueKind)
 import Pudu.Eval.Value
   ( Closure (..)
@@ -361,8 +360,13 @@ evaluateGuard guard = case guard of
 applyBinary :: Span -> Located Expression -> Text -> Located Expression -> Evaluator Value
 applyBinary spanValue left operator right = case operator of
   "=" -> do
-    value <- evaluate right
-    assign spanValue left value
+    target <- placeOf evaluate left
+    case target of
+      Just place -> do
+        value <- evaluate right
+        storePlace place value
+        pure UnitValue
+      Nothing -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing
   "&&" -> do
     leftValue <- evaluate left
     truth <- expectBool spanValue leftValue
@@ -385,12 +389,3 @@ applyBinary spanValue left operator right = case operator of
 
 expectBoolValue :: Span -> Value -> Evaluator Value
 expectBoolValue spanValue value = BoolValue <$> expectBool spanValue value
-
-assign :: Span -> Located Expression -> Value -> Evaluator Value
-assign spanValue target value = case locatedValue target of
-  NameExpression (name :| []) -> do
-    found <- updateExisting name value
-    if found
-      then pure UnitValue
-      else abortAt (Just spanValue) "E7001" ("undefined name " <> name) Nothing
-  _ -> abortAt (Just spanValue) "E7001" "assignment target is not a place" Nothing

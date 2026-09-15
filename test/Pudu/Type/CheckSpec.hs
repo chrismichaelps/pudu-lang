@@ -33,6 +33,7 @@ import Pudu.Type.Check.PatternSpec
   ( testExhaustiveness
   , testMatchThroughBorrow
   )
+import Pudu.Type.Check.PlaceSpec (testPlaces)
 import Pudu.Type.Check.PrimitiveSpec
   ( testAnnotations
   , testDecimalType
@@ -106,4 +107,5 @@ typeProperties =
   , ("compile-time functions keep their evaluator pure", testComptime)
   , ("a structured scope requires an async function", testScopes)
   , ("expression types are recorded for tooling", testRecordedTypes)
+  , ("places are written and lent only where the language allows", testPlaces)
   ]

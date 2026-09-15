@@ -154,7 +154,7 @@ fn firstBadDigit(digits: Str) -> Int {
     if !"0123456789abcdef".contains(digits.slice(index, index + 1)) { return index }
     index = index + 1
   }
-    -1
+  -1
 }
 
 /// Whether two identifiers are the same, compared as the numbers they are.

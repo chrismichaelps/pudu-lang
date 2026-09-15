@@ -112,3 +112,7 @@ exception.
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Check]] · [[Type Check Expression]]
+
+## Places
+
+A local binding's annotation and inferred type are checked by [[Check Place]], which refuses one that would hold an exclusive reference. See [[ADR-0022-lending-a-place]].

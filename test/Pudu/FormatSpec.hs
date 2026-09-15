@@ -17,6 +17,7 @@ formatProperties =
   , ("indentation follows brace depth", testIndentation)
   , ("a wrapped parameter list belongs to its declaration", testWrappedParameters)
   , ("a list written one item to a line keeps its items level", testLeadingCommas)
+  , ("a statement opening with a prefix operator starts its own line", testPrefixStatements)
   , ("spacing is normalised inside a line", testSpacing)
   , ("if let chains retain their flat spelling", testIfLetSpacing)
   , ("a record construction stays tight and a body does not", testBraces)
@@ -123,6 +124,39 @@ testLeadingCommas = do
     , "    , 2"
     , "    , 3"
     , "  ]"
+    , "}"
+    ]
+
+{-| A line that opens with `*`, `-`, or `&` is a statement of its own: the
+    parser reads `*count = 0` on its own line as an assignment through a
+    reference, never as the line above multiplied. Indented as a continuation it
+    looked like part of the statement before it. A binary operator that cannot
+    open an expression still carries the line above on. -}
+testPrefixStatements :: IO Property
+testPrefixStatements = do
+  formatted <- formatOf written
+  pure
+    ( counterexample (Text.unpack formatted)
+        (Text.lines formatted === expected)
+    )
+ where
+  written =
+    Text.unlines
+      [ "module M"
+      , "fn bump(count: &mut Int, step: Int) -> () {"
+      , "*count = *count + step"
+      , "if *count > 9 { return }"
+      , "*count = *count"
+      , "+ step"
+      , "}"
+      ]
+  expected =
+    [ "module M"
+    , "fn bump(count: &mut Int, step: Int) -> () {"
+    , "  *count = *count + step"
+    , "  if *count > 9 { return }"
+    , "  *count = *count"
+    , "    + step"
     , "}"
     ]
 

@@ -126,24 +126,29 @@ group ((firstLine, firstPiece) : rest) = go firstLine [firstPiece] rest
     closing, not the level inside it, so the closer lines up with the line that
     opened it. -}
 indentLines :: [(Bool, [Piece])] -> [Line]
-indentLines = go 0 []
+indentLines = go [] []
  where
   go _ _ [] = []
-  go depth above ((blank, pieces) : rest)
-    | blank = Line 0 [] : go depth above rest
+  go open above ((blank, pieces) : rest)
+    | blank = Line 0 [] : go open above rest
     | otherwise =
-        let opened = sum (map delta pieces)
-            leading = if startsClosed pieces then 1 else 0
-            carried = if continues pieces || resumes above pieces then 1 else 0
-            indent = max 0 (depth - leading + carried)
-         in Line indent pieces : go (max 0 (depth + opened)) pieces rest
-  delta piece = case piece of
-    CommentPiece _ -> 0
+        let leading = if startsClosed pieces then 1 else 0
+            carried = if continues (inBlock open) pieces || resumes above pieces then 1 else 0
+            indent = max 0 (length open - leading + carried)
+         in Line indent pieces : go (foldl track open pieces) pieces rest
+  {-| The delimiters still open, innermost first. -}
+  track open piece = case piece of
+    CommentPiece _ -> open
     TokenPiece token -> case tokenKind token of
       Symbol symbol
-        | symbol `elem` openers -> 1
-        | symbol `elem` closers -> -1
-      _ -> 0
+        | symbol `elem` openers -> symbol : open
+        | symbol `elem` closers -> drop 1 open
+      _ -> open
+  {-| Whether a line starts where statements are written: at the top of a file
+      or directly inside a block, rather than inside parentheses or brackets. -}
+  inBlock open = case open of
+    [] -> True
+    innermost : _ -> innermost == SymLeftBrace
   startsClosed pieces = case dropWhile isComment pieces of
     TokenPiece token : _ -> case tokenKind token of
       Symbol symbol -> symbol `elem` closers
@@ -160,7 +165,7 @@ indentLines = go 0 []
       is indented one level past what it continues. Brace depth alone would put
       a sum type's variants hard against the margin, which says the opposite of
       what they are. -}
-  continues pieces = case dropWhile isComment pieces of
+  continues statementLevel pieces = case dropWhile isComment pieces of
     TokenPiece token : _ -> case tokenKind token of
       {-| A label opens a loop; it never continues the line above. -}
       Symbol SymAt -> False
@@ -176,7 +181,15 @@ indentLines = go 0 []
           comma as a continuation indented each of them one level past the item
           they line up with. -}
       Symbol SymComma -> False
-      Symbol symbol -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
+      {-| Where statements are written, a symbol that can open a prefix
+          expression opens a statement when it starts a line: the parser reads
+          `*count = 0` on its own line as an assignment through a reference, never
+          as the line above multiplied. Inside parentheses or brackets the same
+          line is an argument or an item, and keeps the indentation a
+          continuation gives it. -}
+      Symbol symbol
+        | statementLevel && symbol `elem` [SymMinus, SymAmpersand, SymStar] -> False
+        | otherwise -> symbol `notElem` (openers <> closers <> [SymBang, SymTilde])
       Keyword KwElse -> True
       _ -> False
     _ -> False

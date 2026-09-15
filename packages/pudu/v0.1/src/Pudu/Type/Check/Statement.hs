@@ -37,6 +37,7 @@ import Pudu.Type.Env
   , report
   )
 import Pudu.Type.Check.Pattern (bindPattern)
+import Pudu.Type.Check.Place (checkBindingType)
 import Pudu.Type.Check.Collection (requireConcreteSetLiteral)
 import Pudu.Type.Check.Call (throughBorrow)
 import Pudu.Type.Check.Signature
@@ -110,6 +111,7 @@ checkStatement needs declared rigid (Located spanValue statement) = case stateme
         place a name is introduced at least as often as at a use of it. -}
     resolved <- zonk unified
     requireConcreteSetLiteral (locatedSpan value) (locatedValue value) resolved
+    checkBindingType annotation name resolved
     recordExpression (locatedSpan name) resolved
     bindName (locatedValue name) (monotype unified)
   DeclarationStatement other -> statementDeclaration needs declared other

@@ -70,8 +70,14 @@ testRuntimeEvaluation = do
   reached <- runEntry "test-fixtures/stdlib/UsesForeign.pudu"
   scoped <- runEntry "test-fixtures/scoped/Main.pudu"
   aliased <- runEntry "test-fixtures/program29/B.pudu"
+  places <- runEntry "test-fixtures/stdlib/UsesPlaces.pudu"
   pure $ conjoin
-    [ {-| Every export of the character module, each predicate asked once of a
+    [ {-| Eighteen writes: a var, fields, nested fields, elements, and places
+          lent with &mut and handed back after a plain finish, `return`, and
+          `?`, through methods, trait-qualified calls, and a place lent on. -}
+      counterexample "a place is written, lent, and handed back on every exit"
+        (places === Just "18")
+    , {-| Every export of the character module, each predicate asked once of a
           character that holds it and once of one that does not, since a
           predicate that never refuses is not one. -}
       counterexample

@@ -45,6 +45,13 @@ module Pudu.Type.Env
   , lookupVariantIn
   , lookupVariantFields
   , lookupRecordedExpression
+  , setWritableNames
+  , isWritableName
+  , admitLentArgument
+  , isLentArgument
+  , isMutableField
+  , recordUnwrittenParameter
+  , takeUnwrittenParameters
   , recordExpression
   , report
   , reportedAt
@@ -97,6 +104,10 @@ data DeclaredTypes = DeclaredTypes
   { declaredNames :: !(Map Text NominalId)
   , declaredParams :: !(Map NominalId [Text])
   , declaredFields :: !(Map NominalId [(Text, Type)])
+  {-| The record fields declared `mut`, which are the only fields an
+      assignment may write. Kept apart from the field types because nothing
+      but a place asks. -}
+  , declaredMutableFields :: !(Set (NominalId, Text))
   , declaredVariants :: !(Map Text (NominalId, [Text], [Type]))
   {-| The same variants, keyed by the type that owns them as well as by their
       name.
@@ -127,6 +138,7 @@ emptyDeclared =
     { declaredNames = Map.empty
     , declaredParams = Map.empty
     , declaredFields = Map.empty
+    , declaredMutableFields = Set.empty
     , declaredVariants = Map.empty
     , declaredOwnedVariants = Map.empty
     , declaredVariantFields = Map.empty
@@ -186,6 +198,14 @@ data CheckerState = CheckerState
   , stateIntegerLiterals :: ![IntegerConstraint]
   , stateIntegerKinds :: ![(Span, Text)]
   , stateRigidBounds :: !(Map Text [NominalId])
+  {-| Uses of names that reach a `var` binding, from the resolver. -}
+  , stateWritableNames :: !(Set SpanKey)
+  {-| The `&mut` expressions written directly as a call's arguments, the one
+      position where lending a place means something. -}
+  , stateLentArguments :: !(Set SpanKey)
+  {-| Function literal parameters written without a type, proved not to be
+      exclusive references once inference has settled them. -}
+  , stateUnwrittenParameters :: ![(Span, Type)]
   , stateDiagnosticsRev :: ![Diagnostic]
   }
 
@@ -284,6 +304,9 @@ initialState =
     , stateIntegerLiterals = []
     , stateIntegerKinds = []
     , stateRigidBounds = Map.empty
+    , stateWritableNames = Set.empty
+    , stateLentArguments = Set.empty
+    , stateUnwrittenParameters = []
     , stateDiagnosticsRev = []
     }
 
@@ -638,6 +661,37 @@ lookupRecordedExpression spanValue =
 
 keyOf :: Span -> SpanKey
 keyOf spanValue = (unOffset (spanStart spanValue), unOffset (spanEnd spanValue))
+
+setWritableNames :: Set SpanKey -> Checker ()
+setWritableNames names = Checker $ \state -> ((), state{stateWritableNames = names})
+
+{-| Whether the name used at this span reaches a binding declared with `var`. -}
+isWritableName :: Span -> Checker Bool
+isWritableName spanValue =
+  Checker $ \state -> (Set.member (keyOf spanValue) (stateWritableNames state), state)
+
+admitLentArgument :: Span -> Checker ()
+admitLentArgument spanValue =
+  Checker $ \state ->
+    ((), state{stateLentArguments = Set.insert (keyOf spanValue) (stateLentArguments state)})
+
+isLentArgument :: Span -> Checker Bool
+isLentArgument spanValue =
+  Checker $ \state -> (Set.member (keyOf spanValue) (stateLentArguments state), state)
+
+isMutableField :: NominalId -> Text -> Checker Bool
+isMutableField owner field =
+  Checker $ \state ->
+    (Set.member (owner, field) (declaredMutableFields (stateDeclared state)), state)
+
+recordUnwrittenParameter :: Span -> Type -> Checker ()
+recordUnwrittenParameter spanValue typeValue =
+  Checker $ \state ->
+    ((), state{stateUnwrittenParameters = (spanValue, typeValue) : stateUnwrittenParameters state})
+
+takeUnwrittenParameters :: Checker [(Span, Type)]
+takeUnwrittenParameters =
+  Checker $ \state -> (reverse (stateUnwrittenParameters state), state{stateUnwrittenParameters = []})
 
 {-| Record that a type must implement a trait. Obligations are proved after the
     body is checked, when inference has solved what the argument types are. -}

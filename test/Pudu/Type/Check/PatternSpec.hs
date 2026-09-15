@@ -214,9 +214,9 @@ testExhaustiveness = do
     , counterexample "a write to a captured name is refused" (capturedWrite === ["E3076"])
     , counterexample "a closure writes its own bindings" (ownWrite === [])
     , counterexample "a write outside any closure is untouched" (outerWrite === [])
-    , counterexample "a write through a reference is refused" (derefWrite === ["E3077"])
-    , counterexample "a write to a field is refused" (fieldWrite === ["E3077"])
-    , counterexample "a write to an element is refused" (elementWrite === ["E3077"])
+    , counterexample "a write through an exclusive reference is accepted" (derefWrite === [])
+    , counterexample "a write to a mut field of a var is accepted" (fieldWrite === [])
+    , counterexample "a write to an element of a var array is accepted" (elementWrite === [])
     , counterexample "an arm after a wildcard is unreachable" (unreachable === ["W5001"])
     , counterexample "a tested payload does not cover its constructor"
         (payloadTested === ["E5001"])

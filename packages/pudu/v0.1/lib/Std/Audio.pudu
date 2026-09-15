@@ -499,7 +499,7 @@ fn roundedRatio(numerator: Int, denominator: Int) -> Int {
   if numerator >= 0 {
     (numerator * 2 + denominator) / (denominator * 2)
   } else {
-      -((-numerator * 2 + denominator) / (denominator * 2))
+    -((-numerator * 2 + denominator) / (denominator * 2))
   }
 }
 

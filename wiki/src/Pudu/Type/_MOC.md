@@ -17,6 +17,7 @@ tags: [moc, module]
 - [[Type Marker]] — the compiler-controlled `Copy`, `Send`, and `Sync` markers, decided structurally.
 - [[Type Exhaust]] — match coverage and arm reachability.
 - [[Type Check Call]] — what a call's callee refers to, resolved against the implementation it will run.
+- [[Check Place]] — what an assignment may write, what `&mut` may lend, and where an exclusive reference may be written or held.
 - [[Type Check Safety]] — compile-time purity and unsafe capabilities, the two transitive checks of what a body may reach.
 - [[Type Check Iteration]] — what a `for` loop's binder takes, from the value beside it.
 - [[Type Check Method]] — trait and implementation methods, `Self`, and inherited defaults.

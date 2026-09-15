@@ -96,7 +96,7 @@ export fn trunc(x: Float) -> Float {
     }
     result
   } else {
-      -trunc(-x)
+    -trunc(-x)
   }
 }
 
@@ -202,7 +202,7 @@ export fn sin(x: Float) -> Float {
   if r > halfPi / 2.0 {
     cosPoly(r - halfPi)
   } else if r < -halfPi / 2.0 {
-      -cosPoly(r + halfPi)
+    -cosPoly(r + halfPi)
   } else {
     sinPoly(r)
   }
@@ -214,7 +214,7 @@ export fn cos(x: Float) -> Float {
   let r = reduceAngle(x)
   let halfPi = 1.5707963267948966
   if r > halfPi / 2.0 {
-      -sinPoly(r - halfPi)
+    -sinPoly(r - halfPi)
   } else if r < -halfPi / 2.0 {
     sinPoly(r + halfPi)
   } else {
@@ -274,7 +274,7 @@ export fn atan2(y: Float, x: Float) -> Float {
   } else if x == 0.0 && y > 0.0 {
     halfPi
   } else if x == 0.0 && y < 0.0 {
-      -halfPi
+    -halfPi
   } else {
     0.0
   }

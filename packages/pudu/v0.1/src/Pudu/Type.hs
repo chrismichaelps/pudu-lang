@@ -16,7 +16,9 @@ module Pudu.Type
 import Data.List (sortOn)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Pudu.Diagnostic (Diagnostic)
+import Pudu.Semantic (resolveModule, writableReferences)
 import Pudu.Frontend.Syntax.Tree (Module)
 import Pudu.Source (Span, spanEnd, spanStart, unOffset)
 import Pudu.Type.Check (checkModule)
@@ -33,8 +35,14 @@ newtype TypeInfo = TypeInfo (Map (Int, Int) Type)
 
 checkTypes :: Module -> (TypeInfo, [Diagnostic])
 checkTypes moduleValue =
-  let (entries, diagnostics) = checkModule moduleValue
+  let (entries, diagnostics) = checkModule (writableIn moduleValue) moduleValue
    in (TypeInfo (Map.fromList entries), diagnostics)
+
+{-| The uses of `var` bindings, for a caller that has not resolved the module
+    itself. The checker takes them from resolution rather than scoping names a
+    second time. -}
+writableIn :: Module -> Set (Int, Int)
+writableIn = writableReferences . fst . resolveModule
 
 {-| @Type.ModuleTypes — one check's full result.
 
@@ -53,9 +61,9 @@ data ModuleTypes = ModuleTypes
   }
   deriving stock (Eq, Show)
 
-checkTypesDetailed :: ImportTypes -> Module -> (ModuleTypes, [Diagnostic])
-checkTypesDetailed imported moduleValue =
-  let (entries, schemes, kinds, diagnostics) = Check.checkModuleDetailed imported moduleValue
+checkTypesDetailed :: ImportTypes -> Set (Int, Int) -> Module -> (ModuleTypes, [Diagnostic])
+checkTypesDetailed imported writable moduleValue =
+  let (entries, schemes, kinds, diagnostics) = Check.checkModuleDetailed imported writable moduleValue
    in ( ModuleTypes
           { moduleTypeInfo = TypeInfo (Map.fromList entries)
           , moduleSchemes = schemes
@@ -66,7 +74,7 @@ checkTypesDetailed imported moduleValue =
 
 checkTypesWith :: ImportTypes -> Module -> (TypeInfo, [Diagnostic])
 checkTypesWith imported moduleValue =
-  let (entries, diagnostics) = Check.checkModuleWith imported moduleValue
+  let (entries, diagnostics) = Check.checkModuleWith imported (writableIn moduleValue) moduleValue
    in (TypeInfo (Map.fromList entries), diagnostics)
 
 {-| The type of the widest expression the checker typed inside a region of the

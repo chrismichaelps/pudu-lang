@@ -436,7 +436,17 @@ collectOne owner declared (Located _ declaration) = case declaration of
     case locatedValue (typeDefinition value) of
       RecordDefinition fields -> do
         formed <- mapM (formField declared rigid) fields
-        pure declared{declaredFields = Map.insert identity formed (declaredFields declared)}
+        let mutable =
+              [ (identity, locatedValue (fieldName field))
+              | Located _ field <- fields
+              , fieldMutable field
+              ]
+        pure
+          declared
+            { declaredFields = Map.insert identity formed (declaredFields declared)
+            , declaredMutableFields =
+                foldr Set.insert (declaredMutableFields declared) mutable
+            }
       SumDefinition variants -> do
         entries <- mapM (formVariant declared rigid identity) variants
         let named =

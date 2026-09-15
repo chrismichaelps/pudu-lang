@@ -111,6 +111,7 @@ library
     Pudu.Eval.Match
     Pudu.Eval.Loop
     Pudu.Eval.Operator
+    Pudu.Eval.Place
     Pudu.Eval.Operator.Access
     Pudu.Eval.Runtime
     Pudu.Eval.Context
@@ -210,6 +211,7 @@ library
     Pudu.Type.Check.Safety
     Pudu.Type.Check.Method
     Pudu.Type.Check.Pattern
+    Pudu.Type.Check.Place
     Pudu.Type.Check.Expression
     Pudu.Type.Check.Expression.Control
     Pudu.Type.Check.Prelude

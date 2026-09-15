@@ -5,6 +5,30 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — `&mut`, `mut` fields, and array elements change what they name
+
+- [[ADR-0022-lending-a-place]]. A place is a `var`, a `mut` field of a place, an element of an array
+  place, or `*r` for an exclusive reference, and assignment writes it: [[Eval Place]] resolves the
+  place and its index keys before the right-hand side. `&mut place` lends a place to one call, and
+  [[Eval Call]] stores each `&mut` parameter's final value back into it on every exit, including
+  `return` and `?`, for plain calls, `&mut self` methods, trait-qualified calls, and a reference lent
+  on by name.
+- [[Check Place]] states the rules: a root must be `var` or reached through `&mut` (`E3078`), a field
+  must be `mut` (`E3079`), nothing is written through `&T` (`E3080`), anything else is not a place
+  (`E3077`); `&mut` is only a call argument (`E3081`), loans to one call may not overlap (`E3082`),
+  `&mut T` is only a parameter's type (`E3083`), and no binding, result, closure, other value, or type
+  argument keeps one (`E3084`). The checker takes `var` from the resolver's symbol table.
+- Assigning to a `let`, a parameter, or a pattern binding was accepted and ran; it is now `E3078`. No
+  committed source relied on it: all 527 standard library, example, website, and fixture sources
+  check unchanged. `UsesPlaces` evaluates 18 writes; `PlaceSpec` covers 28 acceptances and refusals;
+  the three `PatternSpec` writes that expected `E3077` are now accepted.
+- The ownership documentation describes the implemented behaviour, with six programs that were run.
+- `pudu fmt` indented a statement opening with `*`, `-`, or `&` as a continuation of the line above,
+  which the new assignments through a reference made common; it now places such a line at its block's
+  level, and inside parentheses or brackets keeps the indentation it gave before.
+- Two checker cases that kept a local `&mut` borrow and returned `&mut` are restated as a `&mut`
+  parameter, since both forms are now refused by design.
+
 ## 2026-09-15 — Documentation spacing and a fuller About page
 
 - A chapter card's number now sits on its own line above the chapter title, and the folded page

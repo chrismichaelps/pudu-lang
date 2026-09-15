@@ -9,7 +9,7 @@ module Pudu.Type.Check.Expression
   , checkExpression
   ) where
 
-import Control.Monad (foldM, unless)
+import Control.Monad (foldM, unless, when)
 import Data.Text (Text)
 import Pudu.Frontend.Syntax.Located (Located (..))
 import Pudu.Frontend.Syntax.Tree
@@ -42,7 +42,7 @@ import Pudu.Type.Check.Safety
   )
 import Pudu.Type.Check.Call
   ( CheckExpression (..)
-  , checkCallee
+  , checkCalleeLending
   , throughBorrow
   , traitQualifiedCall
   )
@@ -69,11 +69,17 @@ import Pudu.Type.Check.Rule
   , unaryType
   )
 import Pudu.Type.Check.Propagation (reportRedundantPropagation)
+import Pudu.Type.Check.Place
+  ( admitLending
+  , checkAssignment
+  , checkExclusiveCapture
+  , checkLending
+  , checkLent
+  , checkTypeArguments
+  )
 import Pudu.Type.Check.Expression.Control
   ( aroundLoop
   , checkArms
-  , checkAssignmentTarget
-  , checkCapturedAssignment
   , lambdaType
   , literalIndex
   )
@@ -114,24 +120,31 @@ inferExpression
   :: CheckSurroundings -> DeclaredTypes -> [(Text, Int)] -> Span -> Expression -> Checker Type
 inferExpression around declared rigid spanValue expression = case expression of
   LiteralExpression literal -> literalType spanValue literal
-  NameExpression names -> nameType spanValue names
+  NameExpression names -> do
+    found <- nameType spanValue names
+    checkExclusiveCapture spanValue names found
+    pure found
   UnaryExpression operator operand -> do
     actual <- checkExpression around declared rigid operand
+    when (operator == "&mut") (checkLent spanValue operand)
     unaryType spanValue operator actual
   BinaryExpression left operator right -> do
     leftType <- checkExpression around declared rigid left
     rightType <- checkExpression around declared rigid right
-    checkCapturedAssignment operator left
-    checkAssignmentTarget operator left
+    checkAssignment operator left
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
+    admitLending arguments
     checkComptimeCall spanValue callee
     dispatched <- traitQualifiedCall (expressionChecker around) declared rigid callee arguments
     case dispatched of
-      Just (calleeType, argumentTypes) -> callType spanValue calleeType argumentTypes
+      Just (calleeType, argumentTypes) -> do
+        checkLending calleeType Nothing arguments argumentTypes
+        callType spanValue calleeType argumentTypes
       Nothing -> do
-        calleeType <- checkCallee (expressionChecker around) declared rigid callee
+        (calleeType, receiver) <- checkCalleeLending (expressionChecker around) declared rigid callee
         argumentTypes <- mapM (checkExpression around declared rigid) arguments
+        checkLending calleeType receiver arguments argumentTypes
         callType spanValue calleeType argumentTypes
   MemberExpression target member -> do
     {-| A variant that named its payload is refused here rather than inside
@@ -324,6 +337,7 @@ inferExpression around declared rigid spanValue expression = case expression of
       expression. That is a real restriction and it is reported rather than
       worked around. -}
   TypeApplication target arguments -> do
+    checkTypeArguments arguments
     formed <- mapM (formType declared rigid) arguments
     {-| A qualified name carries type arguments as readily as a bare one:
         `Num.small[UInt16](...)` is the same call as `small[UInt16](...)` from

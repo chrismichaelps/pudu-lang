@@ -131,7 +131,7 @@ export fn parse(header: Str) -> Option[Trace] {
 export fn childOf(held: &Trace) -> Trace {
   let step = freshHex(STEP_DIGITS)
   if step == ABSENT_STEP {
-      *held
+    *held
   } else {
     Trace{..*held, step: step}
   }

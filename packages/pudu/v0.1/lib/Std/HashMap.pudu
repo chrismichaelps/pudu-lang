@@ -62,7 +62,7 @@ fn positionIn[K: Eq + Hash, V](bucket: &Array[Entry[K, V]], key: &K) -> Int {
     if bucket[index].key.equals(key) { return index }
     index = index + 1
   }
-    -1
+  -1
 }
 
 /// How many pairings a map holds.
@@ -139,7 +139,7 @@ export fn remove[K: Eq + Hash, V](target: &HashMap[K, V], key: &K) -> HashMap[K,
   let bucket = bucketAt(target, index)
   let at = positionIn(&bucket, key)
   if at < 0 {
-      *target
+    *target
   } else {
     let left = bucket.remove(at)
     // A bucket with nothing left is dropped rather than stored empty, so a map

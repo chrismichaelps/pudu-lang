@@ -42,6 +42,7 @@ tags: [moc, module]
 - [[Eval Env]] — environment frames, control unwinding, and abort diagnostics.
 - [[Eval Match]] — total pattern matching against values.
 - [[Eval Operator]] — unary, binary, member, index, and `?` semantics.
+- [[Eval Place]] — storing into a variable, a field, an element, or `*r`, and handing a `&mut` loan back.
 - [[Eval Array]] — Array[T] runtime values, indexing, iteration, and 42 accessor methods.
 - [[Eval Verify]] — runtime verification and integrity assertion preflight.
 

@@ -7,6 +7,7 @@ module Pudu.Type.Check
 
 import Control.Monad (when)
 import qualified Data.Map.Strict as Map
+import Data.Set (Set)
 import Data.Text (Text)
 import Pudu.Diagnostic (Diagnostic)
 import Pudu.Frontend.Syntax.Located (Located (..))
@@ -42,7 +43,15 @@ import Pudu.Type.Env
   , report
   , withRigidBounds
   , runChecker
+  , setWritableNames
   , withDeclared
+  )
+import Pudu.Type.Check.Place
+  ( checkAnswer
+  , checkBindingType
+  , checkParameterTypes
+  , checkTypeDeclaration
+  , requireWrittenExclusive
   )
 import Pudu.Type.Check.Safety
   ( requireComptimePurity
@@ -84,7 +93,7 @@ import Pudu.Type.Formation
   , formOptionalType
   , formType
   )
-import Pudu.Type.Unify (unify)
+import Pudu.Type.Unify (unify, zonk)
 import Pudu.Type.Value
   ( NominalId (..)
   , Required (..)
@@ -101,12 +110,14 @@ import Pudu.Type.Check.Import (collectImportedDeclared, declareImportedTypes)
 
 {-| Check one module. Signatures are collected before any body is checked, so a
     function may call one declared later without a forward declaration. -}
-checkModule :: Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModule :: Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
 checkModule = checkModuleWith mempty
 
-checkModuleWith :: ImportTypes -> Module -> ([((Int, Int), Type)], [Diagnostic])
-checkModuleWith imported moduleValue =
-  let (types, schemes, kinds, diagnostics) = checkModuleDetailed imported moduleValue
+{-| The set is the spans of every use of a `var` binding, which resolution
+    already knows; see [[Check Place]]. -}
+checkModuleWith :: ImportTypes -> Set (Int, Int) -> Module -> ([((Int, Int), Type)], [Diagnostic])
+checkModuleWith imported writable moduleValue =
+  let (types, schemes, kinds, diagnostics) = checkModuleDetailed imported writable moduleValue
    in schemes `seq` kinds `seq` (types, diagnostics)
 
 {-| Everything one check produced: the type of each expression, the scheme the
@@ -117,10 +128,11 @@ checkModuleWith imported moduleValue =
     from the compiler's. -}
 checkModuleDetailed
   :: ImportTypes
+  -> Set (Int, Int)
   -> Module
   -> ([((Int, Int), Type)], [(Text, Scheme)], [(Span, Text)], [Diagnostic])
-checkModuleDetailed imported moduleValue =
-  let products = runChecker (checkUnit imported moduleValue)
+checkModuleDetailed imported writable moduleValue =
+  let products = runChecker (setWritableNames writable >> checkUnit imported moduleValue)
    in ( producedTypes products
       , producedSchemes products
       , producedIntegerKinds products
@@ -140,7 +152,11 @@ checkUnit imported moduleValue = do
   let layouts = recordLayouts (moduleDeclarations moduleValue)
   mapM_ (declareSignature declared layouts traits) (moduleDeclarations moduleValue)
   checkCoherence (moduleDeclarations moduleValue)
-  mapM_ (checkDeclaration declared layouts) (moduleDeclarations moduleValue)
+  {-| A function literal's unwritten parameter types are settled once the
+      declaration holding it is, so they are judged declaration by declaration. -}
+  mapM_
+    (\declaration -> checkDeclaration declared layouts declaration >> requireWrittenExclusive)
+    (moduleDeclarations moduleValue)
   finalizeIntegerLiterals
   dischargeObligations
 
@@ -220,8 +236,10 @@ checkDeclaration declared layouts (Located _ declaration) = case declaration of
     actual <- checkExpression declared [] value
     unified <- unify (locatedSpan value) expected actual
     requireConcreteSetLiteral (locatedSpan value) (locatedValue value) unified
+    zonk unified >>= checkBindingType annotation name
     bindName (locatedValue name) (monotype expected)
   FunctionDeclaration value -> checkFunctionWith ModuleScopeFunction declared [] [] Nothing value
+  TypeDeclaration value -> checkTypeDeclaration value
   TraitDeclaration value ->
     let name = locatedValue (traitName value)
         identity = Map.findWithDefault (NominalId Nothing name) name (declaredNames declared)
@@ -263,6 +281,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
     MemberFunction -> pure Nothing
   withRigidBounds bounds $ withComptime (functionComptime value) $ inTypeScope $ do
     inputs <- mapM (bindParameter declared rigid) (functionParameters value)
+    checkParameterTypes value
     result <- formOptionalType declared rigid (functionReturn value)
     bindName selfName (monotype (FunctionTypeValue (functionAsync value) inputs result))
     {-| Tie the signature the module was given to the one this body is checked
@@ -291,6 +310,7 @@ checkFunctionWith role declared enclosing enclosingBounds selfBound value = do
         mapM_ (const (leaveUnsafe >> pure ())) (functionUnsafe value)
         _ <- unify bodySpan result actual
         pure ()
+    checkAnswer value result
     finalizeIntegerLiterals
     dischargeObligations
 

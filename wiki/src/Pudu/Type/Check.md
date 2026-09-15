@@ -163,3 +163,7 @@ DEPTH 0.85 (DEEP). One entry point hides signature collection, scope constructio
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Type Boundary]] · [[Type Env]] · [[Type Unify]] · [[Type Check Coherence]] · [[architecture/SEMANTICS]]
+
+## Places
+
+The module is checked with the set of spans that use a `var` binding, from resolution. A function's parameter and result types, a module binding's type, and a type declaration's fields go to [[Check Place]], and after each top-level declaration a function literal's untyped parameters are judged there. See [[ADR-0022-lending-a-place]].

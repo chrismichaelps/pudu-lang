@@ -22,7 +22,14 @@ import Pudu.Frontend.Token (Token)
 import Pudu.Eval (EvalOutcome (..))
 import Pudu.Eval.Program (evaluateModule)
 import Pudu.Frontend.Expand (expandModule)
-import Pudu.Semantic (ExportIndex, Resolution, emptyExportIndex, resolveModule, resolveModuleWith)
+import Pudu.Semantic
+  ( ExportIndex
+  , Resolution
+  , emptyExportIndex
+  , resolveModule
+  , resolveModuleWith
+  , writableReferences
+  )
 import Pudu.Doc (DocIndex, buildIndex)
 import Pudu.Type (ModuleTypes (..), TypeInfo, checkTypesDetailed)
 import Pudu.Type.Interface (TypeInterface, importsFor)
@@ -105,7 +112,7 @@ compileFrontendWith context FrontendResult{frontendTokens, frontendModule, front
                 sortDiagnostics
                   (frontendDiagnostics <> expansionDiagnostics <> resolutionDiagnostics)
               (typing, typeDiagnostics) =
-                if hasErrors resolved then (Nothing, []) else typedResult context parsed
+                if hasErrors resolved then (Nothing, []) else typedResult context resolution parsed
               types = moduleTypeInfo <$> typing
               typed = sortDiagnostics (resolved <> typeDiagnostics)
            in do
@@ -149,10 +156,10 @@ foldConstants integerKinds parsed
 
 {-| Typing runs only on a module whose names all resolved: an unresolved name
     has no type, and reporting one would explain the same defect twice. -}
-typedResult :: CompileContext -> Module -> (Maybe ModuleTypes, [Diagnostic])
-typedResult context parsed =
+typedResult :: CompileContext -> Resolution -> Module -> (Maybe ModuleTypes, [Diagnostic])
+typedResult context resolution parsed =
   let imported = importsFor (contextTypes context) parsed
-      (checked, diagnostics) = checkTypesDetailed imported parsed
+      (checked, diagnostics) = checkTypesDetailed imported (writableReferences resolution) parsed
    in (Just checked, diagnostics)
 
 runFrontend :: Source -> FrontendResult

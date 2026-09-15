@@ -168,7 +168,7 @@ fn trimmedEnd(body: &Bytes) -> Bytes {
     let tail = Result.unwrapOr(ByteSeq.toText(&ByteSeq.slice(body, length - 2, length)), "")
     if tail == "\r\n" { ByteSeq.slice(body, 0, length - 2) } else { *body }
   } else {
-      *body
+    *body
   }
 }
 

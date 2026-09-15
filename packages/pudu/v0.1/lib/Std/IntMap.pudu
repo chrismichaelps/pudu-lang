@@ -330,7 +330,7 @@ fn diffTwoBins[V](
   } else if higherMask(m2, m1) && matchPrefix(p1, p2, m2) {
     if zeroBit(p1, m2) { difference(left, l2) } else { difference(left, r2) }
   } else {
-      *left
+    *left
   }
 }
 

@@ -17,7 +17,7 @@ aliases: [Type Check Expression Control]
 
 ## Purpose
 
-Check control flow branches, match arms, lambda functions, captured assignment validity, and loop stack context for expressions.
+Check control flow branches, match arms, lambda functions, and loop stack context for expressions. Assignment and lending rules are [[Check Place]]'s.
 
 ## Interface
 
@@ -40,10 +40,6 @@ lambdaType
   -> Function
   -> Checker Type
 
-checkCapturedAssignment :: Text -> Located Expression -> Checker ()
-
-checkAssignmentTarget :: Text -> Located Expression -> Checker ()
-
 aroundLoop :: Maybe (Located Text) -> Type -> Bool -> Checker a -> Checker Bool
 
 literalIndex :: Located Expression -> Maybe Integer
@@ -53,9 +49,7 @@ literalIndex :: Located Expression -> Maybe Integer
 
 - Extracted from `Pudu.Type.Check.Expression` to maintain source files strictly under 500 lines.
 - `checkArms` validates arm pattern bindings, arm guards, arm bodies, and unifies all arm results into a single common type while reporting exhaustiveness and redundancy at expression boundaries.
-- `lambdaType` verifies closure parameter bindings, closure body evaluation (either block or expression body), and returns a non-generalized `FunctionTypeValue`.
-- `checkCapturedAssignment` prohibits assignments to captured variables from outside a closure, enforcing immutable captures.
-- `checkAssignmentTarget` refuses, with `E3077`, an assignment whose target is not a single variable name: a field, an element, a dereferenced reference, or a qualified path. The evaluator stores only into a binding by name, so such an assignment used to check and then stop the program with `E7001`; the diagnostic names `record = Record{..record, field: value}` and returning the changed value as the forms that work.
+- `lambdaType` verifies closure parameter bindings, closure body evaluation (either block or expression body), and returns a non-generalized `FunctionTypeValue`; it asks [[Check Place]] to check its parameter and result types and to remember parameters written without a type.
 - `aroundLoop` manages loop context entry and exit on the type environment's loop stack, tracking break statements and carries.
 - `literalIndex` parses constant integer expressions for tuple and nominal element index lookups.
 

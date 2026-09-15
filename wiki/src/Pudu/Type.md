@@ -72,3 +72,7 @@ DEPTH 0.60 (MEDIUM). One surface hides formation, unification, and the checking 
 ## Referenced by
 
 [[src/Pudu/Type/_MOC]] · [[Compiler Pipeline]] · [[Pudu REPL]] · [[Semantics]]
+
+## Places
+
+`checkTypesDetailed` takes the `var` use spans from the caller's resolution; `checkTypes` and `checkTypesWith` resolve the module themselves to obtain them. See [[ADR-0022-lending-a-place]].

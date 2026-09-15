@@ -219,7 +219,7 @@ fn addressed(request: &Http.Request, place: &Url.Url) -> Http.Request {
 fn withLength(headers: &Array[(Str, Str)], body: &Bytes) -> Array[(Str, Str)] {
   if body.length() == 0 || Option.isSome(&Http.header(headers, "content-length"))
     || Option.isSome(&Http.header(headers, "transfer-encoding")) {
-      *headers
+    *headers
   } else {
     headers.push(("content-length", show(body.length())))
   }

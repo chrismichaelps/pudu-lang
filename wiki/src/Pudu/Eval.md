@@ -189,3 +189,7 @@ The one-shot runner delegates lifetime to [[Eval Runtime]] and merges its cleanu
 
 
 `evaluateBlockInFrame` executes statements and a block result in the current frame; ordinary lexical blocks retain `withNewFrame` behavior when declarations or let-else statements are present (`blockIntroducesBindings`), avoiding redundant empty frame push/pop cycles and deep environment lookups in tight loops. `outcomeOf` supplies shared result conversion to context execution. Resolved Grill Log: persistent top-level binding execution must not silently pop the frame at the end of each block. Loops whose bodies contain no binding declarations execute in the existing frame without allocating empty environment maps.
+
+## Places
+
+Assignment resolves its place through [[Eval Place]] — root and index keys first — then evaluates the right-hand side and stores; a field, an element, and `*r` are places as well as a variable. See [[ADR-0022-lending-a-place]].

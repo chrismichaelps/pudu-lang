@@ -195,6 +195,6 @@ in `isBuiltinImmediate` so they evaluate immediately without task scheduling or 
 - **Q:** Route bitmap boolean algebra through immediate evaluation? **A:** Yes; bitmap bitwise operations are pure register bit operations without runtime side-effects.
 - **Q:** Are sorting and binary search operations immediate builtins? **A:** Yes; permutation index generation and binary search lookups operate on deterministic unboxed memory without external capabilities or thread yielding.
 
+## Places
 
-
-
+A call records the place each `&mut` argument, bare name, and receiver was taken from as a `Lent`. When the function it reaches declares `&mut` parameters, the body runs under `withFrameKeeping` and each such parameter's final value is stored back into its place after the body finishes, including through `return` and `?`. A receiver chosen by an element is read through its place so its index is evaluated once. See [[ADR-0022-lending-a-place]].

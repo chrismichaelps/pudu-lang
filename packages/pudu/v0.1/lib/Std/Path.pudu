@@ -24,7 +24,7 @@ fn lastSeparator(path: Str) -> Int {
     if isSeparator(path.slice(index, index + 1)) { return index }
     index = index - 1
   }
-    -1
+  -1
 }
 
 /// A path with any trailing separator removed, leaving a lone root alone.
@@ -93,7 +93,7 @@ fn extensionDot(name: Str) -> Int {
     if name.slice(index, index + 1) == "." { return index }
     index = index - 1
   }
-    -1
+  -1
 }
 
 /// A path's extension, without its dot, or nothing when it has none.

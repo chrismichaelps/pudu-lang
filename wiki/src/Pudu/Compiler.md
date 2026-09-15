@@ -122,3 +122,7 @@ DEPTH 0.32 (SHALLOW by current scope). This is intentional temporary orchestrati
 ## Referenced by
 
 [[src/Pudu/_MOC]] · [[architecture/LANGUAGE]] · [[architecture/OVERVIEW]] · [[Tooling]]
+
+## Places
+
+Typing receives the resolution's `var` use spans, so the checker's assignment rules and the resolver's scopes cannot disagree. See [[ADR-0022-lending-a-place]].
