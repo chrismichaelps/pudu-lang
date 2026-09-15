@@ -10,8 +10,14 @@ import View.Layout as Layout
 
 export fn home(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
   let intro = H.section().class("intro").holding([
-      H.h1().says("Find the Pudu API you need."),
-      H.p().says("Search every public function, type, trait, constructor, and constant by name or type."),
+      H.h1().says("Programs that say what they do."),
+      H.p().says("Pudu is a statically typed language where a signature tells you what a function takes, what it gives back, whether it can fail, and whether it changes what it was given."),
+      H.p().class("hero-actions").holding([
+          H.a().class("button").href("/docs/introduction").says("Start learning"),
+          H.a().class("button button-quiet").href("/modules").says("Browse the standard library")
+        ]),
+      H.h2().class("hero-search-title").says("Search the API"),
+      H.p().says("Find any public function, type, trait, constructor, or constant by name or by type."),
       exampleQueries()
     ])
   let modules = modulePanel(&catalog.modules, catalog.languageVersion)

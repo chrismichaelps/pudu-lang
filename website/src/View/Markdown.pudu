@@ -184,8 +184,11 @@ fn slugOf(text: Str) -> Str {
 
 fn codeBlock(language: Str, code: &Array[Str]) -> H.Node {
   let body = H.code().says(code.join("\n"))
-  let labelled = if language.isEmpty() { body } else { body.class("language-" + language) }
-  H.pre().class("code-block").holding([labelled])
+  if language.isEmpty() { return H.pre().class("code-block").holding([body]) }
+  H.figure().class("code-figure").holding([
+      H.span().class("code-label").at("aria-hidden", "true").says(language),
+      H.pre().class("code-block").holding([body.class("language-" + language)])
+    ])
 }
 
 /// An item's words and whether its list is numbered, when the line is an item.

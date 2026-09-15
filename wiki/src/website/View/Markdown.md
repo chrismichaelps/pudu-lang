@@ -18,6 +18,9 @@ with single dashes — made distinct with `-2`, `-3` when a page repeats a headi
 `headings` for the page's contents. The summary is the first paragraph line with its markup removed,
 used as the page's description.
 
+A fenced block with a language is a `figure` holding the language as a label and the `pre`, with the
+code element classed `language-<name>`; a block without one is a bare `pre`.
+
 Every piece of text becomes a text node through `Std.Html.Build`, so nothing a page says can become
 markup. The website suite checks that a script written in prose is escaped, that repeated headings
 get distinct anchors, and that tables render.

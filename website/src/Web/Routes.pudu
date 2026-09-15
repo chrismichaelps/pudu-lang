@@ -45,11 +45,11 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> R
             }
           }),
         Route.get("/docs", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, DocsView.index(siteUrl, docs))
+            Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
           }),
         Route.get("/docs/:page", fn(asked: Route.Request) -> Http.Response {
             let slug = Option.unwrapOr(Route.param(&asked, "page"), "")
-            match DocsView.page(siteUrl, docs, slug) {
+            match DocsView.page(siteUrl, docs, slug, catalog.languageVersion) {
               case Some(page) => Reply.page(200, page)
               case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
             }
@@ -58,7 +58,7 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> R
         // with the documentation's own canonical address, so a link to it keeps
         // working and a crawler is told which address to keep.
         Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, DocsView.index(siteUrl, docs))
+            Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
           }),
         Route.get("/about", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, About.page(siteUrl))

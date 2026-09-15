@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — Documentation pages carry their author and version, and the library reads as a map
+
+- Reading the site as a newcomer on a phone found the page list opened above every article, a home
+  page that assumed the reader already knew a name to search for, and 163 modules in one unexplained
+  list. A documentation page now opens with the article and a closed page list, and names its author,
+  the language version, and a link to its Markdown source. Code blocks use the light `--code` surface
+  with a language label.
+- `/modules` is now the standard library as a map: twelve sections from [[website Domain Library]],
+  each module with its declaration count, one sentence on what it is for, and its child modules. The
+  home page says what Pudu is and links to the introduction and the library before the search.
+- The catalogue was regenerated from the current compiler: 173 modules and 3,456 declarations, now
+  including `Std.Audio`, `Std.Video`, `Std.Fs`, and the `Std.Ui` canvas, layout, screen, text, and
+  desktop modules. All 27 documentation programs were run again and pass; the website suite holds 100
+  assertions.
+
 ## 2026-09-15 — An assignment the evaluator cannot store is refused where it is written
 
 - The checker accepted `*reference = value`, `record.field = value`, and `items[i] = value`, while the

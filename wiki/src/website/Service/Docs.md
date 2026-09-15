@@ -8,7 +8,8 @@ aliases: [website Service Docs]
 # Website Service Docs
 
 Loads the language documentation: every `.md` file in one directory, in the order their names give,
-as `Page { slug, title, lines }` values. A file is named `NN-slug.md`; the number orders the pages
+as `Page { slug, file, title, lines }` values; `file` is the name the page was read from, which the
+view turns into the page's source link. A file is named `NN-slug.md`; the number orders the pages
 and is left out of the address, so a page can move without its address changing. The title is the
 first `# ` heading. `find` answers the page at an address and `neighbours` the pages before and
 after it.

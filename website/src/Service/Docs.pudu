@@ -6,7 +6,7 @@ import Std.Text as Text
 import Error as SiteError
 
 /// One page of the language documentation, as the Markdown it was written in.
-export type Page = { slug: Str, title: Str, lines: Array[Str] }
+export type Page = { slug: Str, file: Str, title: Str, lines: Array[Str] }
 
 /// Every documentation page, in reading order.
 export type Docs = { pages: Array[Page] }
@@ -37,7 +37,7 @@ export fn load(directory: Str) -> Result[Docs, SiteError.SiteError] {
     }
     let lines = text.split("\n")
     let slug = slugOf(name)
-    pages = pages.push(Page{slug: slug, title: titleOf(&lines, slug), lines: lines})
+    pages = pages.push(Page{slug: slug, file: name, title: titleOf(&lines, slug), lines: lines})
   }
   if pages.length() == 0 { return Err(SiteError.DocsUnreadable(directory)) }
   Ok(Docs{pages: pages})

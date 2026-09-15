@@ -8,7 +8,7 @@ tags: [website, source, moc]
 [[website Main]] · [[website Function]] · [[website Prerender]] · [[website Platform Render]] · [[website Web Routes]] · [[website Web Dynamic]] ·
 [[website View Layout]] · [[website View Home]] · [[website View Dynamic]] · [[website View Documentation]] · [[website View About]] · [[website View Donation]] ·
 [[website View Docs]] · [[website View Markdown]] · [[website View MarkdownInline]] ·
-[[website Service Catalog]] · [[website Service Search]] · [[website Service Docs]] · [[website Domain Entry]] · [[website Domain Search]] ·
+[[website Service Catalog]] · [[website Service Search]] · [[website Service Docs]] · [[website Domain Entry]] · [[website Domain Search]] · [[website Domain Library]] ·
 [[website Search Index]] · [[website Seo]] · [[website Config]] · [[website Constants]] · [[website Error]]
 
 Visual system: [[website stylesheet]]. Content: [[website documentation pages]].

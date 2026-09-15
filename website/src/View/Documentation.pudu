@@ -3,26 +3,79 @@ module View.Documentation
 import Std.Html.Build as H
 import Std.Html as Html
 import Std.Url as Url
+import Constants as Constants
 import Domain.Entry as Domain
+import Domain.Library as Library
 import Seo as Seo
 import Service.Catalog as Catalog
 import View.Dynamic as Dynamic
 import View.Layout as Layout
 
+/// The standard library as a map: its sections, each module in a section with
+/// the sentence that says what it is for, and the modules beneath it.
 export fn modules(siteUrl: Str, catalog: &Catalog.Catalog) -> Html.Html {
-  var links: Array[H.Node] = []
-  for name in catalog.modules {
-    let count = Catalog.moduleEntries(catalog, name).length()
-    links = links.push(H.li().holding([
-          H.a().href("/module/" + Url.encodeComponent(name)).says(name),
-          H.span().class("meta").says("  " + show(count) + " declarations")
-        ]))
+  var jumps: Array[H.Node] = []
+  var sections: Array[H.Node] = []
+  for section in Library.SECTIONS {
+    jumps = jumps.push(H.li().holding([H.a().href("#" + section.id).says(section.title)]))
+    var rows: Array[H.Node] = []
+    for name in section.modules {
+      if catalog.modules.contains(name) { rows = rows.push(moduleRow(catalog, name, Library.childrenOf(name, &catalog.modules))) }
+    }
+    sections = sections.push(librarySection(section.id, section.title, section.lead, rows))
   }
-  Layout.page(siteUrl, "Pudu modules", "Browse every module in the Pudu standard library and language API.", "/modules", true, None, H.article().class("doc").holding([
-        H.h1().says("Pudu modules"),
-        H.p().says(show(catalog.modules.length()) + " modules generated from Pudu " + catalog.languageVersion + "."),
-        H.ul().class("module-list").holding(links)
-      ]).html())
+  let remaining = Library.unplaced(&catalog.modules)
+  if remaining.length() > 0 {
+    var rows: Array[H.Node] = []
+    for name in remaining { rows = rows.push(moduleRow(catalog, name, [])) }
+    jumps = jumps.push(H.li().holding([H.a().href("#other").says("Other")]))
+    sections = sections.push(librarySection("other", "Other", "Modules not yet placed in a section.", rows))
+  }
+  Layout.page(siteUrl, "Pudu standard library", "Every module in the Pudu standard library, grouped by what it is for.", "/modules", true, None, H.article().class("doc library").holding([
+        H.span().class("kind").says("Reference"),
+        H.h1().says("Pudu standard library"),
+        H.dl().class("docs-meta").holding([
+            H.dt().says("Author"),
+            H.dd().says(Constants.AUTHOR_NAME),
+            H.dt().says("Version"),
+            H.dd().says(catalog.languageVersion),
+            H.dt().says("Contents"),
+            H.dd().says(show(catalog.modules.length()) + " modules, " + show(catalog.entries.length()) + " public declarations")
+          ]),
+        H.p().says("The standard library ships with the compiler. Every module lives under Std, nothing is imported implicitly, and a program imports exactly the modules it uses. Pick a section, or search by name or type from the top of any page."),
+        H.nav().label("Library sections").holding([H.ul().class("library-jump").holding(jumps)])
+      ].concat(sections)).html())
+}
+
+fn librarySection(id: Str, title: Str, lead: Str, rows: Array[H.Node]) -> H.Node {
+  H.section().class("library-section").holding([
+      H.h2().id(id).says(title),
+      H.p().says(lead),
+      H.div().class("table-wrap").holding([H.table().class("library-table").holding([H.tbody().holding(rows)])])
+    ])
+}
+
+fn moduleRow(catalog: &Catalog.Catalog, name: Str, children: Array[Str]) -> H.Node {
+  let count = Catalog.moduleEntries(catalog, name).length()
+  let summary = match Library.SUMMARIES.get(name) {
+    case Some(text) => text
+    case None => ""
+  }
+  var described: Array[H.Node] = [H.span().says(summary)]
+  if children.length() > 0 {
+    var links: Array[H.Node] = []
+    for child in children {
+      links = links.push(H.li().holding([H.a().href("/module/" + Url.encodeComponent(child)).says(child.drop(name.length() + 1))]))
+    }
+    described = described.push(H.ul().class("child-modules").label("Modules inside " + name).holding(links))
+  }
+  H.tr().holding([
+      H.td().holding([
+          H.a().href("/module/" + Url.encodeComponent(name)).says(name),
+          H.p().class("meta").says(show(count) + " declarations")
+        ]),
+      H.td().holding(described)
+    ])
 }
 
 export fn modulePage(siteUrl: Str, catalog: &Catalog.Catalog, moduleName: Str) -> Option[Html.Html] {

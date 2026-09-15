@@ -17,7 +17,10 @@ current-page state, and the new code-first home sections.
 Invocation checks include Vercel's outer `Action: Invoke` envelope with its request encoded in `body`.
 Documentation checks load `website/docs` and require every page in order, the index, a page's anchored
 sections, code blocks, contents, previous and next links, its sidebar mark, a 404 for an unknown page,
-the `/guide` canonical address, and sitemap coverage. The Markdown renderer is checked directly: the
+the `/guide` canonical address, and sitemap coverage. A page must name its author and version, link
+its own Markdown source, label its code by language, and carry the folded narrow-screen page list.
+The library index must be sectioned, say what a module is for, show child modules beneath their family,
+and leave no module unplaced; home must link a new reader to the introduction. The Markdown renderer is checked directly: the
 title stays out of the body, a script in prose is escaped, a `javascript:` target is not a link,
 repeated headings get distinct anchors, and tables render.
 

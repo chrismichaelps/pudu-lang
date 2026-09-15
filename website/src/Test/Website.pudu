@@ -61,6 +61,7 @@ export fn main() -> Int {
   let docsIndex = Web.render(origin, &catalog, &docs, "/docs")
   let docsPage = Web.render(origin, &catalog, &docs, "/docs/errors")
   let docsMissing = Web.render(origin, &catalog, &docs, "/docs/not-a-page")
+  let modulesIndex = Web.render(origin, &catalog, &docs, "/modules")
   let guide = Web.render(origin, &catalog, &docs, "/guide")
   let written = Markdown.parse(
       &[
@@ -154,6 +155,15 @@ export fn main() -> Int {
       Test.that("a documentation page links its neighbours", docsPage.body.contains("pager-previous") && docsPage.body.contains("pager-next")),
       Test.that("a documentation page marks itself in the sidebar", docsPage.body.contains("href=\"/docs/errors\" aria-current=\"page\"")),
       Test.that("navigation identifies the documentation", docsPage.body.contains("aria-current=\"page\">Docs")),
+      Test.that("a documentation page names its author and version", docsPage.body.contains("<dt>Author</dt><dd>Chris M. Pérez Santiago</dd>") && docsPage.body.contains("<dt>Version</dt><dd>0.1.0</dd>")),
+      Test.that("a documentation page links its own source", docsPage.body.contains("blob/dev/website/docs/05-errors.md")),
+      Test.that("a documentation page labels its code by language", docsPage.body.contains("class=\"code-label\"")),
+      Test.that("a narrow screen gets the page list folded away", docsPage.body.contains("<details class=\"docs-nav-mobile\">")),
+      Test.that("the library is grouped into sections", modulesIndex.body.contains("id=\"collections\"") && modulesIndex.body.contains("id=\"web\"")),
+      Test.that("the library says what a module is for", modulesIndex.body.contains("Ordered maps from keys to values.")),
+      Test.that("the library shows modules beneath their family", modulesIndex.body.contains("href=\"/module/Std.Http.Server.Route\"")),
+      Test.not("every library module has a section", modulesIndex.body.contains("id=\"other\"")),
+      Test.that("home starts a new reader on the documentation", home.body.contains("href=\"/docs/introduction\"")),
       Test.that("an unknown documentation page is 404", docsMissing.status.code == 404),
       Test.that("the guide address names the documentation as canonical", guide.status.code == 200 && guide.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/docs\"")),
       Test.that("markdown keeps the title out of the page body", written.title == "Title" && !writtenHtml.contains("<h1")),

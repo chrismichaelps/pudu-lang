@@ -7,7 +7,8 @@ aliases: [website Constants]
 ---
 # Website Constants
 
-Owns stable names, author identity, copyright and external destinations, asset paths, catalogue defaults, and the responsive white visual system. The
+Owns stable names, author identity, copyright and external destinations (including
+`DOCS_SOURCE_URL`, where a documentation page's Markdown is read on GitHub), asset paths, catalogue defaults, and the responsive white visual system. The
 interactive accent is derived from the blue upper bowl of the supplied Pudu `P`; a darker member
 of the same blue family provides accessible text and button contrast.
 
