@@ -2,7 +2,6 @@ module Std.Http.Message
 
 import Std.Bytes as ByteSeq
 import Std.Http as Http
-import Std.Text as Text
 
 /// What stopped a message from being read.
 export type MessageError
@@ -232,26 +231,34 @@ fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
   if parts.length() != 3 { return Err(BadRequestLine(line)) }
   let target = parts[1]
   let unclearTarget = target.isEmpty() || target.contains("\t") || target.contains("\r")
-  if !isToken(parts[0]) || unclearTarget || !REQUEST_VERSIONS.contains(parts[2]) {
+  if !isToken(parts[0]) || unclearTarget || !TEXT_VERSIONS.contains(parts[2]) {
     return Err(BadRequestLine(line))
   }
   Ok((parts[0], target, parts[2]))
 }
 
-/// The versions a request line may name. Later versions do not arrive as a
-/// line of text.
-const REQUEST_VERSIONS: Set[Str] = setOf(["HTTP/1.0", "HTTP/1.1"])
+/// The versions a message's first line may name, request or status. Later
+/// versions do not arrive as a line of text.
+const TEXT_VERSIONS: Set[Str] = setOf(["HTTP/1.0", "HTTP/1.1"])
 
 /// A status line read into the status it names.
+///
+/// A version this reader speaks, one space, exactly three digits, and then
+/// either nothing or one space and a reason, which may hold spaces of its own.
+/// A code of any other width is refused rather than read as a number: whether
+/// a response carries a body is decided by its code, so a code two readers
+/// take differently is a body two readers frame differently.
 fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
-  let s1 = line.indexOf(" ")
-  if s1 < 0 { return Err(BadStatusLine(line)) }
-  let rest = line.drop(s1 + 1).trim()
-  let s2 = rest.indexOf(" ")
-  let codeStr = if s2 < 0 { rest } else { rest.take(s2) }
-  match Text.countOf(codeStr) {
+  let space = line.indexOf(" ")
+  if space < 0 || !TEXT_VERSIONS.contains(line.take(space)) { return Err(BadStatusLine(line)) }
+  let rest = line.drop(space + 1)
+  let afterCode = rest.drop(3)
+  if rest.length() < 3 || !(afterCode.isEmpty() || afterCode.startsWith(" ")) {
+    return Err(BadStatusLine(line))
+  }
+  match statusCodeOf(rest.take(3)) {
     case Some(code) => {
-      let reason = if s2 < 0 { "" } else { rest.drop(s2 + 1).trim() }
+      let reason = afterCode.trim()
       Ok(Http.Status {
           code: code,
           reason: if reason.isEmpty() { Http.reasonFor(code) } else { reason }
@@ -259,6 +266,16 @@ fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
     }
     case None => Err(BadStatusLine(line))
   }
+}
+
+/// Three digits as a status code, which counts from 100.
+fn statusCodeOf(digits: Str) -> Option[Int] {
+  var total = 0
+  for character in digits.chars() {
+    if character < '0' || character > '9' { return None }
+    total = total * 10 + (character.code() - '0'.code())
+  }
+  if total < 100 { None } else { Some(total) }
 }
 
 /// Header lines read into pairs, with names kept as written.

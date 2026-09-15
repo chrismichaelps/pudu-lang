@@ -5,7 +5,7 @@ import Std.Html as Html
 import Std.Html.Ssr {MissingSlot}
 import Std.Html.Ssr as Ssr
 import Std.Http as Http
-import Std.Http.Message {AmbiguousHeader, BadHeader, BadRequestLine, NoRequestLine, ShortBody}
+import Std.Http.Message {AmbiguousHeader, BadHeader, BadRequestLine, BadStatusLine, NoRequestLine, ShortBody}
 import Std.Http.Message as Message
 import Std.Http.Server.Reply as Reply
 import Std.Json as Json
@@ -155,6 +155,35 @@ export fn main() -> Int {
   // same problem in the other direction.
   if let Err(AmbiguousHeader(_)) = Message.parseResponse("HTTP/1.1 200 OK\r\nContent-Length : 5\r\n\r\nhello") {
     held = held + 1
+  }
+
+  // A status line is a version, one space and three digits, then nothing or a
+  // reason. A code of any other width, a doubled space, a version this reader
+  // does not speak, and a reason run into the code are refused; a reason may
+  // hold spaces of its own and may be absent.
+  let unclearStatus = [
+    "HTTP/1.1 2000 OK\r\n",
+    "HTTP/1.1 20 OK\r\n",
+    "HTTP/1.1 -20 OK\r\n",
+    "HTTP/1.1 099 OK\r\n",
+    "HTTP/1.1  200 OK\r\n",
+    "HTTP/2 200 OK\r\n",
+    "HTTP/1.1 200OK\r\n"
+  ]
+  var refusedStatus = 0
+  for head in unclearStatus {
+    if let Err(BadStatusLine(_)) = Message.parseResponse(head) { refusedStatus = refusedStatus + 1 }
+  }
+  if refusedStatus == unclearStatus.length() { held = held + 1 }
+  match Message.parseResponse("HTTP/1.0 418 I'm a teapot, truly\r\n\r\n") {
+    case Ok(answer) => {
+      if answer.status.code == 418 && answer.status.reason == "I'm a teapot, truly" { held = held + 1 }
+    }
+    case Err(_) => {}
+  }
+  match Message.parseResponse("HTTP/1.1 204\r\n\r\n") {
+    case Ok(answer) => { if answer.status.code == 204 && !answer.status.reason.isEmpty() { held = held + 1 } }
+    case Err(_) => {}
   }
 
   // A response read from what a connection carried.

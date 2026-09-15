@@ -35,6 +35,11 @@ answers 400. The value is still trimmed of surrounding whitespace, which every r
 and `HTTP/1.0` or `HTTP/1.1`. A doubled, leading or trailing space, a tab, a target holding a space,
 a missing version, and a version that never arrives as a line of text are each refused as
 `BadRequestLine` rather than split where a guess would put them.
+
+**A status line is a version, one space, and three digits.** `HTTP/1.0` or `HTTP/1.1`, then a code of
+exactly three digits from 100, then nothing or one space and a reason that may hold spaces. A code of
+any other width, a doubled space, and a later version are `BadStatusLine`, because whether a response
+carries a body is decided by its code. A missing reason is filled from the code.
 ## Grill Log
 - **Q:** Trim whitespace before a header's colon, as the parser once did? **A:** No. _Rationale:_ a
   proxy following the protocol rejects `Content-Length : 5` or ignores it, and a server behind it that

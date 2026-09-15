@@ -21,7 +21,12 @@ tags: [changelog]
 - `decodeChunkedBytes` checked a chunked body's trailer with the head reader, which skips the line a
   head begins with, so a trailer's first field was never read and a malformed one ended the body as
   though it were well formed. Every trailer field is now read.
-- `UsesHttpMessageReplyAll` rises to 101 (100 before the trailer fix, which is the malformed first
+- The status line a client reads was split and trimmed like the request line, and its code was any
+  whole number, so `HTTP/1.1 2000 OK`, `HTTP/1.1  200` and `HTTP/2 200` were all read. Whether a
+  response has a body depends on its code, so a code two readers take differently is a body they frame
+  differently. A status line is now HTTP/1.0 or HTTP/1.1, one space, exactly three digits from 100,
+  then nothing or a space and a reason; anything else is `BadStatusLine`.
+- `UsesHttpMessageReplyAll` rises to 104 (100 before the trailer fix, which is the malformed first
   field being accepted). Against a running server, an ordinary request answered 200
   while whitespace before a colon, a folded line, a target holding a space, and a request line with no
   version each answered 400.
