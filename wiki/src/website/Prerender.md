@@ -7,8 +7,9 @@ aliases: [website Prerender]
 ---
 # Website Prerender
 
-Calls `Web.render` for every canonical path returned by `Seo.paths`, then writes each successful
-response into the Vercel static output tree. It also writes `robots.txt` and `sitemap.xml` without
+Loads the catalogue and the documentation pages, calls `Web.render` for every canonical path returned
+by `Seo.paths` — documentation pages included — then writes each successful response into the Vercel
+static output tree. A documentation directory that cannot be read fails the build. It also writes `robots.txt` and `sitemap.xml` without
 starting a server or making loopback requests.
 
 Resolved Grill Log: the sitemap path source and prerender path source are identical, and any route

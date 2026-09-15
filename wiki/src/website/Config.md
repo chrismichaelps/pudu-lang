@@ -7,7 +7,8 @@ aliases: [website Config]
 ---
 # Website Config
 
-Reads host, port, connection limit, and catalogue path from environment variables with checked
-defaults and typed errors.
+Reads host, port, connection limit, catalogue path, and documentation directory
+(`PUDU_DOCS_PATH`, default `website/docs`) from environment variables with checked defaults and typed
+errors.
 
 Resolved Grill Log: malformed values fail startup rather than silently disabling a bound.

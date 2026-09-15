@@ -5,6 +5,23 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — Language documentation rendered from Markdown, and home page layout fixes
+
+- The website gains a documentation section: ten Markdown pages in `website/docs/` — introduction,
+  basics, types, control flow, errors, ownership, traits, concurrency, the standard library, and
+  tooling — rendered on the server by `Service.Docs`, `View.Markdown`, `View.MarkdownInline`, and
+  `View.Docs` with a page list, the article, and on-page contents. `/docs` and `/docs/:page` are
+  prerendered and in the sitemap; `/guide` answers with `/docs` as its canonical address, and the
+  navigation's Guide link is now Docs. All 27 complete programs in the pages were checked and run.
+- The home page's "Start with a shape" example sat beside a tall module panel, leaving a large empty
+  area under it, and long module names such as `Std.App.Database` overflowed the 280-pixel panel. The
+  example now sits beside its explanation and the modules have their own wrapping grid; at 1280 and
+  375 pixels no page overflows horizontally and no module link overflows its cell.
+- Writing the ownership page found that assigning through a reference checks and then stops the
+  program with `E7001`: the evaluator treats `&`, `&mut`, and `*` as the value itself. The page states
+  the limitation, the home page no longer claims `&mut` changes a value, and
+  [[First Release Readiness]] records it as a critical row. The website suite rises to 91 checks.
+
 ## 2026-09-15 — Bytes cross the PostgreSQL driver both ways
 
 - The PostgreSQL driver refused every `BytesValue` parameter, and a `bytea` column came back as the

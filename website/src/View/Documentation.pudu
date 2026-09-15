@@ -125,33 +125,8 @@ fn signatureGuide(signature: Str) -> Array[H.Node] {
   notes
 }
 
-export fn guide(siteUrl: Str) -> Html.Html {
-  Layout.page(siteUrl, "Pudu programming guide", "Learn Pudu values, functions, typed results, references, and generics through small examples.", "/guide", true, None, H.article().class("doc").holding([
-        H.span().class("kind").says("guide"),
-        H.h1().says("Programming can be understood."),
-        H.p().says("A Pudu program is a set of named values and functions. Start with data, then say what should happen to it."),
-        H.h2().says("Values and variables"),
-        code("let language = \"Pudu\"\nvar lessons = 1\nlessons = lessons + 1"),
-        H.p().says("let gives a name to a value. var gives a name that may receive a new value."),
-        H.h2().says("Functions and results"),
-        code("fn double(number: Int) -> Int \{ number * 2 \}\n\nfn label(number: Int) -> Result[Str, Str] \{ Ok(show(number)) \}"),
-        H.p().says("The text after -> is the result type. Result makes failure part of the function's promise."),
-        H.h2().says("References"),
-        code("fn read(score: &Int) -> Int \{ *score \}\nfn add(score: &mut Int) -> () \{ *score = *score + 1 \}"),
-        H.p().says("&Int is a temporary read-only view. &mut Int is one temporary exclusive view that may change the original value."),
-        H.h2().says("Generics"),
-        code("fn first[T](items: &Array[T]) -> Option[T] \{\n  if items.length() == 0 \{ None \} else \{ Some(items[0]) \}\n\}"),
-        H.p().says("T is a type placeholder. One function can work with Array[Int], Array[Str], and other element types without losing type checks."),
-        H.p().holding([H.a().href("/modules").says("Continue in the complete API index")])
-      ]).html())
-}
-
 export fn missing(siteUrl: Str, path: Str) -> Html.Html {
   Dynamic.missing(siteUrl, path)
-}
-
-fn code(source: Str) -> H.Node {
-  H.pre().class("signature").holding([H.code().says(source)])
 }
 
 fn symbolPath(entry: &Domain.Entry) -> Str {

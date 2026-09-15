@@ -5,7 +5,14 @@ import Std.Option as Option
 import Std.Text as Text
 import Error as SiteError
 
-export type Config = { host: Str, port: Int, connections: Int, cataloguePath: Str, siteUrl: Str }
+export type Config = {
+  host: Str,
+  port: Int,
+  connections: Int,
+  cataloguePath: Str,
+  docsPath: Str,
+  siteUrl: Str
+}
 
 export fn load() -> Result[Config, SiteError.SiteError] {
   let port = whole("PUDU_SITE_PORT", Env.variableOr("PUDU_SITE_PORT", "8080"), 0, 65535) ?
@@ -20,6 +27,7 @@ export fn load() -> Result[Config, SiteError.SiteError] {
       port: port,
       connections: connections,
       cataloguePath: Env.variableOr("PUDU_CATALOG_PATH", "website/data/api.json"),
+      docsPath: Env.variableOr("PUDU_DOCS_PATH", "website/docs"),
       siteUrl: baseUrl(Env.variableOr("PUDU_SITE_URL", "http://127.0.0.1:8080")) ?
     })
 }

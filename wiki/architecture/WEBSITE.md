@@ -8,22 +8,32 @@ aliases: [Pudu Website Architecture]
 
 ## Purpose
 
-Serve the language guide and complete generated API catalogue from a Pudu application, with the
-same routes and rendering used by the local server, static capture, and Vercel function.
+Serve the language documentation and complete generated API catalogue from a Pudu application, with
+the same routes and rendering used by the local server, static capture, and Vercel function.
 
 ## Dependency direction
 
 ```text
-Main / Render / Prerender        Function
-           |                        |
-       Web.Routes              Web.Dynamic
-          /  \                   /      \
-       View  Service.Catalog  View.Dynamic  Service.Search
-         \       /                \          /
-          Seo / Constants          Domain.Entry
+Main / Render / Prerender                    Function
+           |                                    |
+       Web.Routes                          Web.Dynamic
+       /   |     \                           /      \
+   View  Service.Catalog  Service.Docs  View.Dynamic  Service.Search
+     \        /               /              \          /
+      Seo / Constants   View.Markdown         Domain.Entry
 
 SearchIndex -> Service.Catalog -> generated compact search database
 ```
+
+## Documentation
+
+The language documentation is Markdown in `website/docs/`, one file per page named `NN-slug.md`.
+[[website Service Docs]] loads the files once, before any request, in the order their numbers give;
+[[website View Markdown]] and [[website View MarkdownInline]] render a documented subset of Markdown
+into typed `Std.Html` trees, so no page can inject markup; [[website View Docs]] lays a page out with
+the page list, the article, and its contents. The pages are part of the crawlable static graph:
+`Seo.paths` lists `/docs` and every page, so the prerender and the sitemap agree. The dynamic function
+never loads them.
 
 Config and Error are leaf policies used from the composition edge. SEO owns canonical metadata,
 structured data, robots policy, and sitemap rendering; views choose page facts but do not spell tags.

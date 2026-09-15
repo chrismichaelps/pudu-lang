@@ -15,6 +15,11 @@ compact catalogues.
 The shell checks one search landmark, icon-free header navigation, a labelled native mobile disclosure,
 current-page state, and the new code-first home sections.
 Invocation checks include Vercel's outer `Action: Invoke` envelope with its request encoded in `body`.
+Documentation checks load `website/docs` and require every page in order, the index, a page's anchored
+sections, code blocks, contents, previous and next links, its sidebar mark, a 404 for an unknown page,
+the `/guide` canonical address, and sitemap coverage. The Markdown renderer is checked directly: the
+title stays out of the body, a script in prose is escaped, a `javascript:` target is not a link,
+repeated headings get distinct anchors, and tables render.
 
 Resolved Grill Log: tests call the pure route renderer rather than opening a socket, so failures
 identify website behavior and do not depend on a free local port.

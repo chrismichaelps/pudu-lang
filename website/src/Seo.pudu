@@ -8,6 +8,7 @@ import Std.Url as Url
 import Constants as Constants
 import Domain.Entry as Domain
 import Service.Catalog as Catalog
+import Service.Docs as Docs
 
 export fn head(
   siteUrl: Str,
@@ -103,8 +104,11 @@ export fn robots(siteUrl: Str) -> Str {
 /// A symbol can be reached by more than one declaration sharing a name, so the
 /// paths are deduplicated here: rendering one twice is work done twice, and
 /// listing it twice is a sitemap a crawler reports as containing duplicates.
-export fn paths(catalog: &Catalog.Catalog) -> Array[Str] {
-  var found = ["/", "/guide", "/about", "/donate", "/modules"]
+export fn paths(catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Array[Str] {
+  var found = ["/", "/docs", "/about", "/donate", "/modules"]
+  for page in docs.pages {
+    found = found.push("/docs/" + Url.encodeComponent(page.slug))
+  }
   for moduleName in catalog.modules {
     found = found.push("/module/" + Url.encodeComponent(moduleName))
   }
@@ -119,9 +123,9 @@ export fn paths(catalog: &Catalog.Catalog) -> Array[Str] {
   found
 }
 
-export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog) -> Str {
+export fn sitemap(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Str {
   var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n"
-  for path in paths(catalog) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
+  for path in paths(catalog, docs) { body = body + "  <url><loc>" + siteUrl + path + "</loc></url>\n" }
   body + "</urlset>\n"
 }
 

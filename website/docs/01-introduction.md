@@ -1,0 +1,62 @@
+# Introduction
+
+Pudu is a statically typed programming language for programs that are easy to read, safe to change, and honest about failure. What a function takes, what it gives back, whether it can fail, and whether it changes what it was given are all written in its signature, so a reader can tell what code promises without reading its body.
+
+> Pudu is pre-release (0.1.0). Programs run on an interpreter, dependencies are local directories, and the language and its standard library may still change before a stable release.
+
+## What Pudu looks like
+
+```pudu
+module Hello
+
+import Std.Io as Io
+
+fn main() -> Int {
+  let _written = Io.writeLine("Hello from Pudu!")
+  0
+}
+```
+
+Every file names its module, imports what it uses, and declares what it exports. A program starts at `main`, and the whole number `main` returns is the program's exit status.
+
+## Install
+
+No binary release has been published yet. Pudu builds from source with GHC 9.10 or later and Cabal 3.12 or later:
+
+```sh
+git clone https://github.com/chrismichaelps/pudu-lang.git
+cd pudu-lang
+cabal install exe:pudu --installdir="$HOME/.local/bin" --overwrite-policy=always
+pudu version
+```
+
+The installed `pudu` carries its standard library, so nothing else needs to be installed beside it. macOS and Linux x86-64 are tested; Windows is not.
+
+## Run your first program
+
+Save the program above as `Hello.pudu` and run it:
+
+```sh
+pudu run Hello.pudu
+```
+
+To start a project with its own manifest, source directory, and tests:
+
+```sh
+pudu init hello
+cd hello
+pudu run src/Main.pudu
+pudu test
+```
+
+## What Pudu is built around
+
+- **Failure is a value.** A function that can fail returns `Result[T, E]`, and the caller decides what happens. There are no exceptions.
+- **Absence is a value.** `Option[T]` holds `Some(value)` or `None`. Ordinary types never hold `null`.
+- **Change is visible.** `let` never changes, `var` may, and `&mut T` marks the one place allowed to change a borrowed value.
+- **Patterns are checked.** A `match` must cover every shape a value can have.
+- **Imports are explicit.** There are no wildcard imports, so every name's origin is in the import list.
+
+## Where to go next
+
+Read the pages in order to learn the language from the ground up, starting with [Basics](/docs/basics). If you already know what you are looking for, the [standard library overview](/docs/standard-library) and the [API reference](/modules) list everything a program can import.

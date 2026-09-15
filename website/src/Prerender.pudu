@@ -8,6 +8,7 @@ import Config as Config
 import Error as SiteError
 import Seo as Seo
 import Service.Catalog as Catalog
+import Service.Docs as Docs
 import Web.Routes as Web
 
 /// Every page the site has, written to disk.
@@ -40,17 +41,21 @@ fn main() -> Int {
       match Catalog.load(settings.cataloguePath) {
         case Err(problem) => failed(&problem)
         case Ok(catalog) => {
+          let docs = match Docs.load(settings.docsPath) {
+            case Ok(loaded) => loaded
+            case Err(problem) => { return failed(&problem) }
+          }
           // The pages, and the two files that are not pages: a crawler asks for
           // both before it asks for anything else, and neither belongs in the
           // sitemap that one of them points at.
-          var routes = Seo.paths(&catalog)
+          var routes = Seo.paths(&catalog, &docs)
           routes = routes.push("/robots.txt")
           routes = routes.push("/sitemap.xml")
 
           var written = 0
           var refused = 0
           for route in routes {
-            let response = Web.render(settings.siteUrl, &catalog, route)
+            let response = Web.render(settings.siteUrl, &catalog, &docs, route)
             if response.status.code != 200 {
               // A route that does not answer is reported rather than written.
               // Written, it would be a page serving whatever the error rendered

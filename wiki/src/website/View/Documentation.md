@@ -7,8 +7,8 @@ aliases: [website View Documentation]
 ---
 # Website View Documentation
 
-Renders versioned module indexes, symbol-family detail pages, the concise language guide, and
-not-found responses. A symbol page lists every same-kind, same-name declaration and signature so
+Renders versioned module indexes, symbol-family detail pages, and not-found responses. The language
+documentation that replaced the hand-written guide is [[website View Docs]]. A symbol page lists every same-kind, same-name declaration and signature so
 trait methods, implementations, and overloads remain visible at one stable canonical path. Kind is
 part of the path so `stage` the function and `Stage` the type cannot collide on a case-insensitive
 filesystem.

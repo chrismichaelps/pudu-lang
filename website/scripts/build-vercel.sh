@@ -79,6 +79,7 @@ chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 # requests to itself. What is rendered is `Seo.paths`, the list the sitemap is
 # built from, so the two cannot disagree about which pages exist.
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
+  PUDU_DOCS_PATH="$root/website/docs" \
   "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
 # `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and

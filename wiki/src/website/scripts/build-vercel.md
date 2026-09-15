@@ -14,7 +14,9 @@ The matching musl `libffi`, `zlib`, `ncursesw`, and `gmp` libraries are copied b
 function and named directly by its ELF dependencies.
 The build asks Pudu to derive a compact search index from `website/data/api.json` and packages that
 index for the function. The complete JSON catalogue remains the source for static generation and is
-not parsed during a serverless cold start.
+not parsed during a serverless cold start. The prerender is given `PUDU_DOCS_PATH` beside
+`PUDU_CATALOG_PATH`, both absolute, so the Markdown documentation pages are found wherever the script
+is run from and become static pages; the function never reads them.
 
 Resolved Grill Log: dynamic search reaches the same Pudu ranking and result view as local requests
 and tests through a bounded dynamic router, while canonical pages resolve directly from Vercel's static edge output. The builder refuses

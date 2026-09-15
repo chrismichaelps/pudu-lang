@@ -8,6 +8,7 @@ import Std.Option as Option
 import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
+import Service.Docs as Docs
 import Web.Routes as Web
 
 fn main() -> Int {
@@ -17,10 +18,15 @@ fn main() -> Int {
       match Catalog.load(settings.cataloguePath) {
         case Err(problem) => failed(&problem)
         case Ok(catalog) => {
-          let target = Option.unwrapOr(Env.at(0), "/")
-          let response = Web.render(settings.siteUrl, &catalog, target)
-          let _written = Io.writeLine(envelope(&response))
-          0
+          match Docs.load(settings.docsPath) {
+            case Err(problem) => failed(&problem)
+            case Ok(docs) => {
+              let target = Option.unwrapOr(Env.at(0), "/")
+              let response = Web.render(settings.siteUrl, &catalog, &docs, target)
+              let _written = Io.writeLine(envelope(&response))
+              0
+            }
+          }
         }
       }
     }

@@ -13,7 +13,10 @@ The about page carries `AboutPage` data for Pudu and its author; the author's pr
 are the same fixed destinations shown to readers.
 
 Search pages are `noindex,follow`; canonical content pages are `index,follow`. The sitemap contains
-only unique canonical home, guide, about, donation, module-index, module, and symbol-family URLs.
+only unique canonical home, documentation index and page, about, donation, module-index, module, and
+symbol-family URLs. `paths` takes the loaded [[website Service Docs]] beside the catalogue, so the
+prerender renders every documentation page the sitemap names. The old `/guide` address still answers
+but is not listed, because its canonical address is `/docs`.
 Symbol paths include the declaration kind to remain distinct on case-insensitive filesystems. It uses absolute UTF-8 URLs and
 stays one file while the catalogue remains below 50,000 URLs.
 

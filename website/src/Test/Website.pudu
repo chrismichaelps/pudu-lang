@@ -1,5 +1,6 @@
 module Test.Website
 
+import Std.Html.Build as H
 import Std.Http as Http
 import Std.Json as Json
 import Std.Result as Result
@@ -7,7 +8,9 @@ import Std.Test as Test
 import Domain.Entry as Domain
 import Function as Function
 import Service.Catalog as Catalog
+import Service.Docs as Docs
 import Service.Search as Search
+import View.Markdown as Markdown
 import Web.Dynamic as DynamicWeb
 import Web.Routes as Web
 
@@ -50,19 +53,42 @@ export fn main() -> Int {
     case Ok(value) => value
     case Err(_) => { return 0 }
   }
+  let docs = match Docs.load("website/docs") {
+    case Ok(value) => value
+    case Err(_) => { return 0 }
+  }
   let origin = "https://pudu.example"
-  let home = Web.render(origin, &catalog, "/")
-  let search = Web.render(origin, &catalog, "/search?q=checksum")
-  let hostile = Web.render(origin, &catalog, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-  let modulePage = Web.render(origin, &catalog, "/module/Std.Adler32")
-  let symbol = Web.render(origin, &catalog, "/docs/Std.Adler32/fn/checksum")
-  let missing = Web.render(origin, &catalog, "/docs/Std.Adler32/fn/notThere")
-  let robots = Web.render(origin, &catalog, "/robots.txt")
-  let sitemap = Web.render(origin, &catalog, "/sitemap.xml")
-  let health = Web.render(origin, &catalog, "/health")
-  let donation = Web.render(origin, &catalog, "/donate")
-  let about = Web.render(origin, &catalog, "/about")
-  let overloads = Web.render(origin, &catalog, "/docs/Std.Bits/fn/width")
+  let docsIndex = Web.render(origin, &catalog, &docs, "/docs")
+  let docsPage = Web.render(origin, &catalog, &docs, "/docs/errors")
+  let docsMissing = Web.render(origin, &catalog, &docs, "/docs/not-a-page")
+  let guide = Web.render(origin, &catalog, &docs, "/guide")
+  let written = Markdown.parse(
+      &[
+      "# Title",
+      "",
+      "A <script>alert(1)</script> line with [a link](javascript:alert(1)) and `code`.",
+      "",
+      "## Same",
+      "## Same",
+      "",
+      "| left | right |",
+      "| --- | --- |",
+      "| 1 | 2 |"
+    ]
+  )
+  let writtenHtml = H.render(&H.div().holding(written.blocks))
+  let home = Web.render(origin, &catalog, &docs, "/")
+  let search = Web.render(origin, &catalog, &docs, "/search?q=checksum")
+  let hostile = Web.render(origin, &catalog, &docs, "/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
+  let modulePage = Web.render(origin, &catalog, &docs, "/module/Std.Adler32")
+  let symbol = Web.render(origin, &catalog, &docs, "/docs/Std.Adler32/fn/checksum")
+  let missing = Web.render(origin, &catalog, &docs, "/docs/Std.Adler32/fn/notThere")
+  let robots = Web.render(origin, &catalog, &docs, "/robots.txt")
+  let sitemap = Web.render(origin, &catalog, &docs, "/sitemap.xml")
+  let health = Web.render(origin, &catalog, &docs, "/health")
+  let donation = Web.render(origin, &catalog, &docs, "/donate")
+  let about = Web.render(origin, &catalog, &docs, "/about")
+  let overloads = Web.render(origin, &catalog, &docs, "/docs/Std.Bits/fn/width")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -114,7 +140,28 @@ export fn main() -> Int {
       Test.that("mobile navigation uses a labelled disclosure", home.body.contains("<details class=\"mobile-nav\"") && home.body.contains("aria-label=\"Navigation menu\"")),
       Test.that("navigation identifies the current API page", modulePage.body.contains("aria-current=\"page\">API")),
       Test.that("home teaches through a complete program", home.body.contains("Write a complete program") && home.body.contains("module Hello")),
-      Test.that("home explains references", home.body.contains("&amp;mut T gives one temporary place permission")),
+      Test.that("home links the documentation", home.body.contains("href=\"/docs\"")),
+      Test.not("home no longer squeezes modules into a side column", home.body.contains("class=\"grid\"")),
+
+      // The documentation is Markdown read from files and rendered on the
+      // server, so a page is only as good as what the renderer made of it: its
+      // sections, its code, its neighbours, and what it refused to render.
+      Test.that("documentation loads every page in order", docs.pages.length() == 10 && docs.pages[0].slug == "introduction" && docs.pages[9].slug == "tooling"),
+      Test.that("documentation index lists every page", docsIndex.status.code == 200 && docsIndex.body.contains("href=\"/docs/introduction\"") && docsIndex.body.contains("href=\"/docs/tooling\"")),
+      Test.that("a documentation page renders its sections", docsPage.status.code == 200 && docsPage.body.contains("<h2 id=\"the-operator\">")),
+      Test.that("a documentation page renders its code", docsPage.body.contains("class=\"code-block\"") && docsPage.body.contains("language-pudu")),
+      Test.that("a documentation page lists its sections", docsPage.body.contains("On this page") && docsPage.body.contains("href=\"#result\"")),
+      Test.that("a documentation page links its neighbours", docsPage.body.contains("pager-previous") && docsPage.body.contains("pager-next")),
+      Test.that("a documentation page marks itself in the sidebar", docsPage.body.contains("href=\"/docs/errors\" aria-current=\"page\"")),
+      Test.that("navigation identifies the documentation", docsPage.body.contains("aria-current=\"page\">Docs")),
+      Test.that("an unknown documentation page is 404", docsMissing.status.code == 404),
+      Test.that("the guide address names the documentation as canonical", guide.status.code == 200 && guide.body.contains("<link rel=\"canonical\" href=\"https://pudu.example/docs\"")),
+      Test.that("markdown keeps the title out of the page body", written.title == "Title" && !writtenHtml.contains("<h1")),
+      Test.not("markdown escapes markup written in prose", writtenHtml.contains("<script>")),
+      Test.not("markdown refuses a script as a link target", writtenHtml.contains("href=\"javascript")),
+      Test.that("markdown gives repeated headings distinct anchors", writtenHtml.contains("id=\"same\"") && writtenHtml.contains("id=\"same-2\"")),
+      Test.that("markdown renders tables", writtenHtml.contains("<table>") && writtenHtml.contains("<td>2</td>")),
+      Test.that("home explains references", home.body.contains("&amp;mut T asks for the exclusive right to change it")),
       Test.that("search renders matches", search.body.contains("Std.Adler32.checksum")),
       Test.that("search explains its query syntax", search.body.contains("module:Std.List") && search.body.contains("type after ::")),
       Test.that("search is not indexed", search.body.contains("noindex,follow")),
@@ -138,6 +185,8 @@ export fn main() -> Int {
       Test.that("about page links the author's profiles", about.body.contains("linkedin.com/in/chrisperezsantiago") && about.body.contains("github.com/chrismichaelps")),
       Test.that("about page carries structured data", about.body.contains("AboutPage")),
       Test.that("sitemap includes about", sitemap.body.contains("https://pudu.example/about")),
+      Test.that("sitemap includes the documentation", sitemap.body.contains("https://pudu.example/docs</loc>") && sitemap.body.contains("https://pudu.example/docs/introduction</loc>")),
+      Test.not("sitemap no longer lists the old guide address", sitemap.body.contains("https://pudu.example/guide")),
       Test.that("same-name declarations share a page", overloads.body.contains("14 declarations with this name")),
       Test.that("same-name declarations remain visible", overloads.body.contains("fn (UInt8)") && overloads.body.contains("fn (trait Bits)")),
       Test.that("method pages explain trait and concrete providers", overloads.body.contains("required by a trait") && overloads.body.contains("for one concrete type")),
