@@ -14,8 +14,13 @@ tags: [changelog]
   requests in the same bytes. Each is now refused as `AmbiguousHeader`, in requests and responses
   alike, and the server answers 400. A name is a token with nothing between it and its colon; a
   value is still trimmed.
-- `UsesHttpMessageReplyAll` rises to 97. Against a running server, an ordinary request answered 200
-  while whitespace before a colon and a folded line each answered 400.
+- The request line was split at its first space and trimmed, so `GET /a b HTTP/1.1` became target
+  `/a` with version `b HTTP/1.1`, doubled spaces were absorbed, and a missing version defaulted to
+  HTTP/1.1. A request line is now exactly a token method, a target without whitespace, and HTTP/1.0 or
+  HTTP/1.1, one space apart, and anything else is `BadRequestLine`.
+- `UsesHttpMessageReplyAll` rises to 99. Against a running server, an ordinary request answered 200
+  while whitespace before a colon, a folded line, a target holding a space, and a request line with no
+  version each answered 400.
 
 ## 2026-09-14 — Kept values through any driver
 

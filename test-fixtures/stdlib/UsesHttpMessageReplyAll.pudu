@@ -95,6 +95,30 @@ export fn main() -> Int {
     case _ => {}
   }
 
+  // A request line is three parts one space apart, and anything else is
+  // refused rather than split where a guess would put it: a target holding a
+  // space, a doubled or leading or trailing space, a tab, a missing version, a
+  // version that never arrives as a line, and a method that is not a token.
+  let unclearLines = [
+    "GET /a b HTTP/1.1\r\n",
+    "GET  /a HTTP/1.1\r\n",
+    " GET /a HTTP/1.1\r\n",
+    "GET /a HTTP/1.1 \r\n",
+    "GET\t/a HTTP/1.1\r\n",
+    "GET /a\r\n",
+    "GET /a HTTP/2\r\n",
+    "G(T /a HTTP/1.1\r\n"
+  ]
+  var refusedLines = 0
+  for head in unclearLines {
+    if let Err(BadRequestLine(_)) = Message.parseHead(head) { refusedLines = refusedLines + 1 }
+  }
+  if refusedLines == unclearLines.length() { held = held + 1 }
+  match Message.parseHead("GET /a?b=c HTTP/1.0\r\nhost: example.com\r\n") {
+    case Ok(request) => { if request.target == "/a?b=c" { held = held + 1 } }
+    case Err(_) => {}
+  }
+
   // A header a proxy in front would read differently is refused rather than
   // trimmed into agreement. Whitespace before the colon, an empty or spaced
   // name, a folded continuation, and a bare line break inside a value are each

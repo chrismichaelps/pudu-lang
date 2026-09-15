@@ -28,6 +28,11 @@ letters, digits, and ``!#$%&'*+-.^_`|~`` — with nothing between it and its col
 with a space or tab (a folded continuation) and a line still holding a carriage return or line feed
 are refused. Each answers `AmbiguousHeader(line)`, in requests and responses alike, and the server
 answers 400. The value is still trimmed of surrounding whitespace, which every reader agrees on.
+
+**A request line is three parts one space apart.** A token method, a target holding no whitespace,
+and `HTTP/1.0` or `HTTP/1.1`. A doubled, leading or trailing space, a tab, a target holding a space,
+a missing version, and a version that never arrives as a line of text are each refused as
+`BadRequestLine` rather than split where a guess would put them.
 ## Grill Log
 - **Q:** Trim whitespace before a header's colon, as the parser once did? **A:** No. _Rationale:_ a
   proxy following the protocol rejects `Content-Length : 5` or ignores it, and a server behind it that

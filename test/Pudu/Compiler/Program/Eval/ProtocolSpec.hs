@@ -407,10 +407,13 @@ testProtocolEvaluation = do
         before its colon, an empty or spaced name, a folded line, a stray line
         break inside a value — is refused rather than trimmed, in requests and
         responses alike, because that disagreement is how a proxy and a server
-        come to see different requests in the same bytes. -}
+        come to see different requests in the same bytes. A request line is
+        three parts one space apart — a token method, a target with no
+        whitespace, and HTTP/1.0 or HTTP/1.1 — and any other line is refused
+        rather than split where a guess would put it. -}
     , counterexample
         "a message survives being written and read, and declares its body in bytes"
-        (messaged === Just "97")
+        (messaged === Just "99")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}

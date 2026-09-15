@@ -221,18 +221,26 @@ fn headLines(head: Str) -> Array[Str] {
 }
 
 /// A request line read into its method, target, and version.
+///
+/// Exactly three parts, one space apart: a method that is a token, a target
+/// holding no whitespace, and a version this reader speaks. A line with more
+/// or fewer parts is refused rather than split where a guess would put it:
+/// `GET /a b HTTP/1.1` is a target one reader takes as `/a` and another as
+/// `/a b`, and a request two readers route differently is not one request.
 fn parseRequestLine(line: Str) -> Result[(Str, Str, Str), MessageError] {
-  let s1 = line.indexOf(" ")
-  if s1 < 0 { return Err(BadRequestLine(line)) }
-  let method = line.take(s1)
-  let rest = line.drop(s1 + 1).trim()
-  let s2 = rest.indexOf(" ")
-  if s2 < 0 {
-    Ok((method, rest, "HTTP/1.1"))
-  } else {
-    Ok((method, rest.take(s2), rest.drop(s2 + 1).trim()))
+  let parts = line.split(" ")
+  if parts.length() != 3 { return Err(BadRequestLine(line)) }
+  let target = parts[1]
+  let unclearTarget = target.isEmpty() || target.contains("\t") || target.contains("\r")
+  if !isToken(parts[0]) || unclearTarget || !REQUEST_VERSIONS.contains(parts[2]) {
+    return Err(BadRequestLine(line))
   }
+  Ok((parts[0], target, parts[2]))
 }
+
+/// The versions a request line may name. Later versions do not arrive as a
+/// line of text.
+const REQUEST_VERSIONS: Set[Str] = setOf(["HTTP/1.0", "HTTP/1.1"])
 
 /// A status line read into the status it names.
 fn parseStatusLine(line: Str) -> Result[Http.Status, MessageError] {
