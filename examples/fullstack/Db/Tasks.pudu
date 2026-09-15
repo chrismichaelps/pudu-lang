@@ -2,6 +2,7 @@ module Db.Tasks
 
 import Std.App.Database as Database
 import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
 import Std.Db.Row as Row
 import Std.Option as Option
 import Std.Result as Result
@@ -22,18 +23,22 @@ export type Task = { id: Int, title: Str, done: Bool }
 /// distinction nothing reads.
 export type StoreError = { message: Str }
 
-/// The schema, applied at start-up.
+/// The schema, brought up to date at start-up.
 ///
 /// Stated here rather than in a file beside the program, because the example
 /// runs from a single command and a reader following it should not have to
-/// find a second file to know what a row looks like.
+/// find a second file to know what a row looks like. Each change is a numbered
+/// migration that records itself as it commits, so a restart against the same
+/// database runs nothing, and a later change is a further migration rather
+/// than an edit to this one.
 export fn migrate(db: &Database.Database) -> Result[(), StoreError] {
-  let made = Database.execute(
-    db,
-    "CREATE TABLE IF NOT EXISTS task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"
+  let tasks = Migrate.migration(
+    1,
+    "tasks",
+      &["CREATE TABLE task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"]
   )
-  match made {
-    case Err(problem) => Err(StoreError{message: problem.message})
+  match Database.migrate(db, &[tasks]) {
+    case Err(problem) => Err(StoreError{message: Migrate.explain(&problem)})
     case Ok(_) => Ok(())
   }
 }
