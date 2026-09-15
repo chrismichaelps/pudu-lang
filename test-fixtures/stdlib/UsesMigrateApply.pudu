@@ -1,0 +1,185 @@
+module UsesMigrateApply
+
+import Std.App.Database as Database
+import Std.Db.Driver {DollarNumber, IntegerValue, TextValue}
+import Std.Db.Driver as Driver
+import Std.Db.Migrate {ArrivedLate, Changed, Refused, Unnumbered}
+import Std.Db.Migrate as Migrate
+import Std.Option as Option
+import Std.Result as Result
+import Std.Sync as Sync
+
+/// What applying migrations promises, against a real SQLite database.
+///
+/// The plan is checked elsewhere as values. What is checked here is what only
+/// a database can show: that a migration and its record commit together, that
+/// a failure part way through a migration leaves none of it behind, that a
+/// refusal runs nothing at all, and that a second run finds nothing to do.
+export fn main() -> Int {
+  var held = 0
+
+  let first = Migrate.migration(1, "accounts", &["create table accounts (id integer primary key)"])
+  let second = Migrate.migration(2, "email", &["alter table accounts add column email text"])
+
+  match Database.create("sqlite::memory:", 1) {
+    case Err(_) => {}
+    case Ok(db) => {
+      // A database that is not started is refused rather than opened.
+      if let Err(Refused(what, _)) = Database.migrate(&db, &[first]) {
+        if what == "the database" { held = held + 1 }
+      }
+
+      if Result.isOk(&Database.start(&db)) { held = held + 1 }
+
+      // Against an empty database everything runs, in version order, and the
+      // record is made on the way.
+      if Database.migrate(&db, &[second, first]) == Ok(2) { held = held + 1 }
+      if count(&db, "select count(*) from schema_migrations") == 2 { held = held + 1 }
+      if Result.isOk(&Database.execute(&db, "insert into accounts (id, email) values (1, 'a@b.c')")) {
+        held = held + 1
+      }
+
+      // The record holds the version as a number and the digest of what ran.
+      match Database.query(&db, "select version, digest from schema_migrations order by version", &[]) {
+        case Ok(rows) => {
+          if rows.rows.length() == 2 {
+            if rows.rows[0][0] == IntegerValue(1i64) { held = held + 1 }
+            if rows.rows[1][1] == TextValue(Migrate.digestOf(&second)) { held = held + 1 }
+          }
+        }
+        case Err(_) => {}
+      }
+
+      // What has run is not run again.
+      if Database.migrate(&db, &[first, second]) == Ok(0) { held = held + 1 }
+
+      // A migration that fails part way leaves none of itself behind: the
+      // statement that ran before the failure is undone with it, and the
+      // record does not claim it.
+      let broken = Migrate.migration(3, "audit", &["create table audit (id integer)", "insert into missing values (1)"])
+      if let Err(Refused(what, _)) = Database.migrate(&db, &[first, second, broken]) {
+        if what == "3 audit" { held = held + 1 }
+      }
+      if count(&db, "select count(*) from sqlite_master where name = 'audit'") == 0 { held = held + 1 }
+      if count(&db, "select count(*) from schema_migrations") == 2 { held = held + 1 }
+
+      // Migrations before a failure stay applied: each commits on its own.
+      let fourth = Migrate.migration(4, "notes", &["create table notes (id integer)"])
+      let fifth = Migrate.migration(5, "bad", &["create table notes (id integer)"])
+      if let Err(Refused(_, _)) = Database.migrate(&db, &[first, second, fourth, fifth]) { held = held + 1 }
+      if count(&db, "select count(*) from schema_migrations") == 3 { held = held + 1 }
+
+      // A migration edited after it ran is refused before anything runs, so a
+      // pending migration beside it is not applied either.
+      let edited = Migrate.migration(1, "accounts", &["create table accounts (id integer primary key, extra text)"])
+      let later = Migrate.migration(6, "later", &["create table later (id integer)"])
+      if let Err(Changed(version, _)) = Database.migrate(&db, &[edited, second, fourth, later]) {
+        if version == 1 { held = held + 1 }
+      }
+      if count(&db, "select count(*) from sqlite_master where name = 'later'") == 0 { held = held + 1 }
+
+      // A version below one already applied is refused, and so is one that is
+      // not a version at all.
+      if let Err(ArrivedLate(version, highest)) = Database.migrate(&db, &[first, second, Migrate.migration(3, "late", &["select 1"]), fourth]) {
+        if version == 3 && highest == 4 { held = held + 1 }
+      }
+      if let Err(Unnumbered(_)) = Database.migrate(&db, &[Migrate.migration(0, "zero", &["select 1"])]) {
+        held = held + 1
+      }
+
+      // The set a program holds can shed old migrations: what the record
+      // already holds is not required to still be listed.
+      if Database.migrate(&db, &[fourth, later]) == Ok(1) { held = held + 1 }
+
+      // A stage does the same when an application starts, and says why when
+      // it cannot.
+      let seventh = Migrate.migration(7, "tags", &["create table tags (id integer)"])
+      let starting = Database.migrationStage(&db, "schema", &[fourth, later, seventh])
+      if starting.name == "schema" { held = held + 1 }
+      if (starting.start)() == Ok(()) { held = held + 1 }
+      if count(&db, "select count(*) from sqlite_master where name = 'tags'") == 1 { held = held + 1 }
+      let refusing = Database.migrationStage(&db, "schema", &[edited])
+      match (refusing.start)() {
+        case Err(reason) => { if reason.contains("changed after it was applied") { held = held + 1 } }
+        case Ok(_) => {}
+      }
+      if (refusing.stop)() == Ok(()) { held = held + 1 }
+
+      let _stopped = Database.stop(&db)
+    }
+  }
+
+  // On PostgreSQL the lock is taken inside each transaction, before the record
+  // is read, and the record is written with that backend's placeholders.
+  let log = Sync.cell("")
+  let postgres = recording(log)
+  match Database.withDriver(postgres, "postgresql://here/app", 1) {
+    case Err(_) => {}
+    case Ok(db) => {
+      let _started = Database.start(&db)
+      if Database.migrate(&db, &[first]) == Ok(1) { held = held + 1 }
+      let heard = Result.unwrapOr(Sync.get(&log), "")
+      let lock = "tx select pg_advisory_xact_lock(3141592653)\n"
+      if heard.startsWith("begin\n" + lock + "tx create table if not exists schema_migrations") {
+        held = held + 1
+      }
+      if heard.contains(
+        "begin\n" + lock + "tx select version, name, digest from schema_migrations order by version\n"
+          + "tx create table accounts (id integer primary key)\n"
+          + "tx insert into schema_migrations (version, name, digest) values ($1, $2, $3)\n"
+      ) {
+        held = held + 1
+      }
+    }
+  }
+
+  held
+}
+
+fn count(db: &Database.Database, sql: Str) -> Int {
+  match Database.query(db, sql, &[]) {
+    case Ok(rows) => {
+      if rows.rows.length() == 1 {
+        if let IntegerValue(number) = rows.rows[0][0] { return Option.unwrapOr(convertInteger[Int](number), 0 - 1) }
+      }
+      0 - 1
+    }
+    case Err(_) => 0 - 1
+  }
+}
+
+/// A driver named as PostgreSQL that records what it is asked and answers an
+/// empty record, so the order of statements is observable without a server.
+fn recording(into: Sync.Cell[Str]) -> Driver.Driver {
+  Driver.Driver {
+    name: "postgresql",
+    schemes: ["postgresql"],
+    placeholders: DollarNumber,
+    open: fn(_uri: Str, _size: Int) -> Result[Driver.Client, Driver.Error] {
+      let answer = fn(sql: Str) -> Result[Driver.Rows, Driver.Error] {
+        let _said = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "tx " + sql + "\n")
+        Ok(Driver.Rows{columns: [], rows: [], command: "OK"})
+      }
+      Ok(
+        Driver.Client {
+          query: fn(_sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] {
+            Ok(Driver.Rows{columns: [], rows: [], command: "OK"})
+          },
+          execute: fn(_sql: Str) -> Result[Driver.Rows, Driver.Error] {
+            Ok(Driver.Rows{columns: [], rows: [], command: "OK"})
+          },
+          transaction: fn(action: fn(Driver.Tx) -> Result[Driver.Rows, Driver.Error]) -> Result[Driver.Rows, Driver.Error] {
+            let _began = Sync.set(&into, Result.unwrapOr(Sync.get(&into), "") + "begin\n")
+            action(
+              Driver.Tx {
+                query: fn(sql: Str, _values: Array[Driver.Value]) -> Result[Driver.Rows, Driver.Error] { answer(sql) },
+                execute: fn(sql: Str) -> Result[Driver.Rows, Driver.Error] { answer(sql) }
+              }
+            )
+          },
+          close: fn() -> Result[(), Driver.Error] { Ok(()) }
+        }
+      )
+    }
+  }
+}

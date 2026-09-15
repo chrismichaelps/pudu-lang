@@ -2,10 +2,13 @@ module Std.Db.Migrate
 
 import Std.Crypto as Crypto
 import Std.Db as Db
+import Std.Db.Driver {DollarNumber, IntegerValue, Named, NullValue, QuestionMark, TextValue}
+import Std.Db.Driver as Driver
 import Std.Db.Session as Session
 import Std.List as List
 import Std.Option as Option
 import Std.Result as Result
+import Std.Sync as Sync
 import Std.Text as Text
 
 /// One change to a schema.
@@ -29,17 +32,21 @@ export type MigrationError
   = Changed(Int, Str)
   | ArrivedLate(Int, Int)
   | Repeated(Int)
-  | Unordered(Int, Int)
+  | Unnumbered(Int)
   | Refused(Str, Str)
 
 /// Where the record of what has run is kept.
 const RECORD_TABLE: Str = "schema_migrations"
 
-/// The statements that make the record, run before it is read.
+/// The statement that makes the record, run before it is read.
 ///
 /// A first run against an empty database is the ordinary case rather than a
-/// failure, so nothing here requires the record to already exist.
-const RECORD_SCHEMA: Str = "create table if not exists schema_migrations (version bigint primary key, name text not null, digest text not null, applied_at timestamptz not null default now())"
+/// failure, so nothing here requires the record to already exist. Written in
+/// the part of SQL that PostgreSQL and SQLite both accept, so one record means
+/// the same thing on either.
+const RECORD_SCHEMA: Str = "create table if not exists schema_migrations (version bigint primary key, name text not null, digest text not null, applied_at timestamptz not null default current_timestamp)"
+
+const RECORD_READ: Str = "select version, name, digest from schema_migrations order by version"
 
 /// The number this program locks on while it migrates.
 ///
@@ -48,6 +55,11 @@ const RECORD_SCHEMA: Str = "create table if not exists schema_migrations (versio
 /// alone is not a lock. A process that does not get it waits, then finds there
 /// is nothing to do, which is the correct outcome rather than an error.
 const LOCK_KEY: Int = 3141592653
+
+/// What a transaction answers when its migration had already been applied by
+/// another process by the time the lock was granted.
+const SKIPPED: Str = "MIGRATION SKIPPED"
+const APPLIED: Str = "MIGRATION APPLIED"
 
 /// A migration from its parts.
 export fn migration(version: Int, name: Str, statements: &Array[Str]) -> Migration {
@@ -77,6 +89,7 @@ export fn ordered(available: &Array[Migration]) -> Array[Migration] {
 /// a connection.
 export fn plan(available: &Array[Migration], record: &Array[Applied]) -> Result[Plan, MigrationError] {
   let sorted = ordered(available)
+  numbered(&sorted) ?
   repeatedVersion(&sorted) ?
   let highest = highestApplied(record)
   var pending: Array[Migration] = []
@@ -121,6 +134,154 @@ export fn pendingVersions(decided: &Plan) -> Array[Int] {
   found
 }
 
+/// Bring the schema to what the program expects, through any driver.
+///
+/// The plan is decided before any lock is taken, so a refusal holds nothing.
+/// Each pending migration then runs in a transaction of its own, which on
+/// PostgreSQL first takes a lock that ends with the transaction: it cannot be
+/// left held by a failure, and a pooled connection goes back to the pool with
+/// nothing attached to it. Inside the lock the record is read again, so a
+/// process that waited for another finds its migration already there and
+/// skips it rather than running it twice.
+///
+/// SQLite has one writer at a time already. A second process that reaches the
+/// same file mid-migration is refused as busy rather than left waiting, and
+/// running it again finds nothing to do.
+///
+/// Answers how many migrations this call applied.
+export fn apply(
+  client: &Driver.Client,
+  driver: &Driver.Driver,
+  available: &Array[Migration]
+) -> Result[Int, MigrationError] {
+  let guard = lockFor(driver)
+  let made = Driver.transaction(client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      locked(&open, &guard) ?
+      Driver.run(&open, RECORD_SCHEMA)
+    })
+  let _record = refusedBy("the migration record", made) ?
+  let recorded = refusedBy("the migration record", Driver.execute(client, RECORD_READ)) ?
+  let decided = plan(available, &appliedIn(&recorded)) ?
+  var done = 0
+  for step in decided.pending {
+    if applyThrough(client, driver, &guard, &step) ? { done = done + 1 }
+  }
+  Ok(done)
+}
+
+/// One migration and its record, committed together or not at all.
+///
+/// Answers whether it ran, since another process may have applied it while
+/// this one waited for the lock.
+fn applyThrough(
+  client: &Driver.Client,
+  driver: &Driver.Driver,
+  guard: &Option[Str],
+  step: &Migration
+) -> Result[Bool, MigrationError] {
+  let held = *step
+  let lock = *guard
+  let noting = recordInsert(&driver.placeholders)
+  // A refusal decided inside the transaction has to leave it as a driver
+  // failure so the driver rolls back; the reason travels beside it.
+  let refusal: Sync.Cell[Option[MigrationError]] = Sync.cell(None)
+  let outcome = Driver.transaction(client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+      locked(&open, &lock) ?
+      let current = appliedIn(&Driver.run(&open, RECORD_READ) ?)
+      if let Some(ran) = appliedAt(&current, held.version) {
+        if ran.digest == digestOf(&held) { return Ok(marker(SKIPPED)) }
+        return refuse(&refusal, Changed(held.version, held.name))
+      }
+      let highest = highestApplied(&current)
+      if held.version <= highest { return refuse(&refusal, ArrivedLate(held.version, highest)) }
+      for statement in held.statements {
+        let _ran = Driver.run(&open, statement) ?
+      }
+      let _noted = Driver.ask(
+          &open,
+        noting,
+          &[IntegerValue(Option.unwrapOr(convertInteger[Int64](held.version), 0i64)), TextValue(held.name), TextValue(digestOf(&held))]
+      ) ?
+      Ok(marker(APPLIED))
+    })
+  match outcome {
+    case Ok(rows) => Ok(rows.command == APPLIED)
+    case Err(problem) => {
+      match Sync.get(&refusal) {
+        case Ok(Some(decided)) => Err(decided)
+        case _ => Err(Refused(show(held.version) + " " + held.name, problem.message))
+      }
+    }
+  }
+}
+
+/// The statement that takes the migration lock inside a transaction, for the
+/// backends that have one.
+fn lockFor(driver: &Driver.Driver) -> Option[Str] {
+  if driver.name == "postgresql" {
+    Some("select pg_advisory_xact_lock(" + show(LOCK_KEY) + ")")
+  } else {
+    None
+  }
+}
+
+fn locked(open: &Driver.Tx, guard: &Option[Str]) -> Result[(), Driver.Error] {
+  if let Some(statement) = *guard {
+    let _taken = Driver.run(open, statement) ?
+  }
+  Ok(())
+}
+
+fn recordInsert(spelling: &Driver.Placeholders) -> Str {
+  let places = match spelling {
+    case DollarNumber => "$1, $2, $3"
+    case QuestionMark => "?, ?, ?"
+    case Named => ":p1, :p2, :p3"
+  }
+  "insert into " + RECORD_TABLE + " (version, name, digest) values (" + places + ")"
+}
+
+fn refuse(into: &Sync.Cell[Option[MigrationError]], problem: MigrationError) -> Result[Driver.Rows, Driver.Error] {
+  let _kept = Sync.set(into, Some(problem))
+  Err(Driver.error("migrate", "refused", explain(&problem)))
+}
+
+fn refusedBy[T](what: Str, outcome: Result[T, Driver.Error]) -> Result[T, MigrationError] {
+  Result.mapErr(outcome, fn(problem: Driver.Error) -> MigrationError { Refused(what, problem.message) })
+}
+
+fn marker(command: Str) -> Driver.Rows { Driver.Rows{columns: [], rows: [], command: command} }
+
+/// The record as a driver answered it.
+///
+/// A version arrives as a number from a backend that decodes one and as its
+/// digits from one that answers text, and both mean the same row.
+fn appliedIn(result: &Driver.Rows) -> Array[Applied] {
+  var found: Array[Applied] = []
+  for row in result.rows {
+    if row.length() >= 3 {
+      found = found.push(Applied{version: versionIn(&row[0]), name: textIn(&row[1]), digest: textIn(&row[2])})
+    }
+  }
+  found
+}
+
+fn versionIn(cell: &Driver.Value) -> Int {
+  match cell {
+    case IntegerValue(held) => Option.unwrapOr(convertInteger[Int](held), 0)
+    case TextValue(held) => Option.unwrapOr(Text.countOf(held), 0)
+    case _ => 0
+  }
+}
+
+fn textIn(cell: &Driver.Value) -> Str {
+  match cell {
+    case TextValue(held) => held
+    case NullValue => ""
+    case _ => show(*cell)
+  }
+}
+
 /// The record a database holds.
 ///
 /// The table is made before it is read, because a first run against an empty
@@ -129,82 +290,108 @@ export fn recordOf(
   stream: Session.Connection
 ) -> Result[(Array[Applied], Session.Connection), Session.DbError] {
   let made = Db.simple(stream, RECORD_SCHEMA) ?
-  let read = Db.simple(made[1], "select version, name, digest from " + RECORD_TABLE + " order by version") ?
+  let read = Db.simple(made[1], RECORD_READ) ?
   Ok((asApplied(&read[0]), read[1]))
 }
 
-/// Bring the schema to what the program expects.
+/// Bring the schema to what the program expects, on one PostgreSQL session.
 ///
 /// Each migration runs in its own transaction, so a failure leaves every
 /// earlier one applied and the failing one absent and the record always
 /// describes the schema. One transaction around all of them is attractive
 /// until a statement that cannot run inside one appears.
+///
+/// The session lock is released on every path, refusals included, because a
+/// connection that goes back to a pool still holding it stops every later
+/// migration everywhere.
 export fn migrate(
   stream: Session.Connection,
   available: &Array[Migration]
 ) -> Result[(Int, Session.Connection), MigrationError] {
-  let locked = lockTaken(stream) ?
-  let recorded = reported(recordOf(locked)) ?
-  let decided = plan(available, &recorded[0]) ?
-  var carrying = recorded[1]
-  var done = 0
-  var failure: Option[MigrationError] = None
-  var index = 0
-  while index < decided.pending.length() && Option.isNone(&failure) {
-    let outcome = applyOne(carrying, &decided.pending[index])
-    if let Ok(after) = outcome {
-      carrying = after
-      done = done + 1
-    } else {
-      failure = Some(refusalOf(outcome, &decided.pending[index]))
-    }
-    index = index + 1
+  let taken = lockTaken(stream) ?
+  let worked = underLock(taken, available)
+  let released = release(worked[1])
+  let done = worked[0] ?
+  match released {
+    case Err(problem) => Err(Refused("the migration lock", show(problem)))
+    case Ok(after) => Ok((done, after))
   }
-  let released = release(carrying)
-  if let Some(problem) = failure {
-    Err(problem)
-  } else {
-    Ok((done, Result.unwrapOr(released, carrying)))
+}
+
+fn underLock(
+  stream: Session.Connection,
+  available: &Array[Migration]
+) -> (Result[Int, MigrationError], Session.Connection) {
+  match recordOf(stream) {
+    case Err(problem) => (Err(Refused("the migration record", show(problem))), stream)
+    case Ok(recorded) => {
+      match plan(available, &recorded[0]) {
+        case Err(problem) => (Err(problem), recorded[1])
+        case Ok(decided) => {
+          var carrying = recorded[1]
+          var done = 0
+          for step in decided.pending {
+            let outcome = applyOne(carrying, &step)
+            carrying = outcome[1]
+            if let Err(problem) = outcome[0] {
+              return (Err(Refused(show(step.version) + " " + step.name, show(problem))), carrying)
+            }
+            done = done + 1
+          }
+          (Ok(done), carrying)
+        }
+      }
+    }
   }
 }
 
 /// One migration, in its own transaction, recorded in the same one.
 ///
 /// The statements and the record of them commit together, so the record can
-/// never say a migration ran when it did not, or fail to say one did.
+/// never say a migration ran when it did not, or fail to say one did. The
+/// connection comes back whichever way it went, so what follows speaks through
+/// the one the rollback left rather than a copy from before it.
 fn applyOne(
   stream: Session.Connection,
   step: &Migration
-) -> Result[Session.Connection, Session.DbError] {
-  var carrying = Db.begin(stream) ?
+) -> (Result[(), Session.DbError], Session.Connection) {
+  let begun = Db.begin(stream)
+  if let Err(problem) = begun { return (Err(problem), stream) }
+  var carrying = Result.unwrapOr(begun, stream)
   for statement in step.statements {
-    let ran = Db.simple(carrying, statement)
-    if let Err(problem) = ran {
-      let _undone = Db.rollback(carrying)
-      return Err(problem)
+    match Db.simple(carrying, statement) {
+      case Err(problem) => { return undone(carrying, problem) }
+      case Ok(ran) => { carrying = ran[1] }
     }
-    carrying = Result.unwrapOr(ran, (emptyRows(), carrying))[1]
   }
   let noted = Db.run(
     carrying,
-    "insert into " + RECORD_TABLE + " (version, name, digest) values ($1, $2, $3)",
+    recordInsert(&DollarNumber),
       &[Some(show(step.version)), Some(step.name), Some(digestOf(step))]
   )
-  if let Err(problem) = noted {
-    let _undone = Db.rollback(carrying)
-    Err(problem)
-  } else {
-    Db.commit(Result.unwrapOr(noted, (emptyRows(), carrying))[1])
+  match noted {
+    case Err(problem) => undone(carrying, problem)
+    case Ok(pair) => {
+      match Db.commit(pair[1]) {
+        case Err(problem) => undone(pair[1], problem)
+        case Ok(after) => (Ok(()), after)
+      }
+    }
   }
+}
+
+fn undone(
+  stream: Session.Connection,
+  problem: Session.DbError
+) -> (Result[(), Session.DbError], Session.Connection) {
+  (Err(problem), Result.unwrapOr(Db.rollback(stream), stream))
 }
 
 /// Take the lock, so two processes starting together do not both migrate.
 fn lockTaken(stream: Session.Connection) -> Result[Session.Connection, MigrationError] {
-  let taken = Db.simple(stream, "select pg_advisory_lock(" + show(LOCK_KEY) + ")")
-  if let Err(problem) = taken {
-    Err(Refused("the migration lock", show(problem)))
-  } else {
-    Ok(Result.unwrapOr(taken, (emptyRows(), stream))[1])
+  match Db.simple(stream, "select pg_advisory_lock(" + show(LOCK_KEY) + ")") {
+    case Err(problem) => Err(Refused("the migration lock", show(problem)))
+    case Ok(taken) => Ok(taken[1])
   }
 }
 
@@ -213,23 +400,13 @@ fn release(stream: Session.Connection) -> Result[Session.Connection, Session.DbE
   Ok(freed[1])
 }
 
-fn reported[T](
-  outcome: Result[T, Session.DbError]
-) -> Result[T, MigrationError] {
-  Result.mapErr(outcome, fn(problem: Session.DbError) -> MigrationError {
-      Refused("the migration record", show(problem))
-    })
-}
-
-fn refusalOf(
-  outcome: Result[Session.Connection, Session.DbError],
-  step: &Migration
-) -> MigrationError {
-  if let Err(problem) = outcome {
-    Refused(show(step.version) + " " + step.name, show(problem))
-  } else {
-    Refused(show(step.version) + " " + step.name, "the migration did not run")
+/// Versions count from one, which is what lets an empty record stand below
+/// every migration a program holds.
+fn numbered(sorted: &Array[Migration]) -> Result[(), MigrationError] {
+  for step in sorted {
+    if step.version < 1 { return Err(Unnumbered(step.version)) }
   }
+  Ok(())
 }
 
 /// Two migrations with the same version, which cannot both be the truth about
@@ -284,13 +461,11 @@ export fn explain(problem: &MigrationError) -> Str {
     "migration " + show(version) + " is below " + show(highest)
       + ", which is already applied; renumber it rather than running it out of order"
     case Repeated(version) => "two migrations both claim version " + show(version)
-    case Unordered(version, other) =>
-    "migration " + show(version) + " is out of order against " + show(other)
+    case Unnumbered(version) =>
+    "migration " + show(version) + " is not a version; versions count upward from 1"
     case Refused(what, reason) => what + " was refused: " + reason
   }
 }
-
-fn emptyRows() -> Db.Rows { Db.Rows{columns: [], rows: [], tag: ""} }
 
 /// A column that holds a count, when it is there and is one.
 fn countOf(digits: Option[Str]) -> Option[Int] {

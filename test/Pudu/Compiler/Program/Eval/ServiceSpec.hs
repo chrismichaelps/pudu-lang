@@ -27,6 +27,7 @@ testServiceEvaluation = do
   timing <- runEntry "test-fixtures/stdlib/UsesVideo.pudu"
   refused <- runEntry "test-fixtures/stdlib/UsesGuard.pudu"
   schemas <- runEntry "test-fixtures/stdlib/UsesMigrate.pudu"
+  migrated <- runEntry "test-fixtures/stdlib/UsesMigrateApply.pudu"
   connectionStrings <- runEntry "test-fixtures/stdlib/UsesConnectionString.pudu"
   probes <- runEntry "test-fixtures/stdlib/UsesHealth.pudu"
   measured <- runEntry "test-fixtures/stdlib/UsesMetrics.pudu"
@@ -172,11 +173,22 @@ testServiceEvaluation = do
         migration edited after it was applied stops everything, because both
         databases report the same version from then on and nothing later can
         detect that their schemas differ; a version arriving below one already
-        applied is refused rather than run out of order; and a rename is not an
-        edit, because the digest is over what runs. -}
+        applied is refused rather than run out of order; a version below one is
+        refused as not a version; and a rename is not an edit, because the
+        digest is over what runs. -}
     , counterexample
         "a schema change is planned before a database is reached"
-        (schemas === Just "21")
+        (schemas === Just "23")
+    {-| Applied against a real SQLite database, because what matters here is
+        only visible in one: a migration and its record commit together, a
+        failure part way through a migration leaves none of it behind while
+        the ones before it stay, a refusal runs nothing at all, and a second
+        run finds nothing to do. On PostgreSQL the lock is taken inside each
+        migration's transaction, before the record is read again, so it ends
+        with the transaction whichever way that goes. -}
+    , counterexample
+        "migrations apply once, whole or not at all, through any driver"
+        (migrated === Just "26")
     {-| A connection URI is where text a person or an environment supplied
         becomes the address a program dials, so what the parser accepts is the
         whole of what it will connect to. Each refusal is one a URI could

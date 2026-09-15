@@ -79,8 +79,16 @@ choosing by array order. Driver implementations can live in application packages
 
 No example was compiled or executed in this delivery. The bundled implementations are
 PostgreSQL and SQLite; MySQL and other native adapters remain implementation work, not aliases to
-PostgreSQL. [[Std Db Store]], [[Std Db Query]], and migrations currently remain PostgreSQL-specific
-and do not yet consume the generic driver contract.
+PostgreSQL. [[Std Db Store]] remains PostgreSQL-specific and does not yet consume the generic driver
+contract.
+
+## Migrations
+
+`migrate(database, migrations)` applies pending [[Std Db Migrate]] migrations through the selected
+driver and answers how many ran; a database that is not started is refused as `Refused("the
+database", …)`. `migrationStage(database, name, migrations)` is a lifecycle stage that migrates on
+start, reports `Migrate.explain` of any refusal, and does nothing on stop. Place it after the
+database stage so the connection is open while it runs.
 
 ## Selecting the backend through configuration
 

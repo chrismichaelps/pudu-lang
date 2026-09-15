@@ -3,6 +3,7 @@ module Std.App.Database
 import Std.App.Config as Config
 import Std.App.Stage as Lifecycle
 import Std.Db.Driver as Driver
+import Std.Db.Migrate as Migrate
 import Std.Db.Postgres as Postgres
 import Std.Db.Row as Row
 import Std.Db.Sqlite as Sqlite
@@ -159,6 +160,40 @@ export fn transaction(
 ) -> Result[Driver.Rows, Driver.Error] {
   let client = available(database) ?
   Driver.transaction(&client, action)
+}
+
+/// Bring the schema to what the program holds, through this database's driver.
+///
+/// Answers how many migrations ran. A database that is not started is refused
+/// rather than opened, like every other call here.
+export fn migrate(
+  database: &Database,
+  migrations: &Array[Migrate.Migration]
+) -> Result[Int, Migrate.MigrationError] {
+  let client = Result.mapErr(available(database), fn(problem: Driver.Error) -> Migrate.MigrationError {
+      Migrate.Refused("the database", problem.message)
+    }) ?
+  Migrate.apply(&client, &database.driver, migrations)
+}
+
+/// A stage that migrates when the application starts and has nothing to undo
+/// when it stops. Placed after the database's own stage, so the connection is
+/// open before it runs and still open when it finishes.
+export fn migrationStage(
+  database: &Database,
+  name: Str,
+  migrations: &Array[Migrate.Migration]
+) -> Lifecycle.Stage {
+  let resource = *database
+  let held = *migrations
+  Lifecycle.create(name,
+    fn() -> Result[(), Str] {
+      match migrate(&resource, &held) {
+        case Ok(_) => Ok(())
+        case Err(problem) => Err(Migrate.explain(&problem))
+      }
+    },
+    fn() -> Result[(), Str] { Ok(()) })
 }
 
 fn databaseFailure(problem: Driver.Error) -> QueryError { DatabaseFailure(problem) }

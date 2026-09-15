@@ -5,6 +5,27 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Migrations through any driver, with no lock left behind
+
+- `Std.Db.Migrate` ran only on a PostgreSQL wire session, so an application on `Std.App.Database`
+  (every example, and every SQLite program) had no way to migrate. `Migrate.apply(client, driver,
+  migrations)` now runs over the driver contract, and `Database.migrate` and
+  `Database.migrationStage` expose it. Each migration commits with its record in one driver
+  transaction; on PostgreSQL that transaction first takes `pg_advisory_xact_lock` and reads the
+  record again, so a process that waited skips what another applied.
+- The session path took `pg_advisory_lock` and then returned early on a changed migration, a late
+  one, or an unreadable record without releasing it. On a pooled connection the lock stayed held and
+  every later migration anywhere waited forever. It is now released on every path, through the
+  connection the rollback left rather than a copy from before it.
+- A version of zero or below was reported as arriving late against an empty record; it is refused as
+  `Unnumbered`. The unused `Unordered` refusal is removed. The record's applied time defaults to
+  `current_timestamp`, which both bundled backends accept.
+- `UsesMigrateApply` (26) applies migrations to in-memory SQLite and checks what a PostgreSQL driver
+  is sent; `UsesMigrate` rises to 23. Against a live PostgreSQL 14 server both paths refused changed
+  and failing migrations with no advisory lock left, and four processes started together applied
+  three migrations exactly once between them. The `fullstack` and `social` examples now migrate at
+  start-up, and `examples/README.md` covers every example folder.
+
 ## 2026-09-14 — One refusal for a bad audio stream token on every target
 
 - CI on Linux had failed since device audio streaming landed: on a target without a stream adapter,
