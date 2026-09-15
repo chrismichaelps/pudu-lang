@@ -5,6 +5,15 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — Documentation spacing and a fuller About page
+
+- A chapter card's number now sits on its own line above the chapter title, and the folded page
+  list on a narrow screen has room below it before the page's own label. The stylesheet address
+  moves to `v=9` so a browser holding the earlier one fetches the change.
+- The About page says what Pudu is built around, what ships with the compiler, and that 0.1.0 is
+  pre-release, replacing a sentence that called it the first stable version. The author's profile
+  links are labelled LinkedIn and GitHub rather than repeating the author's name.
+
 ## 2026-09-15 — Documentation pages carry their author and version, and the library reads as a map
 
 - Reading the site as a newcomer on a phone found the page list opened above every article, a home
