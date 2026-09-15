@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — SQLite waits for a lock, and says what a failure was
+
+- `Std.Db.Sqlite` set no busy timeout, so while one process held a write transaction a second process
+  writing to the same file was refused within 0.09 seconds, reported only as
+  `SQLite operation failed with status 5`. Every connection now sets `PRAGMA busy_timeout` to five
+  seconds when it opens, so two worker processes can share one file.
+- A SQLite status now carries a category and message from one table — `busy`, `constraint`,
+  `readonly`, `io`, `corrupt`, `full`, `unavailable` — read from the primary code of an extended one,
+  with the number kept in `code`.
+
 ## 2026-09-15 — A PostgreSQL pool survives a dropped connection
 
 - `Std.Db.withConnection` closed the whole pool when an action failed with anything other than a

@@ -302,10 +302,12 @@ testServiceEvaluation = do
         no count, a key naming nothing changes nothing and says so, a value
         spelling a statement is kept as that value, and children come back
         grouped from one statement. On PostgreSQL the count is read from the
-        command tag and no transaction is opened for it. -}
+        command tag and no transaction is opened for it. The SQLite connection
+        underneath waits for another connection's lock rather than refusing at
+        once, and files a violated constraint under its own category. -}
     , counterexample
         "a store reads and writes through any driver and counts what it changed"
-        (keptThrough === Just "23")
+        (keptThrough === Just "25")
     {-| That a statement of real shape holds together: every join, grouping, an
         aggregate, a condition on the group, ordering that says where nothing
         sorts, set operations, a named result, and row locking — composed into

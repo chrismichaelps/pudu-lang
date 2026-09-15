@@ -89,6 +89,20 @@ export fn main() -> Int {
           if Store.removeIn(&target, &people, Some("3")) == Ok(0) { held = held + 1 }
           if Result.unwrapOr(Store.loadAllIn(&target, &people), []).length() == 2 { held = held + 1 }
 
+          // The driver waits for another connection's lock rather than refusing
+          // at once, which is what lets two processes share one file, and a
+          // violated constraint is filed as one rather than as a number.
+          match Database.query(&db, "PRAGMA busy_timeout", &[]) {
+            case Ok(rows) => {
+              if rows.rows.length() == 1 && rows.rows[0][0] == Driver.IntegerValue(5000i64) { held = held + 1 }
+            }
+            case Err(_) => {}
+          }
+          match Database.execute(&db, "insert into people (id, name) values (1, 'twice')") {
+            case Err(problem) => { if problem.category == "constraint" { held = held + 1 } }
+            case Ok(_) => {}
+          }
+
           // A statement a caller built reads through the same target, spelled
           // for this driver's placeholders.
           let base = Result.unwrapOr(Query.selecting(&["id", "name"], "people"), Query.empty())

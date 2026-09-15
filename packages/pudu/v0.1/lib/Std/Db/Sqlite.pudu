@@ -3,6 +3,7 @@ module Std.Db.Sqlite
 import Std.Bytes as ByteSeq
 import Std.Db.Driver as Driver
 import Std.Db.Driver {NullValue, TextValue, IntegerValue, DecimalValue, RealValue, BooleanValue, BytesValue}
+import Std.Option as Option
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -125,7 +126,28 @@ fn recoverTransaction(database: DatabaseHandle, current: &Sync.Cell[Option[Datab
   }
 }
 
+/// How long a statement waits for another connection's lock on the same file
+/// before it is refused as busy.
+const BUSY_WAIT_MILLISECONDS: Int = 5000
+
+/// A handle on a database file, ready to share that file with other processes.
+///
+/// A connection writing to the file holds its lock for the length of its
+/// transaction. Without a busy wait, SQLite refuses every other writer at that
+/// moment at once, so two processes sharing one file fail whichever request
+/// lands second. Waiting a bounded time for the lock is what lets them share.
 fn open(path: Str) -> Result[DatabaseHandle, Driver.Error] {
+  let database = openHandle(path) ?
+  match perform(database, "PRAGMA busy_timeout = " + show(BUSY_WAIT_MILLISECONDS), &[]) {
+    case Ok(_) => Ok(database)
+    case Err(reason) => {
+      unsafe(foreign) { releaseDatabase(database) }
+      Err(reason)
+    }
+  }
+}
+
+fn openHandle(path: Str) -> Result[DatabaseHandle, Driver.Error] {
   unsafe(foreign) {
     let opened = nativeOpen(path)
     if opened[0] != 0i32 {
@@ -267,17 +289,41 @@ fn readBytes(statement: StatementHandle, index: Int32, mode: Int32) -> Result[By
   }
 }
 
+/// What a status means: the category a caller acts on, and what to say.
+///
+/// Keyed by SQLite's primary result code. Negative codes are this adapter's
+/// own. A lock that outlasted the busy wait and a violated constraint are the
+/// two a program most often handles differently from any other failure, so
+/// each is filed under its own category rather than under a number.
+const STATUS_MEANINGS: Map[Int, (Str, Str)] = mapOf([
+    (-1, ("unavailable", "SQLite shared library is not installed")),
+    (-2, ("unavailable", "SQLite shared library lacks a required API")),
+    (-3, ("statement", "SQL contains no statement")),
+    (-4, ("statement", "only one SQL statement is accepted; trailing non-whitespace is refused")),
+    (5, ("busy", "the database stayed locked by another connection past the busy wait")),
+    (6, ("busy", "a table in the database is locked")),
+    (8, ("readonly", "the database is read-only")),
+    (10, ("io", "the operating system reported an I/O error")),
+    (11, ("corrupt", "the database file is malformed")),
+    (13, ("full", "the database or the disk is full")),
+    (14, ("unavailable", "the database file could not be opened")),
+    (19, ("constraint", "a constraint was violated")),
+    (26, ("corrupt", "the file is not a database"))
+  ])
+
 fn statusError(code: Int32) -> Driver.Error {
-  let message = if code == -1i32 { "SQLite shared library is not installed" } else {
-    if code == -2i32 { "SQLite shared library lacks a required API" } else {
-      if code == -3i32 { "SQL contains no statement" } else {
-        if code == -4i32 { "only one SQL statement is accepted; trailing non-whitespace is refused" } else {
-          "SQLite operation failed with status " + show(code)
-        }
-      }
+  let number = Option.unwrapOr(convertInteger[Int](code), 0)
+  // An extended result code carries its primary code in the low byte.
+  let primary = if number > 0 { number % 256 } else { number }
+  match STATUS_MEANINGS.get(primary) {
+    case Some(meaning) => Driver.Error{driver: "sqlite", category: meaning[0], code: Some(show(code)), message: meaning[1]}
+    case None => Driver.Error {
+      driver: "sqlite",
+      category: "operation",
+      code: Some(show(code)),
+      message: "SQLite operation failed with status " + show(code)
     }
   }
-  Driver.Error{driver: "sqlite", category: "operation", code: Some(show(code)), message: message}
 }
 fn problem(category: Str, message: Str) -> Driver.Error { Driver.error("sqlite", category, message) }
 fn synchronization(reason: Sync.SyncError) -> Driver.Error { Driver.error("sqlite", "synchronization", show(reason)) }

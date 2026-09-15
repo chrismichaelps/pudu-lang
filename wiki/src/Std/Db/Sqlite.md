@@ -58,6 +58,17 @@ Foreign-key enforcement follows SQLite defaults; set `PRAGMA foreign_keys = ON` 
 required. Statements with trailing non-whitespace after the first statement are refused, including
 trailing comments after a semicolon. Multi-statement scripts need explicit separate calls.
 
+**Two processes can share one file.** Every connection sets `PRAGMA busy_timeout` to five seconds
+when it opens, so a statement that finds another connection's write lock waits for it rather than
+being refused at once. Without that, two worker processes on one file fail whichever write lands
+second. A lock held past the wait is refused with category `busy`.
+
+**A status says what it means.** SQLite's primary result code, taken from the low byte of an extended
+code, selects a category and a message from one table: `busy` for a lock, `constraint` for a violated
+constraint, `readonly`, `io`, `corrupt`, `full`, and `unavailable` for a library or file that cannot
+be opened. The numeric code is kept in `code`. A code the table does not name keeps category
+`operation` and states its number.
+
 The result command is `SQLITE_DONE`, not an affected-row count. Integers remain Int64, SQL NULL
 remains NullValue, and empty blobs/text remain distinct. Decimal parameters require an explicit
 application storage choice. Standalone BEGIN/COMMIT calls do not reserve a client for one caller;
