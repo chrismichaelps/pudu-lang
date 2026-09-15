@@ -5,6 +5,21 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-14 — Kept values through any driver
+
+- `Std.Db.Store` built backend-neutral statements but could only run them on a PostgreSQL session, so a
+  SQLite application could describe a kept value and not save it. `Store.Target` (a client and its
+  driver) and `saveIn`, `changeIn`, `removeIn`, `loadIn`, `loadAllIn`, `loadWhereIn` and
+  `loadForParentsIn` run the same statements through any driver, spelled for its placeholders;
+  `Database.storeTarget` answers one for a started database.
+- A write answers how many rows it changed. PostgreSQL states that in its command tag; SQLite's driver
+  states no count, so the store asks `changes()` in the same transaction as the write, and a change or
+  removal naming no row answers 0 rather than reporting a write that did not happen.
+- `UsesStoreDriver` (23) runs against in-memory SQLite and checks that a PostgreSQL driver is sent
+  numbered placeholders with no transaction. Against a live PostgreSQL 14 server, saves, a refused
+  duplicate key, changes and removals of present and absent keys, loads and grouped loads all answered
+  as on SQLite.
+
 ## 2026-09-14 — Migrations through any driver, with no lock left behind
 
 - `Std.Db.Migrate` ran only on a PostgreSQL wire session, so an application on `Std.App.Database`

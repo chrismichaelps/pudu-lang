@@ -39,6 +39,7 @@ testServiceEvaluation = do
   submitted <- runEntry "test-fixtures/stdlib/UsesBind.pudu"
   columns <- runEntry "test-fixtures/stdlib/UsesSchema.pudu"
   kept <- runEntry "test-fixtures/stdlib/UsesStore.pudu"
+  keptThrough <- runEntry "test-fixtures/stdlib/UsesStoreDriver.pudu"
   shaped <- runEntry "test-fixtures/stdlib/UsesQueryShape.pudu"
   builtAndShaped <- runEntry "test-fixtures/stdlib/UsesDbQueryShapeAll.pudu"
   proved <- runEntry "test-fixtures/stdlib/UsesPassword.pudu"
@@ -296,6 +297,15 @@ testServiceEvaluation = do
     , counterexample
         "a loaded value is a value, and children load for many parents at once"
         (kept === Just "32")
+    {-| The same store through any driver, against a real SQLite database: a
+        write reports how many rows it changed although SQLite's driver states
+        no count, a key naming nothing changes nothing and says so, a value
+        spelling a statement is kept as that value, and children come back
+        grouped from one statement. On PostgreSQL the count is read from the
+        command tag and no transaction is opened for it. -}
+    , counterexample
+        "a store reads and writes through any driver and counts what it changed"
+        (keptThrough === Just "23")
     {-| That a statement of real shape holds together: every join, grouping, an
         aggregate, a condition on the group, ordering that says where nothing
         sorts, set operations, a named result, and row locking — composed into

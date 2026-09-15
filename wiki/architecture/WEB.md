@@ -107,7 +107,7 @@ library at all — see the rendering table below. That limit is real and is not 
 | A real database client? | **Ready** | [[Std Db]] and [[Std Db Session]]: PostgreSQL, authenticated, with transactions, savepoints, and pooling. |
 | Are values ever placed into a statement as text? | **Ready** | No. Values cross as parameters. |
 | Schema migrations? | **Ready** | [[Std Db Migrate]], through any driver: `Database.migrate` or a start-up stage on SQLite or PostgreSQL. Versioned, digested, each in its own transaction with its record, and on PostgreSQL locked inside that transaction so two processes do not both migrate and a failure leaves no lock behind. What should run is decided without a database. |
-| Zero-downtime schema change? | **Absent** | Depends on migrations existing first. |
+| Zero-downtime schema change? | **Absent** | Migrations exist, but nothing plans a change in expand-then-contract steps, and a migration that must run outside a transaction, such as building an index concurrently, cannot be written. Until then a change that locks a large table locks it for as long as it runs. |
 | Is a failed transaction left open? | **Ready** | A scoped transaction rolls back what failed before the connection is returned. |
 | Connection limits? | **Ready** | Pools bound their count. |
 

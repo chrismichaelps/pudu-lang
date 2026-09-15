@@ -79,8 +79,9 @@ choosing by array order. Driver implementations can live in application packages
 
 No example was compiled or executed in this delivery. The bundled implementations are
 PostgreSQL and SQLite; MySQL and other native adapters remain implementation work, not aliases to
-PostgreSQL. [[Std Db Store]] remains PostgreSQL-specific and does not yet consume the generic driver
-contract.
+PostgreSQL. `storeTarget(database)` answers a [[Std Db Store]] `Target` over the started client and
+its driver, so a kept value is saved and loaded the same way on either backend; a database that is
+not started is refused.
 
 ## Migrations
 

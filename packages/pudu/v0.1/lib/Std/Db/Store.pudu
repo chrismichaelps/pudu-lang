@@ -9,6 +9,7 @@ import Std.Db.Session as Session
 import Std.Map as Map
 import Std.Option as Option
 import Std.Result as Result
+import Std.Text as Text
 
 /// How a kind of value is kept.
 ///
@@ -244,6 +245,119 @@ export fn loadForParents[T](
   let answered = ask(stream, &statement) ?
   let grouped = groupedBy(held, &Db.asDriverRows(&answered[0]), parentColumn) ?
   Ok((grouped, answered[1]))
+}
+
+/// A database a store reads and writes through: a client, and the driver that
+/// opened it, which says how that backend spells a placeholder.
+export type Target = { client: Driver.Client, driver: Driver.Driver }
+
+/// A target from a client and the driver that opened it.
+export fn through(client: &Driver.Client, driver: &Driver.Driver) -> Target {
+  Target{client: *client, driver: *driver}
+}
+
+/// Add one through any driver, and say how many rows it changed.
+///
+/// Each call takes a connection of its own, so it is not for use inside a
+/// transaction on the same client: on SQLite that client has one connection,
+/// and the transaction already holds it.
+export fn saveIn[T](target: &Target, held: &Stored[T], value: T) -> Result[Int, StoreError] {
+  let statement = insertOf(held, value) ?
+  writeIn(target, &statement)
+}
+
+/// Change the one a key names through any driver, and say how many rows it
+/// changed, which is none when no row carries that key.
+export fn changeIn[T](
+  target: &Target,
+  held: &Stored[T],
+  key: Option[Str],
+  value: T
+) -> Result[Int, StoreError] {
+  let statement = updateOf(held, key, value) ?
+  writeIn(target, &statement)
+}
+
+/// Remove the one a key names through any driver, and say how many rows went.
+export fn removeIn[T](target: &Target, held: &Stored[T], key: Option[Str]) -> Result[Int, StoreError] {
+  let statement = deleteOf(held, key) ?
+  writeIn(target, &statement)
+}
+
+/// Read the one a key names through any driver.
+export fn loadIn[T](target: &Target, held: &Stored[T], key: Option[Str]) -> Result[Option[T], StoreError] {
+  let statement = selectOf(held, key) ?
+  readOne(held, &askIn(target, &statement) ?)
+}
+
+/// Read every one through any driver.
+export fn loadAllIn[T](target: &Target, held: &Stored[T]) -> Result[Array[T], StoreError] {
+  let statement = selectAllOf(held) ?
+  readAll(held, &askIn(target, &statement) ?)
+}
+
+/// Read everything a statement chooses through any driver.
+export fn loadWhereIn[T](
+  target: &Target,
+  held: &Stored[T],
+  statement: &Query.Statement
+) -> Result[Array[T], StoreError] {
+  readAll(held, &askIn(target, statement) ?)
+}
+
+/// Read everything belonging to any of these parents through any driver, in
+/// one statement.
+export fn loadForParentsIn[T](
+  target: &Target,
+  held: &Stored[T],
+  parentColumn: Str,
+  keys: &Array[Option[Str]]
+) -> Result[Map[Str, Array[T]], StoreError] {
+  let statement = forParents(held, parentColumn, keys) ?
+  groupedBy(held, &askIn(target, &statement) ?, parentColumn)
+}
+
+fn askIn(target: &Target, statement: &Query.Statement) -> Result[Driver.Rows, StoreError] {
+  refusedBy(Driver.query(&target.client, Query.textIn(statement, &target.driver.placeholders), &Query.valuesOf(statement)))
+}
+
+/// A write, and the number of rows it changed.
+///
+/// PostgreSQL states the count in the command tag it answers with. SQLite
+/// states none, so the count is asked for with `changes()`, in the same
+/// transaction so no other statement can land on the connection between the
+/// write and the question.
+fn writeIn(target: &Target, statement: &Query.Statement) -> Result[Int, StoreError] {
+  let text = Query.textIn(statement, &target.driver.placeholders)
+  let values = Query.valuesOf(statement)
+  if target.driver.name == "sqlite" {
+    let counted = Driver.transaction(&target.client, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+        let _written = Driver.ask(&open, text, &values) ?
+        Driver.ask(&open, "select changes()", &[])
+      })
+    let rows = refusedBy(counted) ?
+    Ok(countIn(&rows))
+  } else {
+    let rows = refusedBy(Driver.query(&target.client, text, &values)) ?
+    Ok(Option.unwrapOr(Text.countOf(lastWord(rows.command)), 0))
+  }
+}
+
+fn countIn(rows: &Driver.Rows) -> Int {
+  if rows.rows.length() == 0 || rows.rows[0].length() == 0 { return 0 }
+  match rows.rows[0][0] {
+    case Driver.IntegerValue(number) => Option.unwrapOr(convertInteger[Int](number), 0)
+    case _ => 0
+  }
+}
+
+fn lastWord(tag: Str) -> Str {
+  let pieces = tag.split(" ")
+  if pieces.length() == 0 { "" } else { pieces[pieces.length() - 1] }
+}
+
+fn refusedBy[T](outcome: Result[T, Driver.Error]) -> Result[T, StoreError] {
+  Result.mapErr(outcome, fn(problem: Driver.Error) -> StoreError { Refused(problem.driver + ": " + problem.message) })
 }
 
 fn run(

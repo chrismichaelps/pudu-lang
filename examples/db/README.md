@@ -55,15 +55,15 @@ they do not suit writing one out.
 
 ## What running them turned up
 
-**A numeric comparison crosses as text, and SQLite answers nothing.** This is
-the one to fix. `Shape.is` takes its value as `Str`, so a filter like
-`having sum(quantity) > 6` binds the bar as the text `"6"`. SQLite orders every
-number before every text, so the comparison is false for any sum there could be
-and the report comes back empty; PostgreSQL coerces the text to the column's
-type and answers correctly. One query, two answers, and no error from either.
-`Reports.pudu` records it rather than working around it, because writing the
-number into the SQL would hide it and the number a screen filters by is exactly
-the value a caller supplies.
+**A numeric comparison written as text makes SQLite answer nothing.**
+`Shape.is` takes its value as `Str`, so a filter like `having sum(quantity) > 6`
+written with it binds the bar as the text `"6"`. SQLite orders every number
+before every text, so the comparison is false for any sum there could be and the
+report comes back empty; PostgreSQL coerces the text to the column's type and
+answers correctly. One query, two answers, and no error from either.
+`Shape.isNumber` sends the bar as a number, and both backends agree.
+`Reports.pudu` runs the query both ways — two groups with `isNumber`, none with
+`is` — so the difference stays visible rather than being worked around.
 
 **An aggregate takes a column, not an expression.** `over("sum", column)` cannot
 say `sum(unit_price * quantity)`, so the spend report sums unit prices — 49.75

@@ -7,6 +7,7 @@ import Std.Db.Migrate as Migrate
 import Std.Db.Postgres as Postgres
 import Std.Db.Row as Row
 import Std.Db.Sqlite as Sqlite
+import Std.Db.Store as Store
 import Std.Result as Result
 import Std.Sync as Sync
 
@@ -174,6 +175,13 @@ export fn migrate(
       Migrate.Refused("the database", problem.message)
     }) ?
   Migrate.apply(&client, &database.driver, migrations)
+}
+
+/// This database as a store reads and writes it. A database that is not
+/// started is refused rather than opened.
+export fn storeTarget(database: &Database) -> Result[Store.Target, Driver.Error] {
+  let client = available(database) ?
+  Ok(Store.through(&client, &database.driver))
 }
 
 /// A stage that migrates when the application starts and has nothing to undo

@@ -47,7 +47,23 @@ values with no database present.
 **The key is part of what it means to be stored.** A kind of value that is stored says which column
 identifies it, because loading, changing, and removing all need it and a layer that guessed would
 guess differently in each.
+
+**Any driver keeps values.** A `Target` is a [[Std Db Driver]] client and the driver that opened it;
+[[Std App Database]]'s `storeTarget` answers one for a started database. `saveIn`, `changeIn`,
+`removeIn`, `loadIn`, `loadAllIn`, `loadWhereIn` and `loadForParentsIn` run the statements this module
+builds, spelled for that driver's placeholders, and the session functions remain for a program that
+holds a PostgreSQL connection directly.
+
+**A write says how many rows it changed, on every backend.** PostgreSQL states the count in its
+command tag. SQLite's driver states none, so the count is asked for with `changes()` inside one
+transaction with the write, where no other statement can land between the two. A change or removal
+whose key names no row answers 0 rather than a success that wrote nothing. Because that transaction
+holds SQLite's one connection, these calls are not for use inside a transaction on the same client.
 ## Grill Log
+- **Q:** Read SQLite's count with a second call on the client after the write? **A:** No.
+  _Rationale:_ a client call takes whatever admission is free, and another statement landing between
+  the write and `changes()` would answer that statement's count. _Rejected:_ an unscoped follow-up
+  query; reporting no count on SQLite.
 - **Q:** Load a relation when it is first read, as the established framework does? **A:** No.
   _Rationale:_ that is the one decision that produces its three best-known failures — an exception
   when the session has closed, a query per parent, and a setting that keeps sessions open across a
