@@ -4,7 +4,7 @@ import Std.Bytes as ByteSeq
 import Std.Concurrent as Concurrent
 import Std.Db as Db
 import Std.Db.Protocol as Wire
-import Std.Db.Session {Active, Auth, Expired, Failed, Idle, Malformed, Other, Server}
+import Std.Db.Session {Active, Auth, Connect, Expired, Failed, Idle, Malformed, Other, Server}
 import Std.Db.Session as Session
 import Std.Net as Net
 import Std.Option as Option
@@ -201,6 +201,22 @@ export fn main() -> Int {
       }
       count
     })
+
+  // Opening a connection has one time limit, from dialling to the end of the
+  // handshake. A server that accepts and then says nothing is refused once it
+  // passes, rather than holding the caller — and, in a pool, the place it was
+  // filling — for as long as the server stays silent.
+  held = held + runAgainst(silentServer, fn(settings: Session.Config) -> Int {
+      var count = 0
+      let limited = Session.Config{..settings, connectMillis: 300}
+      if let Err(Connect(message)) = Session.connect(&limited) {
+        if message.contains("time limit") { count = count + 1 }
+      }
+      count
+    })
+  if Session.config("app", "ada", "pw").connectMillis == Session.DEFAULT_CONNECT_MILLISECONDS {
+    held = held + 1
+  }
 
   // A pool whose connection is lost keeps its place and opens a fresh one for
   // the next borrower. The stub answers one query on each connection and then
@@ -573,6 +589,20 @@ export fn main() -> Int {
 
 /// Start a stub on a port the machine chooses, run a client against it, and
 /// answer what the client counted.
+/// A server that accepts a connection and never answers, which is what a
+/// stalled database looks like to a client opening a connection. It reads
+/// whatever arrives and stops once a second passes with nothing new.
+fn silentServer(connection: Net.Connection) -> Bool {
+  var listening = true
+  while listening {
+    match Net.receiveWithin(&connection, 65536, 1000) {
+      case Ok(Some(_)) => {}
+      case _ => { listening = false }
+    }
+  }
+  false
+}
+
 /// The same, against a stub that serves several connections one after another.
 ///
 /// When the client is done the listener is sent one empty connection, so a

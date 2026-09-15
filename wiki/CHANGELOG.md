@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — Opening a PostgreSQL connection has a time limit
+
+- `Std.Db.Session.connect` dialled with no limit and read the handshake with no deadline, so a host that
+  dropped packets held the caller for as long as the operating system waited, and a server that
+  accepted and stayed silent held it forever — since pools now reopen lost connections on a request,
+  that request with it. `Config.connectMillis` now bounds dialling and the whole handshake, ten seconds
+  by default; `connect_timeout` in a connection URI sets it in whole seconds. Query reads keep no
+  deadline. Against a silent local server a 400 ms limit refused the connection after 403 ms.
+  `UsesDb` rises to 86 and `UsesConnectionString` to 41.
+
 ## 2026-09-15 — SQLite waits for a lock, and says what a failure was
 
 - `Std.Db.Sqlite` set no busy timeout, so while one process held a write transaction a second process

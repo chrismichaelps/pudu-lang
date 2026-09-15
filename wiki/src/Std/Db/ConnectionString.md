@@ -40,3 +40,8 @@ URI scheme and escaping follow the relevant subset of
 This API deliberately does not claim complete libpq compatibility.
 
 Scheme matching is case-insensitive, in agreement with the generic driver selector.
+
+`connect_timeout` is accepted in whole seconds, as libpq spells it, from 1 to 3600, and sets
+`Session.Config.connectMillis`; without it the limit is `Session.DEFAULT_CONNECT_MILLISECONDS`, ten
+seconds. Zero, which means waiting forever in libpq, is refused, as are a value that is not a whole
+number, a repeated option, and a limit past an hour.

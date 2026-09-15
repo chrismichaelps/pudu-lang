@@ -20,15 +20,33 @@ export fn parse(source: Str) -> Result[Session.Config, Session.DbError] {
   let location = rest.take(question)
   let options = rest.drop(question + 1)
   var modeSeen = false
+  var timeoutSeen = false
+  var connectMillis = Session.DEFAULT_CONNECT_MILLISECONDS
   for option in options.split("&") {
     let equals = option.indexOf("=")
     if equals < 0 { return Err(Connect("a connection option needs a value")) }
     let key = decode(option.take(equals)) ?
     let value = decode(option.drop(equals + 1)) ?
-    if key != "sslmode" { return Err(Unsupported("unsupported connection option")) }
-    if modeSeen { return Err(Connect("duplicate sslmode option")) }
-    if value != "disable" { return Err(Unsupported("database TLS negotiation is unavailable")) }
-    modeSeen = true
+    if key == "sslmode" {
+      if modeSeen { return Err(Connect("duplicate sslmode option")) }
+      if value != "disable" { return Err(Unsupported("database TLS negotiation is unavailable")) }
+      modeSeen = true
+    } else if key == "connect_timeout" {
+      // Whole seconds, as libpq spells it. Zero means waiting forever there,
+      // and is refused here: a host that answers nothing would then hold a
+      // request for as long as the operating system cares to wait.
+      if timeoutSeen { return Err(Connect("duplicate connect_timeout option")) }
+      let seconds = Text.countOf(value)
+      if let Some(whole) = seconds {
+        if whole < 1 || whole > MAX_CONNECT_SECONDS { return Err(Connect(CONNECT_TIMEOUT_RANGE)) }
+        connectMillis = whole * 1000
+      } else {
+        return Err(Connect(CONNECT_TIMEOUT_RANGE))
+      }
+      timeoutSeen = true
+    } else {
+      return Err(Unsupported("unsupported connection option"))
+    }
   }
   if !modeSeen { return Err(Unsupported("explicit sslmode=disable is required")) }
   let slash = location.indexOf("/")
@@ -48,8 +66,22 @@ export fn parse(source: Str) -> Result[Session.Config, Session.DbError] {
   let password = decode(if colon < 0 { "" } else { credentials.drop(colon + 1) }) ?
   if user.isEmpty() { return Err(Connect("a database user is required")) }
   let endpoint = hostPort(address) ?
-  Ok(Session.Config{host: endpoint[0], port: endpoint[1], database: database, user: user, password: password})
+  Ok(
+    Session.Config {
+      host: endpoint[0],
+      port: endpoint[1],
+      database: database,
+      user: user,
+      password: password,
+      connectMillis: connectMillis
+    }
+  )
 }
+
+/// The longest `connect_timeout` accepted, an hour.
+const MAX_CONNECT_SECONDS: Int = 3600
+
+const CONNECT_TIMEOUT_RANGE: Str = "connect_timeout must be a whole number of seconds from 1 to 3600"
 
 /// Open a real PostgreSQL session from a connection URI.
 export fn connect(source: Str) -> Result[Session.Connection, Session.DbError] {

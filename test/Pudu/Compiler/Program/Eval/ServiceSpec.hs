@@ -79,7 +79,7 @@ testServiceEvaluation = do
           naming a length this program then tries to hold. -}
       counterexample
         "a database client binds, authenticates, and rolls back"
-        (database === Just "84")
+        (database === Just "86")
     {-| The driver layer is an interface rather than an implementation — a
         driver is a record of functions, which is what lets a program choose
         which backends it admits — so it is checked against one written in the
@@ -200,7 +200,7 @@ testServiceEvaluation = do
         one. The accepted forms sit beside them, because a parser that refuses
         everything is no safer and much less useful. -}
     , counterexample "a connection URI is read exactly, or refused"
-        (connectionStrings === Just "35")
+        (connectionStrings === Just "41")
     {-| That the two questions asked from outside a process stay two
         questions: a liveness judgement is handed a reading rather than a
         connection and is declared comptime, so reaching a clock or a socket
