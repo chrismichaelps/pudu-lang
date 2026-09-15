@@ -79,19 +79,19 @@ export fn remove(db: &Database.Database, id: Int) -> Result[Bool, PostError] {
       // The children go with it. The schema says so too, but foreign keys are
       // off by default in SQLite and a program that relies on a setting it did
       // not make is a program that leaves orphans on somebody else's machine.
-      for statement in [
-        "DELETE FROM approval WHERE post = ?",
-        "DELETE FROM comment WHERE post = ?",
-        "DELETE FROM post WHERE id = ?"
-      ] {
-        match Database.query(db, statement, &[Driver.IntegerValue(big(id))]) {
-          case Err(problem) => {
-            return Err(PostError{message: problem.message})
-          }
-          case Ok(_) => {}
-        }
+      //
+      // All three in one transaction: run one at a time, a failure after the
+      // first would leave a post whose approvals and replies are already gone.
+      let key = [Driver.IntegerValue(big(id))]
+      let removed = Database.transaction(db, fn(open: Driver.Tx) -> Result[Driver.Rows, Driver.Error] {
+          let _approvals = Driver.ask(&open, "DELETE FROM approval WHERE post = ?", &key) ?
+          let _comments = Driver.ask(&open, "DELETE FROM comment WHERE post = ?", &key) ?
+          Driver.ask(&open, "DELETE FROM post WHERE id = ?", &key)
+        })
+      match removed {
+        case Err(problem) => Err(PostError{message: problem.message})
+        case Ok(_) => Ok(true)
       }
-      Ok(true)
     }
   }
 }

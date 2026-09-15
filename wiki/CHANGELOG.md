@@ -14,6 +14,10 @@ tags: [changelog]
   place kept empty, and the next borrower opens a fresh connection there, so the pool keeps its size.
   Against the same server, each dead connection failed one request and the following requests were
   answered by new backends. `UsesDb` rises to 84 with a stub that hangs up after each answer.
+- The `social` example removed a post with three separate statements, so a failure after the first
+  left a post whose approvals and replies were already gone. The three now run in one
+  `Database.transaction`. Checked on a running server: a post with a reply was removed, the feed no
+  longer listed it, and its page answered 404.
 
 ## 2026-09-14 — Header lines another reader would take differently are refused
 
