@@ -217,15 +217,34 @@ export fn asDriverRows(result: &Rows) -> Driver.Rows {
   var values: Array[Array[Driver.Value]] = []
   for row in result.rows {
     var converted: Array[Driver.Value] = []
+    var index = 0
     for cell in row {
+      let binary = index < result.columns.length() && result.columns[index].oid == BYTEA_OID
       converted = converted.push(match cell {
           case None => Driver.NullValue
-          case Some(held) => Driver.TextValue(held)
+          case Some(held) => { if binary { bytesOrText(held) } else { Driver.TextValue(held) } }
         })
+      index = index + 1
     }
     values = values.push(converted)
   }
   Driver.Rows{columns: columns, rows: values, command: result.tag}
+}
+
+/// The type the server gives a column of bytes.
+const BYTEA_OID: Int = 17
+
+/// A bytea cell as the bytes it spells.
+///
+/// The server writes bytes as `\x` and two hexadecimal digits a byte. A cell
+/// in any other form — the older escaped output a server can be configured to
+/// send — is kept as the text it arrived as rather than guessed at.
+fn bytesOrText(held: Str) -> Driver.Value {
+  if !held.startsWith("\\x") { return Driver.TextValue(held) }
+  match ByteSeq.decodeHex(held.drop(2)) {
+    case Ok(bytes) => Driver.BytesValue(bytes)
+    case Err(_) => Driver.TextValue(held)
+  }
 }
 
 /// How much a transaction is protected from what other transactions are doing.

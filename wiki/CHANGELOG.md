@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — Bytes cross the PostgreSQL driver both ways
+
+- The PostgreSQL driver refused every `BytesValue` parameter, and a `bytea` column came back as the
+  text `\x…`, which `Row.bytes` rightly will not call bytes. So binary data worked through the driver
+  layer on SQLite and not at all on PostgreSQL. A bytes parameter now crosses as its hexadecimal text
+  form, and `Db.asDriverRows` reads a `bytea` column's `\x` hex back into `BytesValue`, keeping any
+  other form as text. Against a live PostgreSQL 14 server, three bytes, an empty value and a null
+  each came back exactly, and the server measured the stored value at three bytes. `UsesStore` rises
+  to 35.
+
 ## 2026-09-15 — A readiness check that asks the database
 
 - `Std.App.Health` had readiness checks but nothing that asked a database, so every service wrote its own

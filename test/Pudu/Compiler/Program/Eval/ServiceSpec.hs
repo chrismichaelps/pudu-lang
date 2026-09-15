@@ -296,7 +296,7 @@ testServiceEvaluation = do
         for a list of one, so the batched shape is the ordinary one. -}
     , counterexample
         "a loaded value is a value, and children load for many parents at once"
-        (kept === Just "32")
+        (kept === Just "35")
     {-| The same store through any driver, against a real SQLite database: a
         write reports how many rows it changed although SQLite's driver states
         no count, a key naming nothing changes nothing and says so, a value
