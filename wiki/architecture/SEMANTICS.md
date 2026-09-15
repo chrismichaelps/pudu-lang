@@ -260,6 +260,7 @@ These obligations require executable property/conformance tests now and mechaniz
 
 ## Revision Ledger
 
+- **0.7.0-draft · 2026-09-15:** Admitted places: a `var`, a `mut` field of a place, an element of an array place, and `*r` for an exclusive reference are assignable, and `&mut place` lends a place to one call and receives the parameter's final value on every exit. Assignment to a `let`, a parameter, or a pattern binding, a write through `&T`, overlapping loans, and an exclusive reference anywhere but a parameter are refused. A program that assigned to a `let` or a parameter no longer checks; no committed source did. See [[ADR-0022-lending-a-place]].
 - **0.6.0-draft · 2026-09-03:** Added opaque nominal foreign handles, explicit same-block release ownership, pre-dispatch liveness refusals, reusable exported binding modules with canonical handle identity, and C++ interoperability through `extern "C"` only. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft · 2026-09-04:** Made every admitted scalar and flat-record foreign crossing exact: full-domain `UInt64`, locale-independent UTF-8 text fields and results, result-only unit, and declaration-time bridge capacity checks. See [[ADR-0018-calling-a-library-written-elsewhere]].
 - **0.6.1-draft clarification · 2026-09-04:** Restored the existing namespace rule at expression

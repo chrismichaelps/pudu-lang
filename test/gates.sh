@@ -52,6 +52,7 @@ PUDU=$(cabal list-bin pudu --enable-optimization=2)
 run 'every committed Pudu file is formatted' \
   bash -c '"$PUDU" fmt --check packages/pudu test-fixtures examples'
 run 'every diagnostic code means one thing' node test/diagnostic-codes.mjs
+run 'only a compiler change at a new version releases' python3 test/release-plan.test.py
 run 'the fixtures still reach as much of the library' \
   bash -c 'node test/api-coverage.mjs "$PUDU"'
 run 'a streaming reader holds as much at ten times the input' \

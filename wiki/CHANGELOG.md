@@ -5,6 +5,18 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — A release is published only from main, only for a compiler change
+
+- [[Release Workflow]] builds `linux-amd64` and `darwin-arm64` archives, verifies each checksum, runs a
+  program from each unpacked archive with an empty environment, and publishes an annotated tag and a
+  GitHub release — marked pre-release for `0.x` — from `main`. [[Release Plan]] decides: only a push
+  that changes `packages/pudu/` at a version with no tag releases, so merging README, website,
+  example, or wiki changes never does, and a `release/` branch builds without publishing. Seven
+  tests hold the decision in CI and `test/gates.sh`.
+- [[First Release Readiness]] records the `0.1.0` pre-release scope against the open rows, and
+  `packages/pudu/v0.1/release-notes/0.1.0.md` states what it is and is not. The README describes
+  installing from a pre-release archive, and the semantics ledger records `0.7.0-draft` for places.
+
 ## 2026-09-15 — The documentation reads as a book, from a first program to HTTP services
 
 - Ten new chapters join the ten there were, ordered so each builds on the last: getting started,

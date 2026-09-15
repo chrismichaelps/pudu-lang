@@ -35,6 +35,26 @@ resource lifetime, limits, focused regressions, full gate, and mirror review agr
 | Medium | CLI application arguments | `Std.Args` declares flags, values, and required and repeated options, and parses the command line into a typed result with a typed `ArgsError`, and writes the help text; `Std.Env` keeps the basic flag and positional readers. Subcommands are not yet a declared form. | Subcommands follow a demonstrated application need. |
 | Medium | Compression/archive breadth | Gzip/DEFLATE, POSIX tar, and zip (`Std.Archive.Zip`, reading and writing under an entry limit) ship with bounded decoding; zstd does not. | Add by demonstrated workload, not as a v1 completeness checklist. |
 
+## Pre-release 0.1.0
+
+The first release is a **package-free pre-release**, published as `v0.1.0` and marked pre-release. It
+ships what the table shows as implemented and makes no claim the open rows would contradict:
+
+- **Resource ownership and cancellation** blocks a *stable* release, which this is not. The release
+  notes say that some resources rely on an explicit `close` and that cancellation does not propagate
+  between workers.
+- **Package tooling** admits "a deliberately package-free preview". The notes say dependencies are
+  local directories and that locking, fetching, updating, and publishing are not implemented.
+- **Large-input bounds** blocks *production-readiness claims*. The notes claim a flat peak only for
+  the readers measured — files, CSV, and JSON Lines — and say the others are unmeasured.
+
+Evidence at the release point: the full suite, the optimized `-Werror` build, the formatter, the
+diagnostic-code, and the release-decision gates pass; every standard library module and example
+checks; the 87 documentation examples run; and the [[Release Workflow]] builds the Linux and macOS
+archives and runs a program from each unpacked archive outside the repository before it may publish.
+Publishing happens only when the release PR is merged to `main`, and only a change to
+`packages/pudu/` at an untagged version publishes ([[Release Plan]]).
+
 ## Rows from the earlier table that are no longer missing
 
 - `Std.Process` includes started processes, stdin/stdout/stderr streaming, bounded waiting, stop,

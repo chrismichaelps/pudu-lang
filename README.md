@@ -47,10 +47,21 @@ export fn main() -> Result[(), Str] {
 > the language may change before 1.0. Open work is tracked in
 > [RELEASE-READINESS.md](wiki/architecture/RELEASE-READINESS.md).
 
+## Installing a pre-release
+
+Pre-release archives for Linux x86-64 and macOS on Apple silicon are attached to each
+[release](https://github.com/chrismichaelps/pudu-lang/releases). Each archive holds `bin/pudu` and
+the standard library beside it:
+
+```bash
+tar -xzf pudu-0.1.0-darwin-arm64.tar.gz
+export PATH="$PWD/pudu-0.1.0-darwin-arm64/bin:$PATH"
+pudu version
+```
+
 ## Building from source
 
-No binary release has been published yet. Building requires GHC 9.10 or later and Cabal 3.12 or
-later.
+Building requires GHC 9.10 or later and Cabal 3.12 or later.
 
 ```bash
 git clone https://github.com/chrismichaelps/pudu-lang.git
