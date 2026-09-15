@@ -413,7 +413,7 @@ testProtocolEvaluation = do
         rather than split where a guess would put it. -}
     , counterexample
         "a message survives being written and read, and declares its body in bytes"
-        (messaged === Just "99")
+        (messaged === Just "101")
     {-| Every case here is a handshake that must fail. A handshake that
         wrongly succeeds carries traffic and looks exactly like one that did
         not, so failing closed is the only property worth checking offline. -}

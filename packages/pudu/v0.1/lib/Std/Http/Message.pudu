@@ -369,7 +369,11 @@ export fn decodeChunkedBytes(source: &Bytes, limit: Int) -> Result[Bytes, Messag
         case Ok(value) => value
         case Err(_) => { return Err(BadHeader("invalid chunk trailer")) }
       }
-      let _headers = parseHeaders(&trailer.split("\r\n")) ?
+      // The header reader skips the line a head begins with, so the trailer
+      // is placed after an empty one; otherwise its first field went unread.
+      var trailerLines = [""]
+      for field in trailer.split("\r\n") { trailerLines = trailerLines.push(field) }
+      let _headers = parseHeaders(&trailerLines) ?
       return Ok(ByteSeq.join(&parts))
     }
     if size > limit - total { return Err(BadHeader("chunked body exceeds limit")) }

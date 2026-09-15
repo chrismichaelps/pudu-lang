@@ -282,6 +282,15 @@ export fn main() -> Int {
   if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("zz\r\nWiki\r\n0\r\n\r\n"), 1000)) {
     held = held + 1
   }
+  // Every field of a trailer is read, the first as much as the rest, and a
+  // well-formed trailer still ends the body.
+  if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWiki\r\n0\r\nbroken\r\n\r\n"), 1000)) {
+    held = held + 1
+  }
+  match Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWiki\r\n0\r\nx-sum: 1\r\nx-more: 2\r\n\r\n"), 1000) {
+    case Ok(body) => { if body == Bytes.fromText("Wiki") { held = held + 1 } }
+    case Err(_) => {}
+  }
   if Result.isErr(&Message.decodeChunkedBytes(&Bytes.fromText("4\r\nWi\r\n0\r\n\r\n"), 1000)) {
     held = held + 1
   }

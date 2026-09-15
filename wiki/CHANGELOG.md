@@ -18,7 +18,11 @@ tags: [changelog]
   `/a` with version `b HTTP/1.1`, doubled spaces were absorbed, and a missing version defaulted to
   HTTP/1.1. A request line is now exactly a token method, a target without whitespace, and HTTP/1.0 or
   HTTP/1.1, one space apart, and anything else is `BadRequestLine`.
-- `UsesHttpMessageReplyAll` rises to 99. Against a running server, an ordinary request answered 200
+- `decodeChunkedBytes` checked a chunked body's trailer with the head reader, which skips the line a
+  head begins with, so a trailer's first field was never read and a malformed one ended the body as
+  though it were well formed. Every trailer field is now read.
+- `UsesHttpMessageReplyAll` rises to 101 (100 before the trailer fix, which is the malformed first
+  field being accepted). Against a running server, an ordinary request answered 200
   while whitespace before a colon, a folded line, a target holding a space, and a request line with no
   version each answered 400.
 

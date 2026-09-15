@@ -22,6 +22,8 @@ byte body goes out unchanged. `renderRequest` writes text and refuses a request 
 as `renderResponse` refuses a byte response, rather than dropping the bytes.
 A chunk size arrives from the peer, so hexadecimal digits spelling more than an `Int` holds are not a
 size, checked before each multiplication, rather than an overflow that stops the program.
+A chunked body's trailer is read field by field under the same header rules, its first field as much
+as the rest, and a malformed field refuses the body.
 
 **A header another reader could take differently is refused, not trimmed.** A name is a token —
 letters, digits, and ``!#$%&'*+-.^_`|~`` — with nothing between it and its colon. A line beginning
