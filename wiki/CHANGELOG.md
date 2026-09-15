@@ -5,6 +5,16 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — An assignment the evaluator cannot store is refused where it is written
+
+- The checker accepted `*reference = value`, `record.field = value`, and `items[i] = value`, while the
+  evaluator treats `&`, `&mut`, and `*` as the value itself and stores only into a variable by name, so
+  each checked and then stopped the program with `E7001 assignment target is not a place`. Such an
+  assignment is now `E3077` at check time, naming the forms that work: assign the variable a new value,
+  such as `record = Record{..record, field: value}`, or return the changed value. No committed program
+  used these forms; `UsesVarint`'s never-called helper that assigned through `*held` is removed.
+  Implementing places for references and `mut` fields remains open in [[First Release Readiness]].
+
 ## 2026-09-15 — Language documentation rendered from Markdown, and home page layout fixes
 
 - The website gains a documentation section: ten Markdown pages in `website/docs/` — introduction,

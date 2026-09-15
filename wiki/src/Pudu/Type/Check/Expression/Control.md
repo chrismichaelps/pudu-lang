@@ -42,6 +42,8 @@ lambdaType
 
 checkCapturedAssignment :: Text -> Located Expression -> Checker ()
 
+checkAssignmentTarget :: Text -> Located Expression -> Checker ()
+
 aroundLoop :: Maybe (Located Text) -> Type -> Bool -> Checker a -> Checker Bool
 
 literalIndex :: Located Expression -> Maybe Integer
@@ -53,6 +55,7 @@ literalIndex :: Located Expression -> Maybe Integer
 - `checkArms` validates arm pattern bindings, arm guards, arm bodies, and unifies all arm results into a single common type while reporting exhaustiveness and redundancy at expression boundaries.
 - `lambdaType` verifies closure parameter bindings, closure body evaluation (either block or expression body), and returns a non-generalized `FunctionTypeValue`.
 - `checkCapturedAssignment` prohibits assignments to captured variables from outside a closure, enforcing immutable captures.
+- `checkAssignmentTarget` refuses, with `E3077`, an assignment whose target is not a single variable name: a field, an element, a dereferenced reference, or a qualified path. The evaluator stores only into a binding by name, so such an assignment used to check and then stop the program with `E7001`; the diagnostic names `record = Record{..record, field: value}` and returning the changed value as the forms that work.
 - `aroundLoop` manages loop context entry and exit on the type environment's loop stack, tracking break statements and carries.
 - `literalIndex` parses constant integer expressions for tuple and nominal element index lookups.
 
@@ -75,6 +78,8 @@ literalIndex :: Located Expression -> Maybe Integer
 
 - **Q:** Why pass recursive checkers (`Located Expression -> Checker Type`, etc.) rather than importing `CheckSurroundings` or `Expression`? **A:** Because `Pudu.Type.Check.Expression` imports `Control`. Passing function runners decouples control construct checking from expression coordination and prevents circular imports without `.hs-boot`.
 - **Q:** Why group match arms, lambdas, loops, and captured assignments together in `Control`? **A:** These represent the non-trivial control and scope boundaries of expressions (arms, closure scopes, loop labels/carries, and write guards). Moving them leaves `Expression.hs` as a clear, focused AST dispatcher well below 400 lines.
+
+- **Q:** Refuse an assignment through a reference at check time rather than implement it before the first release? **A:** Refuse it. _Rationale:_ references evaluate to the value they name, so storing through one needs a place model the evaluator does not have, and a program that checks and then stops on a documented form is worse than a clear refusal. No committed program assigned to a field, an element, or through a dereference. _Rejected:_ leaving the run-time `E7001` as the only report; a partial place model for fields alone.
 
 ## Referenced by
 

@@ -72,6 +72,7 @@ import Pudu.Type.Check.Propagation (reportRedundantPropagation)
 import Pudu.Type.Check.Expression.Control
   ( aroundLoop
   , checkArms
+  , checkAssignmentTarget
   , checkCapturedAssignment
   , lambdaType
   , literalIndex
@@ -121,6 +122,7 @@ inferExpression around declared rigid spanValue expression = case expression of
     leftType <- checkExpression around declared rigid left
     rightType <- checkExpression around declared rigid right
     checkCapturedAssignment operator left
+    checkAssignmentTarget operator left
     binaryType spanValue operator leftType rightType
   CallExpression callee arguments -> do
     checkComptimeCall spanValue callee

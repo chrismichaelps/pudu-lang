@@ -259,6 +259,7 @@ From tightest to loosest: postfix calls/index/member/`?`/`.await`; unary `! - & 
 - Prefix `*` dereferences a reference: `*r` has type `T` when `r` has type `&T` or `&mut T`. There is no implicit conversion in either direction, so a value where a reference is wanted must be borrowed and a reference where a value is wanted must be dereferenced. A field or method reached through a reference needs no `*`; `r.field` reads through the borrow.
 - Borrows are inferred to the last use within a function and cannot outlive the owner.
 - Mutation requires `var`, a mutable record field reached through owned mutable authority, or `&mut`.
+- **Only a variable can be assigned today.** The evaluator stores into a binding by its name and has no place for a field, an element, or the value behind a reference, so an assignment to `record.field`, `items[i]`, or `*reference` is `E3077` at check time rather than a run-time stop. Build a new value and assign the variable — `record = Record{..record, field: value}` — or return the changed value from the function that computed it. Assigning through `&mut` and to `mut` fields remains the design above, to be admitted with a place model.
 - Destruction is deterministic at the end of ownership. Types with resource cleanup implement `Drop`; user code cannot call `drop` twice.
 - Unsafe code is lexically explicit and cannot suppress move/borrow accounting for safe values.
 

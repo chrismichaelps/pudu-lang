@@ -103,7 +103,7 @@ Supporting judgements:
 - Set membership evaluates its candidate before its Set operand and performs one lookup in the ordered Set. It neither iterates user code nor defines a general collection protocol.
 - Boolean `&&` and `||` short-circuit.
 - A block evaluates statements sequentially and yields its final expression. A resultless block whose final statement directly transfers control with `return`, `break`, or `continue` has type `Never`; every other resultless block yields unit.
-- Assignment evaluates the target place once, then the right side, then stores.
+- Assignment evaluates the target place once, then the right side, then stores. In the current implementation the only place is a variable binding: an assignment to a field, an element, or through a reference is refused at check time with `E3077` until the evaluator has places for them.
 - Pattern guards evaluate only after structural pattern success.
 - Optimizations must preserve all observable ordering: IO, mutation, panic, failure propagation, destruction, and cancellation points.
 

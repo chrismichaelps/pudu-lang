@@ -29,7 +29,7 @@ fn main() -> Int {
 }
 ```
 
-> The current interpreter passes a borrowed value as a copy. Assigning through a reference — `*score = value`, or a field reached through `&mut` — is refused when the program runs, with `E7001`. Until changing a value through `&mut` is implemented, a function that changes a value returns the new value, and the caller assigns it, as `next` does above.
+> The current implementation passes a borrowed value as a copy, and only a variable can be assigned. Assigning through a reference (`*score = value`), to a field (`tally.count = 2`), or to an element (`items[0] = 5`) is refused by `pudu check` with `E3077`. Until those are implemented, a function that changes a value returns the new value and the caller assigns it, as `next` does above; a record is changed by building a new one, `tally = Tally{..tally, count: 2}`.
 
 There is no implicit conversion between a value and a reference in either direction: a value where a reference is wanted must be borrowed, and a reference where a value is wanted must be dereferenced. A field reached through a reference needs no `*`, so `user.name` works whether `user` is a `User` or a `&User`.
 
@@ -38,7 +38,7 @@ There is no implicit conversion between a value and a reference in either direct
 A binding changes only when something says it may:
 
 - a `var` binding, assigned with `=`,
-- a record field declared `mut`,
+- a record field declared `mut`, once assigning to a field is implemented,
 - or the value behind an `&mut` borrow, once assigning through a reference is implemented.
 
 Collections never change in place. `numbers.push(4)` answers a new array and leaves `numbers` as it was, so writing it as a statement on its own does nothing and is reported as a warning.

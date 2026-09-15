@@ -3,6 +3,7 @@ module Pudu.Type.Check.Expression.Control
   ( checkArms
   , lambdaType
   , checkCapturedAssignment
+  , checkAssignmentTarget
   , aroundLoop
   , literalIndex
   ) where
@@ -134,6 +135,27 @@ checkCapturedAssignment operator (Located spanValue expression)
               )
           else pure ()
       _ -> pure ()
+
+{-| Refuse an assignment to anything but a variable.
+
+    The evaluator stores into a binding by its name; a field, an element, and
+    the value behind a reference are not places it can write. Accepted here,
+    such an assignment would check and then stop the program with `E7001` the
+    first time it ran, so it is refused where it was written, with the form
+    that works named beside it. -}
+checkAssignmentTarget :: Text -> Located Expression -> Checker ()
+checkAssignmentTarget operator (Located spanValue expression)
+  | operator /= "=" = pure ()
+  | otherwise = case expression of
+      NameExpression names | [_] <- NonEmpty.toList names -> pure ()
+      _ ->
+        report "E3077" spanValue
+          "assigning to a field, an element, or through a reference is not implemented"
+          ( Just
+              ( "assign the variable a whole new value instead, such as "
+                  <> "record = Record{..record, field: value}, or return the changed value"
+              )
+          )
 
 {-| Check a loop body with that loop on the stack, reporting whether any
     `break` left it. -}
