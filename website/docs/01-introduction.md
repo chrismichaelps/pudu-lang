@@ -57,6 +57,14 @@ pudu test
 - **Patterns are checked.** A `match` must cover every shape a value can have.
 - **Imports are explicit.** There are no wildcard imports, so every name's origin is in the import list.
 
-## Where to go next
+## How this documentation is organised
 
-Read the pages in order to learn the language from the ground up, starting with [Basics](/docs/basics). If you already know what you are looking for, the [standard library overview](/docs/standard-library) and the [API reference](/modules) list everything a program can import.
+The chapters are written to be read in order, each building on the ones before it:
+
+1. **Starting out** — [getting started](/docs/getting-started), [basics](/docs/basics), [functions](/docs/functions), and [types](/docs/types).
+2. **Working with data** — [text](/docs/text), [collections](/docs/collections), [control flow](/docs/control-flow), and [errors](/docs/errors).
+3. **Structuring programs** — [ownership](/docs/ownership), [modules and packages](/docs/modules), [traits](/docs/traits), and [generics](/docs/generics).
+4. **Building real software** — [testing](/docs/testing), [files and the system](/docs/files), [data formats](/docs/data-formats), [HTTP](/docs/http), and [concurrency](/docs/concurrency).
+5. **Reference** — the [standard library](/docs/standard-library) map and [tooling](/docs/tooling).
+
+Every example is a complete program. Copy one into a file named after its module, run it with `pudu run`, and change it to see what happens. If you already know what you are looking for, the [API reference](/modules) lists everything a program can import.

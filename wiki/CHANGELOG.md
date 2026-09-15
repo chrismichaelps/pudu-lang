@@ -5,6 +5,20 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — The documentation reads as a book, from a first program to HTTP services
+
+- Ten new chapters join the ten there were, ordered so each builds on the last: getting started,
+  functions, text, collections, modules and packages, generics, testing, files and the system, data
+  formats, and HTTP servers and clients. The introduction ends with the outline in five parts. Files
+  were renumbered; every address stayed the same.
+- Every one of the 87 examples is a complete program that was run with the current compiler: `main`
+  answers 0, test modules pass under `pudu test`, the two-file modules example ran as a project, and
+  the server and client examples reach the network only behind a flag. Writing them corrected four
+  claims: the comparison traits are imported from `Std.Order`, `Env.temporaryDirectory()` and
+  `Client.limits()` are calls, and `task` is a reserved word.
+- On a phone, a table cell holding only code may wrap, so a three-column table no longer squeezes its
+  prose to one word per line. The stylesheet address moves to `v=10`.
+
 ## 2026-09-15 — `&mut`, `mut` fields, and array elements change what they name
 
 - [[ADR-0022-lending-a-place]]. A place is a `var`, a `mut` field of a place, an element of an array
