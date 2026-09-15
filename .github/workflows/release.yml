@@ -2,14 +2,26 @@ name: release
 
 # A release is cut only from main, only when a push changed the compiler package,
 # and only when the package's version has no tag yet; scripts/release-plan.py
-# decides. The path filter keeps a merge that changes only the README, the
-# website, the examples, or the wiki from starting this workflow at all. A
-# release/ branch builds and checks the same archives without publishing them.
+# decides, from the full list of changed paths. A push that changes only the
+# README, the website, the examples, or the wiki does not start this workflow.
+# The filter ignores those paths rather than naming the package's, because
+# GitHub stops evaluating a path filter past 300 changed files, and a merge from
+# dev is far larger than that: named paths would never match it and the release
+# would silently not run. A release/ branch builds and checks the same archives
+# without publishing them.
 on:
   push:
     branches: [main, "release/**"]
-    paths:
-      - "packages/pudu/**"
+    paths-ignore:
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "website/**"
+      - "examples/**"
+      - "wiki/**"
+      - "book/**"
+      - "editors/**"
+      - "public/**"
+      - "deploy/**"
 
 permissions:
   contents: read

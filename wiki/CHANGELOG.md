@@ -11,7 +11,8 @@ tags: [changelog]
   program from each unpacked archive with an empty environment, and publishes an annotated tag and a
   GitHub release — marked pre-release for `0.x` — from `main`. [[Release Plan]] decides: only a push
   that changes `packages/pudu/` at a version with no tag releases, so merging README, website,
-  example, or wiki changes never does, and a `release/` branch builds without publishing. Seven
+  example, or wiki changes never does — those paths do not start the workflow, and the plan reads
+  every changed path, which a trigger filter cannot past 300 files, and a `release/` branch builds without publishing. Seven
   tests hold the decision in CI and `test/gates.sh`.
 - [[First Release Readiness]] records the `0.1.0` pre-release scope against the open rows, and
   `packages/pudu/v0.1/release-notes/0.1.0.md` states what it is and is not. The README describes

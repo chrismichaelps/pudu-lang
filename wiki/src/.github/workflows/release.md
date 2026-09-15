@@ -9,8 +9,12 @@ aliases: [Release Workflow]
 
 Publishes a release of the compiler, and proves one before it is merged.
 
-- **Trigger.** A push to `main` or to a `release/` branch that changes `packages/pudu/**`. A push that
-  changes only the README, the website, the examples, or the wiki does not start the workflow.
+- **Trigger.** A push to `main` or to a `release/` branch, except one that changes only the README,
+  `CONTRIBUTING.md`, the website, the examples, the wiki, the book, the editor extensions, the public
+  assets, or the deployment files, which does not start the workflow. The filter ignores those paths
+  rather than naming the package's because GitHub stops evaluating a path filter past 300 changed
+  files: a merge from `dev` is far larger, so a filter naming `packages/pudu/**` never matched it and
+  the first push of `release/0.1.0` started nothing.
 - **Plan.** [[Release Plan]] runs its own tests, then decides from the ref, the package version, the
   existing tags, and the paths the push changed. It releases only from `main`, only for a compiler
   change, and only at a version with no tag; a `release/` branch builds without publishing.
@@ -30,5 +34,7 @@ and plan outputs are passed through the environment.
 Resolved Grill Log: releasing on a manually pushed tag was rejected because `main` must stay the only
 source of a release and the version file the only statement of it. Path filtering alone was not
 enough, because a compiler change that did not raise the version would publish the same version
-again; the tag check closes that. The manual `package` workflow remains for building an archive from
+again; the tag check closes that. Naming the package's paths in the trigger was replaced by ignoring
+documentation paths after the first release branch showed the 300-file limit: the plan, which reads
+every changed path from `git`, is the gate that cannot be exceeded. The manual `package` workflow remains for building an archive from
 any branch.
