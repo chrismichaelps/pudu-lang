@@ -48,6 +48,13 @@ restarts. The settings are kept inside a function, so showing a pool cannot show
 Checked against a live PostgreSQL 14 server: after both backends of a two-connection pool were
 terminated, each failed one request and the next requests were answered by fresh connections.
 
+**Taking a connection waits without a limit.** A borrower that finds every connection lent waits on
+the pool's channel until one comes back, however long that is. Under a burst larger than the pool,
+requests queue rather than fail, which is the ordinary behaviour of a pool, but nothing yet turns a
+wait that has gone on too long into a refusal. Bounding it needs a timed receive on [[Std Channel]],
+and the runtime's channel primitives (`channelPull` and its siblings) take no time limit today. Until
+then, the server's `statement_timeout` is what bounds how long any one lent connection is held.
+
 `closePool` closes admission and the queue, drains queued connections, and attempts all closes.
 It does not wait for active callbacks; their returns perform final cleanup. Host panic and forced
 worker cancellation are not handled by this pure-Pudu scoped helper and remain runtime work.
