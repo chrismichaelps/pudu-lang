@@ -18,6 +18,10 @@ tags: [changelog]
   left a post whose approvals and replies were already gone. The three now run in one
   `Database.transaction`. Checked on a running server: a post with a reply was removed, the feed no
   longer listed it, and its page answered 404.
+- The `fullstack` and `social` examples answered a newly written row by reading the newest row
+  afterwards — `social` the newest post in the whole table, not even the author's — so two requests
+  writing at once could each be answered with the other's row. Both now take the row, or its
+  identifier, from `INSERT … RETURNING`, which PostgreSQL and SQLite 3.35 or later both support.
 
 ## 2026-09-14 — Header lines another reader would take differently are refused
 

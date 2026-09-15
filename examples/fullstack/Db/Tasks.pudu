@@ -56,16 +56,17 @@ export fn find(db: &Database.Database, id: Int) -> Result[Option[Task], StoreErr
 
 /// Add a task and answer the one that was added, so a caller need not read it
 /// back to learn the identifier the database chose.
+///
+/// `RETURNING` answers the row this statement wrote. Reading the newest row
+/// afterwards would answer somebody else's whenever two requests add at once.
 export fn add(db: &Database.Database, title: Str) -> Result[Task, StoreError] {
-  let written = Database.query(db, "INSERT INTO task (title, done) VALUES (?, 0)", &[Driver.TextValue(title)])
-  match written {
-    case Err(problem) => Err(StoreError{message: problem.message})
-    case Ok(_) => {
-      let recent = read(db, "SELECT id, title, done FROM task ORDER BY id DESC LIMIT 1", &[]) ?
-      if recent.length() == 0 { Err(StoreError{message: "the task was written and could not be read back"}) } else {
-        Ok(recent[0])
-      }
-    }
+  let written = read(
+    db,
+    "INSERT INTO task (title, done) VALUES (?, 0) RETURNING id, title, done",
+      &[Driver.TextValue(title)]
+  ) ?
+  if written.length() == 0 { Err(StoreError{message: "the task was written and could not be read back"}) } else {
+    Ok(written[0])
   }
 }
 
