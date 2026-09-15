@@ -5,6 +5,14 @@ tags: [changelog]
 
 # Changelog
 
+## 2026-09-15 — A readiness check that asks the database
+
+- `Std.App.Health` had readiness checks but nothing that asked a database, so every service wrote its own
+  probe or reported ready while its database was down. `Database.readiness(database, name)` runs
+  `select 1` through the started client and answers `Well` or `Unwell`. `UsesAppDatabase` rises to 59:
+  an unstarted SQLite database is unwell, the same database started is well, and a started driver that
+  refuses the question is unwell.
+
 ## 2026-09-15 — Opening a PostgreSQL connection has a time limit
 
 - `Std.Db.Session.connect` dialled with no limit and read the handshake with no deadline, so a host that

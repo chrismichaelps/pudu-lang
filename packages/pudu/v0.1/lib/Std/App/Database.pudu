@@ -1,6 +1,7 @@
 module Std.App.Database
 
 import Std.App.Config as Config
+import Std.App.Health as Health
 import Std.App.Stage as Lifecycle
 import Std.Db.Driver as Driver
 import Std.Db.Migrate as Migrate
@@ -202,6 +203,21 @@ export fn migrationStage(
       }
     },
     fn() -> Result[(), Str] { Ok(()) })
+}
+
+/// A readiness check that asks the database a question.
+///
+/// It runs `select 1` through the started client, so an instance whose
+/// database is not started or not answering is taken out of rotation rather
+/// than sent requests it will fail. It belongs among readiness checks and
+/// never among liveness checks: a database outage is not a reason to restart
+/// a program that is otherwise well, and a liveness check that asked would
+/// restart every instance at once.
+export fn readiness(database: &Database, name: Str) -> Health.Readiness {
+  let resource = *database
+  Health.readiness(name, fn() -> Health.Verdict {
+      Health.fromTruth(Result.isOk(&execute(&resource, "select 1")))
+    })
 }
 
 fn databaseFailure(problem: Driver.Error) -> QueryError { DatabaseFailure(problem) }

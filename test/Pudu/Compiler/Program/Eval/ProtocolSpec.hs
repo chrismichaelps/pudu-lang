@@ -509,7 +509,7 @@ testProtocolEvaluation = do
         the mapper could not read are different faults with different fixes. -}
     , counterexample
         "a database prepared, and the connection strings and pool sizes it refuses"
-        (appDatabase === Just "56")
+        (appDatabase === Just "59")
     , counterexample "the protocol modules parse and render messages"
         (protocol === Just "266")
     , counterexample "dates, FASTA, FASTQ, quoted CSV, and delimited rows all parse"

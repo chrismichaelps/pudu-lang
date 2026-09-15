@@ -83,6 +83,15 @@ PostgreSQL. `storeTarget(database)` answers a [[Std Db Store]] `Target` over the
 its driver, so a kept value is saved and loaded the same way on either backend; a database that is
 not started is refused.
 
+## Readiness
+
+`readiness(database, name)` is an [[Std App Health]] readiness check that runs `select 1` through the
+started client, so an instance whose database is not started or does not answer reports `Unwell` and
+is taken out of rotation rather than sent requests it will fail. The check shares the resource it was
+made from, so a database started after the check was built is what it sees. It belongs among
+readiness checks and never among liveness checks: a database outage is not a reason to restart a
+program that is otherwise well, and a liveness check that asked would restart every instance at once.
+
 ## Migrations
 
 `migrate(database, migrations)` applies pending [[Std Db Migrate]] migrations through the selected
