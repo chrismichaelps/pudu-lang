@@ -80,6 +80,7 @@ chmod 755 "$function_dir/bootstrap" "$function_dir/ld-musl-x86_64.so.1"
 # built from, so the two cannot disagree about which pages exist.
 PUDU_SITE_URL="$PUDU_SITE_URL" PUDU_CATALOG_PATH="$root/website/data/api.json" \
   PUDU_DOCS_PATH="$root/website/docs" \
+  PUDU_RELEASES_PATH="$root/website/data/releases.json" \
   "$compiler" run "$root/website/src/Prerender.pudu" "$output/static"
 
 # `provided.al2023` runs the artefact directly: the platform starts `bootstrap` and
@@ -105,6 +106,7 @@ printf '%s\n' \
   '    { "handle": "filesystem" },' \
   '    { "src": "/", "dest": "/index.html" },' \
   '    { "src": "/guide", "dest": "/guide/index.html" },' \
+  '    { "src": "/download", "dest": "/download/index.html" },' \
   '    { "src": "/about", "dest": "/about/index.html" },' \
   '    { "src": "/donate", "dest": "/donate/index.html" },' \
   '    { "src": "/modules", "dest": "/modules/index.html" },' \

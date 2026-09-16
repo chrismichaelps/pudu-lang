@@ -9,13 +9,15 @@ import Constants as Constants
 import Seo as Seo
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Releases as Releases
 import View.About as About
 import View.Docs as DocsView
 import View.Documentation as Documentation
 import View.Donation as Donation
+import View.Download as Download
 import View.Home as Home
 
-export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Route.Router {
+export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release) -> Route.Router {
   Route.withFallback(&Route.routing(&[
         Route.get("/", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, Home.home(siteUrl, catalog))
@@ -59,6 +61,9 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> R
         // working and a crawler is told which address to keep.
         Route.get("/guide", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, DocsView.index(siteUrl, docs, catalog.languageVersion))
+          }),
+        Route.get("/download", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, Download.page(siteUrl, release))
           }),
         Route.get("/about", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, About.page(siteUrl))
@@ -109,8 +114,8 @@ export fn requestFor(target: Str) -> Route.Request {
   }
 }
 
-export fn render(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, target: Str) -> Http.Response {
-  Route.dispatch(&routes(siteUrl, catalog, docs), requestFor(target))
+export fn render(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release, target: Str) -> Http.Response {
+  Route.dispatch(&routes(siteUrl, catalog, docs, release), requestFor(target))
 }
 
 fn binary(path: Str, mediaType: Str) -> Http.Response {

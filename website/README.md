@@ -9,11 +9,17 @@ Live production URL: **https://website-ivory-one-hyy8j9ljag.vercel.app/**
 
 ```bash
 website/scripts/generate-catalog.sh pudu
+node website/scripts/generate-releases.mjs
 pudu check website/src/Main.pudu website/src/Render.pudu
 pudu fmt --check website/src/Main.pudu website/src/Render.pudu
 pudu test website/src/Test/Website.pudu
 pudu run website/src/Main.pudu
 ```
+
+`generate-releases.mjs` writes `website/data/releases.json` from the published releases, which is
+what `/download` offers. The archives are read at build time rather than per request, so a reader on
+the CDN waits for no API and a rate limit at the forge cannot take the download page down; the cost
+is that a new release reaches the page on the next deployment. Run it again after publishing one.
 
 Open `http://127.0.0.1:8080`. Set `PUDU_SITE_URL` to the public HTTPS origin before a production
 build so canonical URLs, Open Graph URLs, `robots.txt`, and `sitemap.xml` agree.

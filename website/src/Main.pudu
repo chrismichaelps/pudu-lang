@@ -6,6 +6,7 @@ import Config as Config
 import Error as SiteError
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Releases as Releases
 import Web.Routes as Web
 
 fn main() -> Int {
@@ -17,7 +18,12 @@ fn main() -> Int {
         case Ok(catalog) => {
           match Docs.load(settings.docsPath) {
             case Err(problem) => fail(&problem)
-            case Ok(docs) => serve(&settings, &catalog, &docs)
+            case Ok(docs) => {
+              match Releases.load(settings.releasesPath) {
+                case Err(problem) => fail(&problem)
+                case Ok(release) => serve(&settings, &catalog, &docs, &release)
+              }
+            }
           }
         }
       }
@@ -25,12 +31,12 @@ fn main() -> Int {
   }
 }
 
-fn serve(settings: &Config.Config, catalog: &Catalog.Catalog, docs: &Docs.Docs) -> Int {
+fn serve(settings: &Config.Config, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release) -> Int {
   match Server.start(settings.host, settings.port) {
     case Err(_) => fail(&SiteError.ListenFailed)
     case Ok(live) => {
       let _announced = Io.writeLine("Pudu docs listening on http://" + settings.host + ":" + show(Server.portOf(&live)))
-      let result = Server.run(&Server.server(&Web.routes(settings.siteUrl, catalog, docs)), &live, settings.connections)
+      let result = Server.run(&Server.server(&Web.routes(settings.siteUrl, catalog, docs, release)), &live, settings.connections)
       let _stopped = Server.stop(&live)
       match result {
         case Ok(_) => 0

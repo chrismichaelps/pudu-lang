@@ -21,7 +21,7 @@ export fn page(
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=10")
+          H.link().rel("stylesheet").href("/assets/site.css?v=12")
         ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       H.body().holding([
           H.a().class("skip").href("#content").says("Skip to content"),
@@ -77,6 +77,7 @@ fn navigation(path: Str, classes: Str) -> H.Node {
   H.nav().class(classes).label("Main navigation").holding([
       navigationLink("/docs", "Docs", isDocumentation(path)),
       navigationLink("/modules", "API", path == "/modules" || path.startsWith("/module/") || isSymbol(path)),
+      navigationLink("/download", "Download", path == "/download"),
       navigationLink("/about", "About", path == "/about"),
       navigationLink("/donate", "Donate", path == "/donate")
     ])
@@ -106,6 +107,7 @@ fn footer() -> H.Node {
             ]),
           H.small().says(Constants.COPYRIGHT),
           H.span().class("footer-links").holding([
+              H.a().href("/download").says("Download"),
               H.a().href("/donate").says("Donate"),
               H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub")
             ])

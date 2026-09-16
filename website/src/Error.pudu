@@ -6,6 +6,9 @@ export type SiteError
   | CatalogueInvalid
   | CatalogueEmpty
   | DocsUnreadable(Str)
+  | ReleasesUnreadable(Str)
+  | ReleasesInvalid
+  | ReleasesEmpty
   | ListenFailed
 
 export fn explain(problem: &SiteError) -> Str {
@@ -15,6 +18,9 @@ export fn explain(problem: &SiteError) -> Str {
     case CatalogueInvalid => "the API catalogue is not valid generated documentation"
     case CatalogueEmpty => "the API catalogue contains no public declarations"
     case DocsUnreadable(path) => "the documentation pages could not be read at " + path
+    case ReleasesUnreadable(path) => "the published releases could not be read at " + path
+    case ReleasesInvalid => "the published releases are not a valid release document"
+    case ReleasesEmpty => "the published releases carry no archive to download"
     case ListenFailed => "the website listener could not start"
   }
 }
