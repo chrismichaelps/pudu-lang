@@ -24,6 +24,7 @@ import Pudu.Diagnostic
   , mkDiagnosticCode
   , withHelp
   )
+import Pudu.Eval.Confinement (guardConfined)
 import Pudu.Eval.Env (Evaluator (..), Eval (..), abortAt, currentForeignStore, performEffect)
 import Pudu.Eval.Value (ForeignBinding (..), ForeignClaim (..), ForeignSlot (..), Value (..))
 import Pudu.Foreign.Call
@@ -59,6 +60,7 @@ import Pudu.Eval.Foreign.Resource (prepareReleases, releaseHandle, cleanupFailed
     on what was installed on the machine that compiled it. -}
 callForeign :: Span -> ForeignBinding -> [Value] -> Evaluator Value
 callForeign spanValue binding values = maskedBoundary $ do
+  guardConfined spanValue ("the foreign function " <> foreignBindingSymbol binding) False
   crossed <- crossArguments spanValue binding values
   let claims =
         [(address, generation) | ForeignHandleValue _ address (OwnedClaim generation) <- values]

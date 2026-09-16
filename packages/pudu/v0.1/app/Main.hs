@@ -7,6 +7,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Data.List (sort, sortOn)
 import Data.Maybe (fromMaybe)
 import GHC.Conc (getNumCapabilities, getNumProcessors, setNumCapabilities)
+import Pudu.Eval.Confinement (confine)
 import Pudu.Version (versionText)
 import Pudu.Cli.Init (createProject, renderInitError)
 import Pudu.Cli.Lint (LintCommandResult (..), lintCommand)
@@ -347,6 +348,7 @@ runCommand = do
         `Env.at(0)` meant the subcommand here and the first real argument
         there. A program written and tried this way stopped working when it
         was built, and the reason was nowhere near the change. -}
+    ("run" : "--confined" : path : carried) -> confine >> withArgs carried (runProgram style path)
     ("run" : path : carried) -> withArgs carried (runProgram style path)
     ("explain" : path : carried) -> withArgs carried (explainProgram style path)
     ("run" : []) -> do
@@ -475,12 +477,18 @@ renderTally counted =
   right shown =
     Text.replicate (max 1 (12 - length shown)) " " <> Text.pack shown
 
+{-| Compile a program and run its entry point.
+
+    Everything the compiler and the evaluator report goes to standard error,
+    so standard output is only what the program itself wrote: a program whose
+    output is piped elsewhere is not interleaved with warnings, and a reader of
+    both streams can tell the program's words from the tool's. -}
 runProgram :: RenderStyle -> FilePath -> IO ()
 runProgram style path = do
   program <- compileProgram path
   let diagnostics = programDiagnostics program
   unless (null diagnostics) $
-    TextIO.putStrLn (renderProgramDiagnostics style program diagnostics)
+    TextIO.hPutStrLn stderr (renderProgramDiagnostics style program diagnostics)
   if hasErrors diagnostics
     then exitFailure
     else case rootCompileResult program >>= compileModule of
@@ -494,7 +502,7 @@ runProgram style path = do
             (programDependencies program)
             entryPointName
             parsed
-        mapM_ (TextIO.putStrLn . renderRuntime style program) (outcomeDiagnostics outcome)
+        mapM_ (TextIO.hPutStrLn stderr . renderRuntime style program) (outcomeDiagnostics outcome)
         case outcomeValue outcome of
           Just value | not (null (outcomeDiagnostics outcome)) -> value `seq` exitFailure
           Just value -> reportResult value
@@ -984,6 +992,9 @@ usage =
     , "  pudu lint [--json] [--fix] [--allow CODE] <path>..."
     , "                       analyze Pudu files or directories"
     , "  pudu run <file>      compile a program and run its main function"
+    , "  pudu run --confined <file>  the same, allowed to print, read the clock,"
+    , "                       and use threads, but not files, programs, the"
+    , "                       network, or foreign code"
   , "  pudu run --watch <file>  the same, run again whenever a source file"
   , "                       under it changes"
     , "  pudu build <file> [-o name]  write one file that runs anywhere the"
