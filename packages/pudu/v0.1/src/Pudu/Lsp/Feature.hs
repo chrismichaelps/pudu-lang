@@ -1,6 +1,7 @@
 {-| @Program.Lsp.Feature.Module — what the editor shows, from the index -}
 module Pudu.Lsp.Feature
-  ( completionItems
+  ( completionItem
+  , completionItems
   , documentSymbols
   , entryAt
   , hoverContents
@@ -225,9 +226,12 @@ symbolKind kind = case kind of
     editor's completion list answers "what is this" without a second request.
     Ordering is left to the client, which knows what the reader has typed. -}
 completionItems :: DocIndex -> Json
-completionItems index = JsonArray (map item (indexEntries index))
- where
-  item entry =
+completionItems index = JsonArray (map completionItem (indexEntries index))
+
+{-| One declaration as a completion: its name, its kind, its signature, and its
+    documentation. -}
+completionItem :: DocEntry -> Json
+completionItem entry =
     JsonObject
       [ ("label", JsonText (docName entry))
       , ("kind", JsonNumber (fromIntegral (completionKind (docKind entry))))

@@ -1,62 +1,284 @@
 {-| @Program.Lsp.Completion — member and identifier completions -}
-module Pudu.Lsp.Completion (completionAt) where
+module Pudu.Lsp.Completion (completionAt, completionRepaired) where
 
-import Data.Char (isAlphaNum)
+import Data.Char (isAlphaNum, isSpace)
 import Data.List (nub, sort)
+import Data.Maybe (isJust)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Pudu.Doc (DocEntry (..), DocIndex (..), DocKind (..))
 import Pudu.Eval.Operator (builtinMethodNamesFor)
 import Pudu.Lsp.Documents (Analysis (..), Documents, documentOf)
-import Pudu.Lsp.Feature (completionItems, offsetAt)
+import Pudu.Lsp.Feature (completionItem, completionItems, offsetAt)
 import Pudu.Lsp.Json (Json (..), lookupField)
 import Pudu.Lsp.Protocol (positionOf)
-import Pudu.Type (Type (..), narrowestAt)
+import Pudu.Lsp.Repair (Repair (..), lineBounds, mostComplete, withoutRange)
+import Pudu.Semantic.Prelude (wiredInTypeNames)
+import Pudu.Semantic.Resolve (Resolution (..))
+import Pudu.Semantic.Symbol (Namespace (..), Symbol (..), SymbolOrigin (..))
+import Pudu.Source (spanStart, unOffset)
+import Pudu.Type (Type (..), narrowestAt, renderType)
 import Pudu.Type.Value (nominalName)
 
+{-| Completions from the analysis already held, repairing nothing. A request
+    that names no position is answered with every documented name. -}
 completionAt :: Documents -> Json -> Json
-completionAt documents parameters = case documentOf documents parameters of
-  Nothing -> JsonArray []
-  Just value -> case located documents parameters of
-    Just (_, offset) -> case memberMethods value offset of
-      names@(_ : _) -> JsonArray (map methodItem names)
-      [] -> JsonArray (generalCompletions (analysisProgramIndex value))
-    Nothing -> completionItems (analysisProgramIndex value)
+completionAt documents parameters = case located documents parameters of
+  Just (value, offset) -> completionFrom value value offset offset
+  Nothing -> maybe (JsonArray []) (completionItems . analysisProgramIndex) (documentOf documents parameters)
 
-generalCompletions :: DocIndex -> [Json]
-generalCompletions index =
-  case completionItems index of
-    JsonArray items -> items <> keywordCompletions <> primitiveCompletions
-    _ -> keywordCompletions <> primitiveCompletions
+{-| Completions at `offset` of `written`, the text the editor holds, answered
+    from `known`, whose names and types are consulted and which agrees with
+    `written` up to `agrees`.
 
-keywordCompletions :: [Json]
-keywordCompletions =
-  [ JsonObject [("label", JsonText kw), ("kind", JsonNumber 14), ("detail", JsonText "keyword")]
-  | kw <-
-      [ "fn", "let", "var", "const", "mut", "if", "else", "match", "case", "for"
-      , "in", "while", "loop", "break", "continue", "return", "type", "enum"
-      , "struct", "trait", "impl", "where", "export", "import", "unsafe", "foreign", "dynamic"
+    The two analyses differ only when a repaired copy of the text was compiled.
+    After a dot the answer is members or nothing: a keyword is never what
+    follows `value.`. -}
+completionFrom :: Analysis -> Analysis -> Int -> Int -> Json
+completionFrom written known agrees offset = case receiverEnd (analysisText written) offset of
+  Just dotOffset -> case moduleMembers (analysisText written) known dotOffset of
+    members@(_ : _) -> JsonArray members
+    [] -> JsonArray (memberCompletions known dotOffset)
+  Nothing -> JsonArray (scopeCompletions (analysisText written) known (min agrees (wordStart written offset)))
+
+{-| Completions answered from a repaired copy of the program when the program as
+    written cannot say what the answer is.
+
+    `total.` and `total.le` leave a program that does not parse, so the type of
+    `total` is unknown exactly when it is asked for; the program without the
+    member access ends in `total` itself. A name half written on a line of its
+    own usually parses, but an unfinished line such as `let size = ` does not,
+    and the program without that line still says what is in scope above it.
+    `analyse` compiles text as the document; it is asked only when the analysis
+    already held cannot answer. -}
+completionRepaired :: (Text -> IO Analysis) -> Documents -> Json -> IO Json
+completionRepaired analyse documents parameters = case located documents parameters of
+  Nothing -> pure (completionAt documents parameters)
+  Just (value, offset) -> do
+    let content = analysisText value
+        (lineStart, lineEnd) = lineBounds content offset
+    case receiverEnd content offset of
+      Just dotOffset
+        | isJust (analysisTypes value >>= narrowestAt (dotOffset - 1)) ->
+            pure (completionFrom value value offset offset)
+        | otherwise -> do
+            (known, agrees) <-
+              mostComplete analyse value offset
+                [ withoutRange content dotOffset offset
+                , Repair (Text.take dotOffset content <> Text.drop lineEnd content) dotOffset
+                ]
+            pure (completionFrom value known agrees offset)
+      Nothing
+        | isJust (analysisTypes value) -> pure (completionFrom value value offset offset)
+        | otherwise -> do
+            (known, agrees) <-
+              mostComplete analyse value offset
+                [ withoutRange content (wordStart value offset) offset
+                , withoutRange content lineStart lineEnd
+                ]
+            pure (completionFrom value known agrees offset)
+
+{-| The offset where the name being written at `offset` starts. -}
+wordStart :: Analysis -> Int -> Int
+wordStart value offset =
+  offset - Text.length (Text.takeWhileEnd nameScalar (Text.take offset (analysisText value)))
+
+nameScalar :: Char -> Bool
+nameScalar scalar = isAlphaNum scalar || scalar == '_'
+
+{-| Everything a name written at `before` could be, nearest first: the
+    bindings in scope, the file's own declarations, the modules and names it
+    imports, the prelude a program always has, and the language's words.
+
+    Bindings are read from name resolution, which answers even when the program
+    does not type-check. A binding counts when it is declared before `before`
+    and after the start of the declaration `before` is in, which is where its
+    scope can begin. -}
+scopeCompletions :: Text -> Analysis -> Int -> [Json]
+scopeCompletions content known before =
+  distinct
+    ( locals
+        <> declarations
+        <> imported
+        <> map preludeItem preludeItems
+        <> map keywordItem keywords
+        <> [simpleItem name 22 "type" | name <- wiredInTypeNames, name `notElem` ["Copy", "Never", "Buckets"]]
+    )
+ where
+  symbols = maybe [] resolutionSymbols (analysisResolution known)
+  startOf symbol = maybe maxBound (unOffset . spanStart) (symbolSpan symbol)
+  enclosing =
+    maximum (0 : [startOf symbol | symbol <- symbols, symbolOrigin symbol == ModuleOrigin, startOf symbol <= before])
+  locals =
+    reverse
+      [ simpleItem (symbolName symbol) 6 (typeAt (startOf symbol))
+      | symbol <- symbols
+      , symbolOrigin symbol `elem` [ParameterOrigin, LocalOrigin, PatternOrigin]
+      , symbolNamespace symbol == ValueSpace
+      , startOf symbol >= enclosing
+      , startOf symbol < before
       ]
+  typeAt start = maybe "" renderType (analysisTypes known >>= narrowestAt start)
+  fileEntries = [entry | entry <- indexEntries (analysisFileIndex known), not (isMember (docKind entry))]
+  declared = Set.fromList (map docName fileEntries)
+  declarations =
+    map completionItem fileEntries
+      <> [ simpleItem (symbolName symbol) (if symbolNamespace symbol == TypeSpace then 22 else 3) ""
+         | symbol <- symbols
+         , symbolOrigin symbol `elem` [ModuleOrigin, VariantOrigin]
+         , not (Set.member (symbolName symbol) declared)
+         ]
+  imported =
+    [simpleItem alias 9 ("module " <> path) | (alias, path) <- importsOf content]
+      <> [ maybe (simpleItem (symbolName symbol) 3 "") completionItem (importedEntry (symbolName symbol))
+         | symbol <- symbols
+         , symbolOrigin symbol == ImportOrigin
+         , symbolName symbol `notElem` map fst (importsOf content)
+         ]
+  importedEntry name =
+    case [entry | entry <- indexEntries (analysisProgramIndex known), docName entry == name, not (isMember (docKind entry))] of
+      entry : _ -> Just entry
+      [] -> Nothing
+  distinct items = go Set.empty items
+   where
+    go _ [] = []
+    go seen (item : rest) = case labelOf item of
+      Just label
+        | Set.member label seen -> go seen rest
+        | otherwise -> item : go (Set.insert label seen) rest
+      Nothing -> go seen rest
+
+labelOf :: Json -> Maybe Text
+labelOf item = case lookupField "label" item of
+  Just (JsonText label) -> Just label
+  _ -> Nothing
+
+isMember :: DocKind -> Bool
+isMember kind = case kind of
+  DocMethod _ -> True
+  DocTraitMethod _ -> True
+  _ -> False
+
+simpleItem :: Text -> Int -> Text -> Json
+simpleItem label kind detail =
+  JsonObject
+    ( [("label", JsonText label), ("kind", JsonNumber (fromIntegral kind))]
+        <> [("detail", JsonText detail) | not (Text.null detail)]
+    )
+
+keywordItem :: Text -> Json
+keywordItem word = simpleItem word 14 "keyword"
+
+preludeItem :: (Text, Int, Text) -> Json
+preludeItem (label, kind, detail) = simpleItem label kind detail
+
+{-| The prelude names a program reaches for, with what they are. The prelude
+    holds far more — the runtime's primitives, which the library wraps — and
+    offering those unasked would bury these. -}
+preludeItems :: [(Text, Int, Text)]
+preludeItems =
+  [ ("print", 3, "fn(Str) -> Result[(), E]")
+  , ("printError", 3, "fn(Str) -> Result[(), E]")
+  , ("printPart", 3, "fn(Str) -> Result[(), E]")
+  , ("readLine", 3, "fn() -> Result[Option[Str], E]")
+  , ("show", 3, "fn(T) -> Str")
+  , ("display", 3, "fn(T) -> Str")
+  , ("panic", 3, "fn(Str) -> Never")
+  , ("mapOf", 3, "fn(Array[(K, V)]) -> Map[K, V]")
+  , ("setOf", 3, "fn(Array[T]) -> Set[T]")
+  , ("bytesOf", 3, "fn(Array[Int]) -> Bytes")
+  , ("Some", 20, "Option[T]")
+  , ("None", 20, "Option[T]")
+  , ("Ok", 20, "Result[T, E]")
+  , ("Err", 20, "Result[T, E]")
   ]
 
-primitiveCompletions :: [Json]
-primitiveCompletions =
-  [ JsonObject [("label", JsonText ty), ("kind", JsonNumber 25), ("detail", JsonText "type")]
-  | ty <-
-      [ "Int", "Int8", "Int16", "Int32", "Int64", "Int128", "UInt", "UInt8", "UInt16"
-      , "UInt32", "UInt64", "UInt128", "Float32", "Float64", "Decimal", "BigInt"
-      , "Str", "Char", "Bool", "Bytes", "Array", "Map", "Option", "Result"
-      ]
+keywords :: [Text]
+keywords =
+  [ "fn", "let", "var", "const", "mut", "if", "else", "match", "case", "for"
+  , "in", "while", "loop", "break", "continue", "return", "type", "enum"
+  , "struct", "trait", "impl", "where", "export", "import", "unsafe", "foreign", "dynamic"
+  , "true", "false"
   ]
 
-memberMethods :: Analysis -> Int -> [Text]
-memberMethods value offset = case receiverEnd (analysisText value) offset of
+{-| The declarations of a module named before the dot, as in `Io.` after
+    `import Std.Io as Io`, or `Std.Io.` after `import Std.Io`.
+
+    The imports are read from the text rather than from a resolved program,
+    because completion is asked for while a name is half written and the
+    program does not compile. A qualifier no import names answers nothing, and
+    the value's members get their turn. -}
+moduleMembers :: Text -> Analysis -> Int -> [Json]
+moduleMembers content known dotOffset =
+  let qualifier = Text.takeWhileEnd qualifierScalar (Text.take dotOffset content)
+   in case lookup qualifier (importsOf content) of
+        Nothing -> []
+        Just moduleName ->
+          [ completionItem entry
+          | entry <- indexEntries (analysisProgramIndex known)
+          , docModule entry == moduleName
+          , not (isMember (docKind entry))
+          ]
+ where
+  qualifierScalar scalar = nameScalar scalar || scalar == '.'
+
+{-| Every name an import binds, with the module it binds: `import M as N`
+    binds `N`, and `import M` binds the module under its own path. -}
+importsOf :: Text -> [(Text, Text)]
+importsOf content =
+  [ binding
+  | line <- Text.lines content
+  , Just rest <- [Text.stripPrefix "import " (Text.strip line)]
+  , binding <- bound (Text.words (Text.takeWhile (/= '{') rest))
+  ]
+ where
+  bound words' = case words' of
+    [path, "as", alias] -> [(alias, path)]
+    [path] -> [(path, path)]
+    _ -> []
+
+{-| What may follow a value of the type the checker gave the receiver: the
+    fields of a record this file declares, then its methods. -}
+memberCompletions :: Analysis -> Int -> [Json]
+memberCompletions value dotOffset = case analysisTypes value >>= narrowestAt (dotOffset - 1) of
   Nothing -> []
-  Just dotOffset -> case analysisTypes value >>= narrowestAt (dotOffset - 1) of
-    Nothing -> []
-    Just typeValue ->
-      let owner = ownerNameOf typeValue
-       in sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) owner))
+  Just typeValue ->
+    let owner = ownerNameOf typeValue
+     in [simpleItem name 5 fieldType | (name, fieldType) <- recordFields value owner]
+          <> map methodItem (sort (nub (methodsOfType typeValue <> implMethodsFor (analysisProgramIndex value) owner)))
+
+{-| The fields of a record type the file declares, read from its declaration:
+    `type Point = { x: Int, y: Int }` has `x` and `y`. A type declared
+    elsewhere, or one that is not a record, has none here. -}
+recordFields :: Analysis -> Text -> [(Text, Text)]
+recordFields value owner
+  | Text.null owner = []
+  | otherwise = case [docSpan entry | entry <- indexEntries (analysisFileIndex value), docName entry == owner, docKind entry == DocType] of
+      (start, end) : _ ->
+        let declaration = Text.take (end - start) (Text.drop start (analysisText value))
+            afterEquals = Text.drop 1 (Text.dropWhile (/= '=') declaration)
+         in case Text.uncons (Text.stripStart afterEquals) of
+              Just ('{', body) -> concatMap field (topLevelSplit (Text.dropEnd 1 (Text.stripEnd body)))
+              _ -> []
+      [] -> []
+ where
+  field piece = case Text.breakOn ":" piece of
+    (name, rest)
+      | not (Text.null rest), Text.all nameScalar (Text.strip name), not (Text.null (Text.strip name)) ->
+          [(Text.strip name, Text.strip (Text.drop 1 rest))]
+    _ -> []
+
+{-| Split at the commas that are not inside brackets. -}
+topLevelSplit :: Text -> [Text]
+topLevelSplit = map Text.pack . go (0 :: Int) [] . Text.unpack
+ where
+  go _ current [] = [reverse current | not (all isSpace current)]
+  go depth current (scalar : rest)
+    | scalar == ',' && depth == 0 = reverse current : go depth [] rest
+    | scalar `elem` ("([{<" :: String) = go (depth + 1) (scalar : current) rest
+    | scalar `elem` (")]}>" :: String) = go (max 0 (depth - 1)) (scalar : current) rest
+    | otherwise = go depth (scalar : current) rest
 
 implMethodsFor :: DocIndex -> Text -> [Text]
 implMethodsFor index owner
@@ -78,9 +300,12 @@ receiverEnd content offset =
   let before = Text.take offset content
       typed = Text.takeWhileEnd nameScalar before
       atDot = Text.dropEnd (Text.length typed) before
-   in if Text.isSuffixOf "." atDot then Just (Text.length atDot - 1) else Nothing
+      receiver = Text.takeEnd 1 (Text.dropEnd 1 atDot)
+   in if Text.isSuffixOf "." atDot && not (Text.isSuffixOf ".." atDot) && Text.any receiverScalar receiver
+        then Just (Text.length atDot - 1)
+        else Nothing
  where
-  nameScalar scalar = isAlphaNum scalar || scalar == '_'
+  receiverScalar scalar = nameScalar scalar || scalar `elem` (")]}\"" :: String)
 
 methodsOfType :: Type -> [Text]
 methodsOfType typeValue = case throughReferenceType typeValue of
@@ -93,8 +318,7 @@ throughReferenceType typeValue = case typeValue of
   other -> other
 
 methodItem :: Text -> Json
-methodItem name =
-  JsonObject [("label", JsonText name), ("kind", JsonNumber 2), ("detail", JsonText "method")]
+methodItem name = simpleItem name 2 "method"
 
 located :: Documents -> Json -> Maybe (Analysis, Int)
 located documents parameters = do
