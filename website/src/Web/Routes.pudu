@@ -9,18 +9,21 @@ import Constants as Constants
 import Seo as Seo
 import Service.Catalog as Catalog
 import Service.Docs as Docs
+import Service.Documents as Documents
 import Service.Releases as Releases
 import View.About as About
 import View.Docs as DocsView
+import View.Document as Document
 import View.Documentation as Documentation
 import View.Donation as Donation
 import View.Download as Download
 import View.Home as Home
+import View.Releases as ReleasesView
 
-export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release) -> Route.Router {
+export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release, documents: &Documents.Documents) -> Route.Router {
   Route.withFallback(&Route.routing(&[
         Route.get("/", fn(_request: Route.Request) -> Http.Response {
-            Reply.page(200, Home.home(siteUrl, catalog))
+            Reply.page(200, Home.home(siteUrl, catalog, release))
           }),
         Route.get("/search", fn(asked: Route.Request) -> Http.Response {
             Reply.page(200, Home.results(siteUrl, catalog, Option.unwrapOr(Route.queryParam(&asked, "q"), "")))
@@ -64,6 +67,18 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, rele
           }),
         Route.get("/download", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, Download.page(siteUrl, release))
+          }),
+        Route.get("/releases", fn(_request: Route.Request) -> Http.Response {
+            Reply.page(200, ReleasesView.page(siteUrl, release))
+          }),
+        Route.get("/conduct", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "conduct", &asked)
+          }),
+        Route.get("/contributing", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "contributing", &asked)
+          }),
+        Route.get("/security", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "security", &asked)
           }),
         Route.get("/about", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, About.page(siteUrl))
@@ -114,8 +129,16 @@ export fn requestFor(target: Str) -> Route.Request {
   }
 }
 
-export fn render(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release, target: Str) -> Http.Response {
-  Route.dispatch(&routes(siteUrl, catalog, docs, release), requestFor(target))
+export fn render(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, release: &Releases.Release, documents: &Documents.Documents, target: Str) -> Http.Response {
+  Route.dispatch(&routes(siteUrl, catalog, docs, release, documents), requestFor(target))
+}
+
+/// A document the repository keeps, or the missing page when there is none.
+fn published(siteUrl: Str, documents: &Documents.Documents, slug: Str, asked: &Route.Request) -> Http.Response {
+  match Document.page(siteUrl, documents, slug) {
+    case Some(page) => Reply.page(200, page)
+    case None => Reply.page(404, Documentation.missing(siteUrl, asked.path))
+  }
 }
 
 fn binary(path: Str, mediaType: Str) -> Http.Response {

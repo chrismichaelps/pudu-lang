@@ -25,7 +25,8 @@ export type Release = {
   published: Str,
   prerelease: Bool,
   releasesUrl: Str,
-  downloads: Array[Download]
+  downloads: Array[Download],
+  notes: Array[Str]
 }
 
 /// The published release, read from the document the build writes.
@@ -34,7 +35,7 @@ export type Release = {
 /// CDN without waiting on the forge and cannot be taken down by a rate limit. A
 /// document that cannot be read or does not carry a download stops the site from
 /// starting rather than offering a reader a page with nothing to take.
-export fn load(path: Str) -> Result[Release, SiteError.SiteError] {
+export fn load(path: Str, notesDirectory: Str) -> Result[Release, SiteError.SiteError] {
   let source = match Io.read(path) {
     case Ok(content) => content
     case Err(_) => { return Err(SiteError.ReleasesUnreadable(path)) }
@@ -64,14 +65,22 @@ export fn load(path: Str) -> Result[Release, SiteError.SiteError] {
     }
   }
   if downloads.length() == 0 { return Err(SiteError.ReleasesEmpty) }
+  let version = text(&document, "version") ?
+  // The notes are the file the release itself was published with, so the page
+  // and the release cannot come to say different things about one version.
+  let notes = match Io.read(notesDirectory + "/" + version + ".md") {
+    case Ok(content) => content.split("\n")
+    case Err(_) => { return Err(SiteError.ReleaseNotesUnreadable(version)) }
+  }
   Ok(Release {
-      version: text(&document, "version") ?,
+      version: version,
       tag: text(&document, "tag") ?,
       url: text(&document, "url") ?,
       published: text(&document, "published") ?,
       prerelease: Option.unwrapOr(flag(&document, "prerelease"), false),
       releasesUrl: text(&document, "releasesUrl") ?,
-      downloads: downloads
+      downloads: downloads,
+      notes: notes
     })
 }
 

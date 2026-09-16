@@ -21,7 +21,7 @@ export fn page(
           H.meta().at("charset", "utf-8"),
           H.meta().name("viewport").at("content", "width=device-width, initial-scale=1"),
           H.link().rel("icon").at("type", "image/png").href(Constants.SHORT_LOGO_PATH),
-          H.link().rel("stylesheet").href("/assets/site.css?v=12")
+          H.link().rel("stylesheet").href("/assets/site.css?v=14")
         ].concat(Seo.head(siteUrl, title, description, path, indexable, structured))),
       H.body().holding([
           H.a().class("skip").href("#content").says("Skip to content"),
@@ -101,16 +101,48 @@ fn navigationLink(target: Str, label: Str, current: Bool) -> H.Node {
 fn footer() -> H.Node {
   H.footer().class("footer").holding([
       H.div().class("footer-inner").holding([
-          H.span().class("footer-brand").holding([
-              H.img().src(Constants.SHORT_LOGO_PATH).alt(""),
-              H.span().says("Pudu language documentation")
+          H.div().class("footer-brand-column").holding([
+              H.span().class("footer-brand").holding([
+                  H.img().src(Constants.SHORT_LOGO_PATH).alt(""),
+                  H.span().says("Pudu")
+                ]),
+              H.p().class("footer-blurb").says("A statically typed language where a signature says what a function takes, what it gives back, and whether it changes what it was given.")
             ]),
+          footerColumn("Learn", &[
+              ("/docs", "Documentation"),
+              ("/docs/introduction", "Getting started"),
+              ("/modules", "Standard library"),
+              ("/search", "Search the API")
+            ]),
+          footerColumn("Get Pudu", &[
+              ("/download", "Download"),
+              ("/releases", "Release notes")
+            ]),
+          footerColumn("Project", &[
+              ("/about", "About"),
+              ("/contributing", "Contributing"),
+              ("/conduct", "Code of Conduct"),
+              ("/security", "Security")
+            ])
+        ]),
+      H.div().class("footer-base").holding([
           H.small().says(Constants.COPYRIGHT),
-          H.span().class("footer-links").holding([
-              H.a().href("/download").says("Download"),
-              H.a().href("/donate").says("Donate"),
-              H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub")
+          H.span().class("footer-base-links").holding([
+              H.a().href(Constants.REPOSITORY_URL).at("rel", "external noopener noreferrer").says("GitHub"),
+              H.a().href("/donate").says("Donate")
             ])
         ])
+    ])
+}
+
+/// One column of the footer: a heading and the pages under it.
+fn footerColumn(title: Str, links: &Array[(Str, Str)]) -> H.Node {
+  var items: Array[H.Node] = []
+  for link in links {
+    items = items.push(H.li().holding([H.a().href(link[0]).says(link[1])]))
+  }
+  H.div().class("footer-column").holding([
+      H.h2().class("footer-heading").says(title),
+      H.ul().holding(items)
     ])
 }

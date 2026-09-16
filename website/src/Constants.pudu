@@ -13,6 +13,8 @@ export const AUTHOR_LINKEDIN_URL: Str = "https://www.linkedin.com/in/chrisperezs
 export const COPYRIGHT: Str = "© 2026 Chris M. Pérez Santiago. All rights reserved."
 /// Where a documentation page's Markdown can be read and changed.
 export const DOCS_SOURCE_URL: Str = "https://github.com/chrismichaelps/pudu-lang/blob/dev/website/docs/"
+/// Where a document the repository keeps at its root can be read and changed.
+export const REPOSITORY_SOURCE_URL: Str = "https://github.com/chrismichaelps/pudu-lang/blob/dev/"
 export const CATALOGUE_PATH: Str = "website/data/api.json"
 export const RELEASES_PATH: Str = "website/data/releases.json"
 export const STYLESHEET_PATH: Str = "website/public/site.css"
