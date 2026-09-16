@@ -80,6 +80,15 @@ export fn routes(siteUrl: Str, catalog: &Catalog.Catalog, docs: &Docs.Docs, rele
         Route.get("/security", fn(asked: Route.Request) -> Http.Response {
             published(siteUrl, documents, "security", &asked)
           }),
+        Route.get("/community", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "community", &asked)
+          }),
+        Route.get("/privacy", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "privacy", &asked)
+          }),
+        Route.get("/brand", fn(asked: Route.Request) -> Http.Response {
+            published(siteUrl, documents, "brand", &asked)
+          }),
         Route.get("/about", fn(_request: Route.Request) -> Http.Response {
             Reply.page(200, About.page(siteUrl))
           }),

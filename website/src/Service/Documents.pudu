@@ -3,15 +3,19 @@ module Service.Documents
 import Std.Io as Io
 import Error as SiteError
 
-/// The documents the project keeps at its root and the site also shows.
+/// The documents the site shows, and the files they are written in.
 ///
-/// The file is the one contributors read in the repository, so the page and the
-/// repository cannot drift into saying different things: there is one copy, and
-/// the site renders it.
+/// The first three are the files contributors read in the repository, so the
+/// page and the repository cannot drift into saying different things: there is
+/// one copy, and the site renders it. The rest are the site's own pages, kept as
+/// Markdown beside it rather than as markup inside a view.
 export const PUBLISHED: Array[(Str, Str)] = [
   ("conduct", "CODE_OF_CONDUCT.md"),
   ("contributing", "CONTRIBUTING.md"),
-  ("security", "SECURITY.md")
+  ("security", "SECURITY.md"),
+  ("community", "website/pages/community.md"),
+  ("privacy", "website/pages/privacy.md"),
+  ("brand", "website/pages/brand.md")
 ]
 
 /// One document, as the Markdown it was written in.

@@ -140,6 +140,9 @@ export fn main() -> Int {
   let conduct = Web.render(origin, &catalog, &docs, &release, &documents, "/conduct")
   let contributing = Web.render(origin, &catalog, &docs, &release, &documents, "/contributing")
   let security = Web.render(origin, &catalog, &docs, &release, &documents, "/security")
+  let community = Web.render(origin, &catalog, &docs, &release, &documents, "/community")
+  let privacy = Web.render(origin, &catalog, &docs, &release, &documents, "/privacy")
+  let brand = Web.render(origin, &catalog, &docs, &release, &documents, "/brand")
   let hits = Search.find(&catalog.entries, "checksum", 10)
   let compact = Catalog.readSearchIndex(Catalog.searchIndex(&catalog))
   let searchCatalog = match compact {
@@ -170,7 +173,10 @@ export fn main() -> Int {
       Test.that("contributing answers", contributing.status.code == 200),
       Test.that("security policy answers", security.status.code == 200),
       Test.that("security policy names what is in scope", security.body.contains("in scope")),
-      Test.that("every published document is in the sitemap", sitemapHasAll(&sitemap, origin, &["/download", "/releases", "/conduct", "/contributing", "/security"])),
+      Test.that("community page answers", community.status.code == 200),
+      Test.that("privacy page answers", privacy.status.code == 200),
+      Test.that("brand page answers", brand.status.code == 200),
+      Test.that("every published document is in the sitemap", sitemapHasAll(&sitemap, origin, &["/download", "/releases", "/conduct", "/contributing", "/security", "/community", "/privacy", "/brand"])),
       Test.that("the footer links the project pages", footerLinks(&about)),
       Test.that("download page offers every published archive", downloadOffersEvery(&download, &release)),
       Test.that("download page names the version", download.body.contains("Pudu " + release.version)),

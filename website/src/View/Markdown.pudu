@@ -1,6 +1,7 @@
 module View.Markdown
 
 import Std.Html.Build as H
+import Std.List as List
 import Std.Map as Map
 import Std.Text as Text
 import View.MarkdownInline as Inline
@@ -19,7 +20,7 @@ export type Document = {
 
 /// What the lines read so far are building, so a blank line or a line of
 /// another kind can close it.
-type Pending = { paragraph: Array[Str], items: Array[H.Node], ordered: Bool, quote: Array[Str] }
+type Pending = { paragraph: Array[Str], items: Array[Str], ordered: Bool, quote: Array[Str] }
 
 /// A page of Markdown as a document.
 ///
@@ -93,7 +94,13 @@ export fn parse(source: &Array[Str]) -> Document {
         blocks = flush(blocks, &held)
         held = nothingPending()
       }
-      held = Pending{..held, items: held.items.push(H.li().holding(Inline.render(item[1]))), ordered: item[0]}
+      held = Pending{..held, items: held.items.push(item[1]), ordered: item[0]}
+    } else if held.items.length() > 0 && source[index].startsWith(" ") {
+      // A list item wrapped onto an indented line keeps its words. Without
+      // this the rest of the sentence closes the list and becomes a paragraph
+      // of its own, which is how a wrapped item read before.
+      let last = held.items.length() - 1
+      held = Pending{..held, items: List.set(&held.items, last, held.items[last] + " " + bare)}
     } else {
       if held.items.length() > 0 || held.quote.length() > 0 {
         blocks = flush(blocks, &held)
@@ -123,7 +130,9 @@ fn flush(out: Array[H.Node], held: &Pending) -> Array[H.Node] {
     blocks = blocks.push(H.p().holding(Inline.render(held.paragraph.join(" "))))
   }
   if held.items.length() > 0 {
-    blocks = blocks.push(if held.ordered { H.ol().holding(held.items) } else { H.ul().holding(held.items) })
+    var rendered: Array[H.Node] = []
+    for item in held.items { rendered = rendered.push(H.li().holding(Inline.render(item))) }
+    blocks = blocks.push(if held.ordered { H.ol().holding(rendered) } else { H.ul().holding(rendered) })
   }
   if held.quote.length() > 0 {
     blocks = blocks.push(H.blockquote().holding([H.p().holding(Inline.render(held.quote.join(" ")))]))
